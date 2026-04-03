@@ -2107,61 +2107,61 @@ func NewLeaseManager(
 			group:            singleflight.NewGroup("acquire-lease", "descriptor ID"),
 			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 			leasingMetrics: leasingMetrics{
-				outstandingLeases: metric.NewGauge(metric.Metadata{
+				outstandingLeases: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.active",
 					Help:        "The number of outstanding SQL schema leases.",
 					Measurement: "Outstanding leases",
 					Unit:        metric.Unit_COUNT,
-				}),
-				sessionBasedLeasesWaitingToExpire: metric.NewGauge(metric.Metadata{
+				})),
+				sessionBasedLeasesWaitingToExpire: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.waiting_to_expire",
 					Help:        "The number of outstanding session based SQL schema leases with expiry.",
 					Measurement: "Outstanding Leases Waiting to Expire",
 					Unit:        metric.Unit_COUNT,
-				}),
-				sessionBasedLeasesExpired: metric.NewGauge(metric.Metadata{
+				})),
+				sessionBasedLeasesExpired: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.expired",
 					Help:        "The number of outstanding session based SQL schema leases expired.",
 					Measurement: "Leases expired because of a new version",
 					Unit:        metric.Unit_COUNT,
-				}),
-				longWaitForNoVersionsActive: metric.NewGauge(metric.Metadata{
+				})),
+				longWaitForNoVersionsActive: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.long_wait_for_no_version",
 					Help:        "The number of wait for no versions that are taking more than the lease duration.",
 					Measurement: "Number of wait for long wait for no version routines executing",
 					Unit:        metric.Unit_COUNT,
-				}),
-				longWaitForOneVersionsActive: metric.NewGauge(metric.Metadata{
+				})),
+				longWaitForOneVersionsActive: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.long_wait_for_one_version",
 					Help:        "The number of wait for one versions that are taking more than the lease duration.",
 					Measurement: "Number of wait for long wait for one version routines executing",
 					Unit:        metric.Unit_COUNT,
-				}),
-				longTwoVersionInvariantViolationWaitActive: metric.NewGauge(metric.Metadata{
+				})),
+				longTwoVersionInvariantViolationWaitActive: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.long_wait_for_two_version_invariant",
 					Help:        "The number of two version invariant waits that are taking more than the lease duration.",
 					Measurement: "Number of two version invariant wait routines executing",
 					Unit:        metric.Unit_COUNT,
-				}),
-				longWaitForInitialVersionActive: metric.NewGauge(metric.Metadata{
+				})),
+				longWaitForInitialVersionActive: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.long_wait_for_initial_version",
 					Help:        "The number of wait for initial version routines taking more than the lease duration.",
 					Measurement: "Number of wait for initial version routines executing",
 					Unit:        metric.Unit_COUNT,
-				}),
-				leaseCurBytesCount: metric.NewGauge(metric.Metadata{
+				})),
+				leaseCurBytesCount: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 					Name:        "sql.leases.lease_cur_bytes_count",
 					Help:        "The current number of bytes used by the lease manager.",
 					Measurement: "Number of bytes used by the lease manager.",
 					Unit:        metric.Unit_BYTES,
-				}),
+				})),
 				leaseMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-					Metadata: metric.Metadata{
+					Metadata: metric.InitMetadata(metric.Metadata{
 						Name:        "sql.leases.lease_max_bytes_hist",
 						Help:        "Memory used by the lease manager.",
 						Measurement: "Number of bytes used by the lease manager.",
 						Unit:        metric.Unit_BYTES,
-					},
+					}),
 					Duration:     base.DefaultHistogramWindowInterval(),
 					MaxVal:       log10int64times1000,
 					SigFigs:      3,

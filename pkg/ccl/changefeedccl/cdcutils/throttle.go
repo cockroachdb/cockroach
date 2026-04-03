@@ -145,13 +145,13 @@ type Metrics struct {
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
 func MakeMetrics(histogramWindow time.Duration) Metrics {
 	makeMetric := func(n string) metric.Metadata {
-		return metric.Metadata{
+		return metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("changefeed.%s.messages_pushback_nanos", n),
 			Help:        fmt.Sprintf("Total time spent throttled for %s quota", n),
 			Measurement: "Nanoseconds",
 			Unit:        metric.Unit_NANOSECONDS,
 			Category:    metric.Metadata_CHANGEFEEDS,
-		}
+		})
 	}
 
 	return Metrics{

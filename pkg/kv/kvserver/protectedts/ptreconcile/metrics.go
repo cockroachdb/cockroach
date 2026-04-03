@@ -33,32 +33,32 @@ var _ metric.Struct = (*Metrics)(nil)
 func (m *Metrics) MetricStruct() {}
 
 var (
-	metaReconciliationRuns = metric.Metadata{
+	metaReconciliationRuns = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.num_runs",
 		Help:        "number of successful reconciliation runs on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaRecordsProcessed = metric.Metadata{
+	})
+	metaRecordsProcessed = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.records_processed",
 		Help:        "number of records processed without error during reconciliation on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaRecordsRemoved = metric.Metadata{
+	})
+	metaRecordsRemoved = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.records_removed",
 		Help:        "number of records removed during reconciliation runs on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaReconciliationErrors = metric.Metadata{
+	})
+	metaReconciliationErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.errors",
 		Help:        "number of errors encountered during reconciliation runs on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )

@@ -1070,7 +1070,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						tg[admissionpb.RegularWorkClass],
 						tg[admissionpb.ElasticWorkClass],
 					},
-					st, workQueueMetrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.Metadata{}), &mockCoordMu).(*StoreWorkQueue)
+					st, workQueueMetrics, opts, nil /* testing knobs */, &noopOnLogEntryAdmitted{}, metric.NewCounter(metric.InitMetadata(metric.Metadata{})), &mockCoordMu).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()

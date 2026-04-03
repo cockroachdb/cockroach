@@ -98,7 +98,7 @@ const (
 
 // Metric names.
 var (
-	metaExecLatency = metric.Metadata{
+	metaExecLatency = metric.InitMetadata(metric.Metadata{
 		Name: "exec.latency",
 		Help: `Latency of batch KV requests (including errors) executed on this node.
 
@@ -114,8 +114,8 @@ understanding the health of the KV layer.
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaExecSuccess = metric.Metadata{
+	})
+	metaExecSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "exec.success",
 		Help: `Number of batch KV requests executed successfully on this node.
 
@@ -124,8 +124,8 @@ or a transaction restart/abort error.
 `,
 		Measurement: "Batch KV Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaExecError = metric.Metadata{
+	})
+	metaExecError = metric.InitMetadata(metric.Metadata{
 		Name: "exec.error",
 		Help: `Number of batch KV requests that failed to execute on this node.
 
@@ -134,49 +134,49 @@ other errors expected during normal operation, such as ConditionFailedError.
 This metric is thus not an indicator of KV health.`,
 		Measurement: "Batch KV Requests",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaInternalBatchRPCMethodCount = metric.Metadata{
+	metaInternalBatchRPCMethodCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.method.%s.recv",
 		Help:        "Number of %s requests processed",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaInternalBatchRPCCount = metric.Metadata{
+	metaInternalBatchRPCCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.batches.recv",
 		Help:        "Number of batches processed",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaBatchRequestsBytes = metric.Metadata{
+	metaBatchRequestsBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "batch_requests.bytes",
 		Help:        `Total byte count of batch requests processed`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBatchResponsesBytes = metric.Metadata{
+	})
+	metaBatchResponsesBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "batch_responses.bytes",
 		Help:        `Total byte count of batch responses received`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossRegionBatchRequest = metric.Metadata{
+	})
+	metaCrossRegionBatchRequest = metric.InitMetadata(metric.Metadata{
 		Name: "batch_requests.cross_region.bytes",
 		Help: `Total byte count of batch requests processed cross region when region
 		tiers are configured`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossRegionBatchResponse = metric.Metadata{
+	})
+	metaCrossRegionBatchResponse = metric.InitMetadata(metric.Metadata{
 		Name: "batch_responses.cross_region.bytes",
 		Help: `Total byte count of batch responses received cross region when region
 		tiers are configured`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossZoneBatchRequest = metric.Metadata{
+	})
+	metaCrossZoneBatchRequest = metric.InitMetadata(metric.Metadata{
 		Name: "batch_requests.cross_zone.bytes",
 		Help: `Total bytes of batch requests processed cross zones within the same
 		region when zone tiers are configured. If region tiers are not set, it is
@@ -185,8 +185,8 @@ This metric is thus not an indicator of KV health.`,
 		configured across all nodes.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCrossZoneBatchResponse = metric.Metadata{
+	})
+	metaCrossZoneBatchResponse = metric.InitMetadata(metric.Metadata{
 		Name: "batch_responses.cross_zone.bytes",
 		Help: `Total bytes of batch responses received cross zones within the same
 		region when zone tiers are configured. If region tiers are not set, it is
@@ -195,7 +195,7 @@ This metric is thus not an indicator of KV health.`,
 		configured across all nodes.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 )
 
 // Cluster settings.

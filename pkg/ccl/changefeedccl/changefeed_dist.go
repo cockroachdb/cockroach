@@ -277,7 +277,7 @@ func startDistChangefeed(
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		resultRows := sql.NewMetadataCallbackWriter(
+		resultRows := sql.InitMetadataCallbackWriter(
 			newChangefeedResultWriter(resultsCh, cancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {

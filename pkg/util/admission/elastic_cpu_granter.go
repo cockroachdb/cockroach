@@ -283,37 +283,37 @@ func (e *elasticCPUGranter) RecordYieldDelay(d time.Duration) {
 // Can this value be auto-estimated?
 
 var ( // granter-side metrics (some of these have parallels on the requester side, but are still useful to have)
-	elasticCPUAcquiredNanos = metric.Metadata{
+	elasticCPUAcquiredNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.acquired_nanos",
 		Help:        "Total CPU nanoseconds acquired by elastic work",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	elasticCPUReturnedNanos = metric.Metadata{
+	elasticCPUReturnedNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.returned_nanos",
 		Help:        "Total CPU nanoseconds returned by elastic work",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	elasticCPUPreWorkNanos = metric.Metadata{
+	elasticCPUPreWorkNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.pre_work_nanos",
 		Help:        "Total CPU nanoseconds spent doing pre-work, before doing elastic work",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// elasticCPUMaxAvailableNanos is a static metric, useful for computing the
 	// % utilization: (acquired - returned)/max available.
-	elasticCPUMaxAvailableNanos = metric.Metadata{
+	elasticCPUMaxAvailableNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.max_available_nanos",
 		Help:        "Maximum available CPU nanoseconds per second ignoring utilization limit",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	elasticCPUNanosExhaustedDuration = metric.Metadata{
+	elasticCPUNanosExhaustedDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.elastic_cpu.nanos_exhausted_duration",
 		Help: "Total duration when elastic CPU tokens (tokens measured in nanoseconds) " +
 			"were exhausted, as observed by the token granter (not waiters). This is reported in " +
@@ -323,49 +323,49 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.",
-	}
+	})
 
-	elasticCPUOverLimitDurations = metric.Metadata{
+	elasticCPUOverLimitDurations = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.over_limit_durations",
 		Help:        "Measurement of how much over the prescribed limit elastic requests ran (not recorded if requests don't run over)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	elasticCPUAvailableNanos = metric.Metadata{
+	elasticCPUAvailableNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.available_nanos",
 		Help:        "Instantaneous available CPU nanoseconds per second ignoring utilization limit",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	elasticCPUGranterUtilization = metric.Metadata{
+	elasticCPUGranterUtilization = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.utilization",
 		Help:        "CPU utilization by elastic work",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-	}
+	})
 
-	elasticCPUGranterBypassedUtilization = metric.Metadata{
+	elasticCPUGranterBypassedUtilization = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu_bypassed.utilization",
 		Help:        "CPU utilization by elastic work that bypassed admission",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-	}
+	})
 
-	elasticCPUGranterUtilizationLimit = metric.Metadata{
+	elasticCPUGranterUtilizationLimit = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.utilization_limit",
 		Help:        "Utilization limit set for the elastic CPU work",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-	}
+	})
 
-	elasticCPUYieldDelayNanos = metric.Metadata{
+	elasticCPUYieldDelayNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.elastic_cpu.yield_delay_nanos",
 		Help:        "Total nanoseconds goroutines were delayed by runtime.Yield",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // elasticCPUGranterMetrics are the metrics associated with an instance of the

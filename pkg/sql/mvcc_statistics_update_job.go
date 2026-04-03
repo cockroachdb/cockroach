@@ -168,12 +168,12 @@ func init() {
 		jobspb.TypeMVCCStatisticsUpdate,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 			exporter := &mvccStatisticsUpdateJob{job: job, st: settings}
-			exporter.dynamicMetrics.livebytes = metric.NewGauge(metric.Metadata{
+			exporter.dynamicMetrics.livebytes = metric.NewGauge(metric.InitMetadata(metric.Metadata{
 				Name:        "sql.aggregated_livebytes",
 				Help:        "Aggregated number of bytes of live data (keys plus values)",
 				Measurement: "Storage",
 				Unit:        metric.Unit_BYTES,
-			})
+			}))
 			return exporter
 		},
 		jobs.DisablesTenantCostControl,

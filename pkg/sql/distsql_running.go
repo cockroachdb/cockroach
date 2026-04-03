@@ -1250,21 +1250,21 @@ func (w *MetadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.
 	}
 }
 
-// NewMetadataCallbackWriter creates a new MetadataCallbackWriter.
-func NewMetadataCallbackWriter(
+// InitMetadataCallbackWriter creates a new MetadataCallbackWriter.
+func InitMetadataCallbackWriter(
 	rowResultWriter rowResultWriter,
 	metaFn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) *MetadataCallbackWriter {
 	return &MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn}
 }
 
-// NewMetadataOnlyMetadataCallbackWriter creates a new MetadataCallbackWriter
+// InitMetadataOnlyMetadataCallbackWriter creates a new MetadataCallbackWriter
 // that uses errOnlyResultWriter and only supports receiving
 // execinfrapb.ProducerMetadata.
-func NewMetadataOnlyMetadataCallbackWriter(
+func InitMetadataOnlyMetadataCallbackWriter(
 	metaFn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) *MetadataCallbackWriter {
-	return NewMetadataCallbackWriter(
+	return InitMetadataCallbackWriter(
 		&errOnlyResultWriter{},
 		metaFn,
 	)

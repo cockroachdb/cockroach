@@ -14,95 +14,95 @@ import (
 )
 
 var (
-	metaRangeFeedCatchUpScanNanos = metric.Metadata{
+	metaRangeFeedCatchUpScanNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRangeFeedExhausted = metric.Metadata{
+	})
+	metaRangeFeedExhausted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.budget_allocation_failed",
 		Help:        "Number of times RangeFeed failed because memory budget was exceeded",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedBudgetBlocked = metric.Metadata{
+	})
+	metaRangeFeedBudgetBlocked = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.budget_allocation_blocked",
 		Help:        "Number of times RangeFeed waited for budget availability",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedRegistrations = metric.Metadata{
+	})
+	metaRangeFeedRegistrations = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.registrations",
 		Help:        "Number of active RangeFeed registrations",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedBufferedRegistrations = metric.Metadata{
+	})
+	metaRangeFeedBufferedRegistrations = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.buffered_registrations",
 		Help:        "Number of active RangeFeed buffered registrations",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedUnbufferedRegistrations = metric.Metadata{
+	})
+	metaRangeFeedUnbufferedRegistrations = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.unbuffered_registrations",
 		Help:        "Number of active RangeFeed unbuffered registrations",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedClosedTimestampMaxBehindNanos = metric.Metadata{
+	})
+	metaRangeFeedClosedTimestampMaxBehindNanos = metric.InitMetadata(metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp_max_behind_nanos",
 		Help: "Largest latency between realtime and replica max closed timestamp for replicas " +
 			"that have active rangeeds on them",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRangefeedSlowClosedTimestampRanges = metric.Metadata{
+	})
+	metaRangefeedSlowClosedTimestampRanges = metric.InitMetadata(metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp.slow_ranges",
 		Help: "Number of ranges that have a closed timestamp lagging by more than 5x target lag. " +
 			"Periodically re-calculated",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedSlowClosedTimestampCancelledRanges = metric.Metadata{
+	})
+	metaRangeFeedSlowClosedTimestampCancelledRanges = metric.InitMetadata(metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp.slow_ranges.cancelled",
 		Help: "Number of rangefeeds that were cancelled due to a chronically " +
 			"lagging closed timestamp",
 		Measurement: "Cancellation Count",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedProcessors = metric.Metadata{
+	})
+	metaRangeFeedProcessors = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.processors",
 		Help:        "Number of active RangeFeed processors",
 		Measurement: "Processors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueueTimeHistogramsTemplate = metric.Metadata{
+	})
+	metaQueueTimeHistogramsTemplate = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.scheduler.%s.latency",
 		Help:        "KV RangeFeed %s scheduler latency",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaQueueSizeTemplate = metric.Metadata{
+	})
+	metaQueueSizeTemplate = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.scheduler.%s.queue_size",
 		Help:        "Number of entries in the KV RangeFeed %s scheduler queue",
 		Measurement: "Pending Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueueTimeout = metric.Metadata{
+	})
+	metaQueueTimeout = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.scheduled_processor.queue_timeout",
 		Help:        "Number of times the RangeFeed processor shutdown because of a queue send timeout",
 		Measurement: "Failure Count",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedOutputLoopNanosUnbufferedRegistration = metric.Metadata{
+	})
+	metaRangeFeedOutputLoopNanosUnbufferedRegistration = metric.InitMetadata(metric.Metadata{
 		Name: "kv.rangefeed.output_loop_unbuffered_registration_nanos",
 		Help: "Duration of the Rangefeed O(range) output loop goroutine. This is only applicable for " +
 			"unbuffered registrations since buffered registrations spawns long-living goroutines.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // Metrics are for production monitoring of RangeFeeds.
@@ -163,12 +163,12 @@ func (FeedBudgetPoolMetrics) MetricStruct() {}
 // NewFeedBudgetMetrics creates new metrics for RangeFeed budgets.
 func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics {
 	makeMemMetricMetadata := func(name, help string) metric.Metadata {
-		return metric.Metadata{
+		return metric.InitMetadata(metric.Metadata{
 			Name:        "kv.rangefeed.mem_" + name,
 			Help:        help,
 			Measurement: "Memory",
 			Unit:        metric.Unit_BYTES,
-		}
+		})
 	}
 
 	return &FeedBudgetPoolMetrics{
@@ -233,18 +233,18 @@ type StreamManagerMetrics struct {
 }
 
 var (
-	metaActiveMuxRangeFeed = metric.Metadata{
+	metaActiveMuxRangeFeed = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.active",
 		Help:        `Number of currently running MuxRangeFeed streams`,
 		Measurement: "Streams",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalMuxRangeFeed = metric.Metadata{
+	})
+	metaTotalMuxRangeFeed = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.recv",
 		Help:        `Total number of MuxRangeFeed streams`,
 		Measurement: "Streams",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 func (*StreamManagerMetrics) MetricStruct() {}
@@ -263,12 +263,12 @@ type BufferedSenderMetrics struct {
 }
 
 var (
-	metaBufferedSenderQueueSize = metric.Metadata{
+	metaBufferedSenderQueueSize = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.buffered_sender.queue_size",
 		Help:        `Number of entries in the buffered sender queue`,
 		Measurement: "Pending Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 func (*BufferedSenderMetrics) MetricStruct() {}
@@ -281,12 +281,12 @@ func NewBufferedSenderMetrics() *BufferedSenderMetrics {
 }
 
 var (
-	metaRangeFeedMuxStreamSlowSends = metric.Metadata{
+	metaRangeFeedMuxStreamSlowSends = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.rangefeed.mux_stream_send.slow_events",
 		Help:        "Number of RangeFeed events that took longer than 10s to send to the client",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 type LockedMuxStreamMetrics struct {

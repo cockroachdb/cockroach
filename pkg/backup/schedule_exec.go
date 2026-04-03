@@ -606,7 +606,7 @@ func init() {
 				metrics: backupMetrics{
 					ExecutorMetrics:    &m,
 					ExecutorPTSMetrics: &pm,
-					RpoMetric: metric.NewGauge(metric.Metadata{
+					RpoMetric: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 						Name: "schedules.BACKUP.last-completed-time",
 						Help: crstrings.UnwrapText(`
 							The unix timestamp of the most recently completed backup by a
@@ -629,8 +629,8 @@ func init() {
 							For example with a backup frequency of 60 minutes, monitor
 							time() - max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time, 60min)).
 						`),
-					}),
-					RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{
+					})),
+					RpoTenantMetric: metric.NewExportedGaugeVec(metric.InitMetadata(metric.Metadata{
 						Name: "schedules.BACKUP.last-completed-time-by-virtual_cluster",
 						Help: crstrings.UnwrapText(`
 							The unix timestamp of the most recently completed host scheduled
@@ -638,7 +638,7 @@ func init() {
 						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
-					}, []string{"tenant_id"}),
+					}), []string{"tenant_id"}),
 				},
 			}, nil
 		})

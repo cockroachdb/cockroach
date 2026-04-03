@@ -153,5 +153,11 @@ message Metadata {
   // labels will be recorded in the time series database.
   optional bool tsdb_record_labeled = 13;
 
-  // Next ID: 14.
+  // source_file is the repo-relative path of the Go source file where this
+  // metric is defined (e.g., "pkg/kv/kvserver/metrics.go"). It is set
+  // automatically by NewMetadata via runtime.Caller and used at generation
+  // time to resolve the owning team via CODEOWNERS.
+  optional string source_file = 14 [(gogoproto.nullable) = false];
+
+  // Next ID: 15.
 }

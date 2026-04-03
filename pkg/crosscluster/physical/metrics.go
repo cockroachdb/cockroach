@@ -19,19 +19,19 @@ const (
 )
 
 var (
-	metaReplicationEventsIngested = metric.Metadata{
+	metaReplicationEventsIngested = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.events_ingested",
 		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicationResolvedEventsIngested = metric.Metadata{
+	})
+	metaReplicationResolvedEventsIngested = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.resolved_events_ingested",
 		Help:        "Resolved events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicationIngestedBytes = metric.Metadata{
+	})
+	metaReplicationIngestedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
@@ -39,43 +39,43 @@ var (
 		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_BYTES,
 		HowToUse:    "Track PCR throughput",
-	}
-	metaReplicationFlushes = metric.Metadata{
+	})
+	metaReplicationFlushes = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.flushes",
 		Help:        "Total flushes across all replication jobs",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaReplicationFlushHistNanos = metric.Metadata{
+	metaReplicationFlushHistNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.flush_hist_nanos",
 		Help:        "Time spent flushing messages across all replication streams",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicationCommitLatency = metric.Metadata{
+	})
+	metaReplicationCommitLatency = metric.InitMetadata(metric.Metadata{
 		Name: "physical_replication.commit_latency",
 		Help: "Event commit latency: a difference between event MVCC timestamp " +
 			"and the time it was flushed into disk. If we batch events, then the difference " +
 			"between the oldest event in the batch and flush is recorded",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicationAdmitLatency = metric.Metadata{
+	})
+	metaReplicationAdmitLatency = metric.InitMetadata(metric.Metadata{
 		Name: "physical_replication.admit_latency",
 		Help: "Event admission latency: a difference between event MVCC timestamp " +
 			"and the time it was admitted into ingestion processor",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaStreamsRunning = metric.Metadata{
+	})
+	metaStreamsRunning = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.running",
 		Help:        "Number of currently running replication streams",
 		Measurement: "Replication Streams",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaReplicatedTimeSeconds = metric.Metadata{
+	metaReplicatedTimeSeconds = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the physical replication stream in seconds since the unix epoch.",
 		Measurement: "Seconds",
@@ -83,49 +83,49 @@ var (
 		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_SECONDS,
 		HowToUse:    "Track replication lag via current time - physical_replication.replicated_time_seconds",
-	}
+	})
 	// This metric would be 0 until cutover begins, and then it will be updated to
 	// the total number of ranges that need to be reverted, and then gradually go
 	// down to 0 again. NB: that the number of ranges is the total number of
 	// ranges left to be reverted, but some may not have writes and therefore the
 	// revert will be a no-op for those ranges.
-	metaReplicationCutoverProgress = metric.Metadata{
+	metaReplicationCutoverProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.failover_progress",
 		Help:        "The number of ranges left to revert in order to complete an inflight cutover",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSQLReplanCount = metric.Metadata{
+	})
+	metaDistSQLReplanCount = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.distsql_replan_count",
 		Help:        "Total number of dist sql replanning events",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaScanningRanges = metric.Metadata{
+	metaScanningRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.scanning_ranges",
 		Help:        "Source side ranges undergoing an initial scan",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaCatchupRanges = metric.Metadata{
+	})
+	metaCatchupRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.catchup_ranges",
 		Help:        "Source side ranges undergoing catch up scans",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReceiveWaitNanos = metric.Metadata{
+	})
+	metaReceiveWaitNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.receive_wait_nanos",
 		Help:        "Cumulative time spent waiting to receive events from producer; use rate() to compare against flush_wait_nanos",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaFlushWaitNanos = metric.Metadata{
+	})
+	metaFlushWaitNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "physical_replication.flush_wait_nanos",
 		Help:        "Cumulative time spent waiting to send buffer to flush loop; use rate() to compare against receive_wait_nanos",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.

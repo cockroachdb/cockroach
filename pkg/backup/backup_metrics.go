@@ -22,12 +22,12 @@ func (b BackupMetrics) MetricStruct() {}
 // MakeBackupMetrics instantiates the metrics for backup.
 func MakeBackupMetrics(time.Duration) metric.Struct {
 	m := &BackupMetrics{
-		LastKMSInaccessibleErrorTime: metric.NewGauge(metric.Metadata{
+		LastKMSInaccessibleErrorTime: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "backup.last-failed-time.kms-inaccessible",
 			Help:        "The unix timestamp of the most recent failure of backup due to errKMSInaccessible by a backup specified as maintaining this metric",
 			Measurement: "Jobs",
 			Unit:        metric.Unit_TIMESTAMP_SEC,
-		}),
+		})),
 	}
 	return m
 }

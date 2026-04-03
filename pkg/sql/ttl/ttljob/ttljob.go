@@ -307,7 +307,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	}
 	defer func() { t.progressTracker.terminateTracker() }()
 
-	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
+	metadataCallbackWriter := sql.InitMetadataOnlyMetadataCallbackWriter(
 		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 			// In mixed-version clusters (25.3 and earlier), TTL processors fall back to
 			// direct job table updates if any node in the cluster does not support

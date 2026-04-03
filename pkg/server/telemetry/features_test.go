@@ -91,8 +91,8 @@ func TestBucket(t *testing.T) {
 // TestCounterWithMetric verifies that only the telemetry is reset to zero when,
 // for example, a report is created.
 func TestCounterWithMetric(t *testing.T) {
-	cm := telemetry.NewCounterWithMetric(metric.Metadata{Name: "test-metric"})
-	cag := telemetry.NewCounterWithAggMetric(metric.Metadata{Name: "test-agg-metric"})
+	cm := telemetry.NewCounterWithMetric(metric.InitMetadata(metric.Metadata{Name: "test-metric"}))
+	cag := telemetry.NewCounterWithAggMetric(metric.InitMetadata(metric.Metadata{Name: "test-agg-metric"}))
 
 	cm.Inc()
 	cag.Inc("test-db", "test-app")

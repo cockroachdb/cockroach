@@ -44,13 +44,13 @@ var sampleDuration = settings.RegisterDurationSetting(
 	settings.DurationWithMinimum(100*time.Millisecond),
 )
 
-var schedulerLatency = metric.Metadata{
+var schedulerLatency = metric.InitMetadata(metric.Metadata{
 	Name:        "go.scheduler_latency",
 	Help:        "Go scheduling latency",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
 	Visibility:  metric.Metadata_SUPPORT,
-}
+})
 
 // StartSampler spawn a goroutine to periodically sample the scheduler latencies
 // and invoke all registered callbacks.

@@ -326,7 +326,7 @@ func (r *logicalReplicationResumer) ingest(
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
+			sql.InitMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */

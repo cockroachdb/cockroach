@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	metaStoreRebalancerLeaseTransferCount = metric.Metadata{
+	metaStoreRebalancerLeaseTransferCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.lease.transfers",
 		Help:        "Number of lease transfers motivated by store-level load imbalances",
 		Measurement: "Lease Transfers",
@@ -35,8 +35,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
-	}
-	metaStoreRebalancerRangeRebalanceCount = metric.Metadata{
+	})
+	metaStoreRebalancerRangeRebalanceCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.range.rebalances",
 		Help:        "Number of range rebalance operations motivated by store-level load imbalances",
 		Measurement: "Range Rebalances",
@@ -44,14 +44,14 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
-	}
-	metaStoreRebalancerImbalancedOverfullOptionsExhausted = metric.Metadata{
+	})
+	metaStoreRebalancerImbalancedOverfullOptionsExhausted = metric.InitMetadata(metric.Metadata{
 		Name: "rebalancing.state.imbalanced_overfull_options_exhausted",
 		Help: "Number of occurrences where this store was overfull but failed to " +
 			"shed load after exhausting available rebalance options",
 		Measurement: "Overfull Options Exhausted",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // StoreRebalancerMetrics is the set of metrics for the store-level rebalancer.

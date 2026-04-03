@@ -119,7 +119,7 @@ const (
 
 // Fully-qualified names for metrics.
 var (
-	MetaConns = metric.Metadata{
+	MetaConns = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.conns",
 		Help:        "Number of open SQL connections",
 		Measurement: "Connections",
@@ -127,8 +127,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.`,
-	}
-	MetaNewConns = metric.Metadata{
+	})
+	MetaNewConns = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.new_conns",
 		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
@@ -136,26 +136,26 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.`,
-	}
-	MetaConnsWaitingToHash = metric.Metadata{
+	})
+	MetaConnsWaitingToHash = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.conns_waiting_to_hash",
 		Help:        "Number of SQL connection attempts that are being throttled in order to limit password hashing concurrency",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaBytesIn = metric.Metadata{
+	})
+	MetaBytesIn = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.bytesin",
 		Help:        "Number of SQL bytes received",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaBytesOut = metric.Metadata{
+	})
+	MetaBytesOut = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.bytesout",
 		Help:        "Number of SQL bytes sent",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaConnLatency = metric.Metadata{
+	})
+	MetaConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection",
 		Measurement: "Nanoseconds",
@@ -163,8 +163,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.",
-	}
-	MetaConnFailures = metric.Metadata{
+	})
+	MetaConnFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.conn.failures",
 		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
@@ -172,33 +172,33 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric is incremented whenever a connection attempt fails for any reason, including timeouts.",
-	}
-	MetaPGWireCancelTotal = metric.Metadata{
+	})
+	MetaPGWireCancelTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
 		Help:        "Number of pgwire query cancel requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaPGWireCancelIgnored = metric.Metadata{
+	})
+	MetaPGWireCancelIgnored = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pgwire_cancel.ignored",
 		Help:        "Number of pgwire query cancel requests that were ignored due to rate limiting",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaPGWireCancelSuccessful = metric.Metadata{
+	})
+	MetaPGWireCancelSuccessful = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pgwire_cancel.successful",
 		Help:        "Number of pgwire query cancel requests that were successful",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaPGWirePipelineCount = metric.Metadata{
+	})
+	MetaPGWirePipelineCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pgwire.pipeline.count",
 		Help:        "Number of pgwire commands received by the server that have not yet begun processing",
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
-	AuthJWTConnLatency = metric.Metadata{
+	})
+	AuthJWTConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.jwt.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using JWT Token",
 		Measurement: "Nanoseconds",
@@ -206,8 +206,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthCertConnLatency = metric.Metadata{
+	})
+	AuthCertConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.cert.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using certificate",
 		Measurement: "Nanoseconds",
@@ -215,8 +215,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthPassConnLatency = metric.Metadata{
+	})
+	AuthPassConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.password.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using password",
 		Measurement: "Nanoseconds",
@@ -224,8 +224,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthLDAPConnLatency = metric.Metadata{
+	})
+	AuthLDAPConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.ldap.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using LDAP",
 		Measurement: "Nanoseconds",
@@ -233,8 +233,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthGSSConnLatency = metric.Metadata{
+	})
+	AuthGSSConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.gss.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using GSS",
 		Measurement: "Nanoseconds",
@@ -242,8 +242,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthScramConnLatency = metric.Metadata{
+	})
+	AuthScramConnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.scram.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using SCRAM",
 		Measurement: "Nanoseconds",
@@ -251,8 +251,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthLDAPConnLatencyInternal = metric.Metadata{
+	})
+	AuthLDAPConnLatencyInternal = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.ldap.conn.latency.internal",
 		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
 		Measurement: "Nanoseconds",
@@ -260,8 +260,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
-	}
-	AuthCertSANConnTotal = metric.Metadata{
+	})
+	AuthCertSANConnTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.cert.san.conn.total",
 		Help:        "Total number of SQL connection attempts using SAN-based certificate authentication",
 		Measurement: "Connections",
@@ -269,8 +269,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric tracks all authentication attempts when SAN-based certificate validation is enabled. Compare with auth.cert.san.conn.success to calculate failure rate.",
-	}
-	AuthCertSANConnSuccess = metric.Metadata{
+	})
+	AuthCertSANConnSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "auth.cert.san.conn.success",
 		Help:        "Number of successful SQL connections using SAN-based certificate authentication",
 		Measurement: "Connections",
@@ -278,7 +278,7 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.",
-	}
+	})
 )
 
 const (

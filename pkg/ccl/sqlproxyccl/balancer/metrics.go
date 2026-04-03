@@ -21,24 +21,24 @@ func (Metrics) MetricStruct() {}
 var _ metric.Struct = Metrics{}
 
 var (
-	metaRebalanceReqRunning = metric.Metadata{
+	metaRebalanceReqRunning = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.balancer.rebalance.running",
 		Help:        "Number of rebalance requests currently running",
 		Measurement: "Rebalance Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRebalanceReqQueued = metric.Metadata{
+	})
+	metaRebalanceReqQueued = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.balancer.rebalance.queued",
 		Help:        "Number of rebalance requests currently queued",
 		Measurement: "Rebalance Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRebalanceReqTotal = metric.Metadata{
+	})
+	metaRebalanceReqTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.balancer.rebalance.total",
 		Help:        "Number of rebalance requests that were processed",
 		Measurement: "Rebalance Requests",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // NewMetrics instantiates the metrics holder for balancer monitoring.

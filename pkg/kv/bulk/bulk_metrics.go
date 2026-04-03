@@ -25,18 +25,18 @@ func (Metrics) MetricStruct() {}
 var _ metric.Struct = Metrics{}
 
 var (
-	metaMemMaxBytes = metric.Metadata{
+	metaMemMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.mem.bulk.max",
 		Help:        "Memory usage per sql statement for bulk operations",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaMemCurBytes = metric.Metadata{
+	})
+	metaMemCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.mem.bulk.current",
 		Help:        "Current sql statement memory usage for bulk operations",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 )
 
 // See pkg/sql/mem_metrics.go

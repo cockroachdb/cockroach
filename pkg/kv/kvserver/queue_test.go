@@ -106,13 +106,13 @@ func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfi
 		// Needed in order to pass the validation in newBaseQueue.
 		cfg.needsSpanConfigs = true
 	}
-	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
-	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
-	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
-	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
-	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	cfg.enqueueAdd = metric.NewCounter(metric.Metadata{Name: "enqueueadd"})
-	cfg.enqueueUnexpectedError = metric.NewCounter(metric.Metadata{Name: "enqueueunexpectederror"})
+	cfg.successes = metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "processed"}))
+	cfg.failures = metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "failures"}))
+	cfg.pending = metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: "pending"}))
+	cfg.processingNanos = metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "processingnanos"}))
+	cfg.purgatory = metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: "purgatory"}))
+	cfg.enqueueAdd = metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "enqueueadd"}))
+	cfg.enqueueUnexpectedError = metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "enqueueunexpectederror"}))
 	cfg.disabledConfig = testQueueEnabled
 	return newBaseQueue(name, impl, store, cfg)
 }

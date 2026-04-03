@@ -27,54 +27,54 @@ type Metrics struct {
 var _ metric.Struct = (*Metrics)(nil)
 
 var (
-	metaTenants = metric.Metadata{
+	metaTenants = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.num_tenants",
 		Help:        "Number of tenants currently being tracked",
 		Measurement: "Tenants",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaCurrentBlocked = metric.Metadata{
+	})
+	metaCurrentBlocked = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.current_blocked",
 		Help:        "Number of requests currently blocked by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadBatchesAdmitted = metric.Metadata{
+	})
+	metaReadBatchesAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.read_batches_admitted",
 		Help:        "Number of read batches admitted by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteBatchesAdmitted = metric.Metadata{
+	})
+	metaWriteBatchesAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.write_batches_admitted",
 		Help:        "Number of write batches admitted by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadRequestsAdmitted = metric.Metadata{
+	})
+	metaReadRequestsAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.read_requests_admitted",
 		Help:        "Number of read requests admitted by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteRequestsAdmitted = metric.Metadata{
+	})
+	metaWriteRequestsAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.write_requests_admitted",
 		Help:        "Number of write requests admitted by the rate limiter",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadBytesAdmitted = metric.Metadata{
+	})
+	metaReadBytesAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.read_bytes_admitted",
 		Help:        "Number of read bytes admitted by the rate limiter",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaWriteBytesAdmitted = metric.Metadata{
+	})
+	metaWriteBytesAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.tenant_rate_limit.write_bytes_admitted",
 		Help:        "Number of write bytes admitted by the rate limiter",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 )
 
 func makeMetrics() Metrics {

@@ -142,7 +142,7 @@ func TestWriter_Flush(t *testing.T) {
 		}{{
 			name: "counter incremented is stored",
 			setup: func(env *testEnv) {
-				c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+				c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 				env.writer.AddMetric(c)
 				c.Inc(5)
 			},
@@ -150,7 +150,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "counter accumulates multiple increments",
 			setup: func(env *testEnv) {
-				c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+				c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 				env.writer.AddMetric(c)
 				c.Inc(5)
 				c.Inc(3)
@@ -159,14 +159,14 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "counter not incremented is not stored",
 			setup: func(env *testEnv) {
-				c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+				c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 				env.writer.AddMetric(c)
 			},
 			wantNotStored: []string{"c"},
 		}, {
 			name: "gauge updated is stored",
 			setup: func(env *testEnv) {
-				g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+				g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 				env.writer.AddMetric(g)
 				g.Update(100)
 			},
@@ -174,14 +174,14 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "gauge not updated is not stored",
 			setup: func(env *testEnv) {
-				g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+				g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 				env.writer.AddMetric(g)
 			},
 			wantNotStored: []string{"g"},
 		}, {
 			name: "gauge Inc marks dirty",
 			setup: func(env *testEnv) {
-				g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+				g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 				env.writer.AddMetric(g)
 				g.Inc(10)
 			},
@@ -189,7 +189,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "gauge Dec marks dirty",
 			setup: func(env *testEnv) {
-				g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+				g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 				env.writer.AddMetric(g)
 				g.Dec(-5) // Dec of negative = increase
 			},
@@ -197,8 +197,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "multiple counters all stored",
 			setup: func(env *testEnv) {
-				c1 := cmmetrics.NewCounter(metric.Metadata{Name: "c1"})
-				c2 := cmmetrics.NewCounter(metric.Metadata{Name: "c2"})
+				c1 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c1"}))
+				c2 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c2"}))
 				env.writer.AddMetric(c1)
 				env.writer.AddMetric(c2)
 				c1.Inc(10)
@@ -208,8 +208,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "multiple gauges all stored",
 			setup: func(env *testEnv) {
-				g1 := cmmetrics.NewGauge(metric.Metadata{Name: "g1"})
-				g2 := cmmetrics.NewGauge(metric.Metadata{Name: "g2"})
+				g1 := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g1"}))
+				g2 := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g2"}))
 				env.writer.AddMetric(g1)
 				env.writer.AddMetric(g2)
 				g1.Update(100)
@@ -219,8 +219,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "mixed counters and gauges all stored",
 			setup: func(env *testEnv) {
-				c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
-				g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+				c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
+				g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 				env.writer.AddMetric(c)
 				env.writer.AddMetric(g)
 				c.Inc(10)
@@ -230,10 +230,10 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "only dirty metrics stored",
 			setup: func(env *testEnv) {
-				c1 := cmmetrics.NewCounter(metric.Metadata{Name: "c1"})
-				c2 := cmmetrics.NewCounter(metric.Metadata{Name: "c2"})
-				g1 := cmmetrics.NewGauge(metric.Metadata{Name: "g1"})
-				g2 := cmmetrics.NewGauge(metric.Metadata{Name: "g2"})
+				c1 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c1"}))
+				c2 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c2"}))
+				g1 := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g1"}))
+				g2 := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g2"}))
 				env.writer.AddMetric(c1)
 				env.writer.AddMetric(c2)
 				env.writer.AddMetric(g1)
@@ -248,7 +248,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "stopwatch started is stored",
 			setup: func(env *testEnv) {
-				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
+				sw := cmmetrics.NewWriteStopwatch(metric.InitMetadata(metric.Metadata{Name: "sw"}), timeutil.DefaultTimeSource{})
 				env.writer.AddMetric(sw)
 				sw.SetStartTime()
 			},
@@ -260,7 +260,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "stopwatch not started is not stored",
 			setup: func(env *testEnv) {
-				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
+				sw := cmmetrics.NewWriteStopwatch(metric.InitMetadata(metric.Metadata{Name: "sw"}), timeutil.DefaultTimeSource{})
 				env.writer.AddMetric(sw)
 			},
 			wantNotStored: []string{"sw"},
@@ -272,8 +272,8 @@ func TestWriter_Flush(t *testing.T) {
 					Status *cmmetrics.Gauge
 				}
 				m := TestMetrics{
-					Count:  cmmetrics.NewCounter(metric.Metadata{Name: "count"}),
-					Status: cmmetrics.NewGauge(metric.Metadata{Name: "status"}),
+					Count:  cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "count"})),
+					Status: cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "status"})),
 				}
 				env.writer.AddMetricStruct(&m)
 				m.Count.Inc(15)
@@ -308,7 +308,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("gauge unchanged on second flush not written", func(t *testing.T) {
 		env := newTestEnv()
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 		env.writer.AddMetric(g)
 
 		g.Update(50)
@@ -327,7 +327,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("gauge retains value after flush", func(t *testing.T) {
 		env := newTestEnv()
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 		env.writer.AddMetric(g)
 
 		g.Update(42)
@@ -338,7 +338,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("counter accumulates across increments then resets", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 
 		c.Inc(5)
@@ -359,8 +359,8 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("mixed dirty and clean on second flush", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 		env.writer.AddMetric(c)
 		env.writer.AddMetric(g)
 
@@ -390,7 +390,7 @@ func TestWriter_OperationalMetrics(t *testing.T) {
 
 	t.Run("records flush metrics", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 		c.Inc(1)
 
@@ -428,7 +428,7 @@ func TestWriter_PeriodicFlush(t *testing.T) {
 		writerMetrics := NewWriterMetrics()
 		w := NewWriterWithStore(store, writerMetrics)
 
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		w.AddMetric(c)
 		c.Inc(5)
 
@@ -455,7 +455,7 @@ func TestWriter_PeriodicFlush(t *testing.T) {
 		writerMetrics := NewWriterMetrics()
 		w := NewWriterWithStore(store, writerMetrics)
 
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		w.AddMetric(c)
 		c.Inc(5)
 
@@ -482,7 +482,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("gauge vec children persisted with labels", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region", "status")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region", "status")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east", "status": "ok"}, 10)
@@ -500,7 +500,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("counter vec children persisted with labels", func(t *testing.T) {
 		env := newTestEnv()
-		cv := cmmetrics.NewCounterVec(metric.Metadata{Name: "cv"}, "method")
+		cv := cmmetrics.NewCounterVec(metric.InitMetadata(metric.Metadata{Name: "cv"}), "method")
 		env.writer.AddMetric(cv)
 
 		cv.Inc(map[string]string{"method": "GET"}, 5)
@@ -518,7 +518,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("vec with no children is not flushed", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		env.writer.Flush(env.ctx)
@@ -527,7 +527,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("vec children cleared after flush", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east"}, 10)
@@ -546,8 +546,8 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("only dirty vec children are written", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
-		cv := cmmetrics.NewCounterVec(metric.Metadata{Name: "cv"}, "method")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
+		cv := cmmetrics.NewCounterVec(metric.InitMetadata(metric.Metadata{Name: "cv"}), "method")
 		env.writer.AddMetric(gv)
 		env.writer.AddMetric(cv)
 
@@ -561,7 +561,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("stopwatch vec children persisted with labels", func(t *testing.T) {
 		env := newTestEnv()
-		sv := cmmetrics.NewWriteStopwatchVec(metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job")
+		sv := cmmetrics.NewWriteStopwatchVec(metric.InitMetadata(metric.Metadata{Name: "sv"}), timeutil.DefaultTimeSource{}, "job")
 		env.writer.AddMetric(sv)
 
 		sv.SetStartTime(map[string]string{"job": "backup"})
@@ -579,7 +579,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("stopwatch vec with no children is not flushed", func(t *testing.T) {
 		env := newTestEnv()
-		sv := cmmetrics.NewWriteStopwatchVec(metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job")
+		sv := cmmetrics.NewWriteStopwatchVec(metric.InitMetadata(metric.Metadata{Name: "sv"}), timeutil.DefaultTimeSource{}, "job")
 		env.writer.AddMetric(sv)
 
 		env.writer.Flush(env.ctx)
@@ -588,7 +588,7 @@ func TestWriter_VecMetrics(t *testing.T) {
 
 	t.Run("stopwatch vec children cleared after flush", func(t *testing.T) {
 		env := newTestEnv()
-		sv := cmmetrics.NewWriteStopwatchVec(metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job")
+		sv := cmmetrics.NewWriteStopwatchVec(metric.InitMetadata(metric.Metadata{Name: "sv"}), timeutil.DefaultTimeSource{}, "job")
 		env.writer.AddMetric(sv)
 
 		sv.SetStartTime(map[string]string{"job": "backup"})
@@ -654,7 +654,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar counter delete", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 
 		c.Inc(5)
@@ -671,7 +671,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar gauge delete", func(t *testing.T) {
 		env := newTestEnv()
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 		env.writer.AddMetric(g)
 
 		g.Update(42)
@@ -688,7 +688,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar inc then delete before flush", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 
 		c.Inc(5)
@@ -704,7 +704,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar delete then inc before flush", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 
 		c.Delete()
@@ -720,7 +720,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar delete then update gauge", func(t *testing.T) {
 		env := newTestEnv()
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "g"}))
 		env.writer.AddMetric(g)
 
 		g.Update(10)
@@ -738,7 +738,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("vec single child delete", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east"}, 10)
@@ -758,7 +758,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("vec all children deleted", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east"}, 10)
@@ -774,7 +774,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("vec delete and re-add same cycle", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east"}, 10)
@@ -793,7 +793,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("counter vec delete", func(t *testing.T) {
 		env := newTestEnv()
-		cv := cmmetrics.NewCounterVec(metric.Metadata{Name: "cv"}, "method")
+		cv := cmmetrics.NewCounterVec(metric.InitMetadata(metric.Metadata{Name: "cv"}), "method")
 		env.writer.AddMetric(cv)
 
 		cv.Inc(map[string]string{"method": "GET"}, 5)
@@ -813,7 +813,7 @@ func TestWriter_Delete(t *testing.T) {
 	t.Run("stopwatch vec delete", func(t *testing.T) {
 		env := newTestEnv()
 		sv := cmmetrics.NewWriteStopwatchVec(
-			metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job",
+			metric.InitMetadata(metric.Metadata{Name: "sv"}), timeutil.DefaultTimeSource{}, "job",
 		)
 		env.writer.AddMetric(sv)
 
@@ -834,7 +834,7 @@ func TestWriter_Delete(t *testing.T) {
 	t.Run("scalar stopwatch delete", func(t *testing.T) {
 		env := newTestEnv()
 		sw := cmmetrics.NewWriteStopwatch(
-			metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{},
+			metric.InitMetadata(metric.Metadata{Name: "sw"}), timeutil.DefaultTimeSource{},
 		)
 		env.writer.AddMetric(sw)
 
@@ -852,7 +852,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("scalar inc after flushed delete is noop", func(t *testing.T) {
 		env := newTestEnv()
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		env.writer.AddMetric(c)
 
 		c.Inc(5)
@@ -883,7 +883,7 @@ func TestWriter_Delete(t *testing.T) {
 		writerMetrics := NewWriterMetrics()
 		w := NewWriterWithStore(es, writerMetrics)
 
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "c"}))
 		w.AddMetric(c)
 		c.Inc(5)
 		w.Flush(ctx)
@@ -909,7 +909,7 @@ func TestWriter_Delete(t *testing.T) {
 
 	t.Run("operational metrics", func(t *testing.T) {
 		env := newTestEnv()
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "gv"}), "region")
 		env.writer.AddMetric(gv)
 
 		gv.Update(map[string]string{"region": "us-east"}, 10)

@@ -12,27 +12,27 @@ import (
 )
 
 var (
-	metaActiveWorkStates = metric.Metadata{
+	metaActiveWorkStates = metric.InitMetadata(metric.Metadata{
 		Name:        "ash.work_states.active",
 		Help:        "Number of goroutines with an active ASH work state",
 		Measurement: "Goroutines",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
-	metaTakeSampleLatency = metric.Metadata{
+	})
+	metaTakeSampleLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "ash.sampler.take_sample.latency",
 		Help:        "Latency of ASH sample collection ticks",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
-	}
-	metaSamplesCollected = metric.Metadata{
+	})
+	metaSamplesCollected = metric.InitMetadata(metric.Metadata{
 		Name:        "ash.samples.collected",
 		Help:        "Total number of ASH samples collected",
 		Measurement: "Samples",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )
 
 // Metrics holds the metrics for the ASH sampler subsystem.

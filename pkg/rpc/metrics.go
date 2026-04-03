@@ -44,7 +44,7 @@ var (
 	// Together these metrics should provide a picture of the state of current
 	// connections.
 
-	metaConnectionHealthy = metric.Metadata{
+	metaConnectionHealthy = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.connection.healthy",
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
@@ -52,9 +52,9 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
-	}
+	})
 
-	metaConnectionUnhealthy = metric.Metadata{
+	metaConnectionUnhealthy = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.connection.unhealthy",
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
@@ -62,9 +62,9 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
-	}
+	})
 
-	metaConnectionInactive = metric.Metadata{
+	metaConnectionInactive = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.inactive",
 		Help: "Gauge of current connections in an inactive state and pending deletion; " +
 			"these are not healthy but are not tracked as unhealthy either because " +
@@ -72,9 +72,9 @@ var (
 			"for example if the node has since been seen under a new address",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaConnectionHealthyNanos = metric.Metadata{
+	metaConnectionHealthyNanos = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.healthy_nanos",
 		Help: `Gauge of nanoseconds of healthy connection time
 
@@ -86,9 +86,9 @@ for how long a given peer has been connected`,
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
-	}
+	})
 
-	metaConnectionUnhealthyNanos = metric.Metadata{
+	metaConnectionUnhealthyNanos = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.unhealthy_nanos",
 		Help: `Gauge of nanoseconds of unhealthy connection time.
 
@@ -100,9 +100,9 @@ for how long a given peer has been unreachable`,
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
-	}
+	})
 
-	metaConnectionHeartbeats = metric.Metadata{
+	metaConnectionHeartbeats = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.connection.heartbeats",
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
@@ -110,9 +110,9 @@ for how long a given peer has been unreachable`,
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
-	}
+	})
 
-	metaConnectionFailures = metric.Metadata{
+	metaConnectionFailures = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.failures",
 		Help: `Counter of failed connections.
 
@@ -127,9 +127,9 @@ Decommissioned peers are excluded.
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
-	}
+	})
 
-	metaConnectionAvgRoundTripLatency = metric.Metadata{
+	metaConnectionAvgRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.avg_round_trip_latency",
 		Unit: metric.Unit_NANOSECONDS,
 		Help: `Sum of exponentially weighted moving average of round-trip latencies, as measured through a gRPC RPC.
@@ -151,9 +151,9 @@ is reset to zero.
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
-	}
+	})
 
-	metaConnectionTCPRTT = metric.Metadata{
+	metaConnectionTCPRTT = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.tcp_rtt",
 		Unit: metric.Unit_NANOSECONDS,
 		Help: `Kernel-level TCP round-trip time as measured by the Linux TCP stack.
@@ -168,9 +168,9 @@ This metric is only available on Linux.
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.`,
-	}
+	})
 
-	metaConnectionTCPRTTVar = metric.Metadata{
+	metaConnectionTCPRTTVar = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.tcp_rtt_var",
 		Unit: metric.Unit_NANOSECONDS,
 		Help: `Kernel-level TCP round-trip time variance as measured by the Linux TCP stack.
@@ -185,8 +185,8 @@ This metric is only available on Linux.
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
-	}
-	metaConnectionConnected = metric.Metadata{
+	})
+	metaConnectionConnected = metric.InitMetadata(metric.Metadata{
 		Name: "rpc.connection.connected",
 		Help: `Counter of TCP level connected connections.
 
@@ -196,53 +196,53 @@ over this connection.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaNetworkBytesEgress = metric.Metadata{
+	})
+	metaNetworkBytesEgress = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.client.bytes.egress",
 		Unit:        metric.Unit_BYTES,
 		Help:        `Counter of TCP bytes sent via gRPC on connections we initiated.`,
 		Measurement: "Bytes",
-	}
-	metaNetworkBytesIngress = metric.Metadata{
+	})
+	metaNetworkBytesIngress = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.client.bytes.ingress",
 		Unit:        metric.Unit_BYTES,
 		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
 		Measurement: "Bytes",
-	}
-	metaServerRequestDuration = metric.Metadata{
+	})
+	metaServerRequestDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.server.request.duration.nanos",
 		Help:        "Duration of an RPC request at the server in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
-	}
-	metaServerRequestsTotal = metric.Metadata{
+	})
+	metaServerRequestsTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.server.requests.total",
 		Help:        "Total number of RPCs requests received by the server.",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  prometheusgo.MetricType_COUNTER,
-	}
-	metaClientRequestsTotal = metric.Metadata{
+	})
+	metaClientRequestsTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.client.requests.total",
 		Help:        "Total number of RPC requests sent by the client.",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  prometheusgo.MetricType_COUNTER,
-	}
-	metaClientRequestDuration = metric.Metadata{
+	})
+	metaClientRequestDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.client.request.duration.nanos",
 		Help:        "Duration of a RPC request at the client in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
-	}
-	metaDRPCEnabled = metric.Metadata{
+	})
+	metaDRPCEnabled = metric.InitMetadata(metric.Metadata{
 		Name:        "rpc.drpc.enabled",
 		Help:        "1 if this node is using DRPC for internode RPC, 0 otherwise.",
 		Measurement: "Enabled",
 		Unit:        metric.Unit_CONST,
-	}
+	})
 )
 
 func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []string {

@@ -9,24 +9,24 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
 	// Storage metrics.
-	metaWriteSamples = metric.Metadata{
+	metaWriteSamples = metric.InitMetadata(metric.Metadata{
 		Name:        "timeseries.write.samples",
 		Help:        "Total number of metric samples written to disk",
 		Measurement: "Metric Samples",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteBytes = metric.Metadata{
+	})
+	metaWriteBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "timeseries.write.bytes",
 		Help:        "Total size in bytes of metric samples written to disk",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaWriteErrors = metric.Metadata{
+	})
+	metaWriteErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "timeseries.write.errors",
 		Help:        "Total errors encountered while attempting to write metrics to disk",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // TimeSeriesMetrics contains metrics relevant to the time series system.

@@ -36,20 +36,20 @@ import (
 )
 
 var (
-	metaCgoCalls = metric.Metadata{
+	metaCgoCalls = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cgocalls",
 		Help:        "Total number of cgo calls",
 		Measurement: "cgo Calls",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGoroutines = metric.Metadata{
+	})
+	metaGoroutines = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.goroutines",
 		Help:        "Current number of goroutines",
 		Measurement: "goroutines",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRunnableGoroutinesPerCPU = metric.Metadata{
+	})
+	metaRunnableGoroutinesPerCPU = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.runnable.goroutines.per.cpu",
 		Help:        "Average number of goroutines that are waiting to run, normalized by number of cores",
 		Measurement: "goroutines",
@@ -57,151 +57,151 @@ var (
 
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
-		HowToUse:   `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`}
-	metaGoAllocBytes = metric.Metadata{
+		HowToUse:   `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`})
+	metaGoAllocBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.allocbytes",
 		Help:        "Current bytes of memory allocated by go",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGoTotalBytes = metric.Metadata{
+	})
+	metaGoTotalBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.totalbytes",
 		Help:        "Total bytes of memory allocated by go, but not released",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGoLimitBytes = metric.Metadata{
+	})
+	metaGoLimitBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.limitbytes",
 		Help:        "Go soft memory limit",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaGoMemStackSysBytes = metric.Metadata{
+	})
+	metaGoMemStackSysBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.stack.systembytes",
 		Help:        "Stack memory obtained from the OS.",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaGoHeapFragmentBytes = metric.Metadata{
+	})
+	metaGoHeapFragmentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.heapfragmentbytes",
 		Help:        "Total heap fragmentation bytes, derived from bytes in in-use spans minus bytes allocated",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGoHeapReservedBytes = metric.Metadata{
+	})
+	metaGoHeapReservedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.heapreservedbytes",
 		Help:        "Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaGoHeapReleasedBytes = metric.Metadata{
+	})
+	metaGoHeapReleasedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.heapreleasedbytes",
 		Help:        "Total bytes returned to the OS from heap.",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaGoTotalAllocBytes = metric.Metadata{
+	})
+	metaGoTotalAllocBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.allocbytes",
 		Help:        "Cumulative bytes allocated for heap objects.",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGoHeapObjects = metric.Metadata{
+	})
+	metaGoHeapObjects = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.objects",
 		Help:        "Number of live objects on the heap (live + unswept)",
 		Measurement: "Objects",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGoHeapLiveBytes = metric.Metadata{
+	})
+	metaGoHeapLiveBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.heap.livebytes",
 		Help:        "Bytes of live heap objects marked by the previous GC",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCgoAllocBytes = metric.Metadata{
+	})
+	metaCgoAllocBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cgo.allocbytes",
 		Help:        "Current bytes of memory allocated by cgo",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaCgoTotalBytes = metric.Metadata{
+	})
+	metaCgoTotalBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cgo.totalbytes",
 		Help:        "Total bytes of memory allocated by cgo, but not released",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGCCount = metric.Metadata{
+	})
+	metaGCCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.count",
 		Help:        "Total number of GC runs",
 		Measurement: "GC Runs",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGCPauseNS = metric.Metadata{
+	})
+	metaGCPauseNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.pause.ns",
 		Help:        "Total GC pause",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGCStopNS = metric.Metadata{
+	})
+	metaGCStopNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.stop.ns",
 		Help:        "Estimated GC stop-the-world stopping latencies",
 		Measurement: "GC Stopping",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaGCPausePercent = metric.Metadata{
+	})
+	metaGCPausePercent = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.pause.percent",
 		Help:        "Current GC pause percentage",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_PERCENT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaGCAssistNS = metric.Metadata{
+	})
+	metaGCAssistNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.assist.ns",
 		Help:        "Estimated total CPU time user goroutines spent to assist the GC process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaGCAssistEnabled = metric.Metadata{
+	})
+	metaGCAssistEnabled = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.assist.enabled",
 		Help:        "Indicates whether GC assist is currently enabled (1) or disabled (0)",
 		Measurement: "GC Assist",
 		Unit:        metric.Unit_CONST,
-	}
-	metaGCTotalNS = metric.Metadata{
+	})
+	metaGCTotalNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.gc.total.ns",
 		Help:        "Estimated total CPU time spent performing GC tasks",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaNonGCPauseNS = metric.Metadata{
+	})
+	metaNonGCPauseNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.pause.other.ns",
 		Help:        "Estimated non-GC-related total pause time",
 		Measurement: "Non-GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaNonGCStopNS = metric.Metadata{
+	})
+	metaNonGCStopNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.go.stop.other.ns",
 		Help:        "Estimated non-GC-related stop-the-world stopping latencies",
 		Measurement: "Non-GC Stopping",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	metaCPUUserNS = metric.Metadata{
+	metaCPUUserNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.user.ns",
 		Help:        "Total user cpu time consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaCPUUserPercent = metric.Metadata{
+	})
+	metaCPUUserPercent = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.user.percent",
 		Help:        "Current user cpu percentage consumed by the CRDB process",
 		Measurement: "CPU Time",
@@ -213,15 +213,15 @@ var (
 		top command output. The metric value can be more than 1 (or 100%)
 		on multi-core systems. It is best to combine user and system
 		metrics.`,
-	}
-	metaCPUSysNS = metric.Metadata{
+	})
+	metaCPUSysNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.sys.ns",
 		Help:        "Total system cpu time consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaCPUSysPercent = metric.Metadata{
+	})
+	metaCPUSysPercent = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.sys.percent",
 		Help:        "Current system cpu percentage consumed by the CRDB process",
 		Measurement: "CPU Time",
@@ -233,8 +233,8 @@ var (
 		similar to the Linux top command output. The metric value can be
 		more than 1 (or 100%) on multi-core systems. It is best to combine
 		user and system metrics.`,
-	}
-	metaCPUCombinedPercentNorm = metric.Metadata{
+	})
+	metaCPUCombinedPercentNorm = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.combined.percent-normalized",
 		Help:        "Current user+system cpu percentage consumed by the CRDB process, normalized 0-1 by number of cores",
 		Measurement: "CPU Time",
@@ -245,15 +245,15 @@ var (
 		If it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should 
 		not be running with over 80% utilization for extended periods of time (hours). This metric 
 		is used in the DB Console CPU Percent graph.`,
-	}
-	metaCPUNowNS = metric.Metadata{
+	})
+	metaCPUNowNS = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.now.ns",
 		Help:        "The time when CPU measurements were taken, as nanoseconds since epoch",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	metaHostCPUCombinedPercentNorm = metric.Metadata{
+	metaHostCPUCombinedPercentNorm = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.cpu.host.combined.percent-normalized",
 		Help:        "Current user+system cpu percentage across the whole machine, normalized 0-1 by number of cores",
 		Measurement: "CPU Time",
@@ -272,9 +272,9 @@ var (
     running the CockroachDB process in an environment where the CPU
     remains overloaded for extended periods (e.g. multiple hours). This
     metric appears in the DB Console on the Host CPU Percent graph.`,
-	}
+	})
 
-	metaRSSBytes = metric.Metadata{
+	metaRSSBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.rss",
 		Help:        "Current process RSS",
 		Measurement: "RSS",
@@ -288,27 +288,27 @@ var (
 		or both. Conversely, a high utilization, even if a temporary spike,
 		indicates an increased risk of Out-of-memory (OOM) crash
 		(particularly since the swap is generally disabled).`,
-	}
-	metaTotalMemBytes = metric.Metadata{
+	})
+	metaTotalMemBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.totalmem",
 		Help:        "Total memory (both free and used)",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaFDOpen = metric.Metadata{
+	})
+	metaFDOpen = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.fd.open",
 		Help:        "Process open file descriptors",
 		Measurement: "File Descriptors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFDSoftLimit = metric.Metadata{
+	})
+	metaFDSoftLimit = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.fd.softlimit",
 		Help:        "Process open FD soft limit",
 		Measurement: "File Descriptors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaUptime = metric.Metadata{
+	})
+	metaUptime = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.uptime",
 		Help:        "Process uptime",
 		Measurement: "Uptime",
@@ -317,13 +317,13 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
-	}
+	})
 
 	// These disk and network stats are counters of the number of operations, packets, bytes, and
 	// cumulative time of the disk and net IO that has been done across the whole host *since this
 	// Cockroach process started up*. By taking the derivatives of these metrics, we can see the
 	// IO throughput.
-	metaHostDiskReadCount = metric.Metadata{
+	metaHostDiskReadCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.read.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
@@ -332,8 +332,8 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
-	}
-	metaHostDiskReadBytes = metric.Metadata{
+	})
+	metaHostDiskReadBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
@@ -342,14 +342,14 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
-	}
-	metaHostDiskReadTime = metric.Metadata{
+	})
+	metaHostDiskReadTime = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.read.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent reading from all disks since this process started (as reported by the OS)",
-	}
-	metaHostDiskWriteCount = metric.Metadata{
+	})
+	metaHostDiskWriteCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.write.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
@@ -358,8 +358,8 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
-	}
-	metaHostDiskWriteBytes = metric.Metadata{
+	})
+	metaHostDiskWriteBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
@@ -368,26 +368,26 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
-	}
-	metaHostDiskWriteTime = metric.Metadata{
+	})
+	metaHostDiskWriteTime = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.write.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent writing to all disks since this process started (as reported by the OS)",
-	}
-	metaHostDiskIOTime = metric.Metadata{
+	})
+	metaHostDiskIOTime = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.io.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent reading from or writing to all disks since this process started (as reported by the OS)",
-	}
-	metaHostDiskWeightedIOTime = metric.Metadata{
+	})
+	metaHostDiskWeightedIOTime = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.weightedio.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Weighted time spent reading from or writing to all disks since this process started (as reported by the OS)",
-	}
-	metaHostIopsInProgress = metric.Metadata{
+	})
+	metaHostIopsInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
@@ -396,8 +396,8 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.`,
-	}
-	metaHostNetRecvBytes = metric.Metadata{
+	})
+	metaHostNetRecvBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.recv.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
@@ -406,26 +406,26 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
-	}
-	metaHostNetRecvPackets = metric.Metadata{
+	})
+	metaHostNetRecvPackets = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Packets received on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetRecvErr = metric.Metadata{
+	})
+	metaHostNetRecvErr = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.recv.err",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Error receiving packets on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetRecvDrop = metric.Metadata{
+	})
+	metaHostNetRecvDrop = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.recv.drop",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Receiving packets that got dropped on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetSendBytes = metric.Metadata{
+	})
+	metaHostNetSendBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
@@ -434,26 +434,26 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
-	}
-	metaHostNetSendPackets = metric.Metadata{
+	})
+	metaHostNetSendPackets = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Packets sent on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetSendErr = metric.Metadata{
+	})
+	metaHostNetSendErr = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.err",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Error on sending packets on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetSendDrop = metric.Metadata{
+	})
+	metaHostNetSendDrop = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.drop",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
-	}
-	metaHostNetSendTCPRetransSegs = metric.Metadata{
+	})
+	metaHostNetSendTCPRetransSegs = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.tcp.retrans_segs",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Segments",
@@ -480,16 +480,16 @@ The linux tool 'ss -i' can show the Linux kernel's smoothed view of round-trip
 latency and variance on a per-connection basis.  Additionally, 'netstat -s'
 shows all TCP counters maintained by the kernel.
 `,
-	}
-	metaHostNetSendTCPFastRetrans = metric.Metadata{
+	})
+	metaHostNetSendTCPFastRetrans = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.tcp.fast_retrans_segs",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Segments",
 		Help: `Segments retransmitted due to the fast retransmission mechanism in TCP.
 Fast retransmissions occur when the sender learns that intermediate segments have been lost.`,
 		Category: metric.Metadata_NETWORKING,
-	}
-	metaHostNetSendTCPTimeouts = metric.Metadata{
+	})
+	metaHostNetSendTCPTimeouts = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.tcp_timeouts",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Timeouts",
@@ -501,8 +501,8 @@ retransmission timeouts. Anecdotally, they still occasionally present themselves
 even in supposedly healthy cloud environments.
 `,
 		Category: metric.Metadata_NETWORKING,
-	}
-	metaHostNetSendTCPSlowStartRetrans = metric.Metadata{
+	})
+	metaHostNetSendTCPSlowStartRetrans = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.tcp.slow_start_retrans",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Segments",
@@ -512,8 +512,8 @@ is unable to support the initial fast ramp-up in window size, and can be a sign
 of packet loss or congestion.
 `,
 		Category: metric.Metadata_NETWORKING,
-	}
-	metaHostNetSendTCPLossProbes = metric.Metadata{
+	})
+	metaHostNetSendTCPLossProbes = metric.InitMetadata(metric.Metadata{
 		Name:        "sys.host.net.send.tcp.loss_probes",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Probes",
@@ -523,7 +523,7 @@ loss of the last packet earlier than the retransmission timer, and can indicate
 network issues. Tail loss probes are aggressive, so the base rate is often nonzero
 even in healthy networks.`,
 		Category: metric.Metadata_NETWORKING,
-	}
+	})
 )
 
 // diskMetricsIgnoredDevices is a regex that matches any block devices that must be
@@ -913,12 +913,12 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	// queries to filter or group by CockroachDB version — for example, to
 	// identify which nodes are running a particular release series.
 	year, release := build.BranchReleaseSeries()
-	metaBuildTimestamp := metric.Metadata{
+	metaBuildTimestamp := metric.InitMetadata(metric.Metadata{
 		Name:        "build.timestamp",
 		Help:        "Build information",
 		Measurement: "Build Time",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
+	})
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
 	metaBuildTimestamp.AddLabel("major", strconv.Itoa(year))

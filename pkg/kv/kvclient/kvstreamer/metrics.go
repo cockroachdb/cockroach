@@ -8,30 +8,30 @@ package kvstreamer
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
-	metaStreamerCount = metric.Metadata{
+	metaStreamerCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.streamer.operators.active",
 		Help:        "Number of KV Streamer operators currently in use",
 		Measurement: "Operators",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBatchesSent = metric.Metadata{
+	})
+	metaBatchesSent = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.streamer.batches.sent",
 		Help:        "Number of BatchRequests sent across all KV Streamer operators",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBatchesInProgress = metric.Metadata{
+	})
+	metaBatchesInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.streamer.batches.in_progress",
 		Help:        "Number of BatchRequests in progress across all KV Streamer operators",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBatchesThrottled = metric.Metadata{
+	})
+	metaBatchesThrottled = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.streamer.batches.throttled",
 		Help:        "Number of BatchRequests currently being throttled due to reaching the concurrency limit, across all KV Streamer operators",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 type Metrics struct {

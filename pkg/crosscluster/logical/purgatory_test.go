@@ -36,8 +36,8 @@ func TestPurgatory(t *testing.T) {
 		byteLimit:   func() int64 { return 5 << 20 },
 		delay:       func() time.Duration { return 0 },
 		deadline:    func() time.Duration { return 0 },
-		bytesGauge:  metric.NewGauge(metric.Metadata{}),
-		eventsGauge: metric.NewGauge(metric.Metadata{}),
+		bytesGauge:  metric.NewGauge(metric.InitMetadata(metric.Metadata{})),
+		eventsGauge: metric.NewGauge(metric.InitMetadata(metric.Metadata{})),
 		flush: func(
 			_ context.Context, ev []streampb.StreamEvent_KV, _ bool, _ retryEligibility,
 		) ([]streampb.StreamEvent_KV, int64, error) {

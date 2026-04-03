@@ -178,7 +178,7 @@ func runCompactionPlan(
 	rowResultWriter := sql.NewRowResultWriter(nil)
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+		sql.InitMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* txn */

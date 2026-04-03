@@ -816,33 +816,33 @@ const metricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaSQLExecLatency = metric.Metadata{
+	MetaSQLExecLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.exec.latency",
 		Help:        "Latency of SQL statement execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	MetaSQLExecLatencyConsistent = metric.Metadata{
+	})
+	MetaSQLExecLatencyConsistent = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.exec.latency.consistent",
 		Help:        "Latency of SQL statement execution of non-historical queries",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLExecLatencyHistorical = metric.Metadata{
+	})
+	MetaSQLExecLatencyHistorical = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.exec.latency.historical",
 		Help:        "Latency of SQL statement execution of historical queries",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLExecLatencyDetail = metric.Metadata{
+	})
+	MetaSQLExecLatencyDetail = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.exec.latency.detail",
 		Help:        "Latency of SQL statement execution, by statement fingerprint",
 		Measurement: "Latency",
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLServiceLatency = metric.Metadata{
+	})
+	MetaSQLServiceLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.service.latency",
 		Help:        "Latency of SQL request execution",
 		Measurement: "Latency",
@@ -850,78 +850,78 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.",
-	}
-	MetaSQLServiceLatencyConsistent = metric.Metadata{
+	})
+	MetaSQLServiceLatencyConsistent = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.service.latency.consistent",
 		Help:        "Latency of SQL request execution of non-historical queries",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLServiceLatencyHistorical = metric.Metadata{
+	})
+	MetaSQLServiceLatencyHistorical = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.service.latency.historical",
 		Help:        "Latency of SQL request execution of historical queries",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLOptPlanCacheHits = metric.Metadata{
+	})
+	MetaSQLOptPlanCacheHits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.optimizer.plan_cache.hits",
 		Help:        "Number of non-prepared statements for which a cached plan was used",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLOptPlanCacheMisses = metric.Metadata{
+	})
+	MetaSQLOptPlanCacheMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.optimizer.plan_cache.misses",
 		Help:        "Number of non-prepared statements for which a cached plan was not used",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaDistSQLSelect = metric.Metadata{
+	})
+	MetaDistSQLSelect = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.select.count",
 		Help:        "Number of SELECT statements planned to be distributed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaDistSQLSelectDistributed = metric.Metadata{
+	})
+	MetaDistSQLSelectDistributed = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.select.distributed_exec.count",
 		Help:        "Number of SELECT statements that were distributed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaDistSQLExecLatency = metric.Metadata{
+	})
+	MetaDistSQLExecLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.exec.latency",
 		Help:        "Latency of DistSQL statement execution",
 		Measurement: "Latency",
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaDistSQLServiceLatency = metric.Metadata{
+	})
+	MetaDistSQLServiceLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.service.latency",
 		Help:        "Latency of DistSQL request execution",
 		Measurement: "Latency",
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaUniqueStatementCount = metric.Metadata{
+	})
+	MetaUniqueStatementCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.query.unique.count",
 		Help:        "Cardinality estimate of the set of statement fingerprints",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaQueryWithStatementHints = metric.Metadata{
+	})
+	MetaQueryWithStatementHints = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.query.with_statement_hints.count",
 		Help:        "Number of SQL queries executed with external statement hints",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_SQL,
-	}
-	MetaRLSPoliciesApplied = metric.Metadata{
+	})
+	MetaRLSPoliciesApplied = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.rls.policies_applied.count",
 		Help:        "Number of SQL statements where row-level security policies were applied",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_SQL,
-	}
-	MetaTxnAbort = metric.Metadata{
+	})
+	MetaTxnAbort = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
@@ -929,8 +929,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.`,
-	}
-	MetaFailure = metric.Metadata{
+	})
+	MetaFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.failure.count",
 		Help:        "Number of statements resulting in a planning or runtime error",
 		Measurement: "SQL Statements",
@@ -938,20 +938,20 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.`,
-	}
-	MetaStatementTimeout = metric.Metadata{
+	})
+	MetaStatementTimeout = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statement_timeout.count",
 		Help:        "Count of statements that failed because they exceeded the statement timeout",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTransactionTimeout = metric.Metadata{
+	})
+	MetaTransactionTimeout = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.transaction_timeout.count",
 		Help:        "Count of statements that failed because they exceeded the transaction timeout",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLTxnLatency = metric.Metadata{
+	})
+	MetaSQLTxnLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txn.latency",
 		Help:        "Latency of SQL transactions",
 		Measurement: "Latency",
@@ -959,8 +959,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.`,
-	}
-	MetaSQLTxnsOpen = metric.Metadata{
+	})
+	MetaSQLTxnsOpen = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txns.open",
 		Help:        "Number of currently open user SQL transactions",
 		Measurement: "Open SQL Transactions",
@@ -968,8 +968,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.`,
-	}
-	MetaSQLActiveQueries = metric.Metadata{
+	})
+	MetaSQLActiveQueries = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.active",
 		Help:        "Number of currently active user SQL statements",
 		Measurement: "Active Statements",
@@ -977,8 +977,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload volume.`,
-	}
-	MetaFullTableOrIndexScan = metric.Metadata{
+	})
+	MetaFullTableOrIndexScan = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.full.scan.count",
 		Help:        "Number of full table or index scans",
 		Measurement: "SQL Statements",
@@ -986,64 +986,64 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.`,
-	}
+	})
 
 	// Below are the metadata for the statement started counters.
-	MetaQueryStarted = metric.Metadata{
+	MetaQueryStarted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.query.started.count",
 		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnBeginStarted = metric.Metadata{
+	})
+	MetaTxnBeginStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.begin.started.count",
 		Help:         "Number of SQL transaction BEGIN statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "begin"),
-	}
-	MetaTxnCommitStarted = metric.Metadata{
+	})
+	MetaTxnCommitStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.commit.started.count",
 		Help:         "Number of SQL transaction COMMIT statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "commit"),
-	}
-	MetaTxnRollbackStarted = metric.Metadata{
+	})
+	MetaTxnRollbackStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.rollback.started.count",
 		Help:         "Number of SQL transaction ROLLBACK statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback"),
-	}
-	MetaTxnPrepareStarted = metric.Metadata{
+	})
+	MetaTxnPrepareStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.prepare.started.count",
 		Help:         "Number of SQL PREPARE TRANSACTION statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "prepare_transaction"),
-	}
-	MetaTxnCommitPreparedStarted = metric.Metadata{
+	})
+	MetaTxnCommitPreparedStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.commit_prepared.started.count",
 		Help:         "Number of SQL COMMIT PREPARED statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "commit_prepared"),
-	}
-	MetaTxnRollbackPreparedStarted = metric.Metadata{
+	})
+	MetaTxnRollbackPreparedStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.rollback_prepared.started.count",
 		Help:         "Number of SQL ROLLBACK PREPARED statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_prepared"),
-	}
-	MetaSelectStarted = metric.Metadata{
+	})
+	MetaSelectStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.select.started.count",
 		Help:         "Number of SQL SELECT statements started",
 		Measurement:  "SQL Statements",
@@ -1052,8 +1052,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaUpdateStarted = metric.Metadata{
+	})
+	MetaUpdateStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.update.started.count",
 		Help:         "Number of SQL UPDATE statements started",
 		Measurement:  "SQL Statements",
@@ -1062,8 +1062,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaInsertStarted = metric.Metadata{
+	})
+	MetaInsertStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.insert.started.count",
 		Help:         "Number of SQL INSERT statements started",
 		Measurement:  "SQL Statements",
@@ -1072,8 +1072,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaDeleteStarted = metric.Metadata{
+	})
+	MetaDeleteStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.delete.started.count",
 		Help:         "Number of SQL DELETE statements started",
 		Measurement:  "SQL Statements",
@@ -1082,100 +1082,100 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaCRUDStarted = metric.Metadata{
+	})
+	MetaCRUDStarted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.crud_query.started.count",
 		Help:        "Number of SQL SELECT, INSERT, UPDATE, DELETE statements started",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSavepointStarted = metric.Metadata{
+	})
+	MetaSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.started.count",
 		Help:         "Number of SQL SAVEPOINT statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "savepoint"),
-	}
-	MetaReleaseSavepointStarted = metric.Metadata{
+	})
+	MetaReleaseSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.release.started.count",
 		Help:         "Number of `RELEASE SAVEPOINT` statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "release_savepoint"),
-	}
-	MetaRollbackToSavepointStarted = metric.Metadata{
+	})
+	MetaRollbackToSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.rollback.started.count",
 		Help:         "Number of `ROLLBACK TO SAVEPOINT` statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_to_savepoint"),
-	}
-	MetaRestartSavepointStarted = metric.Metadata{
+	})
+	MetaRestartSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.started.count",
 		Help:         "Number of `SAVEPOINT cockroach_restart` statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "restart_savepoint"),
-	}
-	MetaReleaseRestartSavepointStarted = metric.Metadata{
+	})
+	MetaReleaseRestartSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.release.started.count",
 		Help:         "Number of `RELEASE SAVEPOINT cockroach_restart` statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "release_restart_savepoint"),
-	}
-	MetaRollbackToRestartSavepointStarted = metric.Metadata{
+	})
+	MetaRollbackToRestartSavepointStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.rollback.started.count",
 		Help:         "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_to_restart_savepoint"),
-	}
-	MetaDdlStarted = metric.Metadata{
+	})
+	MetaDdlStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.ddl.started.count",
 		Help:         "Number of SQL DDL statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "ddl"),
-	}
-	MetaCopyStarted = metric.Metadata{
+	})
+	MetaCopyStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.copy.started.count",
 		Help:         "Number of COPY SQL statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "copy"),
-	}
-	MetaCopyNonAtomicStarted = metric.Metadata{
+	})
+	MetaCopyNonAtomicStarted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.copy.nonatomic.started.count",
 		Help:        "Number of non-atomic COPY SQL statements started",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaCallStoredProcStarted = metric.Metadata{
+	})
+	MetaCallStoredProcStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.call_stored_proc.started.count",
 		Help:         "Number of invocation of stored procedures via CALL statements",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "call"),
-	}
-	MetaMiscStarted = metric.Metadata{
+	})
+	MetaMiscStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.misc.started.count",
 		Help:         "Number of other SQL statements started",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "misc"),
-	}
-	MetaRoutineSelectStarted = metric.Metadata{
+	})
+	MetaRoutineSelectStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.select.started.count",
 		Help:         "Number of SQL SELECT statements started within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1184,8 +1184,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_select"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineUpdateStarted = metric.Metadata{
+	})
+	MetaRoutineUpdateStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.update.started.count",
 		Help:         "Number of SQL UPDATE statements started within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1194,8 +1194,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_update"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineInsertStarted = metric.Metadata{
+	})
+	MetaRoutineInsertStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.insert.started.count",
 		Help:         "Number of SQL INSERT statements started within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1204,8 +1204,8 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_insert"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineDeleteStarted = metric.Metadata{
+	})
+	MetaRoutineDeleteStarted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.delete.started.count",
 		Help:         "Number of SQL DELETE statements started within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1214,17 +1214,17 @@ var (
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_started_delete"),
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
+	})
 
 	// Below are the metadata for the statement executed counters.
-	MetaQueryExecuted = metric.Metadata{
+	MetaQueryExecuted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.query.count",
 		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	MetaTxnBeginExecuted = metric.Metadata{
+	})
+	MetaTxnBeginExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.begin.count",
 		Help:         "Number of SQL transaction BEGIN statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1234,8 +1234,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).",
-	}
-	MetaTxnCommitExecuted = metric.Metadata{
+	})
+	MetaTxnCommitExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.commit.count",
 		Help:         "Number of SQL transaction COMMIT statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1245,8 +1245,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.",
-	}
-	MetaTxnRollbackExecuted = metric.Metadata{
+	})
+	MetaTxnRollbackExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.rollback.count",
 		Help:         "Number of SQL transaction ROLLBACK statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1256,32 +1256,32 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.",
-	}
-	MetaTxnPrepareExecuted = metric.Metadata{
+	})
+	MetaTxnPrepareExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.prepare.count",
 		Help:         "Number of SQL PREPARE TRANSACTION statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "prepare_transaction"),
-	}
-	MetaTxnCommitPreparedExecuted = metric.Metadata{
+	})
+	MetaTxnCommitPreparedExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.commit_prepared.count",
 		Help:         "Number of SQL COMMIT PREPARED statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "commit_prepared"),
-	}
-	MetaTxnRollbackPreparedExecuted = metric.Metadata{
+	})
+	MetaTxnRollbackPreparedExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.txn.rollback_prepared.count",
 		Help:         "Number of SQL ROLLBACK PREPARED statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_prepared"),
-	}
-	MetaSelectExecuted = metric.Metadata{
+	})
+	MetaSelectExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.select.count",
 		Help:         "Number of SQL SELECT statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1291,8 +1291,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaUpdateExecuted = metric.Metadata{
+	})
+	MetaUpdateExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.update.count",
 		Help:         "Number of SQL UPDATE statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1302,8 +1302,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaInsertExecuted = metric.Metadata{
+	})
+	MetaInsertExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.insert.count",
 		Help:         "Number of SQL INSERT statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1313,8 +1313,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaDeleteExecuted = metric.Metadata{
+	})
+	MetaDeleteExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.delete.count",
 		Help:         "Number of SQL DELETE statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1324,62 +1324,62 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaCRUDExecuted = metric.Metadata{
+	})
+	MetaCRUDExecuted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.crud_query.count",
 		Help:        "Number of SQL SELECT, INSERT, UPDATE, DELETE statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSavepointExecuted = metric.Metadata{
+	})
+	MetaSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.count",
 		Help:         "Number of SQL SAVEPOINT statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "savepoint"),
-	}
-	MetaReleaseSavepointExecuted = metric.Metadata{
+	})
+	MetaReleaseSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.release.count",
 		Help:         "Number of `RELEASE SAVEPOINT` statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "release_savepoint"),
-	}
-	MetaRollbackToSavepointExecuted = metric.Metadata{
+	})
+	MetaRollbackToSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.savepoint.rollback.count",
 		Help:         "Number of `ROLLBACK TO SAVEPOINT` statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_to_savepoint"),
-	}
-	MetaRestartSavepointExecuted = metric.Metadata{
+	})
+	MetaRestartSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.count",
 		Help:         "Number of `SAVEPOINT cockroach_restart` statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "restart_savepoint"),
-	}
-	MetaReleaseRestartSavepointExecuted = metric.Metadata{
+	})
+	MetaReleaseRestartSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.release.count",
 		Help:         "Number of `RELEASE SAVEPOINT cockroach_restart` statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "release_restart_savepoint"),
-	}
-	MetaRollbackToRestartSavepointExecuted = metric.Metadata{
+	})
+	MetaRollbackToRestartSavepointExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.restart_savepoint.rollback.count",
 		Help:         "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback_to_restart_savepoint"),
-	}
-	MetaDdlExecuted = metric.Metadata{
+	})
+	MetaDdlExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.ddl.count",
 		Help:         "Number of SQL DDL statements successfully executed",
 		Measurement:  "SQL Statements",
@@ -1389,38 +1389,38 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaCopyExecuted = metric.Metadata{
+	})
+	MetaCopyExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.copy.count",
 		Help:         "Number of COPY SQL statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "copy"),
-	}
-	MetaCopyNonAtomicExecuted = metric.Metadata{
+	})
+	MetaCopyNonAtomicExecuted = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.copy.nonatomic.count",
 		Help:        "Number of non-atomic COPY SQL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaCallStoredProcExecuted = metric.Metadata{
+	})
+	MetaCallStoredProcExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.call_stored_proc.count",
 		Help:         "Number of successfully executed stored procedure calls",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "call"),
-	}
-	MetaMiscExecuted = metric.Metadata{
+	})
+	MetaMiscExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.misc.count",
 		Help:         "Number of other SQL statements successfully executed",
 		Measurement:  "SQL Statements",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "misc"),
-	}
-	MetaRoutineSelectExecuted = metric.Metadata{
+	})
+	MetaRoutineSelectExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.select.count",
 		Help:         "Number of SQL SELECT statements successfully executed within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1430,8 +1430,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineUpdateExecuted = metric.Metadata{
+	})
+	MetaRoutineUpdateExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.update.count",
 		Help:         "Number of SQL UPDATE statements successfully executed within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1441,8 +1441,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineInsertExecuted = metric.Metadata{
+	})
+	MetaRoutineInsertExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.insert.count",
 		Help:         "Number of SQL INSERT statements successfully executed within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1452,8 +1452,8 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineDeleteExecuted = metric.Metadata{
+	})
+	MetaRoutineDeleteExecuted = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.routine.delete.count",
 		Help:         "Number of SQL DELETE statements successfully executed within routine invocation",
 		Measurement:  "SQL Statements",
@@ -1463,161 +1463,161 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
+	})
 
 	// Miscellaneous metrics.
-	MetaSQLTxnContended = metric.Metadata{
+	MetaSQLTxnContended = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txn.contended.count",
 		Help:        "Number of SQL transactions experienced contention",
 		Measurement: "Contention",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
+	})
+	MetaTxnUpgradedFromWeakIsolation = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txn.upgraded_iso_level.count",
 		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLStatsMemMaxBytes = metric.Metadata{
+	})
+	MetaSQLStatsMemMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.mem.max",
 		Help:        "Memory usage for fingerprint storage",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaSQLStatsMemCurBytes = metric.Metadata{
+	})
+	MetaSQLStatsMemCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.mem.current",
 		Help:        "Current memory usage for fingerprint storage",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaReportedSQLStatsMemMaxBytes = metric.Metadata{
+	})
+	MetaReportedSQLStatsMemMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.reported.mem.max",
 		Help:        "Memory usage for reported fingerprint storage",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaReportedSQLStatsMemCurBytes = metric.Metadata{
+	})
+	MetaReportedSQLStatsMemCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.reported.mem.current",
 		Help:        "Current memory usage for reported fingerprint storage",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaDiscardedSQLStats = metric.Metadata{
+	})
+	MetaDiscardedSQLStats = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.discarded.current",
 		Help:        "Number of fingerprint statistics being discarded",
 		Measurement: "Discarded SQL Stats",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLStatsFlushesSuccessful = metric.Metadata{
+	})
+	MetaSQLStatsFlushesSuccessful = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.flushes.successful",
 		Help:        "Number of times SQL Stats are flushed successfully to persistent storage",
 		Measurement: "successful flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLStatsFlushFingerprintCount = metric.Metadata{
+	})
+	MetaSQLStatsFlushFingerprintCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.flush.fingerprint.count",
 		Help:        "The number of unique statement and transaction fingerprints included in the SQL Stats flush",
 		Measurement: "statement & transaction fingerprints",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLStatsFlushDoneSignalsIgnored = metric.Metadata{
+	})
+	MetaSQLStatsFlushDoneSignalsIgnored = metric.InitMetadata(metric.Metadata{
 		Name: "sql.stats.flush.done_signals.ignored",
 		Help: "Number of times the SQL Stats activity update job ignored the signal sent to it indicating " +
 			"a flush has completed",
 		Measurement: "flush done signals ignored",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	MetaSQLStatsFlushesFailed = metric.Metadata{
+	})
+	MetaSQLStatsFlushesFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.flushes.failed",
 		Help:        "Number of attempted SQL Stats flushes that failed with errors",
 		Measurement: "failed flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLStatsFlushLatency = metric.Metadata{
+	})
+	MetaSQLStatsFlushLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.flush.latency",
 		Help:        "The latency of SQL Stats flushes to persistent storage. Includes failed flush attempts",
 		Measurement: "nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLStatsRemovedRows = metric.Metadata{
+	})
+	MetaSQLStatsRemovedRows = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.cleanup.rows_removed",
 		Help:        "Number of stale statistics rows that are removed",
 		Measurement: "SQL Stats Cleanup",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaSQLTxnStatsCollectionOverhead = metric.Metadata{
+	})
+	MetaSQLTxnStatsCollectionOverhead = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.stats.txn_stats_collection.duration",
 		Help:        "Time took in nanoseconds to collect transaction stats",
 		Measurement: "SQL Transaction Stats Collection Overhead",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaTxnRowsWrittenLog = metric.Metadata{
+	})
+	MetaTxnRowsWrittenLog = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.guardrails.transaction_rows_written_log.count",
 		Help:        "Number of transactions logged because of transaction_rows_written_log guardrail",
 		Measurement: "Logged transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRowsWrittenErr = metric.Metadata{
+	})
+	MetaTxnRowsWrittenErr = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.guardrails.transaction_rows_written_err.count",
 		Help:        "Number of transactions errored because of transaction_rows_written_err guardrail",
 		Measurement: "Errored transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRowsReadLog = metric.Metadata{
+	})
+	MetaTxnRowsReadLog = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.guardrails.transaction_rows_read_log.count",
 		Help:        "Number of transactions logged because of transaction_rows_read_log guardrail",
 		Measurement: "Logged transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRowsReadErr = metric.Metadata{
+	})
+	MetaTxnRowsReadErr = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.guardrails.transaction_rows_read_err.count",
 		Help:        "Number of transactions errored because of transaction_rows_read_err guardrail",
 		Measurement: "Errored transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaFullTableOrIndexScanRejected = metric.Metadata{
+	})
+	MetaFullTableOrIndexScanRejected = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.guardrails.full_scan_rejected.count",
 		Help:        "Number of full table or index scans that have been rejected because of `disallow_full_table_scans` guardrail",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRetry = metric.Metadata{
+	})
+	MetaTxnRetry = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.txn.auto_retry.count",
 		Help:        "Number of SQL transaction automatic retries",
 		Measurement: "SQL Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaStatementRetry = metric.Metadata{
+	})
+	MetaStatementRetry = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.auto_retry.count",
 		Help:        "Number of SQL statement automatic retries",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaStatementRowsRead = metric.Metadata{
+	})
+	MetaStatementRowsRead = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.rows_read.count",
 		Help:        "Number of rows read by SQL statements",
 		Measurement: "Rows",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaStatementBytesRead = metric.Metadata{
+	})
+	MetaStatementBytesRead = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.bytes_read.count",
 		Help:        "Number of bytes read by SQL statements",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaStatementIndexRowsWritten = metric.Metadata{
+	})
+	MetaStatementIndexRowsWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.index_rows_written.count",
 		Help:        "Number of primary and secondary index rows modified by SQL statements",
 		Measurement: "Rows",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaStatementIndexBytesWritten = metric.Metadata{
+	})
+	MetaStatementIndexBytesWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.statements.index_bytes_written.count",
 		Help:        "Number of primary and secondary index bytes modified by SQL statements",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {

@@ -61,10 +61,6 @@ if grep TODO DEPS.bzl; then
 fi
 check_workspace_clean "Run \`./dev generate bazel\` to fix this error."
 
-# Run gen-metric-owners to ensure metric_owners.yaml is up to date
-# before //pkg/gen regenerates metrics.yaml from it.
-bazel run //pkg/cmd/gen-metric-owners $ENGFLOW_ARGS -- -out="$(pwd)/pkg/internal/metricscan/metric_owners.yaml"
-
 # Run `bazel run //pkg/gen` and ensure nothing changes. This ensures
 # generated documentation and checked-in go code are up to date.
 bazel run //pkg/gen $ENGFLOW_ARGS

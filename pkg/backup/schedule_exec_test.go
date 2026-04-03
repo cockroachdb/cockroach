@@ -27,8 +27,8 @@ func TestBackupSucceededUpdatesMetrics(t *testing.T) {
 	ctx := context.Background()
 	executor := &scheduledBackupExecutor{
 		metrics: backupMetrics{
-			RpoMetric:       metric.NewGauge(metric.Metadata{}),
-			RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{}, []string{"tenant_id"}),
+			RpoMetric:       metric.NewGauge(metric.InitMetadata(metric.Metadata{})),
+			RpoTenantMetric: metric.NewExportedGaugeVec(metric.InitMetadata(metric.Metadata{}), []string{"tenant_id"}),
 		},
 	}
 
@@ -63,8 +63,8 @@ func TestBackupSucceededUpdatesMetrics(t *testing.T) {
 		// Use a fresh executor to ensure RpoMetric starts at zero.
 		freshExecutor := &scheduledBackupExecutor{
 			metrics: backupMetrics{
-				RpoMetric:       metric.NewGauge(metric.Metadata{}),
-				RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{}, []string{"tenant_id"}),
+				RpoMetric:       metric.NewGauge(metric.InitMetadata(metric.Metadata{})),
+				RpoTenantMetric: metric.NewExportedGaugeVec(metric.InitMetadata(metric.Metadata{}), []string{"tenant_id"}),
 			},
 		}
 		schedule := createSchedule(t, true)

@@ -177,7 +177,7 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 		// Compare values against metric.Histogram (prometheus-based implementation)
 		promhist := metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePrometheus,
-			Metadata: metric.Metadata{},
+			Metadata: metric.InitMetadata(metric.Metadata{}),
 			Duration: time.Hour,
 			Buckets:  hist.Buckets,
 		})
@@ -277,7 +277,7 @@ func TestCloneHistogram(t *testing.T) {
 //   - Replace windowedCounts with latest delta for TSDB percentiles (10 → 6)
 func TestRuntimeHistogramCumulativeVsWindowed(t *testing.T) {
 	buckets := []float64{0, 10, 20, 30, 40, 50}
-	rh := newRuntimeHistogram(metric.Metadata{Name: "test.histogram"}, buckets)
+	rh := newRuntimeHistogram(metric.InitMetadata(metric.Metadata{Name: "test.histogram"}), buckets)
 	rh.mult = 1.0
 
 	// Simulate first statsInterval (e.g., 0s-10s): 10 accumulated observations.

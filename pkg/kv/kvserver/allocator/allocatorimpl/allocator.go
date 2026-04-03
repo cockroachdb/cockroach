@@ -514,83 +514,83 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 
 var (
 	// Load-based lease transfers.
-	metaLBLeaseTransferCannotFindBetterCandidate = metric.Metadata{
+	metaLBLeaseTransferCannotFindBetterCandidate = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.cannot_find_better_candidate",
 		Help: "The number times the allocator determined that the lease was on the best" +
 			" possible replica",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBLeaseTransferExistingNotOverfull = metric.Metadata{
+	})
+	metaLBLeaseTransferExistingNotOverfull = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.existing_not_overfull",
 		Help: "The number times the allocator determined that the lease was not on an" +
 			" overfull store",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBLeaseTransferDeltaNotSignificant = metric.Metadata{
+	})
+	metaLBLeaseTransferDeltaNotSignificant = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.delta_not_significant",
 		Help: "The number times the allocator determined that the delta between the existing" +
 			" store and the best candidate was not significant",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBLeaseTransferMissingStatsForExistingStore = metric.Metadata{
+	})
+	metaLBLeaseTransferMissingStatsForExistingStore = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.allocator.load_based_lease_transfers.missing_stats_for_existing_stores",
 		Help:        "The number times the allocator was missing qps stats for the leaseholder",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBLeaseTransferShouldTransfer = metric.Metadata{
+	})
+	metaLBLeaseTransferShouldTransfer = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.should_transfer",
 		Help: "The number times the allocator determined that the lease should be" +
 			" transferred to another replica for better load distribution",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBLeaseTransferFollowTheWorkload = metric.Metadata{
+	})
+	metaLBLeaseTransferFollowTheWorkload = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.follow_the_workload",
 		Help: "The number times the allocator determined that the lease should be" +
 			" transferred to another replica for locality.",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Load-based replica rebalances.
-	metaLBReplicaRebalancingCannotFindBetterCandidate = metric.Metadata{
+	metaLBReplicaRebalancingCannotFindBetterCandidate = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_replica_rebalancing.cannot_find_better_candidate",
 		Help: "The number times the allocator determined that the range was on the best" +
 			" possible stores",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBReplicaRebalancingExistingNotOverfull = metric.Metadata{
+	})
+	metaLBReplicaRebalancingExistingNotOverfull = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_replica_rebalancing.existing_not_overfull",
 		Help: "The number times the allocator determined that none of the range's replicas" +
 			" were on overfull stores",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBReplicaRebalancingDeltaNotSignificant = metric.Metadata{
+	})
+	metaLBReplicaRebalancingDeltaNotSignificant = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_replica_rebalancing.delta_not_significant",
 		Help: "The number times the allocator determined that the delta between an" +
 			" existing store and the best replacement candidate was not high enough",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBReplicaRebalancingMissingStatsForExistingStore = metric.Metadata{
+	})
+	metaLBReplicaRebalancingMissingStatsForExistingStore = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.allocator.load_based_replica_rebalancing.missing_stats_for_existing_store",
 		Help:        "The number times the allocator was missing the qps stats for the existing store",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLBReplicaRebalancingShouldTransfer = metric.Metadata{
+	})
+	metaLBReplicaRebalancingShouldTransfer = metric.InitMetadata(metric.Metadata{
 		Name: "kv.allocator.load_based_replica_rebalancing.should_transfer",
 		Help: "The number times the allocator determined that the replica should be" +
 			" rebalanced to another store for better load distribution",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 type loadBasedLeaseTransferMetrics struct {

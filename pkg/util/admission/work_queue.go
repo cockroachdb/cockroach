@@ -2111,54 +2111,54 @@ func (oeh *openEpochsHeap) Pop() interface{} {
 }
 
 var (
-	requestedMeta = metric.Metadata{
+	requestedMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.requested.",
 		Help:        "Number of requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	admittedMeta = metric.Metadata{
+	})
+	admittedMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.admitted.",
 		Help:        "Number of requests admitted",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	erroredMeta = metric.Metadata{
+	})
+	erroredMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.errored.",
 		Help:        "Number of requests not admitted due to error",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	waitDurationsMeta = metric.Metadata{
+	})
+	waitDurationsMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.wait_durations.",
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.",
-	}
-	kvWaitDurationsMeta = metric.Metadata{
+	})
+	kvWaitDurationsMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.wait_durations.",
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the CPU utilization-based admission control queue. Non-zero wait times are expected when CPU is saturated.",
-	}
-	kvStoresWaitDurationsMeta = metric.Metadata{
+	})
+	kvStoresWaitDurationsMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.wait_durations.",
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the I/O utilization-based admission control queue. Non-zero wait times are expected when I/O is saturated.",
-	}
-	waitQueueLengthMeta = metric.Metadata{
+	})
+	waitQueueLengthMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.wait_queue_length.",
 		Help:        "Length of wait queue",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 func addName(name string, meta metric.Metadata) metric.Metadata {

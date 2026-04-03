@@ -57,13 +57,13 @@ type HttpServerMetrics struct {
 }
 
 func NewServerHttpMetrics(reg *metric.Registry, settings *cluster.Settings) *HttpServerMetrics {
-	metadata := metric.Metadata{
+	metadata := metric.InitMetadata(metric.Metadata{
 		Name:        "server.http.request.duration.nanos",
 		Help:        "Duration of an HTTP request in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
-	}
+	})
 
 	histogramVec := metric.NewExportedHistogramVec(
 		metadata,

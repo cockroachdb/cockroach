@@ -101,27 +101,27 @@ var _ metric.Struct = Metrics{}
 // NewMetrics builds a new instance of our Metrics struct.
 func NewMetrics() Metrics {
 	return Metrics{
-		Fingerprints: metric.NewGauge(metric.Metadata{
+		Fingerprints: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.insights.anomaly_detection.fingerprints",
 			Help:        "Current number of statement fingerprints being monitored for anomaly detection",
 			Measurement: "Fingerprints",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_GAUGE,
-		}),
-		Memory: metric.NewGauge(metric.Metadata{
+		})),
+		Memory: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.insights.anomaly_detection.memory",
 			Help:        "Current memory used to support anomaly detection",
 			Measurement: "Memory",
 			Unit:        metric.Unit_BYTES,
 			MetricType:  prometheus.MetricType_GAUGE,
-		}),
-		Evictions: metric.NewCounter(metric.Metadata{
+		})),
+		Evictions: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.insights.anomaly_detection.evictions",
 			Help:        "Evictions of fingerprint latency summaries due to memory pressure",
 			Measurement: "Evictions",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_COUNTER,
-		}),
+		})),
 	}
 }
 
