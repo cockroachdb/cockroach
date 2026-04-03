@@ -220,6 +220,12 @@ type importTestSpec struct {
 	// with this test.
 	datasetNames stringSource
 
+	// skipDistMerge, when true, skips registration of the distmerge=true
+	// variant. Use this for tests that are incompatible with distributed
+	// merge, e.g. node shutdown tests where the merge phase requires SSTs
+	// from all participating instances.
+	skipDistMerge bool
+
 	// preTestHook is run after tables are created, but before the import starts.
 	preTestHook func(context.Context, test.Test, cluster.Cluster, *rand.Rand)
 	// importRunner is an alternate import runner.
@@ -287,10 +293,14 @@ var tests = []importTestSpec{
 	},
 	// Test job survival if a worker node is shutdown. Exclude lineitem (the
 	// largest dataset) to avoid timeouts when running with only 3 active nodes.
+	// Distributed merge requires SSTs from all participating instances, so a
+	// permanently downed node causes merge to time out waiting for the missing
+	// instance.
 	{
-		subtestName:  "nodeShutdown/worker",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anySmallDataset),
+		subtestName:   "nodeShutdown/worker",
+		nodes:         []int{4},
+		skipDistMerge: true,
+		datasetNames:  FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -302,11 +312,12 @@ var tests = []importTestSpec{
 	},
 	// Test job survival if the coordinator node is shutdown. Exclude lineitem
 	// (the largest dataset) to avoid timeouts when running with only 3 active
-	// nodes.
+	// nodes. See nodeShutdown/worker above for why distmerge is skipped.
 	{
-		subtestName:  "nodeShutdown/coordinator",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anySmallDataset),
+		subtestName:   "nodeShutdown/coordinator",
+		nodes:         []int{4},
+		skipDistMerge: true,
+		datasetNames:  FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -352,6 +363,9 @@ func registerImport(r registry.Registry) {
 		}
 
 		for _, distMerge := range []bool{false, true} {
+			if distMerge && testSpec.skipDistMerge {
+				continue
+			}
 			for _, numNodes := range testSpec.nodes {
 				ts := testSpec
 				numNodes := numNodes
