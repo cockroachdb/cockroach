@@ -1711,6 +1711,9 @@ func TestBackupJobRetryReset(t *testing.T) {
 	}
 	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10, InitManualReplication, params)
+	// We disable range-sized spans for this test to avoid 0-span progress
+	// updates. The conditions in which this can occur are outlined in #166401.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.presplit_request_spans.enabled = false")
 	// This creates 4 additional backup chunks.
 	for i := 0; i < 4; i++ {
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s AS (SELECT * FROM bank)`, "bank"+strconv.Itoa(i)))
