@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -95,6 +96,11 @@ type bulkMergeProcessor struct {
 	// rpcMemAcct reserves memory for estimated in-flight RPC transport
 	// buffers when streaming remote SST files.
 	rpcMemAcct mon.BoundAccount
+	// kvIngestSummary accumulates the BulkOpSummary from the SSTBatcher
+	// during the final merge iteration. This tracks the actual number of
+	// rows ingested into KV (excluding skipped duplicates) and is emitted
+	// as metadata when the processor finishes draining.
+	kvIngestSummary kvpb.BulkOpSummary
 }
 
 type mergeProcessorInput struct {
@@ -161,6 +167,17 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		switch {
 		case row == nil && meta == nil:
 			m.MoveToDraining(nil /* err */)
+			// All input consumed. If this was the final iteration, emit
+			// the accumulated KV ingest summary as metadata so the caller
+			// can use the actual ingested row count rather than the
+			// map-phase count (which includes skipped duplicates).
+			if m.isFinalIteration() {
+				return nil, &execinfrapb.ProducerMetadata{
+					BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+						BulkSummary: m.kvIngestSummary,
+					},
+				}
+			}
 		case meta != nil && meta.Err != nil:
 			m.MoveToDraining(meta.Err)
 		case meta != nil:
@@ -178,6 +195,10 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		}
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *bulkMergeProcessor) isFinalIteration() bool {
+	return m.spec.Iteration == m.spec.MaxIterations
 }
 
 func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
@@ -216,13 +237,10 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
 	m.input.Start(ctx)
 
-	// Infer whether this is the final iteration from the spec fields.
 	// Non-final iterations only merge local SSTs to reduce cross-node traffic.
 	// This creates larger merged files locally before the final cross-node merge.
-	isFinal := m.spec.Iteration == m.spec.MaxIterations
-
 	var err error
-	if !isFinal {
+	if !m.isFinalIteration() {
 		localInstanceID := m.flowCtx.NodeID.SQLInstanceID()
 		log.Dev.Infof(ctx, "local iteration %d: filtering to local SSTs from instance %d",
 			m.spec.Iteration, localInstanceID)
@@ -334,7 +352,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		m.iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key})
 	}
 
-	if m.spec.Iteration == m.spec.MaxIterations {
+	if m.isFinalIteration() {
 		return m.ingestFinalIteration(ctx, m.iter, mergeSpan)
 	}
 
@@ -377,10 +395,15 @@ func (m *bulkMergeProcessor) processMergedData(
 	duplicateInjected := false
 
 	// When enforcing uniqueness with multiple SSTs, keys are suffixed to prevent
-	// shadowing. Track previous base key for duplicate detection.
+	// shadowing. Track previous base key and value for duplicate detection.
 	var prevBaseKeyBuf []byte
+	var prevValBuf []byte
 	var baseKey roachpb.Key
 	var keyToWrite storage.MVCCKey
+	// injectedVal holds a value from the InjectDuplicateKey testing hook.
+	// When non-nil, it replaces the iterator value for the replayed key so
+	// the duplicate carries the test-specified value.
+	var injectedVal []byte
 
 	for {
 		ok, err := iter.Valid()
@@ -396,13 +419,21 @@ func (m *bulkMergeProcessor) processMergedData(
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
+		if injectedVal != nil {
+			val = injectedVal
+			injectedVal = nil
+		}
 
 		// Extract base key and check for duplicates when using suffixed iterators.
-		baseKey, keyToWrite, prevBaseKeyBuf, err = m.extractKeyAndCheckDuplicate(
-			key, val, prevBaseKeyBuf,
-		)
+		var skip bool
+		baseKey, keyToWrite, prevBaseKeyBuf, prevValBuf, skip, err =
+			m.extractKeyAndCheckDuplicate(key, val, prevBaseKeyBuf, prevValBuf)
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		if skip {
+			iter.NextKey()
+			continue
 		}
 
 		// Check span boundary using the base key (without suffix).
@@ -436,10 +467,12 @@ func (m *bulkMergeProcessor) processMergedData(
 		}
 
 		// Testing hook: if duplicate requested and not already injected for this
-		// key, skip advancing the iterator so the key is processed again.
+		// key, skip advancing the iterator so the key is processed again with
+		// the hook-provided value.
 		if !duplicateInjected && knobs != nil && knobs.InjectDuplicateKey != nil {
-			if knobs.InjectDuplicateKey(m.spec.Iteration, m.spec.MaxIterations) {
+			if v := knobs.InjectDuplicateKey(m.spec.Iteration, m.spec.MaxIterations); v != nil {
 				duplicateInjected = true
+				injectedVal = v
 				continue
 			}
 		}
@@ -453,11 +486,19 @@ func (m *bulkMergeProcessor) processMergedData(
 
 // extractKeyAndCheckDuplicate extracts the base key from a potentially
 // suffixed key and checks for duplicates when enforcing uniqueness.
+//
+// When a duplicate base key is found, the value is compared with the previous
+// entry. Identical duplicates (same key and value) are benign — they arise
+// from checkpoint-and-resume overlap where some input rows are re-processed,
+// producing SSTs that partially overlap with previously checkpointed SSTs.
+// These are signaled by returning skip=true so the caller can advance past
+// them. A true uniqueness violation (same key, different value) returns a
+// DuplicateKeyError.
 func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
-	key storage.MVCCKey, val []byte, prevBaseKeyBuf []byte,
-) (roachpb.Key, storage.MVCCKey, []byte, error) {
+	key storage.MVCCKey, val []byte, prevBaseKeyBuf []byte, prevValBuf []byte,
+) (roachpb.Key, storage.MVCCKey, []byte, []byte, bool, error) {
 	if !m.spec.EnforceUniqueness {
-		return key.Key, key, prevBaseKeyBuf, nil
+		return key.Key, key, prevBaseKeyBuf, prevValBuf, false, nil
 	}
 
 	var baseKey roachpb.Key
@@ -468,7 +509,7 @@ func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
 		var err error
 		baseKey, err = removeKeySuffix(key.Key)
 		if err != nil {
-			return nil, storage.MVCCKey{}, prevBaseKeyBuf, err
+			return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, false, err
 		}
 		keyToWrite = storage.MVCCKey{Key: baseKey, Timestamp: key.Timestamp}
 	} else {
@@ -478,11 +519,19 @@ func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
 
 	// Check for duplicates.
 	if len(prevBaseKeyBuf) > 0 && baseKey.Equal(prevBaseKeyBuf) {
-		return nil, storage.MVCCKey{}, prevBaseKeyBuf, kvserverbase.NewDuplicateKeyError(baseKey, val)
+		if bytes.Equal(val, prevValBuf) {
+			// Identical duplicate from checkpoint-and-resume overlap. The same
+			// input row was processed in both the previous and current run,
+			// producing identical KVs in separate SSTs. Safe to skip.
+			return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, true, nil
+		}
+		return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, false,
+			kvserverbase.NewDuplicateKeyError(baseKey, val)
 	}
 
 	prevBaseKeyBuf = append(prevBaseKeyBuf[:0], baseKey...)
-	return baseKey, keyToWrite, prevBaseKeyBuf, nil
+	prevValBuf = append(prevValBuf[:0], val...)
+	return baseKey, keyToWrite, prevBaseKeyBuf, prevValBuf, false, nil
 }
 
 func (m *bulkMergeProcessor) ingestFinalIteration(
@@ -523,7 +572,12 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
-	return m.processMergedData(ctx, iter, mergeSpan, writer)
+	output, err := m.processMergedData(ctx, iter, mergeSpan, writer)
+	if err != nil {
+		return output, err
+	}
+	m.kvIngestSummary.Add(batcher.GetSummary())
+	return output, nil
 }
 
 // resolveMemoryMonitor returns the BytesMonitor indicated by the given

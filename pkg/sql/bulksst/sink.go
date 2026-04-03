@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,7 +91,14 @@ type SSTSink struct {
 	writeTS          hlc.Timestamp
 	emittedFileCount int
 	onFlush          func(summary kvpb.BulkOpSummary)
-	pendingManifests []jobspb.BulkSSTManifest
+
+	// mu protects pendingManifests which is appended during auto-flush
+	// (on the data-processing goroutine) and consumed by
+	// ConsumeFlushManifests (on the progress-reporting goroutine).
+	mu struct {
+		syncutil.Mutex
+		pendingManifests []jobspb.BulkSSTManifest
+	}
 }
 
 var _ BulkSink = (*SSTSink)(nil)
@@ -160,7 +168,13 @@ func (s *SSTSink) Flush(ctx context.Context) error {
 func (s *SSTSink) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 	s.onFlush = fn
 	s.writer.SetOnFlush(func(summary kvpb.BulkOpSummary) {
-		s.pendingManifests = append(s.pendingManifests, s.collectNewManifests()...)
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.mu.pendingManifests = append(
+				s.mu.pendingManifests, s.collectNewManifests()...,
+			)
+		}()
 		if s.onFlush != nil {
 			s.onFlush(summary)
 		}
@@ -174,11 +188,13 @@ func (s *SSTSink) IsEmpty() bool {
 
 // ConsumeFlushManifests implements the BulkSink interface.
 func (s *SSTSink) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
-	if len(s.pendingManifests) == 0 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.mu.pendingManifests) == 0 {
 		return nil
 	}
-	out := s.pendingManifests
-	s.pendingManifests = nil
+	out := s.mu.pendingManifests
+	s.mu.pendingManifests = nil
 	return out
 }
 

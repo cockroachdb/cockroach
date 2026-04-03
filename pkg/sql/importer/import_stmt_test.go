@@ -204,8 +204,11 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 				serverArgs.Knobs = base.TestingKnobs{
 					DistSQL: &execinfra.TestingKnobs{
 						BulkMergeTestingKnobs: &bulkmerge.TestingKnobs{
-							InjectDuplicateKey: func(iteration, maxIteration int32) bool {
-								return !injected.Swap(true)
+							InjectDuplicateKey: func(iteration, maxIteration int32) []byte {
+								if !injected.Swap(true) {
+									return []byte("injected-duplicate-value")
+								}
+								return nil
 							},
 						},
 					},
@@ -236,6 +239,59 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 				require.True(t, injected.Load(),
 					"InjectDuplicateKey was not called during merge")
 			}
+		})
+	}
+}
+
+// TestImportIdenticalDuplicateRows verifies that importing a CSV containing
+// identical duplicate rows (same PK, same values) succeeds with both the
+// non-distmerge (BulkAdder/SSTBatcher) and distmerge paths. The non-distmerge
+// path has always tolerated these via SSTBatcher.skipDuplicates and KV's
+// DisallowShadowingBelow idempotent-write handling. The distmerge path now
+// matches this behavior by skipping identical duplicates in the merge
+// processor's extractKeyAndCheckDuplicate.
+func TestImportIdenticalDuplicateRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, distmerge := range []bool{false, true} {
+		name := "non-distmerge"
+		if distmerge {
+			name = "distmerge"
+		}
+		t.Run(name, func(t *testing.T) {
+			dirname := t.TempDir()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				ExternalIODir:     dirname,
+				DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+			})
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+
+			if distmerge {
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+				// Small batch size forces each key into its own SST so
+				// duplicates land in separate SSTs and exercise the merge
+				// processor's cross-SST duplicate detection.
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.sst_writer.batch_size = '1B'`)
+			}
+			// CSV with 5 rows but only 3 distinct PKs. Rows 1,a and 2,b
+			// appear twice with identical values.
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dirname, "data.csv"),
+				[]byte("1,a\n2,b\n3,c\n1,a\n2,b"),
+				os.FileMode(0644),
+			))
+
+			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
+			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t, `IMPORT INTO t (id, name) CSV DATA ($1)`,
+				"nodelocal://1/data.csv")
+
+			var count int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&count)
+			require.Equal(t, 3, count)
 		})
 	}
 }
