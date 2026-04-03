@@ -128,8 +128,7 @@ var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
 var codeownerMetricCountEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, "obs.metric_export.codeowner_count.enabled",
 	"enables the reporting of per-CODEOWNER metric counts in the Prometheus scrape",
-	false,
-	settings.WithPublic)
+	false)
 
 // ScrapeMetrics holds meta-metrics that describe the volume of a Prometheus
 // scrape. They are updated at the end of each /_status/vars scrape cycle and
