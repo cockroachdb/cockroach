@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -380,6 +381,8 @@ type Server struct {
 	// sqlStatsIngester provides the interface to consume stats about a sql execution.
 	sqlStatsIngester *sslocal.SQLStatsIngester
 
+	statementsStore *statementstore.StatementStore
+
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
 	schemaTelemetryController *schematelemetrycontroller.Controller
@@ -486,6 +489,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
+	statementStore := statementstore.NewStatementStore(cfg.Settings, nil)
 	localSQLStats := sslocal.NewSQLStats(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -498,7 +502,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.SQLStatsTestingKnobs,
 	)
 	sqlStatsIngester := sslocal.NewSQLStatsIngester(
-		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, pool, insightsProvider, localSQLStats)
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, pool, statementStore, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -514,6 +518,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		localSqlStats:     localSQLStats,
 		reportedStats:     reportedSQLStats,
 		sqlStatsIngester:  sqlStatsIngester,
+		statementsStore:   statementStore,
 		insights:          insightsProvider,
 		reCache:           tree.NewRegexpCache(512),
 		toCharFormatCache: tochar.NewFormatCache(512),
@@ -562,6 +567,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		s.cfg.NodeInfo.LogicalClusterID,
 	)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
+
+	statementStoreIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	statementStoreIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	s.statementsStore.SetInternalExecutor(
+		NewInternalDB(s, MemoryMetrics{}, statementStoreIEMonitor),
+		statementStoreIEMonitor,
+	)
 	return s
 }
 
@@ -729,10 +741,10 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// If a user can opt in/out of some aspect of background processing, then it
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	s.statementsStore.Start(ctx, stopper)
 
 	s.sqlStatsIngester.Start(ctx, stopper)
 	s.persistedSQLStats.Start(ctx, stopper)
-
 	s.schemaTelemetryController.Start(ctx, stopper)
 
 	// reportedStats is periodically cleared to prevent too many SQL Stats
