@@ -1658,3 +1658,35 @@ statement ok
 DROP TABLE t12
 
 subtest end
+
+# Validate that ALTER PRIMARY KEY blocks implicit partitioning columns at
+# non-leading positions, matching the CREATE INDEX behavior.
+
+subtest alter_primary_key_implicit_col_validation
+
+statement ok
+CREATE TABLE t_pab (
+  a INT PRIMARY KEY,
+  b STRING NOT NULL,
+  c INT
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+
+# CREATE INDEX with the implicit column at a non-leading position is blocked.
+statement error cannot explicitly include implicit partitioning columns from "PARTITION ALL BY" in index definition
+CREATE INDEX ON t_pab (a, b)
+
+# ALTER PRIMARY KEY with the implicit column at a non-leading position is blocked.
+statement error cannot explicitly include implicit partitioning columns
+ALTER TABLE t_pab ALTER PRIMARY KEY USING COLUMNS (a, b)
+
+# Leading position is fine.
+statement ok
+ALTER TABLE t_pab ALTER PRIMARY KEY USING COLUMNS (b, a)
+
+statement ok
+DROP TABLE t_pab
+
+subtest end
