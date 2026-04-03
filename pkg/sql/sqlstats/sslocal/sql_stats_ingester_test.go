@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -164,7 +165,9 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
+			ingester := NewSQLStatsIngester(
+				settings, nil /* knobs */, NewIngesterMetrics(),
+				nil /* parentMon */, nil /* statementStore */, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -198,7 +201,9 @@ func TestSQLIngester_Clear(t *testing.T) {
 	defer stopper.Stop(ingesterCtx)
 	settings := cluster.MakeTestingClusterSettings()
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
+	ingester := NewSQLStatsIngester(
+		settings, nil /* knobs */, NewIngesterMetrics(),
+		nil /* parentMon */, nil /* statementStore */, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -242,7 +247,9 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
+	ingester := NewSQLStatsIngester(
+		settings, nil /* knobs */, NewIngesterMetrics(),
+		nil /* parentMon */, nil /* statementStore */, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -285,7 +292,9 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
+	ingester := NewSQLStatsIngester(
+		settings, nil /* knobs */, NewIngesterMetrics(),
+		nil /* parentMon */, nil /* statementStore */, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -343,7 +352,9 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			},
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), nil /* parentMon */)
+		ingester := NewSQLStatsIngester(
+			settings, knobs, NewIngesterMetrics(),
+			nil /* parentMon */, nil /* statementStore */)
 		ingester.Start(ctx, stopper)
 		ingester.BufferStatement(statementA)
 		ingester.BufferStatement(statementB)
@@ -400,7 +411,9 @@ func TestStatsCollectorIngester(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	fakeSink := &capturingSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, fakeSink)
+	ingester := NewSQLStatsIngester(
+		settings, nil /* knobs */, NewIngesterMetrics(),
+		nil /* parentMon */, nil /* statementStore */, fakeSink)
 	ingester.Start(ctx, stopper, WithFlushInterval(10))
 
 	// Set up a StatsCollector with the ingester.
@@ -885,7 +898,9 @@ func TestSQLStatsIngesterMemoryAccounting(t *testing.T) {
 			knobs := &sqlstats.TestingKnobs{
 				SynchronousSQLStats: true,
 			}
-			ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), parentMon, testSink)
+			ingester := NewSQLStatsIngester(
+				settings, knobs, NewIngesterMetrics(),
+				parentMon, nil /* statementStore */, testSink)
 			ingester.Start(ctx, stopper, WithoutTimedFlush())
 
 			// Record all statements and track which sessions had successful recordings.
@@ -942,4 +957,68 @@ func TestSQLStatsIngesterMemoryAccounting(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIngesterStoresStatementFingerprint verifies that the ingester calls
+// storeStatementFingerprint in flushBuffer (not processStatement), ensuring
+// the final ImplicitTxn value is used for the fingerprint ID.
+func TestIngesterStoresStatementFingerprint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	// The store is intentionally not fully initialized (no
+	// SetInternalExecutor/Start) — this test only verifies the
+	// in-memory cache path, not persistence.
+	store := statementstore.NewStatementStore(settings, nil)
+	knobs := &sqlstats.TestingKnobs{
+		SynchronousSQLStats: true,
+	}
+
+	ingester := NewSQLStatsIngester(
+		settings, knobs, NewIngesterMetrics(),
+		nil /* parentMon */, store)
+	ingester.Start(ctx, stopper, WithoutTimedFlush())
+
+	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+	query := "SELECT _ FROM t WHERE _ = _"
+
+	// Record a statement that was initially recorded as implicit.
+	// RecordStatement with SynchronousSQLStats waits for processing.
+	initialFpID := appstatspb.ConstructStatementFingerprintID(
+		query, true /* implicitTxn */, "defaultdb")
+	ingester.RecordStatement(&sqlstats.RecordedStmtStats{
+		SessionID:     sessionID,
+		FingerprintID: initialFpID,
+		Query:         query,
+		Database:      "defaultdb",
+		ImplicitTxn:   true,
+	})
+
+	// The fingerprint should NOT be cached yet — storage happens in
+	// flushBuffer, not processStatement.
+	require.False(t, store.TestingIsCached(initialFpID),
+		"fingerprint should not be cached until flushBuffer")
+
+	// Record a transaction with ImplicitTxn=false. This triggers flushBuffer,
+	// which recomputes the fingerprint ID for the buffered statement and
+	// stores the final fingerprint.
+	recomputedFpID := appstatspb.ConstructStatementFingerprintID(
+		query, false /* implicitTxn */, "defaultdb")
+	ingester.RecordTransaction(&sqlstats.RecordedTxnStats{
+		SessionID:   sessionID,
+		ImplicitTxn: false,
+	})
+
+	// Only the recomputed (final) fingerprint should be cached.
+	require.True(t, store.TestingIsCached(recomputedFpID),
+		"recomputed fingerprint should be cached after flushBuffer")
+	require.False(t, store.TestingIsCached(initialFpID),
+		"initial fingerprint with wrong ImplicitTxn should not be cached")
+	require.NotEqual(t, initialFpID, recomputedFpID,
+		"fingerprint IDs should differ when ImplicitTxn changes")
 }
