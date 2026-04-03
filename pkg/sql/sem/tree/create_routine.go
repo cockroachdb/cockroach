@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,6 +81,10 @@ type CreateRoutine struct {
 	Params      RoutineParams
 	ReturnType  *RoutineReturnType
 	Options     RoutineOptions
+	// RoutineBody is set during parsing for routines that use SQL-standard
+	// inline body syntax: either BEGIN ATOMIC ... END or a bare RETURN expr
+	// (as opposed to the dollar-quoted AS $$ ... $$ syntax). Currently
+	// unimplemented in the optimizer.
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
 	// assigned during opt builder for logging purpose at the moment. It stores
@@ -163,6 +168,114 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	} else {
 		ctx.FormatNode(funcBody)
 	}
+}
+
+// Doc implements the Docer interface.
+func (node *CreateRoutine) Doc(p *PrettyCfg) pretty.Doc {
+	header := pretty.Keyword("CREATE")
+	if node.Replace {
+		header = pretty.ConcatSpace(header, pretty.Keyword("OR REPLACE"))
+	}
+	if node.IsProcedure {
+		header = pretty.ConcatSpace(header, pretty.Keyword("PROCEDURE"))
+	} else {
+		header = pretty.ConcatSpace(header, pretty.Keyword("FUNCTION"))
+	}
+	header = pretty.ConcatSpace(header, p.Doc(&node.Name))
+	paramDocs := make([]pretty.Doc, len(node.Params))
+	for i := range node.Params {
+		paramDocs[i] = p.Doc(&node.Params[i])
+	}
+	header = pretty.Concat(header, p.bracket("(", p.commaSeparated(paramDocs...), ")"))
+
+	var clauses []pretty.Doc
+	if !node.IsProcedure && node.ReturnType != nil {
+		ret := pretty.Keyword("RETURNS")
+		if node.ReturnType.SetOf {
+			ret = pretty.ConcatSpace(ret, pretty.Keyword("SETOF"))
+		}
+		ret = pretty.ConcatSpace(ret, p.FormatType(node.ReturnType.Type))
+		clauses = append(clauses, ret)
+	}
+
+	// Extract RoutineBodyStr from options; it is formatted separately as the body.
+	var isPLpgSQL bool
+	var funcBody RoutineBodyStr
+	for _, option := range node.Options {
+		switch t := option.(type) {
+		case RoutineBodyStr:
+			funcBody = t
+			continue
+		case RoutineLeakproof, RoutineVolatility, RoutineNullInputBehavior:
+			if node.IsProcedure {
+				continue
+			}
+		case RoutineLanguage:
+			isPLpgSQL = t == RoutineLangPLpgSQL
+		}
+		clauses = append(clauses, p.Doc(option))
+	}
+
+	var bodyDoc pretty.Doc
+	if node.RoutineBody != nil {
+		stmtDocs := make([]pretty.Doc, len(node.RoutineBody.Stmts))
+		for i, stmt := range node.RoutineBody.Stmts {
+			d := p.Doc(stmt)
+			// DoBlock.Doc already includes a trailing semicolon.
+			if _, ok := stmt.(*DoBlock); !ok {
+				d = pretty.Concat(d, pretty.Text(";"))
+			}
+			stmtDocs[i] = d
+		}
+		bodyDoc = pretty.Fold(pretty.Concat,
+			pretty.Keyword("BEGIN ATOMIC"),
+			pretty.NestT(pretty.Concat(pretty.HardLine, pretty.Stack(stmtDocs...))),
+			pretty.HardLine,
+			pretty.Keyword("END"))
+	} else if !isPLpgSQL && ParseSQLForDoc != nil {
+		if stmts := ParseSQLForDoc(string(funcBody)); len(stmts) > 0 {
+			stmtDocs := make([]pretty.Doc, len(stmts))
+			for i, stmt := range stmts {
+				d := p.Doc(stmt)
+				// DoBlock.Doc already includes a trailing semicolon.
+				if _, ok := stmt.(*DoBlock); !ok {
+					d = pretty.Concat(d, pretty.Text(";"))
+				}
+				stmtDocs[i] = d
+			}
+			// Render the body to find a dollar-quote tag that doesn't
+			// collide with nested dollar quotes (e.g. from DO blocks).
+			fmtCtx := NewFmtCtx(p.FmtFlagsWithDefaults())
+			for _, stmt := range stmts {
+				fmtCtx.FormatNode(stmt)
+			}
+			bodyStr := fmtCtx.CloseAndGetString()
+			tag := "$" + DollarQuoteDelimiter(bodyStr) + "$"
+			bodyDoc = pretty.Fold(pretty.Concat,
+				pretty.ConcatSpace(pretty.Keyword("AS"), pretty.Text(tag)),
+				pretty.NestT(pretty.Concat(pretty.HardLine, pretty.Stack(stmtDocs...))),
+				pretty.HardLine,
+				pretty.Text(tag))
+		}
+	} else if isPLpgSQL && ParsePLpgSQLForDoc != nil {
+		if parsed := ParsePLpgSQLForDoc(string(funcBody)); parsed != nil {
+			// Use the formatted output to pick a dollar-quote tag that
+			// doesn't collide with nested dollar quotes (e.g. DO blocks).
+			bodyStr := AsStringWithFlags(parsed, p.FmtFlagsWithDefaults())
+			tag := "$" + DollarQuoteDelimiter(bodyStr) + "$"
+			bodyDoc = pretty.Fold(pretty.Concat,
+				pretty.ConcatSpace(pretty.Keyword("AS"), pretty.Text(tag)),
+				pretty.NestT(pretty.Concat(pretty.HardLine, p.Doc(parsed))),
+				pretty.HardLine,
+				pretty.Text(tag))
+		}
+	}
+	if bodyDoc == nil {
+		bodyDoc = p.docAsString(funcBody)
+	}
+	clauses = append(clauses, bodyDoc)
+
+	return p.nestUnder(header, pretty.Stack(clauses...))
 }
 
 // RoutineBody represent a list of statements in a UDF body.

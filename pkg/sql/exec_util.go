@@ -159,6 +159,24 @@ func DoParserInjection() {
 	parserutils.ParseOne = parser.ParseOne
 	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
 	parserutils.PLpgSQLParse = plpgsqlparser.Parse
+	tree.ParseSQLForDoc = func(sql string) []tree.NodeFormatter {
+		stmts, err := parser.Parse(sql)
+		if err != nil {
+			return nil
+		}
+		result := make([]tree.NodeFormatter, len(stmts))
+		for i, s := range stmts {
+			result[i] = s.AST
+		}
+		return result
+	}
+	tree.ParsePLpgSQLForDoc = func(sql string) tree.NodeFormatter {
+		stmt, err := plpgsqlparser.Parse(sql)
+		if err != nil {
+			return nil
+		}
+		return stmt.AST
+	}
 }
 
 // ClusterOrganization is the organization name.
