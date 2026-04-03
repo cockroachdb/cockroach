@@ -420,6 +420,9 @@ func (m *SchemaDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *SchemaSnapshotMetadata) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *ZoneConfigAudit) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.

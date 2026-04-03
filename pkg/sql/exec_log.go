@@ -184,8 +184,13 @@ func (p *planner) maybeLogStatementInternal(
 	// a user and the user has admin privilege (is directly or indirectly a
 	// member of the admin role).
 
+	// Zone config changes are always audit-logged on the SENSITIVE_ACCESS
+	// channel because they control data placement (CRDB-1180).
+	_, isZoneConfigChange := p.stmt.AST.(tree.ZoneConfigStatement)
+	shouldLogZoneConfigAudit := isZoneConfigChange && execType != executorTypeInternal
+
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
-		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled {
+		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled && !shouldLogZoneConfigAudit {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -295,6 +300,14 @@ func (p *planner) maybeLogStatementInternal(
 
 	if shouldLogToAdminAuditLog {
 		p.logEventsOnlyExternally(ctx, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
+	}
+
+	// Note: for admin users, both admin_query (above) and zone_config_audit
+	// (below) are emitted. This is intentional — admin_query captures all
+	// admin activity, while zone_config_audit enables filtering specifically
+	// for zone config changes across all users.
+	if shouldLogZoneConfigAudit {
+		p.logEventsOnlyExternally(ctx, &eventpb.ZoneConfigAudit{CommonSQLExecDetails: execDetails})
 	}
 
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {

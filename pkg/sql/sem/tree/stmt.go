@@ -273,6 +273,17 @@ type CCLOnlyStatement interface {
 	cclOnlyStatement()
 }
 
+// ZoneConfigStatement is a marker interface for statements that modify
+// zone configurations. This includes SetZoneConfig (ALTER TABLE/DATABASE/
+// INDEX/RANGE ... CONFIGURE ZONE) and AlterDatabaseSetZoneConfigExtension
+// (ALTER DATABASE ... ALTER LOCALITY ... CONFIGURE ZONE).
+type ZoneConfigStatement interface {
+	zoneConfigStatement()
+}
+
+var _ ZoneConfigStatement = &SetZoneConfig{}
+var _ ZoneConfigStatement = &AlterDatabaseSetZoneConfigExtension{}
+
 var _ CCLOnlyStatement = &AlterBackup{}
 var _ CCLOnlyStatement = &AlterBackupSchedule{}
 var _ CCLOnlyStatement = &Backup{}
@@ -466,6 +477,7 @@ func (*AlterDatabaseSetZoneConfigExtension) StatementTag() string {
 }
 
 func (*AlterDatabaseSetZoneConfigExtension) hiddenFromShowQueries() {}
+func (*AlterDatabaseSetZoneConfigExtension) zoneConfigStatement()   {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDefaultPrivileges) StatementReturnType() StatementReturnType { return DDL }
@@ -1772,6 +1784,8 @@ func (*SetZoneConfig) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
+
+func (*SetZoneConfig) zoneConfigStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*SetSessionAuthorizationDefault) StatementReturnType() StatementReturnType { return Ack }

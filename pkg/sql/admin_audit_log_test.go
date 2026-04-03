@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -191,6 +192,161 @@ COMMIT;
 		if !found {
 			t.Fatal(errors.Newf("no matching entry found for test case %s", tc.name))
 		}
+	}
+}
+
+// TestAuditLogZoneConfig verifies that zone config changes produce
+// zone_config_audit events on the SENSITIVE_ACCESS channel for both admin
+// and non-admin users, across all CONFIGURE ZONE syntax variants.
+//
+// Regression test for CRDB-1180: zone config changes are security-sensitive
+// operations that control data placement (for compliance/geo-partitioning).
+// zone_config_audit events are emitted unconditionally, without requiring
+// sql.log.admin_audit.enabled.
+func TestAuditLogZoneConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := installSensitiveAccessLogFileSink(sc, t)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Intentionally NOT setting sql.log.admin_audit.enabled to prove that
+	// zone_config_audit events are emitted unconditionally.
+
+	// Set up a non-admin user with ZONECONFIG privilege on all test objects.
+	db.Exec(t, `CREATE USER testuser`)
+	db.Exec(t, `CREATE DATABASE audit_zone_db`)
+	db.Exec(t, `CREATE TABLE audit_zone_test(id INT PRIMARY KEY, val STRING)`)
+	db.Exec(t, `CREATE INDEX audit_zone_idx ON audit_zone_test(val)`)
+	db.Exec(t, `GRANT ZONECONFIG ON TABLE audit_zone_test TO testuser`)
+	db.Exec(t, `GRANT ZONECONFIG ON DATABASE audit_zone_db TO testuser`)
+
+	// Create a table that testuser does NOT have ZONECONFIG privilege on,
+	// to test that failed zone config changes are also audited.
+	db.Exec(t, `CREATE TABLE audit_zone_noperm(id INT PRIMARY KEY)`)
+
+	testuserConn := s.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
+
+	testCases := []struct {
+		name      string
+		useAdmin  bool
+		setup     string
+		stmt      string
+		user      string // expected username in log entry
+		expectErr bool   // if true, the statement is expected to fail
+	}{
+		{
+			name:     "admin/table/using",
+			useAdmin: true,
+			stmt:     `ALTER TABLE audit_zone_test CONFIGURE ZONE USING num_replicas = 5`,
+			user:     "root",
+		},
+		{
+			name:     "non-admin/table/using",
+			useAdmin: false,
+			stmt:     `ALTER TABLE audit_zone_test CONFIGURE ZONE USING num_replicas = 3`,
+			user:     "testuser",
+		},
+		{
+			name:     "admin/table/discard",
+			useAdmin: true,
+			stmt:     `ALTER TABLE audit_zone_test CONFIGURE ZONE DISCARD`,
+			user:     "root",
+		},
+		{
+			name:     "non-admin/table/discard",
+			useAdmin: false,
+			setup:    `ALTER TABLE audit_zone_test CONFIGURE ZONE USING num_replicas = 5`,
+			stmt:     `ALTER TABLE audit_zone_test CONFIGURE ZONE DISCARD`,
+			user:     "testuser",
+		},
+		{
+			name:     "admin/table/using-default",
+			useAdmin: true,
+			setup:    `ALTER TABLE audit_zone_test CONFIGURE ZONE USING num_replicas = 5`,
+			stmt:     `ALTER TABLE audit_zone_test CONFIGURE ZONE USING DEFAULT`,
+			user:     "root",
+		},
+		{
+			name:     "admin/database/using",
+			useAdmin: true,
+			stmt:     `ALTER DATABASE audit_zone_db CONFIGURE ZONE USING gc.ttlseconds = 7200`,
+			user:     "root",
+		},
+		{
+			name:     "non-admin/database/using",
+			useAdmin: false,
+			stmt:     `ALTER DATABASE audit_zone_db CONFIGURE ZONE USING gc.ttlseconds = 3600`,
+			user:     "testuser",
+		},
+		{
+			name:     "admin/index/using",
+			useAdmin: true,
+			stmt:     `ALTER INDEX audit_zone_test@audit_zone_idx CONFIGURE ZONE USING gc.ttlseconds = 3600`,
+			user:     "root",
+		},
+		{
+			name:      "non-admin/table/permission-denied",
+			useAdmin:  false,
+			stmt:      `ALTER TABLE audit_zone_noperm CONFIGURE ZONE USING num_replicas = 5`,
+			user:      "testuser",
+			expectErr: true,
+		},
+		{
+			name:      "admin/database/alter-locality",
+			useAdmin:  true,
+			stmt:      `ALTER DATABASE audit_zone_db ALTER LOCALITY GLOBAL CONFIGURE ZONE USING num_replicas = 5`,
+			user:      "root",
+			expectErr: true, // database is not multi-region
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != "" {
+				db.Exec(t, tc.setup)
+			}
+
+			beforeExec := timeutil.Now().UnixNano()
+
+			if tc.useAdmin {
+				if tc.expectErr {
+					if _, err := sqlDB.Exec(tc.stmt); err == nil {
+						t.Fatal("expected error but statement succeeded")
+					}
+				} else {
+					db.Exec(t, tc.stmt)
+				}
+			} else {
+				_, err := testuserConn.Exec(tc.stmt)
+				if tc.expectErr && err == nil {
+					t.Fatal("expected error but statement succeeded")
+				}
+				if !tc.expectErr && err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			log.FlushFiles()
+
+			entries, err := log.FetchEntriesFromFiles(
+				beforeExec, math.MaxInt64, 10000,
+				regexp.MustCompile(`"EventType":"zone_config_audit".*`+tc.user),
+				log.WithMarkedSensitiveData,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) == 0 {
+				t.Fatalf("no zone_config_audit entry found for %q (user=%s)", tc.stmt, tc.user)
+			}
+		})
 	}
 }
 
