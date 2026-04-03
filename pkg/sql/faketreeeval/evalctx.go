@@ -620,14 +620,14 @@ func (ep *DummyEvalPlanner) InsertStatementHint(
 
 // DeleteStatementHint is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) DeleteStatementHint(
-	ctx context.Context, rowID int64, statementFingerprint string,
+	ctx context.Context, rowID int64, statementFingerprint string, optDatabase string,
 ) ([]int64, []string, [][]byte, error) {
 	return nil, nil, nil, nil
 }
 
 // SetStatementHintEnabled is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) SetStatementHintEnabled(
-	ctx context.Context, rowID int64, statementFingerprint string, enabled bool,
+	ctx context.Context, rowID int64, statementFingerprint string, enabled bool, optDatabase string,
 ) (int64, error) {
 	return 0, nil
 }
