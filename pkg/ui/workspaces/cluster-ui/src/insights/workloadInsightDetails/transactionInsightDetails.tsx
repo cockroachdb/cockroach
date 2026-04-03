@@ -5,12 +5,13 @@
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Tabs } from "antd";
-import React, { useEffect } from "react";
+import React from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
 import { useTxnInsightDetails } from "src/api/txnInsightDetailsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { idAttr, insights } from "src/util";
@@ -24,12 +25,10 @@ import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsS
 
 export interface TransactionInsightDetailsStateProps {
   timeScale?: TimeScale;
-  hasAdminRole: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
   setTimeScale: (ts: TimeScale) => void;
-  refreshUserSQLRoles: () => void;
 }
 
 export type TransactionInsightDetailsProps =
@@ -44,20 +43,15 @@ enum TabKeysEnum {
 
 export const TransactionInsightDetails: React.FC<
   TransactionInsightDetailsProps
-> = ({
-  setTimeScale,
-  history,
-  timeScale,
-  match,
-  hasAdminRole,
-  refreshUserSQLRoles,
-}) => {
+> = ({ setTimeScale, history, timeScale, match }) => {
   const executionID = getMatchParamByName(match, idAttr);
 
   const { data: txnInsightDetailsResp } = useTxnInsightDetails(
     executionID,
     timeScale,
   );
+  const { data: userRoles } = useUserSQLRoles();
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
 
   const insightDetails = txnInsightDetailsResp?.results.result;
   const insightError = txnInsightDetailsResp?.results.errors ?? null;
@@ -83,10 +77,6 @@ export const TransactionInsightDetails: React.FC<
     hasData &&
     insightDetails != null &&
     (!stmtsComplete || !contentionComplete);
-
-  useEffect(() => {
-    refreshUserSQLRoles();
-  }, [refreshUserSQLRoles]);
 
   const prevPage = (): void => history.goBack();
 
