@@ -839,8 +839,6 @@ owners:
   rpc_batches_recv: cockroachdb/kv
   rpc_client_bytes_egress: cockroachdb/kv
   rpc_client_bytes_ingress: cockroachdb/kv
-  rpc_client_request_duration_nanos: cockroachdb/kv
-  rpc_client_requests_total: cockroachdb/kv
   rpc_connection_avg_round_trip_latency: cockroachdb/kv
   rpc_connection_connected: cockroachdb/kv
   rpc_connection_failures: cockroachdb/kv
@@ -852,9 +850,7 @@ owners:
   rpc_connection_tcp_rtt_var: cockroachdb/kv
   rpc_connection_unhealthy: cockroachdb/kv
   rpc_connection_unhealthy_nanos: cockroachdb/kv
-  rpc_drpc_enabled: cockroachdb/kv
   rpc_server_request_duration_nanos: cockroachdb/kv
-  rpc_server_requests_total: cockroachdb/kv
   rpc_streams_mux_rangefeed_active: cockroachdb/kv
   rpc_streams_mux_rangefeed_recv: cockroachdb/kv
   schedules: cockroachdb/jobs
@@ -1191,8 +1187,6 @@ owners:
   storage_wal_bytes_in: cockroachdb/kv
   storage_wal_bytes_written: cockroachdb/kv
   storage_wal_failover_primary_duration: cockroachdb/kv
-  storage_wal_failover_secondary_disk_available: cockroachdb/kv
-  storage_wal_failover_secondary_disk_capacity: cockroachdb/kv
   storage_wal_failover_secondary_duration: cockroachdb/kv
   storage_wal_failover_switch_count: cockroachdb/kv
   storage_wal_failover_write_and_sync_latency: cockroachdb/kv
