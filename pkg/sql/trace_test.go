@@ -76,6 +76,7 @@ func TestTrace(t *testing.T) {
 	drpcOptionalSpans := []string{
 		"/cockroach.roachpb.KVBatch/Batch",
 		"/cockroach.roachpb.KVBatch/BatchStream",
+		"/cockroach.roachpb.TenantService/RangeLookup",
 	}
 	commonExpSpans := []string{
 		"session recording",
