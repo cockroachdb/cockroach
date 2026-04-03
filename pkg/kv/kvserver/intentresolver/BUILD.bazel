@@ -4,6 +4,7 @@ go_library(
     name = "intentresolver",
     srcs = [
         "admission.go",
+        "doc.go",
         "intent_resolver.go",
         "metrics.go",
     ],
@@ -26,6 +27,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
