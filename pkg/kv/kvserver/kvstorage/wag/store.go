@@ -76,11 +76,16 @@ func Write(w storage.Writer, index uint64, node wagpb.Node) error {
 	return w.PutUnversioned(keys.StoreWAGNodeKey(index), data)
 }
 
+// Delete removes the WAG node at the given sequence number.
+func Delete(w storage.Writer, index uint64) error {
+	return w.ClearUnversioned(keys.StoreWAGNodeKey(index), storage.ClearOptions{})
+}
+
 // Iterator helps to scan the WAG sequence.
 //
 //	var iter wag.Iterator
-//	for node := range iter.Iter(ctx, reader) {
-//		// process node
+//	for index, node := range iter.Iter(ctx, reader) {
+//		// process index, node
 //	}
 //	if err := iter.Error(); err != nil {
 //		return err
@@ -92,8 +97,9 @@ type Iterator struct {
 	err error
 }
 
-// Iter returns an iterator that scans the WAG sequence.
-func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq[wagpb.Node] {
+// Iter returns an iterator that scans the WAG sequence. The iterator yields a
+// pair containing the WAG node index and the WAG node itself.
+func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq2[uint64, wagpb.Node] {
 	prefix := keys.StoreWAGPrefix()
 	mi, err := r.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: prefix.PrefixEnd(),
@@ -104,10 +110,15 @@ func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq[wagpb.N
 	}
 	mi.SeekGE(storage.MakeMVCCMetadataKey(prefix))
 
-	return func(yield func(wagpb.Node) bool) {
+	return func(yield func(uint64, wagpb.Node) bool) {
 		defer mi.Close()
 		for ; ; mi.Next() {
 			if ok, err := mi.Valid(); err != nil || !ok {
+				it.err = err
+				return
+			}
+			index, err := keys.DecodeWAGNodeKey(mi.UnsafeKey().Key)
+			if err != nil {
 				it.err = err
 				return
 			}
@@ -120,7 +131,7 @@ func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq[wagpb.N
 			if it.err = node.Unmarshal(v); it.err != nil { // nolint:protounmarshal
 				return
 			}
-			if !yield(node) {
+			if !yield(index, node) {
 				return
 			}
 		}
