@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -208,6 +209,52 @@ func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName stri
 	}
 }
 
+// validateIndexesForRegionalByRow checks that existing indexes (both primary
+// and secondary) are compatible with the region column that will be implicitly
+// partitioned into each index when the table becomes REGIONAL BY ROW.
+// Specifically:
+//   - The region column may only appear as a KEY column if it is the first key
+//     column and the index is not hash-sharded.
+//   - The region column may not appear as a STORED column.
+func validateIndexesForRegionalByRow(
+	b BuildCtx, tableID catid.DescID, targetLocality *tree.Locality,
+) {
+	if !isLocalityRegionalByRow(targetLocality) {
+		return
+	}
+
+	regionColName := explicitRegionColName(targetLocality.RegionalByRowColumn)
+	regionColID := getColumnIDFromColumnName(b, tableID, regionColName, true /* required */)
+
+	validateIndex := func(idx *scpb.Index, checkStored bool) {
+		idxCols := mustRetrieveIndexColumnElements(b, tableID, idx.IndexID)
+		for _, col := range idxCols {
+			if col.ColumnID != regionColID {
+				continue
+			}
+			if checkStored && col.Kind == scpb.IndexColumn_STORED {
+				panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
+			}
+			if col.Kind == scpb.IndexColumn_KEY {
+				if idx.Sharding != nil {
+					panic(sqlerrors.HashIndexIncludesImplicitPartitionColFromRBR)
+				}
+				if col.OrdinalInKind != 0 {
+					panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
+				}
+			}
+		}
+	}
+
+	tblElems := b.QueryByID(tableID).Filter(publicTargetFilter)
+	tblElems.FilterPrimaryIndex().ForEach(func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
+		validateIndex(&idx.Index, false /* checkStored */)
+	})
+	tblElems.FilterSecondaryIndex().ForEach(func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+		validateIndex(&idx.Index, true /* checkStored */)
+	})
+}
+
 // alterPrimaryKeyForRegionalByRowTable handles the index changes when transitioning
 // to or from REGIONAL BY ROW.
 func alterPrimaryKeyForRegionalByRowTable(
@@ -226,19 +273,20 @@ func alterPrimaryKeyForRegionalByRowTable(
 		return
 	}
 
-	// Step 1: Get current primary key columns
-	primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
+	// Step 1: Validate indexes
+	validateIndexesForRegionalByRow(b, tableID, targetLocality)
 
-	// Step 2: Build columns list with an empty slot for a new region column prepended
+	// Step 2: Get current primary key columns
+	primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
 	cols := retrieveNonImplicitIndexColumns(b, tableID, primaryIndexElem.IndexID)
 
 	// Step 3: Get current PK name and sharding
 	currentPKName := mustRetrieveIndexNameElem(b, tableID, primaryIndexElem.IndexID)
 	var sharded *tree.ShardedIndexDef
 	if primaryIndexElem.Sharding != nil {
-		// remove shard column for the keys
+		// Remove shard column for the keys.
 		cols = cols[1:]
-		// pass non nil sharding definition to alter primary key to recreate the sharding
+		// Pass non nil sharding definition to alter primary key to recreate the sharding.
 		sharded = &tree.ShardedIndexDef{
 			ShardBuckets: tree.NewDInt(tree.DInt(primaryIndexElem.Sharding.ShardBuckets)),
 		}
@@ -254,8 +302,8 @@ func alterPrimaryKeyForRegionalByRowTable(
 		Partitioning: &partSpec,
 	}
 
-	// Step 5: Call alterPrimaryKey
-	// This will trigger recreation of all secondary indexes with new partitioning
+	// Step 5: Call alterPrimaryKey.
+	// This will trigger recreation of all secondary indexes with new partitioning.
 	alterPrimaryKey(b, nil, tbl, nil, spec)
 	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
 		b,
