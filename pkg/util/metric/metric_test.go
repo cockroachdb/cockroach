@@ -1059,6 +1059,153 @@ func BenchmarkHistogramRecordValue(b *testing.B) {
 	})
 }
 
+// BenchmarkClassicVsNativeHistogram compares the performance of classic
+// Prometheus histograms against native (exponential) histograms for both
+// observation recording and quantile computation.
+func BenchmarkClassicVsNativeHistogram(b *testing.B) {
+	bucketConfigs := []struct {
+		name   string
+		config staticBucketConfig
+	}{
+		{"IOLatency", IOLatencyBuckets},
+		{"Count1K", Count1KBuckets},
+	}
+
+	for _, bc := range bucketConfigs {
+		b.Run(bc.name, func(b *testing.B) {
+			makeClassic := func() IHistogram {
+				return NewHistogram(HistogramOptions{
+					Metadata:     Metadata{Name: "classic"},
+					Duration:     0,
+					BucketConfig: bc.config,
+					Mode:         HistogramModePrometheus,
+				})
+			}
+			makeNative := func(bucketFactor float64) IHistogram {
+				prevEnabled := nativeHistogramsEnabled
+				prevFactor := nativeHistogramsBucketFactor
+				nativeHistogramsEnabled = true
+				nativeHistogramsBucketFactor = bucketFactor
+				defer func() {
+					nativeHistogramsEnabled = prevEnabled
+					nativeHistogramsBucketFactor = prevFactor
+				}()
+				return NewHistogram(HistogramOptions{
+					Metadata:     Metadata{Name: "native"},
+					Duration:     0,
+					BucketConfig: bc.config,
+					Mode:         HistogramModePrometheus,
+				})
+			}
+			// Compute the classic growth factor so we can match it for the
+			// "native-matched" variant.
+			classicGrowthFactor := math.Pow(
+				bc.config.max/bc.config.min, 1.0/float64(bc.config.count-1),
+			)
+
+			// Benchmark Observe: sequential
+			b.Run("Observe/classic", func(b *testing.B) {
+				h := makeClassic()
+				r, _ := randutil.NewTestRand()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+				}
+			})
+			b.Run("Observe/native-fine", func(b *testing.B) {
+				h := makeNative(1.1)
+				r, _ := randutil.NewTestRand()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+				}
+			})
+			b.Run("Observe/native-matched", func(b *testing.B) {
+				h := makeNative(classicGrowthFactor)
+				r, _ := randutil.NewTestRand()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+				}
+			})
+
+			// Benchmark Observe: parallel (contended)
+			b.Run("ObserveParallel/classic", func(b *testing.B) {
+				h := makeClassic()
+				b.ResetTimer()
+				b.RunParallel(func(pb *testing.PB) {
+					r, _ := randutil.NewTestRand()
+					for pb.Next() {
+						h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+					}
+				})
+			})
+			b.Run("ObserveParallel/native-fine", func(b *testing.B) {
+				h := makeNative(1.1)
+				b.ResetTimer()
+				b.RunParallel(func(pb *testing.PB) {
+					r, _ := randutil.NewTestRand()
+					for pb.Next() {
+						h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+					}
+				})
+			})
+			b.Run("ObserveParallel/native-matched", func(b *testing.B) {
+				h := makeNative(classicGrowthFactor)
+				b.ResetTimer()
+				b.RunParallel(func(pb *testing.PB) {
+					r, _ := randutil.NewTestRand()
+					for pb.Next() {
+						h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+					}
+				})
+			})
+
+			// Benchmark quantile computation (snapshot + ValueAtQuantile).
+			// Pre-populate with 10k observations to simulate realistic state.
+			seedHistogram := func(h IHistogram) {
+				r, _ := randutil.NewTestRand()
+				for i := 0; i < 10000; i++ {
+					h.RecordValue(int64(randutil.RandIntInRange(r, int(bc.config.min), int(bc.config.max))))
+				}
+			}
+			b.Run("Quantile/classic", func(b *testing.B) {
+				h := makeClassic()
+				seedHistogram(h)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					snap := MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+					snap.ValueAtQuantile(50)
+					snap.ValueAtQuantile(99)
+					snap.ValueAtQuantile(99.9)
+				}
+			})
+			b.Run("Quantile/native-fine", func(b *testing.B) {
+				h := makeNative(1.1)
+				seedHistogram(h)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					snap := MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+					snap.ValueAtQuantile(50)
+					snap.ValueAtQuantile(99)
+					snap.ValueAtQuantile(99.9)
+				}
+			})
+			b.Run("Quantile/native-matched", func(b *testing.B) {
+				h := makeNative(classicGrowthFactor)
+				seedHistogram(h)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					snap := MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+					snap.ValueAtQuantile(50)
+					snap.ValueAtQuantile(99)
+					snap.ValueAtQuantile(99.9)
+				}
+			})
+		})
+	}
+}
+
 func TestMetadataGetLabels(t *testing.T) {
 	tests := []struct {
 		name            string
