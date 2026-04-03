@@ -361,6 +361,11 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 
 	// Run the combined uniqueness and FK checks batch.
 	ba := n.run.uniqBatch.ShallowCopy()
+	// Copy the locking-related header fields from the FK batch so that the
+	// combined batch honors lock_timeout and deadlock_timeout for FK checks.
+	ba.Header.WaitPolicy = n.run.fkBatch.Header.WaitPolicy
+	ba.Header.LockTimeout = n.run.fkBatch.Header.LockTimeout
+	ba.Header.DeadlockTimeout = n.run.fkBatch.Header.DeadlockTimeout
 	log.VEventf(params.ctx, 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
@@ -409,6 +414,8 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		maxSpans := len(n.run.fkChecks) * len(n.input)
 		// Any FK checks using locking should have lock wait policy BLOCK.
 		n.run.fkBatch.Header.WaitPolicy = lock.WaitPolicy_Block
+		n.run.fkBatch.Header.LockTimeout = params.SessionData().LockTimeout
+		n.run.fkBatch.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 		n.run.fkBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
 		n.run.fkSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 		if len(n.input) > 1 {
