@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -258,6 +260,48 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			requiresDeprecatedWorkload: true,
 			run:                        TestLDRConflict,
 		},
+		{
+			name: "ldr/kv0/workload=source/single_key_update_benchmark",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				createTables: true,
+			},
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRHotKeyUpdate,
+			monitor:             true,
+		},
+		{
+			name: "ldr/unique_constraint/workload=source/update_benchmark",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				createTables: true,
+			},
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRUniqueConstraintUpdate,
+			monitor:             true,
+		},
 	}
 
 	for _, sp := range specs {
@@ -270,6 +314,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			Cluster:                    sp.clusterSpec.ToSpec(r),
 			Leases:                     registry.MetamorphicLeases,
 			RequiresDeprecatedWorkload: sp.requiresDeprecatedWorkload,
+			Monitor:                    sp.monitor,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
@@ -835,6 +880,94 @@ func TestLDROnNetworkPartition(
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
 }
 
+// Unidirectional hot key update workload.
+func TestLDRHotKeyUpdate(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	ldrWorkload := LDRWorkload{
+		workload: replicateKV{
+			readPercent:             0,
+			debugRunDuration:        duration,
+			maxBlockBytes:           1024,
+			initRows:                1,
+			tolerateErrors:          true,
+			initWithSplitAndScatter: false,
+			uniform:                 true,
+		},
+		manualSchemaSetup: true,
+		dbName:            "kv",
+		tableNames:        []string{"kv"},
+	}
+
+	setup.right.sysSQL.Exec(t, "CREATE DATABASE kv")
+	c.Run(ctx,
+		option.WithNodes(setup.workloadNode),
+		ldrWorkload.workload.sourceInitCmd("system", setup.left.nodes))
+
+	_, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
+
+	workloadDoneCh := make(chan struct{})
+	maxExpectedLatency := 10 * time.Minute
+	group := t.NewGroup()
+	validateLatency := setupLatencyVerifiersWithGroup(t, c, group, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+
+	group.Go(func(ctx context.Context, _ *logger.Logger) error {
+		defer close(workloadDoneCh)
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.left.nodes))
+	})
+
+	group.Wait()
+	validateLatency()
+}
+
+// Unidirectional unique constraint update workload.
+func TestLDRUniqueConstraintUpdate(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	ldrWorkload := LDRWorkload{
+		workload: replicateUniqueIndex{
+			rows:       600,
+			dataSize:   1024,
+			splitEvery: 1000,
+			scatter:    true,
+			duration:   duration,
+		},
+		manualSchemaSetup: true,
+		dbName:            "uniqueindex",
+		tableNames:        []string{"uniqueindex"},
+	}
+
+	setup.right.sysSQL.Exec(t, "CREATE DATABASE uniqueindex")
+	c.Run(ctx,
+		option.WithNodes(setup.workloadNode),
+		ldrWorkload.workload.sourceInitCmd("system", setup.left.nodes))
+
+	_, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
+
+	workloadDoneCh := make(chan struct{})
+	maxExpectedLatency := 10 * time.Minute
+	group := t.NewGroup()
+	validateLatency := setupLatencyVerifiersWithGroup(t, c, group, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+
+	group.Go(func(ctx context.Context, _ *logger.Logger) error {
+		defer close(workloadDoneCh)
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.left.nodes))
+	})
+
+	group.Wait()
+	validateLatency()
+}
+
 type ldrJobInfo struct {
 	*jobRecord
 }
@@ -869,6 +1002,7 @@ type ldrTestSpec struct {
 	// required for mixed version testing. If no supported predecessor
 	// meets this minimum, mixed version testing is skipped.
 	mixedVersionMinimum clusterversion.Key
+	monitor             bool
 }
 
 type mode int
@@ -1189,6 +1323,58 @@ func setupLatencyVerifiers(
 		return nil
 	})
 	return func() {
+		rlv.assertValid(t)
+		if leftJobID != 0 {
+			llv.assertValid(t)
+		}
+	}
+}
+
+// setupLatencyVerifiersWithGroup is like setupLatencyVerifiers but uses a
+// task.Group for goroutine management instead of the deprecated cluster.Monitor.
+func setupLatencyVerifiersWithGroup(
+	t test.Test,
+	c cluster.Cluster,
+	group task.Group,
+	leftJobID, rightJobID int,
+	setup multiClusterSetup,
+	workloadDoneCh chan struct{},
+	maxExpectedLatency time.Duration,
+) func() {
+	var llv *latencyVerifier
+	if leftJobID != 0 {
+		llv = makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
+			getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	}
+
+	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+
+	debugZipFetcher := &sync.Once{}
+
+	group.Go(func(ctx context.Context, _ *logger.Logger) error {
+		if leftJobID == 0 {
+			t.L().Printf("No left job created")
+			return nil
+		}
+		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	group.Go(func(ctx context.Context, _ *logger.Logger) error {
+		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	return func() {
+		rlv.maybeLogLatencyHist()
+		if leftJobID != 0 {
+			llv.maybeLogLatencyHist()
+		}
 		rlv.assertValid(t)
 		if leftJobID != 0 {
 			llv.assertValid(t)
