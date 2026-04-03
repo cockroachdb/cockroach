@@ -395,6 +395,39 @@ WHERE
 	require.False(t, strings.Contains(locality, kv.antiRegion), "region %s is in locality %s", kv.antiRegion, locality)
 }
 
+type uniqueKVWorkload struct {
+	rows       int
+	dataSize   int
+	splitEvery int // splitEvery specifies the interval at which to split the unique index.
+	scatter    bool
+	duration   time.Duration
+}
+
+func (w uniqueKVWorkload) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
+	cmd := roachtestutil.NewCommand(`./cockroach workload init uniquekv`).
+		MaybeFlag(w.rows > 0, "rows", w.rows).
+		MaybeFlag(w.dataSize > 0, "data-size", w.dataSize).
+		MaybeFlag(w.splitEvery > 0, "split-every", w.splitEvery).
+		MaybeOption(w.scatter, "scatter").
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
+	return cmd.String()
+}
+
+func (w uniqueKVWorkload) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
+	cmd := roachtestutil.NewCommand(`./cockroach workload run uniquekv`).
+		MaybeFlag(w.duration > 0, "duration", w.duration).
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
+	return cmd.String()
+}
+
+func (w uniqueKVWorkload) runDriver(
+	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
+) error {
+	return defaultWorkloadDriver(workloadCtx, setup, c, w)
+}
+
 type replicateBulkOps struct {
 	// short uses less data during the import and rollback steps. Also only runs one rollback.
 	short bool

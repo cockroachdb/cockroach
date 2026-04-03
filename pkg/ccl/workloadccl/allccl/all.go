@@ -37,6 +37,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttlbench"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/uniquekv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/vecann"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
