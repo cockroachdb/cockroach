@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "statementstore",
+    srcs = ["statement_store.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/statementstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/util/buildutil",
+        "//pkg/util/cache",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "statementstore_test",
+    srcs = ["statement_store_test.go"],
+    deps = [
+        ":statementstore",
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
