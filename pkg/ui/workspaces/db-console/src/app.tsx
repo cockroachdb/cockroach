@@ -11,6 +11,8 @@ import {
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
   ScheduleDetails,
+  StatementsPageV2,
+  TransactionsPageV2,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -381,6 +383,17 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                             exact
                             path="/debug/hotranges/:node_id"
                             component={HotRanges}
+                          />
+                          {/* SQL Activity V2 (debug pages) */}
+                          <Route
+                            exact
+                            path="/debug/statements"
+                            component={StatementsPageV2}
+                          />
+                          <Route
+                            exact
+                            path="/debug/transactions"
+                            component={TransactionsPageV2}
                           />
                           <Route
                             exact

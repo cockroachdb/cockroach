@@ -33,3 +33,4 @@ export * from "./clusterSettingsApi";
 export * from "./dataDistributionApi";
 export * from "./liveWorkloadApi";
 export * from "./sessionsApi";
+export * from "./sqlActivityApi";
