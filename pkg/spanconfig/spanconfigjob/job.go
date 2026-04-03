@@ -195,8 +195,8 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)
 	}
 
-	if lastErr != nil {
-		return errors.Wrap(lastErr, "reconciliation unsuccessful, failing job")
+	if err := errors.CombineErrors(lastErr, ctx.Err()); err != nil {
+		return errors.Wrap(err, "reconciliation unsuccessful, failing job")
 	}
 	return errors.Newf("reconciliation unsuccessful, failing job")
 }
