@@ -1494,7 +1494,7 @@ func checkPrivilegesForRestore(
 	{
 		// Cluster and tenant restores require the `RESTORE` system privilege for
 		// non-admin users.
-		requiresRestoreSystemPrivilege := restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
+		requiresRestoreSystemPrivilege := restoreStmt.DescriptorCoverage != tree.RequestedDescriptors ||
 			restoreStmt.Targets.TenantID.IsSet()
 
 		if requiresRestoreSystemPrivilege {
@@ -2200,6 +2200,9 @@ func collectRestoreTelemetry(
 	telemetry.Count("restore.total.started")
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		telemetry.Count("restore.full-cluster")
+	}
+	if restoreStmt.DescriptorCoverage == tree.SystemUsers {
+		telemetry.Count("restore.system-users")
 	}
 	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, restoreStmt.Options,
 		descsByTablePattern, restoreDBs, applicationName)
