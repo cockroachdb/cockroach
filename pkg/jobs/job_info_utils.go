@@ -43,34 +43,26 @@ func WriteChunkedFileToJobInfo(
 	}
 
 	var chunkCounter int
-	var chunkName string
 	for len(data) > 0 {
 		if chunkCounter > 9999 {
-			return errors.AssertionFailedf("too many chunks for file %s; chunk name will break lexicographic ordering", filename)
+			return errors.AssertionFailedf(
+				"too many chunks for file %s; chunk name will break lexicographic ordering", filename,
+			)
 		}
-		chunkSize := bundleChunkSize
 		chunk := data
-		if len(chunk) > chunkSize {
-			chunkName = fmt.Sprintf("%s#%04d", filename, chunkCounter)
-			chunk = chunk[:chunkSize]
-		} else {
-			// This is the last chunk we will write, assign it a sentinel file name.
-			chunkName = finalChunkName
+		if len(chunk) > bundleChunkSize {
+			chunk = chunk[:bundleChunkSize]
 		}
 		data = data[len(chunk):]
-		var err error
-		chunk, err = compressChunk(chunk)
-		if err != nil {
-			return errors.Wrapf(err, "failed to compress chunk for file %s", filename)
-		}
 
-		// On listing we want the info_key of each chunk to sort after the
-		// previous chunk of the same file so that the chunks can be reassembled
-		// on download. For this reason we use a monotonically increasing
-		// chunk counter as the suffix.
-		err = jobInfo.Write(ctx, chunkName, chunk)
-		if err != nil {
-			return errors.Wrapf(err, "failed to write chunk for file %s", filename)
+		// Determine the chunk index: use -1 for the final chunk so that
+		// writeCompressedChunk assigns the sentinel #_final suffix.
+		chunkIndex := chunkCounter
+		if len(data) == 0 {
+			chunkIndex = -1
+		}
+		if err := writeCompressedChunk(ctx, jobInfo, filename, chunkIndex, chunk); err != nil {
+			return err
 		}
 		chunkCounter++
 	}
@@ -153,4 +145,137 @@ func (i InfoStorage) GetProto(
 		return false, errors.Wrap(err, "failed to unmarshal proto")
 	}
 	return true, nil
+}
+
+// DeleteChunkedFile deletes all chunks associated with the given filename from
+// the job_info table. Chunks are stored with info keys in [filename,
+// filename#_final~), and this function removes all of them.
+func DeleteChunkedFile(
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
+) error {
+	finalChunkName := filename + finalChunkSuffix
+	return InfoStorageForJob(txn, jobID).DeleteRange(
+		ctx, filename, finalChunkName+"~", 0,
+	)
+}
+
+// WriteChunkedProtos marshals a slice of protobuf messages and writes them as
+// a chunked file to the job_info table. Each entry is stored with a 4-byte
+// big-endian length prefix followed by its marshaled bytes. Chunks are flushed
+// to the job_info table as they fill up, so only one chunk's worth of
+// marshaled data is buffered in memory at a time. Chunk boundaries are always
+// aligned to proto entry boundaries, so each chunk can be independently
+// decompressed and parsed by ReadChunkedProtos.
+func WriteChunkedProtos[T any, PT interface {
+	*T
+	protoutil.Message
+}](ctx context.Context, filename string, msgs []T, txn isql.Txn, jobID jobspb.JobID) error {
+	if err := DeleteChunkedFile(ctx, filename, txn, jobID); err != nil {
+		return err
+	}
+	jobInfo := InfoStorageForJob(txn, jobID)
+	var buf bytes.Buffer
+	var chunkCounter int
+	for i := range msgs {
+		data, err := protoutil.Marshal(PT(&msgs[i]))
+		if err != nil {
+			return errors.Wrap(err, "marshaling proto entry")
+		}
+		var lenBuf [4]byte
+		binary.BigEndian.PutUint32(lenBuf[:], uint32(len(data)))
+		buf.Write(lenBuf[:])
+		buf.Write(data)
+		if buf.Len() >= bundleChunkSize {
+			if err := writeCompressedChunk(ctx, jobInfo, filename, chunkCounter, buf.Bytes()); err != nil {
+				return err
+			}
+			buf.Reset()
+			chunkCounter++
+			if chunkCounter > 9999 {
+				return errors.AssertionFailedf(
+					"too many chunks for file %s; chunk name will break lexicographic ordering", filename,
+				)
+			}
+		}
+	}
+	// Write the final chunk (may be empty if all protos fit evenly into
+	// previous chunks, but we always write a final chunk so the reader can
+	// verify completeness).
+	return writeCompressedChunk(ctx, jobInfo, filename, -1 /* final */, buf.Bytes())
+}
+
+// writeCompressedChunk gzip-compresses data and writes it as a single chunk.
+// A chunkIndex of -1 indicates the final chunk.
+func writeCompressedChunk(
+	ctx context.Context, jobInfo InfoStorage, filename string, chunkIndex int, data []byte,
+) error {
+	var chunkName string
+	if chunkIndex < 0 {
+		chunkName = filename + finalChunkSuffix
+	} else {
+		chunkName = fmt.Sprintf("%s#%04d", filename, chunkIndex)
+	}
+	compressed, err := compressChunk(data)
+	if err != nil {
+		return errors.Wrapf(err, "compressing chunk for file %s", filename)
+	}
+	return jobInfo.Write(ctx, chunkName, compressed)
+}
+
+// ReadChunkedProtos reads length-prefixed proto entries from a chunked file in
+// the job_info table into the provided slice. Each chunk is independently
+// decompressed and its entries are parsed one at a time, so only one chunk's
+// worth of serialized data is in memory at a time. Returns true if any entries
+// were found.
+//
+// T is the concrete proto type (e.g. jobspb.BulkSSTManifest) and PT is its
+// pointer type which must implement protoutil.Message.
+func ReadChunkedProtos[T any, PT interface {
+	*T
+	protoutil.Message
+}](ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID, out *[]T) (bool, error) {
+	jobInfo := InfoStorageForJob(txn, jobID)
+	var lastInfoKey string
+	var found bool
+	if err := jobInfo.Iterate(ctx, filename,
+		func(infoKey string, value []byte) error {
+			lastInfoKey = infoKey
+			r, err := gzip.NewReader(bytes.NewBuffer(value))
+			if err != nil {
+				return err
+			}
+			data, err := io.ReadAll(r)
+			if err != nil {
+				return err
+			}
+			for len(data) > 0 {
+				if len(data) < 4 {
+					return errors.New("truncated length prefix in chunked protos")
+				}
+				n := binary.BigEndian.Uint32(data[:4])
+				data = data[4:]
+				if uint32(len(data)) < n {
+					return errors.Newf(
+						"truncated proto entry: expected %d bytes, got %d", n, len(data),
+					)
+				}
+				var msg T
+				if err := protoutil.Unmarshal(data[:n], PT(&msg)); err != nil {
+					return errors.Wrap(err, "unmarshaling proto entry")
+				}
+				*out = append(*out, msg)
+				found = true
+				data = data[n:]
+			}
+			return nil
+		}); err != nil {
+		return false, errors.Wrapf(err, "reading chunked protos for file %s", filename)
+	}
+	if found && !strings.Contains(lastInfoKey, finalChunkSuffix) {
+		return false, errors.AssertionFailedf(
+			"failed to read all chunks for file %s, last info key read was %s",
+			filename, lastInfoKey,
+		)
+	}
+	return found, nil
 }

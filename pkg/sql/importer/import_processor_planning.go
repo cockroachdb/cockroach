@@ -204,18 +204,13 @@ func distImport(
 		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
-			data, err := jobs.ReadChunkedFileToJobInfo(
-				ctx, importSSTManifestsInfoKey, txn, job.ID(),
+			found, err := jobs.ReadChunkedProtos(
+				ctx, importSSTManifestsInfoKey, txn, job.ID(), &resumeManifests,
 			)
 			if err != nil {
 				return err
 			}
-			if len(data) > 0 {
-				var stored jobspb.BulkSSTManifests
-				if err := protoutil.Unmarshal(data, &stored); err != nil {
-					return errors.Wrap(err, "unmarshaling SST manifests from job info")
-				}
-				resumeManifests = stored.Manifests
+			if found {
 				processorOutput = append(
 					processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
 				)
