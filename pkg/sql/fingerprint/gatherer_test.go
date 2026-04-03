@@ -8,7 +8,6 @@ package fingerprint
 import (
 	"context"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -16,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,7 +138,7 @@ func TestGathererCheckpointing(t *testing.T) {
 	// its by 10, while the checkpoint ticker is 17 to make it coprime. This means
 	// each span is processed and checkpoint occurs at a distinct point on the
 	// timeline ensuring the test's behavior is deterministic.
-	synctest.Test(t, func(t *testing.T) {
+	timeutil.SyncTest(t, func(t *testing.T) {
 		ctx := context.Background()
 		spans := []roachpb.Span{sp('a'), sp('c'), sp('e'), sp('g'), sp('i'), sp('k')}
 
@@ -172,7 +172,7 @@ func TestGathererCheckpointPreservation(t *testing.T) {
 	// This test verifies that checkpointed progress is preserved when an error
 	// occurs. Specifically, we want to ensure that spans completed before a
 	// checkpoint are not re-processed when the gatherer is resumed after an error.
-	synctest.Test(t, func(t *testing.T) {
+	timeutil.SyncTest(t, func(t *testing.T) {
 		ctx := context.Background()
 		spans := []roachpb.Span{sp('a'), sp('c'), sp('e'), sp('g'), sp('i'), sp('k')}
 

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -204,7 +205,7 @@ func TestMergeFeedRandomized(t *testing.T) {
 	// greater than the previous batch's max.
 	lastBatchMaxTS := 0
 
-	synctest.Test(t, func(t *testing.T) {
+	timeutil.SyncTest(t, func(t *testing.T) {
 		go func() {
 			err := feed.Subscribe(context.Background())
 			require.NoError(t, err)
