@@ -373,7 +373,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	opts := feed.Opts
 
 	timestampOracle := newChangeAggregatorLowerBoundOracle(
-		ca.frontier, feed.ScanTime, ca.frontier.MaxSpanTS(),
+		ca.frontier, feed.ScanTime, ca.frontier.LatestTS(),
 		changefeedbase.CloudStorageSinkInitialLowerBoundOnMaxSpanTS.Get(&ca.FlowCtx.Cfg.Settings.SV),
 	)
 
@@ -1479,7 +1479,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.MoveToDraining(err)
 		return
 	}
-	cf.maxSpanTSAtStart = cf.frontier.MaxSpanTS()
+	cf.maxSpanTSAtStart = cf.frontier.LatestTS()
 
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
 		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)

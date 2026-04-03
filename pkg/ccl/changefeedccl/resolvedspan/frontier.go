@@ -212,6 +212,8 @@ type resolvedSpanFrontier struct {
 
 	// boundary stores the latest-known non-NONE resolved span boundary.
 	boundary resolvedSpanBoundary
+	// boundaryPassed is true if any span has been forwarded past boundary.
+	boundaryPassed bool
 }
 
 // newResolvedSpanFrontier returns a new resolvedSpanFrontier.
@@ -256,6 +258,13 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 	}
 	f.latestTS.Forward(r.Timestamp)
 	boundaryForwarded := f.boundary.Forward(r.Timestamp, r.BoundaryType)
+	if boundaryForwarded {
+		// We received a new boundary, reset boundaryPassed.
+		f.boundaryPassed = false
+	}
+	if !f.boundaryPassed && f.boundary.IsSet() {
+		f.boundaryPassed = r.Timestamp.After(f.boundary.ts)
+	}
 	if boundaryForwarded && !forwarded {
 		// The frontier is considered forwarded if the boundary type
 		// changes to non-NONE and all the spans are at the boundary
@@ -266,7 +275,8 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 }
 
 // AtBoundary returns true at the single moment when all watched spans
-// have reached a boundary and no spans after the boundary have been received.
+// have reached a boundary and no spans after the boundary have been received
+// in the _current_ session.
 func (f *resolvedSpanFrontier) AtBoundary() (
 	bool,
 	jobspb.ResolvedSpan_BoundaryType,
@@ -277,8 +287,7 @@ func (f *resolvedSpanFrontier) AtBoundary() (
 	if !frontierAtBoundary {
 		return false, 0, hlc.Timestamp{}
 	}
-	latestAtBoundary, _ := f.boundary.At(f.latestTS)
-	if !latestAtBoundary {
+	if f.boundaryPassed {
 		return false, 0, hlc.Timestamp{}
 	}
 	return true, boundaryType, frontier
@@ -354,31 +363,14 @@ func (f *resolvedSpanFrontier) LatestTS() hlc.Timestamp {
 	return f.latestTS
 }
 
-// MaxSpanTS returns the maximum timestamp of any span in the frontier.
-//
-// N.B. This diverges from LatestTS after restarting from a checkpoint,
-// where the latestTS will be empty until new resolved spans are forwarded,
-// while the MaxSpanTS will take into account the restored spans. We need
-// this distinction for schema change boundaries, since latestTS is used to
-// determine whether we've reached a boundary. i.e. if we just forwarded the
-// latestTS to the MaxSpanTS after restoring, we would take the latestTS as
-// having passed the boundary.
-func (f *resolvedSpanFrontier) MaxSpanTS() hlc.Timestamp {
-	maxTS := hlc.Timestamp{}
-	for _, ts := range f.Entries() {
-		maxTS.Forward(ts)
-	}
-	return maxTS
-}
-
 // RestoreCheckpoint restores the frontier from a checkpoint.
 func (f *resolvedSpanFrontier) RestoreCheckpoint(spans []jobspb.ResolvedSpan) error {
 	for _, rs := range spans {
 		if _, err := f.Forward(rs.Span, rs.Timestamp); err != nil {
 			return err
 		}
+		f.latestTS.Forward(rs.Timestamp)
 	}
-
 	return nil
 }
 

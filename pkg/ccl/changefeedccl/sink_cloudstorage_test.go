@@ -1068,7 +1068,7 @@ func TestCloudStorageSinkOrderingWithPartialCheckpoint(t *testing.T) {
 			hlc.Timestamp{}, hlc.Timestamp{}, nil /* codec */, false /* perTableTracking */, span1, span2,
 		)
 		require.NoError(t, err)
-		oracle := newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.MaxSpanTS(), boundOnMaxSpanTSAtStart)
+		oracle := newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.LatestTS(), boundOnMaxSpanTSAtStart)
 		sink, err := makeCloudStorageSink(
 			ctx, sinkURL, 1, settings, opts, oracle, externalStorageFromURI, user, nil, nil,
 		)
@@ -1109,7 +1109,7 @@ func TestCloudStorageSinkOrderingWithPartialCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, sf.RestoreCheckpoint(checkpoint))
 		// sf.Frontier() = min(span1@t=10, span2@t=10, span3@t=0) = t=0.
-		oracle = newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.MaxSpanTS(), boundOnMaxSpanTSAtStart)
+		oracle = newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.LatestTS(), boundOnMaxSpanTSAtStart)
 		sink, err = makeCloudStorageSink(
 			ctx, sinkURL, 1, settings, opts, oracle, externalStorageFromURI, user, nil, nil,
 		)
