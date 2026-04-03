@@ -4839,17 +4839,12 @@ func (ex *connExecutor) applySessionVariableHint(
 		return errors.New("unknown session variable")
 	}
 
-	// Normalize the value via GetStringVal if available (e.g. for booleans,
-	// this canonicalizes "TRUE"/"1" to "on").
-	if v.GetStringVal != nil {
-		values := []tree.TypedExpr{tree.NewDString(varValue)}
-		normalized, err := v.GetStringVal(ctx, &p.extendedEvalCtx, values, p.Txn())
-		if err != nil {
-			return err
-		}
-		varValue = normalized
-	}
-
+	// Skip GetStringVal normalization for hints. GetStringVal is designed for
+	// the SET var = <expr> path where the SQL parser produces typed datums
+	// (e.g. DInt for integers, DBool for booleans). Hint values are always
+	// strings, and wrapping them as DString breaks GetStringVal functions that
+	// expect non-string datum types (e.g. makeIntGetStringValFn expects DInt).
+	// The Set method already accepts a plain string and handles its own parsing.
 	if v.Set != nil {
 		return ex.dataMutatorIterator.ApplyOnStmtScopedMutator(
 			func(m sessionmutator.SessionDataMutator) error {
