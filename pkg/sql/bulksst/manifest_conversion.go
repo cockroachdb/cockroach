@@ -7,7 +7,9 @@ package bulksst
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -49,6 +51,31 @@ func SSTFilesToManifests(files *SSTFiles, writeTS *hlc.Timestamp) []jobspb.BulkS
 	manifests := make([]jobspb.BulkSSTManifest, 0, len(files.SST))
 	for _, f := range files.SST {
 		manifests = append(manifests, SSTFileToManifest(f, writeTS))
+	}
+	return manifests
+}
+
+// MergeOutputToManifests converts BulkMergeSpec_SST output from a merge
+// iteration into BulkSSTManifest records suitable for checkpointing.
+// RowSample is populated with StartKey plus a family 0 suffix so that
+// CombineFileInfo can use it for span splitting on resume.
+func MergeOutputToManifests(merged []execinfrapb.BulkMergeSpec_SST) []jobspb.BulkSSTManifest {
+	manifests := make([]jobspb.BulkSSTManifest, 0, len(merged))
+	for _, sst := range merged {
+		span := roachpb.Span{
+			Key:    append(roachpb.Key(nil), sst.StartKey...),
+			EndKey: append(roachpb.Key(nil), sst.EndKey...),
+		}
+		manifests = append(manifests, jobspb.BulkSSTManifest{
+			URI:      sst.URI,
+			Span:     &span,
+			KeyCount: sst.KeyCount,
+			// StartKey is a row prefix (family suffix stripped by
+			// SSTWriter.Flush), but CombineFileInfo passes samples through
+			// keys.EnsureSafeSplitKey which expects a full key including the
+			// column family suffix. Re-appending family 0 makes the key valid.
+			RowSample: keys.MakeFamilyKey(append(roachpb.Key(nil), sst.StartKey...), 0),
+		})
 	}
 	return manifests
 }
