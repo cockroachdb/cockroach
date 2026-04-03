@@ -77,11 +77,11 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
- │         └── 71 Mutation operations
+ │         └── 74 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
@@ -109,6 +109,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
@@ -288,11 +291,11 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
- │         └── 78 Mutation operations
+ │         └── 81 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── DemoteEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
@@ -320,6 +323,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}

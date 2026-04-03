@@ -21,7 +21,6 @@ import (
 // be sequenced in order to safely enact online schema changes are sequenced
 // in separate transactions.
 func init() {
-
 	findNoopSourceStatuses := func(
 		el scpb.Element, targetStatus scpb.TargetStatus,
 	) map[scpb.Status][]scpb.Status {
@@ -67,12 +66,17 @@ func init() {
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
 			descriptorIsNotBeingDropped(from.El),
-			// Make sure to join a data element to confirm that data exists.
-			descriptorData.Type((*scpb.TableData)(nil)),
-			descriptorData.JoinTargetNode(),
-			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
-			descriptorData.DescIDEq(descID),
-			descriptorDataIsNotBeingAdded(descID),
+		}
+		// Join a data element on elements of table descriptors to avoid
+		// enforcing 2-version for newly created tables.
+		if isTableDescriptorChildElement(el) {
+			clauses = append(clauses,
+				descriptorData.Type((*scpb.TableData)(nil)),
+				descriptorData.JoinTargetNode(),
+				descriptorData.CurrentStatus(scpb.Status_PUBLIC),
+				descriptorData.DescIDEq(descID),
+				descriptorDataIsNotBeingAdded(descID),
+			)
 		}
 		// Indexes are allowed to skip the two version invariant if we can guarantee
 		// no backfill is required. For truncate both the source and temporary index
