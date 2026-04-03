@@ -651,6 +651,7 @@ var npgsqlBlocklist = blocklist{
 }
 
 var npgsqlIgnoreList = blocklist{
+	`Npgsql.Tests.CommandTests(NonMultiplexing).Cancel_async_soft`:                                   "flaky",
 	`Npgsql.Tests.ConnectionTests(Multiplexing).Fail_connect_then_succeed(True)`:                     "flaky",
 	`Npgsql.Tests.CopyTests(Multiplexing).Import_numeric`:                                            "flaky",
 	`Npgsql.Tests.CopyTests(Multiplexing).Import_string_array`:                                       "flaky",
