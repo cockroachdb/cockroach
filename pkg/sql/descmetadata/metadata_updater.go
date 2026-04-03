@@ -45,10 +45,10 @@ type metadataUpdater struct {
 	clusterID uuid.UUID
 }
 
-// NewMetadataUpdater creates a new comment updater, which can be used to
+// InitMetadataUpdater creates a new comment updater, which can be used to
 // create / destroy metadata (i.e. comments) associated with different
 // schema objects.
-func NewMetadataUpdater(
+func InitMetadataUpdater(
 	ctx context.Context,
 	txn isql.Txn,
 	descriptors *descs.Collection,

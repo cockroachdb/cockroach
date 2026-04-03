@@ -135,163 +135,163 @@ var ReplicateQueueMaxSize = settings.RegisterIntSetting(
 )
 
 var (
-	metaReplicateQueueAddReplicaCount = metric.Metadata{
+	metaReplicateQueueAddReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.addreplica",
 		Help:        "Number of replica additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueAddVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueAddVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.addvoterreplica",
 		Help:        "Number of voter replica additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueAddNonVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueAddNonVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.addnonvoterreplica",
 		Help:        "Number of non-voter replica additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removereplica",
 		Help:        "Number of replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removevoterreplica",
 		Help:        "Number of voter replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveNonVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveNonVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removenonvoterreplica",
 		Help:        "Number of non-voter replica removals attempted by the replicate queue (typically in response to a rebalancer-initiated addition)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDeadReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDeadReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica",
 		Help:        "Number of dead replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDeadVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDeadVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedeadvoterreplica",
 		Help:        "Number of dead voter replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDeadNonVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDeadNonVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedeadnonvoterreplica",
 		Help:        "Number of dead non-voter replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDecommissioningReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDecommissioningReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica",
 		Help:        "Number of decommissioning replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDecommissioningVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDecommissioningVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningvoterreplica",
 		Help:        "Number of decommissioning voter replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDecommissioningNonVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDecommissioningNonVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningnonvoterreplica",
 		Help:        "Number of decommissioning non-voter replica removals attempted by the replicate queue (typically in response to a node outage)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveLearnerReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveLearnerReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removelearnerreplica",
 		Help:        "Number of learner replica removals attempted by the replicate queue (typically due to internal race conditions)",
 		Measurement: "Replica Removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRebalanceReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRebalanceReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.rebalancereplica",
 		Help:        "Number of replica rebalancer-initiated additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRebalanceVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRebalanceVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.rebalancevoterreplica",
 		Help:        "Number of voter replica rebalancer-initiated additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRebalanceNonVoterReplicaCount = metric.Metadata{
+	})
+	metaReplicateQueueRebalanceNonVoterReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.rebalancenonvoterreplica",
 		Help:        "Number of non-voter replica rebalancer-initiated additions attempted by the replicate queue",
 		Measurement: "Replica Additions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueTransferLeaseCount = metric.Metadata{
+	})
+	metaReplicateQueueTransferLeaseCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.transferlease",
 		Help:        "Number of range lease transfers attempted by the replicate queue",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueNonVoterPromotionsCount = metric.Metadata{
+	})
+	metaReplicateQueueNonVoterPromotionsCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.nonvoterpromotions",
 		Help:        "Number of non-voters promoted to voters by the replicate queue",
 		Measurement: "Promotions of Non Voters to Voters",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueVoterDemotionsCount = metric.Metadata{
+	})
+	metaReplicateQueueVoterDemotionsCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.voterdemotions",
 		Help:        "Number of voters demoted to non-voters by the replicate queue",
 		Measurement: "Demotions of Voters to Non Voters",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueAddReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueAddReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.addreplica.success",
 		Help:        "Number of successful replica additions processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueAddReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueAddReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.addreplica.error",
 		Help:        "Number of failed replica additions processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removereplica.success",
 		Help:        "Number of successful replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removereplica.error",
 		Help:        "Number of failed replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueReplaceDeadReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueReplaceDeadReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.success",
 		Help:        "Number of successful dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueReplaceDeadReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueReplaceDeadReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.error",
 		Help:        "Number of failed dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueReplaceDecommissioningReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueReplaceDecommissioningReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.success",
 		Help:        "Number of successful decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueReplaceDecommissioningReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueReplaceDecommissioningReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.error",
 		Help:        "Number of failed decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
@@ -299,32 +299,32 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Refer to Decommission the node.`,
-	}
-	metaReplicateQueueRemoveDecommissioningReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDecommissioningReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.success",
 		Help:        "Number of successful decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDecommissioningReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDecommissioningReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.error",
 		Help:        "Number of failed decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDeadReplicaSuccessCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDeadReplicaSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.success",
 		Help:        "Number of successful dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRemoveDeadReplicaErrorCount = metric.Metadata{
+	})
+	metaReplicateQueueRemoveDeadReplicaErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.error",
 		Help:        "Number of failed dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueRequeueDueToPriorityInversion = metric.Metadata{
+	})
+	metaReplicateQueueRequeueDueToPriorityInversion = metric.InitMetadata(metric.Metadata{
 		Name: "queue.replicate.priority_inversion.requeue",
 		Help: "Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. " +
 			"A priority inversion occurs when the priority at processing time ends up being lower " +
@@ -332,14 +332,14 @@ var (
 			"the change is requeued to avoid unfairness.",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueuePriorityInversionTotal = metric.Metadata{
+	})
+	metaReplicateQueuePriorityInversionTotal = metric.InitMetadata(metric.Metadata{
 		Name: "queue.replicate.priority_inversion.total",
 		Help: "Total number of priority inversions in the replicate queue. " +
 			"A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // quorumError indicates a retryable error condition which sends replicas being

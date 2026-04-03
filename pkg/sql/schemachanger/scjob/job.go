@@ -134,7 +134,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Settings,
 		execCfg.Validator,
 		func(ctx context.Context, descriptors *descs.Collection, txn isql.Txn) scexec.DescriptorMetadataUpdater {
-			return descmetadata.NewMetadataUpdater(ctx,
+			return descmetadata.InitMetadataUpdater(ctx,
 				txn,
 				descriptors,
 				&execCfg.Settings.SV,

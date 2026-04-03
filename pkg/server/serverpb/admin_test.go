@@ -133,13 +133,13 @@ func (m *mockAdminClient) AllMetricMetadata(
 func TestApplyMetricsFilter(t *testing.T) {
 	counterType := io_prometheus_client.MetricType_COUNTER
 
-	metadata := map[string]metric.Metadata{
+	metadata := map[string]metric.InitMetadata(metric.Metadata{
 		"sql.query.count":      {MetricType: counterType},
 		"sql.exec.count":       {MetricType: counterType},
 		"kv.range.count":       {MetricType: counterType},
 		"changefeed.running":   {MetricType: counterType},
 		"distsender.rpc.count": {MetricType: counterType},
-	}
+	})
 
 	testCases := []struct {
 		name                string
@@ -246,12 +246,12 @@ func TestGetInternalTimeseriesNamesFromServer(t *testing.T) {
 	gaugeType := io_prometheus_client.MetricType_GAUGE
 	histogramType := io_prometheus_client.MetricType_HISTOGRAM
 
-	mockMetadata := map[string]metric.Metadata{
+	mockMetadata := map[string]metric.InitMetadata(metric.Metadata{
 		"sql.query.count":      {MetricType: counterType},
 		"changefeed.running":   {MetricType: gaugeType},
 		"request.latency":      {MetricType: histogramType},
 		"distsender.rpc.count": {MetricType: counterType},
-	}
+	})
 
 	mockClient := &mockAdminClient{metadata: mockMetadata}
 	ctx := context.Background()
@@ -370,7 +370,7 @@ func TestGetInternalTimeseriesNamesFromServer(t *testing.T) {
 func TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering(t *testing.T) {
 	ctx := context.Background()
 
-	mockMetadata := map[string]metric.Metadata{
+	mockMetadata := map[string]metric.InitMetadata(metric.Metadata{
 		"sys.cpu.user.percent": {
 			Name:       "sys.cpu.user.percent",
 			Visibility: metric.Metadata_ESSENTIAL,
@@ -401,7 +401,7 @@ func TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering(t *testing.T) 
 			Visibility: metric.Metadata_INTERNAL,
 			MetricType: io_prometheus_client.MetricType_COUNTER,
 		},
-	}
+	})
 
 	testCases := []struct {
 		name       string
@@ -456,7 +456,7 @@ func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
 	}{
 		{
 			name:       "empty metadata returns empty list",
-			metadata:   map[string]metric.Metadata{},
+			metadata:   map[string]metric.InitMetadata(metric.Metadata{}),
 			nonVerbose: false,
 			validate: func(t *testing.T, names []string, err error) {
 				require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
 		},
 		{
 			name: "all internal metrics filtered in non-verbose",
-			metadata: map[string]metric.Metadata{
+			metadata: map[string]metric.InitMetadata(metric.Metadata{
 				"internal1": {
 					Name:       "internal1",
 					Help:       "Internal metric 1",
@@ -478,7 +478,7 @@ func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
 					Visibility: metric.Metadata_INTERNAL,
 					MetricType: io_prometheus_client.MetricType_COUNTER,
 				},
-			},
+			}),
 			nonVerbose: true,
 			validate: func(t *testing.T, names []string, err error) {
 				require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
 		},
 		{
 			name: "metrics are sorted alphabetically",
-			metadata: map[string]metric.Metadata{
+			metadata: map[string]metric.InitMetadata(metric.Metadata{
 				"zebra": {
 					Name:       "zebra",
 					Help:       "Z metric",
@@ -506,7 +506,7 @@ func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
 					Visibility: metric.Metadata_ESSENTIAL,
 					MetricType: io_prometheus_client.MetricType_GAUGE,
 				},
-			},
+			}),
 			nonVerbose: false,
 			validate: func(t *testing.T, names []string, err error) {
 				require.NoError(t, err)

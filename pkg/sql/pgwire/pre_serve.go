@@ -33,42 +33,42 @@ import (
 
 // Fully-qualified names for metrics.
 var (
-	MetaPreServeNewConns = metric.Metadata{
+	MetaPreServeNewConns = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.new_conns",
 		Help:        "Number of SQL connections created prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaPreServeBytesIn = metric.Metadata{
+	})
+	MetaPreServeBytesIn = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.bytesin",
 		Help:        "Number of SQL bytes received prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaPreServeBytesOut = metric.Metadata{
+	})
+	MetaPreServeBytesOut = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.bytesout",
 		Help:        "Number of SQL bytes sent prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaPreServeConnFailures = metric.Metadata{
+	})
+	MetaPreServeConnFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.conn.failures",
 		Help:        "Number of SQL connection failures prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaPreServeMaxBytes = metric.Metadata{
+	})
+	MetaPreServeMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.mem.max",
 		Help:        "Memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaPreServeCurBytes = metric.Metadata{
+	})
+	MetaPreServeCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.pre_serve.mem.cur",
 		Help:        "Current memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 )
 
 // PreServeConnHandler implements the early initialization of an incoming

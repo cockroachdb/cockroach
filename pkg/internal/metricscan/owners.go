@@ -124,14 +124,6 @@ func BuildMetricOwners(r *Result, resolveOwner func(file string) string) *Metric
 	return mo
 }
 
-// DefaultMetricOwners returns a MetricOwners loaded from the
-// generated data embedded by gen-metric-owners. This makes the
-// metric-to-team mapping available at runtime without reading an
-// external file.
-func DefaultMetricOwners() (*MetricOwners, error) {
-	return LoadMetricOwners(metricOwnersData)
-}
-
 // LoadMetricOwners deserializes a MetricOwners from YAML data and
 // classifies entries into exact matches, prefixes, and patterns.
 func LoadMetricOwners(data []byte) (*MetricOwners, error) {

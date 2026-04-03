@@ -48,31 +48,31 @@ import (
 )
 
 var (
-	metaDistSenderBatchCount = metric.Metadata{
+	metaDistSenderBatchCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches",
 		Help:        "Number of batches processed",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderPartialBatchCount = metric.Metadata{
+	})
+	metaDistSenderPartialBatchCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches.partial",
 		Help:        "Number of partial batches processed after being divided on range boundaries",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderReplicaAddressedBatchRequestBytes = metric.Metadata{
+	})
+	metaDistSenderReplicaAddressedBatchRequestBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batch_requests.replica_addressed.bytes",
 		Help:        `Total byte count of replica-addressed batch requests processed`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderReplicaAddressedBatchResponseBytes = metric.Metadata{
+	})
+	metaDistSenderReplicaAddressedBatchResponseBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batch_responses.replica_addressed.bytes",
 		Help:        `Total byte count of replica-addressed batch responses received`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossRegionBatchRequestBytes = metric.Metadata{
+	})
+	metaDistSenderCrossRegionBatchRequestBytes = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.batch_requests.cross_region.bytes",
 		Help: crstrings.UnwrapText(`
 			Total byte count of replica-addressed batch requests processed cross
@@ -80,8 +80,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossRegionBatchResponseBytes = metric.Metadata{
+	})
+	metaDistSenderCrossRegionBatchResponseBytes = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.batch_responses.cross_region.bytes",
 		Help: crstrings.UnwrapText(`
 			Total byte count of replica-addressed batch responses received cross
@@ -89,8 +89,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossZoneBatchRequestBytes = metric.Metadata{
+	})
+	metaDistSenderCrossZoneBatchRequestBytes = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.batch_requests.cross_zone.bytes",
 		Help: crstrings.UnwrapText(`
 			Total byte count of replica-addressed batch requests processed cross zone
@@ -101,8 +101,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderCrossZoneBatchResponseBytes = metric.Metadata{
+	})
+	metaDistSenderCrossZoneBatchResponseBytes = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.batch_responses.cross_zone.bytes",
 		Help: crstrings.UnwrapText(`
 			Total byte count of replica-addressed batch responses received cross zone
@@ -113,44 +113,44 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistSenderAsyncSentCount = metric.Metadata{
+	})
+	metaDistSenderAsyncSentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches.async.sent",
 		Help:        "Number of partial batches sent asynchronously",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderAsyncInProgress = metric.Metadata{
+	})
+	metaDistSenderAsyncInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches.async.in_progress",
 		Help:        "Number of partial batches currently being executed asynchronously",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderAsyncThrottledCount = metric.Metadata{
+	})
+	metaDistSenderAsyncThrottledCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches.async.throttled",
 		Help:        "Number of partial batches not sent asynchronously due to throttling",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderAsyncThrottledDuration = metric.Metadata{
+	})
+	metaDistSenderAsyncThrottledDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.batches.async.throttled_cumulative_duration_nanos",
 		Help:        "Cumulative duration of partial batches being throttled (in nanoseconds)",
 		Measurement: "Throttled Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaTransportSentCount = metric.Metadata{
+	})
+	metaTransportSentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.sent",
 		Help:        "Number of replica-addressed RPCs sent",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTransportLocalSentCount = metric.Metadata{
+	})
+	metaTransportLocalSentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.sent.local",
 		Help:        "Number of replica-addressed RPCs sent through the local-server optimization",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTransportSenderNextReplicaErrCount = metric.Metadata{
+	})
+	metaTransportSenderNextReplicaErrCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.sent.nextreplicaerror",
 		Help:        "Number of replica-addressed RPCs sent due to per-replica errors",
 		Measurement: "RPCs",
@@ -165,8 +165,8 @@ var (
 			node. The non-success status is a result of an orderly execution of an RPC
 			that reports a specific logical condition.
 		`),
-	}
-	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
+	})
+	metaDistSenderNotLeaseHolderErrCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.errors.notleaseholder",
 		Help:        "Number of NotLeaseHolderErrors encountered from replica-addressed RPCs",
 		Measurement: "Errors",
@@ -179,20 +179,20 @@ var (
 			retried. However they may create occasional response time spikes. In that
 			case, this metric may provide the explanation of the cause.
 		`),
-	}
-	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
+	})
+	metaDistSenderInLeaseTransferBackoffsCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.errors.inleasetransferbackoffs",
 		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangeLookups = metric.Metadata{
+	})
+	metaDistSenderRangeLookups = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangelookups",
 		Help:        "Number of range lookups",
 		Measurement: "Range Lookups",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderSlowRPCs = metric.Metadata{
+	})
+	metaDistSenderSlowRPCs = metric.InitMetadata(metric.Metadata{
 		Name: "requests.slow.distsender",
 		Help: crstrings.UnwrapText(`
 			Number of range-bound RPCs currently stuck or retrying for a long time.
@@ -204,8 +204,8 @@ var (
 		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderSlowReplicaRPCs = metric.Metadata{
+	})
+	metaDistSenderSlowReplicaRPCs = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.slow.replicarpcs",
 		Help: crstrings.UnwrapText(`
 			Number of slow replica-bound RPCs.
@@ -217,8 +217,8 @@ var (
 		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderMethodCountTmpl = metric.Metadata{
+	})
+	metaDistSenderMethodCountTmpl = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.rpc.%s.sent",
 		Help: crstrings.UnwrapText(`
 			Number of %s requests processed.
@@ -228,8 +228,8 @@ var (
 		`),
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderErrCountTmpl = metric.Metadata{
+	})
+	metaDistSenderErrCountTmpl = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.err.%s",
 		Help:        "Number of %s errors received replica-bound RPCs.",
 		Measurement: "Errors",
@@ -241,124 +241,124 @@ var (
 			'roachpb.CommunicationErrType' and unclassified errors as
 			'roachpb.InternalErrType'.
 		`),
-	}
-	metaDistSenderProxySentCount = metric.Metadata{
+	})
+	metaDistSenderProxySentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.proxy.sent",
 		Help:        "Number of attempts by a gateway to proxy a request to an unreachable leaseholder via a follower replica.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderProxyErrCount = metric.Metadata{
+	})
+	metaDistSenderProxyErrCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.proxy.err",
 		Help:        "Number of attempts by a gateway to proxy a request which resulted in a failure.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderProxyForwardSentCount = metric.Metadata{
+	})
+	metaDistSenderProxyForwardSentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.proxy.forward.sent",
 		Help:        "Number of attempts on a follower replica to proxy a request to an unreachable leaseholder.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderProxyForwardErrCount = metric.Metadata{
+	})
+	metaDistSenderProxyForwardErrCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rpc.proxy.forward.err",
 		Help:        "Number of attempts on a follower replica to proxy a request which resulted in a failure.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedTotalRanges = metric.Metadata{
+	})
+	metaDistSenderRangefeedTotalRanges = metric.InitMetadata(metric.Metadata{
 		Name: "distsender.rangefeed.total_ranges",
 		Help: crstrings.UnwrapText(`
 			Number of ranges with an active rangefeed.
 		`),
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedCatchupRanges = metric.Metadata{
+	})
+	metaDistSenderRangefeedCatchupRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangefeed.catchup_ranges",
 		Help:        "Number of ranges with an active rangefeed that are performing a catchup scan.",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedCatchupRangesWaitingClientSide = metric.Metadata{
+	})
+	metaDistSenderRangefeedCatchupRangesWaitingClientSide = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangefeed.catchup_ranges_waiting_client_side",
 		Help:        `Number of ranges waiting on the client-side limiter to perform catchup scans`,
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedLocalRanges = metric.Metadata{
+	})
+	metaDistSenderRangefeedLocalRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangefeed.local_ranges",
 		Help:        `Number of ranges connected to local node.`,
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedErrorCatchupRanges = metric.Metadata{
+	})
+	metaDistSenderRangefeedErrorCatchupRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangefeed.error_catchup_ranges",
 		Help:        `Number of ranges in catchup mode which experienced an error`,
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderRangefeedRestartRanges = metric.Metadata{
+	})
+	metaDistSenderRangefeedRestartRanges = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.rangefeed.restart_ranges",
 		Help:        `Number of ranges that were restarted due to transient errors`,
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaDistSenderCircuitBreakerReplicasCount = metric.Metadata{
+	metaDistSenderCircuitBreakerReplicasCount = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.count",
 		Help:        `Number of replicas currently tracked by DistSender circuit breakers`,
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasTripped = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasTripped = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.tripped",
 		Help:        `Number of DistSender replica circuit breakers currently tripped`,
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasTrippedEvents = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasTrippedEvents = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.tripped_events",
 		Help:        `Cumulative number of DistSender replica circuit breakers tripped over time`,
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasProbesRunning = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasProbesRunning = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.probes.running",
 		Help:        `Number of currently running DistSender replica circuit breaker probes`,
 		Measurement: "Probes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasProbesSuccess = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasProbesSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.probes.success",
 		Help:        `Cumulative number of successful DistSender replica circuit breaker probes`,
 		Measurement: "Probes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasProbesFailure = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasProbesFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.probes.failure",
 		Help:        `Cumulative number of failed DistSender replica circuit breaker probes`,
 		Measurement: "Probes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasRequestsCancelled = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasRequestsCancelled = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.requests.cancelled",
 		Help:        `Cumulative number of requests cancelled when DistSender replica circuit breakers trip`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderCircuitBreakerReplicasRequestsRejected = metric.Metadata{
+	})
+	metaDistSenderCircuitBreakerReplicasRequestsRejected = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.circuit_breaker.replicas.requests.rejected",
 		Help:        `Cumulative number of requests rejected by tripped DistSender replica circuit breakers`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistSenderLeaseholderRandomizedOnContextError = metric.Metadata{
+	})
+	metaDistSenderLeaseholderRandomizedOnContextError = metric.InitMetadata(metric.Metadata{
 		Name:        "distsender.range_cache.leaseholder_randomized",
 		Help:        `Number of times the DistSender randomized the leaseholder for range cache entries upon seeing a context error`,
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // metamorphicRouteToLeaseholderFirst is used to control the behavior of the
@@ -601,21 +601,21 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 	retryCounters := make(map[int32]*metric.Counter, len(kvpb.RangeFeedRetryError_Reason_value))
 	for name, idx := range kvpb.RangeFeedRetryError_Reason_value {
 		name = strings.TrimPrefix(name, "REASON_")
-		retryCounters[idx] = metric.NewCounter(metric.Metadata{
+		retryCounters[idx] = metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ToLower(name)),
 			Help:        fmt.Sprintf(`Number of ranges that encountered retryable %s error`, name),
 			Measurement: "Ranges",
 			Unit:        metric.Unit_COUNT,
-		})
+		}))
 	}
 
 	retryMeta := func(name string) metric.Metadata {
-		return metric.Metadata{
+		return metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ReplaceAll(name, " ", "_")),
 			Help:        fmt.Sprintf("Number of ranges that encountered retryable %s error", name),
 			Measurement: "Ranges",
 			Unit:        metric.Unit_COUNT,
-		}
+		})
 	}
 
 	return rangeFeedErrorCounters{

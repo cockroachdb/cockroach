@@ -64,7 +64,7 @@ func GetClusterMetricMetadata(name string) (metric.Metadata, []string, bool) {
 	defer metadata.mu.RUnlock()
 	meta, ok := metadata.mu.registeredMetadata[name]
 	if !ok {
-		return metric.Metadata{}, nil, false
+		return metric.InitMetadata(metric.Metadata{}), nil, false
 	}
 	labels := metadata.mu.registeredLabeledMetrics[name]
 	return meta, labels, true

@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
-	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
-	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -31,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	slugify "github.com/mozillazg/go-slugify"
@@ -69,7 +68,6 @@ type YAMLOutput struct {
 }
 
 var manPath string
-var metricOwnersFile string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
@@ -387,59 +385,37 @@ func init() {
 		"label to use in the output for the various setting classes")
 
 	genMetricListCmd.Flags().Bool("essential", false, "only emit essential metrics")
-	genMetricListCmd.Flags().StringVar(&metricOwnersFile, "metric-owners", "",
-		"path to pre-computed metric owners YAML file (avoids AST scan + CODEOWNERS)")
 
 	GenCmd.AddCommand(genCmds...)
 }
 
-// loadMetricOwners fetches a mapping from metric name to owning team.
-// When --metric-owners is provided (Bazel genrule), the pre-computed
-// file is loaded directly. Otherwise, the mapping is built from an
-// AST scan of Go sources combined with CODEOWNERS.
-func loadMetricOwners() *metricscan.MetricOwners {
-	if metricOwnersFile != "" {
-		data, err := os.ReadFile(metricOwnersFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"reading metric owners failed (owner will be omitted): %v\n", err)
-			return nil
-		}
-		mo, err := metricscan.LoadMetricOwners(data)
-		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"parsing metric owners failed (owner will be omitted): %v\n", err)
-			return nil
-		}
-		return mo
-	}
-	repoRoot := reporoot.Get()
-	if repoRoot == "" {
-		return nil
-	}
-	scanResult, scanErr := metricscan.Scan(repoRoot)
-	if scanErr != nil {
+// loadCodeOwners loads the CODEOWNERS file for resolving metric ownership
+// from source file paths embedded in metric.Metadata.
+func loadCodeOwners() *codeowners.CodeOwners {
+	owners, err := codeowners.DefaultLoadCodeOwners()
+	if err != nil {
 		fmt.Fprintf(os.Stderr,
-			"metric source scan failed (owner will be omitted): %v\n", scanErr)
+			"CODEOWNERS load failed (owner will be omitted): %v\n", err)
 		return nil
 	}
-	owners, ownersErr := codeowners.DefaultLoadCodeOwners()
-	if ownersErr != nil {
-		fmt.Fprintf(os.Stderr,
-			"CODEOWNERS load failed (owner will be omitted): %v\n", ownersErr)
-		return nil
-	}
-	return metricscan.BuildMetricOwners(scanResult, func(file string) string {
-		teams := owners.Match(file)
-		if len(teams) > 0 {
-			return string(teams[0].Name())
-		}
+	return owners
+}
+
+// resolveOwner returns the owning team for the given source file path
+// using the CODEOWNERS rules. Returns an empty string if no owner is found.
+func resolveOwner(owners *codeowners.CodeOwners, sourceFile string) string {
+	if owners == nil || sourceFile == "" {
 		return ""
-	})
+	}
+	teams := owners.Match(sourceFile)
+	if len(teams) > 0 {
+		return string(teams[0].Name())
+	}
+	return ""
 }
 
 func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
-	metricOwners := loadMetricOwners()
+	owners := loadCodeOwners()
 
 	sArgs := base.TestServerArgs{
 		Insecure:          true,
@@ -468,6 +444,20 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 	case <-readyCh:
 	case <-time.After(5 * time.Second):
 		return nil, errors.AssertionFailedf("could not initialize server in time")
+	}
+
+	// Build a map of metric name → source file from the server's metadata.
+	// The SourceFile field is set by metric.InitMetadata() at definition time.
+	metadataMap := make(map[string]metric.Metadata)
+	nodeMd, appMd, srvMd := srv.MetricsRecorder().GetMetricsMetadata(false /* combine */)
+	for k, v := range nodeMd {
+		metadataMap[k] = v
+	}
+	for k, v := range appMd {
+		metadataMap[k] = v
+	}
+	for k, v := range srvMd {
+		metadataMap[k] = v
 	}
 
 	var sections []catalog.ChartSection
@@ -553,13 +543,12 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 			if visibility == "INTERNAL" {
 				visibility = ""
 			}
-			// Resolve the owning team for this metric.
+			// Resolve the owning team for this metric via its source file.
 			var owner string
-			if metricOwners != nil {
-				exportedName := chart.Metrics[0].ExportedName
-				owner, _ = metricOwners.Resolve(exportedName)
+			if md, ok := metadataMap[chart.Metrics[0].Name]; ok {
+				owner = resolveOwner(owners, md.SourceFile)
 			}
-			metric := MetricInfo{
+			info := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
 				LabeledName:  chart.Metrics[0].LabeledName,
@@ -573,7 +562,7 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Visibility:   visibility,
 				Owner:        owner,
 			}
-			category.Metrics = append(category.Metrics, metric)
+			category.Metrics = append(category.Metrics, info)
 		}
 
 		layer.Categories = append(layer.Categories, category)

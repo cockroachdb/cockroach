@@ -230,7 +230,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	metadataUpdater := descmetadata.NewMetadataUpdater(
+	metadataUpdater := descmetadata.InitMetadataUpdater(
 		ctx,
 		p.InternalSQLTxn(),
 		p.Descriptors(),

@@ -36,12 +36,12 @@ type Metrics struct {
 
 func newMetrics() Metrics {
 	return Metrics{
-		InvalidObjects: metric.NewGauge(metric.Metadata{
+		InvalidObjects: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.schema.invalid_objects",
 			Help:        "Gauge of detected invalid objects within the system.descriptor table (measured by querying crdb_internal.invalid_objects)",
 			Measurement: "Objects",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 	}
 }
 

@@ -54,84 +54,84 @@ var _ metric.Struct = (*Metrics)(nil)
 func (m *Metrics) MetricStruct() {}
 
 var (
-	metaTotalRU = metric.Metadata{
+	metaTotalRU = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.request_units",
 		Help:        "Total RU consumption",
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalKVRU = metric.Metadata{
+	})
+	metaTotalKVRU = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.kv_request_units",
 		Help:        "RU consumption attributable to KV",
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalReadBatches = metric.Metadata{
+	})
+	metaTotalReadBatches = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.read_batches",
 		Help:        "Total number of KV read batches",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalReadRequests = metric.Metadata{
+	})
+	metaTotalReadRequests = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.read_requests",
 		Help:        "Total number of KV read requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalReadBytes = metric.Metadata{
+	})
+	metaTotalReadBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.read_bytes",
 		Help:        "Total number of bytes read from KV",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalWriteBatches = metric.Metadata{
+	})
+	metaTotalWriteBatches = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.write_batches",
 		Help:        "Total number of KV write batches",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalWriteRequests = metric.Metadata{
+	})
+	metaTotalWriteRequests = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.write_requests",
 		Help:        "Total number of KV write requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalWriteBytes = metric.Metadata{
+	})
+	metaTotalWriteBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.write_bytes",
 		Help:        "Total number of bytes written to KV",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalSQLPodsCPUSeconds = metric.Metadata{
+	})
+	metaTotalSQLPodsCPUSeconds = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.sql_pods_cpu_seconds",
 		Help:        "Total amount of CPU used by SQL pods",
 		Measurement: "CPU Seconds",
 		Unit:        metric.Unit_SECONDS,
-	}
-	metaTotalPGWireEgressBytes = metric.Metadata{
+	})
+	metaTotalPGWireEgressBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.pgwire_egress_bytes",
 		Help:        "Total number of bytes transferred from a SQL pod to the client",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalExternalIOIngressBytes = metric.Metadata{
+	})
+	metaTotalExternalIOIngressBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.external_io_ingress_bytes",
 		Help:        "Total number of bytes read from external services such as cloud storage providers",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalExternalIOEgressBytes = metric.Metadata{
+	})
+	metaTotalExternalIOEgressBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.external_io_egress_bytes",
 		Help:        "Total number of bytes written to external services such as cloud storage providers",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalCrossRegionNetworkRU = metric.Metadata{
+	})
+	metaTotalCrossRegionNetworkRU = metric.InitMetadata(metric.Metadata{
 		Name:        "tenant.consumption.cross_region_network_ru",
 		Help:        "Total number of RUs charged for cross-region network traffic",
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 func (m *Metrics) init() {

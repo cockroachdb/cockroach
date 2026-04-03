@@ -54,24 +54,24 @@ var SlowSplitTracingThreshold = settings.RegisterDurationSetting(
 )
 
 var (
-	metaSizeBasedSplitCount = metric.Metadata{
+	metaSizeBasedSplitCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.size_based",
 		Help:        "Number of range splits due to a range being greater than the configured max range size",
 		Measurement: "Range Splits",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLoadBasedSplitCount = metric.Metadata{
+	})
+	metaLoadBasedSplitCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.load_based",
 		Help:        "Number of range splits due to a range being greater than the configured max range load",
 		Measurement: "Range Splits",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSpanConfigBasedSplitCount = metric.Metadata{
+	})
+	metaSpanConfigBasedSplitCount = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.span_config_based",
 		Help:        "Number of range splits due to span configuration",
 		Measurement: "Range Splits",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // SplitQueueMetrics is the set of metrics for the split queue.

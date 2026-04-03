@@ -142,6 +142,12 @@ func (r *Registry) AddMetric(metric Iterable) {
 			"skipping non-exportable metric %s (%T)", name, metric)
 		return
 	}
+	if meta := metric.GetMetadata(); meta.SourceFile == "" {
+		name := metric.GetName(false /* useStaticLabels */)
+		log.Dev.Warningf(context.TODO(),
+			"metric %s (%T) is missing SourceFile; use metric.InitMetadata() to construct metric metadata",
+			name, metric)
+	}
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric

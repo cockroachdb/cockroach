@@ -27,36 +27,36 @@ var _ metric.Struct = (*InspectMetrics)(nil)
 func (InspectMetrics) MetricStruct() {}
 
 var (
-	metaInspectRuns = metric.Metadata{
+	metaInspectRuns = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.inspect.runs",
 		Help:        "Number of INSPECT jobs executed",
 		Measurement: "Jobs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaInspectRunsWithIssues = metric.Metadata{
+	})
+	metaInspectRunsWithIssues = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.inspect.runs_with_issues",
 		Help:        "Number of INSPECT jobs that found at least one issue",
 		Measurement: "Jobs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaInspectIssuesFound = metric.Metadata{
+	})
+	metaInspectIssuesFound = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.inspect.issues_found",
 		Help:        "Total count of issues found by INSPECT jobs",
 		Measurement: "Issues",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaInspectSpansProcessed = metric.Metadata{
+	})
+	metaInspectSpansProcessed = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.inspect.spans_processed",
 		Help:        "Number of spans processed by INSPECT jobs",
 		Measurement: "Spans",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaInspectNumActiveSpans = metric.Metadata{
+	})
+	metaInspectNumActiveSpans = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.inspect.num_active_spans",
 		Help:        "Number of spans currently being processed by INSPECT jobs",
 		Measurement: "Spans",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // MakeInspectMetrics instantiates the metrics for INSPECT jobs.

@@ -74,34 +74,34 @@ var TempObjectCleanupBatchSize = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 var (
-	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{
+	temporaryObjectCleanerActiveCleanersMetric = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.temp_object_cleaner.active_cleaners",
 		Help:        "number of cleaner tasks currently running on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
-	temporaryObjectCleanerSchemasToDeleteMetric = metric.Metadata{
+	})
+	temporaryObjectCleanerSchemasToDeleteMetric = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.temp_object_cleaner.schemas_to_delete",
 		Help:        "number of schemas to be deleted by the temp object cleaner on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	temporaryObjectCleanerSchemasDeletionErrorMetric = metric.Metadata{
+	})
+	temporaryObjectCleanerSchemasDeletionErrorMetric = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.temp_object_cleaner.schemas_deletion_error",
 		Help:        "number of errored schema deletions by the temp object cleaner on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	temporaryObjectCleanerSchemasDeletionSuccessMetric = metric.Metadata{
+	})
+	temporaryObjectCleanerSchemasDeletionSuccessMetric = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.temp_object_cleaner.schemas_deletion_success",
 		Help:        "number of successful schema deletions by the temp object cleaner on this node",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )
 
 func (p *planner) InsertTemporarySchema(

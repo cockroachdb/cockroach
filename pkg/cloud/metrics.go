@@ -46,83 +46,83 @@ type Metrics struct {
 
 // MakeMetrics returns a new instance of Metrics.
 func MakeMetrics(cidrLookup *cidr.Lookup) metric.Struct {
-	cloudReaders := metric.Metadata{
+	cloudReaders := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.readers_opened",
 		Help:        "Readers opened by all cloud operations",
 		Measurement: "Files",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	cloudReadBytes := metric.Metadata{
+	})
+	cloudReadBytes := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.read_bytes",
 		Help:        "Bytes read from all cloud operations",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	cloudWriters := metric.Metadata{
+	})
+	cloudWriters := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.writers_opened",
 		Help:        "Writers opened by all cloud operations",
 		Measurement: "files",
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	cloudWriteBytes := metric.Metadata{
+	})
+	cloudWriteBytes := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.write_bytes",
 		Help:        "Bytes written by all cloud operations",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	listings := metric.Metadata{
+	})
+	listings := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.listings",
 		Help:        "Listing operations by all cloud operations",
 		Measurement: "Calls",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	listingResults := metric.Metadata{
+	})
+	listingResults := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.listing_results",
 		Help:        "Listing results by all cloud operations",
 		Measurement: "Results",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	connsOpened := metric.Metadata{
+	})
+	connsOpened := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.conns_opened",
 		Help:        "HTTP connections opened by cloud operations",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	connsReused := metric.Metadata{
+	})
+	connsReused := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.conns_reused",
 		Help:        "HTTP connections reused by cloud operations",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	tlsHandhakes := metric.Metadata{
+	})
+	tlsHandhakes := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.tls_handshakes",
 		Help:        "TLS handshakes done by cloud operations",
 		Measurement: "Handshakes",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	cloudOpenReaders := metric.Metadata{
+	})
+	cloudOpenReaders := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.open_readers",
 		Help:        "Currently open readers for cloud IO",
 		Measurement: "Readers",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
-	cloudOpenWriters := metric.Metadata{
+	})
+	cloudOpenWriters := metric.InitMetadata(metric.Metadata{
 		Name:        "cloud.open_writers",
 		Help:        "Currently open writers for cloud IO",
 		Measurement: "Writers",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
+	})
 	return &Metrics{
 		CreatedReaders: metric.NewCounter(cloudReaders),
 		OpenReaders:    metric.NewGauge(cloudOpenReaders),

@@ -175,7 +175,7 @@ func makeMergeReceiver(
 	if onProgress != nil {
 		return sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowWriter, onProgress),
+			sql.InitMetadataCallbackWriter(rowWriter, onProgress),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil,

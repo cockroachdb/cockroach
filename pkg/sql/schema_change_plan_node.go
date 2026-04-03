@@ -290,7 +290,7 @@ func newSchemaChangerTxnRunDependencies(
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
-	metaDataUpdater := descmetadata.NewMetadataUpdater(
+	metaDataUpdater := descmetadata.InitMetadataUpdater(
 		ctx,
 		txn,
 		descriptors,

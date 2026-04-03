@@ -291,7 +291,7 @@ func distImport(
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+		sql.InitMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* txn - the flow does not read or write the database */

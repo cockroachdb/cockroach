@@ -46,7 +46,7 @@ func init() {
 
 var (
 	// Replica metrics.
-	metaReplicaCount = metric.Metadata{
+	metaReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas",
 		Help:        "Number of replicas",
 		Measurement: "Replicas",
@@ -54,38 +54,38 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data distribution across cluster nodes.`,
-	}
-	metaReservedReplicaCount = metric.Metadata{
+	})
+	metaReservedReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.reserved",
 		Help:        "Number of replicas reserved for snapshots",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLeaderCount = metric.Metadata{
+	})
+	metaRaftLeaderCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.leaders",
 		Help:        "Number of raft leaders",
 		Measurement: "Raft Leaders",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
+	})
+	metaRaftLeaderNotLeaseHolderCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.leaders_not_leaseholders",
 		Help:        "Number of replicas that are Raft leaders whose range lease is held by another store",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLeaderNotFortifiedCount = metric.Metadata{
+	})
+	metaRaftLeaderNotFortifiedCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.leaders_not_fortified",
 		Help:        "Number of replicas that are not fortified Raft leaders",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLeaderInvalidLeaseCount = metric.Metadata{
+	})
+	metaRaftLeaderInvalidLeaseCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.leaders_invalid_lease",
 		Help:        "Number of replicas that are Raft leaders whose lease is invalid",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseHolderCount = metric.Metadata{
+	})
+	metaLeaseHolderCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.leaseholders",
 		Help:        "Number of lease holders",
 		Measurement: "Replicas",
@@ -93,47 +93,47 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data processing points across cluster nodes.`,
-	}
-	metaQuiescentCount = metric.Metadata{
+	})
+	metaQuiescentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.quiescent",
 		Help:        "Number of quiesced replicas",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAsleepCount = metric.Metadata{
+	})
+	metaAsleepCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.asleep",
 		Help:        "Number of asleep replicas. Similarly to quiesced replicas, asleep replicas do not tick in Raft.",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaUninitializedCount = metric.Metadata{
+	})
+	metaUninitializedCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.uninitialized",
 		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaRaftFlowsReplicate = metric.Metadata{
+	metaRaftFlowsReplicate = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.state_replicate",
 		Help:        "Number of leader->peer flows in StateReplicate",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftFlowsProbe = metric.Metadata{
+	})
+	metaRaftFlowsProbe = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.state_probe",
 		Help:        "Number of leader->peer flows in StateProbe",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftFlowsSnapshot = metric.Metadata{
+	})
+	metaRaftFlowsSnapshot = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.state_snapshot",
 		Help:        "Number of leader->peer flows in StateSnapshot",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Range metrics.
-	metaRangeCount = metric.Metadata{
+	metaRangeCount = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges",
 		Help:        "Number of ranges",
 		Measurement: "Ranges",
@@ -141,8 +141,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides a measure of the scale of the data size.`,
-	}
-	metaUnavailableRangeCount = metric.Metadata{
+	})
+	metaUnavailableRangeCount = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.unavailable",
 		Help:        "Number of ranges with fewer live replicas than needed for quorum",
 		Measurement: "Ranges",
@@ -154,8 +154,8 @@ var (
 			cluster is unhealthy and can impact workload. If an entire range is
 			unavailable, then it will be unable to process queries.
 		`),
-	}
-	metaUnderReplicatedRangeCount = metric.Metadata{
+	})
+	metaUnderReplicatedRangeCount = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.underreplicated",
 		Help:        "Number of ranges with fewer live replicas than the replication target",
 		Measurement: "Ranges",
@@ -163,23 +163,23 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric is an indicator of replication issues. It shows whether the cluster has data that is not conforming to resilience goals. The next step is to determine the corresponding database object, such as the table or index, of these under-replicated ranges and whether the under-replication is temporarily expected. Use the statement SELECT table_name, index_name FROM [SHOW RANGES WITH INDEXES] WHERE range_id = {id of under-replicated range};`,
-	}
-	metaOverReplicatedRangeCount = metric.Metadata{
+	})
+	metaOverReplicatedRangeCount = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.overreplicated",
 		Help:        "Number of ranges with more live replicas than the replication target",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDecommissioningRangeCount = metric.Metadata{
+	})
+	metaDecommissioningRangeCount = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.decommissioning",
 		Help:        "Number of ranges with at lease one replica on a decommissioning node",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 
 	// Decommisioning nudger metrics.
-	metaDecommissioningNudgerEnqueue = metric.Metadata{
+	metaDecommissioningNudgerEnqueue = metric.InitMetadata(metric.Metadata{
 		Name: "ranges.decommissioning.nudger.enqueue",
 		Help: crstrings.UnwrapText(`
 			Number of enqueued enqueues of a range for decommissioning by the
@@ -191,22 +191,22 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "ranges.decommissioning.nudger.enqueue",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "enqueue"),
-	}
-	metaDecommissioningNudgerEnqueueSuccess = metric.Metadata{
+	})
+	metaDecommissioningNudgerEnqueueSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.decommissioning.nudger.enqueue.success",
 		Help:        "Number of ranges that were successfully enqueued by the decommisioning nudger",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.enqueue.success",
-	}
-	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+	})
+	metaDecommissioningNudgerEnqueueFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "ranges.decommissioning.nudger.enqueue.failure",
 		Help:        "Number of ranges that failed to enqueue at the replicate queue",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.enqueue.failure",
-	}
-	metaDecommissioningNudgerProcessSuccess = metric.Metadata{
+	})
+	metaDecommissioningNudgerProcessSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "ranges.decommissioning.nudger.process.success",
 		Help: crstrings.UnwrapText(`
 			Number of ranges enqueued by the decommissioning nudger that were
@@ -215,8 +215,8 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.process.success",
-	}
-	metaDecommissioningNudgerProcessFailure = metric.Metadata{
+	})
+	metaDecommissioningNudgerProcessFailure = metric.InitMetadata(metric.Metadata{
 		Name: "ranges.decommissioning.nudger.process.failure",
 		Help: crstrings.UnwrapText(`
 			Number of ranges enqueued by the decommissioning nudger that failed to
@@ -225,8 +225,8 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.process.failure",
-	}
-	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.Metadata{
+	})
+	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.InitMetadata(metric.Metadata{
 		Name: "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
 		Help: crstrings.UnwrapText(`
 			Number of ranges that were not the leaseholder or had an invalid lease at
@@ -235,28 +235,28 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
-	}
+	})
 
 	// Lease request metrics.
-	metaLeaseRequestSuccessCount = metric.Metadata{
+	metaLeaseRequestSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.success",
 		Help:        "Number of successful lease requests",
 		Measurement: "Lease Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseRequestErrorCount = metric.Metadata{
+	})
+	metaLeaseRequestErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.error",
 		Help:        "Number of failed lease requests",
 		Measurement: "Lease Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseRequestLatency = metric.Metadata{
+	})
+	metaLeaseRequestLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.requests.latency",
 		Help:        "Lease request latency (all types and outcomes, coalesced)",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaLeaseTransferSuccessCount = metric.Metadata{
+	})
+	metaLeaseTransferSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.transfers.success",
 		Help:        "Number of successful lease transfers",
 		Measurement: "Lease Transfers",
@@ -264,61 +264,61 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high number of lease transfers is not a negative or positive signal, rather it is a reflection of the elastic cluster activities. For example, this metric is high during cluster topology changes. A high value is often the reason for NotLeaseHolderErrors which are normal and expected during rebalancing. Observing this metric may provide a confirmation of the cause of such errors.`,
-	}
-	metaLeaseTransferErrorCount = metric.Metadata{
+	})
+	metaLeaseTransferErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.transfers.error",
 		Help:        "Number of failed lease transfers",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseTransferLocksWrittenCount = metric.Metadata{
+	})
+	metaLeaseTransferLocksWrittenCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.transfers.locks_written",
 		Help:        "Number of locks written to storage during lease transfers",
 		Measurement: "Locks Written",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadSummaryLocalCompressionCount = metric.Metadata{
+	})
+	metaReadSummaryLocalCompressionCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.read_summary.local_compression",
 		Help:        "Number of times the local segment of a read summary lost precision due to compression",
 		Measurement: "Compressions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseExpirationCount = metric.Metadata{
+	})
+	metaLeaseExpirationCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.expiration",
 		Help:        "Number of replica leaseholders using expiration-based leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseEpochCount = metric.Metadata{
+	})
+	metaLeaseEpochCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.epoch",
 		Help:        "Number of replica leaseholders using epoch-based leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseLeaderCount = metric.Metadata{
+	})
+	metaLeaseLeaderCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.leader",
 		Help:        "Number of replica leaseholders using leader leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseLivenessCount = metric.Metadata{
+	})
+	metaLeaseLivenessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.liveness",
 		Help:        "Number of replica leaseholders for the liveness range(s)",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseViolatingPreferencesCount = metric.Metadata{
+	})
+	metaLeaseViolatingPreferencesCount = metric.InitMetadata(metric.Metadata{
 		Name:        "leases.preferences.violating",
 		Help:        "Number of replica leaseholders which violate lease preferences",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseLessPreferredCount = metric.Metadata{
+	})
+	metaLeaseLessPreferredCount = metric.InitMetadata(metric.Metadata{
 		Name: "leases.preferences.less-preferred",
 		Help: crstrings.UnwrapText(`
 			Number of replica leaseholders which satisfy a lease preference which is
@@ -326,148 +326,148 @@ var (
 		`),
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaSubsumeLocksWrittenCount = metric.Metadata{
+	metaSubsumeLocksWrittenCount = metric.InitMetadata(metric.Metadata{
 		Name:        "subsume.locks_written",
 		Help:        "Number of locks written to storage during subsume (range merge)",
 		Measurement: "Locks Written",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaReqCPUNanos = metric.Metadata{
+	metaReqCPUNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas.cpunanospersecond",
 		Help:        "Nanoseconds of CPU time in Replica request processing including evaluation but not replication",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// Storage metrics.
-	metaLiveBytes = metric.Metadata{
+	metaLiveBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "livebytes",
 		Help:        "Number of bytes of live data (keys plus values)",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaKeyBytes = metric.Metadata{
+	})
+	metaKeyBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "keybytes",
 		Help:        "Number of bytes taken up by keys",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaValBytes = metric.Metadata{
+	})
+	metaValBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "valbytes",
 		Help:        "Number of bytes taken up by values",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeKeyBytes = metric.Metadata{
+	})
+	metaRangeKeyBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "rangekeybytes",
 		Help:        "Number of bytes taken up by range keys (e.g. MVCC range tombstones)",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeValBytes = metric.Metadata{
+	})
+	metaRangeValBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "rangevalbytes",
 		Help:        "Number of bytes taken up by range key values (e.g. MVCC range tombstones)",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaTotalBytes = metric.Metadata{
+	})
+	metaTotalBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "totalbytes",
 		Help:        "Total number of bytes taken up by keys and values including non-live data",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaIntentBytes = metric.Metadata{
+	})
+	metaIntentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "intentbytes",
 		Help:        "Number of bytes in intent KV pairs",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaLockBytes = metric.Metadata{
+	})
+	metaLockBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "lockbytes",
 		Help:        "Number of bytes taken up by replicated lock key-values (shared and exclusive strength, not intent strength)",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaLiveCount = metric.Metadata{
+	})
+	metaLiveCount = metric.InitMetadata(metric.Metadata{
 		Name:        "livecount",
 		Help:        "Count of live keys",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaKeyCount = metric.Metadata{
+	})
+	metaKeyCount = metric.InitMetadata(metric.Metadata{
 		Name:        "keycount",
 		Help:        "Count of all keys",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaValCount = metric.Metadata{
+	})
+	metaValCount = metric.InitMetadata(metric.Metadata{
 		Name:        "valcount",
 		Help:        "Count of all values",
 		Measurement: "MVCC Values",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeKeyCount = metric.Metadata{
+	})
+	metaRangeKeyCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rangekeycount",
 		Help:        "Count of all range keys (e.g. MVCC range tombstones)",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeValCount = metric.Metadata{
+	})
+	metaRangeValCount = metric.InitMetadata(metric.Metadata{
 		Name:        "rangevalcount",
 		Help:        "Count of all range key values (e.g. MVCC range tombstones)",
 		Measurement: "MVCC Values",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaIntentCount = metric.Metadata{
+	})
+	metaIntentCount = metric.InitMetadata(metric.Metadata{
 		Name:        "intentcount",
 		Help:        "Count of intent keys",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLockCount = metric.Metadata{
+	})
+	metaLockCount = metric.InitMetadata(metric.Metadata{
 		Name:        "lockcount",
 		Help:        "Count of replicated locks (shared, exclusive, and intent strength)",
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// TODO(nvanbenschoten): rename "intentage" metric to "lockage".
-	metaLockAge = metric.Metadata{
+	metaLockAge = metric.InitMetadata(metric.Metadata{
 		Name:        "intentage",
 		Help:        "Cumulative age of locks",
 		Measurement: "Age",
 		Unit:        metric.Unit_SECONDS,
-	}
-	metaGcBytesAge = metric.Metadata{
+	})
+	metaGcBytesAge = metric.InitMetadata(metric.Metadata{
 		Name:        "gcbytesage",
 		Help:        "Cumulative age of non-live data",
 		Measurement: "Age",
 		Unit:        metric.Unit_SECONDS,
-	}
+	})
 
 	// Contention and intent resolution metrics.
-	metaResolveCommit = metric.Metadata{
+	metaResolveCommit = metric.InitMetadata(metric.Metadata{
 		Name:        "intents.resolve-attempts",
 		Help:        "Count of (point or range) intent commit evaluation attempts",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaResolveAbort = metric.Metadata{
+	})
+	metaResolveAbort = metric.InitMetadata(metric.Metadata{
 		Name:        "intents.abort-attempts",
 		Help:        "Count of (point or range) non-poisoning intent abort evaluation attempts",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaResolvePoison = metric.Metadata{
+	})
+	metaResolvePoison = metric.InitMetadata(metric.Metadata{
 		Name:        "intents.poison-attempts",
 		Help:        "Count of (point or range) poisoning intent abort evaluation attempts",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Disk usage diagram (CR=Cockroach):
 	//                            ---------------------------------
@@ -478,7 +478,7 @@ var (
 	//                    "used":               |=========|
 	//               "available":                         |=======|
 	// "usable" (computed in UI):               |=================|
-	metaCapacity = metric.Metadata{
+	metaCapacity = metric.InitMetadata(metric.Metadata{
 		Name:        "capacity",
 		Help:        "Total storage capacity",
 		Measurement: "Storage",
@@ -490,8 +490,8 @@ var (
 			the following rule: CockroachDB storage volumes should not be utilized
 			more than 60% (40% free space).
 		`),
-	}
-	metaAvailable = metric.Metadata{
+	})
+	metaAvailable = metric.InitMetadata(metric.Metadata{
 		Name:        "capacity.available",
 		Help:        "Available storage capacity",
 		Measurement: "Storage",
@@ -503,8 +503,8 @@ var (
 			with the following rule: CockroachDB storage volumes should not be
 			utilized more than 60% (40% free space).
 		`),
-	}
-	metaUsed = metric.Metadata{
+	})
+	metaUsed = metric.InitMetadata(metric.Metadata{
 		Name:        "capacity.used",
 		Help:        "Used storage capacity",
 		Measurement: "Storage",
@@ -516,35 +516,35 @@ var (
 			the following rule: CockroachDB storage volumes should not be utilized
 			more than 60% (40% free space).
 		`),
-	}
+	})
 
-	metaReserved = metric.Metadata{
+	metaReserved = metric.InitMetadata(metric.Metadata{
 		Name:        "capacity.reserved",
 		Help:        "Capacity reserved for snapshots",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSysBytes = metric.Metadata{
+	})
+	metaSysBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sysbytes",
 		Help:        "Number of bytes in system KV pairs",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSysCount = metric.Metadata{
+	})
+	metaSysCount = metric.InitMetadata(metric.Metadata{
 		Name:        "syscount",
 		Help:        "Count of system KV pairs",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAbortSpanBytes = metric.Metadata{
+	})
+	metaAbortSpanBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "abortspanbytes",
 		Help:        "Number of bytes in the abort span",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
-	metaAverageQueriesPerSecond = metric.Metadata{
+	metaAverageQueriesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.queriespersecond",
 		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
 		Measurement: "Queries/Sec",
@@ -552,38 +552,38 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric shows hotspots along the queries per second (QPS) dimension. It provides insights into the ongoing rebalancing activities.`,
-	}
-	metaAverageWritesPerSecond = metric.Metadata{
+	})
+	metaAverageWritesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.writespersecond",
 		Help:        "Number of keys written (i.e. applied by raft) per second to the store, considering the last 30 minutes.",
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAverageRequestsPerSecond = metric.Metadata{
+	})
+	metaAverageRequestsPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.requestspersecond",
 		Help:        "Number of requests received recently per second, considering the last 30 minutes.",
 		Measurement: "Requests/Sec",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAverageReadsPerSecond = metric.Metadata{
+	})
+	metaAverageReadsPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.readspersecond",
 		Help:        "Number of keys read recently per second, considering the last 30 minutes.",
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAverageWriteBytesPerSecond = metric.Metadata{
+	})
+	metaAverageWriteBytesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.writebytespersecond",
 		Help:        "Number of bytes written recently per second, considering the last 30 minutes.",
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaAverageReadBytesPerSecond = metric.Metadata{
+	})
+	metaAverageReadBytesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.readbytespersecond",
 		Help:        "Number of bytes read recently per second, considering the last 30 minutes.",
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaAverageCPUNanosPerSecond = metric.Metadata{
+	})
+	metaAverageCPUNanosPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "rebalancing.cpunanospersecond",
 		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
 		Measurement: "Nanoseconds/Sec",
@@ -591,8 +591,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range.`,
-	}
-	metaRecentReplicaCPUNanosPerSecond = metric.Metadata{
+	})
+	metaRecentReplicaCPUNanosPerSecond = metric.InitMetadata(metric.Metadata{
 		Name: "rebalancing.replicas.cpunanospersecond",
 		Help: crstrings.UnwrapText(`
 			Histogram of average CPU nanoseconds spent on processing replica
@@ -607,8 +607,8 @@ var (
 			replicas is part of a hot range. See also the non-histogram variant:
 			rebalancing.cpunanospersecond.
 		`),
-	}
-	metaRecentReplicaQueriesPerSecond = metric.Metadata{
+	})
+	metaRecentReplicaQueriesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name: "rebalancing.replicas.queriespersecond",
 		Help: crstrings.UnwrapText(`
 			Histogram of average kv-level requests received per second by replicas on
@@ -619,18 +619,18 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range. See also: rebalancing_replicas_cpunanospersecond.`,
-	}
+	})
 
 	// Metric for tracking follower reads.
-	metaFollowerReadsCount = metric.Metadata{
+	metaFollowerReadsCount = metric.InitMetadata(metric.Metadata{
 		Name:        "follower_reads.success_count",
 		Help:        "Number of reads successfully processed by any replica",
 		Measurement: "Read Ops",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Server-side transaction metrics.
-	metaCommitWaitBeforeCommitTriggerCount = metric.Metadata{
+	metaCommitWaitBeforeCommitTriggerCount = metric.InitMetadata(metric.Metadata{
 		Name: "txn.commit_waits.before_commit_trigger",
 		Help: crstrings.UnwrapText(`
 			Number of KV transactions that had to commit-wait on the server before
@@ -638,32 +638,32 @@ var (
 		`),
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteEvaluationServerSideRetrySuccess = metric.Metadata{
+	})
+	metaWriteEvaluationServerSideRetrySuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side_retry.write_evaluation.success",
 		Help:        "Number of write batches that were successfully refreshed server side",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteEvaluationServerSideRetryFailure = metric.Metadata{
+	})
+	metaWriteEvaluationServerSideRetryFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side_retry.write_evaluation.failure",
 		Help:        "Number of write batches that were not successfully refreshed server side",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadEvaluationServerSideRetrySuccess = metric.Metadata{
+	})
+	metaReadEvaluationServerSideRetrySuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side_retry.read_evaluation.success",
 		Help:        "Number of read batches that were successfully refreshed server side",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadEvaluationServerSideRetryFailure = metric.Metadata{
+	})
+	metaReadEvaluationServerSideRetryFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side_retry.read_evaluation.failure",
 		Help:        "Number of read batches that were not successfully refreshed server side",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess = metric.Metadata{
+	})
+	metaReadWithinUncertaintyIntervalErrorServerSideRetrySuccess = metric.InitMetadata(metric.Metadata{
 		Name: "txn.server_side_retry.uncertainty_interval_error.success",
 		Help: crstrings.UnwrapText(`
 			Number of batches that ran into uncertainty interval errors that were
@@ -671,8 +671,8 @@ var (
 		`),
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure = metric.Metadata{
+	})
+	metaReadWithinUncertaintyIntervalErrorServerSideRetryFailure = metric.InitMetadata(metric.Metadata{
 		Name: "txn.server_side_retry.uncertainty_interval_error.failure",
 		Help: crstrings.UnwrapText(`
 			Number of batches that ran into uncertainty interval errors that were not
@@ -680,30 +680,30 @@ var (
 		`),
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaOnePhaseCommitSuccess = metric.Metadata{
+	})
+	metaOnePhaseCommitSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side.1PC.success",
 		Help:        "Number of batches that attempted to commit using 1PC and succeeded",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaOnePhaseCommitFailure = metric.Metadata{
+	})
+	metaOnePhaseCommitFailure = metric.InitMetadata(metric.Metadata{
 		Name:        "txn.server_side.1PC.failure",
 		Help:        "Number of batches that attempted to commit using 1PC and failed",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	//Ingest metrics
-	metaIngestCount = metric.Metadata{
+	metaIngestCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.ingest.count",
 		Help:        "Number of successful ingestions performed",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Pebble metrics.
-	metaRdbBlockCacheHits = metric.Metadata{
+	metaRdbBlockCacheHits = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
 		Help:        "Count of block cache hits",
 		Measurement: "Cache Ops",
@@ -716,8 +716,8 @@ var (
 			shrinks. By observing block cache hits and misses, you can fine-tune
 			memory allocations in the node process for the demands of the workload.
 		`),
-	}
-	metaRdbBlockCacheMisses = metric.Metadata{
+	})
+	metaRdbBlockCacheMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.block.cache.misses",
 		Help:        "Count of block cache misses",
 		Measurement: "Cache Ops",
@@ -730,44 +730,44 @@ var (
 			shrinks. By observing block cache hits and misses, you can fine-tune
 			memory allocations in the node process for the demands of the workload.
 		`),
-	}
-	metaRdbBlockCacheUsage = metric.Metadata{
+	})
+	metaRdbBlockCacheUsage = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.block.cache.usage",
 		Help:        "Bytes used by the block cache",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbBloomFilterPrefixChecked = metric.Metadata{
+	})
+	metaRdbBloomFilterPrefixChecked = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.bloom.filter.prefix.checked",
 		Help:        "Number of times the bloom filter was checked",
 		Measurement: "Bloom Filter Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbBloomFilterPrefixUseful = metric.Metadata{
+	})
+	metaRdbBloomFilterPrefixUseful = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.bloom.filter.prefix.useful",
 		Help:        "Number of times the bloom filter helped avoid iterator creation",
 		Measurement: "Bloom Filter Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbMemtableTotalSize = metric.Metadata{
+	})
+	metaRdbMemtableTotalSize = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.memtable.total-size",
 		Help:        "Current size of memtable in bytes",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbFlushes = metric.Metadata{
+	})
+	metaRdbFlushes = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.flushes",
 		Help:        "Number of table flushes",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbFlushedBytes = metric.Metadata{
+	})
+	metaRdbFlushedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.flushed-bytes",
 		Help:        "Bytes written during flush",
 		Measurement: "Bytes Written",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbCompactions = metric.Metadata{
+	})
+	metaRdbCompactions = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.compactions",
 		Help:        "Number of table compactions",
 		Measurement: "Compactions",
@@ -781,69 +781,69 @@ var (
 			for an extended period, the cluster will initially exhibit performance
 			issues that will eventually escalate into stability issues.
 		`),
-	}
-	metaRdbIngestedBytes = metric.Metadata{
+	})
+	metaRdbIngestedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.ingested-bytes",
 		Help:        "Bytes ingested",
 		Measurement: "Bytes Ingested",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbCompactedBytesRead = metric.Metadata{
+	})
+	metaRdbCompactedBytesRead = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.compacted-bytes-read",
 		Help:        "Bytes read during compaction",
 		Measurement: "Bytes Read",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbCompactedBytesWritten = metric.Metadata{
+	})
+	metaRdbCompactedBytesWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.compacted-bytes-written",
 		Help:        "Bytes written during compaction",
 		Measurement: "Bytes Written",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbTableReadersMemEstimate = metric.Metadata{
+	})
+	metaRdbTableReadersMemEstimate = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.table-readers-mem-estimate",
 		Help:        "Memory used by index and filter blocks",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbReadAmplification = metric.Metadata{
+	})
+	metaRdbReadAmplification = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.read-amplification",
 		Help:        "Number of disk reads per query",
 		Measurement: "Disk Reads per Query",
 		Unit:        metric.Unit_CONST,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRdbNumSSTables = metric.Metadata{
+	})
+	metaRdbNumSSTables = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.num-sstables",
 		Help:        "Number of storage engine SSTables",
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbPendingCompaction = metric.Metadata{
+	})
+	metaRdbPendingCompaction = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.estimated-pending-compaction",
 		Help:        "Estimated pending compaction bytes",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRdbMarkedForCompactionFiles = metric.Metadata{
+	})
+	metaRdbMarkedForCompactionFiles = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.marked-for-compaction-files",
 		Help:        "Count of SSTables marked for compaction",
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbKeysRangeKeySets = metric.Metadata{
+	})
+	metaRdbKeysRangeKeySets = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.keys.range-key-set.count",
 		Help:        "Approximate count of RangeKeySet internal keys across the storage engine.",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRdbKeysTombstones = metric.Metadata{
+	})
+	metaRdbKeysTombstones = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.keys.tombstone.count",
 		Help:        "Approximate count of DEL, SINGLEDEL and RANGEDEL internal keys across the storage engine.",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 	// NB: bytes only ever get flushed into L0, so this metric does not
 	// exist for any other level.
 	metaRdbL0BytesFlushed = storageLevelMetricMetadata(
@@ -899,7 +899,7 @@ var (
 		nil, // No visibility overrides
 	)
 
-	metaRdbWriteStalls = metric.Metadata{
+	metaRdbWriteStalls = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.write-stalls",
 		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
 		Measurement: "Events",
@@ -915,16 +915,16 @@ var (
 			rate persists over an extended period of time, and worse, if it is
 			increasing.
 		`),
-	}
-	metaRdbWriteStallNanos = metric.Metadata{
+	})
+	metaRdbWriteStallNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.write-stall-nanos",
 		Help:        "Total write stall duration in nanos",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 
-	metaRdbCheckpoints = metric.Metadata{
+	metaRdbCheckpoints = metric.InitMetadata(metric.Metadata{
 		Name: "storage.checkpoints",
 		Help: crstrings.UnwrapText(`
 			The number of checkpoint directories found in storage.
@@ -945,39 +945,39 @@ var (
 
 		Measurement: "Directories",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaBlockBytes = metric.Metadata{
+	metaBlockBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.iterator.block-load.bytes",
 		Help:        "Bytes loaded by storage engine iterators (possibly cached). See storage.AggregatedIteratorStats for details.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBlockBytesInCache = metric.Metadata{
+	})
+	metaBlockBytesInCache = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.iterator.block-load.cached-bytes",
 		Help:        "Bytes loaded by storage engine iterators from the block cache. See storage.AggregatedIteratorStats for details.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBlockReadDuration = metric.Metadata{
+	})
+	metaBlockReadDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.iterator.block-load.read-duration",
 		Help:        "Cumulative time storage engine iterators spent loading blocks from durable storage. See storage.AggregatedIteratorStats for details.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaIterExternalSeeks = metric.Metadata{
+	})
+	metaIterExternalSeeks = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.iterator.external.seeks",
 		Help:        "Cumulative count of seeks performed on storage engine iterators. See storage.AggregatedIteratorStats for details.",
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaIterExternalSteps = metric.Metadata{
+	})
+	metaIterExternalSteps = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.iterator.external.steps",
 		Help:        "Cumulative count of steps performed on storage engine iterators. See storage.AggregatedIteratorStats for details.",
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaIterInternalSeeks = metric.Metadata{
+	})
+	metaIterInternalSeeks = metric.InitMetadata(metric.Metadata{
 		Name: "storage.iterator.internal.seeks",
 		Help: crstrings.UnwrapText(`
 			Cumulative count of seeks performed internally within storage engine
@@ -991,8 +991,8 @@ var (
 		`),
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaIterInternalSteps = metric.Metadata{
+	})
+	metaIterInternalSteps = metric.InitMetadata(metric.Metadata{
 		Name: "storage.iterator.internal.steps",
 		Help: crstrings.UnwrapText(`
 			Cumulative count of steps performed internally within storage engine
@@ -1006,8 +1006,8 @@ var (
 		`),
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaStorageCompactionsDuration = metric.Metadata{
+	})
+	metaStorageCompactionsDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.compactions.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative sum of all compaction durations.
@@ -1018,8 +1018,8 @@ var (
 		`),
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaStorageWriteAmplification = metric.Metadata{
+	})
+	metaStorageWriteAmplification = metric.InitMetadata(metric.Metadata{
 		Name: "storage.write-amplification",
 		Help: crstrings.UnwrapText(`
 			Running measure of write-amplification.
@@ -1031,8 +1031,8 @@ var (
 		`),
 		Measurement: "Ratio of bytes written to logical bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaStorageCompactionsKeysPinnedCount = metric.Metadata{
+	})
+	metaStorageCompactionsKeysPinnedCount = metric.InitMetadata(metric.Metadata{
 		Name: "storage.compactions.keys.pinned.count",
 		Help: crstrings.UnwrapText(`
 			Cumulative count of storage engine KVs written to sstables during
@@ -1049,8 +1049,8 @@ var (
 		`),
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaStorageCompactionsKeysPinnedBytes = metric.Metadata{
+	})
+	metaStorageCompactionsKeysPinnedBytes = metric.InitMetadata(metric.Metadata{
 		Name: "storage.compactions.keys.pinned.bytes",
 		Help: crstrings.UnwrapText(`
 			Cumulative size of storage engine KVs written to sstables during flushes
@@ -1066,20 +1066,20 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStorageCompactionsCancelledCount = metric.Metadata{
+	})
+	metaStorageCompactionsCancelledCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compactions.cancelled.count",
 		Help:        `Cumulative count of compactions that were cancelled before they completed due to a conflicting operation.`,
 		Measurement: "Compactions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaStorageCompactionsCancelledBytes = metric.Metadata{
+	})
+	metaStorageCompactionsCancelledBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compactions.cancelled.bytes",
 		Help:        `Cumulative volume of data written to sstables during compactions that were ultimately cancelled due to a conflicting operation.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStoragePointDeletionsBytes = metric.Metadata{
+	})
+	metaStoragePointDeletionsBytes = metric.InitMetadata(metric.Metadata{
 		Name: "storage.point_deletions.bytes",
 		Help: crstrings.UnwrapText(`
 			Estimated file bytes that will be saved by compacting all point
@@ -1090,8 +1090,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStorageRangeDeletionsBytes = metric.Metadata{
+	})
+	metaStorageRangeDeletionsBytes = metric.InitMetadata(metric.Metadata{
 		Name: "storage.range_deletions.bytes",
 		Help: crstrings.UnwrapText(`
 			Estimated file bytes that will be saved by compacting all range
@@ -1102,46 +1102,46 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaInitialStatsComplete = metric.Metadata{
+	})
+	metaInitialStatsComplete = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.initial_stats_complete",
 		Help:        "Set to 1 when initial table stats collection is complete.",
 		Measurement: "Boolean",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// TODO(sumeer): remove, since can fire due to delete-only compactions.
-	metaStorageSingleDelInvariantViolationCount = metric.Metadata{
+	metaStorageSingleDelInvariantViolationCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.single-delete.invariant-violation",
 		Help:        "Number of SingleDelete invariant violations",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// TODO(sumeer): remove, since can fire due to delete-only compactions.
-	metaStorageSingleDelIneffectualCount = metric.Metadata{
+	metaStorageSingleDelIneffectualCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.single-delete.ineffectual",
 		Help:        "Number of SingleDeletes that were ineffectual",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSharedStorageBytesWritten = metric.Metadata{
+	})
+	metaSharedStorageBytesWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.shared-storage.write",
 		Help:        "Bytes written to external storage",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSharedStorageBytesRead = metric.Metadata{
+	})
+	metaSharedStorageBytesRead = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.shared-storage.read",
 		Help:        "Bytes read from shared storage",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBlockLoadsInProgress = metric.Metadata{
+	})
+	metaBlockLoadsInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.block-load.active",
 		Help:        "The number of sstable block loads currently in progress",
 		Measurement: "Block loads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBlockLoadsQueued = metric.Metadata{
+	})
+	metaBlockLoadsQueued = metric.InitMetadata(metric.Metadata{
 		Name: "storage.block-load.queued",
 		Help: crstrings.UnwrapText(`
 			The cumulative number of SSTable block loads that were delayed because
@@ -1149,92 +1149,92 @@ var (
 		`),
 		Measurement: "Block loads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheSize = metric.Metadata{
+	})
+	metaSecondaryCacheSize = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.size",
 		Help:        "The number of sstable bytes stored in the secondary cache",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSecondaryCacheCount = metric.Metadata{
+	})
+	metaSecondaryCacheCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.count",
 		Help:        "The count of cache blocks in the secondary cache (not sstable blocks)",
 		Measurement: "Cache items",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheTotalReads = metric.Metadata{
+	})
+	metaSecondaryCacheTotalReads = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-total",
 		Help:        "The number of reads from the secondary cache",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheMultiShardReads = metric.Metadata{
+	})
+	metaSecondaryCacheMultiShardReads = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-multi-shard",
 		Help:        "The number of secondary cache reads that require reading data from 2+ shards",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheMultiBlockReads = metric.Metadata{
+	})
+	metaSecondaryCacheMultiBlockReads = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-multi-block",
 		Help:        "The number of secondary cache reads that require reading data from 2+ cache blocks",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheReadsWithFullHit = metric.Metadata{
+	})
+	metaSecondaryCacheReadsWithFullHit = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-full-hit",
 		Help:        "The number of reads where all data returned was read from the secondary cache",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheReadsWithPartialHit = metric.Metadata{
+	})
+	metaSecondaryCacheReadsWithPartialHit = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-partial-hit",
 		Help:        "The number of reads where some data returned was read from the secondary cache",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheReadsWithNoHit = metric.Metadata{
+	})
+	metaSecondaryCacheReadsWithNoHit = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.reads-no-hit",
 		Help:        "The number of reads where no data returned was read from the secondary cache",
 		Measurement: "Num reads",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheEvictions = metric.Metadata{
+	})
+	metaSecondaryCacheEvictions = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.evictions",
 		Help:        "The number of times a cache block was evicted from the secondary cache",
 		Measurement: "Num evictions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSecondaryCacheWriteBackFailures = metric.Metadata{
+	})
+	metaSecondaryCacheWriteBackFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.secondary-cache.write-back-failures",
 		Help:        "The number of times writing a cache block to the secondary cache failed",
 		Measurement: "Num failures",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFlushableIngestCount = metric.Metadata{
+	})
+	metaFlushableIngestCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.flush.ingest.count",
 		Help:        "Flushes performing an ingest (flushable ingestions)",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFlushableIngestTableCount = metric.Metadata{
+	})
+	metaFlushableIngestTableCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.flush.ingest.table.count",
 		Help:        "Tables ingested via flushes (flushable ingestions)",
 		Measurement: "Tables",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFlushableIngestTableBytes = metric.Metadata{
+	})
+	metaFlushableIngestTableBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.flush.ingest.table.bytes",
 		Help:        "Bytes ingested via flushes (flushable ingestions)",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBatchCommitCount = metric.Metadata{
+	})
+	metaBatchCommitCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.batch-commit.count",
 		Help:        "Count of batch commits. See storage.AggregatedBatchCommitStats for details.",
 		Measurement: "Commit Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBatchCommitDuration = metric.Metadata{
+	})
+	metaBatchCommitDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent in batch commit. See
@@ -1242,8 +1242,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitSemWaitDuration = metric.Metadata{
+	})
+	metaBatchCommitSemWaitDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.sem-wait.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent in semaphore wait, for batch commit. See
@@ -1251,8 +1251,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitWALQWaitDuration = metric.Metadata{
+	})
+	metaBatchCommitWALQWaitDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.wal-queue-wait.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent waiting for memory blocks in the WAL queue, for
@@ -1260,8 +1260,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitMemStallDuration = metric.Metadata{
+	})
+	metaBatchCommitMemStallDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.mem-stall.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent in a write stall due to too many memtables, for
@@ -1269,8 +1269,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitL0StallDuration = metric.Metadata{
+	})
+	metaBatchCommitL0StallDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.l0-stall.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent in a write stall due to high read amplification in
@@ -1278,8 +1278,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitWALRotDuration = metric.Metadata{
+	})
+	metaBatchCommitWALRotDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.wal-rotation.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent waiting for WAL rotation, for batch commit. See
@@ -1287,8 +1287,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaBatchCommitCommitWaitDuration = metric.Metadata{
+	})
+	metaBatchCommitCommitWaitDuration = metric.InitMetadata(metric.Metadata{
 		Name: "storage.batch-commit.commit-wait.duration",
 		Help: crstrings.UnwrapText(`
 			Cumulative time spent waiting for WAL sync, for batch commit. See
@@ -1296,8 +1296,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaSSTableZombieBytes = metric.Metadata{
+	})
+	metaSSTableZombieBytes = metric.InitMetadata(metric.Metadata{
 		Name: "storage.sstable.zombie.bytes",
 		Help: crstrings.UnwrapText(`
 			Bytes in SSTables that have been logically deleted, but can't yet be
@@ -1305,171 +1305,171 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSSTableRemoteBytes = metric.Metadata{
+	})
+	metaSSTableRemoteBytes = metric.InitMetadata(metric.Metadata{
 		Name: "storage.sstable.remote.bytes",
 		Help: crstrings.UnwrapText(`
 			Bytes in SSTables that are stored off-disk (remotely) in object storage.
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSSTableRemoteCount = metric.Metadata{
+	})
+	metaSSTableRemoteCount = metric.InitMetadata(metric.Metadata{
 		Name: "storage.sstable.remote.count",
 		Help: crstrings.UnwrapText(`
 			Count of SSTables that are stored off-disk (remotely) in object storage.
 		`),
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaCompressionSnappyBytes = metric.Metadata{
+	metaCompressionSnappyBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.snappy.bytes",
 		Help:        "Total on disk size of sstable and blob value data that is compressed with the Snappy algorithm.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCompressionSnappyCR = metric.Metadata{
+	})
+	metaCompressionSnappyCR = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.snappy.cr",
 		Help:        "Average compression ratio of sstable and blob value data that is compressed with the snappy algorithm.",
 		Measurement: "Ratio",
 		Unit:        metric.Unit_CONST,
-	}
-	metaCompressionMinLZBytes = metric.Metadata{
+	})
+	metaCompressionMinLZBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.minlz.bytes",
 		Help:        "Total on disk size of sstable and blob value data that is compressed with the MinLZ algorithm.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_CONST,
-	}
-	metaCompressionMinLZCR = metric.Metadata{
+	})
+	metaCompressionMinLZCR = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.minlz.cr",
 		Help:        "Average compression ratio of sstable and blob value data that is compressed with the MinLZ algorithm.",
 		Measurement: "Ratio",
 		Unit:        metric.Unit_CONST,
-	}
-	metaCompressionZstdBytes = metric.Metadata{
+	})
+	metaCompressionZstdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.zstd.bytes",
 		Help:        "Total on disk size of sstable and blob value data that is compressed with the Zstd algorithm.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCompressionZstdCR = metric.Metadata{
+	})
+	metaCompressionZstdCR = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.zstd.cr",
 		Help:        "Average compression ratio of sstable and blob value data that is compressed with the Zstd algorithm.",
 		Measurement: "Ratio",
 		Unit:        metric.Unit_CONST,
-	}
-	metaCompressionNoneBytes = metric.Metadata{
+	})
+	metaCompressionNoneBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.none.bytes",
 		Help:        "Total on disk size of sstable and blob value data that is not compressed.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCompressionUnknownBytes = metric.Metadata{
+	})
+	metaCompressionUnknownBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.unknown.bytes",
 		Help:        "Total on disk size of sstable and blob value data that is compressed but for which we have no compression statistics.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaCompressionOverallCR = metric.Metadata{
+	})
+	metaCompressionOverallCR = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.compression.cr",
 		Help:        "Average compression ratio of sstable and blob value data.",
 		Measurement: "Ratio",
 		Unit:        metric.Unit_CONST,
-	}
-	metaBytesCompressedL5Data = metric.Metadata{
+	})
+	metaBytesCompressedL5Data = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-compressed.l5.data",
 		Help:         "Total number of logical bytes compressed for L5 data blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-compressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "data"),
-	}
-	metaBytesDecompressedL5Data = metric.Metadata{
+	})
+	metaBytesDecompressedL5Data = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-decompressed.l5.data",
 		Help:         "Total number of logical bytes decompressed for L5 data blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-decompressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "data"),
-	}
-	metaBytesCompressedL5Values = metric.Metadata{
+	})
+	metaBytesCompressedL5Values = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-compressed.l5.values",
 		Help:         "Total number of logical bytes compressed for L5 value blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-compressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "values"),
-	}
-	metaBytesDecompressedL5Values = metric.Metadata{
+	})
+	metaBytesDecompressedL5Values = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-decompressed.l5.values",
 		Help:         "Total number of logical bytes decompressed for L5 value blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-decompressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "values"),
-	}
-	metaBytesCompressedL6Data = metric.Metadata{
+	})
+	metaBytesCompressedL6Data = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-compressed.l6.data",
 		Help:         "Total number of logical bytes compressed for L6 data blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-compressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "data"),
-	}
-	metaBytesDecompressedL6Data = metric.Metadata{
+	})
+	metaBytesDecompressedL6Data = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-decompressed.l6.data",
 		Help:         "Total number of logical bytes decompressed for L6 data blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-decompressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "data"),
-	}
-	metaBytesCompressedL6Values = metric.Metadata{
+	})
+	metaBytesCompressedL6Values = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-compressed.l6.values",
 		Help:         "Total number of logical bytes compressed for L6 value blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-compressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "values"),
-	}
-	metaBytesDecompressedL6Values = metric.Metadata{
+	})
+	metaBytesDecompressedL6Values = metric.InitMetadata(metric.Metadata{
 		Name:         "storage.bytes-decompressed.l6.values",
 		Help:         "Total number of logical bytes decompressed for L6 value blocks.",
 		Measurement:  "Bytes",
 		Unit:         metric.Unit_BYTES,
 		LabeledName:  "storage.bytes-decompressed",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "values"),
-	}
+	})
 )
 
 var (
 	// Disk health metrics.
-	metaDiskSlow = metric.Metadata{
+	metaDiskSlow = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk-slow",
 		Help:        "Number of instances of disk operations taking longer than 10s",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 	// TODO(jackson): Consider removing the `storage.disk-stalled` metric.
 	// Stalls fatal the node. It's unlikely this metric will ever be reported
 	// greater than zero.
-	metaDiskStalled = metric.Metadata{
+	metaDiskStalled = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk-stalled",
 		Help:        "Number of instances of disk operations taking longer than 20s",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskUnhealthyDuration = metric.Metadata{
+	})
+	metaDiskUnhealthyDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk-unhealthy.duration",
 		Help:        "Total disk unhealthy duration in nanos",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 	// Range event metrics.
-	metaRangeSplits = metric.Metadata{
+	metaRangeSplits = metric.InitMetadata(metric.Metadata{
 		Name:        "range.splits",
 		Help:        "Number of range splits",
 		Measurement: "Range Ops",
@@ -1477,8 +1477,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling up. Spikes can indicate resource hotspots since the split heuristic is based on QPS. To understand whether hotspots are an issue and with which tables and indexes they are occurring, correlate this metric with other metrics such as CPU usage, such as sys.cpu.combined.percent-normalized, or use the Hot Ranges page.`,
-	}
-	metaRangeMerges = metric.Metadata{
+	})
+	metaRangeMerges = metric.InitMetadata(metric.Metadata{
 		Name:        "range.merges",
 		Help:        "Number of range merges",
 		Measurement: "Range Ops",
@@ -1486,117 +1486,117 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling down. Merges are Cockroach's optimization for performance. This metric indicates that there have been deletes in the workload.`,
-	}
-	metaRangeAdds = metric.Metadata{
+	})
+	metaRangeAdds = metric.InitMetadata(metric.Metadata{
 		Name:        "range.adds",
 		Help:        "Number of range additions",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRangeRemoves = metric.Metadata{
+	})
+	metaRangeRemoves = metric.InitMetadata(metric.Metadata{
 		Name:        "range.removes",
 		Help:        "Number of range removals",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotsGenerated = metric.Metadata{
+	})
+	metaRangeSnapshotsGenerated = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.generated",
 		Help:        "Number of generated snapshots",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotsAppliedByVoters = metric.Metadata{
+	})
+	metaRangeSnapshotsAppliedByVoters = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.applied-voter",
 		Help:        "Number of snapshots applied by voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotsAppliedForInitialUpreplication = metric.Metadata{
+	})
+	metaRangeSnapshotsAppliedForInitialUpreplication = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.applied-initial",
 		Help:        "Number of snapshots applied for initial upreplication",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotsAppliedByNonVoter = metric.Metadata{
+	})
+	metaRangeSnapshotsAppliedByNonVoter = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.applied-non-voter",
 		Help:        "Number of snapshots applied by non-voter replicas",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapshotRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.rcvd-bytes",
 		Help:        "Number of snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotSentBytes = metric.Metadata{
+	})
+	metaRangeSnapshotSentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.sent-bytes",
 		Help:        "Number of snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotUnknownRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapshotUnknownRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.unknown.rcvd-bytes",
 		Help:        "Number of unknown snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotUnknownSentBytes = metric.Metadata{
+	})
+	metaRangeSnapshotUnknownSentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.unknown.sent-bytes",
 		Help:        "Number of unknown snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRebalancingRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapshotRebalancingRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.rebalancing.rcvd-bytes",
 		Help:        "Number of rebalancing snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRebalancingSentBytes = metric.Metadata{
+	})
+	metaRangeSnapshotRebalancingSentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.rebalancing.sent-bytes",
 		Help:        "Number of rebalancing snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapshotRecoveryRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recovery.rcvd-bytes",
 		Help:        "Number of raft recovery snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
+	})
+	metaRangeSnapshotRecoverySentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recovery.sent-bytes",
 		Help:        "Number of raft recovery snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotUpreplicationRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapshotUpreplicationRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.upreplication.rcvd-bytes",
 		Help:        "Number of upreplication snapshot bytes received",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotUpreplicationSentBytes = metric.Metadata{
+	})
+	metaRangeSnapshotUpreplicationSentBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.upreplication.sent-bytes",
 		Help:        "Number of upreplication snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRecvFailed = metric.Metadata{
+	})
+	metaRangeSnapshotRecvFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-failed",
 		Help:        "Number of range snapshot initialization messages that errored out on the recipient, typically before any data is transferred",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotRecvUnusable = metric.Metadata{
+	})
+	metaRangeSnapshotRecvUnusable = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-unusable",
 		Help:        "Number of range snapshot that were fully transmitted but determined to be unnecessary or unusable",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapShotCrossRegionSentBytes = metric.Metadata{
+	})
+	metaRangeSnapShotCrossRegionSentBytes = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.cross-region.sent-bytes",
 		Help: crstrings.UnwrapText(`
 			Number of snapshot bytes sent cross region by this store when region
@@ -1604,8 +1604,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapShotCrossRegionRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapShotCrossRegionRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.cross-region.rcvd-bytes",
 		Help: crstrings.UnwrapText(`
 			Number of snapshot bytes received cross region by this store when region
@@ -1613,8 +1613,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapShotCrossZoneSentBytes = metric.Metadata{
+	})
+	metaRangeSnapShotCrossZoneSentBytes = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.cross-zone.sent-bytes",
 		Help: crstrings.UnwrapText(`
 			Number of snapshot bytes sent cross zone within the same region by this
@@ -1625,8 +1625,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapShotCrossZoneRcvdBytes = metric.Metadata{
+	})
+	metaRangeSnapShotCrossZoneRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.cross-zone.rcvd-bytes",
 		Help: crstrings.UnwrapText(`
 			Number of snapshot bytes received cross zone within the same region by
@@ -1637,70 +1637,70 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotSendQueueLength = metric.Metadata{
+	})
+	metaRangeSnapshotSendQueueLength = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.send-queue",
 		Help:        "Number of snapshots queued to send",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRangeSnapshotRecvQueueLength = metric.Metadata{
+	})
+	metaRangeSnapshotRecvQueueLength = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-queue",
 		Help:        "Number of snapshots queued to receive",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotSendInProgress = metric.Metadata{
+	})
+	metaRangeSnapshotSendInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.send-in-progress",
 		Help:        "Number of non-empty snapshots being sent",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotRecvInProgress = metric.Metadata{
+	})
+	metaRangeSnapshotRecvInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-in-progress",
 		Help:        "Number of non-empty snapshots being received",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotSendTotalInProgress = metric.Metadata{
+	})
+	metaRangeSnapshotSendTotalInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.send-total-in-progress",
 		Help:        "Number of total snapshots being sent",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotRecvTotalInProgress = metric.Metadata{
+	})
+	metaRangeSnapshotRecvTotalInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-total-in-progress",
 		Help:        "Number of total snapshots being received",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeSnapshotSendQueueSize = metric.Metadata{
+	})
+	metaRangeSnapshotSendQueueSize = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.send-queue-bytes",
 		Help:        "Total size of all snapshots in the snapshot send queue",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRangeSnapshotRecvQueueSize = metric.Metadata{
+	})
+	metaRangeSnapshotRecvQueueSize = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.recv-queue-bytes",
 		Help:        "Total size of all snapshots in the snapshot receive queue",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
-	metaRangeRaftLeaderTransfers = metric.Metadata{
+	metaRangeRaftLeaderTransfers = metric.InitMetadata(metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeRaftLeaderRemovals = metric.Metadata{
+	})
+	metaRangeRaftLeaderRemovals = metric.InitMetadata(metric.Metadata{
 		Name:        "range.raftleaderremovals",
 		Help:        "Number of times the current Raft leader was removed from a range",
 		Measurement: "Raft leader removals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeLossOfQuorumRecoveries = metric.Metadata{
+	})
+	metaRangeLossOfQuorumRecoveries = metric.InitMetadata(metric.Metadata{
 		Name: "range.recoveries",
 		Help: crstrings.UnwrapText(`
 			Count of offline loss of quorum recovery operations performed on ranges.
@@ -1711,8 +1711,8 @@ var (
 		`),
 		Measurement: "Quorum Recoveries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDelegateSnapshotSendBytes = metric.Metadata{
+	})
+	metaDelegateSnapshotSendBytes = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.delegate.sent-bytes",
 		Help: crstrings.UnwrapText(`
 			Bytes sent using a delegate.
@@ -1723,8 +1723,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDelegateSnapshotSuccesses = metric.Metadata{
+	})
+	metaDelegateSnapshotSuccesses = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.delegate.successes",
 		Help: crstrings.UnwrapText(`
 			Number of snapshots that were delegated to a different node and resulted
@@ -1732,8 +1732,8 @@ var (
 		`),
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDelegateSnapshotFailures = metric.Metadata{
+	})
+	metaDelegateSnapshotFailures = metric.InitMetadata(metric.Metadata{
 		Name: "range.snapshots.delegate.failures",
 		Help: crstrings.UnwrapText(`
 			Number of snapshots that were delegated to a different node and resulted
@@ -1743,45 +1743,45 @@ var (
 		`),
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDelegateSnapshotInProgress = metric.Metadata{
+	})
+	metaDelegateSnapshotInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "range.snapshots.delegate.in-progress",
 		Help:        `Number of delegated snapshots that are currently in-flight.`,
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Quota pool metrics.
-	metaRaftQuotaPoolPercentUsed = metric.Metadata{
+	metaRaftQuotaPoolPercentUsed = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.quota_pool.percent_used",
 		Help:        `Histogram of proposal quota pool utilization (0-100) per leaseholder per metrics interval`,
 		Measurement: "Percent",
 		// TODO(kv-obs): There is Unit_PERCENT but it seems to operate on float64
 		// (0 to 1.0) so it probably won't produce useful results here.
 		Unit: metric.Unit_COUNT,
-	}
+	})
 	// Raft entry bytes loaded in memory.
-	metaRaftLoadedEntriesBytes = metric.Metadata{
+	metaRaftLoadedEntriesBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.loaded_entries.bytes",
 		Help:        `Bytes allocated by raft Storage.Entries calls that are still kept in memory`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
 	// Raft processing metrics.
-	metaRaftTicks = metric.Metadata{
+	metaRaftTicks = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.ticks",
 		Help:        "Number of Raft ticks queued",
 		Measurement: "Ticks",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftProposalsDropped = metric.Metadata{
+	})
+	metaRaftProposalsDropped = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.dropped",
 		Help:        "Number of Raft proposals dropped (this counts individial raftpb.Entry, not raftpb.MsgProp)",
 		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftProposalsDroppedLeader = metric.Metadata{
+	})
+	metaRaftProposalsDroppedLeader = metric.InitMetadata(metric.Metadata{
 		Name: "raft.dropped_leader",
 		Help: crstrings.UnwrapText(`
 			Number of Raft proposals dropped by a Replica that believes itself to be
@@ -1790,8 +1790,8 @@ var (
 		`),
 		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftWorkingDurationNanos = metric.Metadata{
+	})
+	metaRaftWorkingDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name: "raft.process.workingnanos",
 		Help: crstrings.UnwrapText(`
 			Nanoseconds spent in store.processRaft() working.
@@ -1801,14 +1801,14 @@ var (
 		`),
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftTickingDurationNanos = metric.Metadata{
+	})
+	metaRaftTickingDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.process.tickingnanos",
 		Help:        "Nanoseconds spent in store.processRaft() processing replica.Tick()",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftCommandsProposed = metric.Metadata{
+	})
+	metaRaftCommandsProposed = metric.InitMetadata(metric.Metadata{
 		Name: "raft.commands.proposed",
 		Help: crstrings.UnwrapText(`
 			Number of Raft commands proposed.
@@ -1819,8 +1819,8 @@ var (
 		`),
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftCommandsReproposed = metric.Metadata{
+	})
+	metaRaftCommandsReproposed = metric.InitMetadata(metric.Metadata{
 		Name: "raft.commands.reproposed.unchanged",
 		Help: crstrings.UnwrapText(`
 			Number of Raft commands re-proposed without modification.
@@ -1832,8 +1832,8 @@ var (
 		`),
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftCommandsReproposedLAI = metric.Metadata{
+	})
+	metaRaftCommandsReproposedLAI = metric.InitMetadata(metric.Metadata{
 		Name: "raft.commands.reproposed.new-lai",
 		Help: crstrings.UnwrapText(`
 			Number of Raft commands re-proposed with a newer LAI.
@@ -1844,8 +1844,8 @@ var (
 		`),
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftCommandsPending = metric.Metadata{
+	})
+	metaRaftCommandsPending = metric.InitMetadata(metric.Metadata{
 		Name: "raft.commands.pending",
 		Help: crstrings.UnwrapText(`
 			Number of Raft commands proposed and pending.
@@ -1856,8 +1856,8 @@ var (
 		`),
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftCommandsApplied = metric.Metadata{
+	})
+	metaRaftCommandsApplied = metric.InitMetadata(metric.Metadata{
 		Name: "raft.commandsapplied",
 		Help: crstrings.UnwrapText(`
 			Number of Raft commands applied.
@@ -1871,8 +1871,8 @@ var (
 		`),
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLogCommitLatency = metric.Metadata{
+	})
+	metaRaftLogCommitLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.process.logcommit.latency",
 		Help: crstrings.UnwrapText(`
 			Latency histogram for committing Raft log entries to stable storage
@@ -1888,8 +1888,8 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftCommandCommitLatency = metric.Metadata{
+	})
+	metaRaftCommandCommitLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.process.commandcommit.latency",
 		Help: crstrings.UnwrapText(`
 			Latency histogram for applying a batch of Raft commands to the state
@@ -1907,7 +1907,7 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 	// TODO(tbg): I think this metric skews low because we will often handle Readies
 	// for which the result is that there is nothing to do. Do we want to change this
 	// metric to only record ready handling when there is a Ready? That seems more
@@ -1915,7 +1915,7 @@ var (
 	// Though they aren't really no-ops, they still have to get a mutex and check
 	// for a Ready, etc, but I still think it would be better to avoid those measure-
 	// ments and to count the number of noops instead if we really want to.
-	metaRaftHandleReadyLatency = metric.Metadata{
+	metaRaftHandleReadyLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.process.handleready.latency",
 		Help: crstrings.UnwrapText(`
 			Latency histogram for handling a Raft ready.
@@ -1941,8 +1941,8 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftApplyCommittedLatency = metric.Metadata{
+	})
+	metaRaftApplyCommittedLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.process.applycommitted.latency",
 		Help: crstrings.UnwrapText(`
 			Latency histogram for applying all committed Raft commands in a Raft
@@ -1955,8 +1955,8 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftReplicationLatency = metric.Metadata{
+	})
+	metaRaftReplicationLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.replication.latency",
 		Help: crstrings.UnwrapText(`
 			The duration elapsed between having evaluated a BatchRequest and it being
@@ -1986,8 +1986,8 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftSchedulerLatency = metric.Metadata{
+	})
+	metaRaftSchedulerLatency = metric.InitMetadata(metric.Metadata{
 		Name: "raft.scheduler.latency",
 		Help: crstrings.UnwrapText(`
 			Queueing durations for ranges waiting to be processed by the Raft
@@ -2000,14 +2000,14 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftTimeoutCampaign = metric.Metadata{
+	})
+	metaRaftTimeoutCampaign = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.timeoutcampaign",
 		Help:        "Number of Raft replicas campaigning after missed heartbeats from leader",
 		Measurement: "Elections called after timeout",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftStorageReadBytes = metric.Metadata{
+	})
+	metaRaftStorageReadBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.storage.read_bytes",
 		Help: crstrings.UnwrapText(`
 			Counter of raftpb.Entry.Size() read from pebble for raft log entries.
@@ -2036,124 +2036,124 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftStorageError = metric.Metadata{
+	})
+	metaRaftStorageError = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.storage.error",
 		Help:        "Number of Raft storage errors",
 		Measurement: "Error Count",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Raft message metrics.
-	metaRaftRcvdProp = metric.Metadata{
+	metaRaftRcvdProp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.prop",
 		Help:        "Number of MsgProp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdApp = metric.Metadata{
+	})
+	metaRaftRcvdApp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.app",
 		Help:        "Number of MsgApp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdAppResp = metric.Metadata{
+	})
+	metaRaftRcvdAppResp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.appresp",
 		Help:        "Number of MsgAppResp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdVote = metric.Metadata{
+	})
+	metaRaftRcvdVote = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.vote",
 		Help:        "Number of MsgVote messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdVoteResp = metric.Metadata{
+	})
+	metaRaftRcvdVoteResp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.voteresp",
 		Help:        "Number of MsgVoteResp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdPreVote = metric.Metadata{
+	})
+	metaRaftRcvdPreVote = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.prevote",
 		Help:        "Number of MsgPreVote messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdPreVoteResp = metric.Metadata{
+	})
+	metaRaftRcvdPreVoteResp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.prevoteresp",
 		Help:        "Number of MsgPreVoteResp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdSnap = metric.Metadata{
+	})
+	metaRaftRcvdSnap = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.snap",
 		Help:        "Number of MsgSnap messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdHeartbeat = metric.Metadata{
+	})
+	metaRaftRcvdHeartbeat = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.heartbeat",
 		Help:        "Number of (coalesced, if enabled) MsgHeartbeat messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdHeartbeatResp = metric.Metadata{
+	})
+	metaRaftRcvdHeartbeatResp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.heartbeatresp",
 		Help:        "Number of (coalesced, if enabled) MsgHeartbeatResp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdTransferLeader = metric.Metadata{
+	})
+	metaRaftRcvdTransferLeader = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.transferleader",
 		Help:        "Number of MsgTransferLeader messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdTimeoutNow = metric.Metadata{
+	})
+	metaRaftRcvdTimeoutNow = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.timeoutnow",
 		Help:        "Number of MsgTimeoutNow messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdFortifyLeader = metric.Metadata{
+	})
+	metaRaftRcvdFortifyLeader = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.fortifyleader",
 		Help:        "Number of MsgFortifyLeader messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdFortifyLeaderResp = metric.Metadata{
+	})
+	metaRaftRcvdFortifyLeaderResp = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.fortifyleaderresp",
 		Help:        "Number of MsgFortifyLeaderResp messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdDeFortifyLeader = metric.Metadata{
+	})
+	metaRaftRcvdDeFortifyLeader = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.defortifyleader",
 		Help:        "Number of MsgDeFortifyLeader messages received by this store",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdDropped = metric.Metadata{
+	})
+	metaRaftRcvdDropped = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.dropped",
 		Help:        "Number of incoming Raft messages dropped (due to queue length or size)",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftRcvdDroppedBytes = metric.Metadata{
+	})
+	metaRaftRcvdDroppedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.dropped_bytes",
 		Help:        "Bytes of dropped incoming Raft messages",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftRcvdQueuedBytes = metric.Metadata{
+	})
+	metaRaftRcvdQueuedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.rcvd.queued_bytes",
 		Help:        "Number of bytes in messages currently waiting for raft processing",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftRcvdSteppedBytes = metric.Metadata{
+	})
+	metaRaftRcvdSteppedBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.rcvd.stepped_bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes in messages processed by Raft.
@@ -2169,9 +2169,9 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
-	metaRaftRcvdBytes = metric.Metadata{
+	metaRaftRcvdBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.rcvd.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes in Raft messages received by this store. Note that this
@@ -2179,8 +2179,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftRcvdCrossRegionBytes = metric.Metadata{
+	})
+	metaRaftRcvdCrossRegionBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.rcvd.cross_region.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes received by this store for cross region Raft messages when
@@ -2189,8 +2189,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftRcvdCrossZoneBytes = metric.Metadata{
+	})
+	metaRaftRcvdCrossZoneBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.rcvd.cross_zone.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes received by this store for cross
@@ -2202,8 +2202,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftSentBytes = metric.Metadata{
+	})
+	metaRaftSentBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.sent.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes in Raft messages sent by this store. Note that this does
@@ -2211,8 +2211,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftSentCrossRegionBytes = metric.Metadata{
+	})
+	metaRaftSentCrossRegionBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.sent.cross_region.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes sent by this store for cross region Raft messages when
@@ -2221,8 +2221,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftSentCrossZoneBytes = metric.Metadata{
+	})
+	metaRaftSentCrossZoneBytes = metric.InitMetadata(metric.Metadata{
 		Name: "raft.sent.cross_zone.bytes",
 		Help: crstrings.UnwrapText(`
 			Number of bytes sent by this store for cross zone, same region Raft
@@ -2234,17 +2234,17 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
-	metaRaftCoalescedHeartbeatsPending = metric.Metadata{
+	metaRaftCoalescedHeartbeatsPending = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.heartbeats.pending",
 		Help:        "Number of pending heartbeats and responses waiting to be coalesced",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Raft log metrics.
-	metaRaftLogFollowerBehindCount = metric.Metadata{
+	metaRaftLogFollowerBehindCount = metric.InitMetadata(metric.Metadata{
 		Name: "raftlog.behind",
 		Help: crstrings.UnwrapText(`
 			Number of Raft log entries followers on other stores are behind.
@@ -2260,28 +2260,28 @@ var (
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftLogTruncated = metric.Metadata{
+	})
+	metaRaftLogTruncated = metric.InitMetadata(metric.Metadata{
 		Name:        "raftlog.truncated",
 		Help:        "Number of Raft log entries truncated",
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaRaftLogTotalSize = metric.Metadata{
+	metaRaftLogTotalSize = metric.InitMetadata(metric.Metadata{
 		Name:        "raftlog.size.total",
 		Help:        "Approximate size of all Raft logs on the store.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaRaftLogMaxSize = metric.Metadata{
+	})
+	metaRaftLogMaxSize = metric.InitMetadata(metric.Metadata{
 		Name:        "raftlog.size.max",
 		Help:        "Approximate size of the largest Raft log on the store.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
-	metaRaftFollowerPaused = metric.Metadata{
+	metaRaftFollowerPaused = metric.InitMetadata(metric.Metadata{
 		Name: "admission.raft.paused_replicas",
 		Help: crstrings.UnwrapText(`
 			Number of followers (i.e. Replicas) to which replication is currently
@@ -2296,8 +2296,8 @@ var (
 		`),
 		Measurement: "Followers",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftPausedFollowerDroppedMsgs = metric.Metadata{
+	})
+	metaRaftPausedFollowerDroppedMsgs = metric.InitMetadata(metric.Metadata{
 		Name: "admission.raft.paused_replicas_dropped_msgs",
 		Help: crstrings.UnwrapText(`
 			Number of messages dropped instead of being sent to paused replicas.
@@ -2307,9 +2307,9 @@ var (
 		`),
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaIOOverload = metric.Metadata{
+	metaIOOverload = metric.InitMetadata(metric.Metadata{
 		Name: "admission.io.overload",
 		Help: crstrings.UnwrapText(`
 			1-normalized float indicating whether IO admission control considers the
@@ -2328,185 +2328,185 @@ var (
 			'admission.l0_sub_level_count_overload_threshold' and
 			'admission.l0_file_count_overload_threshold' respectively.
 		`),
-	}
+	})
 
-	metaMVCCGCQueueSuccesses = metric.Metadata{
+	metaMVCCGCQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.process.success",
 		Help:        "Number of replicas successfully processed by the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaMVCCGCQueueFailures = metric.Metadata{
+	})
+	metaMVCCGCQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.process.failure",
 		Help:        "Number of replicas which failed processing in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMVCCGCQueuePending = metric.Metadata{
+	})
+	metaMVCCGCQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.pending",
 		Help:        "Number of pending replicas in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMVCCGCQueueProcessingNanos = metric.Metadata{
+	})
+	metaMVCCGCQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the MVCC GC queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaMergeQueueSuccesses = metric.Metadata{
+	})
+	metaMergeQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.merge.process.success",
 		Help:        "Number of replicas successfully processed by the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMergeQueueFailures = metric.Metadata{
+	})
+	metaMergeQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.merge.process.failure",
 		Help:        "Number of replicas which failed processing in the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMergeQueuePending = metric.Metadata{
+	})
+	metaMergeQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.merge.pending",
 		Help:        "Number of pending replicas in the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMergeQueueProcessingNanos = metric.Metadata{
+	})
+	metaMergeQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.merge.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the merge queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaMergeQueuePurgatory = metric.Metadata{
+	})
+	metaMergeQueuePurgatory = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.merge.purgatory",
 		Help:        "Number of replicas in the merge queue's purgatory, waiting to become mergeable",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftLogQueueSuccesses = metric.Metadata{
+	})
+	metaRaftLogQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftlog.process.success",
 		Help:        "Number of replicas successfully processed by the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftLogQueueFailures = metric.Metadata{
+	})
+	metaRaftLogQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftlog.process.failure",
 		Help:        "Number of replicas which failed processing in the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftLogQueuePending = metric.Metadata{
+	})
+	metaRaftLogQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftlog.pending",
 		Help:        "Number of pending replicas in the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftLogQueueProcessingNanos = metric.Metadata{
+	})
+	metaRaftLogQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftlog.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the Raft log queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaRaftSnapshotQueueSuccesses = metric.Metadata{
+	})
+	metaRaftSnapshotQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftsnapshot.process.success",
 		Help:        "Number of replicas successfully processed by the Raft repair queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftSnapshotQueueFailures = metric.Metadata{
+	})
+	metaRaftSnapshotQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftsnapshot.process.failure",
 		Help:        "Number of replicas which failed processing in the Raft repair queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftSnapshotQueuePending = metric.Metadata{
+	})
+	metaRaftSnapshotQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftsnapshot.pending",
 		Help:        "Number of pending replicas in the Raft repair queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftSnapshotQueueProcessingNanos = metric.Metadata{
+	})
+	metaRaftSnapshotQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.raftsnapshot.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the Raft repair queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConsistencyQueueSuccesses = metric.Metadata{
+	})
+	metaConsistencyQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.consistency.process.success",
 		Help:        "Number of replicas successfully processed by the consistency checker queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConsistencyQueueFailures = metric.Metadata{
+	})
+	metaConsistencyQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.consistency.process.failure",
 		Help:        "Number of replicas which failed processing in the consistency checker queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConsistencyQueuePending = metric.Metadata{
+	})
+	metaConsistencyQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.consistency.pending",
 		Help:        "Number of pending replicas in the consistency checker queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConsistencyQueueProcessingNanos = metric.Metadata{
+	})
+	metaConsistencyQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.consistency.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the consistency checker queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicaGCQueueSuccesses = metric.Metadata{
+	})
+	metaReplicaGCQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicagc.process.success",
 		Help:        "Number of replicas successfully processed by the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicaGCQueueFailures = metric.Metadata{
+	})
+	metaReplicaGCQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicagc.process.failure",
 		Help:        "Number of replicas which failed processing in the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicaGCQueuePending = metric.Metadata{
+	})
+	metaReplicaGCQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicagc.pending",
 		Help:        "Number of pending replicas in the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicaGCQueuePurgatory = metric.Metadata{
+	})
+	metaReplicaGCQueuePurgatory = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicagc.purgatory",
 		Help:        "Number of replicas in the replica GC queue's purgatory, waiting for a prerequisite (e.g. left neighbor GC) before they can be GC'd",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicaGCQueueProcessingNanos = metric.Metadata{
+	})
+	metaReplicaGCQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicagc.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the replica GC queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicateQueueEnqueueAdd = metric.Metadata{
+	})
+	metaReplicateQueueEnqueueAdd = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.enqueue.add",
 		Help:        "Number of replicas successfully added to the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueEnqueueFailedPrecondition = metric.Metadata{
+	})
+	metaReplicateQueueEnqueueFailedPrecondition = metric.InitMetadata(metric.Metadata{
 		Name: "queue.replicate.enqueue.failedprecondition",
 		Help: crstrings.UnwrapText(`
 			Number of replicas that failed the precondition checks and were therefore
@@ -2514,8 +2514,8 @@ var (
 		`),
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueEnqueueNoAction = metric.Metadata{
+	})
+	metaReplicateQueueEnqueueNoAction = metric.InitMetadata(metric.Metadata{
 		Name: "queue.replicate.enqueue.noaction",
 		Help: crstrings.UnwrapText(`
 			Number of replicas for which ShouldQueue determined no action was needed
@@ -2523,8 +2523,8 @@ var (
 		`),
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueEnqueueUnexpectedError = metric.Metadata{
+	})
+	metaReplicateQueueEnqueueUnexpectedError = metric.InitMetadata(metric.Metadata{
 		Name: "queue.replicate.enqueue.unexpectederror",
 		Help: crstrings.UnwrapText(`
 			Number of replicas that were expected to be enqueued (ShouldQueue returned
@@ -2533,262 +2533,262 @@ var (
 		`),
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseQueueSuccesses = metric.Metadata{
+	})
+	metaLeaseQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.lease.process.success",
 		Help:        "Number of replicas successfully processed by the replica lease queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseQueueFailures = metric.Metadata{
+	})
+	metaLeaseQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.lease.process.failure",
 		Help:        "Number of replicas which failed processing in the replica lease queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLeaseQueuePending = metric.Metadata{
+	})
+	metaLeaseQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.lease.pending",
 		Help:        "Number of pending replicas in the replica lease queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseQueueProcessingNanos = metric.Metadata{
+	})
+	metaLeaseQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.lease.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the replica lease queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicateQueueSuccesses = metric.Metadata{
+	})
+	metaReplicateQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.process.success",
 		Help:        "Number of replicas successfully processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicateQueueFailures = metric.Metadata{
+	})
+	metaReplicateQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.process.failure",
 		Help:        "Number of replicas which failed processing in the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaLeaseQueuePurgatory = metric.Metadata{
+	})
+	metaLeaseQueuePurgatory = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.lease.purgatory",
 		Help:        "Number of replicas in the lease queue's purgatory, awaiting lease transfer operations",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueuePending = metric.Metadata{
+	})
+	metaReplicateQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.pending",
 		Help:        "Number of pending replicas in the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaReplicateQueueFull = metric.Metadata{
+	})
+	metaReplicateQueueFull = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.queue_full",
 		Help:        "Number of times a replica was dropped from the queue due to queue fullness",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicateQueueProcessingNanos = metric.Metadata{
+	})
+	metaReplicateQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the replicate queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicateQueuePurgatory = metric.Metadata{
+	})
+	metaReplicateQueuePurgatory = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.replicate.purgatory",
 		Help:        "Number of replicas in the replicate queue's purgatory, awaiting allocation options",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSplitQueueSuccesses = metric.Metadata{
+	})
+	metaSplitQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.process.success",
 		Help:        "Number of replicas successfully processed by the split queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSplitQueueFailures = metric.Metadata{
+	})
+	metaSplitQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.process.failure",
 		Help:        "Number of replicas which failed processing in the split queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSplitQueuePending = metric.Metadata{
+	})
+	metaSplitQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.pending",
 		Help:        "Number of pending replicas in the split queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSplitQueueProcessingNanos = metric.Metadata{
+	})
+	metaSplitQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the split queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaSplitQueuePurgatory = metric.Metadata{
+	})
+	metaSplitQueuePurgatory = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.split.purgatory",
 		Help:        "Number of replicas in the split queue's purgatory, waiting to become splittable",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTimeSeriesMaintenanceQueueSuccesses = metric.Metadata{
+	})
+	metaTimeSeriesMaintenanceQueueSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.tsmaintenance.process.success",
 		Help:        "Number of replicas successfully processed by the time series maintenance queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTimeSeriesMaintenanceQueueFailures = metric.Metadata{
+	})
+	metaTimeSeriesMaintenanceQueueFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.tsmaintenance.process.failure",
 		Help:        "Number of replicas which failed processing in the time series maintenance queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTimeSeriesMaintenanceQueuePending = metric.Metadata{
+	})
+	metaTimeSeriesMaintenanceQueuePending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.tsmaintenance.pending",
 		Help:        "Number of pending replicas in the time series maintenance queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaTimeSeriesMaintenanceQueueProcessingNanos = metric.Metadata{
+	})
+	metaTimeSeriesMaintenanceQueueProcessingNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.tsmaintenance.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the time series maintenance queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// GCInfo cumulative totals.
-	metaGCNumKeysAffected = metric.Metadata{
+	metaGCNumKeysAffected = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.numkeysaffected",
 		Help:        "Number of keys with GC'able data",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCNumRangeKeysAffected = metric.Metadata{
+	})
+	metaGCNumRangeKeysAffected = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.numrangekeysaffected",
 		Help:        "Number of range keys GC'able",
 		Measurement: "Range Keys",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCIntentsConsidered = metric.Metadata{
+	})
+	metaGCIntentsConsidered = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.intentsconsidered",
 		Help:        "Number of 'old' intents",
 		Measurement: "Intents",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCIntentTxns = metric.Metadata{
+	})
+	metaGCIntentTxns = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.intenttxns",
 		Help:        "Number of associated distinct transactions",
 		Measurement: "Txns",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanScanned = metric.Metadata{
+	})
+	metaGCTransactionSpanScanned = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspanscanned",
 		Help:        "Number of entries in transaction spans scanned from the engine",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanGCAborted = metric.Metadata{
+	})
+	metaGCTransactionSpanGCAborted = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcaborted",
 		Help:        "Number of GC'able entries corresponding to aborted txns",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanGCCommitted = metric.Metadata{
+	})
+	metaGCTransactionSpanGCCommitted = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspangccommitted",
 		Help:        "Number of GC'able entries corresponding to committed txns",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanGCStaging = metric.Metadata{
+	})
+	metaGCTransactionSpanGCStaging = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcstaging",
 		Help:        "Number of GC'able entries corresponding to staging txns",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanGCPending = metric.Metadata{
+	})
+	metaGCTransactionSpanGCPending = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcpending",
 		Help:        "Number of GC'able entries corresponding to pending txns",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTransactionSpanGCPrepared = metric.Metadata{
+	})
+	metaGCTransactionSpanGCPrepared = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcprepared",
 		Help:        "Number of GC'able entries corresponding to prepared txns",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCAbortSpanScanned = metric.Metadata{
+	})
+	metaGCAbortSpanScanned = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.abortspanscanned",
 		Help:        "Number of transactions present in the AbortSpan scanned from the engine",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCAbortSpanConsidered = metric.Metadata{
+	})
+	metaGCAbortSpanConsidered = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.abortspanconsidered",
 		Help:        "Number of AbortSpan entries old enough to be considered for removal",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCAbortSpanGCNum = metric.Metadata{
+	})
+	metaGCAbortSpanGCNum = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.abortspangcnum",
 		Help:        "Number of AbortSpan entries fit for removal",
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCPushTxn = metric.Metadata{
+	})
+	metaGCPushTxn = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.pushtxn",
 		Help:        "Number of attempted pushes",
 		Measurement: "Pushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCResolveTotal = metric.Metadata{
+	})
+	metaGCResolveTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.resolvetotal",
 		Help:        "Number of attempted intent resolutions",
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCResolveSuccess = metric.Metadata{
+	})
+	metaGCResolveSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.resolvesuccess",
 		Help:        "Number of successful intent resolutions",
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCResolveFailed = metric.Metadata{
+	})
+	metaGCResolveFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.resolvefailed",
 		Help:        "Number of cleanup intent failures during GC",
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCTxnIntentsResolveFailed = metric.Metadata{
+	})
+	metaGCTxnIntentsResolveFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.transactionresolvefailed",
 		Help:        "Number of intent cleanup failures for local transactions during GC",
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCUsedClearRange = metric.Metadata{
+	})
+	metaGCUsedClearRange = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.clearrangesuccess",
 		Help:        "Number of successful ClearRange operations during GC",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCFailedClearRange = metric.Metadata{
+	})
+	metaGCFailedClearRange = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.clearrangefailed",
 		Help:        "Number of failed ClearRange operations during GC",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaGCEnqueueHighPriority = metric.Metadata{
+	})
+	metaGCEnqueueHighPriority = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.gc.info.enqueuehighpriority",
 		Help:        "Number of replicas enqueued for GC with high priority",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Slow request metrics.
-	metaLatchRequests = metric.Metadata{
+	metaLatchRequests = metric.InitMetadata(metric.Metadata{
 		Name: "requests.slow.latch",
 		Help: crstrings.UnwrapText(`
 			Number of requests that have been stuck for a long time acquiring
@@ -2807,8 +2807,8 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaSlowLeaseRequests = metric.Metadata{
+	})
+	metaSlowLeaseRequests = metric.InitMetadata(metric.Metadata{
 		Name: "requests.slow.lease",
 		Help: crstrings.UnwrapText(`
 			Number of requests that have been stuck for a long time acquiring a
@@ -2823,8 +2823,8 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaSlowRaftRequests = metric.Metadata{
+	})
+	metaSlowRaftRequests = metric.InitMetadata(metric.Metadata{
 		Name: "requests.slow.raft",
 		Help: crstrings.UnwrapText(`
 			Number of requests that have been stuck for a long time in the replication
@@ -2841,10 +2841,10 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 
 	// Backpressure metrics.
-	metaBackpressuredOnSplitRequests = metric.Metadata{
+	metaBackpressuredOnSplitRequests = metric.InitMetadata(metric.Metadata{
 		Name: "requests.backpressure.split",
 		Help: crstrings.UnwrapText(`
 			Number of backpressured writes waiting on a Range split.
@@ -2856,29 +2856,29 @@ var (
 		`),
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// AddSSTable metrics.
-	metaAddSSTableProposals = metric.Metadata{
+	metaAddSSTableProposals = metric.InitMetadata(metric.Metadata{
 		Name:        "addsstable.proposals",
 		Help:        "Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)",
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaAddSSTableApplications = metric.Metadata{
+	})
+	metaAddSSTableApplications = metric.InitMetadata(metric.Metadata{
 		Name:        "addsstable.applications",
 		Help:        "Number of SSTable ingestions applied (i.e. applied by Replicas)",
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAddSSTableApplicationCopies = metric.Metadata{
+	})
+	metaAddSSTableApplicationCopies = metric.InitMetadata(metric.Metadata{
 		Name:        "addsstable.copies",
 		Help:        "number of SSTable ingestions that required copying files during application",
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAddSSTableAsWrites = metric.Metadata{
+	})
+	metaAddSSTableAsWrites = metric.InitMetadata(metric.Metadata{
 		Name: "addsstable.aswrites",
 		Help: crstrings.UnwrapText(`
 			Number of SSTables ingested as normal writes.
@@ -2891,41 +2891,41 @@ var (
 		`),
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAddSSTableEvalTotalDelay = metric.Metadata{
+	})
+	metaAddSSTableEvalTotalDelay = metric.InitMetadata(metric.Metadata{
 		Name:        "addsstable.delay.total",
 		Help:        "Amount by which evaluation of AddSSTable requests was delayed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 
 	// Export request counter.
-	metaExportEvalTotalDelay = metric.Metadata{
+	metaExportEvalTotalDelay = metric.InitMetadata(metric.Metadata{
 		Name:        "exportrequest.delay.total",
 		Help:        "Amount by which evaluation of Export requests was delayed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// Encryption-at-rest metrics.
 	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
-	metaEncryptionAlgorithm = metric.Metadata{
+	metaEncryptionAlgorithm = metric.InitMetadata(metric.Metadata{
 		Name:        "rocksdb.encryption.algorithm",
 		Help:        "Algorithm in use for encryption-at-rest, see storage/enginepb/key_registry.proto",
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
-	}
+	})
 
 	// Concurrency control metrics.
-	metaConcurrencyLocks = metric.Metadata{
+	metaConcurrencyLocks = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.locks",
 		Help:        "Number of active locks held in lock tables. Does not include replicated locks (intents) that are not held in memory",
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaConcurrencyAverageLockHoldDurationNanos = metric.Metadata{
+	})
+	metaConcurrencyAverageLockHoldDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name: "kv.concurrency.avg_lock_hold_duration_nanos",
 		Help: crstrings.UnwrapText(`
 			Average lock hold duration across locks currently held in lock tables.
@@ -2933,8 +2933,8 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConcurrencyMaxLockHoldDurationNanos = metric.Metadata{
+	})
+	metaConcurrencyMaxLockHoldDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name: "kv.concurrency.max_lock_hold_duration_nanos",
 		Help: crstrings.UnwrapText(`
 			Maximum length of time any lock in a lock table is held. Does not include
@@ -2942,61 +2942,61 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
+	})
+	metaConcurrencyLocksWithWaitQueues = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.locks_with_wait_queues",
 		Help:        "Number of active locks held in lock tables with active wait-queues",
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConcurrencyLockWaitQueueWaiters = metric.Metadata{
+	})
+	metaConcurrencyLockWaitQueueWaiters = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.lock_wait_queue_waiters",
 		Help:        "Number of requests actively waiting in a lock wait-queue",
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConcurrencyAverageLockWaitDurationNanos = metric.Metadata{
+	})
+	metaConcurrencyAverageLockWaitDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.avg_lock_wait_duration_nanos",
 		Help:        "Average lock wait duration across requests currently waiting in lock wait-queues",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConcurrencyMaxLockWaitDurationNanos = metric.Metadata{
+	})
+	metaConcurrencyMaxLockWaitDurationNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.max_lock_wait_duration_nanos",
 		Help:        "Maximum lock wait duration across requests currently waiting in lock wait-queues",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
+	})
+	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
 		Help:        "Maximum number of requests actively waiting in any single lock wait-queue",
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaLatchConflictWaitDurations = metric.Metadata{
+	})
+	metaLatchConflictWaitDurations = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.concurrency.latch_conflict_wait_durations",
 		Help:        "Durations in nanoseconds spent on latch acquisition waiting for conflicts with other latches",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// Closed timestamp metrics.
-	metaClosedTimestampMaxBehindNanos = metric.Metadata{
+	metaClosedTimestampMaxBehindNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.closed_timestamp.max_behind_nanos",
 		Help:        "Largest latency between realtime and replica max closed timestamp",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
 	// Closed timestamp policy change metrics.
-	metaClosedTimestampPolicyChange = metric.Metadata{
+	metaClosedTimestampPolicyChange = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.closed_timestamp.policy_change",
 		Help:        "Number of times closed timestamp policy change occurred on ranges",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaClosedTimestampLatencyInfoMissing = metric.Metadata{
+	metaClosedTimestampLatencyInfoMissing = metric.InitMetadata(metric.Metadata{
 		Name: "kv.closed_timestamp.policy_latency_info_missing",
 		Help: crstrings.UnwrapText(`
 			Number of times closed timestamp policy refresh had to use hardcoded
@@ -3004,10 +3004,10 @@ var (
 		`),
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Replica circuit breaker.
-	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
+	metaReplicaCircuitBreakerCurTripped = metric.InitMetadata(metric.Metadata{
 		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
 		Help: crstrings.UnwrapText(`
 			Number of Replicas for which the per-Replica circuit breaker is currently
@@ -3018,17 +3018,17 @@ var (
 		`),
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// Replica circuit breaker.
-	metaReplicaCircuitBreakerCumTripped = metric.Metadata{
+	metaReplicaCircuitBreakerCumTripped = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.replica_circuit_breaker.num_tripped_events",
 		Help:        `Number of times the per-Replica circuit breakers tripped since process start.`,
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// Replica read batch evaluation.
-	metaReplicaReadBatchEvaluationLatency = metric.Metadata{
+	metaReplicaReadBatchEvaluationLatency = metric.InitMetadata(metric.Metadata{
 		Name: "kv.replica_read_batch_evaluate.latency",
 		Help: crstrings.UnwrapText(`
 			Execution duration for evaluating a BatchRequest on the read-only path
@@ -3039,9 +3039,9 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 	// Replica read-write batch evaluation.
-	metaReplicaWriteBatchEvaluationLatency = metric.Metadata{
+	metaReplicaWriteBatchEvaluationLatency = metric.InitMetadata(metric.Metadata{
 		Name: "kv.replica_write_batch_evaluate.latency",
 		Help: crstrings.UnwrapText(`
 			Execution duration for evaluating a BatchRequest on the read-write path
@@ -3054,94 +3054,94 @@ var (
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaPopularKeyCount = metric.Metadata{
+	})
+	metaPopularKeyCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.loadsplitter.popularkey",
 		Help:        "Load-based splitter could not find a split key and the most popular sampled split key occurs in >= 25% of the samples.",
 		Measurement: "Occurrences",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaNoSplitKeyCount = metric.Metadata{
+	metaNoSplitKeyCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.loadsplitter.nosplitkey",
 		Help:        "Load-based splitter could not find a split key.",
 		Measurement: "Occurrences",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaClearDirectionCount = metric.Metadata{
+	metaClearDirectionCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.loadsplitter.cleardirection",
 		Help:        "Load-based splitter observed an access direction greater than 80% left or right in the samples.",
 		Measurement: "Occurrences",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaSplitEstimatedStats = metric.Metadata{
+	metaSplitEstimatedStats = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.split.estimated_stats",
 		Help:        "Number of splits that computed estimated MVCC stats.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaSplitEstimatedTotalBytesDiff = metric.Metadata{
+	metaSplitEstimatedTotalBytesDiff = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.split.total_bytes_estimates",
 		Help:        "Number of total bytes difference between the pre-split and post-split MVCC stats.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
-	metaStorageFlushUtilization = metric.Metadata{
+	metaStorageFlushUtilization = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.flush.utilization",
 		Help:        "The percentage of time the storage engine is actively flushing memtables to disk.",
 		Measurement: "Flush Utilization",
 		Unit:        metric.Unit_PERCENT,
-	}
-	metaValueSeparationBytesReferenced = metric.Metadata{
+	})
+	metaValueSeparationBytesReferenced = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.value_separation.value_bytes.referenced",
 		Help:        "The size of storage engine value bytes (pre-compression) that are stored separately in blob files and referenced by a live sstable.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaValueSeparationBytesUnreferenced = metric.Metadata{
+	})
+	metaValueSeparationBytesUnreferenced = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.value_separation.value_bytes.unreferenced",
 		Help:        "The size of storage engine value bytes (pre-compression) that are stored separately in blob files and not referenced by any live sstable. These bytes are garbage that could be reclaimed by a compaction.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaValueSeparationBlobFileCount = metric.Metadata{
+	})
+	metaValueSeparationBlobFileCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.value_separation.blob_files.count",
 		Help:        "The number of blob files that are used to store separated values within the storage engine.",
 		Measurement: "Files",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaValueSeparationBlobFileSize = metric.Metadata{
+	})
+	metaValueSeparationBlobFileSize = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.value_separation.blob_files.size",
 		Help:        "The size of the physical blob files that are used to store separated values within the storage engine. This sum is the physical post-compression sum of value_bytes.referenced and value_bytes.unreferenced.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaValueSeparationValueRetrievalCount = metric.Metadata{
+	})
+	metaValueSeparationValueRetrievalCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.value_separation.value_retrieval.count",
 		Help:        "The number of value retrievals of values separated into blob files.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWALBytesWritten = metric.Metadata{
+	})
+	metaWALBytesWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.bytes_written",
 		Help:        "The number of bytes the storage engine has written to the Write-Ahead Log.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWALBytesIn = metric.Metadata{
+	})
+	metaWALBytesIn = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.bytes_in",
 		Help:        "The number of logical bytes the storage engine has written to the Write-Ahead Log.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// metaStorageFsyncLatency tracks the primary WAL device latency.
 	// For secondary WAL device latency (when WAL failover is configured),
 	// see metaStorageWALSecondaryFileOpLatency.
-	metaStorageFsyncLatency = metric.Metadata{
+	metaStorageFsyncLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.fsync.latency",
 		Help:        "The fsync latency to the Write-Ahead Log device.",
 		Measurement: "Fsync Latency",
@@ -3156,16 +3156,16 @@ var (
 			metric reflects the fsync latency of the primary and/or the secondary WAL
 			device.
 		`),
-	}
-	metaStorageWALSecondaryFileOpLatency = metric.Metadata{
+	})
+	metaStorageWALSecondaryFileOpLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.secondary.file_op.latency",
 		Help:        "The latency of file operations on the secondary Write-Ahead Log device.",
 		Measurement: "File Op Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse:    "Only populated when WAL failover is configured. This metric tracks file operation latency specifically on the secondary WAL device.",
-	}
-	metaStorageWALFailoverSwitchCount = metric.Metadata{
+	})
+	metaStorageWALFailoverSwitchCount = metric.InitMetadata(metric.Metadata{
 		Name: "storage.wal.failover.switch.count",
 		Help: crstrings.UnwrapText(`
 			Count of the number of times WAL writing has switched from primary to
@@ -3178,22 +3178,22 @@ var (
 			Only populated when WAL failover is configured. A high switch count
 			indicates that many disk stalls were encountered.
 		`),
-	}
-	metaStorageWALFailoverPrimaryDuration = metric.Metadata{
+	})
+	metaStorageWALFailoverPrimaryDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.failover.primary.duration",
 		Help:        "Cumulative time spent writing to the primary WAL directory.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		HowToUse:    "Only populated when WAL failover is configured.",
-	}
-	metaStorageWALFailoverSecondaryDuration = metric.Metadata{
+	})
+	metaStorageWALFailoverSecondaryDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.failover.secondary.duration",
 		Help:        "Cumulative time spent writing to the secondary WAL directory.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		HowToUse:    "Only populated when WAL failover is configured.",
-	}
-	metaStorageWALFailoverWriteAndSyncLatency = metric.Metadata{
+	})
+	metaStorageWALFailoverWriteAndSyncLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.failover.write_and_sync.latency",
 		Help:        "The observed latency for writing and syncing to the logical Write-Ahead Log.",
 		Measurement: "Nanoseconds",
@@ -3204,8 +3204,8 @@ var (
 			Only populated when WAL failover is configured. Without WAL failover, the
 			relevant metric is storage.wal.fsync.latency.
 		`),
-	}
-	metaStorageWALFailoverSecondaryDiskCapacity = metric.Metadata{
+	})
+	metaStorageWALFailoverSecondaryDiskCapacity = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.failover.secondary.disk.capacity",
 		Help:        "Total disk capacity of the secondary WAL failover volume.",
 		Measurement: "Storage",
@@ -3213,8 +3213,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse:    "Only populated when WAL failover is configured.",
-	}
-	metaStorageWALFailoverSecondaryDiskAvailable = metric.Metadata{
+	})
+	metaStorageWALFailoverSecondaryDiskAvailable = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.wal.failover.secondary.disk.available",
 		Help:        "Available disk space on the secondary WAL failover volume.",
 		Measurement: "Storage",
@@ -3222,78 +3222,78 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse:    "Only populated when WAL failover is configured.",
-	}
-	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
+	})
+	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 		Help:        `Number of times read-only batches dropped latches before evaluation.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicaReadBatchWithoutInterleavingIter = metric.Metadata{
+	})
+	metaReplicaReadBatchWithoutInterleavingIter = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.without_interleaving_iter",
 		Help:        `Number of read-only batches evaluated without an intent interleaving iter.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDiskReadCount = metric.Metadata{
+	})
+	metaDiskReadCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.read.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Disk read operations on the store's disk since this process started (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskReadBytes = metric.Metadata{
+	})
+	metaDiskReadBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes read from the store's disk since this process started (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskReadTime = metric.Metadata{
+	})
+	metaDiskReadTime = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.read.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent reading from the store's disk since this process started (as reported by the OS)",
-	}
-	metaDiskWriteCount = metric.Metadata{
+	})
+	metaDiskWriteCount = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.write.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Disk write operations on the store's disk since this process started (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskWriteBytes = metric.Metadata{
+	})
+	metaDiskWriteBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.write.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes written to the store's disk since this process started (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskWriteTime = metric.Metadata{
+	})
+	metaDiskWriteTime = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.write.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent writing to the store's disks since this process started (as reported by the OS)",
-	}
-	metaDiskIOTime = metric.Metadata{
+	})
+	metaDiskIOTime = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.io.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
-	}
-	metaDiskWeightedIOTime = metric.Metadata{
+	})
+	metaDiskWeightedIOTime = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.weightedio.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
 		Help:        "Weighted time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
-	}
-	metaDiskIopsInProgress = metric.Metadata{
+	})
+	metaDiskIopsInProgress = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "IO operations currently in progress on the store's disk (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 	// The max disk rate metrics are computed using data sampled at
 	// DefaultDiskStatsPollingInterval, which defaults to 100ms, and scaled up
 	// to be a per-second rate. This is useful to observe short duration spikes
@@ -3307,32 +3307,32 @@ var (
 	// If these max rate metrics show usage close to the provisioned value, one
 	// can blame the high usage for the higher latency, and not blame it on
 	// unrelated slowness in the disk infrastructure.
-	metaDiskReadMaxBytesPerSecond = metric.Metadata{
+	metaDiskReadMaxBytesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.read-max.bytespersecond",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were read from disk (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskWriteMaxBytesPerSecond = metric.Metadata{
+	})
+	metaDiskWriteMaxBytesPerSecond = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.write-max.bytespersecond",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were written to disk (as reported by the OS)",
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaDiskReadMaxIOPS = metric.Metadata{
+	})
+	metaDiskReadMaxIOPS = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.read-max.iops",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Maximum rate of read operations performed on the disk (as reported by the OS)",
-	}
-	metaDiskWriteMaxIOPS = metric.Metadata{
+	})
+	metaDiskWriteMaxIOPS = metric.InitMetadata(metric.Metadata{
 		Name:        "storage.disk.write-max.iops",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Maximum rate of write operations performed on the disk (as reported by the OS)",
-	}
+	})
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -5035,12 +5035,12 @@ func raftFlowStateGaugeSlice() [tracker.StateCount]*metric.Gauge {
 func makePolicyRefresherMetrics() [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge {
 	var policyGauges [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 	for policy := ctpb.LAG_BY_CLUSTER_SETTING; policy < ctpb.MAX_CLOSED_TIMESTAMP_POLICY; policy++ {
-		meta := metric.Metadata{
+		meta := metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("kv.closed_timestamp.policy.%s", strings.ToLower(policy.String())),
 			Help:        fmt.Sprintf("Number of ranges with %s closed timestamp policy", policy.String()),
 			Measurement: "Ranges",
 			Unit:        metric.Unit_COUNT,
-		}
+		})
 		policyGauges[policy] = metric.NewGauge(meta)
 	}
 	return policyGauges
@@ -5053,12 +5053,12 @@ func storageLevelMetricMetadata(
 ) [7]metric.Metadata {
 	var sl [7]metric.Metadata
 	for i := range sl {
-		sl[i] = metric.Metadata{
+		sl[i] = metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("storage.l%d-%s", i, name),
 			Help:        fmt.Sprintf(helpTpl, i),
 			Measurement: measurement,
 			Unit:        unit,
-		}
+		})
 		// Apply visibility override if specified for this level
 		if visibility, ok := visibilityOverrides[i]; ok {
 			sl[i].Visibility = visibility
@@ -5115,24 +5115,24 @@ type pebbleCategoryIterMetrics struct {
 }
 
 func makePebbleCategorizedIterMetrics(category block.Category) pebbleCategoryIterMetrics {
-	metaBlockBytes := metric.Metadata{
+	metaBlockBytes := metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.bytes", category),
 		Help:        "Bytes loaded by storage sstable iterators (possibly cached).",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBlockBytesInCache := metric.Metadata{
+	})
+	metaBlockBytesInCache := metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.cached-bytes", category),
 		Help:        "Bytes loaded by storage sstable iterators from the block cache",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaBlockReadLatencySum := metric.Metadata{
+	})
+	metaBlockReadLatencySum := metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.latency-sum", category),
 		Help:        "Cumulative latency for loading bytes not in the block cache, by storage sstable iterators",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 	return pebbleCategoryIterMetrics{
 		IterBlockBytes:          metric.NewCounter(metaBlockBytes),
 		IterBlockBytesInCache:   metric.NewCounter(metaBlockBytesInCache),
@@ -5180,12 +5180,12 @@ type pebbleCategoryDiskWriteMetrics struct {
 func makePebbleCategorizedWriteMetrics(
 	category vfs.DiskWriteCategory,
 ) *pebbleCategoryDiskWriteMetrics {
-	metaDiskBytesWritten := metric.Metadata{
+	metaDiskBytesWritten := metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("storage.category-%s.bytes-written", category),
 		Help:        "Bytes written to disk",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 	return &pebbleCategoryDiskWriteMetrics{BytesWritten: metric.NewCounter(metaDiskBytesWritten)}
 }
 

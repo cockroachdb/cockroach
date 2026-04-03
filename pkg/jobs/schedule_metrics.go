@@ -61,40 +61,40 @@ type SchedulerMetrics struct {
 // MakeSchedulerMetrics returns metrics for scheduled job daemon.
 func MakeSchedulerMetrics() SchedulerMetrics {
 	return SchedulerMetrics{
-		NumStarted: metric.NewGauge(metric.Metadata{
+		NumStarted: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "schedules.round.jobs-started",
 			Help:        "The number of jobs started",
 			Measurement: "Jobs",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		RescheduleSkip: metric.NewGauge(metric.Metadata{
+		RescheduleSkip: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "schedules.round.reschedule-skip",
 			Help:        "The number of schedules rescheduled due to SKIP policy",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		RescheduleWait: metric.NewGauge(metric.Metadata{
+		RescheduleWait: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "schedules.round.reschedule-wait",
 			Help:        "The number of schedules rescheduled due to WAIT policy",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		NumErrSchedules: metric.NewGauge(metric.Metadata{
+		NumErrSchedules: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "schedules.error",
 			Help:        "Number of schedules which did not execute successfully",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		NumMalformedSchedules: metric.NewGauge(metric.Metadata{
+		NumMalformedSchedules: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "schedules.malformed",
 			Help:        "Number of malformed schedules",
 			Measurement: "Schedules",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 	}
 }
 
@@ -106,7 +106,7 @@ var _ metric.Struct = &SchedulerMetrics{}
 // MakeExecutorMetrics creates metrics for scheduled job executor.
 func MakeExecutorMetrics(name string) ExecutorMetrics {
 	m := ExecutorMetrics{
-		NumStarted: metric.NewCounter(metric.Metadata{
+		NumStarted: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.started", name),
 			Help:        fmt.Sprintf("Number of %s jobs started", name),
 			Measurement: "Jobs",
@@ -116,9 +116,9 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 				metric.LabelName, name,
 				metric.LabelStatus, "started",
 			),
-		}),
+		})),
 
-		NumSucceeded: metric.NewCounter(metric.Metadata{
+		NumSucceeded: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.succeeded", name),
 			Help:        fmt.Sprintf("Number of %s jobs succeeded", name),
 			Measurement: "Jobs",
@@ -128,9 +128,9 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 				metric.LabelName, name,
 				metric.LabelStatus, "succeeded",
 			),
-		}),
+		})),
 
-		NumFailed: metric.NewCounter(metric.Metadata{
+		NumFailed: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.failed", name),
 			Help:        fmt.Sprintf("Number of %s jobs failed", name),
 			Measurement: "Jobs",
@@ -140,7 +140,7 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 				metric.LabelName, name,
 				metric.LabelStatus, "failed",
 			),
-		}),
+		})),
 	}
 
 	if name == tree.ScheduledBackupExecutor.UserName() {
@@ -161,7 +161,7 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 // MakeExecutorPTSMetrics creates PTS metrics.
 func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 	return ExecutorPTSMetrics{
-		NumWithPTS: metric.NewGauge(metric.Metadata{
+		NumWithPTS: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.protected_record_count", name),
 			Help:        fmt.Sprintf("Number of PTS records held by %s schedules", name),
 			Measurement: "Records",
@@ -171,8 +171,8 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			StaticLabels: metric.MakeLabelPairs(
 				metric.LabelName, name,
 			),
-		}),
-		PTSAge: metric.NewGauge(metric.Metadata{
+		})),
+		PTSAge: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("schedules.%s.protected_age_sec", name),
 			Help:        fmt.Sprintf("The age of the oldest PTS record protected by %s schedules", name),
 			Measurement: "Seconds",
@@ -182,6 +182,6 @@ func MakeExecutorPTSMetrics(name string) ExecutorPTSMetrics {
 			StaticLabels: metric.MakeLabelPairs(
 				metric.LabelName, name,
 			),
-		}),
+		})),
 	}
 }

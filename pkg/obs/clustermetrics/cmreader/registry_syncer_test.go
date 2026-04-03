@@ -42,10 +42,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "new gauge",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.gauge", metric.Metadata{
+				"test.gauge", metric.InitMetadata(metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
-				})
+				}))
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 42,
@@ -69,10 +69,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "existing gauge update",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.gauge", metric.Metadata{
+				"test.gauge", metric.InitMetadata(metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
-				})
+				}))
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 10,
@@ -87,10 +87,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "counter",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.counter", metric.Metadata{
+				"test.counter", metric.InitMetadata(metric.Metadata{
 					Name: "test.counter",
 					Help: "A test counter",
-				})
+				}))
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.counter", Type: "COUNTER", Value: 0,
@@ -115,10 +115,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "new gauge vec",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.gaugevec", metric.Metadata{
+				"test.gaugevec", metric.InitMetadata(metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
@@ -143,10 +143,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "vec second label set",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.gaugevec", metric.Metadata{
+				"test.gaugevec", metric.InitMetadata(metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
@@ -167,10 +167,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "existing gauge vec update",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.gaugevec", metric.Metadata{
+				"test.gaugevec", metric.InitMetadata(metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
@@ -190,10 +190,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "counter vec",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.countervec", metric.Metadata{
+				"test.countervec", metric.InitMetadata(metric.Metadata{
 					Name: "test.countervec",
 					Help: "A test counter vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.countervec",
@@ -222,10 +222,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "new stopwatch",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.stopwatch", metric.Metadata{
+				"test.stopwatch", metric.InitMetadata(metric.Metadata{
 					Name: "test.stopwatch",
 					Help: "A test stopwatch",
-				})
+				}))
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.stopwatch", Type: "STOPWATCH",
@@ -253,10 +253,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "existing stopwatch update",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.stopwatch", metric.Metadata{
+				"test.stopwatch", metric.InitMetadata(metric.Metadata{
 					Name: "test.stopwatch",
 					Help: "A test stopwatch",
-				})
+				}))
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.stopwatch", Type: "STOPWATCH",
@@ -276,10 +276,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "new stopwatch vec",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.stopwatchvec", metric.Metadata{
+				"test.stopwatchvec", metric.InitMetadata(metric.Metadata{
 					Name: "test.stopwatchvec",
 					Help: "A test stopwatch vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.stopwatchvec",
@@ -305,10 +305,10 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name: "stopwatch vec second label set",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.stopwatchvec", metric.Metadata{
+				"test.stopwatchvec", metric.InitMetadata(metric.Metadata{
 					Name: "test.stopwatchvec",
 					Help: "A test stopwatch vec",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.stopwatchvec",
@@ -361,10 +361,10 @@ func TestDeleteMetricLocked(t *testing.T) {
 		name: "scalar gauge",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterClusterMetric(
-				"test.gauge", metric.Metadata{
+				"test.gauge", metric.InitMetadata(metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
-				})
+				}))
 		},
 		insertRows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 42,
@@ -382,10 +382,10 @@ func TestDeleteMetricLocked(t *testing.T) {
 		name: "vec metric label set",
 		setup: func() func() {
 			return cmmetrics.TestingRegisterLabeledClusterMetric(
-				"test.vec", metric.Metadata{
+				"test.vec", metric.InitMetadata(metric.Metadata{
 					Name: "test.vec",
 					Help: "A test vector gauge",
-				}, []string{"store"})
+				}), []string{"store"})
 		},
 		insertRows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.vec",
@@ -441,14 +441,14 @@ func TestStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer cmmetrics.TestingRegisterClusterMetric("gauge_one", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge_one", metric.InitMetadata(metric.Metadata{
 		Name: "gauge_one",
 		Help: "First gauge",
-	})()
-	defer cmmetrics.TestingRegisterClusterMetric("gauge_two", metric.Metadata{
+	}))()
+	defer cmmetrics.TestingRegisterClusterMetric("gauge_two", metric.InitMetadata(metric.Metadata{
 		Name: "gauge_two",
 		Help: "Second gauge",
-	})()
+	}))()
 
 	ctx := context.Background()
 	u, reg := makeTestRegistrySyncer()
@@ -477,18 +477,18 @@ func TestOnRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer cmmetrics.TestingRegisterClusterMetric("gauge.old", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge.old", metric.InitMetadata(metric.Metadata{
 		Name: "gauge.old",
 		Help: "Old gauge",
-	})()
-	defer cmmetrics.TestingRegisterClusterMetric("gauge.new", metric.Metadata{
+	}))()
+	defer cmmetrics.TestingRegisterClusterMetric("gauge.new", metric.InitMetadata(metric.Metadata{
 		Name: "gauge.new",
 		Help: "New gauge",
-	})()
-	defer cmmetrics.TestingRegisterClusterMetric("counter.new", metric.Metadata{
+	}))()
+	defer cmmetrics.TestingRegisterClusterMetric("counter.new", metric.InitMetadata(metric.Metadata{
 		Name: "counter.new",
 		Help: "New counter",
-	})()
+	}))()
 
 	ctx := context.Background()
 	u, reg := makeTestRegistrySyncer()

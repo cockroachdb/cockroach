@@ -312,7 +312,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	// LazilyCreated asserts that a directory is not created during flow Setup
 	// but is done so when an operator spills to disk.
 	t.Run("LazilyCreated", func(t *testing.T) {
-		spilledCounter := metric.NewCounter(metric.Metadata{})
+		spilledCounter := metric.NewCounter(metric.InitMetadata(metric.Metadata{}))
 		vf := newVectorizedFlow(spilledCounter)
 		var creator *vectorizedFlowCreator
 		vf.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
@@ -353,7 +353,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	})
 
 	t.Run("DirCreationRace", func(t *testing.T) {
-		spilledCounter := metric.NewCounter(metric.Metadata{})
+		spilledCounter := metric.NewCounter(metric.InitMetadata(metric.Metadata{}))
 		vf := newVectorizedFlow(spilledCounter)
 		var creator *vectorizedFlowCreator
 		vf.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {

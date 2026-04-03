@@ -56,7 +56,7 @@ func (as nodeSet) asSlice() []roachpb.NodeID {
 // gauge object from the parent.
 func (as nodeSet) filter(filterFn func(node roachpb.NodeID) bool) nodeSet {
 	avail := makeNodeSet(as.maxSize,
-		metric.NewGauge(metric.Metadata{Name: "TODO(marc)", Help: "TODO(marc)"}))
+		metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: "TODO(marc)", Help: "TODO(marc)"})))
 	for node := range as.nodes {
 		if filterFn(node) {
 			avail.addNode(node)

@@ -13,55 +13,55 @@ import (
 )
 
 var (
-	metaChangefeedBufferEntriesIn = metric.Metadata{
+	metaChangefeedBufferEntriesIn = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries.in",
 		Help:        "Total entries entering the buffer between raft and changefeed sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedBufferEntriesOut = metric.Metadata{
+	})
+	metaChangefeedBufferEntriesOut = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries.out",
 		Help:        "Total entries leaving the buffer between raft and changefeed sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedBufferEntriesReleased = metric.Metadata{
+	})
+	metaChangefeedBufferEntriesReleased = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries.released",
 		Help:        "Total entries processed, emitted and acknowledged by the sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedBufferMemAcquired = metric.Metadata{
+	})
+	metaChangefeedBufferMemAcquired = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries_mem.acquired",
 		Help:        "Total amount of memory acquired for entries as they enter the system",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedBufferMemReleased = metric.Metadata{
+	})
+	metaChangefeedBufferMemReleased = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries_mem.released",
 		Help:        "Total amount of memory released by the entries after they have been emitted",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedBufferPushbackNanos = metric.Metadata{
+	})
+	metaChangefeedBufferPushbackNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_pushback_nanos",
 		Help:        "Total time spent waiting while the buffer was full",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
-	metaChangefeedAllocatedMemory = metric.Metadata{
+	})
+	metaChangefeedAllocatedMemory = metric.InitMetadata(metric.Metadata{
 		Name:        "changefeed.buffer_entries.allocated_mem",
 		Help:        "Current quota pool memory allocation",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 		Category:    metric.Metadata_CHANGEFEEDS,
-	}
+	})
 )
 
 // Metrics is a metric.Struct for kvfeed metrics.
@@ -140,13 +140,13 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 				return "resolved"
 			}
 		}()
-		return metric.Metadata{
+		return metric.InitMetadata(metric.Metadata{
 			Name:        fmt.Sprintf("changefeed.buffer_entries.%s", eventTypeName),
 			Help:        fmt.Sprintf("Number of %s elements added to the buffer", eventTypeName),
 			Measurement: "Events",
 			Unit:        metric.Unit_COUNT,
 			Category:    metric.Metadata_CHANGEFEEDS,
-		}
+		})
 	}
 	commonBufferMetrics := CommonBufferMetrics{
 		BufferEntriesMemAcquired: metric.NewCounter(metaChangefeedBufferMemAcquired),

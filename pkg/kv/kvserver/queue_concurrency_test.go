@@ -56,11 +56,11 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		acceptsUnsplitRanges: true,
 		processTimeoutFunc:   constantTimeoutFunc(time.Millisecond),
 		// We don't care about these, but we don't want to crash.
-		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
-		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
-		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
-		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
-		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
+		successes:       metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "processed"})),
+		failures:        metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "failures"})),
+		pending:         metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: "pending"})),
+		processingNanos: metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "processingnanos"})),
+		purgatory:       metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: "purgatory"})),
 		disabledConfig:  testQueueEnabled,
 	}
 

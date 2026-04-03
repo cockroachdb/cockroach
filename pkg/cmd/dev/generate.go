@@ -187,11 +187,7 @@ func (d *dev) generateBazel(cmd *cobra.Command) error {
 }
 
 func (d *dev) generateDocs(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	if err := d.generateMetricOwners(ctx); err != nil {
-		return err
-	}
-	return d.generateTarget(ctx, "//pkg/gen:docs")
+	return d.generateTarget(cmd.Context(), "//pkg/gen:docs")
 }
 
 func (d *dev) generateExecgen(cmd *cobra.Command) error {
@@ -199,11 +195,7 @@ func (d *dev) generateExecgen(cmd *cobra.Command) error {
 }
 
 func (d *dev) generateGoAndDocs(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	if err := d.generateMetricOwners(ctx); err != nil {
-		return err
-	}
-	return d.generateTarget(ctx, "//pkg/gen")
+	return d.generateTarget(cmd.Context(), "//pkg/gen")
 }
 
 func (d *dev) generateGo(cmd *cobra.Command) error {
@@ -222,20 +214,6 @@ func (d *dev) generateGoFull(cmd *cobra.Command) error {
 
 func (d *dev) generateGoNoCgo(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:code")
-}
-
-func (d *dev) generateMetricOwners(ctx context.Context) error {
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	// Write directly to the metricscan package where it is embedded
-	// at build time via go:embed and referenced by the metrics genrule.
-	yamlPath := filepath.Join(workspace, "pkg", "internal", "metricscan", "metric_owners.yaml")
-	return d.exec.CommandContextInheritingStdStreams(
-		ctx, "bazel", "run", "//pkg/cmd/gen-metric-owners", "--",
-		fmt.Sprintf("-out=%s", yamlPath),
-	)
 }
 
 func (d *dev) generateLogicTest(cmd *cobra.Command) error {

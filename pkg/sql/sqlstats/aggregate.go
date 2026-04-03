@@ -72,11 +72,11 @@ func NewStmtStatsAggregator(
 		func() *StmtStatistics {
 			return &StmtStatistics{
 				ServiceLatency: metric.NewHistogram(metric.HistogramOptions{
-					Metadata: metric.Metadata{
+					Metadata: metric.InitMetadata(metric.Metadata{
 						Name:        "stmt.svc.latency",
 						Measurement: "Aggregate service latency of statement executions",
 						Unit:        metric.Unit_NANOSECONDS,
-					},
+					}),
 					Duration:     base.DefaultHistogramWindowInterval(),
 					BucketConfig: metric.IOLatencyBuckets,
 				}),

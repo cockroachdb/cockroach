@@ -73,12 +73,12 @@ var DiskBandwidthForSnapshotIngestMinRateEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-var snapshotWaitDur = metric.Metadata{
+var snapshotWaitDur = metric.InitMetadata(metric.Metadata{
 	Name:        "admission.wait_durations.snapshot_ingest",
 	Help:        "Wait time for snapshot ingest requests that waited",
 	Measurement: "Wait time Duration",
 	Unit:        metric.Unit_NANOSECONDS,
-}
+})
 
 type SnapshotMetrics struct {
 	WaitDurations         metric.IHistogram
@@ -93,12 +93,12 @@ func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		AdmittedSnapshotBytes: *metric.NewCounter(metric.Metadata{
+		AdmittedSnapshotBytes: *metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "admission.admitted_snapshot_bytes",
 			Help:        "Number of bytes admitted for snapshot ingests when provisioned bandwidth AC is enabled",
 			Measurement: "Bytes",
 			Unit:        metric.Unit_BYTES,
-		}),
+		})),
 	}
 	registry.AddMetricStruct(m)
 	return m

@@ -11,21 +11,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-var metaChangefeedTableMetadataNanos = metric.Metadata{
+var metaChangefeedTableMetadataNanos = metric.InitMetadata(metric.Metadata{
 	Name:        "changefeed.schemafeed.table_metadata_nanos",
 	Help:        "Time blocked while verifying table metadata histories",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
 	Category:    metric.Metadata_CHANGEFEEDS,
-}
+})
 
-var metaChangefeedTableHistoryScans = metric.Metadata{
+var metaChangefeedTableHistoryScans = metric.InitMetadata(metric.Metadata{
 	Name:        "changefeed.schemafeed.table_history_scans",
 	Help:        "The number of table history scans during polling",
 	Measurement: "Counts",
 	Unit:        metric.Unit_COUNT,
 	Category:    metric.Metadata_CHANGEFEEDS,
-}
+})
 
 // Metrics is a metric.Struct for schemafeed metrics.
 type Metrics struct {

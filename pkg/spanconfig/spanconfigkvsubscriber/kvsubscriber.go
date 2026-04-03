@@ -28,29 +28,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var updateBehindNanos = metric.Metadata{
+var updateBehindNanos = metric.InitMetadata(metric.Metadata{
 	Name: "spanconfig.kvsubscriber.update_behind_nanos",
 	Help: "Difference between the current time and when the KVSubscriber received its last update" +
 		" (an ever increasing number indicates that we're no longer receiving updates)",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
-}
+})
 
-var protectedRecordCount = metric.Metadata{
+var protectedRecordCount = metric.InitMetadata(metric.Metadata{
 	Name:        "spanconfig.kvsubscriber.protected_record_count",
 	Help:        "Number of protected timestamp records, as seen by KV",
 	Measurement: "Records",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
-var oldestProtectedRecordNanos = metric.Metadata{
+var oldestProtectedRecordNanos = metric.InitMetadata(metric.Metadata{
 	Name: "spanconfig.kvsubscriber.oldest_protected_record_nanos",
 	Help: "Difference between the current time and the oldest protected timestamp" +
 		" (sudden drops indicate a record being released; an ever increasing" +
 		" number indicates that the oldest record is around and preventing GC if > configured GC TTL)",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
-}
+})
 
 // metricsPollerInterval determines the frequency at which we refresh internal
 // metrics.

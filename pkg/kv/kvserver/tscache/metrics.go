@@ -24,18 +24,18 @@ func (sklMetrics) MetricStruct() {}
 var _ metric.Struct = sklMetrics{}
 
 var (
-	metaSklPages = metric.Metadata{
+	metaSklPages = metric.InitMetadata(metric.Metadata{
 		Name:        "tscache.skl.pages",
 		Help:        "Number of pages in the timestamp cache",
 		Measurement: "Pages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSklRotations = metric.Metadata{
+	})
+	metaSklRotations = metric.InitMetadata(metric.Metadata{
 		Name:        "tscache.skl.rotations",
 		Help:        "Number of page rotations in the timestamp cache",
 		Measurement: "Page Rotations",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 func makeMetrics() Metrics {

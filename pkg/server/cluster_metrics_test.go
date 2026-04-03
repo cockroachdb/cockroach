@@ -38,10 +38,10 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 
 	// Create and register test metrics up front so each table-driven
 	// case can reference its metric via closure.
-	counter := clustermetrics.NewCounter(metric.Metadata{Name: "test.int.counter"})
-	gauge := clustermetrics.NewGauge(metric.Metadata{Name: "test.int.gauge"})
-	counterAccum := clustermetrics.NewCounter(metric.Metadata{Name: "test.int.counter.accum"})
-	gaugeUpdate := clustermetrics.NewGauge(metric.Metadata{Name: "test.int.gauge.update"})
+	counter := clustermetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.int.counter"}))
+	gauge := clustermetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.int.gauge"}))
+	counterAccum := clustermetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.int.counter.accum"}))
+	gaugeUpdate := clustermetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.int.gauge.update"}))
 
 	writer.AddMetric(counter)
 	writer.AddMetric(gauge)
@@ -136,8 +136,8 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 			Latency  *clustermetrics.Gauge
 		}
 		m := &appMetrics{
-			Requests: clustermetrics.NewCounter(metric.Metadata{Name: "test.int.requests"}),
-			Latency:  clustermetrics.NewGauge(metric.Metadata{Name: "test.int.latency"}),
+			Requests: clustermetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.int.requests"})),
+			Latency:  clustermetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.int.latency"})),
 		}
 		writer.AddMetricStruct(m)
 

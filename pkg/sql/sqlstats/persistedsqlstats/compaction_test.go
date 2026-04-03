@@ -56,7 +56,7 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 	statsCompactor := persistedsqlstats.NewStatsCompactor(
 		server.ClusterSettings(),
 		server.InternalDB().(isql.DB),
-		metric.NewCounter(metric.Metadata{}),
+		metric.NewCounter(metric.InitMetadata(metric.Metadata{})),
 		nil, /* knobs */
 	)
 
@@ -211,7 +211,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			statsCompactor := persistedsqlstats.NewStatsCompactor(
 				server.ClusterSettings(),
 				server.InternalDB().(isql.DB),
-				metric.NewCounter(metric.Metadata{}),
+				metric.NewCounter(metric.InitMetadata(metric.Metadata{})),
 				sqlStatsKnobs,
 			)
 

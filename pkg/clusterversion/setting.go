@@ -269,12 +269,12 @@ var AutoUpgradeSystemClusterFromMeta1Leaseholder = settings.RegisterBoolSetting(
 	true,
 )
 
-var metaPreserveDowngradeLastUpdated = metric.Metadata{
+var metaPreserveDowngradeLastUpdated = metric.InitMetadata(metric.Metadata{
 	Name:        "cluster.preserve-downgrade-option.last-updated",
 	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
 	Measurement: "Timestamp",
 	Unit:        metric.Unit_TIMESTAMP_SEC,
-}
+})
 
 // RegisterOnVersionChangeCallback is a callback function that updates the
 // cluster.preserve-downgrade-option.last-updated when the
