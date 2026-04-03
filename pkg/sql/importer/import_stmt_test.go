@@ -2256,189 +2256,32 @@ func (f *importIntoCSVTestFixture) dropTableAfterJobComplete(t *testing.T, table
 	f.sqlDB.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
 }
 
-func TestImportIntoCSV(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+// importIntoCSVTestCase defines a test case for IMPORT INTO CSV tests. These
+// are split across multiple top-level test functions so Bazel can distribute
+// them across shards.
+type importIntoCSVTestCase struct {
+	name    string
+	query   string // must have one `%s` for the files list.
+	files   []string
+	jobOpts string
+	err     string
+}
 
-	f := setupImportIntoCSVTest(t)
-	defer f.tc.Stopper().Stop(context.Background())
-
+// runImportIntoCSVTestCases executes a slice of importIntoCSVTestCase against
+// the provided fixture. For success cases, it verifies the import job and row
+// counts. For error cases, it checks the expected error message.
+func runImportIntoCSVTestCases(
+	t *testing.T, f *importIntoCSVTestFixture, cases []importIntoCSVTestCase,
+) {
 	sqlDB := f.sqlDB
-	testFiles := f.testFiles
-
 	empty := []string{"'nodelocal://1/empty.csv'"}
+	insertedRows := f.numFiles * f.rowsPerFile
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
-	insertedRows := f.numFiles * f.rowsPerFile
-
-	for _, tc := range []struct {
-		name    string
-		query   string // must have one `%s` for the files list.
-		files   []string
-		jobOpts string
-		err     string
-	}{
-		{
-			"simple-import-into",
-			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			testFiles.files,
-			``,
-			"",
-		},
-		{
-			"import-into-with-opts",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
-			testFiles.filesWithOpts,
-			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
-			"",
-		},
-		{
-			"empty-file",
-			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			empty,
-			``,
-			"",
-		},
-		{
-			"empty-with-files",
-			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			append(empty, testFiles.files...),
-			``,
-			"",
-		},
-		{
-			"import-into-auto-decompress",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			testFiles.files,
-			` WITH OPTIONS (decompress = 'auto')`,
-			"",
-		},
-		{
-			"import-into-no-decompress",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
-			testFiles.files,
-			` WITH OPTIONS (decompress = 'none')`,
-			"",
-		},
-		{
-			"import-into-explicit-gzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
-			testFiles.gzipFiles,
-			` WITH OPTIONS (decompress = 'gzip')`,
-			"",
-		},
-		{
-			"import-into-auto-gzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			testFiles.gzipFiles,
-			` WITH OPTIONS (decompress = 'auto')`,
-			"",
-		},
-		{
-			"import-into-implicit-gzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			testFiles.gzipFiles,
-			``,
-			"",
-		},
-		{
-			"import-into-explicit-bzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'bzip'`,
-			testFiles.bzipFiles,
-			` WITH OPTIONS (decompress = 'bzip')`,
-			"",
-		},
-		{
-			"import-into-auto-bzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			testFiles.bzipFiles,
-			` WITH OPTIONS (decompress = 'auto')`,
-			"",
-		},
-		{
-			"import-into-implicit-bzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s)`,
-			testFiles.bzipFiles,
-			``,
-			"",
-		},
-		{
-			"import-into-no-decompress-wildcard",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
-			testFiles.filesUsingWildcard,
-			` WITH OPTIONS (decompress = 'none')`,
-			"",
-		},
-		{
-			"import-into-explicit-gzip-wildcard",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
-			testFiles.gzipFilesUsingWildcard,
-			` WITH OPTIONS (decompress = 'gzip')`,
-			"",
-		},
-		{
-			"import-into-auto-bzip-wildcard",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			testFiles.gzipFilesUsingWildcard,
-			` WITH OPTIONS (decompress = 'auto')`,
-			"",
-		},
-		// NB: successes above, failures below, because we check the i-th job.
-		{
-			"import-into-bad-opt-name",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH foo = 'bar'`,
-			testFiles.files,
-			``,
-			"invalid option \"foo\"",
-		},
-		{
-			"import-into-no-database",
-			`IMPORT INTO nonexistent.t (a, b) CSV DATA (%s)`,
-			testFiles.files,
-			``,
-			`database does not exist: "nonexistent.t"`,
-		},
-		{
-			"import-into-no-table",
-			`IMPORT INTO g (a, b) CSV DATA (%s)`,
-			testFiles.files,
-			``,
-			`pq: relation "g" does not exist`,
-		},
-		{
-			"import-into-no-decompress-gzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
-			testFiles.gzipFiles,
-			` WITH OPTIONS (decompress = 'none')`,
-			// This returns different errors for `make test` and `make testrace` but
-			// field is in both error messages.
-			"field",
-		},
-		{
-			"import-into-no-decompress-gzip",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
-			testFiles.files,
-			` WITH OPTIONS (decompress = 'gzip')`,
-			"gzip: invalid header",
-		},
-		{
-			"import-no-files-match-wildcard",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
-			[]string{`'nodelocal://1/data-[0-9][0-9]*'`},
-			` WITH OPTIONS (decompress = 'auto')`,
-			`pq: no files matched`,
-		},
-		{
-			"import-into-no-glob-wildcard",
-			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
-			testFiles.filesUsingWildcard,
-			` WITH OPTIONS (disable_glob_matching)`,
-			"pq: (.+)no such file or directory: nodelocal storage file does not exist:",
-		},
-	} {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if strings.Contains(tc.name, "bzip") && len(testFiles.bzipFiles) == 0 {
+			if strings.Contains(tc.name, "bzip") && len(f.testFiles.bzipFiles) == 0 {
 				skip.IgnoreLint(t, "bzip2 not available on PATH?")
 			}
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
@@ -2511,6 +2354,203 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestImportIntoCSV tests basic IMPORT INTO with CSV data, including options
+// and empty file handling.
+func TestImportIntoCSV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	empty := []string{"'nodelocal://1/empty.csv'"}
+
+	runImportIntoCSVTestCases(t, f, []importIntoCSVTestCase{
+		{
+			"simple-import-into",
+			`IMPORT INTO t (a, b) CSV DATA (%s)`,
+			f.testFiles.files,
+			``,
+			"",
+		},
+		{
+			"import-into-with-opts",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
+			f.testFiles.filesWithOpts,
+			` WITH OPTIONS (comment = '#', delimiter = '|', "nullif" = '', skip = '2')`,
+			"",
+		},
+		{
+			"empty-file",
+			`IMPORT INTO t (a, b) CSV DATA (%s)`,
+			empty,
+			``,
+			"",
+		},
+		{
+			"empty-with-files",
+			`IMPORT INTO t (a, b) CSV DATA (%s)`,
+			append(empty, f.testFiles.files...),
+			``,
+			"",
+		},
+		{
+			"import-into-auto-decompress",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			f.testFiles.files,
+			` WITH OPTIONS (decompress = 'auto')`,
+			"",
+		},
+		{
+			"import-into-no-decompress",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
+			f.testFiles.files,
+			` WITH OPTIONS (decompress = 'none')`,
+			"",
+		},
+	})
+}
+
+// TestImportIntoCSVCompress tests IMPORT INTO with various compression formats
+// (gzip, bzip) and wildcard file patterns.
+func TestImportIntoCSVCompress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	runImportIntoCSVTestCases(t, f, []importIntoCSVTestCase{
+		{
+			"import-into-explicit-gzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
+			f.testFiles.gzipFiles,
+			` WITH OPTIONS (decompress = 'gzip')`,
+			"",
+		},
+		{
+			"import-into-auto-gzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			f.testFiles.gzipFiles,
+			` WITH OPTIONS (decompress = 'auto')`,
+			"",
+		},
+		{
+			"import-into-implicit-gzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s)`,
+			f.testFiles.gzipFiles,
+			``,
+			"",
+		},
+		{
+			"import-into-explicit-bzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'bzip'`,
+			f.testFiles.bzipFiles,
+			` WITH OPTIONS (decompress = 'bzip')`,
+			"",
+		},
+		{
+			"import-into-auto-bzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			f.testFiles.bzipFiles,
+			` WITH OPTIONS (decompress = 'auto')`,
+			"",
+		},
+		{
+			"import-into-implicit-bzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s)`,
+			f.testFiles.bzipFiles,
+			``,
+			"",
+		},
+		{
+			"import-into-no-decompress-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
+			f.testFiles.filesUsingWildcard,
+			` WITH OPTIONS (decompress = 'none')`,
+			"",
+		},
+		{
+			"import-into-explicit-gzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
+			f.testFiles.gzipFilesUsingWildcard,
+			` WITH OPTIONS (decompress = 'gzip')`,
+			"",
+		},
+		{
+			"import-into-auto-bzip-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			f.testFiles.gzipFilesUsingWildcard,
+			` WITH OPTIONS (decompress = 'auto')`,
+			"",
+		},
+	})
+}
+
+// TestImportIntoCSVErrors tests IMPORT INTO error handling for invalid options,
+// missing databases/tables, format mismatches, and glob matching.
+func TestImportIntoCSVErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	runImportIntoCSVTestCases(t, f, []importIntoCSVTestCase{
+		{
+			"import-into-bad-opt-name",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH foo = 'bar'`,
+			f.testFiles.files,
+			``,
+			"invalid option \"foo\"",
+		},
+		{
+			"import-into-no-database",
+			`IMPORT INTO nonexistent.t (a, b) CSV DATA (%s)`,
+			f.testFiles.files,
+			``,
+			`database does not exist: "nonexistent.t"`,
+		},
+		{
+			"import-into-no-table",
+			`IMPORT INTO g (a, b) CSV DATA (%s)`,
+			f.testFiles.files,
+			``,
+			`pq: relation "g" does not exist`,
+		},
+		{
+			"import-into-no-decompress-gzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'none'`,
+			f.testFiles.gzipFiles,
+			` WITH OPTIONS (decompress = 'none')`,
+			// This returns different errors for `make test` and `make testrace` but
+			// field is in both error messages.
+			"field",
+		},
+		{
+			"import-into-no-decompress-gzip",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'gzip'`,
+			f.testFiles.files,
+			` WITH OPTIONS (decompress = 'gzip')`,
+			"gzip: invalid header",
+		},
+		{
+			"import-no-files-match-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH decompress = 'auto'`,
+			[]string{`'nodelocal://1/data-[0-9][0-9]*'`},
+			` WITH OPTIONS (decompress = 'auto')`,
+			`pq: no files matched`,
+		},
+		{
+			"import-into-no-glob-wildcard",
+			`IMPORT INTO t (a, b) CSV DATA (%s) WITH disable_glob_matching`,
+			f.testFiles.filesUsingWildcard,
+			` WITH OPTIONS (disable_glob_matching)`,
+			"pq: (.+)no such file or directory: nodelocal storage file does not exist:",
+		},
+	})
 }
 
 func TestImportIntoCSVExtended(t *testing.T) {
