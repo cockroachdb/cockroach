@@ -156,6 +156,23 @@ var tpchTables = map[string]TableDef{
 			stringCol("s_comment"),
 		},
 	},
+	"region": {
+		Name: "region",
+		Columns: []ColumnDef{
+			longCol("r_regionkey"),
+			stringCol("r_name"),
+			stringCol("r_comment"),
+		},
+	},
+	"nation": {
+		Name: "nation",
+		Columns: []ColumnDef{
+			longCol("n_nationkey"),
+			stringCol("n_name"),
+			longCol("n_regionkey"),
+			stringCol("n_comment"),
+		},
+	},
 }
 
 // allTPCHTables returns the names of all defined TPC-H tables.

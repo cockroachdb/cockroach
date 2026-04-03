@@ -88,30 +88,29 @@ func main() {
 		}
 		fmt.Printf("processing table: %s\n", tableName)
 
-		for shardIdx := 1; shardIdx <= 8; shardIdx++ {
-			fileName := fmt.Sprintf("%s.tbl.%d", tableName, shardIdx)
-			filePath := filepath.Join(*inputDir, fileName)
+		for _, s := range shardFiles(tableName) {
+			filePath := filepath.Join(*inputDir, s.fileName)
 
 			f, err := os.Open(filePath)
 			if err != nil {
 				log.Fatalf("opening %s: %v", filePath, err)
 			}
 
-			writer, err := format.NewWriter(tableDef, *outputDir, shardIdx)
+			writer, err := format.NewWriter(tableDef, *outputDir, s.idx)
 			if err != nil {
 				f.Close()
-				log.Fatalf("creating writer for %s shard %d: %v", tableName, shardIdx, err)
+				log.Fatalf("creating writer for %s shard %d: %v", tableName, s.idx, err)
 			}
 
 			if _, err := processShard(f, tableDef, writer); err != nil {
 				_ = writer.Close()
 				f.Close()
-				log.Fatalf("processing %s shard %d: %v", tableName, shardIdx, err)
+				log.Fatalf("processing %s shard %d: %v", tableName, s.idx, err)
 			}
 
 			if err := writer.Close(); err != nil {
 				f.Close()
-				log.Fatalf("closing writer for %s shard %d: %v", tableName, shardIdx, err)
+				log.Fatalf("closing writer for %s shard %d: %v", tableName, s.idx, err)
 			}
 			f.Close()
 		}
@@ -126,6 +125,36 @@ func availableFormats() string {
 		names = append(names, name)
 	}
 	return strings.Join(names, ", ")
+}
+
+// shardFile identifies a single input file and its shard index.
+type shardFile struct {
+	fileName string
+	idx      int
+}
+
+// singleFileTables lists tables where dbgen produces a single unsuffixed file
+// instead of per-shard files (e.g. region.tbl instead of region.tbl.1..8).
+var singleFileTables = map[string]bool{
+	"region": true,
+	"nation": true,
+}
+
+// shardFiles returns the list of input files for the given table. Small
+// dimension tables (region, nation) have a single file; all others are split
+// into 8 shards by dbgen.
+func shardFiles(tableName string) []shardFile {
+	if singleFileTables[tableName] {
+		return []shardFile{{fileName: tableName + ".tbl", idx: 1}}
+	}
+	shards := make([]shardFile, 8)
+	for i := range 8 {
+		shards[i] = shardFile{
+			fileName: fmt.Sprintf("%s.tbl.%d", tableName, i+1),
+			idx:      i + 1,
+		}
+	}
+	return shards
 }
 
 // processShard reads a pipe-delimited TPC-H file and streams parsed rows to the
