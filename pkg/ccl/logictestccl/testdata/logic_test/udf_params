@@ -220,7 +220,12 @@ $$ LANGUAGE PLpgSQL;
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_param_types];
 ----
-CREATE FUNCTION public.f_param_types(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
+CREATE FUNCTION public.f_param_types(
+  IN p1 INT8,
+  INOUT p2 INT8,
+  INOUT p3 INT8,
+  OUT p4 INT8
+)
   RETURNS RECORD
   VOLATILE
   NOT LEAKPROOF
@@ -228,10 +233,10 @@ CREATE FUNCTION public.f_param_types(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, O
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  SELECT p2, p3, p1;
-  END;
-$$
+    BEGIN
+      SELECT p2, p3, p1;
+    END;
+  $$
 
 statement ok
 DROP FUNCTION f_param_types;
@@ -408,7 +413,10 @@ CREATE OR REPLACE FUNCTION f_int(IN param INT, OUT param_out INT) AS $$ BEGIN SE
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
 ----
-CREATE FUNCTION public.f_int(IN param INT8, OUT param_out INT8)
+CREATE FUNCTION public.f_int(
+  IN param INT8,
+  OUT param_out INT8
+)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -416,10 +424,10 @@ CREATE FUNCTION public.f_int(IN param INT8, OUT param_out INT8)
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  SELECT param INTO param_out;
-  END;
-$$
+    BEGIN
+      SELECT param INTO param_out;
+    END;
+  $$
 
 query I colnames
 SELECT * FROM f_int(2);
@@ -433,7 +441,10 @@ CREATE OR REPLACE FUNCTION f_int(OUT param_out INT, IN param INT) AS $$ BEGIN SE
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_int];
 ----
-CREATE FUNCTION public.f_int(OUT param_out INT8, IN param INT8)
+CREATE FUNCTION public.f_int(
+  OUT param_out INT8,
+  IN param INT8
+)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF
@@ -441,10 +452,10 @@ CREATE FUNCTION public.f_int(OUT param_out INT8, IN param INT8)
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  SELECT param INTO param_out;
-  END;
-$$
+    BEGIN
+      SELECT param INTO param_out;
+    END;
+  $$
 
 query I colnames
 SELECT * FROM f_int(2);
@@ -491,7 +502,12 @@ CREATE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT INT) AS $$ 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
 ----
-CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT INT8
+)
   RETURNS RECORD
   VOLATILE
   NOT LEAKPROOF
@@ -499,10 +515,10 @@ CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT I
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  param2 := 2;
-  END;
-$$
+    BEGIN
+      param2 := 2;
+    END;
+  $$
 
 query T colnames
 SELECT f_default_names(0);
@@ -550,7 +566,12 @@ CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
 ----
-CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT column3 INT8)
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT column3 INT8
+)
   RETURNS RECORD
   VOLATILE
   NOT LEAKPROOF
@@ -558,10 +579,10 @@ CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT c
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  SELECT 3 INTO column3;
-  END;
-$$
+    BEGIN
+      SELECT 3 INTO column3;
+    END;
+  $$
 
 query I colnames
 SELECT column3 FROM f_default_names(0);
@@ -580,7 +601,12 @@ CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN INT, OUT 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
 ----
-CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN INT8,
+  OUT INT8
+)
   RETURNS RECORD
   VOLATILE
   NOT LEAKPROOF
@@ -588,10 +614,10 @@ CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT I
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  param2 := 2;
-  END;
-$$
+    BEGIN
+      param2 := 2;
+    END;
+  $$
 
 # Introducing the IN parameter name is ok.
 statement ok
@@ -600,7 +626,12 @@ CREATE OR REPLACE FUNCTION f_default_names(OUT INT, OUT param2 INT, IN in_param 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_default_names];
 ----
-CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN in_param INT8, OUT INT8)
+CREATE FUNCTION public.f_default_names(
+  OUT INT8,
+  OUT param2 INT8,
+  IN in_param INT8,
+  OUT INT8
+)
   RETURNS RECORD
   VOLATILE
   NOT LEAKPROOF
@@ -608,10 +639,10 @@ CREATE FUNCTION public.f_default_names(OUT INT8, OUT param2 INT8, IN in_param IN
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  SELECT in_param INTO param2;
-  END;
-$$
+    BEGIN
+      SELECT in_param INTO param2;
+    END;
+  $$
 
 # But then the IN parameter name cannot be changed anymore.
 statement error cannot change name of input parameter "in_param"

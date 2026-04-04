@@ -678,8 +678,8 @@ CREATE FUNCTION public.single_quote(s STRING)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT (e'\'' || s) || e'\'';
-$$
+    SELECT e'\'' || s || e'\'';
+  $$
 
 query T
 SELECT single_quote('hello')

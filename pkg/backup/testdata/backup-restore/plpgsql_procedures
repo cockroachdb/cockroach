@@ -96,14 +96,14 @@ CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	SECURITY INVOKER
 	AS $$
-	DECLARE
-	foobar sc1.enum1;
-	BEGIN
-	SELECT a FROM sc1.tbl1;
-	SELECT 'Good':::sc1.enum1;
-	SELECT nextval('sc1.sq1'::REGCLASS);
-	END;
-$$
+		DECLARE
+			foobar sc1.enum1;
+		BEGIN
+			SELECT a FROM sc1.tbl1;
+			SELECT 'Good':::sc1.enum1;
+			SELECT nextval('sc1.sq1'::REGCLASS);
+		END;
+	$$
 
 exec-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -137,14 +137,14 @@ CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	SECURITY INVOKER
 	AS $$
-	DECLARE
-	foobar sc1.enum1;
-	BEGIN
-	SELECT a FROM sc1.tbl1;
-	SELECT 'Good':::sc1.enum1;
-	SELECT nextval('sc1.sq1'::REGCLASS);
-	END;
-$$
+		DECLARE
+			foobar sc1.enum1;
+		BEGIN
+			SELECT a FROM sc1.tbl1;
+			SELECT 'Good':::sc1.enum1;
+			SELECT nextval('sc1.sq1'::REGCLASS);
+		END;
+	$$
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
@@ -302,14 +302,14 @@ CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	SECURITY INVOKER
 	AS $$
-	DECLARE
-	foobar sc1.enum1;
-	BEGIN
-	SELECT a FROM sc1.tbl1;
-	SELECT 'Good':::sc1.enum1;
-	SELECT nextval('sc1.sq1'::REGCLASS);
-	END;
-$$
+		DECLARE
+			foobar sc1.enum1;
+		BEGIN
+			SELECT a FROM sc1.tbl1;
+			SELECT 'Good':::sc1.enum1;
+			SELECT nextval('sc1.sq1'::REGCLASS);
+		END;
+	$$
 
 query-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -344,14 +344,14 @@ CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	SECURITY INVOKER
 	AS $$
-	DECLARE
-	foobar sc1.enum1;
-	BEGIN
-	SELECT a FROM sc1.tbl1;
-	SELECT 'Good':::sc1.enum1;
-	SELECT nextval('sc1.sq1'::REGCLASS);
-	END;
-$$
+		DECLARE
+			foobar sc1.enum1;
+		BEGIN
+			SELECT a FROM sc1.tbl1;
+			SELECT 'Good':::sc1.enum1;
+			SELECT nextval('sc1.sq1'::REGCLASS);
+		END;
+	$$
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
