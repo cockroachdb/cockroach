@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -24,7 +23,6 @@ import (
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcmux"
-	"storj.io/drpc/drpcpool"
 	"storj.io/drpc/drpcserver"
 	"storj.io/drpc/drpcwire"
 )
@@ -54,27 +52,19 @@ func DialDRPC(
 			return nil, err
 		}
 
-		// TODO(server): could use connection class instead of empty key here.
-		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
-			Expiration: defaultDRPCConnIdleTimeout,
-		})
-		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
-			_ struct{}) (drpcpool.Conn, error) {
-			return drpcclient.DialContext(ctx, target, drpcDialOptions...)
-		})
-
-		// The passed in drpc connection can be either a concrete connection or
-		// a pooled connection.
-		clientConn, err := drpcclient.NewClientConnWithOptions(ctx, pooledConn, drpcDialOptions...)
+		dc, err := drpcclient.DialContext(ctx, target, drpcDialOptions...)
 		if err != nil {
 			return nil, err
 		}
 
-		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
-		return &closeEntirePoolConn{
-			Conn: clientConn,
-			pool: pool,
-		}, nil
+		// The passed in drpc connection can be either a concrete connection or
+		// a pooled connection.
+		clientConn, err := drpcclient.NewClientConnWithOptions(ctx, dc, drpcDialOptions...)
+		if err != nil {
+			return nil, err
+		}
+
+		return clientConn, nil
 	}
 }
 
@@ -200,21 +190,6 @@ func (rpcCtx *Context) drpcDialOptsNetwork(
 	drpcDialOpts = append(drpcDialOpts, drpcclient.WithContextDialer(dialerFunc))
 
 	return drpcDialOpts, nil
-}
-
-type closeEntirePoolConn struct {
-	closeOnce sync.Once
-	drpc.Conn
-	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
-}
-
-func (c *closeEntirePoolConn) Close() (err error) {
-	// TODO(server): make drpc pooledConn.Close() idempotent
-	c.closeOnce.Do(func() {
-		_ = c.Conn.Close()
-		err = c.pool.Close()
-	})
-	return err
 }
 
 type DRPCConnection = Connection[drpc.Conn]
