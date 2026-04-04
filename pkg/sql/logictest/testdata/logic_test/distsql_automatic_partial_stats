@@ -71,14 +71,14 @@ __auto_partial__  {a}           0          0               0           (a IS NUL
 __auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
 __auto_partial__  {d}           100        1               0           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
 
-# Enable full stat collections with the cluster setting.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = true
-
 # Disable automatic partial and full stats with the table settings.
 statement ok
 ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = false);
 ALTER TABLE data SET (sql_stats_automatic_full_collection_enabled = false)
+
+# Enable full stat collections with the cluster setting.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = true
 
 # Change 20% of the table, no new partial or full stats should be collected.
 statement ok
