@@ -312,13 +312,13 @@ CREATE TABLE pg_catalog.pg_depend (
 // https://www.postgresql.org/docs/9.5/catalog-pg-description.html,
 var PGCatalogDescription = `
 CREATE VIEW pg_catalog.pg_description AS SELECT
-  objoid, classoid, objsubid, description
+  objoid, compat_classoid AS classoid, objsubid, description
 FROM crdb_internal.kv_catalog_comments
 WHERE classoid != ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `
 UNION ALL
 	SELECT
 	oid AS objoid,
-	` + strconv.Itoa(catconstants.PgCatalogProcTableID) + `:::oid AS classoid,
+	compat_classoid AS classoid,
 	0:::INT4 AS objsubid,
 	description AS description
 	FROM crdb_internal.kv_builtin_function_comments
@@ -329,7 +329,7 @@ UNION ALL
 // https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html,
 var PGCatalogSharedDescription = `
 CREATE VIEW pg_catalog.pg_shdescription AS
-SELECT objoid, classoid, description
+SELECT objoid, compat_classoid AS classoid, description
 FROM "".crdb_internal.kv_catalog_comments
 WHERE classoid = ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `:::oid`
 

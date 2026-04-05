@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -192,8 +194,14 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			return nil, err
 		}
 		if id, err := evalCtx.Planner.ResolveTableName(ctx, &tn); err == nil {
-			// tree.ID is a uint32, so this type conversion is safe.
-			return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
+			// Only remap OIDs for pg_catalog tables so that user tables are
+			// never affected by the remapping.
+			remap := tn.SchemaName == catconstants.PgCatalogName &&
+				sessiondatapb.IsPgDumpCompatibilityEnabled(
+					evalCtx.SessionData().PgDumpCompatibility,
+				)
+			resolvedOid := catconstants.RemapPgCatalogOid(uint32(id), remap)
+			return tree.NewDOidWithTypeAndName(resolvedOid, t, tn.ObjectName.String()), nil
 		} else if pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 			return nil, err
 		}

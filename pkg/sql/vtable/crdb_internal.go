@@ -9,16 +9,22 @@ package vtable
 // crdb_internal.kv_builtin_function_comments table.
 var CrdbInternalBuiltinFunctionComments = `
 CREATE TABLE crdb_internal.kv_builtin_function_comments (
-  oid         OID NOT NULL,
-  description STRING NOT NULL
+  oid              OID NOT NULL,
+  description      STRING NOT NULL,
+  -- compat_classoid holds the standard PostgreSQL OID for the catalog table
+  -- when pg_dump_compatibility is enabled, or matches classoid otherwise.
+  compat_classoid  OID NOT NULL
 )`
 
 // CrdbInternalCatalogComments describes the schema of the
 // crdb_internal.kv_catalog_comments table.
 var CrdbInternalCatalogComments = `
 CREATE TABLE crdb_internal.kv_catalog_comments (
-  classoid    OID NOT NULL,
-  objoid      OID NOT NULL,
-  objsubid    INT4 NOT NULL,
-  description STRING NOT NULL
+  classoid         OID NOT NULL,
+  objoid           OID NOT NULL,
+  objsubid         INT4 NOT NULL,
+  description      STRING NOT NULL,
+  -- compat_classoid holds the standard PostgreSQL OID for the catalog table
+  -- when pg_dump_compatibility is enabled, or matches classoid otherwise.
+  compat_classoid  OID NOT NULL
 )`
