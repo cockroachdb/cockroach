@@ -599,11 +599,17 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		}
 		clientRequestMetrics := NewClientRequestMetrics()
 		rpcCtx.metrics.clientRequestMetrics = clientRequestMetrics
-		rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
-			NewDRPCUnaryClientRequestMetricsInterceptor(clientRequestMetrics))
-		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
-			NewDRPCStreamClientRequestMetricsInterceptor(clientRequestMetrics))
 		rpcCtx.metrics.drpcPoolMetrics = NewDRPCPoolMetrics()
+
+		rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
+			NewDRPCUnaryClientRequestMetricsInterceptor(clientRequestMetrics, func(method string) bool {
+				return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
+			}))
+		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
+			NewDRPCStreamClientRequestMetricsInterceptor(clientRequestMetrics, func(method string) bool {
+				return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
+			}))
+
 	}
 
 	rpcCtx.dialbackMu.Lock()
@@ -711,11 +717,11 @@ func (rpcCtx *Context) ClientRequestMetrics() *ClientRequestMetrics {
 }
 
 // DRPCPoolMetrics returns the Context's DRPCPoolMetrics struct.
-func (rpcCtx *Context) DRPCPoolMetrics() *drpcpool.PoolMetrics {
-	if rpcCtx.metrics == nil {
-		return nil
+func (rpcCtx *Context) DRPCPoolMetrics() drpcpool.PoolMetrics {
+	if rpcCtx.metrics == nil || rpcCtx.metrics.drpcPoolMetrics == nil {
+		return drpcpool.PoolMetrics{}
 	}
-	return rpcCtx.metrics.drpcPoolMetrics
+	return *rpcCtx.metrics.drpcPoolMetrics
 }
 
 // GetLocalInternalClientForAddr returns the context's internal batch client

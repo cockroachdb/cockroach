@@ -15,6 +15,8 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -30,6 +32,7 @@ import (
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcpool"
+	"storj.io/drpc/drpcserver"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
@@ -266,6 +269,12 @@ over this connection.
 		Unit:        metric.Unit_CONST,
 		MetricType:  prometheusgo.MetricType_GAUGE,
 	}
+	metaDRPCTLSHandshakeErrors = metric.Metadata{
+		Name:       "rpc.drpc.tls.handshake.errors",
+		Unit:       metric.Unit_COUNT,
+		Help:       "Number of TLS handshake errors for DRPC connections.",
+		MetricType: prometheusgo.MetricType_COUNTER,
+	}
 )
 
 func (m *Metrics) makeLabels(
@@ -492,6 +501,33 @@ func (m *Metrics) acquire(
 }
 
 const (
+	serverPrefix = "/cockroach.server"
+	tsdbPrefix   = "/cockroach.ts"
+)
+
+// ServerRPCRequestMetricsEnabled is a cluster setting that enables the
+// collection of gRPC and DRPC request duration metrics. This uses export only
+// metrics so the metrics are only exported to external sources such as
+// /_status/vars and DataDog.
+var serverRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.rpc.request_metrics.enabled",
+	"enables the collection of rpc metrics",
+	false, /* defaultValue */
+	settings.WithRetiredName("server.grpc.request_metrics.enabled"),
+)
+
+func ShouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
+	return serverRPCRequestMetricsEnabled.Get(&settings.SV) &&
+		(strings.HasPrefix(method, serverPrefix) ||
+			strings.HasPrefix(method, tsdbPrefix))
+}
+
+func ShouldRecordRequestMetricsDRPC(settings *cluster.Settings) bool {
+	return serverRPCRequestMetricsEnabled.Get(&settings.SV)
+}
+
+const (
 	// RPC method label
 	RPCMethodLabel     = "methodName"
 	RPCStatusCodeLabel = "statusCode"
@@ -506,8 +542,9 @@ const (
 
 // ServerRequestMetrics contains server metrics for both gRPC and DRPC requests.
 type ServerRequestMetrics struct {
-	RequestsTotal   *metric.CounterVec
-	RequestDuration *metric.HistogramVec
+	RequestsTotal     *metric.CounterVec
+	RequestDuration   *metric.HistogramVec
+	DRPCServerMetrics drpcserver.ServerMetrics
 }
 
 func (m *ServerRequestMetrics) recordMetricsPreCall(rpc string) time.Time {
@@ -580,6 +617,8 @@ func NewServerRequestMetrics() *ServerRequestMetrics {
 			metaServerRequestDuration,
 			metric.ResponseTime30sBuckets,
 			[]string{RPCMethodLabel, RPCStatusCodeLabel}),
+		DRPCServerMetrics: drpcserver.ServerMetrics{
+			TLSHandshakeErrors: metric.NewCounter(metaDRPCTLSHandshakeErrors)},
 	}
 }
 
@@ -606,6 +645,7 @@ func NewDRPCUnaryServerRequestMetricsInterceptor(
 		handler drpcmux.UnaryHandler,
 	) (resp any, err error) {
 		if !shouldRecord(rpc) {
+			fmt.Printf("DRPCUnaryServerRequestMetricsInterceptor: skipping %s\n", rpc)
 			return handler(ctx, req)
 		}
 		startTime := serverMetrics.recordMetricsPreCall(rpc)
@@ -685,14 +725,9 @@ func NewDRPCPoolMetrics() *drpcpool.PoolMetrics {
 	}
 }
 
-// TODO (sujatha): use to filter out apis we don't want to record metrics for.
-func shouldRecordClientMetrics(rpc string) bool {
-	return true
-}
-
 // NewDRPCUnaryClientRequestMetricsInterceptor reports unary DRPC client metrics.
 func NewDRPCUnaryClientRequestMetricsInterceptor(
-	clientMetrics *ClientRequestMetrics,
+	clientMetrics *ClientRequestMetrics, shouldRecord func(rpc string) bool,
 ) drpcclient.UnaryClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -702,7 +737,8 @@ func NewDRPCUnaryClientRequestMetricsInterceptor(
 		cc *drpcclient.ClientConn,
 		invoker drpcclient.UnaryInvoker,
 	) (err error) {
-		if !shouldRecordClientMetrics(rpc) {
+		if !shouldRecord(rpc) {
+			fmt.Printf("DRPCUnaryClientRequestMetricsInterceptor: skipping %s\n", rpc)
 			return invoker(ctx, rpc, enc, in, out, cc)
 		}
 		startTime := clientMetrics.recordMetricsPreCall(rpc)
@@ -713,7 +749,7 @@ func NewDRPCUnaryClientRequestMetricsInterceptor(
 
 // NewDRPCStreamClientRequestMetricsInterceptor reports streaming DRPC client metrics.
 func NewDRPCStreamClientRequestMetricsInterceptor(
-	clientMetrics *ClientRequestMetrics,
+	clientMetrics *ClientRequestMetrics, shouldRecord func(rpc string) bool,
 ) drpcclient.StreamClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -722,7 +758,7 @@ func NewDRPCStreamClientRequestMetricsInterceptor(
 		cc *drpcclient.ClientConn,
 		streamer drpcclient.Streamer,
 	) (str drpc.Stream, err error) {
-		if !shouldRecordClientMetrics(rpc) {
+		if !shouldRecord(rpc) {
 			return streamer(ctx, rpc, enc, cc)
 		}
 		startTime := clientMetrics.recordMetricsPreCall(rpc)

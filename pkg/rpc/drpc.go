@@ -43,8 +43,7 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 
 // TODO(server): unexport this once dial methods are added in rpccontext.
 func DialDRPC(
-	rpcCtx *Context,
-	lm localityMetrics,
+	rpcCtx *Context, cm *drpcmetrics.ClientMetrics,
 ) func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 		transport := tcpTransport
@@ -57,18 +56,20 @@ func DialDRPC(
 			return nil, err
 		}
 
-		clientMetrics := &drpcmetrics.ClientMetrics{
-			BytesSent: lm.ConnectionBytesSent,
-			BytesRecv: lm.ConnectionBytesRecv,
-		}
-		drpcDialOptions = append(drpcDialOptions, drpcclient.WithMetrics(clientMetrics))
+		drpcDialOptions = append(drpcDialOptions, drpcclient.WithMetrics(cm))
 
 		drpcPoolMetrics := rpcCtx.DRPCPoolMetrics()
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration: defaultDRPCConnIdleTimeout,
 			Metrics:    drpcPoolMetrics,
-			Labels: map[string]string{"target": target, "class": class.String()},
+			Labels:     map[string]string{"target": target, "class": class.String()},
+			ShouldRecord: func() bool {
+				if ShouldRecordRequestMetricsDRPC(rpcCtx.Settings) {
+					return true
+				}
+				return false
+			},
 		})
 
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
@@ -414,6 +415,7 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		},
 		TLSConfig:         o.tlsConfig,
 		TLSCipherRestrict: o.tlsCipherRestrict,
+		Metrics:           o.drpcServerMetrics,
 	})
 	d.Mux = mux
 
@@ -453,11 +455,15 @@ func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[drpc.Conn] {
 	pm, lm := rpcCtx.metrics.acquire(k, locality, rpcProtocolDRPC)
+	clientMetrics := &drpcmetrics.ClientMetrics{
+		BytesSent: lm.ConnectionBytesSent,
+		BytesRecv: lm.ConnectionBytesRecv,
+	}
 	return &peerOptions[drpc.Conn]{
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
 		connOptions: &ConnectionOptions[drpc.Conn]{
-			dial: DialDRPC(rpcCtx, lm),
+			dial: DialDRPC(rpcCtx, clientMetrics),
 			connEquals: func(a, b drpc.Conn) bool {
 				return a == b
 			},

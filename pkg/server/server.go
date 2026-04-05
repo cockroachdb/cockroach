@@ -426,6 +426,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	serverRequestMetrics := rpc.NewServerRequestMetrics()
 	appRegistry.AddMetricStruct(serverRequestMetrics)
+	appRegistry.AddMetricStruct(serverRequestMetrics.DRPCServerMetrics)
 	if rpcContext.UseDRPC {
 		appRegistry.AddMetricStruct(rpcContext.ClientRequestMetrics())
 		appRegistry.AddMetricStruct(rpcContext.DRPCPoolMetrics())

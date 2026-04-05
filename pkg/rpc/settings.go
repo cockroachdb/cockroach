@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcserver"
 )
 
 func init() {
@@ -129,6 +130,7 @@ type serverOpts struct {
 	tlsCipherRestrict                   func(conn net.Conn) error
 	drpcUnaryRequestMetricsInterceptor  DRPCUnaryServerRequestMetricsInterceptor
 	drpcStreamRequestMetricsInterceptor DRPCStreamServerRequestMetricsInterceptor
+	drpcServerMetrics                   drpcserver.ServerMetrics
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -151,8 +153,6 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 		}
 	}
 }
-
-
 
 // WithMetricsServerInterceptor adds a RequestMetricsInterceptor to the grpc server.
 func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerOption {
@@ -195,5 +195,15 @@ func WithTLSConfig(cfg *tls.Config) ServerOption {
 func WithTLSCipherRestrict(f func(conn net.Conn) error) ServerOption {
 	return func(opts *serverOpts) {
 		opts.tlsCipherRestrict = f
+	}
+}
+
+// WithTLSCipherRestrict sets a callback that is invoked immediately after
+// a successful TLS handshake in the DRPC server. The callback receives the
+// net.Conn (a *tls.Conn) and may inspect ConnectionState to enforce cipher
+// suite restrictions. If it returns a non-nil error, the connection is rejected.
+func WithDRPCServerMetrics(m drpcserver.ServerMetrics) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcServerMetrics = m
 	}
 }

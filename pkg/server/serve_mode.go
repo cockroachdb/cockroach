@@ -6,11 +6,8 @@
 package server
 
 import (
-	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -68,33 +65,6 @@ func (s *serveMode) set(mode serveMode) {
 
 func (s *serveMode) get() serveMode {
 	return serveMode(atomic.LoadInt32((*int32)(s)))
-}
-
-const (
-	serverPrefix = "/cockroach.server"
-	tsdbPrefix   = "/cockroach.ts"
-)
-
-// serverRPCRequestMetricsEnabled is a cluster setting that enables the
-// collection of gRPC and DRPC request duration metrics. This uses export only
-// metrics so the metrics are only exported to external sources such as
-// /_status/vars and DataDog.
-var serverRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"server.rpc.request_metrics.enabled",
-	"enables the collection of rpc metrics",
-	false, /* defaultValue */
-	settings.WithRetiredName("server.grpc.request_metrics.enabled"),
-)
-
-func shouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
-	return serverRPCRequestMetricsEnabled.Get(&settings.SV) &&
-		(strings.HasPrefix(method, serverPrefix) ||
-			strings.HasPrefix(method, tsdbPrefix))
-}
-
-func shouldRecordServerRequestMetricsDRPC(settings *cluster.Settings) bool {
-	return serverRPCRequestMetricsEnabled.Get(&settings.SV)
 }
 
 // NewWaitingForInitError creates an error indicating that the server cannot run
