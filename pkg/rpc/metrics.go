@@ -645,7 +645,6 @@ func NewDRPCUnaryServerRequestMetricsInterceptor(
 		handler drpcmux.UnaryHandler,
 	) (resp any, err error) {
 		if !shouldRecord(rpc) {
-			fmt.Printf("DRPCUnaryServerRequestMetricsInterceptor: skipping %s\n", rpc)
 			return handler(ctx, req)
 		}
 		startTime := serverMetrics.recordMetricsPreCall(rpc)
@@ -738,7 +737,6 @@ func NewDRPCUnaryClientRequestMetricsInterceptor(
 		invoker drpcclient.UnaryInvoker,
 	) (err error) {
 		if !shouldRecord(rpc) {
-			fmt.Printf("DRPCUnaryClientRequestMetricsInterceptor: skipping %s\n", rpc)
 			return invoker(ctx, rpc, enc, in, out, cc)
 		}
 		startTime := clientMetrics.recordMetricsPreCall(rpc)
