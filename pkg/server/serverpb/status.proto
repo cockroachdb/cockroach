@@ -2275,7 +2275,9 @@ message GetThrottlingMetadataResponse {
 }
 
 // UploadDebugDataRequest is sent from the CLI/SQL to the coordinator
-// node to initiate a debug data upload session.
+// node to initiate a debug data upload session. When session_id is
+// set, the coordinator resumes an existing session instead of
+// creating a new one.
 message UploadDebugDataRequest {
   string server_url = 1;
   string api_key = 2;
@@ -2286,6 +2288,15 @@ message UploadDebugDataRequest {
   repeated int32 node_ids = 6;
   bool include_range_info = 7;
   bool include_goroutine_stacks = 8;
+
+  // session_id, when set, indicates an existing session to resume
+  // rather than creating a new one. The coordinator will call the
+  // upload server's reupload endpoint to reopen the session and
+  // only fan out to nodes that haven't completed yet.
+  string session_id = 9;
+  // upload_token is the token for the existing session being resumed.
+  // Only used when session_id is set.
+  string upload_token = 10;
 }
 
 // NodeUploadStatus reports the upload outcome for a single node.
@@ -2328,6 +2339,66 @@ message UploadNodeDebugDataRequest {
 message UploadNodeDebugDataResponse {
   int32 artifacts_uploaded = 1;
   repeated string errors = 2;
+}
+
+// SessionCreated is sent as the first event in the UploadDebugData
+// stream, immediately after the session is created (or reopened for
+// resume). This allows the CLI to capture the session_id early so it
+// can retry on a different node if the coordinator fails mid-upload.
+message SessionCreated {
+  string session_id = 1;
+  string upload_token = 2;
+}
+
+// UploadDebugDataEvent is a server-streaming message from the
+// UploadDebugData RPC. The coordinator sends a SessionCreated event
+// first, then a Completed event when the upload finishes.
+message UploadDebugDataEvent {
+  oneof event {
+    SessionCreated session_created = 1;
+    UploadDebugDataResponse completed = 2;
+  }
+}
+
+// StartDebugUploadResponse is returned by StartDebugUpload. The
+// upload proceeds asynchronously in the background; the client polls
+// GetDebugUploadStatus for progress.
+message StartDebugUploadResponse {
+  string session_id = 1;
+  string upload_token = 2;
+}
+
+// GetDebugUploadStatusRequest queries the upload server for the
+// current status of a session. Any node can serve this request.
+message GetDebugUploadStatusRequest {
+  string session_id = 1;
+  string server_url = 2;
+  string upload_token = 3;
+}
+
+// GetDebugUploadStatusResponse returns per-node completion status
+// from the upload server.
+message GetDebugUploadStatusResponse {
+  // state is the session state: "active", "completed", or "failed".
+  string state = 1;
+  int32 artifacts_received = 2;
+  // artifacts_by_node maps node ID (as string) to artifact count.
+  // Node ID "0" represents cluster-level artifacts.
+  map<string, int32> artifacts_by_node = 3;
+}
+
+// ResumeDebugUploadRequest triggers an async resume of a previously
+// failed or incomplete upload session. The coordinator calls the
+// upload server's reupload endpoint, determines which nodes still
+// need uploading, and fans out only to those nodes.
+message ResumeDebugUploadRequest {
+  string session_id = 1;
+  string server_url = 2;
+  string api_key = 3;
+  bool redact = 4;
+  int32 cpu_prof_seconds = 5;
+  bool include_range_info = 6;
+  bool include_goroutine_stacks = 7;
 }
 
 service Status {
@@ -2846,12 +2917,44 @@ service Status {
   // UploadDebugData initiates a debug data upload session. The
   // coordinator creates a session on the upload server, collects
   // cluster-wide data, fans out to all nodes, and completes the
-  // session.
+  // session. Returns a stream: first a SessionCreated event with
+  // the session_id, then a Completed event with the final result.
   // This RPC does not have a corresponding HTTP endpoint on purpose.
-  rpc UploadDebugData(UploadDebugDataRequest) returns (UploadDebugDataResponse) {}
+  rpc UploadDebugData(UploadDebugDataRequest) returns (stream UploadDebugDataEvent) {}
 
   // UploadNodeDebugData collects and uploads debug data from a single
   // node directly to the upload server.
   // This RPC does not have a corresponding HTTP endpoint on purpose.
   rpc UploadNodeDebugData(UploadNodeDebugDataRequest) returns (UploadNodeDebugDataResponse) {}
+
+  // StartDebugUpload initiates an async debug data upload. The
+  // coordinator creates a session and starts the fan-out in a
+  // background goroutine, returning immediately with the session_id.
+  // Use GetDebugUploadStatus to poll for progress.
+  rpc StartDebugUpload(UploadDebugDataRequest) returns (StartDebugUploadResponse) {
+    option (google.api.http) = {
+      post: "/_status/start_debug_upload"
+      body: "*"
+    };
+  }
+
+  // GetDebugUploadStatus returns the current status of an upload
+  // session by proxying to the upload server. Any node can serve
+  // this request.
+  rpc GetDebugUploadStatus(GetDebugUploadStatusRequest) returns (GetDebugUploadStatusResponse) {
+    option (google.api.http) = {
+      get: "/_status/debug_upload_status/{session_id}"
+    };
+  }
+
+  // ResumeDebugUpload resumes a previously failed or incomplete
+  // upload session. The coordinator calls the reupload endpoint,
+  // determines completed nodes, and fans out to the remaining ones
+  // in a background goroutine.
+  rpc ResumeDebugUpload(ResumeDebugUploadRequest) returns (StartDebugUploadResponse) {
+    option (google.api.http) = {
+      post: "/_status/resume_debug_upload"
+      body: "*"
+    };
+  }
 }

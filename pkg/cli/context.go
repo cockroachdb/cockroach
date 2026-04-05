@@ -414,10 +414,11 @@ func setZipContextDefaults() {
 var uploadServerCtx uploadServerContext
 
 type uploadServerContext struct {
-	serverURL string
-	apiKey    string
-	labels    []string
-	fromFile  string
+	serverURL     string
+	apiKey        string
+	labels        []string
+	fromFile      string
+	fallbackHosts []string
 }
 
 // setUploadServerContextDefaults sets the default values in
@@ -428,6 +429,7 @@ func setUploadServerContextDefaults() {
 	uploadServerCtx.apiKey = ""
 	uploadServerCtx.labels = nil
 	uploadServerCtx.fromFile = ""
+	uploadServerCtx.fallbackHosts = nil
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

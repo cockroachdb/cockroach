@@ -746,9 +746,10 @@ func (s *statusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
 }
 
-// RegisterService registers the DRPC service.
+// RegisterDRPCService registers the DRPC service. Uses a wrapper
+// to provide DRPC-specific streaming method signatures.
 func (s *statusServer) RegisterDRPCService(d drpc.Mux) error {
-	return serverpb.DRPCRegisterStatus(d, s)
+	return serverpb.DRPCRegisterStatus(d, &drpcStatusServer{statusServer: s})
 }
 
 // RegisterGateway starts the gateway (i.e. reverse
@@ -765,9 +766,10 @@ func (s *systemStatusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
 }
 
-// RegisterService registers the DRPC service.
+// RegisterDRPCService registers the DRPC service. Uses a wrapper
+// to provide DRPC-specific streaming method signatures.
 func (s *systemStatusServer) RegisterDRPCService(d drpc.Mux) error {
-	return serverpb.DRPCRegisterStatus(d, s)
+	return serverpb.DRPCRegisterStatus(d, &drpcSystemStatusServer{systemStatusServer: s})
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {

@@ -1938,6 +1938,15 @@ connecting to the cluster.
 `,
 	}
 
+	UploadServerFallbackHosts = FlagInfo{
+		Name: "fallback-hosts",
+		Description: `
+Comma-separated list of additional host:port addresses to try if the
+primary host fails during upload. When not provided, fallback candidates
+are auto-discovered from the cluster's node list.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

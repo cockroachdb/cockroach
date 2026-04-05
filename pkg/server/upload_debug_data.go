@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,16 +30,85 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// UploadDebugData is the tenant-level stub. Secondary tenants cannot
-// use this RPC.
+// drpcStatusServer wraps statusServer for DRPC registration,
+// providing DRPC-specific streaming method signatures.
+type drpcStatusServer struct {
+	*statusServer
+}
+
+// UploadDebugData satisfies the DRPCStatusServer interface for the
+// tenant-level stub.
+func (s *drpcStatusServer) UploadDebugData(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.DRPCStatus_UploadDebugDataStream,
+) error {
+	return s.statusServer.uploadDebugDataImpl(req, stream)
+}
+
+// drpcSystemStatusServer wraps systemStatusServer for DRPC
+// registration, providing DRPC-specific streaming method signatures.
+type drpcSystemStatusServer struct {
+	*systemStatusServer
+}
+
+// UploadDebugData satisfies the DRPCStatusServer interface for the
+// system-level implementation.
+func (s *drpcSystemStatusServer) UploadDebugData(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.DRPCStatus_UploadDebugDataStream,
+) error {
+	return s.systemStatusServer.uploadDebugDataImpl(req, stream)
+}
+
+// UploadDebugData is the tenant-level gRPC stub. Secondary tenants
+// cannot use this RPC.
 func (t *statusServer) UploadDebugData(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.Status_UploadDebugDataServer,
+) error {
+	return t.uploadDebugDataImpl(req, stream)
+}
+
+// uploadDebugDataImpl is the common implementation that works with
+// both gRPC and DRPC stream types.
+func (t *statusServer) uploadDebugDataImpl(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.RPCStatus_UploadDebugDataStream,
+) error {
+	ctx := t.AnnotateCtx(stream.Context())
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return err
+	}
+	return status.Error(codes.Unimplemented, "upload debug data is not supported on secondary tenants")
+}
+
+// StartDebugUpload is the tenant-level stub.
+func (t *statusServer) StartDebugUpload(
 	ctx context.Context, req *serverpb.UploadDebugDataRequest,
-) (*serverpb.UploadDebugDataResponse, error) {
+) (*serverpb.StartDebugUploadResponse, error) {
 	ctx = t.AnnotateCtx(ctx)
 	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
-	return nil, status.Error(codes.Unimplemented, "upload debug data is not supported on secondary tenants")
+	return nil, status.Error(codes.Unimplemented, "start debug upload is not supported on secondary tenants")
+}
+
+// GetDebugUploadStatus is the tenant-level stub.
+func (t *statusServer) GetDebugUploadStatus(
+	ctx context.Context, req *serverpb.GetDebugUploadStatusRequest,
+) (*serverpb.GetDebugUploadStatusResponse, error) {
+	ctx = t.AnnotateCtx(ctx)
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+	return nil, status.Error(codes.Unimplemented, "get debug upload status is not supported on secondary tenants")
+}
+
+// ResumeDebugUpload is the tenant-level stub.
+func (t *statusServer) ResumeDebugUpload(
+	ctx context.Context, req *serverpb.ResumeDebugUploadRequest,
+) (*serverpb.StartDebugUploadResponse, error) {
+	ctx = t.AnnotateCtx(ctx)
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+	return nil, status.Error(codes.Unimplemented, "resume debug upload is not supported on secondary tenants")
 }
 
 // UploadNodeDebugData is the tenant-level stub. Secondary tenants
@@ -53,59 +123,43 @@ func (t *statusServer) UploadNodeDebugData(
 	return nil, status.Error(codes.Unimplemented, "upload node debug data is not supported on secondary tenants")
 }
 
-// UploadDebugData on the system status server coordinates the debug
-// data upload across all nodes. It:
-//  1. Creates a session on the upload server.
-//  2. Fans out UploadNodeDebugData RPCs to all (or selected) nodes.
-//  3. Completes the session on the upload server.
-func (s *systemStatusServer) UploadDebugData(
-	ctx context.Context, req *serverpb.UploadDebugDataRequest,
-) (*serverpb.UploadDebugDataResponse, error) {
-	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
-	ctx = s.AnnotateCtx(ctx)
+// uploadFanoutResult holds the aggregated result of the upload
+// fan-out across all nodes plus cluster-level data.
+type uploadFanoutResult struct {
+	sessionID      string
+	artifacts      int32
+	succeeded      int32
+	failed         int32
+	nodeStatuses   []serverpb.NodeUploadStatus
+	nodesCompleted []int32
+}
 
-	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
-		return nil, err
+// runUploadFanout runs the core upload logic: cluster-level data
+// collection and per-node fan-out. skipNodes contains node IDs that
+// have already completed (used during resume). When skipClusterData
+// is true, cluster-level data is not re-collected.
+func (s *systemStatusServer) runUploadFanout(
+	ctx context.Context,
+	client *uploadServerRPCClient,
+	req *serverpb.UploadDebugDataRequest,
+	skipNodes map[int32]bool,
+	skipClusterData bool,
+) (*uploadFanoutResult, error) {
+	result := &uploadFanoutResult{sessionID: client.sessionID}
+
+	// Collect cluster-level data (coordinator only) unless skipped.
+	var clusterTotalArtifacts int32
+	var clusterAllErrs []string
+	if !skipClusterData {
+		clusterArtifacts, clusterDataErrs := s.uploadClusterData(
+			ctx, client, req,
+		)
+		clusterTableArtifacts, clusterTableErrs := s.uploadClusterTables(
+			ctx, client, req.Redact,
+		)
+		clusterAllErrs = append(clusterDataErrs, clusterTableErrs...)
+		clusterTotalArtifacts = clusterArtifacts + clusterTableArtifacts
 	}
-
-	if req.ServerUrl == "" {
-		return nil, status.Error(codes.InvalidArgument, "server_url is required")
-	}
-	if req.ApiKey == "" {
-		return nil, status.Error(codes.InvalidArgument, "api_key is required")
-	}
-
-	// Get the node count and cluster info for session creation.
-	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
-	nodeCount := len(nodeStatuses)
-
-	clusterID := s.rpcCtx.StorageClusterID.Get().String()
-
-	// Create session on the upload server.
-	client := newUploadServerClientForRPC(req.ServerUrl, req.ApiKey, 5*time.Minute)
-	if err := client.createSession(ctx, clusterID, nodeCount, req.Redact, req.Labels); err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
-	defer func() { _ = client.closeGCS() }()
-	log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
-
-	// Initialize the GCS client for chunked resumable uploads.
-	if err := client.initGCSClient(ctx); err != nil {
-		return nil, status.Errorf(codes.Internal, "initializing GCS client: %v", err)
-	}
-
-	// Collect cluster-level data (coordinator only).
-	clusterArtifacts, clusterDataErrs := s.uploadClusterData(
-		ctx, client, req,
-	)
-	clusterTableArtifacts, clusterTableErrs := s.uploadClusterTables(
-		ctx, client, req.Redact,
-	)
-	clusterAllErrs := append(clusterDataErrs, clusterTableErrs...)
-	clusterTotalArtifacts := clusterArtifacts + clusterTableArtifacts
 
 	// Prepare the per-node request. Pass the coordinator's GCS
 	// credentials so all nodes upload to the same session folder.
@@ -130,18 +184,19 @@ func (s *systemStatusServer) UploadDebugData(
 
 	// Fan out to all nodes.
 	var mu syncutil.Mutex
-	var nodeStatuses2 []serverpb.NodeUploadStatus
-	var totalArtifacts int32
-	var nodesSucceeded, nodesFailed int32
-	var nodesCompleted []int32
 
 	nodeFn := func(
 		ctx context.Context,
 		statusClient serverpb.RPCStatusClient,
 		nodeID roachpb.NodeID,
 	) (*serverpb.UploadNodeDebugDataResponse, error) {
+		nid := int32(nodeID)
 		// Skip nodes not in the requested set (if specified).
-		if len(requestedNodes) > 0 && !requestedNodes[int32(nodeID)] {
+		if len(requestedNodes) > 0 && !requestedNodes[nid] {
+			return &serverpb.UploadNodeDebugDataResponse{}, nil
+		}
+		// Skip nodes already completed (resume case).
+		if skipNodes[nid] {
 			return &serverpb.UploadNodeDebugDataResponse{}, nil
 		}
 		return statusClient.UploadNodeDebugData(ctx, nodeReq)
@@ -155,21 +210,21 @@ func (s *systemStatusServer) UploadDebugData(
 			ArtifactsUploaded: resp.ArtifactsUploaded,
 			Errors:            resp.Errors,
 		}
-		nodeStatuses2 = append(nodeStatuses2, nStatus)
-		totalArtifacts += resp.ArtifactsUploaded
+		result.nodeStatuses = append(result.nodeStatuses, nStatus)
+		result.artifacts += resp.ArtifactsUploaded
 		if len(resp.Errors) > 0 {
-			nodesFailed++
+			result.failed++
 		} else {
-			nodesSucceeded++
-			nodesCompleted = append(nodesCompleted, int32(nodeID))
+			result.succeeded++
+			result.nodesCompleted = append(result.nodesCompleted, int32(nodeID))
 		}
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		mu.Lock()
 		defer mu.Unlock()
-		nodesFailed++
-		nodeStatuses2 = append(nodeStatuses2, serverpb.NodeUploadStatus{
+		result.failed++
+		result.nodeStatuses = append(result.nodeStatuses, serverpb.NodeUploadStatus{
 			NodeId: int32(nodeID),
 			Errors: []string{err.Error()},
 		})
@@ -194,13 +249,13 @@ func (s *systemStatusServer) UploadDebugData(
 		responseFn,
 		errorFn,
 	); err != nil {
-		return nil, srverrors.ServerError(ctx, err)
+		return nil, err
 	}
 
 	// Add cluster-level artifacts and status.
-	totalArtifacts += clusterTotalArtifacts
+	result.artifacts += clusterTotalArtifacts
 	if clusterTotalArtifacts > 0 || len(clusterAllErrs) > 0 {
-		nodeStatuses2 = append(nodeStatuses2, serverpb.NodeUploadStatus{
+		result.nodeStatuses = append(result.nodeStatuses, serverpb.NodeUploadStatus{
 			NodeId:            0,
 			ArtifactsUploaded: clusterTotalArtifacts,
 			Errors:            clusterAllErrs,
@@ -208,16 +263,317 @@ func (s *systemStatusServer) UploadDebugData(
 	}
 
 	// Complete the session.
-	if err := client.completeSession(ctx, int(totalArtifacts), nodesCompleted); err != nil {
+	if err := client.completeSession(ctx, int(result.artifacts), result.nodesCompleted); err != nil {
 		log.Dev.Warningf(ctx, "failed to complete upload session: %v", err)
 	}
 
-	return &serverpb.UploadDebugDataResponse{
-		SessionId:         client.sessionID,
-		ArtifactsUploaded: totalArtifacts,
-		NodesSucceeded:    nodesSucceeded,
-		NodesFailed:       nodesFailed,
-		NodeStatuses:      nodeStatuses2,
+	return result, nil
+}
+
+// setupUploadClient creates and initializes an upload server client.
+// For resume (req.SessionId != ""), it reopens the existing session
+// via the reupload endpoint and returns the set of already-completed
+// nodes. For new sessions, it creates a fresh session.
+func (s *systemStatusServer) setupUploadClient(
+	ctx context.Context, req *serverpb.UploadDebugDataRequest,
+) (client *uploadServerRPCClient, skipNodes map[int32]bool, skipClusterData bool, err error) {
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	nodeCount := len(nodeStatuses)
+	clusterID := s.rpcCtx.StorageClusterID.Get().String()
+
+	client = newUploadServerClientForRPC(req.ServerUrl, req.ApiKey, 5*time.Minute)
+	skipNodes = map[int32]bool{}
+
+	if req.SessionId != "" {
+		// Resume an existing session.
+		client.sessionID = req.SessionId
+		if req.UploadToken != "" {
+			client.uploadToken = req.UploadToken
+		}
+
+		// Reopen the session to get fresh credentials.
+		if reuploadErr := client.reuploadSession(ctx, nil, "coordinator failover"); reuploadErr != nil {
+			return nil, nil, false, errors.Wrap(reuploadErr, "reopening session")
+		}
+		log.Ops.Infof(ctx, "upload session reopened for resume: %s", client.sessionID)
+
+		// Query which nodes are already done.
+		sessionStatus, statusErr := client.getSessionStatus(ctx)
+		if statusErr != nil {
+			return nil, nil, false, errors.Wrap(statusErr, "querying session status")
+		}
+		for nodeIDStr, count := range sessionStatus.ArtifactsByNode {
+			if count > 0 {
+				if nodeIDStr == "0" {
+					skipClusterData = true
+				} else {
+					nid, parseErr := strconv.Atoi(nodeIDStr)
+					if parseErr == nil {
+						skipNodes[int32(nid)] = true
+					}
+				}
+			}
+		}
+		log.Ops.Infof(ctx, "resume: skipping %d completed nodes, skipClusterData=%t",
+			len(skipNodes), skipClusterData)
+	} else {
+		// Create a new session.
+		if createErr := client.createSession(ctx, clusterID, nodeCount, req.Redact, req.Labels); createErr != nil {
+			return nil, nil, false, createErr
+		}
+		log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
+	}
+
+	// Initialize the GCS client for chunked resumable uploads.
+	if gcsErr := client.initGCSClient(ctx); gcsErr != nil {
+		return nil, nil, false, errors.Wrap(gcsErr, "initializing GCS client")
+	}
+
+	return client, skipNodes, skipClusterData, nil
+}
+
+// UploadDebugData on the system status server coordinates the debug
+// data upload across all nodes. Delegates to the common
+// implementation for both gRPC and DRPC.
+func (s *systemStatusServer) UploadDebugData(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.Status_UploadDebugDataServer,
+) error {
+	return s.uploadDebugDataImpl(req, stream)
+}
+
+// uploadDebugDataImpl streams events back to the caller: first a
+// SessionCreated event with the session_id, then a Completed event
+// with the final result. Supports resuming an existing session when
+// req.SessionId is set.
+func (s *systemStatusServer) uploadDebugDataImpl(
+	req *serverpb.UploadDebugDataRequest, stream serverpb.RPCStatus_UploadDebugDataStream,
+) error {
+	ctx := stream.Context()
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return err
+	}
+
+	if req.ServerUrl == "" {
+		return status.Error(codes.InvalidArgument, "server_url is required")
+	}
+	if req.ApiKey == "" {
+		return status.Error(codes.InvalidArgument, "api_key is required")
+	}
+
+	client, skipNodes, skipClusterData, err := s.setupUploadClient(ctx, req)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	defer func() { _ = client.closeGCS() }()
+
+	// Send the session_id to the client immediately so it can
+	// retry on a different node if this coordinator fails.
+	if err := stream.Send(&serverpb.UploadDebugDataEvent{
+		Event: &serverpb.UploadDebugDataEvent_SessionCreated{
+			SessionCreated: &serverpb.SessionCreated{
+				SessionId:   client.sessionID,
+				UploadToken: client.uploadToken,
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	result, err := s.runUploadFanout(ctx, client, req, skipNodes, skipClusterData)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+
+	// Send the final result.
+	return stream.Send(&serverpb.UploadDebugDataEvent{
+		Event: &serverpb.UploadDebugDataEvent_Completed{
+			Completed: &serverpb.UploadDebugDataResponse{
+				SessionId:         result.sessionID,
+				ArtifactsUploaded: result.artifacts,
+				NodesSucceeded:    result.succeeded,
+				NodesFailed:       result.failed,
+				NodeStatuses:      result.nodeStatuses,
+			},
+		},
+	})
+}
+
+// StartDebugUpload creates a session and starts the fan-out in a
+// background goroutine, returning immediately with the session_id.
+// DB Console uses this to trigger uploads without a long-lived
+// connection.
+func (s *systemStatusServer) StartDebugUpload(
+	ctx context.Context, req *serverpb.UploadDebugDataRequest,
+) (*serverpb.StartDebugUploadResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if req.ServerUrl == "" {
+		return nil, status.Error(codes.InvalidArgument, "server_url is required")
+	}
+	if req.ApiKey == "" {
+		return nil, status.Error(codes.InvalidArgument, "api_key is required")
+	}
+
+	client, skipNodes, skipClusterData, err := s.setupUploadClient(ctx, req)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	sessionID := client.sessionID
+	uploadToken := client.uploadToken
+
+	// Run the fan-out in a background goroutine managed by the
+	// stopper so it is cleaned up on node shutdown.
+	if err := s.stopper.RunAsyncTask(
+		s.AnnotateCtx(context.Background()),
+		"upload-debug-data-async",
+		func(ctx context.Context) {
+			defer func() { _ = client.closeGCS() }()
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
+			result, fanoutErr := s.runUploadFanout(ctx, client, req, skipNodes, skipClusterData)
+			if fanoutErr != nil {
+				log.Ops.Errorf(ctx, "async upload failed for session %s: %v", sessionID, fanoutErr)
+				return
+			}
+			log.Ops.Infof(ctx, "async upload completed for session %s: %d artifacts, %d succeeded, %d failed",
+				sessionID, result.artifacts, result.succeeded, result.failed)
+		},
+	); err != nil {
+		_ = client.closeGCS()
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	return &serverpb.StartDebugUploadResponse{
+		SessionId:   sessionID,
+		UploadToken: uploadToken,
+	}, nil
+}
+
+// GetDebugUploadStatus proxies a status request to the upload server
+// and returns per-node completion information. Any node can serve
+// this request.
+func (s *systemStatusServer) GetDebugUploadStatus(
+	ctx context.Context, req *serverpb.GetDebugUploadStatusRequest,
+) (*serverpb.GetDebugUploadStatusResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if req.SessionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	if req.ServerUrl == "" {
+		return nil, status.Error(codes.InvalidArgument, "server_url is required")
+	}
+	if req.UploadToken == "" {
+		return nil, status.Error(codes.InvalidArgument, "upload_token is required")
+	}
+
+	client := newUploadServerClientForNodeRPC(
+		req.ServerUrl, req.SessionId, req.UploadToken, 30*time.Second,
+	)
+
+	sessionStatus, err := client.getSessionStatus(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	artifactsByNode := make(map[string]int32, len(sessionStatus.ArtifactsByNode))
+	for k, v := range sessionStatus.ArtifactsByNode {
+		artifactsByNode[k] = int32(v)
+	}
+
+	return &serverpb.GetDebugUploadStatusResponse{
+		State:             sessionStatus.State,
+		ArtifactsReceived: int32(sessionStatus.ArtifactsReceived),
+		ArtifactsByNode:   artifactsByNode,
+	}, nil
+}
+
+// ResumeDebugUpload resumes a previously failed or incomplete upload
+// session. It calls the reupload endpoint, determines completed
+// nodes, and starts a background goroutine to fan out to the
+// remaining nodes.
+func (s *systemStatusServer) ResumeDebugUpload(
+	ctx context.Context, req *serverpb.ResumeDebugUploadRequest,
+) (*serverpb.StartDebugUploadResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if req.SessionId == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	if req.ServerUrl == "" {
+		return nil, status.Error(codes.InvalidArgument, "server_url is required")
+	}
+	if req.ApiKey == "" {
+		return nil, status.Error(codes.InvalidArgument, "api_key is required")
+	}
+
+	// Build an UploadDebugDataRequest so setupUploadClient and
+	// runUploadFanout can reuse the same code paths.
+	uploadReq := &serverpb.UploadDebugDataRequest{
+		ServerUrl:              req.ServerUrl,
+		ApiKey:                 req.ApiKey,
+		Redact:                 req.Redact,
+		CpuProfSeconds:         req.CpuProfSeconds,
+		IncludeRangeInfo:       req.IncludeRangeInfo,
+		IncludeGoroutineStacks: req.IncludeGoroutineStacks,
+		SessionId:              req.SessionId,
+	}
+
+	client, skipNodes, skipClusterData, err := s.setupUploadClient(ctx, uploadReq)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	sessionID := client.sessionID
+	uploadToken := client.uploadToken
+
+	if err := s.stopper.RunAsyncTask(
+		s.AnnotateCtx(context.Background()),
+		"resume-debug-upload-async",
+		func(ctx context.Context) {
+			defer func() { _ = client.closeGCS() }()
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
+			result, fanoutErr := s.runUploadFanout(ctx, client, uploadReq, skipNodes, skipClusterData)
+			if fanoutErr != nil {
+				log.Ops.Errorf(ctx, "async resume upload failed for session %s: %v", sessionID, fanoutErr)
+				return
+			}
+			log.Ops.Infof(ctx, "async resume upload completed for session %s: %d artifacts, %d succeeded, %d failed",
+				sessionID, result.artifacts, result.succeeded, result.failed)
+		},
+	); err != nil {
+		_ = client.closeGCS()
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	return &serverpb.StartDebugUploadResponse{
+		SessionId:   sessionID,
+		UploadToken: uploadToken,
 	}, nil
 }
 

@@ -344,6 +344,88 @@ func (c *uploadServerRPCClient) completeSession(
 	return nil
 }
 
+// rpcSessionStatusResponse is the JSON response from
+// GET /api/v1/sessions/{id}/status.
+type rpcSessionStatusResponse struct {
+	State             string         `json:"state"`
+	ArtifactsReceived int            `json:"artifacts_received"`
+	ArtifactsByNode   map[string]int `json:"artifacts_by_node"`
+}
+
+// getSessionStatus retrieves the current status of the upload session
+// from the upload server, including per-node artifact counts.
+func (c *uploadServerRPCClient) getSessionStatus(
+	ctx context.Context,
+) (*rpcSessionStatusResponse, error) {
+	url := fmt.Sprintf("%s/api/v1/sessions/%s/status", c.serverURL, c.sessionID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating status request")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.uploadToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching session status")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, readUploadHTTPError(resp)
+	}
+
+	var result rpcSessionStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "decoding status response")
+	}
+	return &result, nil
+}
+
+// reuploadSession reopens a previously incomplete session on the
+// upload server. It calls POST /sessions/{id}/reupload with the
+// api_key for authentication, and updates the client's uploadToken
+// with the fresh one returned by the server.
+func (c *uploadServerRPCClient) reuploadSession(
+	ctx context.Context, nodeIDs []int32, reason string,
+) error {
+	body := map[string]interface{}{
+		"node_ids": nodeIDs,
+		"reason":   reason,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return errors.Wrap(err, "marshaling reupload request")
+	}
+
+	url := fmt.Sprintf("%s/api/v1/sessions/%s/reupload", c.serverURL, c.sessionID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+	if err != nil {
+		return errors.Wrap(err, "creating reupload request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "sending reupload request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return readUploadHTTPError(resp)
+	}
+
+	var result struct {
+		SessionID   string `json:"session_id"`
+		UploadToken string `json:"upload_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return errors.Wrap(err, "decoding reupload response")
+	}
+	c.uploadToken = result.UploadToken
+	return nil
+}
+
 // readUploadHTTPError reads an error response and returns a descriptive error.
 func readUploadHTTPError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
