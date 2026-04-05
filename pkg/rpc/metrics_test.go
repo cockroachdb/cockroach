@@ -438,7 +438,7 @@ func TestDRPCUnaryClientRequestMetricsInterceptor(t *testing.T) {
 	clientMetrics := NewClientRequestMetrics()
 	ctx := context.Background()
 	rpc := "/testservice/TestMethod"
-	interceptor := NewDRPCUnaryClientRequestMetricsInterceptor(clientMetrics)
+	interceptor := NewDRPCUnaryClientRequestMetricsInterceptor(clientMetrics, func(rpc string) bool { return true })
 
 	startedLabels := map[string]string{
 		RPCMethodLabel: rpc,
@@ -493,7 +493,7 @@ func TestDRPCStreamClientRequestMetricsInterceptor(t *testing.T) {
 	clientMetrics := NewClientRequestMetrics()
 	ctx := context.Background()
 	rpc := "/testservice/StreamMethod"
-	interceptor := NewDRPCStreamClientRequestMetricsInterceptor(clientMetrics)
+	interceptor := NewDRPCStreamClientRequestMetricsInterceptor(clientMetrics, func(rpc string) bool { return true })
 
 	startedLabels := map[string]string{
 		RPCMethodLabel: rpc,

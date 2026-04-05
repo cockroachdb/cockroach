@@ -501,15 +501,15 @@ func (m *Metrics) acquire(
 }
 
 const (
-	serverPrefix = "/cockroach.server"
-	tsdbPrefix   = "/cockroach.ts"
+	ServerPrefix = "/cockroach.server"
+	TsdbPrefix   = "/cockroach.ts"
 )
 
 // ServerRPCRequestMetricsEnabled is a cluster setting that enables the
 // collection of gRPC and DRPC request duration metrics. This uses export only
 // metrics so the metrics are only exported to external sources such as
 // /_status/vars and DataDog.
-var serverRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
+var ServerRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"server.rpc.request_metrics.enabled",
 	"enables the collection of rpc metrics",
@@ -518,13 +518,13 @@ var serverRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
 )
 
 func ShouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
-	return serverRPCRequestMetricsEnabled.Get(&settings.SV) &&
-		(strings.HasPrefix(method, serverPrefix) ||
-			strings.HasPrefix(method, tsdbPrefix))
+	return ServerRPCRequestMetricsEnabled.Get(&settings.SV) &&
+		(strings.HasPrefix(method, ServerPrefix) ||
+			strings.HasPrefix(method, TsdbPrefix))
 }
 
 func ShouldRecordRequestMetricsDRPC(settings *cluster.Settings) bool {
-	return serverRPCRequestMetricsEnabled.Get(&settings.SV)
+	return ServerRPCRequestMetricsEnabled.Get(&settings.SV)
 }
 
 const (
