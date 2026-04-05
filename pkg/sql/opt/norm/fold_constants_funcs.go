@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -404,8 +406,14 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			// Pass an empty user so that re-validation uses the current
 			// session user (this is not a definer context).
 			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT, username.SQLUsername{})
+			resolvedOid := catconstants.RemapPgCatalogOid(
+				uint32(ds.PostgresDescriptorID()),
+				sessiondatapb.IsPgDumpCompatibilityEnabled(
+					c.f.evalCtx.SessionData().PgDumpCompatibility,
+				),
+			)
 			dOid = tree.NewDOidWithTypeAndName(
-				oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName),
+				resolvedOid, types.RegClass, string(tn.ObjectName),
 			)
 
 		default:
