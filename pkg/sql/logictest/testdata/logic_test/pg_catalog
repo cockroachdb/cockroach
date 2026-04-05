@@ -1999,6 +1999,51 @@ rulename  relname                ev_type  ev_enabled  is_instead  ev_qual
 _RETURN   depend_view            1        NULL        true        NULL
 _RETURN   view_dependingon_view  1        NULL        true        NULL
 
+# Verify pg_dump's dependency resolution pattern works.
+# pg_dump joins pg_depend to pg_rewrite using CatalogId = (classid, objid)
+# matching (tableoid, oid). If classid != pg_rewrite's tableoid, the
+# dependency is silently dropped and views are dumped before their tables.
+
+# Test with default settings.
+query TT colnames,rowsort
+SELECT depend_class.relname AS view_name,
+       source_class.relname AS depends_on
+FROM pg_depend d
+JOIN pg_rewrite r ON d.classid = r.tableoid AND d.objid = r.oid
+JOIN pg_class depend_class ON r.ev_class = depend_class.oid
+JOIN pg_class source_class ON d.refobjid = source_class.oid
+WHERE r.rulename = '_RETURN'
+  AND d.deptype NOT IN ('p', 'e')
+  AND source_class.relname = 'source_table'
+ORDER BY 1, 2
+----
+view_name      depends_on
+depend_view    source_table
+depend_view    source_table
+
+# Test with pg_dump_compatibility = postgres (OID remapping active).
+statement ok
+SET pg_dump_compatibility = postgres
+
+query TT colnames,rowsort
+SELECT depend_class.relname AS view_name,
+       source_class.relname AS depends_on
+FROM pg_depend d
+JOIN pg_rewrite r ON d.classid = r.tableoid AND d.objid = r.oid
+JOIN pg_class depend_class ON r.ev_class = depend_class.oid
+JOIN pg_class source_class ON d.refobjid = source_class.oid
+WHERE r.rulename = '_RETURN'
+  AND d.deptype NOT IN ('p', 'e')
+  AND source_class.relname = 'source_table'
+ORDER BY 1, 2
+----
+view_name      depends_on
+depend_view    source_table
+depend_view    source_table
+
+statement ok
+RESET pg_dump_compatibility
+
 ## pg_catalog.pg_enum
 statement ok
 CREATE TYPE newtype1 AS ENUM ('v1', 'v2');
@@ -6012,5 +6057,61 @@ query T
 SELECT nspacl FROM pg_namespace WHERE nspname = 'testowner_schema'
 ----
 NULL
+
+subtest pg_shdepend_compat
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# With compat mode, pg_shdepend classid/refclassid should use PostgreSQL OIDs.
+# pg_class = 1259, pg_authid = 1260, pg_database = 1262.
+query OO colnames,rowsort
+SELECT DISTINCT classid, refclassid FROM pg_shdepend
+WHERE classid != 0
+LIMIT 5
+----
+classid  refclassid
+1259     1260
+1262     1260
+
+statement ok
+RESET pg_dump_compatibility
+
+subtest end
+
+subtest pg_description_compat
+
+statement ok
+CREATE TABLE desc_compat_test (id INT PRIMARY KEY)
+
+statement ok
+COMMENT ON TABLE desc_compat_test IS 'test comment'
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# With compat mode, pg_description.classoid should be PostgreSQL's
+# pg_class OID (1259), not CockroachDB's internal descriptor ID.
+query OT
+SELECT classoid, description FROM pg_description
+WHERE description = 'test comment'
+----
+1259  test comment
+
+statement ok
+RESET pg_dump_compatibility
+
+# Without compat mode, classoid should be CockroachDB's descriptor ID.
+let $crdb_pg_class_oid
+SELECT oid FROM pg_class WHERE relname = 'pg_class' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog')
+
+query BT
+SELECT classoid = $crdb_pg_class_oid, description FROM pg_description
+WHERE description = 'test comment'
+----
+true  test comment
+
+statement ok
+DROP TABLE desc_compat_test
 
 subtest end

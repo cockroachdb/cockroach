@@ -423,12 +423,12 @@ distribution: local
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column102) = (table_id)
+        │ equality: (column103) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column83) = (table_id)
+        │       │ equality: (column84) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -466,7 +466,7 @@ distribution: local
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = <oid>
+        │       │                               │ filter: (classoid != 4294967071) AND (compat_classoid = <oid>)
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary

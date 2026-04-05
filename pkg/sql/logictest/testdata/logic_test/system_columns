@@ -415,6 +415,38 @@ SELECT bool_and(tableoid = $crdb_tables_oid) FROM crdb_internal.tables
 ----
 true
 
+# Additional pg_catalog tables should also have remapped tableoids.
+query O
+SELECT DISTINCT tableoid FROM pg_attribute LIMIT 1
+----
+1249
+
+query O
+SELECT DISTINCT tableoid FROM pg_index LIMIT 1
+----
+2610
+
+# Forward regclass cast should return PostgreSQL OIDs in compat mode.
+query O
+SELECT 'pg_class'::regclass::oid
+----
+1259
+
+query O
+SELECT 'pg_type'::regclass::oid
+----
+1247
+
+query O
+SELECT 'pg_namespace'::regclass::oid
+----
+2615
+
+query O
+SELECT 'pg_proc'::regclass::oid
+----
+1255
+
 # Turn it back off and verify default behavior is restored.
 statement ok
 SET pg_dump_compatibility = 'off'

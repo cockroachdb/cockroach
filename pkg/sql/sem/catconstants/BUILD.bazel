@@ -6,10 +6,12 @@ go_library(
     srcs = [
         "constants.go",
         "namespace.go",
+        "pg_catalog_oids.go",
         "schemas.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_lib_pq//oid"],
 )
 
 disallowed_imports_test(
