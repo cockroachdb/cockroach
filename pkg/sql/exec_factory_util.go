@@ -14,12 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq/oid"
 )
 
 func constructPlan(
@@ -255,22 +255,6 @@ func getResultColumnsForGroupBy(
 	return columns
 }
 
-// pgCatalogTableOIDs maps pg_catalog table names to their standard PostgreSQL
-// OIDs. This is used when pg_dump_compatibility is enabled to return the OIDs
-// that pg_dump expects when looking up catalog objects by tableoid.
-var pgCatalogTableOIDs = map[string]oid.Oid{
-	"pg_class":        1259,
-	"pg_type":         1247,
-	"pg_proc":         1255,
-	"pg_operator":     2617,
-	"pg_am":           2601,
-	"pg_collation":    3456,
-	"pg_namespace":    2615,
-	"pg_extension":    3079,
-	"pg_publication":  6104,
-	"pg_subscription": 6100,
-}
-
 func constructVirtualScan(
 	ef exec.Factory,
 	p *planner,
@@ -352,12 +336,11 @@ func constructVirtualScan(
 			exprs[i] = tree.NewTypedOrdinalReference(i, inputCols[i].Typ)
 		}
 		tableID := table.(*optVirtualTable).desc.GetID()
-		tableOidValue := oid.Oid(tableID)
-		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
-			if pgOid, ok := pgCatalogTableOIDs[tn.Table()]; ok && tn.Schema() == "pg_catalog" {
-				tableOidValue = pgOid
-			}
-		}
+		tableOidValue := catconstants.RemapPgCatalogOid(
+			tn.Schema(),
+			uint32(tableID),
+			sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility),
+		)
 		exprs[len(inputCols)] = tree.NewDOid(tableOidValue)
 		n, err = ef.ConstructRender(n, renderCols, exprs, nil /* reqOrdering */)
 		if err != nil {

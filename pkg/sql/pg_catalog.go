@@ -886,7 +886,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
-		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
+		compat := sessiondatapb.IsPgDumpCompatibilityEnabled(
+			p.SessionData().PgDumpCompatibility,
+		)
+		if compat {
 			// Use PostgreSQL's heap AM OID for tables so pg_dump doesn't emit
 			// SET default_table_access_method = prefix.
 			relAm = heapAmOid
@@ -956,8 +959,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		}
 		implicitTypOID := typedesc.TableIDToImplicitTypeOID(table.GetID())
 		namespaceOid := schemaOid(sc.GetID())
+		relOid := tree.NewDOid(catconstants.RemapPgCatalogOid(
+			sc.GetName(), uint32(table.GetID()), compat,
+		))
 		if err := addRow(
-			tableOid(table.GetID()),        // oid
+			relOid,                         // oid
 			tree.NewDName(table.GetName()), // relname
 			namespaceOid,                   // relnamespace
 			tree.NewDOid(implicitTypOID),   // reltype (PG creates a composite type in pg_type for each table)
@@ -1980,9 +1986,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 			return errors.New("could not find pg_catalog.pg_proc")
 		}
 		h := makeOidHasher()
-		pgConstraintTableOid := tableOid(pgConstraintsDesc.GetID())
-		pgClassTableOid := tableOid(pgClassDesc.GetID())
-		pgRewriteTableOid := tableOid(pgRewriteDesc.GetID())
+		compat := sessiondatapb.IsPgDumpCompatibilityEnabled(
+			p.SessionData().PgDumpCompatibility,
+		)
+		pgConstraintTableOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgConstraintsDesc.GetID()), compat),
+		)
+		pgClassTableOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgClassDesc.GetID()), compat),
+		)
+		pgRewriteTableOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgRewriteDesc.GetID()), compat),
+		)
 
 		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /*virtual tables have no constraints*/
 		err = forEachTableDesc(ctx, p, dbContext, opts, func(
@@ -2081,7 +2096,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 			return err
 		}
 		return forEachSchema(ctx, p, dbContext, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
-			pgProcTableOid := tableOid(pgProcDesc.GetID())
+			pgProcTableOid := tree.NewDOid(
+				catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgProcDesc.GetID()), compat),
+			)
 			return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
 				funcDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).Get().Function(ctx, sig.ID)
 				if err != nil {
@@ -3543,19 +3560,28 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
-		pgClassOid := tableOid(pgClassDesc.GetID())
+		compat := sessiondatapb.IsPgDumpCompatibilityEnabled(
+			p.SessionData().PgDumpCompatibility,
+		)
+		pgClassOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgClassDesc.GetID()), compat),
+		)
 
 		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_authid")
 		}
-		pgAuthIDOid := tableOid(pgAuthIDDesc.GetID())
+		pgAuthIDOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgAuthIDDesc.GetID()), compat),
+		)
 
 		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_database")
 		}
-		pgDatabaseOid := tableOid(pgDatabaseDesc.GetID())
+		pgDatabaseOid := tree.NewDOid(
+			catconstants.RemapPgCatalogOid(catconstants.PgCatalogName, uint32(pgDatabaseDesc.GetID()), compat),
+		)
 
 		// There is no dependent object for pinned roles; In postgres this type of
 		// entry is a signal that the system itself depends on the referenced

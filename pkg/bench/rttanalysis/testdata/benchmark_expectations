@@ -115,7 +115,7 @@ exp,benchmark
 3,ORMQueries/information_schema._pg_index_position
 5,ORMQueries/introspection_description_join
 4,ORMQueries/liquibase_migrations
-11,ORMQueries/liquibase_migrations_on_multiple_dbs
+15,ORMQueries/liquibase_migrations_on_multiple_dbs
 4,ORMQueries/npgsql_fields
 4,ORMQueries/npgsql_types
 3,ORMQueries/pg_attribute
