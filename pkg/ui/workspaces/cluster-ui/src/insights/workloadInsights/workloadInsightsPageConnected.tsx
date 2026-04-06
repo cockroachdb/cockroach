@@ -12,7 +12,6 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import { localStorageSelector } from "src/store/utils/selectors";
 
 import { actions as analyticsActions } from "../../store/analytics";
-import { actions as sqlActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { TimeScale } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "../types";
@@ -81,7 +80,7 @@ export const WorkloadInsightsPageConnected: React.FC = () => {
 
   const txnSetTimeScale = useCallback(
     (ts: TimeScale) => {
-      dispatch(sqlActions.updateTimeScale({ ts }));
+      dispatch(localStorageActions.updateTimeScale({ value: ts }));
       dispatch(
         analyticsActions.track({
           name: "TimeScale changed",
@@ -137,7 +136,7 @@ export const WorkloadInsightsPageConnected: React.FC = () => {
 
   const stmtSetTimeScale = useCallback(
     (ts: TimeScale) => {
-      dispatch(sqlActions.updateTimeScale({ ts }));
+      dispatch(localStorageActions.updateTimeScale({ value: ts }));
       dispatch(
         analyticsActions.track({
           name: "TimeScale changed",

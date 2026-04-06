@@ -9,7 +9,6 @@ import { Dispatch } from "redux";
 
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { selectRequestTime } from "src/transactionsPage/transactionsPage.selectors";
 
 import { actions as analyticsActions } from "../store/analytics";
@@ -49,8 +48,8 @@ const mapDispatchToProps = (
 ): TransactionDetailsDispatchProps => ({
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(
-      sqlStatsActions.updateTimeScale({
-        ts: ts,
+      localStorageActions.updateTimeScale({
+        value: ts,
       }),
     );
     dispatch(

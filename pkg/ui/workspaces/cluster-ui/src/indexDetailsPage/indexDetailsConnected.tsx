@@ -7,7 +7,7 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 
-import { actions as sqlStatsActions } from "../store/sqlStats";
+import { actions as localStorageActions } from "../store/localStorage";
 import { selectTimeScale } from "../store/utils/selectors";
 import { TimeScale } from "../timeScaleDropdown";
 import { databaseNameAttr, indexNameAttr, tableNameAttr } from "../util";
@@ -24,7 +24,7 @@ export const ConnectedIndexDetailsPage: React.FC = () => {
   const dispatch = useDispatch();
 
   const onTimeScaleChange = (ts: TimeScale) => {
-    dispatch(sqlStatsActions.updateTimeScale({ ts }));
+    dispatch(localStorageActions.updateTimeScale({ value: ts }));
   };
 
   return (

@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { actions as analyticsActions } from "../../store/analytics";
-import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { actions as localStorageActions } from "../../store/localStorage";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { TimeScale } from "../../timeScaleDropdown";
 
@@ -22,7 +22,7 @@ const StatementInsightDetailsPage: React.FC<RouteComponentProps> = props => {
       {...props}
       timeScale={timeScale}
       setTimeScale={(ts: TimeScale) => {
-        dispatch(sqlStatsActions.updateTimeScale({ ts }));
+        dispatch(localStorageActions.updateTimeScale({ value: ts }));
         dispatch(
           analyticsActions.track({
             name: "TimeScale changed",

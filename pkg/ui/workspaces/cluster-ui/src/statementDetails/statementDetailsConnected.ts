@@ -12,7 +12,6 @@ import { StatementDiagnosticsReport } from "src/api";
 import { selectRequestTime } from "src/statementsPage/statementsPage.selectors";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { getMatchParamByName, statementAttr } from "src/util";
 
 import { AppState } from "../store";
@@ -35,8 +34,8 @@ const mapDispatchToProps = (
 ): StatementDetailsDispatchProps => ({
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(
-      sqlStatsActions.updateTimeScale({
-        ts: ts,
+      localStorageActions.updateTimeScale({
+        value: ts,
       }),
     );
     dispatch(
