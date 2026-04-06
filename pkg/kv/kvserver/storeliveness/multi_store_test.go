@@ -165,6 +165,7 @@ func makeMultiStoreArgs(storeKnobs *kvserver.StoreTestingKnobs) base.TestCluster
 func TestStoreLivenessAllToAllSupport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 167469)
 
 	ctx := context.Background()
 	args := makeMultiStoreArgs(nil)
@@ -232,6 +233,7 @@ func TestStoreLivenessRestart(t *testing.T) {
 func TestStoreLivenessDiskStall(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 167469)
 
 	ctx := context.Background()
 	stalledStore := slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(3)}
