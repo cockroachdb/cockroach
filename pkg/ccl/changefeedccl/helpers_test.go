@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1932,12 +1931,11 @@ func verifyLogsWithEmittedBytesAndMessages(
 	t *testing.T,
 	jobID jobspb.JobID,
 	logSpy *logtestutils.StructuredLogSpy[eventpb.ChangefeedEmittedBytes],
-	sv *settings.Values,
 	interval int64,
 	closing bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		emittedBytesLogs := logSpy.GetUnreadLogs(getChangefeedLoggingChannel(sv))
+		emittedBytesLogs := logSpy.GetUnreadLogs(getChangefeedLoggingChannel())
 		if len(emittedBytesLogs) == 0 {
 			return errors.New("no logs found")
 		}
