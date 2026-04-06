@@ -11082,8 +11082,8 @@ def go_deps():
         importpath = "storj.io/drpc",
         replace = "github.com/cthumuluru-crdb/drpc",
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:xCBV96q9gPIUrNZpKi897jebfut6xuIGb4wgkBtS778=",
-        version = "v0.0.0-20260405193453-68a0e16d87f7",
+        sum = "h1:DBb3B/Q8aZekx6fO+G17HVeUdDeTf4rIfKRINuOqPE8=",
+        version = "v0.0.0-20260406032320-8a0949eeee1f",
     )
     go_repository(
         name = "org_bazil_fuse",
