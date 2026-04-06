@@ -8,10 +8,12 @@ package kvstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,33 +104,69 @@ func isNodeApplied(ctx context.Context, stateRO StateRO, node wagpb.Node) (bool,
 	return true, nil
 }
 
-// truncateAppliedNode checks the first WAG node and deletes it if all of its
-// events have been applied to the state engine. Returns true if a node was
-// deleted.
+// SideloadClearer truncates sideloaded files for a given range up to and
+// including the specified raft log index. Files beyond this index may belong
+// to a newer replica and must be preserved.
+type SideloadClearer func(ctx context.Context, rangeID roachpb.RangeID, upToIndex kvpb.RaftIndex) error
+
+// clearReplicaRaftLog clears raft log entries at or below the given index for
+// a destroyed or subsumed replica.
+func clearReplicaRaftLog(
+	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
+) error {
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	start := prefixBuf.RaftLogPrefix()
+	end := prefixBuf.RaftLogKey(lastIndex).Next()
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, raft.RO, raft.WO, start, end, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TruncateAppliedWAGNodeAndClearRaftState checks the first WAG node and
+// deletes it if all of its events have been applied to the state engine. For
+// nodes containing EventDestroy or EventSubsume events, it also clears the
+// raft log entries and sideloaded files for those replicas.
 //
 // The caller must provide a stateRO reader with GuaranteedDurability so that
 // only state confirmed flushed to persistent storage is visible. This ensures
 // we never delete a WAG node whose mutations aren't flushed yet.
-func truncateAppliedNode(ctx context.Context, raft Raft, stateRO StateRO) (bool, error) {
+// TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
+func TruncateAppliedWAGNodeAndClearRaftState(
+	ctx context.Context, raft Raft, stateRO StateRO, clearSideloaded SideloadClearer,
+) (bool, error) {
 	var iter wag.Iterator
 	for index, node := range iter.Iter(ctx, raft.RO) {
 		applied, err := isNodeApplied(ctx, stateRO, node)
-		if err != nil {
+		if err != nil || !applied {
 			return false, err
-		}
-		if !applied {
-			return false, nil
 		}
 		if err := wag.Delete(raft.WO, index); err != nil {
 			return false, err
 		}
-		// TODO(Ibrahim): Add logic to clear raft state (log entries, HardState,
-		// TruncatedState) for destroyed/subsumed replicas.
-		// TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
+
+		// Clean up the Raft state of a destroyed/subsumed replica.
+		for _, event := range node.Events {
+			if event.Type != wagpb.EventDestroy && event.Type != wagpb.EventSubsume {
+				continue
+			}
+			if err := clearReplicaRaftLog(ctx, raft, event.Addr.RangeID, event.Addr.Index); err != nil {
+				return false, errors.Wrapf(err, "clearing raft log for r%d", event.Addr.RangeID)
+			}
+			if clearSideloaded != nil {
+				// In general, we shouldn't delete sideloaded files before commiting the
+				// batch that deletes the Raft log entries. However, in this case, we
+				// know that the destroy/subsume event has already been flushed to disk,
+				// and the replica is destroyed. We will not need to reference the
+				// sideloaded files anymore.
+				if err := clearSideloaded(ctx, event.Addr.RangeID, event.Addr.Index); err != nil {
+					return false, errors.Wrapf(err, "clearing sideloaded files for r%d", event.Addr.RangeID)
+				}
+			}
+		}
 		return true, nil
 	}
-	if err := iter.Error(); err != nil {
-		return false, err
-	}
-	return false, nil
+	return false, iter.Error()
 }
