@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2512,8 +2513,11 @@ type attachJsonResponse struct {
 }
 
 func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
-	// TODO(leon): what happens if this device already exists?
-	deviceName := "/dev/sdf"
+	// Use the same device naming convention as newVolume() (starting at
+	// /dev/sdd). The caller appends the volume to NonBootAttachedVolumes
+	// before calling this method, so len-1 gives the 0-based index.
+	devIdx := len(vm.NonBootAttachedVolumes) - 1
+	deviceName := fmt.Sprintf("/dev/sd%c", 'd'+devIdx)
 	args := []string{
 		"ec2",
 		"attach-volume",
@@ -2565,9 +2569,9 @@ type createVolume struct {
 func (p *Provider) CreateVolume(
 	l *logger.Logger, vco vm.VolumeCreateOpts,
 ) (vol vm.Volume, err error) {
-	// TODO(leon): SourceSnapshotID and IOPS, are not handled
-	if vco.SourceSnapshotID != "" || vco.IOPS != 0 {
-		err = errors.New("Creating a volume with SourceSnapshotID or IOPS is not supported at this time.")
+	// TODO(leon): IOPS is not handled.
+	if vco.IOPS != 0 {
+		err = errors.New("creating a volume with IOPS is not supported at this time")
 		return vol, err
 	}
 
@@ -2577,6 +2581,9 @@ func (p *Provider) CreateVolume(
 		"create-volume",
 		"--availability-zone", vco.Zone,
 		"--region", region,
+	}
+	if vco.SourceSnapshotID != "" {
+		args = append(args, "--snapshot-id", vco.SourceSnapshotID)
 	}
 	if vco.Encrypted {
 		args = append(args, "--encrypted")
@@ -2658,8 +2665,46 @@ func (p *Provider) CreateVolume(
 	return vol, err
 }
 
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, _ *vm.VM) error {
-	return vm.UnimplementedError
+func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, v *vm.VM) error {
+	region := volume.Zone[:len(volume.Zone)-1]
+
+	// Detach the volume from the instance.
+	{
+		args := []string{
+			"ec2", "detach-volume",
+			"--region", region,
+			"--volume-id", volume.ProviderResourceID,
+			"--instance-id", v.ProviderID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			return errors.Wrap(err, "detaching volume")
+		}
+	}
+
+	// Wait for the volume to become available (detached) before deleting.
+	{
+		args := []string{
+			"ec2", "wait", "volume-available",
+			"--region", region,
+			"--volume-ids", volume.ProviderResourceID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			return errors.Wrap(err, "waiting for volume to detach")
+		}
+	}
+
+	// Delete the volume.
+	{
+		args := []string{
+			"ec2", "delete-volume",
+			"--region", region,
+			"--volume-id", volume.ProviderResourceID,
+		}
+		if _, err := p.runCommand(l, args); err != nil {
+			return errors.Wrap(err, "deleting volume")
+		}
+	}
+	return nil
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
@@ -2704,20 +2749,119 @@ func (p *Provider) CreateVolumeSnapshot(
 	if err := p.runJSONCommand(l, args, &so); err != nil {
 		return vm.VolumeSnapshot{}, err
 	}
+
+	// Wait for the snapshot to complete before returning. AWS snapshots
+	// are asynchronous and cannot be used to create volumes while pending.
+	waitArgs := []string{
+		"ec2", "wait", "snapshot-completed",
+		"--region", region,
+		"--snapshot-ids", so.SnapshotID,
+	}
+	if _, err := p.runCommand(l, waitArgs); err != nil {
+		return vm.VolumeSnapshot{}, errors.Wrapf(err, "waiting for snapshot %s to complete", so.SnapshotID)
+	}
+
 	return vm.VolumeSnapshot{
-		ID:   so.SnapshotID,
-		Name: vsco.Name,
+		ID:     so.SnapshotID,
+		Name:   vsco.Name,
+		Region: region,
 	}, nil
 }
 
 func (p *Provider) ListVolumeSnapshots(
 	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return nil, vm.UnimplementedError
+	regions, err := p.allRegions(p.Config.availabilityZoneNames())
+	if err != nil {
+		return nil, err
+	}
+
+	var filters []string
+	if vslo.NamePrefix != "" {
+		filters = append(filters, fmt.Sprintf("Name=tag:Name,Values=%s*", vslo.NamePrefix))
+	}
+	for k, v := range vslo.Labels {
+		filters = append(filters, fmt.Sprintf("Name=tag:%s,Values=%s", k, v))
+	}
+
+	var mu syncutil.Mutex
+	var snapshots []vm.VolumeSnapshot
+	g := ctxgroup.WithContext(context.Background())
+	for _, r := range regions {
+		g.GoCtx(func(ctx context.Context) error {
+			args := []string{
+				"ec2", "describe-snapshots",
+				"--region", r,
+				"--owner-ids", "self",
+			}
+			if len(filters) > 0 {
+				args = append(args, "--filters")
+				args = append(args, filters...)
+			}
+
+			var result struct {
+				Snapshots []snapshotOutput `json:"Snapshots"`
+			}
+			if err := p.runJSONCommand(l, args, &result); err != nil {
+				l.Printf("WARN: failed to list snapshots in region %s (results may be incomplete): %v", r, err)
+				return nil
+			}
+
+			var regionSnapshots []vm.VolumeSnapshot
+			for _, so := range result.Snapshots {
+				if !vslo.CreatedBefore.IsZero() && !so.StartTime.Before(vslo.CreatedBefore) {
+					continue
+				}
+				name := ""
+				for _, tag := range so.Tags {
+					if tag.Key == "Name" {
+						name = tag.Value
+						break
+					}
+				}
+				// Double-check prefix match since AWS wildcard matching may
+				// differ from exact prefix semantics.
+				if vslo.NamePrefix != "" && !strings.HasPrefix(name, vslo.NamePrefix) {
+					continue
+				}
+				regionSnapshots = append(regionSnapshots, vm.VolumeSnapshot{
+					ID:     so.SnapshotID,
+					Name:   name,
+					Region: r,
+				})
+			}
+			mu.Lock()
+			snapshots = append(snapshots, regionSnapshots...)
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	sort.Sort(vm.VolumeSnapshots(snapshots))
+	return snapshots, nil
 }
 
 func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	return vm.UnimplementedError
+	if len(snapshots) == 0 {
+		return nil
+	}
+
+	g := ctxgroup.WithContext(context.Background())
+	for _, snap := range snapshots {
+		g.GoCtx(func(ctx context.Context) error {
+			args := []string{
+				"ec2", "delete-snapshot",
+				"--region", snap.Region,
+				"--snapshot-id", snap.ID,
+			}
+			_, err := p.runCommand(l, args)
+			return err
+		})
+	}
+	return g.Wait()
 }
 
 // loadBalancerResourceName returns the name of a load balancer resource.
