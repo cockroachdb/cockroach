@@ -1402,6 +1402,7 @@ func makeTenantSQLServerArgs(
 
 	serverRequestMetrics := rpc.NewServerRequestMetrics()
 	registry.AddMetricStruct(serverRequestMetrics)
+	registry.AddMetricStruct(serverRequestMetrics.DRPCServerMetrics)
 	if rpcContext.UseDRPC {
 		registry.AddMetricStruct(rpcContext.ClientRequestMetrics())
 		registry.AddMetricStruct(rpcContext.DRPCPoolMetrics())

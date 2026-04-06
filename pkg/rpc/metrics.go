@@ -270,10 +270,11 @@ over this connection.
 		MetricType:  prometheusgo.MetricType_GAUGE,
 	}
 	metaDRPCTLSHandshakeErrors = metric.Metadata{
-		Name:       "rpc.drpc.tls.handshake.errors",
-		Unit:       metric.Unit_COUNT,
-		Help:       "Number of TLS handshake errors for DRPC connections.",
-		MetricType: prometheusgo.MetricType_COUNTER,
+		Name:        "rpc.drpc.tls.handshake.errors",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Errors",
+		Help:        "Number of TLS handshake errors for DRPC connections.",
+		MetricType:  prometheusgo.MetricType_COUNTER,
 	}
 )
 
