@@ -761,6 +761,10 @@ type DistSender struct {
 	// deprioritized.
 	dontConsiderConnHealth bool
 
+	// dontRandomizeLeaseholderOnCtxError, if set, disables randomization of the
+	// cached leaseholder when a context error is encountered.
+	dontRandomizeLeaseholderOnCtxError bool
+
 	// Currently executing range feeds.
 	activeRangeFeeds syncutil.Set[*rangeFeedRegistry]
 }
@@ -878,6 +882,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.routeToLeaseholderFirst = cfg.TestingKnobs.RouteToLeaseholderFirst || metamorphicRouteToLeaseholderFirst
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
+	ds.dontRandomizeLeaseholderOnCtxError = cfg.TestingKnobs.DontRandomizeLeaseholderOnCtxError
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
 	// set a max retries limit. Should they?
@@ -2373,7 +2378,8 @@ func (ds *DistSender) sendPartialBatch(
 	// (*EvictionToken).RandomizeLeaseholder() for an explanation.
 	if ctx.Err() != nil && routingTok.Valid() &&
 		randomizeLeaseholderOnContextErrorDuration > 0 &&
-		routingTok.SinceLeaseholderContacted() >= randomizeLeaseholderOnContextErrorDuration {
+		routingTok.SinceLeaseholderContacted() >= randomizeLeaseholderOnContextErrorDuration &&
+		!ds.dontRandomizeLeaseholderOnCtxError {
 
 		ds.metrics.LeaseholderRandomizedOnContextErrorCount.Inc(1)
 		log.VEventf(ctx, 1,
