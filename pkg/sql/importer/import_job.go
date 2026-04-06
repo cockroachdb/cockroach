@@ -333,11 +333,28 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		details.Table.Desc.ImportStartWallTime = details.Walltime
 		details.Tables[0].Desc.ImportStartWallTime = details.Walltime
 
-		if err := bindTableDescImportProperties(ctx, p, table.Desc.ID, details.Walltime); err != nil {
-			return err
-		}
-
-		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+		// Write the import start walltime to both the table descriptor and the job
+		// record atomically. If these writes are not atomic, a pause between them
+		// can leave the descriptor with ImportStartWallTime set while the job record
+		// still has Walltime == 0. On resume, InitializeImport would then fire an
+		// assertion because ImportStartWallTime is already non-zero.
+		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		) error {
+			mutableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, table.Desc.ID)
+			if err != nil {
+				return err
+			}
+			if err := mutableDesc.InitializeImport(details.Walltime); err != nil {
+				return err
+			}
+			if err := descsCol.WriteDesc(
+				ctx, false /* kvTrace */, mutableDesc, txn.KV(),
+			); err != nil {
+				return err
+			}
+			return r.job.WithTxn(txn).SetDetails(ctx, details)
+		}); err != nil {
 			return err
 		}
 	}
@@ -615,33 +632,6 @@ func (r *importResumer) prepareTableForIngestion(
 	// choosing our Walltime.
 	importDetails.Walltime = 0
 	return importDetails, nil
-}
-
-// bindTableDescImportProperties updates the table descriptor at the start of an
-// import for a table that existed before the import.
-func bindTableDescImportProperties(
-	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
-) error {
-	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
-	) error {
-		mutableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, id)
-		if err != nil {
-			return err
-		}
-		if err := mutableDesc.InitializeImport(startWallTime); err != nil {
-			return err
-		}
-		if err := descsCol.WriteDesc(
-			ctx, false /* kvTrace */, mutableDesc, txn.KV(),
-		); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
 }
 
 // publishTable updates the status of the imported table from OFFLINE to PUBLIC.

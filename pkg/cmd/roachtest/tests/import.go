@@ -742,13 +742,18 @@ func importCancellationRunner(
 		// remove the files that succeeded so we don't try to import them again.
 		// If this was the last attempt, this should remove all the remaining
 		// files and `filesToImport` should be empty.
-		if status == "succeeded" {
+		switch status {
+		case "succeeded":
 			t.L().PrintfCtx(ctx, "Removing files [%s] from consideration; completed", strings.Join(urls, ", "))
 			urlsToImport = slices.DeleteFunc(urlsToImport, func(url string) bool {
 				return slices.Contains(urls, url)
 			})
-		} else if status == "failed" {
+		case "canceled":
+			// Expected outcome of cancellation.
+		case "failed":
 			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
+		default:
+			return errors.Newf("job %s in unexpected state %q after completion", jobID, status)
 		}
 	}
 	if len(urlsToImport) != 0 {
@@ -804,15 +809,21 @@ func importPauseRunner(
 			return ctx.Err()
 		}
 
-		// Check if job already completed (might finish before all pauses)
+		// Check if job is still running before attempting to pause.
 		var status string
 		err = conn.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
 		if err != nil {
 			return errors.Wrapf(err, "checking job status before pause %d", i+1)
 		}
-		if status == "succeeded" {
+		switch status {
+		case "running":
+			// Expected — proceed to pause.
+		case "succeeded":
 			t.WorkerStatus(fmt.Sprintf("job %d completed before pause %d/%d", jobID, i+1, numPauses))
 			return nil
+		default:
+			return errors.Newf("job %d in unexpected state %q before pause %d/%d",
+				jobID, status, i+1, numPauses)
 		}
 
 		// Pause the job
