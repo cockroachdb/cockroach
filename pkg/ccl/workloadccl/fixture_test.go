@@ -184,8 +184,8 @@ func TestImportFixture(t *testing.T) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
 		stats.DefaultAsOfTime = oldAsOf
 	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = 10 * time.Millisecond
+	stats.DefaultRefreshInterval = time.Second
+	stats.DefaultAsOfTime = 100 * time.Millisecond
 
 	// Disable auto stats collection on all tables. This is needed because we
 	// run only one auto stats job at a time, and collecting auto stats on
