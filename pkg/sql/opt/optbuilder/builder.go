@@ -7,7 +7,6 @@ package optbuilder
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -550,37 +548,38 @@ func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
 }
 
 func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
-	if b.trackSchemaDeps {
-		if texpr != nil && texpr.ResolvedType().Identical(types.RegClass) {
-			// We do not add a dependency if the RegClass Expr contains variables,
-			// we cannot resolve the variables in this context. This matches Postgres
-			// behavior.
-			if !tree.ContainsVars(texpr) {
-				regclass, err := eval.Expr(b.ctx, b.evalCtx, texpr)
-				if err != nil {
-					panic(err)
-				}
-
-				var ds cat.DataSource
-				// Regclass can contain an ID or a string.
-				// Ex. nextval('s'::regclass) and nextval(59::regclass) are both valid.
-				id, err := strconv.Atoi(regclass.String())
-				if err == nil {
-					ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, cat.Flags{}, cat.StableID(id))
-					if err != nil {
-						panic(err)
-					}
-				} else {
-					tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-					ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
-				}
-
-				b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
-					DataSource: ds,
-				})
-			}
-		}
+	if !b.trackSchemaDeps {
+		return
 	}
+	if texpr == nil || !texpr.ResolvedType().Identical(types.RegClass) {
+		return
+	}
+	// We do not add a dependency if the RegClass Expr contains variables,
+	// we cannot resolve the variables in this context. This matches Postgres
+	// behavior.
+	if tree.ContainsVars(texpr) {
+		return
+	}
+	regclass, err := eval.Expr(b.ctx, b.evalCtx, texpr)
+	if err != nil {
+		panic(err)
+	}
+	// eval.Expr on a REGCLASS expression returns a *tree.DOid.
+	// Use the OID directly for resolution rather than DOid.String(), which
+	// returns only the object name and drops the schema prefix (e.g. returns
+	// "myseq" instead of "sc.myseq"), causing unqualified lookups to fail
+	// when the schema is not in the search path.
+	dOid, ok := regclass.(*tree.DOid)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"expected *tree.DOid from eval.Expr on REGCLASS expression, got %T", regclass,
+		))
+	}
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.Flags{}, cat.StableID(dOid.Oid))
+	if err != nil {
+		panic(err)
+	}
+	b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{DataSource: ds})
 }
 
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
