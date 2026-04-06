@@ -83,8 +83,9 @@ jobs:
               const baseRef = pr.baseRefName;
               console.log(`Processing PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Target: ${baseRef}, Labels: ${labels}`);
 
-              const trunkBranches = ['release-24.3', 'release-25.2'];
-              if (trunkBranches.includes(baseRef)) {
+              const nonTrunkBranches = ['release-24.1', 'release-25.1', 'release-25.3'];
+              const useTrunk = !nonTrunkBranches.includes(baseRef);
+              if (useTrunk) {
                 // Use comment to trigger trunk merge for trunk-enabled branches
                 console.log(`Adding /trunk merge comment for PR #${pr.number} (target: ${baseRef})`);
                 try {
