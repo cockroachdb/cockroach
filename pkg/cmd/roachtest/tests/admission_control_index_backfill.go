@@ -54,6 +54,15 @@ var indexBackfillVariants = []indexBackfillVariant{
 	},
 }
 
+// versionedSnapshotPrefix returns a snapshot prefix that includes the major
+// version (e.g., "index-backfill-tpce-100k-bw-v26.2") so that each major
+// release uses its own snapshots. This is needed because snapshot data may
+// not be compatible across major versions.
+func versionedSnapshotPrefix(t test.Test) string {
+	v := t.BuildVersion()
+	return fmt.Sprintf("%s-v%s", t.SnapshotPrefix(), v.Major())
+}
+
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
@@ -97,17 +106,18 @@ func runIndexBackfill(
 	withCgroupLimiting bool,
 	withProvisionedBandwidth bool,
 ) {
+	snapshotPrefix := versionedSnapshotPrefix(t)
 	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 		// TODO(irfansharif): Search by taking in the other parts of the
 		// snapshot fingerprint, i.e. the node count, the version, etc.
-		NamePrefix: t.SnapshotPrefix(),
+		NamePrefix: snapshotPrefix,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(snapshots) == 0 {
 		t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
-			t.Name(), t.SnapshotPrefix())
+			t.Name(), snapshotPrefix)
 
 		// Set up TPC-E with 100k customers. Do so using a published
 		// CRDB release, since we'll use this state to generate disk
@@ -154,7 +164,7 @@ func runIndexBackfill(
 		c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
 		// Create the aforementioned snapshots.
-		snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
+		snapshots, err = c.CreateSnapshot(ctx, snapshotPrefix)
 		if err != nil {
 			if strings.Contains(err.Error(), "already exists") {
 				// Another concurrent run may have already created snapshots
@@ -165,11 +175,11 @@ func runIndexBackfill(
 			}
 		} else {
 			t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
-				len(snapshots), t.SnapshotPrefix())
+				len(snapshots), snapshotPrefix)
 		}
 	} else {
 		t.L().Printf("using %d pre-existing snapshot(s) with prefix %q",
-			len(snapshots), t.SnapshotPrefix())
+			len(snapshots), snapshotPrefix)
 
 		if !t.SkipInit() {
 			roachtestutil.CopySnapshotDataToNodes(ctx, t, c, snapshots)
