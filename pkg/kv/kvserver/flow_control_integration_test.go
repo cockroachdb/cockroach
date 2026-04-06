@@ -2422,6 +2422,9 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 								return disableWorkQueueGrantingServers[idx].Load()
 							},
 						},
+						KVClient: &kvcoord.ClientTestingKnobs{
+							DontRandomizeLeaseholderOnCtxError: true,
+						},
 					},
 				}
 			}
