@@ -58,7 +58,7 @@ func TestRangeIterForward(t *testing.T) {
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
@@ -95,7 +95,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
@@ -135,7 +135,7 @@ func TestRangeIterReverse(t *testing.T) {
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
@@ -172,7 +172,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
