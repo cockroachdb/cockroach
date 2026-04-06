@@ -587,6 +587,9 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 							return true
 						},
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 				},
 			},
 		})
