@@ -519,6 +519,12 @@ type replicationSpec struct {
 
 	clouds registry.CloudSet
 	suites registry.SuiteSet
+
+	// cockroachBinary specifies the type of cockroach binary to use for this test.
+	// If not set (zero value), defaults to RandomizedCockroach.
+	// Set to registry.StandardCockroach to disable runtime assertions for
+	// performance-sensitive tests.
+	cockroachBinary registry.ClusterCockroachBinary
 }
 
 type multiRegionSpecs struct {
@@ -1312,6 +1318,7 @@ func c2cRegisterWrapper(
 		CompatibleClouds:          sp.clouds,
 		Suites:                    sp.suites,
 		TestSelectionOptOutSuites: sp.suites,
+		CockroachBinary:           sp.cockroachBinary,
 		Run:                       run,
 		// Read from standby tests also spin up the schema change workload which
 		// uses the workload binary.
@@ -1556,8 +1563,11 @@ func registerClusterToCluster(r registry.Registry) {
 			// Skipping node distribution check because there is little data on the
 			// source when the replication stream begins.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.OnlyGCE,
-			suites:                    registry.Suites(registry.Nightly),
+			// Never run with runtime assertions as import rollback with tombstones
+			// gets much slower.
+			cockroachBinary: registry.StandardCockroach,
+			clouds:          registry.OnlyGCE,
+			suites:          registry.Suites(registry.Nightly),
 		},
 		{
 			name:               "c2c/BulkOps/singleImport",
