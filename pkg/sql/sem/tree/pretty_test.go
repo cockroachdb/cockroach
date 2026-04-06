@@ -247,8 +247,9 @@ func TestPrettyBigStatement(t *testing.T) {
 	}
 
 	cfg := tree.DefaultPrettyCfg()
-	_, err = cfg.Pretty(stmt.AST)
-	assert.Errorf(t, err, "max call stack depth of be exceeded")
+	result, err := cfg.Pretty(stmt.AST)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, result)
 }
 
 func BenchmarkPrettyData(b *testing.B) {

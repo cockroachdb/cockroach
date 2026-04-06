@@ -174,10 +174,16 @@ func Pretty(stmt NodeFormatter) (string, error) {
 	return cfg.Pretty(stmt)
 }
 
-// Pretty pretty prints stmt with specified options.
+// Pretty pretty-prints stmt with specified options. If the doc tree is too
+// deeply nested for the pretty-printer, it falls back to the Format-based
+// string representation.
 func (p *PrettyCfg) Pretty(stmt NodeFormatter) (string, error) {
 	doc := p.Doc(stmt)
-	return pretty.Pretty(doc, p.LineWidth, p.UseTabs, p.TabWidth, p.Case)
+	str, err := pretty.Pretty(doc, p.LineWidth, p.UseTabs, p.TabWidth, p.Case)
+	if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+		return AsStringWithFlags(stmt, p.FmtFlagsWithDefaults()), nil
+	}
+	return str, err
 }
 
 // Doc converts f (generally a Statement) to a pretty.Doc. If f does not have a
