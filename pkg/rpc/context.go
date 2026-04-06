@@ -592,6 +592,18 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		metrics:         newMetrics(opts.Locality),
 	}
 
+	if opts.UseDRPC {
+		if !opts.ClientOnly {
+			rpcCtx.metrics.DRPCEnabled.Update(1)
+		}
+		clientRequestMetrics := NewClientRequestMetrics()
+		rpcCtx.metrics.clientRequestMetrics = clientRequestMetrics
+		rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
+			NewDRPCUnaryClientRequestMetricsInterceptor(clientRequestMetrics))
+		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
+			NewDRPCStreamClientRequestMetricsInterceptor(clientRequestMetrics))
+	}
+
 	rpcCtx.dialbackMu.Lock()
 	rpcCtx.dialbackMu.m = map[roachpb.NodeID]*GRPCConnection{}
 	rpcCtx.dialbackMu.Unlock()
@@ -686,6 +698,11 @@ func (rpcCtx *Context) ClusterName() string {
 // Metrics returns the Context's Metrics struct.
 func (rpcCtx *Context) Metrics() *Metrics {
 	return rpcCtx.metrics
+}
+
+// Metrics returns the Context's ClientRequestMetrics struct.
+func (rpcCtx *Context) ClientRequestMetrics() *ClientRequestMetrics {
+	return rpcCtx.metrics.clientRequestMetrics
 }
 
 // GetLocalInternalClientForAddr returns the context's internal batch client

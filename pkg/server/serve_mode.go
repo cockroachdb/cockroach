@@ -93,6 +93,10 @@ func shouldRecordRequestDuration(settings *cluster.Settings, method string) bool
 			strings.HasPrefix(method, tsdbPrefix))
 }
 
+func shouldRecordServerRequestMetricsDRPC(settings *cluster.Settings) bool {
+	return serverRPCRequestMetricsEnabled.Get(&settings.SV)
+}
+
 // NewWaitingForInitError creates an error indicating that the server cannot run
 // the specified method until the node has been initialized.
 func NewWaitingForInitError(methodName string) error {
