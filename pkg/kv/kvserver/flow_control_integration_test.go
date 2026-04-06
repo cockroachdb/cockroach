@@ -432,6 +432,9 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 							return disableWorkQueueGranting.Load()
 						},
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 				},
 			},
 		})
