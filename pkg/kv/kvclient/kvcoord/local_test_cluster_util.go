@@ -77,7 +77,7 @@ func NewDistSenderForLocalTestCluster(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	return NewDistSender(DistSenderConfig{
+	return NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientContext(tracer),
 		Settings:           st,
 		Clock:              clock,
