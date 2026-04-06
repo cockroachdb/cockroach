@@ -1314,7 +1314,7 @@ func makeTenantSQLServerArgs(
 		TestingKnobs:      dsKnobs,
 		CanSendToFollower: followerreads.CanSendToFollower,
 	}
-	ds := kvcoord.NewDistSender(dsCfg)
+	ds := kvcoord.NewDistSender(startupCtx, dsCfg)
 	registry.AddMetricStruct(ds.Metrics())
 
 	var clientKnobs kvcoord.ClientTestingKnobs

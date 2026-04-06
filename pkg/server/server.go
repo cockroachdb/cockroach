@@ -510,7 +510,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			return livenessCache.GetNodeVitality(id).IsLive(livenesspb.DistSender)
 		},
 	}
-	distSender := kvcoord.NewDistSender(distSenderCfg)
+	distSender := kvcoord.NewDistSender(ctx, distSenderCfg)
 	appRegistry.AddMetricStruct(distSender.Metrics())
 
 	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())
