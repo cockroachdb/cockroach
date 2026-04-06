@@ -71,6 +71,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/dd",
@@ -84,5 +85,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_time//rate",
     ],
 )
