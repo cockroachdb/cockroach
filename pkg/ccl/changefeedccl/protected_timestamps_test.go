@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1367,6 +1368,12 @@ func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
 		var dbDescTS atomic.Value
 		dbDescTS.Store(hlc.Timestamp{})
 		var hasGCdDBDesc atomic.Bool
+		// event1Consumed is closed when Event 1 has been fully consumed
+		// (decoded) by the changefeed consumer. Waiting on this ensures that
+		// it is safe to GC to that timestamp. If we didn't, decoding the event
+		// would race with GC.
+		event1Consumed := make(chan struct{})
+		var event1ConsumedOnce sync.Once
 		var kvEvents []kvevent.Event
 		var hasProcessedAllEvents atomic.Bool
 		beforeAddKnob := func(ctx context.Context, e kvevent.Event) (_ context.Context, _ kvevent.Event, shouldAdd bool) {
@@ -1375,11 +1382,22 @@ func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
 			// Since this test also depends on specific GC behavior, we handle GC
 			// ourselves.
 			if e.Type() == kvevent.TypeResolved {
-				resolvedTimestamp := e.Timestamp()
-
 				// We need to wait for the resolved timestamp to move past the
 				// first kv event so that we know it's safe to GC the first database
-				// descriptor version.
+				// descriptor version. However, if event 1 hasn't been consumed,
+				// obviously the resolved timestamp should not be past it so we
+				// can ignore the resolved timestamp and return early.
+				select {
+				case <-event1Consumed:
+				default:
+					return ctx, e, false
+				}
+
+				resolvedTimestamp := e.Timestamp()
+
+				// Once event 1 has been consumed, try to GC the first DB descriptor
+				// version. It is safe to do that once we see that the resolved timestamp
+				// has moved past the time that descriptor version was active.
 				if !hasGCdDBDesc.Load() {
 					dbDescTSVal := dbDescTS.Load().(hlc.Timestamp)
 					if !dbDescTSVal.IsEmpty() && dbDescTSVal.Less(resolvedTimestamp) {
@@ -1389,7 +1407,7 @@ func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
 					}
 				}
 
-				// We use the resolved events to know when we can stop the test.
+				// We also use the resolved events to know when we can stop the test.
 				if len(kvEvents) > 2 && resolvedTimestamp.After(kvEvents[2].Timestamp()) {
 					hasProcessedAllEvents.Store(true)
 				}
@@ -1443,6 +1461,16 @@ func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
+
+		// In order to emit the row, it needs to have already been
+		// fully decoded, so it's safe to GC the descriptor versions
+		// since we no longer need them. Since event 1 will be the
+		// first row we emit, once we see this knob, we know it will
+		// have been consumed.
+		knobs.BeforeEmitRow = func(ctx context.Context) error {
+			event1ConsumedOnce.Do(func() { close(event1Consumed) })
+			return nil
+		}
 
 		knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
 			return kvevent.BlockingBufferTestingKnobs{
