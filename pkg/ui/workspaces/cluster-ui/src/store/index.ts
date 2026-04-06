@@ -5,7 +5,6 @@
 
 export { sagas } from "./sagas";
 export { actions as analyticsActions } from "./analytics";
-export { actions as uiConfigActions } from "./uiConfig";
 export { rootReducer } from "./reducers";
 export type { UIConfigState } from "./uiConfig";
 export type { AppState } from "./reducers";
