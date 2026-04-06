@@ -76,6 +76,13 @@ func TestLogic_cross_version_tenant_backup(
 	runLogicTest(t, "cross_version_tenant_backup")
 }
 
+func TestLogic_mixed_version_aclitem(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_aclitem")
+}
+
 func TestLogic_mixed_version_bootstrap_tenant(
 	t *testing.T,
 ) {
@@ -88,6 +95,13 @@ func TestLogic_mixed_version_can_login(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_can_login")
+}
+
+func TestLogic_mixed_version_new_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_new_privileges")
 }
 
 func TestLogic_mixed_version_statement_hints_session_settings(
