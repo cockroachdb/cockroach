@@ -871,7 +871,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Track PCR throughput
       visibility: ESSENTIAL
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.replicated_time_seconds
       exported_name: physical_replication_replicated_time_seconds
       description: The replicated time of the physical replication stream in seconds since the unix epoch.
@@ -882,7 +882,7 @@ layers:
       derivative: NONE
       how_to_use: Track replication lag via current time - physical_replication.replicated_time_seconds
       visibility: ESSENTIAL
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
   - name: DISTRIBUTED
     metrics:
     - name: distsender.errors.notleaseholder
@@ -7831,7 +7831,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.catchup_ranges
       exported_name: physical_replication_catchup_ranges
       description: Source side ranges undergoing catch up scans
@@ -7840,7 +7840,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.commit_latency
       exported_name: physical_replication_commit_latency
       description: 'Event commit latency: a difference between event MVCC timestamp and the time it was flushed into disk. If we batch events, then the difference between the oldest event in the batch and flush is recorded'
@@ -7849,7 +7849,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.distsql_replan_count
       exported_name: physical_replication_distsql_replan_count
       description: Total number of dist sql replanning events
@@ -7858,7 +7858,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.events_ingested
       exported_name: physical_replication_events_ingested
       description: Events ingested by all replication jobs
@@ -7867,7 +7867,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.failover_progress
       exported_name: physical_replication_failover_progress
       description: The number of ranges left to revert in order to complete an inflight cutover
@@ -7876,7 +7876,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flush_hist_nanos
       exported_name: physical_replication_flush_hist_nanos
       description: Time spent flushing messages across all replication streams
@@ -7885,7 +7885,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flush_wait_nanos
       exported_name: physical_replication_flush_wait_nanos
       description: Cumulative time spent waiting to send buffer to flush loop; use rate() to compare against receive_wait_nanos
@@ -7894,7 +7894,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flushes
       exported_name: physical_replication_flushes
       description: Total flushes across all replication jobs
@@ -7903,7 +7903,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.receive_wait_nanos
       exported_name: physical_replication_receive_wait_nanos
       description: Cumulative time spent waiting to receive events from producer; use rate() to compare against flush_wait_nanos
@@ -7912,7 +7912,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.resolved_events_ingested
       exported_name: physical_replication_resolved_events_ingested
       description: Resolved events ingested by all replication jobs
@@ -7921,7 +7921,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.running
       exported_name: physical_replication_running
       description: Number of currently running replication streams
@@ -7930,7 +7930,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.scanning_ranges
       exported_name: physical_replication_scanning_ranges
       description: Source side ranges undergoing an initial scan
@@ -7939,7 +7939,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: requests.slow.distsender
       exported_name: requests_slow_distsender
       description: |-

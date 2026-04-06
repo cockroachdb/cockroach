@@ -506,21 +506,21 @@ owners:
   obs_tablemetadata_update_job_errors: cockroachdb/obs-prs
   obs_tablemetadata_update_job_runs: cockroachdb/obs-prs
   obs_tablemetadata_update_job_table_updates: cockroachdb/obs-prs
-  physical_replication_admit_latency: cockroachdb/unowned
-  physical_replication_catchup_ranges: cockroachdb/unowned
-  physical_replication_commit_latency: cockroachdb/unowned
-  physical_replication_distsql_replan_count: cockroachdb/unowned
-  physical_replication_events_ingested: cockroachdb/unowned
-  physical_replication_failover_progress: cockroachdb/unowned
-  physical_replication_flush_hist_nanos: cockroachdb/unowned
-  physical_replication_flush_wait_nanos: cockroachdb/unowned
-  physical_replication_flushes: cockroachdb/unowned
-  physical_replication_logical_bytes: cockroachdb/unowned
-  physical_replication_receive_wait_nanos: cockroachdb/unowned
-  physical_replication_replicated_time_seconds: cockroachdb/unowned
-  physical_replication_resolved_events_ingested: cockroachdb/unowned
-  physical_replication_running: cockroachdb/unowned
-  physical_replication_scanning_ranges: cockroachdb/unowned
+  physical_replication_admit_latency: cockroachdb/disaster-recovery
+  physical_replication_catchup_ranges: cockroachdb/disaster-recovery
+  physical_replication_commit_latency: cockroachdb/disaster-recovery
+  physical_replication_distsql_replan_count: cockroachdb/disaster-recovery
+  physical_replication_events_ingested: cockroachdb/disaster-recovery
+  physical_replication_failover_progress: cockroachdb/disaster-recovery
+  physical_replication_flush_hist_nanos: cockroachdb/disaster-recovery
+  physical_replication_flush_wait_nanos: cockroachdb/disaster-recovery
+  physical_replication_flushes: cockroachdb/disaster-recovery
+  physical_replication_logical_bytes: cockroachdb/disaster-recovery
+  physical_replication_receive_wait_nanos: cockroachdb/disaster-recovery
+  physical_replication_replicated_time_seconds: cockroachdb/disaster-recovery
+  physical_replication_resolved_events_ingested: cockroachdb/disaster-recovery
+  physical_replication_running: cockroachdb/disaster-recovery
+  physical_replication_scanning_ranges: cockroachdb/disaster-recovery
   proxy_access_control_errors: cockroachdb/sqlproxy-prs
   proxy_balancer_rebalance_queued: cockroachdb/sqlproxy-prs
   proxy_balancer_rebalance_running: cockroachdb/sqlproxy-prs
