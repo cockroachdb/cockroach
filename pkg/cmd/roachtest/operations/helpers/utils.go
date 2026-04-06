@@ -248,3 +248,108 @@ func EnvOrDefaultInt(name string, value int) (int, error) {
 	}
 	return value, nil
 }
+
+// GetLiveNodes queries gossip to discover all live nodes in the
+// cluster. It tries each cluster node until it finds one it can
+// connect to, then reads crdb_internal.gossip_nodes. Returns the list
+// of live node IDs, or nil if none can be determined.
+func GetLiveNodes(
+	ctx context.Context, o operation.Operation, c cluster.Cluster,
+) option.NodeListOption {
+	for _, n := range c.All() {
+		db, err := c.ConnE(ctx, o.L(), n)
+		if err != nil {
+			o.Status(fmt.Sprintf("GetLiveNodes: connect to node %d failed: %v", n, err))
+			continue
+		}
+		rows, err := db.QueryContext(ctx,
+			"SELECT node_id FROM crdb_internal.gossip_nodes WHERE is_live = true")
+		if err != nil {
+			o.Status(fmt.Sprintf("GetLiveNodes: gossip query on node %d failed: %v", n, err))
+			db.Close()
+			continue
+		}
+		var liveNodes option.NodeListOption
+		for rows.Next() {
+			var nid int
+			if err := rows.Scan(&nid); err != nil {
+				break
+			}
+			liveNodes = append(liveNodes, nid)
+		}
+		rows.Close()
+		db.Close()
+		return liveNodes
+	}
+	return nil
+}
+
+// GetStoreCount returns the number of stores on the given node by
+// querying crdb_internal.kv_store_status.
+func GetStoreCount(ctx context.Context, o operation.Operation, conn *gosql.DB, nodeID int) int {
+	var count int
+	err := conn.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT count(*) FROM crdb_internal.kv_store_status WHERE node_id = %d", nodeID),
+	).Scan(&count)
+	if err != nil {
+		o.Fatalf("failed to get store count for node %d: %v", nodeID, err)
+	}
+	if count == 0 {
+		o.Fatalf("unexpected zero stores found on node %d", nodeID)
+	}
+	return count
+}
+
+// CheckNodeHealth verifies that a node is responsive by opening a SQL
+// connection and executing SELECT 1. It retries up to maxAttempts
+// times with retryDelay between attempts. Returns true on the first
+// successful response, or false if all attempts fail or the context
+// is cancelled.
+//
+// This is intentionally different from roachtestutil.WaitForSQLReady:
+// WaitForSQLReady requires an already-established *gosql.DB and waits
+// for full SQL subsystem initialization. CheckNodeHealth needs to
+// detect nodes that are completely unreachable (e.g. crashed under
+// disk pressure), where even opening a connection will fail.
+func CheckNodeHealth(
+	ctx context.Context,
+	o operation.Operation,
+	c cluster.Cluster,
+	nodeID int,
+	maxAttempts int,
+	retryDelay time.Duration,
+) bool {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		db, err := c.ConnE(ctx, o.L(), nodeID)
+		if err != nil {
+			o.Status(fmt.Sprintf(
+				"node %d connection attempt %d/%d failed: %v", nodeID, attempt, maxAttempts, err,
+			))
+			if attempt < maxAttempts {
+				select {
+				case <-time.After(retryDelay):
+				case <-ctx.Done():
+					return false
+				}
+			}
+			continue
+		}
+		_, err = db.ExecContext(ctx, "SELECT 1")
+		db.Close()
+		if err != nil {
+			o.Status(fmt.Sprintf(
+				"node %d health check %d/%d failed: %v", nodeID, attempt, maxAttempts, err,
+			))
+			if attempt < maxAttempts {
+				select {
+				case <-time.After(retryDelay):
+				case <-ctx.Done():
+					return false
+				}
+			}
+			continue
+		}
+		return true
+	}
+	return false
+}

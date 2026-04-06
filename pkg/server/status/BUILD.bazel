@@ -43,6 +43,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/internal/metricscan",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
@@ -151,6 +152,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/internal/metricscan",
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

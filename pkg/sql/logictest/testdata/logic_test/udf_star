@@ -113,8 +113,18 @@ f_subquery  CREATE FUNCTION public.f_subquery()
               LANGUAGE SQL
               SECURITY INVOKER
               AS $$
-              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM public.t_onecol) AS foo) AS bar;
-            $$
+                SELECT
+                  bar.a
+                FROM
+                  (
+                    SELECT
+                      a
+                    FROM
+                      (SELECT t_onecol.a FROM public.t_onecol)
+                        AS foo
+                  )
+                    AS bar;
+              $$
 
 query TT
 SHOW CREATE FUNCTION f_allcolsel_alias
@@ -183,7 +193,7 @@ SELECT f_allcolsel_alias()
 statement ok
 ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return t_twocol
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.t_twocol
 SELECT f_unqualified_twocol()
 
 # Dropping the new column renders the function usable again.

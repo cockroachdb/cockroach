@@ -6,30 +6,14 @@
 import { SagaIterator } from "redux-saga";
 import { all, fork } from "redux-saga/effects";
 
-import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
-import { clusterSettingsSaga } from "./clusterSettings/clusterSettings.saga";
-import { databasesListSaga } from "./databasesList";
-import { transactionInsightsSaga } from "./insights/transactionInsights/transactionInsights.sagas";
-import { livenessSaga } from "./liveness";
 import { localStorageSaga } from "./localStorage";
-import { nodesSaga } from "./nodes";
 import { sqlStatsSaga } from "./sqlStats";
-import { statementsDiagnosticsSagas } from "./statementDiagnostics";
-import { txnStatsSaga } from "./transactionStats";
 import { uiConfigSaga } from "./uiConfig";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
     fork(localStorageSaga),
-    fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
-    fork(nodesSaga, cacheInvalidationPeriod),
-    fork(livenessSaga, cacheInvalidationPeriod),
-    fork(transactionInsightsSaga),
-    fork(databasesListSaga),
     fork(sqlStatsSaga),
-    fork(clusterLocksSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
-    fork(txnStatsSaga),
-    fork(clusterSettingsSaga),
   ]);
 }

@@ -2352,17 +2352,17 @@ CREATE TABLE test.pg_indexdef_test (
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON public.pg_indexdef_test USING btree (a ASC)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
+CREATE INDEX pg_indexdef_partial_idx ON public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
+CREATE INDEX pg_indexdef_partial_enum_idx ON public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2372,7 +2372,7 @@ NULL
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON public.pg_indexdef_test USING btree (a ASC)
 
 statement ok
 CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_cols_idx (a ASC, b DESC), INDEX other (a DESC))
@@ -2380,7 +2380,7 @@ CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_cols_idx ON test.public.pg_indexdef_test_cols USING btree (a ASC, b DESC)
+CREATE UNIQUE INDEX pg_indexdef_cols_idx ON public.pg_indexdef_test_cols USING btree (a ASC, b DESC)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 1, true)
@@ -2424,7 +2424,7 @@ CREATE VIEW test.pg_viewdef_view AS SELECT a, b FROM test.pg_viewdef_test
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 query T
 SELECT pg_catalog.pg_get_viewdef(0, true)
@@ -2439,12 +2439,12 @@ NULL
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, true)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 statement ok
 CREATE MATERIALIZED VIEW test.pg_viewdef_mview AS SELECT b, a FROM test.pg_viewdef_test
@@ -2452,7 +2452,7 @@ CREATE MATERIALIZED VIEW test.pg_viewdef_mview AS SELECT b, a FROM test.pg_viewd
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_mview'::regclass::oid)
 ----
-SELECT b, a FROM test.public.pg_viewdef_test
+SELECT b, a FROM test.public.pg_viewdef_test;
 
 statement ok
 CREATE TABLE test.pg_constraintdef_test (
@@ -2471,13 +2471,13 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
-FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
-FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
-CHECK ((c > a))
-CHECK ((c > 0)) NOT VALID
 PRIMARY KEY (rowid ASC)
 UNIQUE (b ASC)
-UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
+UNIQUE (a ASC) WHERE (d = 'foo'::text)
+CHECK ((c > a))
+CHECK ((c > 0)) NOT VALID
+FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
+FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
@@ -4560,11 +4560,11 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
      AND pg_catalog.pg_type_is_visible(t.oid)
 ORDER BY 1, 2;
 ----
-Schema  Name             Description
-public  concat_enum      ·
-public  custom_typ       ·
-public  roach_dwellings  ·
-public  testenum         ·
+Schema  Name                    Description
+public  public.concat_enum      ·
+public  public.custom_typ       ·
+public  public.roach_dwellings  ·
+public  public.testenum         ·
 
 subtest end
 

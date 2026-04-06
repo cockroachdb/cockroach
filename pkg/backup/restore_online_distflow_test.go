@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -171,6 +172,7 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 		runner.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		runner.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+		jobutils.WaitForJobToCancel(t, runner, downloadJobID)
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	}
 

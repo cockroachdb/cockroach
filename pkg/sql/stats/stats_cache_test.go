@@ -115,7 +115,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	statsList, _, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -413,7 +413,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+				stats, _, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -1004,7 +1004,7 @@ func runStatsCacheDataDriven(
 		if !d.HasArg("no-invalidate") {
 			sc.InvalidateTableStats(ctx, tbl.GetID())
 		}
-		_, statsDiffer, err := sc.GetTableStatsMaybeStable(
+		_, statsDiffer, _, err := sc.GetTableStatsMaybeStable(
 			ctx, tbl, nil /* typeResolver */, false /* stable */, canaryWindow, statsAsOf,
 		)
 		if err != nil {

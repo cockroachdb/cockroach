@@ -138,12 +138,9 @@ func TestImportDistributedMerge(t *testing.T) {
 // TestImportDistributedMergeDuplicateDetection verifies that IMPORT with
 // distributed merge detects duplicate keys at each phase of the pipeline.
 // These tests cover the fixes for cases 4-6 described in #161447.
-//
-// Case 4 (cross-SST duplicates during intermediate merge) does not apply to
-// IMPORT because it uses MaxIterations=1. That case is tested at the merge
-// level by TestCrossSSTDuplicateHandling in pkg/sql/bulkmerge.
-// TODO(mw5h): When IMPORT switches to multi-stage merge (MaxIterations>1),
-// add a test case for intermediate merge duplicate detection (case 4).
+// Case 4 (cross-SST duplicates during intermediate merge) is covered by the
+// "intermediate merge injected duplicate" test case below, now that IMPORT
+// uses MaxIterations=2.
 func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -155,6 +152,9 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 		// injectMergeDuplicate uses the InjectDuplicateKey testing knob to
 		// simulate a duplicate during the merge phase.
 		injectMergeDuplicate bool
+		// injectOnIteration restricts duplicate injection to a specific merge
+		// iteration. 0 means inject on the first call regardless of iteration.
+		injectOnIteration int32
 		// smallBatchSize forces each key into its own SST so that non-adjacent
 		// duplicate PKs land in separate SSTs, testing cross-SST detection.
 		smallBatchSize bool
@@ -188,6 +188,18 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 			injectMergeDuplicate: true,
 			errRegex:             "duplicate key",
 		},
+		{
+			// Case 4: cross-SST duplicate during the intermediate (non-final)
+			// merge iteration. With MaxIterations=2, iteration 1 is a local
+			// merge that writes to external storage rather than KV. This test
+			// verifies that duplicate detection works during intermediate
+			// iterations, not just the final one.
+			name:                 "intermediate merge injected duplicate",
+			csvData:              "1,a\n2,b\n3,c\n4,d\n5,e",
+			injectMergeDuplicate: true,
+			injectOnIteration:    1,
+			errRegex:             "duplicate key",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -201,11 +213,18 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 
 			var injected atomic.Bool
 			if tc.injectMergeDuplicate {
+				targetIteration := tc.injectOnIteration
 				serverArgs.Knobs = base.TestingKnobs{
 					DistSQL: &execinfra.TestingKnobs{
 						BulkMergeTestingKnobs: &bulkmerge.TestingKnobs{
-							InjectDuplicateKey: func(iteration, maxIteration int32) bool {
-								return !injected.Swap(true)
+							InjectDuplicateKey: func(iteration, maxIteration int32) []byte {
+								if targetIteration != 0 && iteration != targetIteration {
+									return nil
+								}
+								if !injected.Swap(true) {
+									return []byte("injected-duplicate-value")
+								}
+								return nil
 							},
 						},
 					},
@@ -240,6 +259,59 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 	}
 }
 
+// TestImportIdenticalDuplicateRows verifies that importing a CSV containing
+// identical duplicate rows (same PK, same values) succeeds with both the
+// non-distmerge (BulkAdder/SSTBatcher) and distmerge paths. The non-distmerge
+// path has always tolerated these via SSTBatcher.skipDuplicates and KV's
+// DisallowShadowingBelow idempotent-write handling. The distmerge path now
+// matches this behavior by skipping identical duplicates in the merge
+// processor's extractKeyAndCheckDuplicate.
+func TestImportIdenticalDuplicateRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, distmerge := range []bool{false, true} {
+		name := "non-distmerge"
+		if distmerge {
+			name = "distmerge"
+		}
+		t.Run(name, func(t *testing.T) {
+			dirname := t.TempDir()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				ExternalIODir:     dirname,
+				DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+			})
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+
+			if distmerge {
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+				// Small batch size forces each key into its own SST so
+				// duplicates land in separate SSTs and exercise the merge
+				// processor's cross-SST duplicate detection.
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.sst_writer.batch_size = '1B'`)
+			}
+			// CSV with 5 rows but only 3 distinct PKs. Rows 1,a and 2,b
+			// appear twice with identical values.
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dirname, "data.csv"),
+				[]byte("1,a\n2,b\n3,c\n1,a\n2,b"),
+				os.FileMode(0644),
+			))
+
+			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
+			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t, `IMPORT INTO t (id, name) CSV DATA ($1)`,
+				"nodelocal://1/data.csv")
+
+			var count int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&count)
+			require.Equal(t, 3, count)
+		})
+	}
+}
+
 // importDataTest defines a single test case for the TestImportData* family
 // of tests. Tests are split across multiple top-level functions by format type
 // to avoid exceeding shard timeouts.
@@ -252,6 +324,92 @@ type importDataTest struct {
 	err      string
 	rejected string
 	query    map[string][][]string
+}
+
+// TestImportDistributedMergeResume verifies that an import using the 2-stage
+// distributed merge can resume correctly after being paused between merge
+// iterations. It pauses the job after merge iteration 1 checkpoints, then
+// resumes and verifies the data is correct.
+func TestImportDistributedMergeResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dirname := t.TempDir()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir:     dirname,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+
+	// Write test data with enough rows to produce multiple SSTs.
+	var csvData strings.Builder
+	const numRows = 100
+	for i := 0; i < numRows; i++ {
+		fmt.Fprintf(&csvData, "%d,value-%d\n", i, i)
+	}
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dirname, "data.csv"),
+		[]byte(csvData.String()),
+		os.FileMode(0644),
+	))
+
+	sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, name STRING)`)
+
+	// Set pausepoint to pause after the first merge iteration checkpoints.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_merge_iteration'`)
+
+	// Run import — it will pause after merge iteration 1.
+	_, err := db.Exec(`IMPORT INTO t (id, name) CSV DATA ($1)`, "nodelocal://1/data.csv")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "pause point")
+
+	// Wait for the job to reach paused state.
+	var jobID int64
+	testutils.SucceedsSoon(t, func() error {
+		return db.QueryRow(
+			`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
+		).Scan(&jobID)
+	})
+
+	// Verify the checkpoint recorded merge phase 1.
+	var mergePhase int
+	sqlDB.QueryRow(t,
+		`SELECT COALESCE((crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Progress', progress)->'import'->>'distributedMergePhase')::INT, 0) FROM crdb_internal.system_jobs WHERE id = $1`,
+		jobID,
+	).Scan(&mergePhase)
+	require.Equal(t, 1, mergePhase, "expected merge phase 1 to be checkpointed")
+
+	// Clear pausepoint and resume.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+
+	// Wait for success.
+	testutils.SucceedsSoon(t, func() error {
+		var status, errStr string
+		if err := db.QueryRow(
+			fmt.Sprintf(`SELECT status, COALESCE(error, '') FROM [SHOW JOB %d]`, jobID),
+		).Scan(&status, &errStr); err != nil {
+			return err
+		}
+		if status == string(jobs.StateFailed) {
+			return errors.Newf("import job %d failed: %s", jobID, errStr)
+		}
+		if status != string(jobs.StateSucceeded) {
+			return errors.Newf("job %d status: %s", jobID, status)
+		}
+		return nil
+	})
+
+	// Verify all rows were imported correctly.
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM t`, [][]string{{fmt.Sprintf("%d", numRows)}})
+	sqlDB.CheckQueryResults(t,
+		`SELECT id, name FROM t ORDER BY id LIMIT 3`,
+		[][]string{{"0", "value-0"}, {"1", "value-1"}, {"2", "value-2"}},
+	)
 }
 
 var validImportDataTypes = map[string]struct{}{

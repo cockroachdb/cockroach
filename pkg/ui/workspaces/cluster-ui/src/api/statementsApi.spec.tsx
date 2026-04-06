@@ -13,6 +13,7 @@ import { ClusterDetailsContext, ClusterDetailsContextType } from "../contexts";
 import {
   useCombinedStatementStats,
   useStatementDetails,
+  useCombinedTransactionStats,
   SqlStatsSortOptions,
 } from "./statementsApi";
 
@@ -206,6 +207,83 @@ describe("useStatementDetails", () => {
 
     const { result, waitFor } = renderHook(
       () => useStatementDetails("abc123", undefined, timeScale),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined();
+    });
+  });
+});
+
+describe("useCombinedTransactionStats", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("fetches transactions and returns data", async () => {
+    const mockTxnResponse = {
+      transactions: [{ stats_data: { transaction_fingerprint_id: "1" } }],
+      txns_source_table: "crdb_internal.transaction_statistics",
+    };
+    mockGetCombinedStatements.mockResolvedValueOnce(mockTxnResponse);
+
+    const timeScale = {
+      windowSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "seconds"),
+      fixedWindowEnd: moment.utc("2024-01-01 14:00"),
+      key: "Past 1 Hour",
+    };
+
+    const { result, waitForNextUpdate } = renderHook(
+      () =>
+        useCombinedTransactionStats(
+          timeScale,
+          100,
+          SqlStatsSortOptions.SERVICE_LAT,
+        ),
+      { wrapper },
+    );
+
+    expect(result.current.isLoading).toBe(true);
+
+    await waitForNextUpdate();
+
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeDefined();
+    expect(result.current.error).toBeUndefined();
+    expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips fetch when timeScale is null", async () => {
+    const { result } = renderHook(
+      () =>
+        useCombinedTransactionStats(null, 100, SqlStatsSortOptions.SERVICE_LAT),
+      { wrapper },
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isLoading).toBe(false);
+    expect(mockGetCombinedStatements).not.toHaveBeenCalled();
+  });
+
+  it("returns error when fetch fails", async () => {
+    mockGetCombinedStatements.mockRejectedValue(new Error("fetch failed"));
+
+    const timeScale = {
+      windowSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "seconds"),
+      fixedWindowEnd: moment.utc("2024-01-01 14:00"),
+      key: "Past 1 Hour",
+    };
+
+    const { result, waitFor } = renderHook(
+      () =>
+        useCombinedTransactionStats(
+          timeScale,
+          100,
+          SqlStatsSortOptions.SERVICE_LAT,
+        ),
       { wrapper },
     );
 

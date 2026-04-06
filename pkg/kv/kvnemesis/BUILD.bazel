@@ -80,7 +80,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
-        "//pkg/gossip",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvnemesis/kvnemesisutil",
@@ -98,7 +97,6 @@ go_test(
         "//pkg/kv/kvserver/protectedts/ptutil",
         "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

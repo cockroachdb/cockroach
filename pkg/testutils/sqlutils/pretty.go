@@ -21,7 +21,21 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	}
 	for i := range stmts {
 		origStmt := stmts[i].AST
-		verifyStatementPrettyRoundTrip(t, sql, origStmt, SQL)
+
+		if containsCreateRoutine(origStmt) {
+			// The Format round-trip check doesn't work for CreateRoutine
+			// because Doc re-parses and reformats the routine body, while
+			// Format outputs it as a raw string. Use the idempotent check
+			// instead, which also verifies the output is parseable.
+			//
+			// TODO(yang): Run verifyPrettyIdempotent for all statement types.
+			// Currently some AST nodes (e.g. FuncExpr with reserved keyword
+			// names like "overlaps") have idempotency issues that we need to
+			// fix first.
+			verifyPrettyIdempotent(t, sql, origStmt, SQL)
+		} else {
+			verifyStatementPrettyRoundTrip(t, sql, origStmt, SQL)
+		}
 
 		// Verify that the AST can be walked.
 		if _, err := tree.SimpleStmtVisit(
@@ -30,12 +44,13 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 		); err != nil {
 			t.Fatalf("cannot walk stmt %s %v", stmts[i].SQL, err)
 		}
-
 	}
 }
 
 // verifyStatementPrettyRoundTrip verifies that a SQL or PL/pgSQL statement
-// correctly round trips through the pretty printer.
+// correctly round trips through the pretty printer by checking
+// Format(Parse(Pretty(AST))) == Format(AST). If that fails, it retries with
+// Format(Parse(Pretty(AST))) == Format(Parse(Format(AST))).
 func verifyStatementPrettyRoundTrip(
 	t *testing.T, sql string, origStmt tree.NodeFormatter, p Parser,
 ) {
@@ -103,5 +118,45 @@ func verifyStatementPrettyRoundTrip(
 				prettyFormatted,
 			)
 		}
+	}
+}
+
+// verifyPrettyIdempotent checks that Pretty(Parse(Pretty(AST))) == Pretty(AST).
+// This check also doubles as a check that the pretty-printed version parses.
+func verifyPrettyIdempotent(t *testing.T, sql string, origStmt tree.NodeFormatter, p Parser) {
+	cfg := tree.DefaultPrettyCfg()
+	cfg.Simplify = false
+	pretty1, err := cfg.Pretty(origStmt)
+	if err != nil {
+		t.Fatalf("%s: %s", err, sql)
+	}
+	reparsed, err := parseOne(t, pretty1, p)
+	if err != nil {
+		t.Fatalf("cannot re-parse pretty output: %s\npretty: %s", err, pretty1)
+	}
+	pretty2, err := cfg.Pretty(reparsed)
+	if err != nil {
+		t.Fatalf("%s: %s", err, pretty1)
+	}
+	if pretty1 != pretty2 {
+		t.Fatalf("pretty-printing is not idempotent\nfirst:\n%s\nsecond:\n%s",
+			pretty1, pretty2)
+	}
+}
+
+// containsCreateRoutine returns true if the statement is or wraps a
+// CreateRoutine (e.g. EXPLAIN CREATE FUNCTION).
+func containsCreateRoutine(stmt tree.Statement) bool {
+	switch s := stmt.(type) {
+	case *tree.CreateRoutine:
+		return true
+	case *tree.Explain:
+		return containsCreateRoutine(s.Statement)
+	case *tree.ExplainAnalyze:
+		return containsCreateRoutine(s.Statement)
+	case *tree.Prepare:
+		return containsCreateRoutine(s.Statement)
+	default:
+		return false
 	}
 }

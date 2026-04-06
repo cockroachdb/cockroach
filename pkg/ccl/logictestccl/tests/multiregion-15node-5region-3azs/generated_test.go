@@ -72,6 +72,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_multi_region_zone_config_extensions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_zone_config_extensions")
+}
+
 func TestCCLLogic_secondary_region(
 	t *testing.T,
 ) {
@@ -98,4 +105,11 @@ func TestCCLLogic_super_regions_cluster_settings(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "super_regions_cluster_settings")
+}
+
+func TestCCLLogic_super_regions_survival_goal(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "super_regions_survival_goal")
 }

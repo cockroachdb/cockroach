@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import Analytics from "analytics-node";
+import { Analytics } from "@segment/analytics-node";
 import { Location } from "history";
 import each from "lodash/each";
 import isEmpty from "lodash/isEmpty";
@@ -302,13 +302,10 @@ export function initializeAnalytics(store: Store<AdminUIState>) {
   // Create a global instance of AnalyticsSync which can be used from various
   // packages. If enabled, this instance will push to segment using the following
   // analytics key.
-  const analyticsOpts = {
+  const analyticsInstance = new Analytics({
+    writeKey: "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
     host: COCKROACHLABS_ADDR + "/api/segment",
-  };
-  const analyticsInstance = new Analytics(
-    "5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb",
-    analyticsOpts,
-  );
+  });
   analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
   // Attach a listener to the history object which will track a 'page' event
   // whenever the user navigates to a new path.

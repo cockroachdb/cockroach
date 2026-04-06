@@ -121,6 +121,9 @@ func (p *planner) createDatabase(
 		if err != nil {
 			return nil, true, err
 		}
+		if err := p.checkAdminOrMemberOfRole(ctx, owner); err != nil {
+			return nil, true, err
+		}
 	}
 
 	db := dbdesc.NewInitial(
@@ -138,10 +141,6 @@ func (p *planner) createDatabase(
 		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(owner, includeCreatePriv),
 		Version:    1,
 	}).BuildCreatedMutableSchema()
-
-	if err := p.checkCanAlterToNewOwner(ctx, db, owner); err != nil {
-		return nil, true, err
-	}
 
 	if err := p.createDescriptor(ctx, db, jobDesc); err != nil {
 		return nil, true, err
@@ -183,6 +182,7 @@ func (p *planner) createDatabase(
 			database.SuperRegion.Regions,
 			database.SuperRegion.Name,
 			tree.AsStringWithFQNames(database, p.Ann()),
+			nil,
 		); err != nil {
 			return nil, false, err
 		}

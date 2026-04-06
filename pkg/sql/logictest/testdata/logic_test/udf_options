@@ -74,8 +74,8 @@ CREATE FUNCTION public.get_l(i INT8)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT v FROM test.public.kv WHERE k = i;
-$$
+    SELECT v FROM public.kv WHERE k = i;
+  $$
 
 query T
 SELECT pg_get_functiondef(NULL)

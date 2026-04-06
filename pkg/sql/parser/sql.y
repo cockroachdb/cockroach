@@ -2351,6 +2351,22 @@ alter_database_alter_super_region:
       Regions: $9.nameList(),
     }
   }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name survival_goal_clause
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegionSurvivalGoal{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      SurvivalGoal: $8.survivalGoal(),
+    }
+  }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name SURVIVE DEFAULT
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegionSurvivalGoal{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      SurvivalGoal: tree.SurvivalGoalDefault,
+    }
+  }
 
 alter_database_set_secondary_region_stmt:
    ALTER DATABASE database_name SET secondary_region_clause
@@ -2412,6 +2428,20 @@ alter_database_set_zone_config_extension_stmt:
       DatabaseName:  tree.Name($3),
       LocalityLevel: tree.LocalityLevelTable,
       RegionName:    tree.Name($8),
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault:    s.SetDefault,
+        YAMLConfig:    s.YAMLConfig,
+        Options:       s.Options,
+      },
+    }
+  }
+| ALTER DATABASE database_name ALTER LOCALITY SUPER REGION region_name set_zone_config
+  {
+    s := $9.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:    tree.Name($3),
+      LocalityLevel:   tree.LocalityLevelSuperRegion,
+      SuperRegionName: tree.Name($8),
       ZoneConfigSettings: tree.ZoneConfigSettings {
         SetDefault:    s.SetDefault,
         YAMLConfig:    s.YAMLConfig,
@@ -5032,6 +5062,10 @@ logical_replication_create_table_options:
 | BIDIRECTIONAL ON string_or_placeholder
   {
    $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
+  }
+| SKIP FOREIGN KEYS
+  {
+   $$.val = &tree.LogicalReplicationOptions{SkipForeignKeys: tree.MakeDBool(true)}
   }
 
 

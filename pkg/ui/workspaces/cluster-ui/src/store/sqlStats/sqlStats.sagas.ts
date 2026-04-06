@@ -14,7 +14,6 @@ import {
 import { actions as localStorageActions } from "src/store/localStorage";
 
 import { maybeError } from "../../util";
-import { actions as txnStatsActions } from "../transactionStats";
 
 import {
   actions as sqlStatsActions,
@@ -51,10 +50,7 @@ export function* updateSQLStatsTimeScaleSaga(
 export function* resetSQLStatsSaga() {
   try {
     yield call(resetSQLStats);
-    yield all([
-      put(sqlStatsActions.invalidated()),
-      put(txnStatsActions.invalidated()),
-    ]);
+    yield all([put(sqlStatsActions.invalidated())]);
   } catch (e) {
     yield put(sqlStatsActions.failed(maybeError(e)));
   }

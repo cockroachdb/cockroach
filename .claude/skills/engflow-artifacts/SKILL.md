@@ -21,21 +21,22 @@ engflow_auth export mesolite.cluster.engflow.com
 
 ## Quick Reference
 
-The script is at `.claude/skills/engflow-artifacts/engflow_artifacts.py` and is
-directly executable (has a shebang). Run it from the repo root:
+Use `run.sh` to invoke the script — it manages a local venv with dependencies
+automatically. The script is at `.claude/skills/engflow-artifacts/run.sh`:
 
 | Command | Purpose |
 |---------|---------|
 | `targets <ID>` | List failed targets in an invocation |
 | `list <ID> --target <LABEL>` | List per-shard artifacts for a target |
 | `download <ID> --target <LABEL> --shard N` | Download artifacts for a shard |
+| `download <ID> --target <LABEL> --shard N --run M` | Download a specific run |
 | `blob <HASH> <SIZE>` | Download a specific CAS blob |
 | `url '<FULL_URL>'` | Download from a full EngFlow invocation URL |
 
 ## Typical Investigation Workflow
 
 ```bash
-EF=.claude/skills/engflow-artifacts/engflow_artifacts.py
+EF=.claude/skills/engflow-artifacts/run.sh
 
 # 1. Find what failed
 ./$EF targets daa807a0-3589-40a5-94b5-3440c7490d6a
@@ -69,11 +70,13 @@ Some shards also have:
 
 - **`engflow_auth export`** provides a JWT token.
 - **gRPC-web calls via curl** to EngFlow's internal `v1alpha` ResultStore API (GetTarget, GetTargetLabelsByStatus).
+- **Protobuf parsing** via `google.protobuf` with a reverse-engineered `.proto` schema (`resultstore.proto`). Responses are properly deserialized — shard numbers and run numbers come from actual protobuf fields, not byte-pattern heuristics.
 - **CAS blob downloads via curl** with the auth token as a cookie.
 - `outputs.zip` is auto-extracted after download.
-- test.xml blobs are found by parsing `engflow.type.CompactDigest` entries (binary SHA-256 + uint64 size) from the protobuf response.
 
-Python's urllib mangles headers in a way EngFlow rejects, so the script uses `subprocess` + `curl`.
+Each test target has multiple **shards** (parallel test splits) and **runs** (repeated executions). Use `--shard` to select a shard and `--run` to select a run (defaults to run 1). Shard numbers are 1-based and match the `testReportShard` parameter in EngFlow URLs.
+
+EngFlow's gRPC-web endpoint requires HTTP/2, so the script uses `curl` (which negotiates HTTP/2 via ALPN) rather than Python HTTP libraries that only speak HTTP/1.1. Dependencies are installed automatically by `run.sh`.
 
 ## Extracted outputs.zip Structure
 

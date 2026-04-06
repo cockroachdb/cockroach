@@ -904,10 +904,16 @@ func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
 // ScanNodeVitalityFromCache returns a map of nodeID to boolean liveness status
 // of each node from the cache. This excludes nodes that were decommissioned.
 // Decommissioned nodes are kept in the KV store and the cache forever, but are
-// typically not referenced in normal usage. The method ScanNodeVitalityFromKV
-// does return decommissioned nodes.
+// typically not referenced in normal usage. Use ScanAllNodeVitalityFromCache to
+// include decommissioned nodes.
 func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	return nl.cache.ScanNodeVitalityFromCache()
+}
+
+// ScanAllNodeVitalityFromCache is like ScanNodeVitalityFromCache but includes
+// decommissioned nodes.
+func (nl *NodeLiveness) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return nl.cache.ScanAllNodeVitalityFromCache()
 }
 
 // ScanNodeVitalityFromKV returns the status for all the nodes from KV including

@@ -3,12 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import {
-  api as clusterUiApi,
-  util,
-  StmtInsightEvent,
-  TxnInsightEvent,
-} from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 import map from "lodash/map";
@@ -32,8 +27,7 @@ import {
 } from "./cachedDataReducer";
 import { AdminUIState } from "./state";
 
-const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
-  util;
+const { generateStmtDetailsToID, generateTableID } = util;
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.
@@ -201,16 +195,6 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
-const txnFingerprintStatsReducerObj = new CachedDataReducer(
-  clusterUiApi.getFlushedTxnStatsApi,
-  "transactions",
-  null,
-  moment.duration(30, "m"),
-  true,
-);
-export const invalidateTxns = txnFingerprintStatsReducerObj.invalidateData;
-export const refreshTxns = txnFingerprintStatsReducerObj.refresh;
-
 export const statementDetailsRequestToID = (
   req: api.StatementDetailsRequestMessage,
 ): string =>
@@ -264,62 +248,6 @@ const metricMetadataReducerObj = new CachedDataReducer(
   "metricMetadata",
 );
 export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
-
-const clusterLocksReducerObj = new CachedDataReducer(
-  clusterUiApi.getClusterLocksState,
-  "clusterLocks",
-  null,
-  moment.duration(30, "s"),
-);
-export const refreshClusterLocks = clusterLocksReducerObj.refresh;
-
-const stmtInsightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getStmtInsightsApi,
-  "stmtInsights",
-  null,
-  moment.duration(5, "m"),
-);
-export const refreshStmtInsights = stmtInsightsReducerObj.refresh;
-export const invalidateExecutionInsights =
-  stmtInsightsReducerObj.invalidateData;
-
-const txnInsightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getTxnInsightsApi,
-  "txnInsights",
-  null,
-  moment.duration(5, "m"),
-);
-export const refreshTxnInsights = txnInsightsReducerObj.refresh;
-export const invalidateTxnInsights = txnInsightsReducerObj.invalidateData;
-
-export const txnInsightsRequestKey = (
-  req: clusterUiApi.TxnInsightDetailsRequest,
-): string => req.txnExecutionID;
-
-const txnInsightDetailsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getTxnInsightDetailsApi,
-  "txnInsightDetails",
-  txnInsightsRequestKey,
-  null,
-  moment.duration(5, "m"),
-);
-
-export const refreshTxnInsightDetails = txnInsightDetailsReducerObj.refresh;
-
-export const statementFingerprintInsightRequestKey = (
-  req: clusterUiApi.StmtInsightsReq,
-): string => `${HexStringToInt64String(req.stmtFingerprintId)}`;
-
-const statementFingerprintInsightsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getStmtInsightsApi,
-  "statementFingerprintInsights",
-  statementFingerprintInsightRequestKey,
-  null,
-  moment.duration(5, "m"),
-);
-
-export const refreshStatementFingerprintInsights =
-  statementFingerprintInsightsReducerObj.refresh;
 
 const snapshotsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.listTracingSnapshots,
@@ -378,26 +306,10 @@ export interface APIReducersState {
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
-  transactions: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
   statementDetails: KeyedCachedDataReducerState<api.StatementDetailsResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
-  clusterLocks: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.ClusterLocksResponse>
-  >;
-  stmtInsights: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
-  >;
-  txnInsightDetails: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.TxnInsightDetailsResponse>
-  >;
-  txnInsights: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<TxnInsightEvent[]>
-  >;
-  statementFingerprintInsights: KeyedCachedDataReducerState<
-    clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
-  >;
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
   rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
@@ -421,24 +333,15 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
-  [txnFingerprintStatsReducerObj.actionNamespace]:
-    txnFingerprintStatsReducerObj.reducer,
   [statementDetailsReducerObj.actionNamespace]:
     statementDetailsReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
-  [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
-  [txnInsightsReducerObj.actionNamespace]: txnInsightsReducerObj.reducer,
-  [txnInsightDetailsReducerObj.actionNamespace]:
-    txnInsightDetailsReducerObj.reducer,
-  [stmtInsightsReducerObj.actionNamespace]: stmtInsightsReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,
   [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
-  [statementFingerprintInsightsReducerObj.actionNamespace]:
-    statementFingerprintInsightsReducerObj.reducer,
   [tenantsListObj.actionNamespace]: tenantsListObj.reducer,
 });
 

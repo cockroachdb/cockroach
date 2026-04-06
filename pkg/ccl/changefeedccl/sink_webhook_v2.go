@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -272,7 +273,7 @@ func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error
 	req.Body = b
 	res, err := sc.client.Do(req)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "webhook sink request failed")
 	}
 	defer res.Body.Close()
 
@@ -282,7 +283,8 @@ func (sc *webhookSinkClient) Flush(ctx context.Context, batch SinkPayload) error
 		if err != nil {
 			return errors.Wrapf(err, "failed to read body for HTTP response with status: %d", res.StatusCode)
 		}
-		return fmt.Errorf("%s: %s", res.Status, string(resBody))
+		return errors.Newf("webhook sink HTTP error %s: %s",
+			redact.Safe(res.Status), resBody)
 	}
 	return nil
 }

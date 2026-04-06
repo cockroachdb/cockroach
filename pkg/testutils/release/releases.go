@@ -81,10 +81,11 @@ func IsWithdrawn(v *version.Version) (bool, error) {
 	return false, nil
 }
 
-// MajorReleasesBetween returns the number of major releases between
-// any two versions passed. Returns an error when there is no
-// predecessor information for a release in the chain (which should
-// only happen if one of the versions passed is very old).
+// MajorReleasesBetween returns the number of released major versions
+// between any two versions passed, skipping unreleased series (those
+// with empty Latest). Returns an error when there is no predecessor
+// information for a release in the chain (which should only happen if
+// one of the versions passed is very old).
 func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
 	older, newer := v1, v2
 	if v1.AtLeast(*v2) {
@@ -93,12 +94,23 @@ func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
 
 	var count int
 	currentSeries := VersionSeries(newer)
+	olderSeries := VersionSeries(older)
+	visited := map[string]bool{}
 
-	for currentSeries != VersionSeries(older) {
-		count++
+	for currentSeries != olderSeries {
+		if visited[currentSeries] {
+			return -1, fmt.Errorf("cycle in predecessor chain at series: %s", currentSeries)
+		}
+		visited[currentSeries] = true
+
 		seriesData, ok := releaseData[currentSeries]
 		if !ok {
 			return -1, fmt.Errorf("no release data for release series: %s", currentSeries)
+		}
+
+		// Only count series that have actual releases.
+		if seriesData.Latest != "" {
+			count++
 		}
 
 		currentSeries = seriesData.Predecessor
@@ -114,6 +126,9 @@ func LatestPatch(seriesStr string) (string, error) {
 	series, ok := releaseData[seriesStr]
 	if !ok {
 		return "", fmt.Errorf("no release information for %q series", seriesStr)
+	}
+	if series.Latest == "" {
+		return "", fmt.Errorf("no releases available for %q series", seriesStr)
 	}
 	activeReleases := activePatchReleases(series)
 	return activeReleases[len(activeReleases)-1], nil
@@ -251,7 +266,9 @@ func activePatchReleases(releaseSeries Series) []string {
 }
 
 // predecessorSeries retrieves the corresponding `Series` data for the
-// version passed. Returns an error if the data is not available.
+// predecessor of the version passed, skipping unreleased series
+// (those with empty Latest). Returns an error if no released
+// predecessor is found.
 func predecessorSeries(v *version.Version) (Series, error) {
 	var empty Series
 	seriesStr := VersionSeries(v)
@@ -260,16 +277,25 @@ func predecessorSeries(v *version.Version) (Series, error) {
 		return empty, fmt.Errorf("no release information for %q (%q series)", v, seriesStr)
 	}
 
+	// Walk the predecessor chain, skipping unreleased series.
+	visited := map[string]bool{seriesStr: true}
+	cur := series.Predecessor
+	for cur != "" && !visited[cur] {
+		visited[cur] = true
+		predSeries, ok := releaseData[cur]
+		if !ok {
+			return empty, fmt.Errorf("no release information for %q (predecessor of %q)", cur, v)
+		}
+		if predSeries.Latest != "" {
+			return predSeries, nil
+		}
+		cur = predSeries.Predecessor
+	}
+
 	if series.Predecessor == "" {
 		return empty, fmt.Errorf("no known predecessor for %q (%q series)", v, seriesStr)
 	}
-
-	predSeries, ok := releaseData[series.Predecessor]
-	if !ok {
-		return empty, fmt.Errorf("no release information for %q (predecessor of %q)", series.Predecessor, v)
-	}
-
-	return predSeries, nil
+	return empty, fmt.Errorf("no released predecessor for %q (%q series)", v, seriesStr)
 }
 
 func mustParseVersion(str string) *version.Version {

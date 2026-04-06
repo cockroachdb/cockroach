@@ -2167,11 +2167,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 func getLivenessResponse(
 	ctx context.Context, nl livenesspb.NodeVitalityInterface,
 ) (*serverpb.LivenessResponse, error) {
-	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
-
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
+	nodeVitalityMap := nl.ScanAllNodeVitalityFromCache()
 
 	livenesses := make([]livenesspb.Liveness, 0, len(nodeVitalityMap))
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))

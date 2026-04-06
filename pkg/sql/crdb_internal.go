@@ -457,7 +457,8 @@ CREATE TABLE crdb_internal.super_regions (
 	id INT NOT NULL,
 	database_name STRING NOT NULL,
   super_region_name STRING NOT NULL,
-	regions STRING[]
+	regions STRING[],
+	survival_goal STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -487,11 +488,20 @@ CREATE TABLE crdb_internal.super_regions (
 					}); err != nil {
 						return err
 					}
+					survivalGoalDatum := tree.DNull
+					goalStr, hasGoal, err := regionDesc.GetSuperRegionSurvivalGoal(superRegion)
+					if err != nil {
+						return err
+					}
+					if hasGoal {
+						survivalGoalDatum = tree.NewDString(goalStr)
+					}
 					return addRow(
 						tree.NewDInt(tree.DInt(db.GetID())), // id
 						tree.NewDString(db.GetName()),       // database_name
 						tree.NewDString(superRegion),        // super_region_name
 						regionList,                          // regions
+						survivalGoalDatum,                   // survival_goal
 					)
 				})
 			})
@@ -3407,33 +3417,11 @@ func createRoutinePopulate(
 			if err != nil {
 				return err
 			}
-			for i := range treeNode.Options {
-				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
-					bodyStr := string(body)
-					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, bodyStr, fnDesc.GetLanguage())
-					if err != nil {
-						return err
-					}
-					bodyStr, err = formatQuerySequencesForDisplay(ctx, &p.semaCtx, bodyStr, true /* multiStmt */, fnDesc.GetLanguage())
-					if err != nil {
-						return err
-					}
-					bodyStr, err = formatUnqualifyTableNames(bodyStr, fnIDToDBName[fnDesc.GetID()], fnDesc.GetLanguage())
-					if err != nil {
-						return err
-					}
-
-					bodyStr = strings.TrimSpace(bodyStr)
-					stmtStrs := strings.Split(bodyStr, "\n")
-					for i := range stmtStrs {
-						if stmtStrs[i] != "" {
-							stmtStrs[i] = "\t" + stmtStrs[i]
-						}
-					}
-					p := &treeNode.Options[i]
-					// Add two new lines just for better formatting.
-					*p = tree.RoutineBodyStr("\n" + strings.Join(stmtStrs, "\n") + "\n")
-				}
+			createStatement, err := formatCreateRoutineForDisplay(
+				ctx, &p.semaCtx, treeNode, fnDesc.GetLanguage(), fnIDToDBName[fnDesc.GetID()],
+			)
+			if err != nil {
+				return err
 			}
 
 			err = addRow(
@@ -3443,7 +3431,7 @@ func createRoutinePopulate(
 				tree.NewDString(fnIDToScName[fnDesc.GetID()]),       // schema_name
 				tree.NewDInt(tree.DInt(fnDesc.GetID())),             // function_id
 				tree.NewDString(fnDesc.GetName()),                   // function_name
-				tree.NewDString(tree.AsString(treeNode)),            // create_statement
+				tree.NewDString(createStatement),                    // create_statement
 			)
 			if err != nil {
 				return err
@@ -3489,29 +3477,12 @@ func createRoutinePopulateByFnIndex(
 	if err != nil {
 		return false, err
 	}
-	for i := range treeNode.Options {
-		if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
-			bodyStr := string(body)
-			bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, bodyStr, fnDesc.GetLanguage())
-			if err != nil {
-				return false, err
-			}
-			bodyStr, err = formatQuerySequencesForDisplay(ctx, &p.semaCtx, bodyStr, true /* multiStmt */, fnDesc.GetLanguage())
-			if err != nil {
-				return false, err
-			}
-			bodyStr = strings.TrimSpace(bodyStr)
-			stmtStrs := strings.Split(bodyStr, "\n")
-			for i := range stmtStrs {
-				if stmtStrs[i] != "" {
-					stmtStrs[i] = "\t" + stmtStrs[i]
-				}
-			}
-			p := &treeNode.Options[i]
-			*p = tree.RoutineBodyStr("\n" + strings.Join(stmtStrs, "\n") + "\n")
-		}
+	createStatement, err := formatCreateRoutineForDisplay(
+		ctx, &p.semaCtx, treeNode, fnDesc.GetLanguage(), dbName,
+	)
+	if err != nil {
+		return false, err
 	}
-	createStatement := tree.AsString(treeNode)
 	if err := addRow(
 		tree.NewDInt(tree.DInt(dbID)),           // database_id
 		tree.NewDString(dbName),                 // database_name
@@ -3524,6 +3495,41 @@ func createRoutinePopulateByFnIndex(
 		return false, err
 	}
 	return true, nil
+}
+
+// formatCreateRoutineForDisplay takes a tree.CreateRoutine and rewrites its
+// routine body (in place) to be more human-readable (e.g. by replacing OIDs
+// with names) and then generates a pretty-printed create statement.
+func formatCreateRoutineForDisplay(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	treeNode *tree.CreateRoutine,
+	lang catpb.Function_Language,
+	dbName string,
+) (string, error) {
+	for i := range treeNode.Options {
+		body, ok := treeNode.Options[i].(tree.RoutineBodyStr)
+		if !ok {
+			continue
+		}
+		bodyStr := string(body)
+		var err error
+		bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, semaCtx, bodyStr, lang)
+		if err != nil {
+			return "", err
+		}
+		bodyStr, err = formatQuerySequencesForDisplay(ctx, semaCtx, bodyStr, true /* multiStmt */, lang)
+		if err != nil {
+			return "", err
+		}
+		bodyStr, err = formatUnqualifyTableNames(bodyStr, dbName, lang)
+		if err != nil {
+			return "", err
+		}
+		treeNode.Options[i] = tree.RoutineBodyStr(strings.TrimSpace(bodyStr))
+	}
+	cfg := tree.DefaultPrettyCfg()
+	return cfg.Pretty(treeNode)
 }
 
 var crdbInternalCreateFunctionStmtsTable = virtualSchemaTable{

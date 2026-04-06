@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "backfill.go",
         "distributed_merge_mode.go",
+        "doc.go",
         "index_backfiller_cols.go",
         "mvcc_index_merger.go",
         "sst_manifest.go",

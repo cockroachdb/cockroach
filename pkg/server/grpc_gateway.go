@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -117,6 +116,5 @@ func configureGRPCGateway(
 // getServerEndpointCounter returns a telemetry Counter corresponding to the
 // given grpc method.
 func getServerEndpointCounter(method string) telemetry.Counter {
-	const counterPrefix = "http.grpc-gateway"
-	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+	return telemetry.GetCounter(rpc.GatewayEndpointCounterName("grpc", method))
 }

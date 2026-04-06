@@ -2293,6 +2293,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
+	// Initialize the WAG sequencer from the last persisted node index so that
+	// new WAG nodes are written after existing ones.
+	if s.EnginesSeparated() {
+		if err := s.wagSeq.Init(ctx, s.LogEngine()); err != nil {
+			return err
+		}
+	}
+
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the

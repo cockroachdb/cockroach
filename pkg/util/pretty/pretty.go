@@ -36,6 +36,7 @@ const (
 	hardlineB
 	spacesB
 	keywordB
+	failB
 )
 
 // Pretty returns a pretty-printed string for the Doc d at line length
@@ -148,6 +149,8 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	switch t := d.d.(type) {
 	case nilDoc:
 		res = b.be(k, z)
+	case failDoc:
+		res = b.newDocBest(docBest{tag: failB})
 	case *concat:
 		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
 	case nests:
@@ -273,12 +276,12 @@ func fits(w int16, x *docBest) bool {
 	switch x.tag {
 	case textB, keywordB:
 		return fits(w-int16(len(x.s)), x.d)
-	case lineB:
+	case lineB, hardlineB:
 		return true
-	case hardlineB:
-		return false
 	case spacesB:
 		return fits(w-x.i.spaces, x.d)
+	case failB:
+		return false
 	default:
 		panic(fmt.Errorf("unknown type: %d", x.tag))
 	}
@@ -314,6 +317,8 @@ func (b *beExec) layout(sb *strings.Builder, useTabs bool, d *docBest) {
 			for i := int16(0); i < d.i.spaces; i++ {
 				sb.WriteByte(' ')
 			}
+		case failB:
+			panic(errors.AssertionFailedf("failB should never reach layout"))
 		default:
 			panic(fmt.Errorf("unknown type: %d", d.tag))
 		}

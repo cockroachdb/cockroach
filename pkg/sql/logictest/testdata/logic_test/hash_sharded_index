@@ -76,7 +76,7 @@ WHERE tablename = 'sharded_primary'
 ORDER BY 1, 2, 3
 ----
 tablename        indexname  indexdef
-sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10)
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10)
 
 # Test that the indexdef output from pg_indexes is round-trippable. This is a
 # regression test for #161516.
@@ -92,7 +92,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
 
 # Verify that the CREATE INDEX statement from pg_indexes can be executed.
 # First, save the index definition.
@@ -112,7 +112,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+store_columns_test  idx1       CREATE INDEX idx1 ON public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
 
 statement ok
 DROP TABLE store_columns_test

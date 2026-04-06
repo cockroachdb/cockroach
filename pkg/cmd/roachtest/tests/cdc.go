@@ -1244,11 +1244,21 @@ func runCDCRollingRestart(
 	}
 
 	// Node topology:
-	// - Nodes 1 through N-2: CRDB (subject to rolling restarts)
-	// - Node N-1: CRDB + workload runner + SQL queries (not restarted)
-	// - Node N: Kafka
-	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-	kafkaNode := c.Node(c.Spec().NodeCount)
+	// - Nodes 1 through N-3: CRDB (subject to rolling restarts)
+	// - Node N-2: CRDB (stable, never restarted)
+	// - Node N-1: Kafka
+	// - Node N: Workload runner only (no CRDB, framework workload node)
+	//
+	// This is a regression test for a case where rolling restarts cause
+	// feeds to lag. That happens specifically when the backoff between
+	// retries is allowed to grow. Since restarting the coordinator
+	// would reset the backoff, we keep one node stable to avoid that.
+	// This stable node is used to simulate the changefeed coordinator
+	// in a large production cluster. In a large cluster (N nodes), we
+	// can go a long time (O(n) restarts) without restarting the coordinator.
+	crdbNodes := c.Range(1, c.Spec().NodeCount-2)
+	stableNode := c.Spec().NodeCount - 2
+	kafkaNode := c.Node(c.Spec().NodeCount - 1)
 
 	startOpts := option.DefaultStartOpts()
 	// Start the retry backoff at the max (30s) so that every restart
@@ -1264,11 +1274,11 @@ func runCDCRollingRestart(
 	kafka, kafkaCleanup := setupKafka(ctx, t, c, kafkaNode)
 	defer kafkaCleanup()
 
-	// Set up prometheus on the workload node for roachperf export. The
-	// workload node is never restarted, so prometheus scraping is stable.
-	workloadNode := c.Spec().NodeCount - 1
+	// Set up prometheus on the workload runner node for roachperf export. The
+	// workload runner node is never restarted and doesn't run CRDB, so
+	// prometheus scraping is stable.
 	promCfg := (&prometheus.Config{}).
-		WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
+		WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
 		WithCluster(crdbNodes.InstallNodes()).
 		WithNodeExporter(c.All().InstallNodes())
 	if err := c.StartGrafana(ctx, t.L(), promCfg); err != nil {
@@ -1291,25 +1301,26 @@ func runCDCRollingRestart(
 		return nil
 	}
 
-	// Connect to the workload node for queries since we'll be restarting the
-	// other nodes during the test.
-	db := c.Conn(ctx, t.L(), workloadNode)
+	// Connect to the stable CRDB node for queries since we'll be restarting
+	// the other nodes during the test.
+	db := c.Conn(ctx, t.L(), stableNode)
 	defer db.Close()
 	t.L().Printf("setting up test with doRestarts=%t", params.doRestarts)
 	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := fmt.Sprintf("./cockroach workload init kv --splits 50 {pgurl:%d}", workloadNode)
-	if err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), cmd); err != nil {
+	cmd := fmt.Sprintf("./cockroach workload init kv --splits 50 {pgurl%s}", crdbNodes)
+	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 		t.Fatal(err)
 	}
 
-	// Run the kv workload for the full test duration.
+	// Run the kv workload for the full test duration on the dedicated
+	// workload runner node, spreading traffic across all CRDB nodes.
 	t.Go(func(ctx context.Context, l *logger.Logger) error {
-		cmd := fmt.Sprintf("./cockroach workload run kv --zipfian --duration=%s {pgurl:%d} --tolerate-errors",
-			params.testDuration, workloadNode)
-		return c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
+		cmd := fmt.Sprintf("./cockroach workload run kv --zipfian --duration=%s {pgurl%s} --tolerate-errors",
+			params.testDuration, crdbNodes)
+		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	})
 
 	var jobID int
@@ -1349,11 +1360,11 @@ func runCDCRollingRestart(
 	beginTime := timeutil.Now()
 
 	// Start rolling restarts in a background goroutine if enabled. We
-	// restart all nodes except the workload node.
+	// restart all CRDB nodes except the stable node.
 	if params.doRestarts {
 		const restartInterval = 2 * time.Minute
-		restartNodes := make([]int, 0, workloadNode-1)
-		for i := 1; i < workloadNode; i++ {
+		restartNodes := make([]int, 0, stableNode-1)
+		for i := 1; i < stableNode; i++ {
 			restartNodes = append(restartNodes, i)
 		}
 		t.Go(func(ctx context.Context, l *logger.Logger) error {
@@ -2431,7 +2442,7 @@ CONFIGURE ZONE USING
 		Name:             "cdc/rolling-restart",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(5),
+		Cluster:          r.MakeClusterSpec(6, spec.WorkloadNode()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
@@ -2451,7 +2462,7 @@ CONFIGURE ZONE USING
 		Name:             "cdc/no-rolling-restart",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(5),
+		Cluster:          r.MakeClusterSpec(6, spec.WorkloadNode()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,

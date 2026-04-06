@@ -797,19 +797,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  -- But this should work:
  SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1))) ORDER BY 1;
          q1        
-@@ -935,10 +943,7 @@
- --
- -- Check behavior with empty select list (allowed since 9.4)
- --
--select union select;
----
--(1 row)
--
-+-- select union select;
- select intersect select;
- --
- (1 row)
-@@ -949,104 +954,142 @@
+@@ -949,29 +957,45 @@
  
  -- check hashed implementation
  set enable_hashagg = true;
@@ -865,37 +853,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
 -               ->  Function Scan on generate_series generate_series_1
 -(6 rows)
 -
--select from generate_series(1,5) union select from generate_series(1,3);
----
--(1 row)
--
 +ERROR:  at or near "off": syntax error
 +DETAIL:  source SQL:
 +explain (costs off)
 +               ^
 +HINT:  try \h <SELECTCLAUSE>
-+-- select from generate_series(1,5) union select from generate_series(1,3);
- select from generate_series(1,5) union all select from generate_series(1,3);
+ select from generate_series(1,5) union select from generate_series(1,3);
  --
- (8 rows)
- 
--select from generate_series(1,5) intersect select from generate_series(1,3);
----
--(1 row)
--
-+-- select from generate_series(1,5) intersect select from generate_series(1,3);
- select from generate_series(1,5) intersect all select from generate_series(1,3);
- --
- (3 rows)
- 
--select from generate_series(1,5) except select from generate_series(1,3);
----
--(0 rows)
--
-+-- select from generate_series(1,5) except select from generate_series(1,3);
- select from generate_series(1,5) except all select from generate_series(1,3);
- --
- (2 rows)
+ (1 row)
+@@ -998,29 +1022,45 @@
  
  -- check sorted implementation
  set enable_hashagg = false;
@@ -951,36 +917,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
 -               ->  Function Scan on generate_series generate_series_1
 -(6 rows)
 -
--select from generate_series(1,5) union select from generate_series(1,3);
----
--(1 row)
--
 +ERROR:  at or near "off": syntax error
 +DETAIL:  source SQL:
 +explain (costs off)
 +               ^
 +HINT:  try \h <SELECTCLAUSE>
-+-- select from generate_series(1,5) union select from generate_series(1,3);
- select from generate_series(1,5) union all select from generate_series(1,3);
+ select from generate_series(1,5) union select from generate_series(1,3);
  --
- (8 rows)
- 
--select from generate_series(1,5) intersect select from generate_series(1,3);
----
--(1 row)
--
-+-- select from generate_series(1,5) intersect select from generate_series(1,3);
- select from generate_series(1,5) intersect all select from generate_series(1,3);
- --
- (3 rows)
- 
--select from generate_series(1,5) except select from generate_series(1,3);
----
--(0 rows)
--
-+-- select from generate_series(1,5) except select from generate_series(1,3);
- select from generate_series(1,5) except all select from generate_series(1,3);
- --
+ (1 row)
+@@ -1046,7 +1086,31 @@
  (2 rows)
  
  reset enable_hashagg;
@@ -1012,7 +957,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  --
  -- Check handling of a case with unknown constants.  We don't guarantee
  -- an undecorated constant will work in all cases, but historically this
-@@ -1066,9 +1109,7 @@
+@@ -1066,9 +1130,7 @@
  
  -- This should fail, but it should produce an error cursor
  SELECT '3.4'::numeric UNION SELECT 'foo';
@@ -1023,7 +968,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  --
  -- Test that expression-index constraints can be pushed down through
  -- UNION or UNION ALL
-@@ -1079,69 +1120,103 @@
+@@ -1079,69 +1141,103 @@
  INSERT INTO t1 VALUES ('a', 'b'), ('x', 'y');
  INSERT INTO t2 VALUES ('ab'), ('xy');
  set enable_seqscan = off;
@@ -1158,7 +1103,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
    SELECT * FROM
    (SELECT a || b AS ab FROM t1
     UNION ALL
-@@ -1151,40 +1226,74 @@
+@@ -1151,40 +1247,74 @@
  ----
   ab
   ab
@@ -1251,7 +1196,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  -- Test constraint exclusion of UNION ALL subqueries
  explain (costs off)
   SELECT * FROM
-@@ -1192,11 +1301,11 @@
+@@ -1192,11 +1322,11 @@
     UNION ALL
     SELECT 2 AS t, * FROM tenk1 b) c
   WHERE t = 2;
@@ -1268,7 +1213,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  -- Test that we push quals into UNION sub-selects only when it's safe
  explain (costs off)
  SELECT * FROM
-@@ -1205,19 +1314,11 @@
+@@ -1205,19 +1335,11 @@
     SELECT 2 AS t, 4 AS x) ss
  WHERE x < 4
  ORDER BY x;
@@ -1293,7 +1238,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  SELECT * FROM
    (SELECT 1 AS t, 2 AS x
     UNION
-@@ -1236,20 +1337,11 @@
+@@ -1236,20 +1358,11 @@
     SELECT 2 AS t, 4 AS x) ss
  WHERE x < 4
  ORDER BY x;
@@ -1319,7 +1264,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  SELECT * FROM
    (SELECT 1 AS t, generate_series(1,10) AS x
     UNION
-@@ -1270,20 +1362,11 @@
+@@ -1270,20 +1383,11 @@
     SELECT 2 AS t, 4 AS x) ss
  WHERE x > 3
  ORDER BY x;
@@ -1345,7 +1290,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  SELECT * FROM
    (SELECT 1 AS t, (random()*3)::int AS x
     UNION
-@@ -1303,25 +1386,11 @@
+@@ -1303,25 +1407,11 @@
     union all
     select distinct * from int8_tbl i82) ss
  where q2 = q2;
@@ -1376,7 +1321,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  select distinct q1 from
    (select distinct * from int8_tbl i81
     union all
-@@ -1339,25 +1408,11 @@
+@@ -1339,25 +1429,11 @@
     union all
     select distinct * from int8_tbl i82) ss
  where -q1 = q2;
@@ -1407,7 +1352,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  select distinct q1 from
    (select distinct * from int8_tbl i81
     union all
-@@ -1373,35 +1428,43 @@
+@@ -1373,35 +1449,43 @@
  create function expensivefunc(int) returns int
  language plpgsql immutable strict cost 10000
  as $$begin return $1; end$$;
@@ -1468,7 +1413,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/union.out --label
  -- Test handling of appendrel quals that const-simplify into an AND
  explain (costs off)
  select * from
-@@ -1409,14 +1472,11 @@
+@@ -1409,14 +1493,11 @@
     union all
     select *, 1 as x from int8_tbl b) ss
  where (x = 0) or (q1 >= q2 and q1 <= q2);

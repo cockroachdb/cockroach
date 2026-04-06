@@ -61,7 +61,35 @@ var goroutineCPUHandlePool = sync.Pool{
 // SQLCPUHandle manages CPU accounting and admission for SQL work across
 // multiple goroutines.
 //
-// TODO(sumeer): fill in more details.
+// SQL CPU admission differs from KV admission in several important ways:
+//
+//   - Admission model: KV uses an estimate-then-correct model. WorkQueue.Admit
+//     is called before execution with an estimated RequestedCount (via
+//     cpuTimeTokenEstimator), and AdmittedWorkDone is called after execution to
+//     correct the estimate using the actual CPU time from grunning. SQL CPU
+//     admission uses a measure-then-admit model: measureAndAdmit is called
+//     periodically during execution (every ~1024 rows or every vectorized batch
+//     via the CancelChecker), and the exact CPU consumed since the last call is
+//     known from grunning. There is no estimation and no correction step.
+//
+//   - Lifetime: A KV request typically consumes microseconds to low
+//     milliseconds of on-CPU time (as measured by grunning), with a
+//     single Admit/AdmittedWorkDone pair. A SQLCPUHandle is created
+//     per-statement (in MakeCPUHandle) and lives until the statement
+//     completes. It spans the entire operator tree: each goroutine
+//     in the DistSQL flow registers via RegisterGoroutine and gets a
+//     GoroutineCPUHandle. For a simple query this may be a single goroutine
+//     lasting milliseconds; for a long-running OLAP query, IMPORT, or BACKUP,
+//     the handle can live for minutes or hours across many goroutines, with
+//     measureAndAdmit called thousands or millions of times.
+//
+//   - Why admit-after-consume is acceptable: The goroutine runs freely between
+//     measureAndAdmit calls — CPU is consumed without permission and then
+//     retroactively deducted from the shared token bucket. If the bucket is
+//     depleted, the goroutine blocks, preventing it from consuming more CPU.
+//     Each uncontrolled burst is bounded by the work between two CancelChecker
+//     calls (~1024 rows), so the amount of unpermitted CPU per check is limited.
+//     The throttling does not prevent past usage but gates future usage.
 type SQLCPUHandle struct {
 	workInfo  WorkInfo
 	atGateway bool
@@ -91,14 +119,40 @@ func newSQLCPUAdmissionHandle(
 	return h
 }
 
-// reportCPU atomically adds the CPU time difference to the appropriate
-// cumulative counter.
-func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
+// reportAndAcquireConsumedCPU updates cumulative CPU counters and, if a CTT
+// WorkQueue is attached, calls Admit to deduct the consumed CPU from the token
+// bucket. This may block until tokens are available unless noWait is true.
+func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
+	ctx context.Context, diff time.Duration, noWait bool,
+) error {
 	if h.atGateway {
 		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
 	} else {
 		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
 	}
+
+	if h.wq == nil {
+		return nil
+	}
+
+	// RequestedCount is set to the exact CPU consumed (from grunning), so the
+	// WorkQueue's CPU time token estimator is skipped (see Admit). Because the
+	// exact amount is deducted at Admit time, there is no estimate to correct,
+	// so AdmittedWorkDone is not called. This also avoids training the KV
+	// estimator with SQL CPU data, which would corrupt its estimates.
+	//
+	// TODO(wenyi): Currently we call Admit on every measureAndAdmit invocation,
+	// which happens every ~1024 rows. This means each SQL goroutine takes the
+	// WorkQueue mutex on every check. Consider reserving more tokens than the
+	// exact amount consumed (e.g., 2x the last diff, or a smoothed estimate of
+	// upcoming usage) and tracking remaining reservation locally. This would
+	// allow subsequent measureAndAdmit calls to deduct from the local
+	// reservation without calling Admit, reducing contention on the WorkQueue.
+	workInfo := h.workInfo
+	workInfo.RequestedCount = diff.Nanoseconds()
+	workInfo.BypassAdmission = noWait
+	_, err := h.wq.Admit(ctx, workInfo)
+	return err
 }
 
 // TODO(sumeer): see the comment
@@ -233,6 +287,8 @@ func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
 // noWait parameter should only be set to true when the work is finished, so
 // only measurement is desired (blocking is no longer productive). When noWait
 // is true, this function never returns an error.
+//
+// See SQLCPUHandle for how SQL CPU admission differs from KV admission.
 func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) error {
 	if h.paused > 0 {
 		return nil
@@ -248,8 +304,7 @@ func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) e
 	// we would need an atomic here is that when SQLCPUHandle is closed, it
 	// needs to reach in and grab whatever CPU has not yet been reported.
 	h.cpuAccounted += diff
-	h.h.reportCPU(diff)
-	return nil
+	return h.h.reportAndAcquireConsumedCPU(ctx, diff, noWait)
 }
 
 // PauseMeasuring is used to pause the CPU accounting for this goroutine. It
@@ -275,12 +330,12 @@ type sqlCPUProviderImpl struct {
 	// cumulativeGatewayCPUNanos tracks the cumulative CPU time in nanoseconds
 	// accounted for SQL work executed at gateway nodes. This value is
 	// monotonically increasing and is updated atomically as CPU time is
-	// reported via SQLCPUHandle.reportCPU.
+	// reported via SQLCPUHandle.reportAndAcquireConsumedCPU.
 	cumulativeGatewayCPUNanos atomic.Int64
 	// cumulativeDistSQLCPUNanos tracks the cumulative CPU time in nanoseconds
 	// accounted for distributed SQL work. This value is monotonically
 	// increasing and is updated atomically as CPU time is reported via
-	// SQLCPUHandle.reportCPU.
+	// SQLCPUHandle.reportAndAcquireConsumedCPU.
 	cumulativeDistSQLCPUNanos atomic.Int64
 	// sv is the settings values used to check if CTT AC is enabled.
 	sv *settings.Values

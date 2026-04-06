@@ -720,7 +720,7 @@ FROM pg_indexes
 WHERE tablename = 'intervalstyle_in_index'
 AND indexname = 'idx'
 ----
-idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > '3-0'::INTERVAL)
+idx  CREATE INDEX idx ON public.intervalstyle_in_index USING btree (b ASC) WHERE (b > '3-0'::interval)
 
 statement ok
 SET intervalstyle = 'iso_8601'
@@ -731,7 +731,7 @@ FROM pg_indexes
 WHERE tablename = 'intervalstyle_in_index'
 AND indexname = 'idx'
 ----
-idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::INTERVAL)
+idx  CREATE INDEX idx ON public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::interval)
 
 # date_trunc
 statement ok

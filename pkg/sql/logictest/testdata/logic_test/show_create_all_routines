@@ -51,17 +51,20 @@ CREATE FUNCTION public.add_one(x INT8)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT x + 1;
-$$;
-CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+    SELECT x + 1;
+  $$;
+CREATE PROCEDURE public.double_triple(
+  INOUT double INT8,
+  OUT triple INT8
+)
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  double := double * 2;
-  triple := double * 3;
-  END;
-$$;
+    BEGIN
+      double := double * 2;
+      triple := double * 3;
+    END;
+  $$;
 
 statement ok
 CREATE FUNCTION add_one(x FLOAT) RETURNS FLOAT AS 'SELECT x + 1' LANGUAGE SQL;
@@ -78,8 +81,8 @@ CREATE FUNCTION public.add_one(x INT8)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT x + 1;
-$$;
+    SELECT x + 1;
+  $$;
 CREATE FUNCTION public.add_one(x FLOAT8)
   RETURNS FLOAT8
   VOLATILE
@@ -88,17 +91,20 @@ CREATE FUNCTION public.add_one(x FLOAT8)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT x + 1;
-$$;
-CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+    SELECT x + 1;
+  $$;
+CREATE PROCEDURE public.double_triple(
+  INOUT double INT8,
+  OUT triple INT8
+)
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  double := double * 2;
-  triple := double * 3;
-  END;
-$$;
+    BEGIN
+      double := double * 2;
+      triple := double * 3;
+    END;
+  $$;
 
 
 #test dropping routines
@@ -112,15 +118,18 @@ query T colnames
 SHOW CREATE ALL ROUTINES;
 ----
 create_statement
-CREATE PROCEDURE public.double_triple(INOUT double INT8, OUT triple INT8)
+CREATE PROCEDURE public.double_triple(
+  INOUT double INT8,
+  OUT triple INT8
+)
   LANGUAGE plpgsql
   SECURITY INVOKER
   AS $$
-  BEGIN
-  double := double * 2;
-  triple := double * 3;
-  END;
-$$;
+    BEGIN
+      double := double * 2;
+      triple := double * 3;
+    END;
+  $$;
 
 statement ok
 DROP PROCEDURE double_triple;

@@ -864,21 +864,13 @@ func (mc *multiCluster) StartCluster(
 	mc.c.Start(ctx, t.L(), startOps, clusterSettings, nodes)
 
 	node := nodes.SeededRandNode(mc.rng)
-
-	addr, err := mc.c.ExternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{})
-	require.NoError(t, err)
-
-	t.L().Printf("Randomly chosen %s node %d for gateway with address %s", desc, node, addr)
-
+	pgURL, err := makeInlineCertsURL(ctx, t, t.L(), mc.c, node)
 	require.NoError(t, err)
 
 	db := mc.c.Conn(ctx, t.L(), node[0])
 	sqlRunner := sqlutils.MakeSQLRunner(db)
 
 	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-
-	pgURL, err := copyPGCertsAndMakeURL(ctx, t, mc.c, node, clusterSettings.PGUrlCertsDir, addr[0])
-	require.NoError(t, err)
 
 	cleanup := func() {
 		if t.Failed() {

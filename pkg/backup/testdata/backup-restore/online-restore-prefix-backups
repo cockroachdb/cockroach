@@ -36,6 +36,12 @@ SELECT count(*) FROM data.baz;
 ----
 3
 
-exec-sql 
+exec-sql
 RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEFERRED COPY, new_db_name =d2;
 ----
+
+# Wait for all download jobs to finish
+query-sql retry
+SELECT count(*) FROM [SHOW JOBS] WHERE job_type='RESTORE' AND status != 'succeeded';
+----
+0

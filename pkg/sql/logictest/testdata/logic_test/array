@@ -257,6 +257,40 @@ NULL
 query error cannot subscript type string because it is not an array
 SELECT '{a,b,c}'[0]
 
+# name type subscript access (0-based, matching PostgreSQL).
+# In PG, the name type has typsubscript => 'raw_array_subscript_handler',
+# treating it as a fixed-length array of chars. text does not support this.
+
+query T
+SELECT ('hello'::name)[0]
+----
+h
+
+query T
+SELECT ('hello'::name)[4]
+----
+o
+
+query T nosort
+SELECT ('hello'::name)[5]
+----
+NULL
+
+query T nosort
+SELECT ('hello'::name)[-1]
+----
+NULL
+
+# pg_dump compatibility: detect array types by checking first char of typname.
+query B
+SELECT (typname::name)[0] = '_' FROM pg_type WHERE typname = '_int4'
+----
+true
+
+# text/string subscripting is not supported (matches PG).
+statement error cannot subscript type string
+SELECT ('world'::STRING)[0]
+
 query T
 SELECT (ARRAY['a', 'b', 'c'])[2]
 ----

@@ -128,6 +128,29 @@ func NewDiskUsageTracker(
 	return &DiskUsageTracker{c: c, l: diskLogger}, nil
 }
 
+// GetDiskAvailInBytes returns the available (free) disk space in bytes
+// for the given store on the specified node. nodeIdx and storeIdx are
+// both 1-based.
+func GetDiskAvailInBytes(
+	ctx context.Context, c cluster.Cluster, logger *logger.Logger, nodeIdx int, storeIdx int,
+) (int64, error) {
+	result, err := c.RunWithDetailsSingleNode(
+		ctx, logger, option.WithNodes(c.Node(nodeIdx)),
+		fmt.Sprintf(
+			"df --output=avail {store-dir:%d} | tail -1 | tr -d ' '",
+			storeIdx,
+		),
+	)
+	if err != nil {
+		return 0, err
+	}
+	kb, err := strconv.ParseInt(strings.TrimSpace(result.Stdout), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return kb * 1024, nil
+}
+
 // GetDiskUsageInBytes executes the command `du {store-dir}` on node `nodeIdx` and
 // parses the result to bytes. nodeIdx starts at one.
 func GetDiskUsageInBytes(

@@ -1911,3 +1911,60 @@ statement ok
 SELECT information_schema.crdb_delete_statement_hints(
   'SELECT * FROM abc WHERE b = _'
 )
+
+# Regression test: session variable hints must be applied for all variable
+# types. Previously, the hint value was wrapped as a DString and passed to
+# GetStringVal, which expected type-specific datums (DInt, DFloat, etc.),
+# causing hints to be silently skipped for non-string variable types.
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 10',
+  'reorder_joins_limit', '0'
+)
+
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 10',
+  'testing_optimizer_cost_perturbation', '0.5'
+)
+
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 10',
+  'enable_zigzag_join', 'false'
+)
+
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 10',
+  'statement_timeout', '30s'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+query II
+SELECT * FROM xy WHERE x = 10
+----
+10  10
+
+statement ok
+SET tracing = off
+
+query T rowsort
+SELECT message FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%session variable hint%'
+----
+applied session variable hint: enable_zigzag_join = false
+applied session variable hint: reorder_joins_limit = 0
+applied session variable hint: statement_timeout = 30s
+applied session variable hint: testing_optimizer_cost_perturbation = 0.5
+
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE x = _')
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()

@@ -735,7 +735,7 @@ func validateMultiRegion(
 	})
 
 	zoneCfgExtensions := desc.TypeDesc().RegionConfig.ZoneConfigExtensions
-	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, func(err error) {
+	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, superRegions, func(err error) {
 		vea.Report(err)
 	})
 }
@@ -1144,6 +1144,30 @@ func (desc *immutable) ForEachSuperRegion(f func(superRegionName string) error) 
 		}
 	}
 	return nil
+}
+
+// GetSuperRegionSurvivalGoal implements the catalog.RegionEnumTypeDescriptor
+// interface.
+func (desc *immutable) GetSuperRegionSurvivalGoal(superRegion string) (string, bool, error) {
+	for _, s := range desc.RegionConfig.SuperRegions {
+		if s.SuperRegionName == superRegion {
+			if !s.HasSurvivalGoal {
+				return "", false, nil
+			}
+			switch s.SurvivalGoal {
+			case descpb.SurvivalGoal_ZONE_FAILURE:
+				return "zone", true, nil
+			case descpb.SurvivalGoal_REGION_FAILURE:
+				return "region", true, nil
+			default:
+				return "", false, errors.AssertionFailedf(
+					"unknown survival goal %d for super region %q",
+					s.SurvivalGoal, superRegion,
+				)
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

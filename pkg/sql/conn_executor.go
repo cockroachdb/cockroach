@@ -1468,7 +1468,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.InternalDB,
-			ex.server.cfg.Codec,
+			ex.server.cfg.Settings,
 			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
@@ -4384,8 +4384,10 @@ func (ex *connExecutor) runWithStatementTimeout(
 			var cancelFn context.CancelFunc
 			waitCtx, cancelFn = context.WithCancel(waitCtx)
 			queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
-				cancelFn()
+				// Before the cancellation make sure that the query
+				// is marked as timed out.
 				queryTimedout.Store(true)
+				cancelFn()
 			})
 			defer cancelFn()
 			defer queryTimeTicker.Stop()

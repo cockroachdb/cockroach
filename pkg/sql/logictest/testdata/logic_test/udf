@@ -678,8 +678,8 @@ CREATE FUNCTION public.single_quote(s STRING)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT (e'\'' || s) || e'\'';
-$$
+    SELECT e'\'' || s || e'\'';
+  $$
 
 query T
 SELECT single_quote('hello')
@@ -835,7 +835,7 @@ SELECT * FROM f();
 statement ok
 DROP FUNCTION f;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return one_typ
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.one_typ
 CREATE FUNCTION f() RETURNS one_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1)); $$;
 
 # Test a function returning a composite type with two elements.
@@ -871,7 +871,7 @@ SELECT * FROM f();
 statement ok
 DROP FUNCTION f;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return two_typ
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.two_typ
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
 
 # Test a function with two OUT-parameters.
@@ -1043,7 +1043,7 @@ select * from pg_catalog.pg_attrdef;
 1508958170  132  2  unique_rowid()                                         unique_rowid()
 1202826234  151  1  gen_random_uuid()                                      gen_random_uuid()
 1202826232  151  3  now()                                                  now()
-3466299042  175  1  public.app_to_db_id(nextval('public.seq1'::REGCLASS))  public.app_to_db_id(nextval('public.seq1'::REGCLASS))
+3466299042  175  1  public.app_to_db_id(nextval('public.seq1'::regclass))  public.app_to_db_id(nextval('public.seq1'::regclass))
 3466299041  175  2  unique_rowid()                                         unique_rowid()
 
 subtest end

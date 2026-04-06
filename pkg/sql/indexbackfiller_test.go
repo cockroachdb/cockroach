@@ -66,7 +66,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TestIndexBackfiller tests the scenarios described in docs/tech-notes/index-backfill.md
+// TestIndexBackfiller tests the MVCC-compatible index backfill with temporary indexes.
 func TestIndexBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -121,9 +121,9 @@ func TestIndexBackfiller(t *testing.T) {
 		return nil
 	}
 
-	// The sequence of events here exactly matches the test cases in
-	// docs/tech-notes/index-backfill.md. If you update this, please remember to
-	// update the tech note as well.
+	// The sequence of events here exercises the MVCC-compatible index
+	// backfill protocol: concurrent DML during backfill is captured by
+	// the temporary index, then merged into the final index.
 	execOrFail("SET create_table_with_schema_locked=false")
 	execOrFail("SET use_declarative_schema_changer='off'")
 	execOrFail("CREATE DATABASE t")
@@ -2044,15 +2044,15 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 			var rowCounter atomic.Int64
 
 			bulkMergeKnobs := &bulkmerge.TestingKnobs{
-				InjectDuplicateKey: func(iteration, maxIteration int32) bool {
+				InjectDuplicateKey: func(iteration, maxIteration int32) []byte {
 					// Only count rows during the target iteration.
 					if iteration != tc.injectIteration {
-						return false
+						return nil
 					}
 
 					// Only inject if we haven't already done so.
 					if duplicateInjected.Load() {
-						return false
+						return nil
 					}
 
 					currentRow := rowCounter.Add(1) - 1 // Get and increment, 0-indexed.
@@ -2060,9 +2060,9 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 					// Check if we've reached the target row count.
 					if tc.injectAfterRows == 0 || currentRow >= tc.injectAfterRows {
 						duplicateInjected.Store(true)
-						return true
+						return []byte("injected-duplicate-value")
 					}
-					return false
+					return nil
 				},
 			}
 

@@ -868,6 +868,10 @@ var (
 	VarBitArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
 
+	// OidArray is the type of an array value having Oid-typed elements.
+	OidArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Oid, Oid: oid.T__oid, Locale: &emptyLocale}}
+
 	// AnyEnumArray is the type of an array value having AnyEnum-typed elements.
 	AnyEnumArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
@@ -1907,6 +1911,14 @@ func (t *T) TelemetryName() string {
 // This function is full of special cases. See backend/utils/adt/format_type.c
 // in Postgres.
 func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
+	// Domain types share their base type's Family, so check for them before
+	// the Family switch to avoid returning the base type name.
+	if t.UserDefined() && t.TypeMeta.DomainData != nil {
+		if t.TypeMeta.Name == nil {
+			return fmt.Sprintf("@%d", t.Oid())
+		}
+		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+	}
 	var buf strings.Builder
 	switch t.Family() {
 	case AnyFamily:
@@ -2090,8 +2102,12 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "tsvector"
 	case TupleFamily:
 		if t.UserDefined() {
-			// If we have a user-defined tuple type, use its user-defined name.
-			return t.TypeMeta.Name.Basename()
+			if t.TypeMeta.Name == nil {
+				return fmt.Sprintf("@%d", t.Oid())
+			}
+			// If we have a user-defined tuple type, use its user-defined name
+			// with schema qualification but without catalog.
+			return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 		}
 		return "record"
 	case UnknownFamily:
@@ -2101,7 +2117,13 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case VoidFamily:
 		return "void"
 	case EnumFamily:
-		return t.TypeMeta.Name.Basename()
+		if t.Oid() == oid.T_anyenum {
+			return "anyenum"
+		}
+		if t.TypeMeta.Name == nil {
+			return fmt.Sprintf("@%d", t.Oid())
+		}
+		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 	case LTreeFamily:
 		return t.Name()
 	default:
@@ -2130,6 +2152,14 @@ func (t *T) InformationSchemaName() string {
 // reproduce the type via parsing the string as a type. It is used in error
 // messages and also to produce the output of SHOW CREATE.
 func (t *T) SQLString() string {
+	// Domain types share their base type's Family, so check for them before
+	// the Family switch to avoid returning the base type name.
+	if t.UserDefined() && t.TypeMeta.DomainData != nil {
+		if t.TypeMeta.Name == nil {
+			return fmt.Sprintf("@%d", t.Oid())
+		}
+		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+	}
 	switch t.Family() {
 	case BitFamily:
 		switch t.Oid() {

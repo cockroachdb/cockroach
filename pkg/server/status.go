@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -127,9 +128,44 @@ const (
 	updateTableMetadataCachePermissionErrMsg = "only admin users can trigger table metadata cache updates"
 )
 
+// metricsVisibilityInternalAlias is a separate enum key that lets the cluster
+// setting accept "internal" as a synonym for "all" (no filtering). It maps to
+// a sentinel value that resolveVisibility converts back to Metadata_INTERNAL.
+const metricsVisibilityInternalAlias int64 = -1
+
+var defaultMetricsVisibility = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"obs.metrics_scrape.default_visibility",
+	"controls the default metric visibility level for the metrics scrape endpoints",
+	"all",
+	map[int64]string{
+		int64(metric.Metadata_INTERNAL):  "all",
+		metricsVisibilityInternalAlias:   "internal",
+		int64(metric.Metadata_SUPPORT):   "support",
+		int64(metric.Metadata_ESSENTIAL): "essential",
+	},
+	settings.WithPublic,
+)
+
+// parseMetricsVisibility maps a ?visibility= query parameter value to the
+// corresponding Metadata_MetricVisibility threshold. Returns the level and
+// true on success, or (0, false) if the value is not recognized.
+func parseMetricsVisibility(s string) (metric.Metadata_MetricVisibility, bool) {
+	switch strings.ToLower(s) {
+	case "all", "internal":
+		return metric.Metadata_INTERNAL, true
+	case "support":
+		return metric.Metadata_SUPPORT, true
+	case "essential":
+		return metric.Metadata_ESSENTIAL, true
+	default:
+		return 0, false
+	}
+}
+
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer, expfmt.Format, bool) error
+	PrintAsText(io.Writer, expfmt.Format, bool, metric.Metadata_MetricVisibility) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -2145,10 +2181,7 @@ func (s *systemStatusServer) nodesHelper(
 		Nodes: statuses,
 	}
 
-	nodeStatusMap, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
+	nodeStatusMap := s.nodeLiveness.ScanAllNodeVitalityFromCache()
 	// TODO(baptist): Consider returning something better than LivenessStatus. It
 	// is an unfortunate mix of values.
 	resp.LivenessByNodeID = make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeStatusMap))
@@ -2497,12 +2530,40 @@ type varsHandler struct {
 	useStaticLabels bool
 }
 
+// resolveVisibility returns the minimum visibility level for this request,
+// using the query parameter if present or the cluster setting otherwise.
+func (h varsHandler) resolveVisibility(r *http.Request) (metric.Metadata_MetricVisibility, error) {
+	if raw := r.URL.Query().Get("visibility"); raw != "" {
+		level, ok := parseMetricsVisibility(raw)
+		if !ok {
+			return 0, fmt.Errorf(
+				"invalid visibility value %q; valid values are: all, internal, support, essential",
+				raw,
+			)
+		}
+		return level, nil
+	}
+	v := defaultMetricsVisibility.Get(&h.st.SV)
+	if v == metricsVisibilityInternalAlias {
+		return metric.Metadata_INTERNAL, nil
+	}
+	return metric.Metadata_MetricVisibility(v), nil
+}
+
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	minVisibility, err := h.resolveVisibility(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
-	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
+	err = h.metricSource.PrintAsText(
+		w, contentType, h.useStaticLabels, minVisibility,
+	)
 	if err != nil {
 		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -221,8 +221,6 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"comments",
 		"geometry",
 		"xid",
-		// TODO(yuzefovich): add a patch to explicitly set the time zone in the
-		// 'horology' so that time zone handling is unified between two DBs.
 		"horology",
 		"type_sanity",
 		"expressions",
@@ -364,8 +362,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"temp",
 		// TODO(#28296): Reenable copy2 when triggers and COPY [view] FROM are supported.
 		// "copy2",
-		// TODO(#166495): uncomment when fixed.
-		// "rangefuncs",
+		"rangefuncs",
 		"sequence",
 		"truncate",
 		"alter_table",
@@ -509,7 +506,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 func registerPGRegress(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "pg_regress",
-		Owner:     registry.OwnerSQLQueries,
+		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: false,
 		Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
 		// At the moment, we have a very large deviation from postgres, also
@@ -1426,155 +1423,6 @@ index 2c0f87a651..26bd75bbf0 100644
  
  -- **************** pg_class ****************
 `},
-	// TODO(yuzefovich): this no longer hits an internal error so no need to
-	// comment it out.
-	{"plpgsql.sql", `diff --git a/src/test/regress/sql/plpgsql.sql b/src/test/regress/sql/plpgsql.sql
-index 924d524094..eb7bc0cf87 100644
---- a/src/test/regress/sql/plpgsql.sql
-+++ b/src/test/regress/sql/plpgsql.sql
-@@ -1087,51 +1087,51 @@ end;
- -- ************************************************************
- -- * Describe the front of a wall connector slot
- -- ************************************************************
--create function wslot_slotlink_view(bpchar)
--returns text as '"'"'
--declare
--    rec		record;
--    sltype	char(2);
--    retval	text;
--begin
--    select into rec * from WSlot where slotname = $1;
--    if not found then
--        return '"'"''"'"''"'"''"'"';
--    end if;
--    if rec.slotlink = '"'"''"'"''"'"''"'"' then
--        return '"'"''"'"'-'"'"''"'"';
--    end if;
--    sltype := substr(rec.slotlink, 1, 2);
--    if sltype = '"'"''"'"'PH'"'"''"'"' then
--        select into rec * from PHone where slotname = rec.slotlink;
--	retval := '"'"''"'"'Phone '"'"''"'"' || trim(rec.slotname);
--	if rec.comment != '"'"''"'"''"'"''"'"' then
--	    retval := retval || '"'"''"'"' ('"'"''"'"';
--	    retval := retval || rec.comment;
--	    retval := retval || '"'"''"'"')'"'"''"'"';
--	end if;
--	return retval;
--    end if;
--    if sltype = '"'"''"'"'IF'"'"''"'"' then
--	declare
--	    syrow	System%RowType;
--	    ifrow	IFace%ROWTYPE;
--        begin
--	    select into ifrow * from IFace where slotname = rec.slotlink;
--	    select into syrow * from System where name = ifrow.sysname;
--	    retval := syrow.name || '"'"''"'"' IF '"'"''"'"';
--	    retval := retval || ifrow.ifname;
--	    if syrow.comment != '"'"''"'"''"'"''"'"' then
--	        retval := retval || '"'"''"'"' ('"'"''"'"';
--		retval := retval || syrow.comment;
--		retval := retval || '"'"''"'"')'"'"''"'"';
--	    end if;
--	    return retval;
--	end;
--    end if;
--    return rec.slotlink;
--end;
--'"'"' language plpgsql;
-+-- create function wslot_slotlink_view(bpchar)
-+-- returns text as '"'"'
-+-- declare
-+--     rec		record;
-+--     sltype	char(2);
-+--     retval	text;
-+-- begin
-+--     select into rec * from WSlot where slotname = $1;
-+--     if not found then
-+--         return '"'"''"'"''"'"''"'"';
-+--     end if;
-+--     if rec.slotlink = '"'"''"'"''"'"''"'"' then
-+--         return '"'"''"'"'-'"'"''"'"';
-+--     end if;
-+--     sltype := substr(rec.slotlink, 1, 2);
-+--     if sltype = '"'"''"'"'PH'"'"''"'"' then
-+--         select into rec * from PHone where slotname = rec.slotlink;
-+-- 	retval := '"'"''"'"'Phone '"'"''"'"' || trim(rec.slotname);
-+-- 	if rec.comment != '"'"''"'"''"'"''"'"' then
-+-- 	    retval := retval || '"'"''"'"' ('"'"''"'"';
-+-- 	    retval := retval || rec.comment;
-+-- 	    retval := retval || '"'"''"'"')'"'"''"'"';
-+-- 	end if;
-+-- 	return retval;
-+--     end if;
-+--     if sltype = '"'"''"'"'IF'"'"''"'"' then
-+-- 	declare
-+-- 	    syrow	System%RowType;
-+-- 	    ifrow	IFace%ROWTYPE;
-+--         begin
-+-- 	    select into ifrow * from IFace where slotname = rec.slotlink;
-+-- 	    select into syrow * from System where name = ifrow.sysname;
-+-- 	    retval := syrow.name || '"'"''"'"' IF '"'"''"'"';
-+-- 	    retval := retval || ifrow.ifname;
-+-- 	    if syrow.comment != '"'"''"'"''"'"''"'"' then
-+-- 	        retval := retval || '"'"''"'"' ('"'"''"'"';
-+-- 		retval := retval || syrow.comment;
-+-- 		retval := retval || '"'"''"'"')'"'"''"'"';
-+-- 	    end if;
-+-- 	    return retval;
-+-- 	end;
-+--     end if;
-+--     return rec.slotlink;
-+-- end;
-+-- '"'"' language plpgsql;
- 
- 
- 
-@@ -2191,25 +2191,25 @@ drop function missing_return_expr();
- create table eifoo (i integer, y integer);
- create type eitype as (i integer, y integer);
- 
--create or replace function execute_into_test(varchar) returns record as $$
--declare
--    _r record;
--    _rt eifoo%rowtype;
--    _v eitype;
--    i int;
--    j int;
--    k int;
--begin
--    execute '"'"'insert into '"'"'||$1||'"'"' values(10,15)'"'"';
--    execute '"'"'select (row).* from (select row(10,1)::eifoo) s'"'"' into _r;
--    raise notice '"'"'% %'"'"', _r.i, _r.y;
--    execute '"'"'select * from '"'"'||$1||'"'"' limit 1'"'"' into _rt;
--    raise notice '"'"'% %'"'"', _rt.i, _rt.y;
--    execute '"'"'select *, 20 from '"'"'||$1||'"'"' limit 1'"'"' into i, j, k;
--    raise notice '"'"'% % %'"'"', i, j, k;
--    execute '"'"'select 1,2'"'"' into _v;
--    return _v;
--end; $$ language plpgsql;
-+-- create or replace function execute_into_test(varchar) returns record as $$
-+-- declare
-+--     _r record;
-+--     _rt eifoo%rowtype;
-+--     _v eitype;
-+--     i int;
-+--     j int;
-+--     k int;
-+-- begin
-+--     execute '"'"'insert into '"'"'||$1||'"'"' values(10,15)'"'"';
-+--     execute '"'"'select (row).* from (select row(10,1)::eifoo) s'"'"' into _r;
-+--     raise notice '"'"'% %'"'"', _r.i, _r.y;
-+--     execute '"'"'select * from '"'"'||$1||'"'"' limit 1'"'"' into _rt;
-+--     raise notice '"'"'% %'"'"', _rt.i, _rt.y;
-+--     execute '"'"'select *, 20 from '"'"'||$1||'"'"' limit 1'"'"' into i, j, k;
-+--     raise notice '"'"'% % %'"'"', i, j, k;
-+--     execute '"'"'select 1,2'"'"' into _v;
-+--     return _v;
-+-- end; $$ language plpgsql;
- 
- select execute_into_test('"'"'eifoo'"'"');
-
-`},
 	// TODO(#114847): Remove this patch when the internal error is fixed.
 	{"rowtypes.sql", `diff --git a/src/test/regress/sql/rowtypes.sql b/src/test/regress/sql/rowtypes.sql
 index 565e6249d5..f36ce2844b 100644
@@ -1592,51 +1440,6 @@ index 565e6249d5..f36ce2844b 100644
  -- non-comparable types
  create type testtype6 as (a int, b point);
 
-`},
-	// TODO(#118698): Remove patch when internal error is fixed.
-	{"union.sql", `diff --git a/src/test/regress/sql/union.sql b/src/test/regress/sql/union.sql
-index ca8c9b4d12..7b8aaf2df2 100644
---- a/src/test/regress/sql/union.sql
-+++ b/src/test/regress/sql/union.sql
-@@ -294,7 +294,7 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
- -- Check behavior with empty select list (allowed since 9.4)
- --
- 
--select union select;
-+-- select union select;
- select intersect select;
- select except select;
- 
-@@ -307,11 +307,11 @@ select from generate_series(1,5) union select from generate_series(1,3);
- explain (costs off)
- select from generate_series(1,5) intersect select from generate_series(1,3);
- 
--select from generate_series(1,5) union select from generate_series(1,3);
-+-- select from generate_series(1,5) union select from generate_series(1,3);
- select from generate_series(1,5) union all select from generate_series(1,3);
--select from generate_series(1,5) intersect select from generate_series(1,3);
-+-- select from generate_series(1,5) intersect select from generate_series(1,3);
- select from generate_series(1,5) intersect all select from generate_series(1,3);
--select from generate_series(1,5) except select from generate_series(1,3);
-+-- select from generate_series(1,5) except select from generate_series(1,3);
- select from generate_series(1,5) except all select from generate_series(1,3);
- 
- -- check sorted implementation
-@@ -323,11 +323,11 @@ select from generate_series(1,5) union select from generate_series(1,3);
- explain (costs off)
- select from generate_series(1,5) intersect select from generate_series(1,3);
- 
--select from generate_series(1,5) union select from generate_series(1,3);
-+-- select from generate_series(1,5) union select from generate_series(1,3);
- select from generate_series(1,5) union all select from generate_series(1,3);
--select from generate_series(1,5) intersect select from generate_series(1,3);
-+-- select from generate_series(1,5) intersect select from generate_series(1,3);
- select from generate_series(1,5) intersect all select from generate_series(1,3);
--select from generate_series(1,5) except select from generate_series(1,3);
-+-- select from generate_series(1,5) except select from generate_series(1,3);
- select from generate_series(1,5) except all select from generate_series(1,3);
- 
- reset enable_hashagg;
 `},
 	// Use SET ROLE instead of SET SESSION AUTHORIZATION. Adjust SQL to allow
 	// creation of a function (f_leak), which is used throughout the test.

@@ -344,6 +344,71 @@ CREATE DATABASE d WITH OWNER testuser2
 
 user root
 
+# Regression test for #122901: with CREATEDB privilege, non-admins must
+# still be a member of the owning role.
+subtest create_database_owner_membership_check
+
+statement ok
+CREATE ROLE db_owner_role;
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement error pq: role/user "db_owner_role2" does not exist
+CREATE DATABASE d_owned WITH OWNER db_owner_role2
+
+statement error pq: must be member of role "db_owner_role"
+CREATE DATABASE d_owned WITH OWNER db_owner_role
+
+user root
+
+statement ok
+GRANT db_owner_role TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE d_owned WITH OWNER db_owner_role
+
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+statement ok
+REVOKE db_owner_role FROM testuser
+
+# Admin role must bypass role membership.
+statement ok
+CREATE USER db_admin_role;
+ALTER USER db_admin_role CREATEDB;
+
+statement ok
+SET ROLE db_admin_role
+
+statement error pq: must be member of role "db_owner_role"
+CREATE DATABASE d_admin WITH OWNER db_owner_role
+
+statement ok
+RESET ROLE;
+ALTER USER db_admin_role NOCREATEDB;
+GRANT ADMIN TO db_admin_role;
+SET ROLE db_admin_role
+
+statement ok
+CREATE DATABASE db_admin WITH OWNER db_owner_role
+
+statement ok
+CREATE DATABASE db_root WITH OWNER root
+
+statement ok
+RESET ROLE;
+DROP USER db_admin_role
+
+subtest end
+
 # Fix for https://github.com/cockroachdb/cockroach/issues/97938.
 subtest if_not_exists_with_owner
 

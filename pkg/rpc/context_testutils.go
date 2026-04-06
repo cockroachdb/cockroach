@@ -196,13 +196,9 @@ func (p *Partitioner) EnablePartitions(enable bool) {
 	p.partitionsEnabled.Store(enable)
 }
 
-// RegisterNodeAddr is called after the cluster is started, but before
-// EnablePartitions is called on every node to register the mapping from the
-// address of the node to the NodeID.
+// RegisterNodeAddr registers the mapping from the address of the node to its
+// ID. Usually called after the node is started and its address is known.
 func (p *Partitioner) RegisterNodeAddr(addr string, id roachpb.NodeID) {
-	if p.partitionsEnabled.Load() {
-		panic("Can not register node addresses with a partition enabled")
-	}
 	p.nodeAddrMap.Store(addr, &id)
 }
 
@@ -273,6 +269,8 @@ func (p *Partitioner) RegisterTestingKnobs(id roachpb.NodeID, knobs *ContextTest
 		}
 		return nil
 	}
+	// TODO(pav-kv): fail if the interceptors are already set, instead of silently
+	// overriding them.
 	knobs.UnaryClientInterceptor =
 		func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor {
 			return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

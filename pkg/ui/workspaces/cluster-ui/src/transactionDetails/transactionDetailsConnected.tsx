@@ -7,28 +7,12 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { StatementsRequest } from "src/api/statementsApi";
-import { AppState, uiConfigActions } from "src/store";
-import {
-  actions as transactionInsights,
-  selectTxnInsightsByFingerprint,
-} from "src/store/insights/transactionInsights";
+import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { actions as txnStatsActions } from "src/store/transactionStats";
 import { selectRequestTime } from "src/transactionsPage/transactionsPage.selectors";
 
-import { TxnInsightsRequest } from "../api";
 import { actions as analyticsActions } from "../store/analytics";
-import {
-  nodeRegionsByIDSelector,
-  actions as nodesActions,
-} from "../store/nodes";
-import {
-  selectIsTenant,
-  selectHasViewActivityRedactedRole,
-  selectHasAdminRole,
-} from "../store/uiConfig";
 import {
   selectTimeScale,
   selectTxnsPageLimit,
@@ -50,16 +34,10 @@ const mapStateToProps = (
 ): TransactionDetailsStateProps => {
   return {
     timeScale: selectTimeScale(state),
-    isTenant: selectIsTenant(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
-    txnStatsResp: state?.adminUI?.transactions,
     transactionFingerprintId: getMatchParamByName(
       props.match,
       txnFingerprintIdAttr,
     ),
-    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
-    transactionInsights: selectTxnInsightsByFingerprint(state, props),
-    hasAdminRole: selectHasAdminRole(state),
     limit: selectTxnsPageLimit(state),
     reqSortSetting: selectTxnsPageReqSort(state),
     requestTime: selectRequestTime(state),
@@ -69,10 +47,6 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionDetailsDispatchProps => ({
-  refreshData: (req?: StatementsRequest) =>
-    dispatch(txnStatsActions.refresh(req)),
-  refreshNodes: () => dispatch(nodesActions.refresh()),
-  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
@@ -86,9 +60,6 @@ const mapDispatchToProps = (
         value: ts.key,
       }),
     );
-  },
-  refreshTransactionInsights: (req: TxnInsightsRequest) => {
-    dispatch(transactionInsights.refresh(req));
   },
   onRequestTimeChange: (t: moment.Moment) => {
     dispatch(

@@ -7,9 +7,7 @@ import { PayloadAction } from "@reduxjs/toolkit";
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
 
-import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { actions as txnStatsActions } from "src/store/transactionStats";
 import { TimeScale } from "src/timeScaleDropdown";
 
 import {
@@ -30,11 +28,7 @@ export function* updateLocalStorageItemSaga(action: AnyAction) {
 export function* updateTimeScale(
   action: PayloadAction<TypedPayload<TimeScale>>,
 ) {
-  yield all([
-    put(sqlStatsActions.invalidated()),
-    put(txnInsightActions.invalidated()),
-    put(txnStatsActions.invalidated()),
-  ]);
+  yield put(sqlStatsActions.invalidated());
   yield call(
     { context: localStorage, fn: localStorage.setItem },
     LocalStorageKeys.GLOBAL_TIME_SCALE,

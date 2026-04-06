@@ -848,9 +848,14 @@ func drpcGatewayRequestCounterInterceptor(
 	return invoker(ctx, rpc, enc, in, out, cc)
 }
 
+// GatewayEndpointCounterName returns the telemetry counter name for the
+// given gateway type (e.g. "grpc", "drpc") and RPC method.
+func GatewayEndpointCounterName(gateway, method string) string {
+	return fmt.Sprintf("http.%s-gateway.%s", gateway, method)
+}
+
 // getDRPCGatewayEndpointCounter returns a telemetry Counter corresponding to
 // the given DRPC method.
 func getDRPCGatewayEndpointCounter(method string) telemetry.Counter {
-	const counterPrefix = "http.drpc-gateway"
-	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+	return telemetry.GetCounter(GatewayEndpointCounterName("drpc", method))
 }

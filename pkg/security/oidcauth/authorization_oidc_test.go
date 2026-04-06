@@ -258,6 +258,16 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // capture loop var
 		t.Run(tc.name, func(t *testing.T) {
+			staleRows := sqlDB.QueryStr(t,
+				`SELECT role FROM system.role_members WHERE member = $1`, testUser)
+			if len(staleRows) > 0 {
+				staleRoles := make([]string, len(staleRows))
+				for i, r := range staleRows {
+					staleRoles[i] = r[0]
+				}
+				sqlDB.Exec(t, fmt.Sprintf(`REVOKE %s FROM %s`, strings.Join(staleRoles, ", "), testUser))
+			}
+
 			// Replace the factory so that the server uses our mock manager.
 			origFactory := NewOIDCManager
 			t.Cleanup(func() { NewOIDCManager = origFactory })
@@ -322,39 +332,19 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 			cbReq.URL.RawQuery = q.Encode()
 
 			cbResp, err := client.Do(cbReq)
+			require.NoError(t, err)
 
-			// During stress tests, the HTTP request may timeout even though the OIDC
-			// operation succeeds on the server. If we get a timeout, we'll allow the
-			// test to continue and verify the actual side effects (role grants) below.
-			// Only non-timeout errors are considered true failures.
-			if err != nil {
-				var urlErr *url.Error
-				isTimeout := errors.As(err, &urlErr) && urlErr.Timeout()
-				if !isTimeout {
-					// Non-timeout error - this is a real failure
-					require.NoError(t, err, "OIDC callback request failed with non-timeout error")
-				}
-				// Timeout occurred - log it but continue to check if operation succeeded
-				t.Logf("OIDC callback request timed out, but checking if operation succeeded: %v", err)
-				// Set cbResp to nil to skip HTTP response validation
-				cbResp = nil
+			expStatus := tc.expectedStatus
+			if expStatus == 0 {
+				expStatus = http.StatusTemporaryRedirect
+			}
+			require.Equal(t, expStatus, cbResp.StatusCode)
+
+			if tc.wantErrSubstring != "" {
+				body, _ := io.ReadAll(cbResp.Body)
+				require.Contains(t, string(body), tc.wantErrSubstring)
 			}
 
-			// Only validate HTTP response if we actually got one (no timeout)
-			if cbResp != nil {
-				expStatus := tc.expectedStatus
-				if expStatus == 0 {
-					expStatus = http.StatusTemporaryRedirect
-				}
-				require.Equal(t, expStatus, cbResp.StatusCode)
-
-				if tc.wantErrSubstring != "" {
-					body, _ := io.ReadAll(cbResp.Body)
-					require.Contains(t, string(body), tc.wantErrSubstring)
-				}
-			}
-
-			// Check which SQL roles were granted to the user.
 			rows := sqlDB.QueryStr(t,
 				`SELECT role FROM system.role_members WHERE member = $1 ORDER BY role`, testUser)
 			actualRoles := make([]string, len(rows))

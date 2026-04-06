@@ -10,6 +10,7 @@ import { SWRConfig } from "swr";
 
 import * as sqlApi from "../../api/sqlApi";
 import * as stmtInsightsApi from "../../api/stmtInsightsApi";
+import * as userApi from "../../api/userApi";
 import { ClusterDetailsContext } from "../../contexts";
 import { CollapseWhitespace, MockSqlResponse } from "../../util/testing";
 
@@ -33,6 +34,15 @@ jest.mock("../../api/stmtInsightsApi", () => {
 
 const useStmtInsightDetailsMock =
   stmtInsightsApi.useStmtInsightDetails as jest.Mock;
+
+// Mock useUserSQLRoles which is now called directly inside the component.
+jest.spyOn(userApi, "useUserSQLRoles").mockReturnValue({
+  data: { roles: ["ADMIN"] },
+  isLoading: false,
+  error: null,
+  mutate: null,
+  isValidating: false,
+});
 
 function renderWithProviders(ui: React.ReactElement) {
   return render(

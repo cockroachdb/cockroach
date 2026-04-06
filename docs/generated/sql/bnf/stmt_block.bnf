@@ -2563,6 +2563,8 @@ alter_database_add_super_region ::=
 
 alter_database_alter_super_region ::=
 	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name survival_goal_clause
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE' 'DEFAULT'
 
 alter_database_drop_super_region ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
@@ -2578,6 +2580,7 @@ alter_database_set_zone_config_extension_stmt ::=
 	'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'GLOBAL' set_zone_config
 	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' set_zone_config
 	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'IN' region_name set_zone_config
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'SUPER' 'REGION' region_name set_zone_config
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' a_expr set_zone_config
@@ -3646,6 +3649,7 @@ logical_replication_create_table_options ::=
 	| 'LABEL' '=' string_or_placeholder
 	| 'UNIDIRECTIONAL'
 	| 'BIDIRECTIONAL' 'ON' string_or_placeholder
+	| 'SKIP' 'FOREIGN' 'KEYS'
 
 check_external_connection_options ::=
 	'TRANSFER' '=' string_or_placeholder

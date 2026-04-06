@@ -96,22 +96,22 @@ LEFT JOIN pg_roles e ON e.oid = a.grantee
 ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    CREATE          false
-root     admin    DELETE          false
-root     admin    INSERT          false
-root     admin    MAINTAIN        false
-root     admin    SELECT          false
-root     admin    TRIGGER         false
-root     admin    TRUNCATE        false
-root     admin    UPDATE          false
-root     root     CREATE          false
-root     root     DELETE          false
-root     root     INSERT          false
-root     root     MAINTAIN        false
-root     root     SELECT          false
-root     root     TRIGGER         false
-root     root     TRUNCATE        false
-root     root     UPDATE          false
+root     admin    CREATE          true
+root     admin    DELETE          true
+root     admin    INSERT          true
+root     admin    MAINTAIN        true
+root     admin    SELECT          true
+root     admin    TRIGGER         true
+root     admin    TRUNCATE        true
+root     admin    UPDATE          true
+root     root     CREATE          true
+root     root     DELETE          true
+root     root     INSERT          true
+root     root     MAINTAIN        true
+root     root     SELECT          true
+root     root     TRIGGER         true
+root     root     TRUNCATE        true
+root     root     UPDATE          true
 
 subtest end
 
@@ -166,38 +166,38 @@ subtest acldefault
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{admin=CradwDtm/root,root=CradwDtm/root}
+{admin=C*r*a*d*w*D*t*m*/root,root=C*r*a*d*w*D*t*m*/root}
 
 # Database defaults: admin and root get CREATE, CONNECT, TEMPORARY.
 # PUBLIC gets CONNECT and TEMPORARY.
 query T
 SELECT acldefault('d'::"char", 'root'::regrole)
 ----
-{=cT/root,admin=CcT/root,root=CcT/root}
+{=cT/root,admin=C*c*T*/root,root=C*c*T*/root}
 
 # Function defaults: admin and root get EXECUTE, PUBLIC gets EXECUTE.
 query T
 SELECT acldefault('f'::"char", 'root'::regrole)
 ----
-{=X/root,admin=X/root,root=X/root}
+{=X/root,admin=X*/root,root=X*/root}
 
 # Type defaults: admin and root get USAGE, PUBLIC gets USAGE.
 query T
 SELECT acldefault('T'::"char", 'root'::regrole)
 ----
-{=U/root,admin=U/root,root=U/root}
+{=U/root,admin=U*/root,root=U*/root}
 
 # Schema defaults: admin and root get USAGE and CREATE, PUBLIC gets nothing.
 query T
 SELECT acldefault('n'::"char", 'root'::regrole)
 ----
-{admin=CU/root,root=CU/root}
+{admin=C*U*/root,root=C*U*/root}
 
 # Language defaults: admin, root, and PUBLIC get USAGE.
 query T
 SELECT acldefault('l'::"char", 'root'::regrole)
 ----
-{=U/root,admin=U/root,root=U/root}
+{=U/root,admin=U*/root,root=U*/root}
 
 # Column defaults: nobody gets anything.
 query T
@@ -209,7 +209,7 @@ SELECT acldefault('c'::"char", 'root'::regrole)
 query T
 SELECT acldefault('p'::"char", 'root'::regrole)
 ----
-{admin=sA/root,root=sA/root}
+{admin=s*A*/root,root=s*A*/root}
 
 # Error on invalid type char.
 statement error unrecognized object type abbreviation: "Z"
@@ -234,12 +234,29 @@ ORDER BY 1, 2, 3
 grantor  grantee  privilege_type  is_grantable
 root     PUBLIC   CONNECT         false
 root     PUBLIC   TEMPORARY       false
-root     admin    CONNECT         false
-root     admin    CREATE          false
-root     admin    TEMPORARY       false
-root     root     CONNECT         false
-root     root     CREATE          false
-root     root     TEMPORARY       false
+root     admin    CONNECT         true
+root     admin    CREATE          true
+root     admin    TEMPORARY       true
+root     root     CONNECT         true
+root     root     CREATE          true
+root     root     TEMPORARY       true
+
+# Round-trip for LANGUAGE type: admin and root should have grant options.
+query TTTB colnames
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('l'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY 1, 2, 3
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   USAGE           false
+root     admin    USAGE           true
+root     root     USAGE           true
 
 # Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
 # SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
@@ -257,10 +274,10 @@ LEFT JOIN pg_roles e ON e.oid = a.grantee
 ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    ALTER SYSTEM    false
-root     admin    SET             false
-root     root     ALTER SYSTEM    false
-root     root     SET             false
+root     admin    ALTER SYSTEM    true
+root     admin    SET             true
+root     root     ALTER SYSTEM    true
+root     root     SET             true
 
 subtest end
 
@@ -386,7 +403,7 @@ CREATE TYPE typ AS ENUM ('hello')
 query T
 SELECT format_type(oid, 0) FROM pg_catalog.pg_type WHERE typname = 'typ'
 ----
-typ
+public.typ
 
 # Nothing breaks if we put a non-existing oid into format_type.
 query T
@@ -1241,7 +1258,7 @@ NULL
 query T
 SELECT to_regtype('test_type')
 ----
-test_type
+public.test_type
 
 # Test that pg_get_indexdef works for expression indexes.
 statement ok
@@ -1253,14 +1270,14 @@ CREATE INDEX expr_idx ON expr_idx_tbl (id, (json->>'bar'), (length(id)))
 query T
 SELECT pg_get_indexdef('expr_idx'::regclass::oid)
 ----
-CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+CREATE INDEX expr_idx ON public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::text) ASC, length(id) ASC)
 
 query IT
 SELECT k, pg_get_indexdef('expr_idx'::regclass::oid, k, true) FROM generate_series(0,4) k ORDER BY k
 ----
-0  CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+0  CREATE INDEX expr_idx ON public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::text) ASC, length(id) ASC)
 1  id
-2  (json->>'bar'::STRING)
+2  (json->>'bar'::text)
 3  (length(id))
 4  ·
 
@@ -1489,5 +1506,69 @@ DROP FUNCTION trig_fn
 skipif config local-legacy-schema-changer
 statement ok
 DROP TABLE trig_test
+
+subtest end
+
+subtest pg_get_statisticsobjdef
+
+statement ok
+CREATE TABLE stxtest (a INT, b INT, c TEXT)
+
+statement ok
+CREATE STATISTICS stxtest_stat ON a, b FROM stxtest
+
+# pg_get_statisticsobjdef returns the CREATE STATISTICS command for a stat object.
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_stat'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_stat ON a, b FROM public.stxtest
+
+# NULL input returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(NULL)
+----
+NULL
+
+# Non-existent OID returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(0)
+----
+NULL
+
+# Column names that are keywords should be quoted.
+statement ok
+CREATE TABLE stxtest_kw ("select" INT, "from" INT, normal INT)
+
+statement ok
+CREATE STATISTICS stxtest_kw_stat ON "select", "from" FROM stxtest_kw
+
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_kw_stat'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_kw_stat ON "select", "from" FROM public.stxtest_kw
+
+# Mixed keyword and non-keyword columns.
+statement ok
+CREATE STATISTICS stxtest_kw_mixed ON "select", normal FROM stxtest_kw
+
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_kw_mixed'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_kw_mixed ON "select", normal FROM public.stxtest_kw
+
+statement ok
+DROP TABLE stxtest_kw
+
+statement ok
+DROP TABLE stxtest
 
 subtest end

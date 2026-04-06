@@ -12,11 +12,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +45,7 @@ func makeInMemPebbleLogger() *logSnooper {
 func TestPebbleIteratorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	synctest.Test(t, func(t *testing.T) {
+	timeutil.SyncTest(t, func(t *testing.T) {
 		// Capture long-lived iterator reports by swapping out the logger.
 		snooper := makeInMemPebbleLogger()
 		opt := func(cfg *engineConfig) error {

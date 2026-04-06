@@ -134,3 +134,52 @@ DELETE FROM t WHERE v = 9
 onlyif config weak-iso-level-configs
 statement count 0
 DELETE FROM t WHERE v = 9
+
+# Verify that lock_timeout is honored by insert fast path FK checks. The insert
+# fast path performs FK existence checks in a separate KV batch that previously
+# did not propagate lock_timeout from the session, causing indefinite blocking.
+
+user root
+
+statement ok
+COMMIT
+
+statement ok
+CREATE TABLE parent_lt (p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child_lt (c INT PRIMARY KEY, p INT REFERENCES parent_lt (p))
+
+statement ok
+GRANT ALL ON TABLE parent_lt TO testuser
+
+statement ok
+GRANT ALL ON TABLE child_lt TO testuser
+
+statement ok
+INSERT INTO parent_lt VALUES (1)
+
+statement ok
+BEGIN; UPDATE parent_lt SET p = 1 WHERE p = 1
+
+user testuser
+
+statement ok
+SET lock_timeout = '1ms';
+SET enable_implicit_fk_locking_for_serializable = on;
+SET enable_shared_locking_for_serializable = on;
+SET enable_durable_locking_for_serializable = on
+
+statement error conflicting locks.*reason=lock_timeout
+INSERT INTO child_lt VALUES (1, 1)
+
+statement ok
+RESET lock_timeout;
+RESET enable_implicit_fk_locking_for_serializable;
+RESET enable_shared_locking_for_serializable;
+RESET enable_durable_locking_for_serializable
+
+user root
+
+statement ok
+ROLLBACK

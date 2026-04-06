@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -610,11 +608,8 @@ func (rd *replicationDriver) setupC2C(
 	srcNode := srcCluster.SeededRandNode(rd.rng)
 	destNode := dstCluster.SeededRandNode(rd.rng)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
-	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
+	t.L().Printf("Randomly chosen src node %d", srcNode)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
-
-	require.NoError(t, err)
 
 	srcDB := c.Conn(ctx, t.L(), srcNode[0])
 	srcSQL := sqlutils.MakeSQLRunner(srcDB)
@@ -633,7 +628,7 @@ func (rd *replicationDriver) setupC2C(
 	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster), option.NoBackupSchedule)
 	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
 
-	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
+	pgURL, err := makeInlineCertsURL(ctx, t, t.L(), c, srcNode)
 	require.NoError(t, err)
 
 	srcTenantInfo := clusterInfo{
@@ -816,7 +811,7 @@ func (rd *replicationDriver) ensureStandbyPollerAdvances(ctx context.Context, in
 		var standbyTimeStr string
 		readerTenantSQL.QueryRow(rd.t,
 			`SELECT COALESCE(high_water_timestamp, '0')
-				FROM crdb_internal.jobs 
+				FROM crdb_internal.jobs
 				WHERE job_type = 'STANDBY READ TS POLLER'`).Scan(&standbyTimeStr)
 
 		if standbyTimeStr == "0" {
@@ -2182,48 +2177,31 @@ func waitForReplicatedTime(
 	}, wait)
 }
 
-func copyPGCertsAndMakeURL(
+func makeInlineCertsURL(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	c cluster.Cluster,
 	srcNode option.NodeListOption,
-	pgURLDir string,
-	urlString string,
 ) (*url.URL, error) {
-	pgURL, err := url.Parse(urlString)
+	addr, err := c.InternalPGUrl(ctx, l, srcNode, roachprod.PGURLOptions{
+		VirtualClusterName: install.SystemInterfaceName,
+	})
 	if err != nil {
 		return nil, err
+	}
+	t.L().Printf("chose src node %d for gateway with address %s", srcNode, addr)
+
+	allDetails, err := c.RunWithDetails(
+		ctx, l, option.WithNodes(srcNode),
+		fmt.Sprintf(`./cockroach convert-url --url '%s' --inline`, addr[0]),
+	)
+	details := allDetails[0]
+	if err != nil {
+		return nil, err
+	} else if details.Err != nil {
+		return nil, details.Err
 	}
 
-	tmpDir, err := os.MkdirTemp("", install.CockroachNodeCertsDir)
-	if err != nil {
-		return nil, err
-	}
-	func() { _ = os.RemoveAll(tmpDir) }()
-
-	if err := c.Get(ctx, t.L(), pgURLDir, tmpDir, srcNode); err != nil {
-		return nil, err
-	}
-
-	sslRootCert, err := os.ReadFile(filepath.Join(tmpDir, "ca.crt"))
-	if err != nil {
-		return nil, err
-	}
-	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.crt", install.DefaultUser)))
-	if err != nil {
-		return nil, err
-	}
-	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.key", install.DefaultUser)))
-	if err != nil {
-		return nil, err
-	}
-
-	options := pgURL.Query()
-	options.Set("sslmode", "verify-full")
-	options.Set("sslinline", "true")
-	options.Set("sslrootcert", string(sslRootCert))
-	options.Set("sslcert", string(sslClientCert))
-	options.Set("sslkey", string(sslClientKey))
-	pgURL.RawQuery = options.Encode()
-	return pgURL, nil
+	return url.Parse(strings.TrimSpace(details.Stdout))
 }

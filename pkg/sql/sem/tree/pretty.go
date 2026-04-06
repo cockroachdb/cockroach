@@ -20,6 +20,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	// ParseSQLForDoc parses SQL statements stored as raw strings (e.g.
+	// RoutineBodyStr) into AST nodes for structured pretty-printing.
+	// Injected at init time to avoid a circular dependency on the parser
+	// package (the parserutils package unfortunately has the same issue).
+	// Returns nil if parsing fails.
+	ParseSQLForDoc func(sql string) []NodeFormatter
+
+	// ParsePLpgSQLForDoc parses a PL/pgSQL block stored as a raw string
+	// into an AST node for structured pretty-printing. Injected at init
+	// time to avoid a circular dependency on the plpgsqlparser package
+	// (the parserutils package unfortunately has the same issue).
+	// Returns nil if parsing fails.
+	ParsePLpgSQLForDoc func(sql string) NodeFormatter
+)
+
 // This file contains methods that convert statements to pretty Docs (a tree
 // structure that can be pretty printed at a specific line width). Nodes
 // implement the Docer interface to allow this conversion. In general,

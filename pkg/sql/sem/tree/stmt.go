@@ -273,6 +273,17 @@ type CCLOnlyStatement interface {
 	cclOnlyStatement()
 }
 
+// ZoneConfigStatement is a marker interface for statements that modify
+// zone configurations. This includes SetZoneConfig (ALTER TABLE/DATABASE/
+// INDEX/RANGE ... CONFIGURE ZONE) and AlterDatabaseSetZoneConfigExtension
+// (ALTER DATABASE ... ALTER LOCALITY ... CONFIGURE ZONE).
+type ZoneConfigStatement interface {
+	zoneConfigStatement()
+}
+
+var _ ZoneConfigStatement = &SetZoneConfig{}
+var _ ZoneConfigStatement = &AlterDatabaseSetZoneConfigExtension{}
+
 var _ CCLOnlyStatement = &AlterBackup{}
 var _ CCLOnlyStatement = &AlterBackupSchedule{}
 var _ CCLOnlyStatement = &Backup{}
@@ -414,6 +425,21 @@ func (*AlterDatabaseAlterSuperRegion) StatementTag() string {
 func (*AlterDatabaseAlterSuperRegion) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementReturnType() StatementReturnType {
+	return DDL
+}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementTag() string {
+	return "ALTER DATABASE"
+}
+
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterDatabaseSecondaryRegion) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -451,6 +477,7 @@ func (*AlterDatabaseSetZoneConfigExtension) StatementTag() string {
 }
 
 func (*AlterDatabaseSetZoneConfigExtension) hiddenFromShowQueries() {}
+func (*AlterDatabaseSetZoneConfigExtension) zoneConfigStatement()   {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDefaultPrivileges) StatementReturnType() StatementReturnType { return DDL }
@@ -1758,6 +1785,8 @@ func (*SetZoneConfig) StatementType() StatementType { return TypeDCL }
 // StatementTag returns a short string identifying the type of statement.
 func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
 
+func (*SetZoneConfig) zoneConfigStatement() {}
+
 // StatementReturnType implements the Statement interface.
 func (*SetSessionAuthorizationDefault) StatementReturnType() StatementReturnType { return Ack }
 
@@ -2577,23 +2606,26 @@ func (*AlterFunctionDepExtension) StatementType() StatementType { return TypeDDL
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterFunctionDepExtension) StatementTag() string { return "ALTER FUNCTION" }
 
-func (n *AlterChangefeed) String() string                     { return AsString(n) }
-func (n *AlterChangefeedCmds) String() string                 { return AsString(n) }
-func (n *AlterBackup) String() string                         { return AsString(n) }
-func (n *AlterBackupSchedule) String() string                 { return AsString(n) }
-func (n *AlterBackupScheduleCmds) String() string             { return AsString(n) }
-func (n *AlterIndex) String() string                          { return AsString(n) }
-func (n *AlterIndexVisible) String() string                   { return AsString(n) }
-func (n *AlterJobOwner) String() string                       { return AsString(n) }
-func (n *AlterDatabaseOwner) String() string                  { return AsString(n) }
-func (n *AlterDatabaseAddRegion) String() string              { return AsString(n) }
-func (n *AlterDatabaseDropRegion) String() string             { return AsString(n) }
-func (n *AlterDatabaseSurvivalGoal) String() string           { return AsString(n) }
-func (n *AlterDatabasePlacement) String() string              { return AsString(n) }
-func (n *AlterDatabasePrimaryRegion) String() string          { return AsString(n) }
-func (n *AlterDatabaseAddSuperRegion) String() string         { return AsString(n) }
-func (n *AlterDatabaseDropSuperRegion) String() string        { return AsString(n) }
-func (n *AlterDatabaseAlterSuperRegion) String() string       { return AsString(n) }
+func (n *AlterChangefeed) String() string               { return AsString(n) }
+func (n *AlterChangefeedCmds) String() string           { return AsString(n) }
+func (n *AlterBackup) String() string                   { return AsString(n) }
+func (n *AlterBackupSchedule) String() string           { return AsString(n) }
+func (n *AlterBackupScheduleCmds) String() string       { return AsString(n) }
+func (n *AlterIndex) String() string                    { return AsString(n) }
+func (n *AlterIndexVisible) String() string             { return AsString(n) }
+func (n *AlterJobOwner) String() string                 { return AsString(n) }
+func (n *AlterDatabaseOwner) String() string            { return AsString(n) }
+func (n *AlterDatabaseAddRegion) String() string        { return AsString(n) }
+func (n *AlterDatabaseDropRegion) String() string       { return AsString(n) }
+func (n *AlterDatabaseSurvivalGoal) String() string     { return AsString(n) }
+func (n *AlterDatabasePlacement) String() string        { return AsString(n) }
+func (n *AlterDatabasePrimaryRegion) String() string    { return AsString(n) }
+func (n *AlterDatabaseAddSuperRegion) String() string   { return AsString(n) }
+func (n *AlterDatabaseDropSuperRegion) String() string  { return AsString(n) }
+func (n *AlterDatabaseAlterSuperRegion) String() string { return AsString(n) }
+func (n *AlterDatabaseAlterSuperRegionSurvivalGoal) String() string {
+	return AsString(n)
+}
 func (n *AlterDatabaseSecondaryRegion) String() string        { return AsString(n) }
 func (n *AlterDatabaseDropSecondaryRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseSetZoneConfigExtension) String() string { return AsString(n) }

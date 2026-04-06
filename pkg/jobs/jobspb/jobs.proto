@@ -296,7 +296,9 @@ message LogicalReplicationDetails {
 
   bool skip_schema_check = 17;
 
-  // Next ID: 17.
+  bool skip_foreign_keys = 18;
+
+  // Next ID: 19.
 }
 
 message LogicalReplicationProgress {
@@ -800,6 +802,12 @@ message ImportProgress {
   repeated string sst_storage_prefixes = 8 [(gogoproto.customname) = "SSTStoragePrefixes"];
 
   reserved 9;
+
+  // DistributedMergePhase tracks import progress through the distributed merge
+  // pipeline. Values: 0 = map complete (or no merge iterations done yet),
+  // N (N >= 1) = merge iteration N completed. Used on resume to skip completed
+  // iterations.
+  int32 distributed_merge_phase = 10;
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.

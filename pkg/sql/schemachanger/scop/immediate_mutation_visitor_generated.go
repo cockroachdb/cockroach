@@ -188,6 +188,10 @@ type ImmediateMutationVisitor interface {
 	SetTableStorageParam(context.Context, SetTableStorageParam) error
 	ResetTableStorageParam(context.Context, ResetTableStorageParam) error
 	UpsertRowLevelTTL(context.Context, UpsertRowLevelTTL) error
+	AddEnumTypeValue(context.Context, AddEnumTypeValue) error
+	PromoteEnumTypeValue(context.Context, PromoteEnumTypeValue) error
+	DemoteEnumTypeValue(context.Context, DemoteEnumTypeValue) error
+	RemoveEnumTypeValue(context.Context, RemoveEnumTypeValue) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -1043,4 +1047,24 @@ func (op ResetTableStorageParam) Visit(ctx context.Context, v ImmediateMutationV
 // Visit is part of the ImmediateMutationOp interface.
 func (op UpsertRowLevelTTL) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpsertRowLevelTTL(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddEnumTypeValue(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op PromoteEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.PromoteEnumTypeValue(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op DemoteEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.DemoteEnumTypeValue(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveEnumTypeValue) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveEnumTypeValue(ctx, op)
 }

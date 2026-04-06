@@ -74,6 +74,22 @@ select '[3,Inf]'::vector
 query error pgcode 22000 infinite value not allowed in vector
 select '[3,-Inf]'::vector
 
+# Regression tests for edge case values in array-to-vector cast (#146606).
+query error pgcode 22000 vector must have at least 1 dimension
+SELECT '{}'::real[]::vector
+
+query error pgcode 22000 NaN not allowed in vector
+SELECT '{NaN}'::real[]::vector
+
+query error pgcode 22000 infinite value not allowed in vector
+SELECT '{Infinity}'::real[]::vector
+
+query error pgcode 22000 infinite value not allowed in vector
+SELECT '{-Infinity}'::real[]::vector
+
+query error pgcode 22000 infinite value not allowed in vector
+SELECT '{4e38,-4e38}'::double precision[]::vector
+
 statement ok
 CREATE TABLE x (a float[], b real[], c float4[])
 

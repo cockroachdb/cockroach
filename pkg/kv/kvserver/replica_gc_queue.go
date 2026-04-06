@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -362,9 +361,6 @@ func (rgcq *replicaGCQueue) process(
 		// above and deciding to remove the replica, it could have been removed
 		// concurrently. RemoveReplica gracefully returns nil in this case.
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "replica GC queue"); err != nil {
-			// Should never get an error from RemoveReplica.
-			const format = "error during replicaGC: %v"
-			logcrash.ReportOrPanic(ctx, &repl.store.ClusterSettings().SV, format, err)
 			return false, err
 		}
 	} else {

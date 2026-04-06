@@ -172,6 +172,11 @@ func executeNodeShutdown(
 
 type checkStatusFunc func(status jobs.State) (success bool, unexpected bool)
 
+// WaitForState waits for a job to reach a state that satisfies the provided
+// check function. The check function returns two booleans: the first indicates
+// whether the job is in a successful state, and the second indicates whether
+// the job is in an unexpected state that should fail fast. The two booleans
+// should never both be true.
 func WaitForState(
 	ctx context.Context,
 	db *gosql.DB,
@@ -289,6 +294,27 @@ func WaitForFailed(
 			case jobs.StateRunning:
 				return false, false
 			case jobs.StateReverting:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+// WaitForCanceled waits for a job to reach the canceled state.
+func WaitForCanceled(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(state jobs.State) (success bool, unexpected bool) {
+			switch state {
+			case jobs.StateCanceled:
+				return true, false
+			case jobs.StateCancelRequested:
+				return false, false
+			case jobs.StateReverting:
+				return false, false
+			case jobs.StateRunning:
 				return false, false
 			default:
 				return false, true

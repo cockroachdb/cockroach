@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import Analytics from "analytics-node";
+import { Analytics } from "@segment/analytics-node";
 import { Location, createLocation, createHashHistory } from "history";
 import each from "lodash/each";
 import { Store } from "redux";

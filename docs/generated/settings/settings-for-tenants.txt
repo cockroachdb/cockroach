@@ -113,6 +113,7 @@ kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
 log.channel_compatibility_mode.enabled	boolean	false	when true, logs will to log to their legacy (pre 26.1) logging channels; when false, logs will be logged to new logging channels	application
+obs.metrics_scrape.default_visibility	enumeration	all	controls the default metric visibility level for the metrics scrape endpoints [internal = -1, all = 0, support = 1, essential = 2]	application
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
@@ -400,6 +401,7 @@ sql.telemetry.query_sampling.max_event_frequency	integer	8	the max event frequen
 sql.telemetry.query_sampling.mode	enumeration	statement	the execution level used for telemetry sampling. If set to 'statement', events are sampled at the statement execution level. If set to 'transaction', events are sampled at the transaction execution level, i.e. all statements for a transaction will be logged and are counted together as one sampled event (events are still emitted one per statement). [statement = 0, transaction = 1]	application
 sql.telemetry.transaction_sampling.max_event_frequency	integer	8	the max event frequency (events per second) at which we sample transactions for telemetry. If sampling mode is set to 'statement', this setting is ignored. In practice, this means that we only sample a transaction if 1/max_event_frequency seconds have elapsed since the last transaction was sampled.	application
 sql.telemetry.transaction_sampling.statement_events_per_transaction.max	integer	50	the maximum number of statement events to log for every sampled transaction. Note that statements that are logged by force do not adhere to this limit.	application
+sql.temp_object_cleaner.batch_size	integer	1000	number of temporary objects to drop per transaction during cleanup	application
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	application
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
 sql.log.all_statements.enabled (alias: sql.trace.log_statement_execute)	boolean	false	set to true to enable logging of all executed statements	application

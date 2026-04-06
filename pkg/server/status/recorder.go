@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
@@ -124,15 +125,21 @@ var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithVisibility(settings.Reserved))
 
+var codeownerMetricCountEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "obs.metric_export.codeowner_count.enabled",
+	"enables the reporting of per-CODEOWNER metric counts in the Prometheus scrape",
+	false)
+
 // ScrapeMetrics holds meta-metrics that describe the volume of a Prometheus
 // scrape. They are updated at the end of each /_status/vars scrape cycle and
 // therefore report values from the most recent (or, on first scrape, zero)
 // scrape. Because the metrics themselves live in the node registry, they are
 // self-referentially included in the output.
 type ScrapeMetrics struct {
-	NameCount  *metric.Gauge
-	LineCount  *metric.Gauge
-	ChildCount *metric.GaugeVec
+	NameCount        *metric.Gauge
+	LineCount        *metric.Gauge
+	ChildCount       *metric.GaugeVec
+	OwnerMetricCount *metric.GaugeVec
 }
 
 func newScrapeMetrics() *ScrapeMetrics {
@@ -155,6 +162,12 @@ func newScrapeMetrics() *ScrapeMetrics {
 			Measurement: "Child Instances",
 			Unit:        metric.Unit_COUNT,
 		}, []string{"metric_name"}),
+		OwnerMetricCount: metric.NewExportedGaugeVec(metric.Metadata{
+			Name:        "obs.metric_export.codeowner.metric_count",
+			Help:        "Metric count per CODEOWNER team as ingested (histograms expand to computed metrics)",
+			Measurement: "Metrics",
+			Unit:        metric.Unit_COUNT,
+		}, []string{"codeowner"}),
 	}
 }
 
@@ -193,6 +206,12 @@ type MetricsRecorder struct {
 	// scrapeMetrics holds meta-metrics that describe the volume of the most
 	// recent /_status/vars Prometheus scrape.
 	scrapeMetrics *ScrapeMetrics
+
+	// metricOwners maps scraped metric names to CODEOWNER teams. Loaded
+	// once at construction from the generated metric_owners data. If the
+	// data is unavailable (e.g. in tests), this is nil and owner-based
+	// line counts are skipped.
+	metricOwners *metricscan.MetricOwners
 
 	// mu synchronizes the reading of node/store registries against the adding of
 	// nodes/stores. Consequently, almost all uses of it only need to take an
@@ -257,6 +276,13 @@ func NewMetricsRecorder(
 	clock hlc.WallClock,
 	settings *cluster.Settings,
 ) *MetricsRecorder {
+	mo, err := metricscan.DefaultMetricOwners()
+	if err != nil {
+		log.Ops.Warningf(
+			context.Background(),
+			"could not load metric owners; codeowner line counts will be unavailable: %v", err,
+		)
+	}
 	mr := &MetricsRecorder{
 		HealthChecker:       NewHealthChecker(trackedMetrics),
 		nodeLiveness:        nodeLiveness,
@@ -267,6 +293,7 @@ func NewMetricsRecorder(
 		tenantNameContainer: tenantNameContainer,
 		prometheusExporter:  metric.MakePrometheusExporter(),
 		scrapeMetrics:       newScrapeMetrics(),
+		metricOwners:        mo,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -455,11 +482,11 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 // ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
 func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
-	mr.ScrapeIntoPrometheusWithStaticLabels(false)(pm)
+	mr.ScrapeIntoPrometheusWithStaticLabels(false, metric.Metadata_INTERNAL)(pm)
 }
 
 func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
-	useStaticLabels bool,
+	useStaticLabels bool, minVisibility metric.Metadata_MetricVisibility,
 ) func(pm *metric.PrometheusExporter) {
 	return func(pm *metric.PrometheusExporter) {
 		mr.mu.RLock()
@@ -473,6 +500,9 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 			metric.WithIncludeAggregateMetrics(includeAggregateMetrics),
 			metric.WithUseStaticLabels(useStaticLabels),
 			metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled),
+		}
+		if minVisibility > metric.Metadata_INTERNAL {
+			scrapeOptions = append(scrapeOptions, metric.WithMinVisibility(minVisibility))
 		}
 		if mr.mu.nodeRegistry == nil {
 			// We haven't yet processed initialization information; output nothing.
@@ -499,10 +529,15 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 // We write metrics to a temporary buffer which is then copied to the writer.
 // This is to avoid hanging requests from holding the lock.
 func (mr *MetricsRecorder) PrintAsText(
-	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
+	w io.Writer,
+	contentType expfmt.Format,
+	useStaticLabels bool,
+	minVisibility metric.Metadata_MetricVisibility,
 ) error {
 	var buf bytes.Buffer
-	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)
+	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(
+		useStaticLabels, minVisibility,
+	)
 	// For /_status/vars (useStaticLabels=false), update scrape meta-metrics
 	// after scraping. Values appear in the next scrape (first reports zeros).
 	if !useStaticLabels {
@@ -540,6 +575,22 @@ func countTimeSeriesLines(data []byte) int64 {
 	return count
 }
 
+// countFamilyMetrics counts the number of individual metrics a
+// MetricFamily produces as ingested by downstream systems like
+// Datadog. HELP/TYPE overhead is omitted and histograms expand
+// into their computed metrics (percentiles, count, sum, avg, max).
+func countFamilyMetrics(family *prometheusgo.MetricFamily) int64 {
+	var count int64
+	for _, m := range family.Metric {
+		if m.Histogram != nil {
+			count += int64(len(metric.HistogramMetricComputers))
+		} else {
+			count++
+		}
+	}
+	return count
+}
+
 // updateScrapeMetrics updates the name count and child count meta-metrics
 // from the current exporter state. Called inside ScrapeAndPrintAsText's
 // lock, after all registries have been scraped but before clearMetrics.
@@ -553,6 +604,25 @@ func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
 		mr.scrapeMetrics.ChildCount.Update(
 			map[string]string{"metric_name": metricName}, count,
 		)
+	}
+
+	if mr.metricOwners != nil && codeownerMetricCountEnabled.Get(&mr.settings.SV) {
+		ownerCounts := make(map[string]int64)
+		for _, family := range families {
+			owner, ok := mr.metricOwners.Resolve(family.GetName())
+			if !ok {
+				owner = "unknown"
+			}
+			ownerCounts[owner] += countFamilyMetrics(family)
+		}
+		mr.scrapeMetrics.OwnerMetricCount.Clear()
+		for owner, count := range ownerCounts {
+			mr.scrapeMetrics.OwnerMetricCount.Update(
+				map[string]string{"codeowner": owner}, count,
+			)
+		}
+	} else {
+		mr.scrapeMetrics.OwnerMetricCount.Clear()
 	}
 }
 

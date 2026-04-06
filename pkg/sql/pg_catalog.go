@@ -457,7 +457,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				attRelID,                        // attrelid
 				tree.NewDName(column.GetName()), // attname
 				typOid(colTyp),                  // atttypid
-				zeroVal,                         // attstattarget
+				tree.DNull,                      // attstattarget
 				typLen(colTyp),                  // attlen
 				tree.NewDInt(tree.DInt(attNum)), // attnum
 				zeroVal,                         // attndims
@@ -514,7 +514,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					tableID,                             // attrelid
 					tree.NewDName(colName),              // attname
 					oidZero,                             // atttypid
-					zeroVal,                             // attstattarget
+					tree.DNull,                          // attstattarget
 					negOneVal,                           // attlen
 					tree.NewDInt(tree.DInt(colOrdinal)), // attnum
 					zeroVal,                             // attndims
@@ -990,7 +990,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					h.CollationOid(collName),  // oid
 					tree.NewDString(collName), // collname
 					namespaceOid,              // collnamespace
-					tree.DNull,                // collowner
+					nodeOID,                   // collowner
 					builtins.DatEncodingUTFId, // collencoding
 					// It's not clear how to translate a Go collation tag into the format
 					// required by LC_COLLATE and LC_CTYPE.
@@ -1740,8 +1740,9 @@ func createDefACLItem(
 // included; CockroachDB-specific privileges (BACKUP, CHANGEFEED, etc.)
 // are silently skipped by ListToACL.
 //
-// Grant option markers ('*') are stripped for admin, root, and the owner,
-// since their grant options are implicit (matching PostgreSQL behavior).
+// Grant option markers ('*') are stripped for the owner, since the owner's
+// grant option is implicit in PostgreSQL (acldefault never includes '*' for
+// the owner).
 //
 // If the resulting ACL matches the default privileges for the object type,
 // NULL is returned (matching PostgreSQL behavior where NULL means defaults).
@@ -1769,10 +1770,12 @@ func privilegeDescriptorToACLArray(
 				return nil, err
 			}
 		}
-		// Strip grant options for admin, root, and owner — their grant
-		// options are implicit in PostgreSQL convention.
+		// Strip grant options for the owner — the owner's grant option is
+		// implicit in PostgreSQL (acldefault never includes '*' for the
+		// owner). However, root and admin always show explicit grant
+		// options since they appear in every ACL with grants.
 		var grantOptions privilege.List
-		if !grantee.IsAdminRole() && !grantee.IsRootUser() && grantee != owner {
+		if grantee != owner || grantee.IsRootUser() || grantee.IsAdminRole() {
 			grantOptions, err = privilege.ListFromBitField(
 				userPriv.WithGrantOption, objectType,
 			)
@@ -2369,11 +2372,11 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual tables do not have indexes */
 		return forEachTableDesc(ctx, p, dbContext, opts,
 			func(ctx context.Context, descCtx tableDescContext) error {
-				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
+				sc, table := descCtx.schema, descCtx.table
 				scNameName := tree.NewDName(sc.GetName())
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, sc, table, index)
+					def, err := indexDefFromDescriptor(ctx, p, sc, table, index)
 					if err != nil {
 						return err
 					}
@@ -2391,17 +2394,19 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 }
 
 // indexDefFromDescriptor creates an index definition (`CREATE INDEX ... ON (...)`) from
-// and index descriptor by reconstructing a CreateIndex parser node and calling its
-// String method.
+// an index descriptor by reconstructing a CreateIndex parser node and calling its
+// String method. The table name is schema-qualified only (no database prefix),
+// matching PostgreSQL's format. Cross-database index references are not possible
+// in either PostgreSQL or CockroachDB.
 func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
-	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) (string, error) {
-	tableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(table.GetName()))
+	tableName := tree.MakeTableNameWithSchema("", tree.Name(sc.GetName()), tree.Name(table.GetName()))
+	tableName.ExplicitCatalog = false
 	partitionStr := ""
 	fmtStr, err := catformat.IndexForDisplay(
 		ctx,
@@ -2511,8 +2516,8 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
-					tree.DBoolTrue,                       // ispopulated,
-					tree.NewDString(desc.GetViewQuery()), // definition
+					tree.DBoolTrue, // ispopulated,
+					tree.NewDString(desc.GetViewQuery()+";"), // definition
 				)
 			})
 	},
@@ -2685,7 +2690,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 
 				tree.NewDString(opName), // oprname
 				nspOid,                  // oprnamespace
-				tree.DNull,              // oprowner
+				nodeOID,                 // oprowner
 				kind,                    // oprkind
 				tree.DBoolFalse,         // oprcanmerge
 				tree.DBoolFalse,         // oprcanhash
@@ -2937,7 +2942,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			tree.NewDOid(builtin.Oid),                // oid
 			dName,                                    // proname
 			nspOid,                                   // pronamespace
-			tree.DNull,                               // proowner
+			nodeOID,                                  // proowner
 			languageInternalOid,                      // prolang
 			tree.DNull,                               // procost
 			tree.DNull,                               // prorows
@@ -3613,7 +3618,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 		return addRow(
 			oidZero,                       // oid
 			tree.NewDString("pg_default"), // spcname
-			tree.DNull,                    // spcowner
+			nodeOID,                       // spcowner
 			tree.DNull,                    // spclocation
 			tree.DNull,                    // spcacl
 			tree.DNull,                    // spcoptions
@@ -4026,7 +4031,7 @@ func addPGAttributeRowForCompositeType(
 			tree.NewDOid(typ.Oid()),      // attrelid
 			tree.NewDName(tupLabels[i]),  // attname
 			typOid(colTyp),               // atttypid
-			zeroVal,                      // attstattarget
+			tree.DNull,                   // attstattarget
 			typLen(colTyp),               // attlen
 			tree.NewDInt(tree.DInt(i+1)), // attnum
 			zeroVal,                      // attndims
@@ -4093,7 +4098,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, nodeOID /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return err
 					}
 				}
@@ -4146,7 +4151,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, nodeOID /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return false, err
 					}
 					return true, nil
@@ -4456,7 +4461,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 				tableOid(descpb.ID(tableID)), // stxrelid
 				row[1],                       // stxname
 				schemaOid(statSchema),        // stxnamespace
-				tree.DNull,                   // stxowner
+				nodeOID,                      // stxowner
 				statTgt,                      // stxstattarget
 				columnIDs,                    // stxkeys
 				statisticsKind,               // stxkind
@@ -5504,10 +5509,10 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDName(sc.GetName()),          // schemaname
-					tree.NewDName(desc.GetName()),        // viewname
-					owner,                                // viewowner
-					tree.NewDString(desc.GetViewQuery()), // definition
+					tree.NewDName(sc.GetName()),   // schemaname
+					tree.NewDName(desc.GetName()), // viewname
+					owner,                         // viewowner
+					tree.NewDString(desc.GetViewQuery()+";"), // definition
 				)
 			})
 	},

@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -588,26 +587,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		// Convert merged SSTs to manifests for checkpointing. On resume, these
 		// manifests will be used as input to complete the merge in a single
 		// iteration directly to KV.
-		newManifests := make([]jobspb.BulkSSTManifest, 0, len(merged))
-		for _, sst := range merged {
-			span := roachpb.Span{
-				Key:    append([]byte(nil), sst.StartKey...),
-				EndKey: append([]byte(nil), sst.EndKey...),
-			}
-			newManifests = append(newManifests, jobspb.BulkSSTManifest{
-				URI:      sst.URI,
-				Span:     &span,
-				KeyCount: sst.KeyCount,
-				// Populate RowSample so CombineFileInfo can split schema spans on
-				// resume. StartKey is already a row prefix (family suffix stripped
-				// by SSTWriter.Flush), but CombineFileInfo passes samples through
-				// keys.EnsureSafeSplitKey which expects a full key including the
-				// column family suffix. Re-appending family 0 makes the key valid
-				// for that function.
-				RowSample: keys.MakeFamilyKey(append(roachpb.Key(nil), sst.StartKey...), 0),
-			})
-		}
-		progress.SSTManifests = newManifests
+		progress.SSTManifests = bulksst.MergeOutputToManifests(merged)
 		// Update the merge phase to track which iteration we completed.
 		// This allows resume logic to know we're in the middle of merge iterations.
 		// Clear task tracking fields so progress calculation doesn't incorrectly

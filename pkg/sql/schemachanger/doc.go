@@ -110,7 +110,16 @@ package schemachanger
 //    ColumnName from ABSENT to PUBLIC will involve executing the SetColumnName
 //    operation, which will use the catalog API to mutate the table descriptor
 //    by overwriting the `name` field in the corresponding column descriptor.
-//  - BackfillType involves backfilling and merging indexes.
+//  - BackfillType involves backfilling and merging indexes. Index
+//    creation uses a two-phase approach: first, the BackfillIndex
+//    operation scans the source index and writes entries for the new
+//    index (via BulkAdder or SST sink + distributed merge in
+//    `bulkmerge`); then, the MergeIndex operation uses
+//    `backfill.IndexBackfillMerger` to merge entries from the
+//    temporary index (which captured concurrent DML) into the final
+//    index. The backfill operations are defined in `scop` and
+//    executed in `scexec`; the core backfill primitives live in
+//    `backfill`.
 //  - ValidationType involves validating constraints.
 //
 // These operations are defined in `scop` and are implemented in `scexec/...`.

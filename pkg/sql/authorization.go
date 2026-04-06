@@ -869,17 +869,39 @@ func (p *planner) checkCanAlterToNewOwner(
 
 	// To alter the owner, you must also be a direct or indirect member of the new
 	// owning role.
-	if p.User() == newOwner {
+	return p.checkMemberOfRole(ctx, newOwner)
+}
+
+// checkMemberOfRole checks that the current user is a member of the given role,
+// either directly or indirectly. Being the role itself counts as membership.
+func (p *planner) checkMemberOfRole(ctx context.Context, role username.SQLUsername) error {
+	if p.User() == role {
 		return nil
 	}
 	memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		return err
 	}
-	if _, ok := memberOf[newOwner]; ok {
+	if _, ok := memberOf[role]; ok {
 		return nil
 	}
-	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", role)
+}
+
+// checkAdminOrMemberOfRole checks that the given role exists and that the
+// current user is either an admin or a member of the given role.
+func (p *planner) checkAdminOrMemberOfRole(ctx context.Context, role username.SQLUsername) error {
+	if err := p.CheckRoleExists(ctx, role); err != nil {
+		return err
+	}
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if hasAdmin {
+		return nil
+	}
+	return p.checkMemberOfRole(ctx, role)
 }
 
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.

@@ -4449,8 +4449,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 -  3 | 13
 -  4 | 14
 -(4 rows)
-+  7 | 11
-+  8 | 12
++ 21 | 11
++ 22 | 12
 +(2 rows)
  
  select alter2.plus1(41);

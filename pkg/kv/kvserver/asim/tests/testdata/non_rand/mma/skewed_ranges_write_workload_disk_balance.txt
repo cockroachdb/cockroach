@@ -10,6 +10,20 @@
 # to keep CPU utilization and write bandwidth also balanced. The hope is that
 # MMA extends the time it takes for the first node to hit high disk-usage
 # threshold compared to SMA.
+#
+# Thrashing: The main source of thrashing in mma-count is the replicate queue
+# fighting MMA. The replicate queue is unaware of range size and will move
+# 90 MiB replicas to stores with fuller disks for count balance. The MMA veto
+# (IsInConflictWithMMA) only blocks moves where the target's overall load
+# summary is worse than the source's, so it doesn't catch moves that add
+# significant bytes to an already-full target. MMA then tries to shed those
+# bytes, disrupting count balance, and the cycle repeats. mma-only avoids this
+# entirely and has much lower thrashing (777% vs 4509%). The remaining
+# mma-only thrashing comes from multi-dimensional tension (moving a large
+# replica for disk also moves its CPU/write load) and late-phase flapping
+# when all stores are above 90% disk and the allocator can't distinguish
+# "everyone is equally full" from "there's a meaningful imbalance to fix."
+# See #165798 for the full investigation.
 gen_cluster nodes=6 node_cpu_cores=2 store_byte_capacity_gib=20
 ----
 
