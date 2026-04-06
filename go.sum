@@ -2242,8 +2242,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s=
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
-github.com/suj-krishnan/drpc v0.0.0-20260405142109-922a3da5082a h1:n3RFwOtxZVi8O2kZ6FkioREUasBqSTL6vg1s4Or+c7Y=
-github.com/suj-krishnan/drpc v0.0.0-20260405142109-922a3da5082a/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
+github.com/suj-krishnan/drpc v0.0.0-20260406053526-c5ffbb99e4c6 h1:Raf3r0Irccwq3QFnFglr8XJa5Qfhv1jUJdk2LSI2gq8=
+github.com/suj-krishnan/drpc v0.0.0-20260406053526-c5ffbb99e4c6/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
 github.com/swaggo/swag v1.16.6 h1:qBNcx53ZaX+M5dxVyTrgQ0PJ/ACK+NzhwcbieTt+9yI=
 github.com/swaggo/swag v1.16.6/go.mod h1:ngP2etMK5a0P3QBizic5MEwpRmluJZPHjXcMoj4Xesg=
 github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
