@@ -230,10 +230,6 @@ func sendAddRemoteSSTs(
 		return 0, 0, err
 	}
 
-	if err := job.NoTxn().UpdateStatusMessage(ctx, "Splitting and distributing spans"); err != nil {
-		return 0, 0, err
-	}
-
 	if err := splitAndScatter(ctx, execCtx, genSpan, *kr, fromSystemTenant, targetRangeSize); err != nil {
 		return 0, 0, errors.Wrap(err, "failed to split and scatter spans")
 	}
@@ -248,10 +244,6 @@ func sendAddRemoteSSTs(
 		}
 	}
 	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_link"); err != nil {
-		return 0, 0, err
-	}
-
-	if err := job.NoTxn().UpdateStatusMessage(ctx, ""); err != nil {
 		return 0, 0, err
 	}
 
@@ -582,8 +574,14 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	// amount we expect to download and persist it so that we can indicate our
 	// progress as that number goes down later.
 	log.Dev.Infof(ctx, "calculating total download size (across all stores) to complete restore")
-	if err := r.job.NoTxn().UpdateStatusMessage(ctx, "Calculating total download size..."); err != nil {
-		return 0, errors.Wrapf(err, "failed to update running status of job %d", r.job.ID())
+
+	// Set the Phase 2 status message before calculating the total download size.
+	// This ensures users always see the download phase status, even if there's
+	// nothing to download.
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return r.job.StatusStorage().Set(ctx, txn, "Phase 2 of 2: Downloading restored data")
+	}); err != nil {
+		return 0, errors.Wrap(err, "updating status message for download phase")
 	}
 
 	total, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
@@ -599,7 +597,6 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.GetRestore().TotalDownloadRequired = total
-		md.Progress.StatusMessage = fmt.Sprintf("Downloading %s of restored data...", sz(total))
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {

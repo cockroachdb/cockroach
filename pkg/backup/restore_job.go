@@ -2361,6 +2361,15 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	// has already complete. This ensures we skip the link phase if we resume an
 	// online restore job that blocks on the download job.
 
+	// Set status message for Phase 1 if this is a two-phase ExperimentalCopy restore.
+	if details.ExperimentalCopy {
+		if err := r.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.job.StatusStorage().Set(ctx, txn, "Phase 1 of 2: Link External Data")
+		}); err != nil {
+			return errors.Wrap(err, "updating status message for link phase")
+		}
+	}
+
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
