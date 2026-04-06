@@ -123,7 +123,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
-	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	runnerL, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
 	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
 
 	if runtime.GOOS == "darwin" {
@@ -158,7 +158,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	lopt := loggingOpt{
-		l:                   l,
+		runnerL:             runnerL,
 		tee:                 tee,
 		stdout:              os.Stdout,
 		stderr:              os.Stderr,
@@ -174,20 +174,20 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		teamLoader:  team.DefaultLoadTeams,
 	}
 
-	l.Printf("global random seed: %d", globalSeed)
+	runnerL.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", roachtestflags.PromPort),
 			promhttp.HandlerFor(r.promRegistry, promhttp.HandlerOpts{}),
 		); err != nil {
-			l.Errorf("error serving prometheus: %v", err)
+			runnerL.Errorf("error serving prometheus: %v", err)
 		}
 	}()
 	// We're going to run all the workers (and thus all the tests) in a context
 	// that gets canceled when the Interrupt signal is received.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	CtrlC(ctx, l, cancel, cr)
+	CtrlC(ctx, runnerL, cancel, cr)
 	if false {
 		// Install goroutine leak checker and run it at the end of the entire test
 		// run. If a test is leaking a goroutine, then it will likely be still around.
@@ -200,7 +200,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		// output pollutes stdout and makes roachtest annoying to use.
 		//
 		// Tracking issue: https://github.com/cockroachdb/cockroach/issues/148196
-		defer leaktest.AfterTest(l)()
+		defer leaktest.AfterTest(runnerL)()
 	}
 
 	// We allow roachprod users to set a default auth-mode through the
@@ -226,14 +226,14 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	// ctx above might be canceled in case a signal was received. If that's
 	// the case, we're running under a 5s timeout until the CtrlC() goroutine
 	// kills the process.
-	l.PrintfCtx(ctx, "runTests destroying all unsaved clusters")
-	cr.destroyAllClusters(context.Background(), l)
+	runnerL.PrintfCtx(ctx, "runTests destroying all unsaved clusters")
+	cr.destroyAllClusters(context.Background(), runnerL)
 
 	if roachtestflags.TeamCity {
 		// Collect the runner logs.
 		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
-	runner.writeTestReports(ctx, l, artifactsDir)
+	runner.writeTestReports(ctx, runnerL, artifactsDir)
 
 	return err
 }

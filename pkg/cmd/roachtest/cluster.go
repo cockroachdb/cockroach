@@ -891,7 +891,7 @@ var create = roachprod.Create
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
-	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
+	ctx context.Context, cfg clusterConfig, setStatus func(string),
 ) (*clusterImpl, *vm.CreateOpts, error) {
 	if ctx.Err() != nil {
 		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
@@ -979,7 +979,7 @@ func (f *clusterFactory) newCluster(
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
-		l, err := logger.RootLogger(logPath, teeOpt)
+		clusterL, err := logger.RootLogger(logPath, logger.NoTee)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
@@ -995,11 +995,11 @@ func (f *clusterFactory) newCluster(
 			destroyState: destroyState{
 				owned: true,
 			},
-			l: l,
+			l: clusterL,
 		}
 		c.status("creating cluster")
 
-		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
+		clusterL.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
 		opts := []*cloud.ClusterCreateOpts{{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}}
 		// There can only be one local cluster so creating two sequentially overwrites the first.
@@ -1010,13 +1010,13 @@ func (f *clusterFactory) newCluster(
 				{Nodes: cfg.spec.WorkloadNodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
 			}
 		}
-		err = create(ctx, l, cfg.username, opts...)
+		err = create(ctx, clusterL, cfg.username, opts...)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
 			}
 			c.status("idle")
-			l.Close()
+			clusterL.Close()
 			return c, &createVMOpts, nil
 		}
 
@@ -1030,8 +1030,8 @@ func (f *clusterFactory) newCluster(
 			return nil, nil, err
 		}
 
-		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
-		c.Destroy(ctx, closeLogger, l)
+		clusterL.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
+		c.Destroy(ctx, closeLogger, clusterL)
 		if i >= maxAttempts {
 			return nil, nil, err
 		}
@@ -1959,7 +1959,7 @@ func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *tes
 // PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
 // at the specified location.
 func (c *clusterImpl) PutLibraries(
-	ctx context.Context, libraryDir string, libraries []string,
+	ctx context.Context, l *logger.Logger, libraryDir string, libraries []string,
 ) error {
 	if len(libraries) == 0 {
 		return nil
@@ -1969,6 +1969,12 @@ func (c *clusterImpl) PutLibraries(
 	}
 	c.status("uploading library files")
 	defer c.status("")
+
+	// Temporarily swap c.l so that RunE (which doesn't accept a logger
+	// parameter) writes to the caller-provided logger.
+	savedL := c.l
+	c.l = l
+	defer func() { c.l = savedL }()
 
 	if err := c.RunE(ctx, option.WithNodes(c.All()), "mkdir", "-p", libraryDir); err != nil {
 		return err
@@ -1986,7 +1992,7 @@ func (c *clusterImpl) PutLibraries(
 		putPath := filepath.Join(libraryDir, libName+ext)
 		if err := c.PutE(
 			ctx,
-			c.l,
+			l,
 			libraryFilePath,
 			putPath,
 		); err != nil {
