@@ -256,7 +256,7 @@ var PreserveDowngradeVersion = settings.RegisterStringSetting(
 var AutoUpgradeEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cluster.auto_upgrade.enabled",
-	"disable automatic cluster version upgrade until reset",
+	"when true, enables automatic finalization of major version upgrades once all cluster nodes are running an upgraded binary",
 	true,
 	settings.WithReportable(true),
 	settings.WithPublic,
