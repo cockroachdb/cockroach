@@ -448,14 +448,14 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
   		tbm.table_id,
   		tbm.schema_name,
 			tbm.table_name,
-			tbm.replication_size_bytes, 
-			tbm.total_ranges, 
-			tbm.total_columns, 
-			tbm.total_indexes, 
+			tbm.replication_size_bytes,
+			tbm.total_ranges,
+			tbm.total_columns,
+			tbm.total_indexes,
 			tbm.perc_live_data,
 			tbm.total_live_data_bytes,
 			tbm.total_data_bytes,
-			tbm.store_ids, 
+			tbm.store_ids,
 			COALESCE((tbm.details->>'auto_stats_enabled')::BOOL, csc.auto_stats_enabled) as auto_stats_enabled,
 			parse_timestamp(tbm.details->>'stats_last_updated') as stats_last_updated,
 			COALESCE((tbm.details->>'replica_count')::INT, 0) as replica_count,
@@ -463,7 +463,7 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 			tbm.last_updated,
 			count(*) OVER() as total_row_count
 		FROM system.table_metadata tbm,
-		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
+		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled
 		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
 		WHERE (
 			$ = 'admin'
@@ -476,12 +476,24 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 			OR tbm.db_name IN (
 	  			SELECT cdp.database_name
 	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE (grantee = $ OR grantee = 'public')
-	  			AND privilege_type = 'CONNECT'
+	  			WHERE cdp.privilege_type = 'CONNECT'
+	  			AND (cdp.grantee = $ OR cdp.grantee = 'public'
+	  				OR cdp.grantee IN (
+	  					SELECT role FROM (
+	  						WITH RECURSIVE user_roles(role) AS (
+	  							SELECT role FROM system.role_members WHERE member = $:::STRING
+	  							UNION
+	  							SELECT rm.role FROM system.role_members rm
+	  							JOIN user_roles ur ON rm.member = ur.role
+	  						)
+	  						SELECT role FROM user_roles
+	  					)
+	  				)
+	  			)
 	  		)
 		)
 		AND tbm.table_type = 'TABLE'
-		`, userName, userName, userName)
+		`, userName, userName, userName, userName)
 
 	return query
 }
@@ -856,8 +868,9 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 
 	// Base query aggregates table metadata by db_id. It joins on a subquery which flattens
 	// and deduplicates all store ids for tables in a database into a single array. This query
-	// will only return databases that the provided sql user has CONNECT privileges to. If they
-	// are an admin, they have access to all databases.
+	// will only return databases that the provided sql user has CONNECT privileges to, either
+	// directly or through role membership. If they are an admin, they have access to all
+	// databases.
 	query.Append(`SELECT
 		n.id as db_id,
 		n.name as db_name,
@@ -884,13 +897,25 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 			OR n.name IN (
 				SELECT cdp.database_name
 				FROM "".crdb_internal.cluster_database_privileges AS cdp
-				WHERE (cdp.grantee = $ OR cdp.grantee = 'public')
-					AND cdp.privilege_type = 'CONNECT'
+				WHERE cdp.privilege_type = 'CONNECT'
+				AND (cdp.grantee = $ OR cdp.grantee = 'public'
+					OR cdp.grantee IN (
+						SELECT role FROM (
+							WITH RECURSIVE user_roles(role) AS (
+								SELECT role FROM system.role_members WHERE member = $:::STRING
+								UNION
+								SELECT rm.role FROM system.role_members rm
+								JOIN user_roles ur ON rm.member = ur.role
+							)
+							SELECT role FROM user_roles
+						)
+					)
+				)
 			)
 		)
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
-`, userName, userName, userName)
+`, userName, userName, userName, userName)
 
 	return query
 }
@@ -1064,12 +1089,24 @@ func (a *apiV2Server) updateTableMetadataJobAuthorized(
 	FROM (
 	  SELECT 1 FROM system.role_members WHERE member = $ AND role = 'admin'
 		UNION
-		SELECT 1 
+		SELECT 1
 		FROM "".crdb_internal.cluster_database_privileges cdp
-	 	WHERE (cdp.grantee = $ OR cdp.grantee = 'public') 
-	 	AND cdp.privilege_type = 'CONNECT' 
+		WHERE cdp.privilege_type = 'CONNECT'
+		AND (cdp.grantee = $ OR cdp.grantee = 'public'
+			OR cdp.grantee IN (
+				SELECT role FROM (
+					WITH RECURSIVE user_roles(role) AS (
+						SELECT role FROM system.role_members WHERE member = $:::STRING
+						UNION
+						SELECT rm.role FROM system.role_members rm
+						JOIN user_roles ur ON rm.member = ur.role
+					)
+					SELECT role FROM user_roles
+				)
+			)
+		)
 	)
-`, sqlUserStr, sqlUserStr)
+`, sqlUserStr, sqlUserStr, sqlUserStr)
 
 	row, colTypes, err := a.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "check-updatejob-authorized", nil, /* txn */
