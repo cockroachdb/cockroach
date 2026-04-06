@@ -99,7 +99,7 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
-    shard_count = 4,
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/jobs",
