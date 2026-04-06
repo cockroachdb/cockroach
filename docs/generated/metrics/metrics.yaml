@@ -871,7 +871,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Track PCR throughput
       visibility: ESSENTIAL
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.replicated_time_seconds
       exported_name: physical_replication_replicated_time_seconds
       description: The replicated time of the physical replication stream in seconds since the unix epoch.
@@ -882,7 +882,7 @@ layers:
       derivative: NONE
       how_to_use: Track replication lag via current time - physical_replication.replicated_time_seconds
       visibility: ESSENTIAL
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
   - name: DISTRIBUTED
     metrics:
     - name: distsender.errors.notleaseholder
@@ -1144,6 +1144,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.
       visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
     - name: auth.cert.san.conn.total
       exported_name: auth_cert_san_conn_total
       description: Total number of SQL connection attempts using SAN-based certificate authentication
@@ -1154,6 +1155,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks all authentication attempts when SAN-based certificate validation is enabled. Compare with auth.cert.san.conn.success to calculate failure rate.
       visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
     - name: auth.gss.conn.latency
       exported_name: auth_gss_conn_latency
       description: Latency to establish and authenticate a SQL connection using GSS
@@ -7820,7 +7822,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.catchup_ranges
       exported_name: physical_replication_catchup_ranges
       description: Source side ranges undergoing catch up scans
@@ -7829,7 +7831,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.commit_latency
       exported_name: physical_replication_commit_latency
       description: 'Event commit latency: a difference between event MVCC timestamp and the time it was flushed into disk. If we batch events, then the difference between the oldest event in the batch and flush is recorded'
@@ -7838,7 +7840,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.distsql_replan_count
       exported_name: physical_replication_distsql_replan_count
       description: Total number of dist sql replanning events
@@ -7847,7 +7849,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.events_ingested
       exported_name: physical_replication_events_ingested
       description: Events ingested by all replication jobs
@@ -7856,7 +7858,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.failover_progress
       exported_name: physical_replication_failover_progress
       description: The number of ranges left to revert in order to complete an inflight cutover
@@ -7865,7 +7867,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flush_hist_nanos
       exported_name: physical_replication_flush_hist_nanos
       description: Time spent flushing messages across all replication streams
@@ -7874,7 +7876,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flush_wait_nanos
       exported_name: physical_replication_flush_wait_nanos
       description: Cumulative time spent waiting to send buffer to flush loop; use rate() to compare against receive_wait_nanos
@@ -7883,7 +7885,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.flushes
       exported_name: physical_replication_flushes
       description: Total flushes across all replication jobs
@@ -7892,7 +7894,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.receive_wait_nanos
       exported_name: physical_replication_receive_wait_nanos
       description: Cumulative time spent waiting to receive events from producer; use rate() to compare against flush_wait_nanos
@@ -7901,7 +7903,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.resolved_events_ingested
       exported_name: physical_replication_resolved_events_ingested
       description: Resolved events ingested by all replication jobs
@@ -7910,7 +7912,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.running
       exported_name: physical_replication_running
       description: Number of currently running replication streams
@@ -7919,7 +7921,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: physical_replication.scanning_ranges
       exported_name: physical_replication_scanning_ranges
       description: Source side ranges undergoing an initial scan
@@ -7928,7 +7930,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/unowned
+      owner: cockroachdb/disaster-recovery
     - name: requests.slow.distsender
       exported_name: requests_slow_distsender
       description: |-
@@ -8084,6 +8086,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: schedules.BACKUP.last-completed-time-by-virtual_cluster
       exported_name: schedules_BACKUP_last_completed_time_by_virtual_cluster
       description: The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric
@@ -11372,6 +11375,7 @@ layers:
       unit: CONST
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/obs-prs
     - name: sys.gc.assist.ns
       exported_name: sys_gc_assist_ns
       description: Estimated total CPU time user goroutines spent to assist the GC process
@@ -17911,6 +17915,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/obs-prs
     - name: obs.metric_export.line.count
       exported_name: obs_metric_export_line_count
       description: Total individual time series (all label combinations) in the most recent Prometheus scrape
@@ -17919,6 +17924,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/obs-prs
     - name: obs.metric_export.name.count
       exported_name: obs_metric_export_name_count
       description: Number of metric families (unique metric names) in the most recent Prometheus scrape
@@ -17927,6 +17933,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/obs-prs
     - name: queue.consistency.pending
       exported_name: queue_consistency_pending
       description: Number of pending replicas in the consistency checker queue
