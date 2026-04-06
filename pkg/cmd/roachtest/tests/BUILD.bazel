@@ -24,6 +24,7 @@ go_library(
         "admission_control_multi_store_overload.go",
         "admission_control_multitenant_fairness.go",
         "admission_control_row_level_ttl.go",
+        "admission_control_single_node_index_backfill.go",
         "admission_control_snapshot_overload.go",
         "admission_control_snapshot_overload_io.go",
         "admission_control_tpcc_overload.go",
