@@ -1102,7 +1102,7 @@ func (r *Refresher) maybeRefreshStats(
 		// ConcurrentCreateStatsError is expected, so simply ignore it (it's
 		// handled by RescheduleRefresh called by the stats job). Log all
 		// others.
-		if errors.Is(err, ConcurrentCreateStatsError) {
+		if IsConcurrentCreateStatsError(err) {
 			return
 		}
 		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
@@ -1194,9 +1194,26 @@ type concurrentCreateStatisticsError struct{}
 var _ error = concurrentCreateStatisticsError{}
 
 func (concurrentCreateStatisticsError) Error() string {
-	return "another CREATE STATISTICS job is already running"
+	return "another automatic CREATE STATISTICS job is already running on this table"
 }
 
 // ConcurrentCreateStatsError is reported when two CREATE STATISTICS jobs
-// are issued concurrently. This is a sentinel error.
+// are issued concurrently on the same table. This is a sentinel error.
 var ConcurrentCreateStatsError error = concurrentCreateStatisticsError{}
+
+type concurrentCreateStatsLimitError struct{}
+
+var _ error = concurrentCreateStatsLimitError{}
+
+func (concurrentCreateStatsLimitError) Error() string {
+	return "global limit on concurrent automatic CREATE STATISTICS jobs has been reached"
+}
+
+// ConcurrentCreateStatsError is reported when the limit on the global
+// concurrency of automatic CREATE STATISTICS jobs has been reached. This is a
+// sentinel error.
+var ConcurrentCreateStatsLimitError error = concurrentCreateStatsLimitError{}
+
+func IsConcurrentCreateStatsError(err error) bool {
+	return errors.Is(err, ConcurrentCreateStatsError) || errors.Is(err, ConcurrentCreateStatsLimitError)
+}

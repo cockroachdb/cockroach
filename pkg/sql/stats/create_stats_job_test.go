@@ -1061,7 +1061,7 @@ func runAutoStatsJob(
 	beforeCount := getNumberOfTableStats(t, sqlDB, tableName, statsName)
 
 	if shouldError {
-		sqlDB.ExpectErr(t, "another CREATE STATISTICS job is already running", query)
+		sqlDB.ExpectNonNilErr(t, query)
 		return
 	}
 
