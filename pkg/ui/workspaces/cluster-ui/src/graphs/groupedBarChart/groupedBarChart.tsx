@@ -223,20 +223,12 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     const items: { label: string; color: string }[] = [];
     const seen = new Set<string>();
 
-    // Check if all groups use the same color for each layer index.
-    const groups = data[0].groups;
-    const sharedColors =
-      groups.length >= 2 &&
-      groups[0].layers.length === groups[1].layers.length &&
-      groups[0].layers.every((l, i) => groups[1].layers[i]?.color === l.color);
-
-    for (const group of groups) {
+    for (const group of data[0].groups) {
       for (const layer of group.layers) {
-        const key = `${layer.label}:${layer.color}`;
-        if (!seen.has(key)) {
-          seen.add(key);
+        if (!seen.has(layer.label)) {
+          seen.add(layer.label);
           items.push({
-            label: sharedColors ? layer.label : `${group.label} ${layer.label}`,
+            label: layer.label,
             color: layer.color,
           });
         }
