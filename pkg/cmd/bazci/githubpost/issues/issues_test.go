@@ -552,3 +552,99 @@ func TestDataDriven(t *testing.T) {
 	})
 
 }
+
+func TestDefaultOptionsFromEnv_StripsBranchPrefix(t *testing.T) {
+	testCases := []struct {
+		name           string
+		envValue       string
+		expectedBranch string
+	}{
+		{
+			name:           "strips refs/heads/ prefix from master",
+			envValue:       "refs/heads/master",
+			expectedBranch: "master",
+		},
+		{
+			name:           "strips refs/heads/ from release branch",
+			envValue:       "refs/heads/release-24.3",
+			expectedBranch: "release-24.3",
+		},
+		{
+			name:           "strips refs/heads/ from provisional branch",
+			envValue:       "refs/heads/provisional_24_3_0_rc1",
+			expectedBranch: "provisional_24_3_0_rc1",
+		},
+		{
+			name:           "handles branch without prefix",
+			envValue:       "master",
+			expectedBranch: "master",
+		},
+		{
+			name:           "handles release branch without prefix",
+			envValue:       "release-19.2",
+			expectedBranch: "release-19.2",
+		},
+		{
+			name:           "handles branch-not-found-in-env fallback",
+			envValue:       "",
+			expectedBranch: "branch-not-found-in-env",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := map[string]string{}
+			if tc.envValue != "" {
+				env["TC_BUILD_BRANCH"] = tc.envValue
+			}
+			unset := setEnv(env)
+			defer unset()
+
+			opts := DefaultOptionsFromEnv()
+			require.Equal(t, tc.expectedBranch, opts.Branch)
+		})
+	}
+}
+
+func TestOptions_IsReleaseBranch(t *testing.T) {
+	testCases := []struct {
+		branch   string
+		expected bool
+	}{
+		{"master", true},
+		{"release-24.3", true},
+		{"release-19.2", true},
+		{"provisional_24_3_0_rc1", true},
+		{"provisional_19_2_0", true},
+		{"feature-branch", false},
+		{"my-branch", false},
+		{"", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.branch, func(t *testing.T) {
+			opts := &Options{Branch: tc.branch}
+			result := opts.IsReleaseBranch()
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestReleaseLabel(t *testing.T) {
+	testCases := []struct {
+		branch   string
+		expected string
+	}{
+		{"master", "branch-master"},
+		{"release-24.3", "branch-release-24.3"},
+		{"provisional_24_3", "branch-provisional_24_3"},
+		{"my-feature", "branch-my-feature"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.branch, func(t *testing.T) {
+			result := releaseLabel(tc.branch)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
