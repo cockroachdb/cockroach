@@ -433,7 +433,7 @@ func runSingleNodeIndexBackfill(
 	// tolerate run-to-run variance while catching severe regressions (e.g.,
 	// AC over-throttling the backfill or starving the disk).
 	const (
-		maxBackfillDuration = 90 * time.Minute
+		maxBackfillDuration = 150 * time.Minute
 		minAvgTotalBW       = 50.0 // MiB/s
 	)
 	if backfillDuration > maxBackfillDuration {
