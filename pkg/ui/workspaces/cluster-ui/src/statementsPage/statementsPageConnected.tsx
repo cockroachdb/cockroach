@@ -14,7 +14,6 @@ import {
   updateStmtsPageLimitAction,
   updateStmsPageReqSortAction,
 } from "src/store/localStorage";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
 
 import { StatementDiagnosticsReport, SqlStatsSortType } from "../api";
 import { Filters } from "../queryFilter";
@@ -74,8 +73,8 @@ export const ConnectedStatementsPage = withRouter(
       fingerprintsPageProps: {
         onTimeScaleChange: (ts: TimeScale) => {
           dispatch(
-            sqlStatsActions.updateTimeScale({
-              ts: ts,
+            localStorageActions.updateTimeScale({
+              value: ts,
             }),
           );
         },
