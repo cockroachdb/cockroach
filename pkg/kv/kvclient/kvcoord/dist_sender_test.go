@@ -1870,6 +1870,12 @@ func TestEventuallyRecoverFromLeaseholderContextError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Enable leaseholder randomization on context errors, which is disabled by
+	// default (see the TODO on randomizeLeaseholderOnContextErrorDuration).
+	old := randomizeLeaseholderOnContextErrorDuration
+	randomizeLeaseholderOnContextErrorDuration = 2 * time.Second
+	defer func() { randomizeLeaseholderOnContextErrorDuration = old }()
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

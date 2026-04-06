@@ -457,9 +457,13 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 // randomizeLeaseholderOnContextErrorDuration controls the timeout after which
 // we deliberately randomize the leaseholder in a cached range descriptor after
 // seeing context errors (deadline exceeded, context canceled, etc.) to force
-// us to contact a healthy replica.
-var randomizeLeaseholderOnContextErrorDuration = max(500*time.Millisecond,
-	envutil.EnvOrDefaultDuration("COCKROACH_RANDOMIZE_LEASEHOLDER_ON_CONTEXT_ERROR_DURATION", 2*time.Second))
+// us to contact a healthy replica. A zero value disables this behavior.
+//
+// TODO(arul): re-enable this (default 2s, with a 500ms floor) once the
+// RACv2 test flakes caused by leaseholder randomization have been addressed.
+var randomizeLeaseholderOnContextErrorDuration = envutil.EnvOrDefaultDuration(
+	"COCKROACH_RANDOMIZE_LEASEHOLDER_ON_CONTEXT_ERROR_DURATION", 0,
+)
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
@@ -2430,6 +2434,7 @@ func (ds *DistSender) sendPartialBatch(
 	// See the documentation for the function
 	// (*EvictionToken).RandomizeLeaseholder() for an explanation.
 	if ctx.Err() != nil && routingTok.Valid() &&
+		randomizeLeaseholderOnContextErrorDuration > 0 &&
 		routingTok.SinceLeaseholderContacted() >= randomizeLeaseholderOnContextErrorDuration {
 
 		ds.metrics.LeaseholderRandomizedOnContextErrorCount.Inc(1)
