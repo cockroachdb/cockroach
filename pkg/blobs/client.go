@@ -124,11 +124,15 @@ func (c *remoteClient) readFileWithFlowControl(
 }
 
 type streamWriter struct {
+	ctx context.Context
 	s   blobspb.RPCBlob_PutStreamClient
 	buf blobspb.StreamChunk
 }
 
 func (w *streamWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
 	n := 0
 	for len(p) > 0 {
 		l := copy(w.buf.Payload[:cap(w.buf.Payload)], p)
@@ -145,6 +149,9 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 }
 
 func (w *streamWriter) Close() error {
+	if err := w.ctx.Err(); err != nil {
+		return err
+	}
 	_, err := w.s.CloseAndRecv()
 	return err
 }
@@ -156,7 +163,7 @@ func (c *remoteClient) Writer(ctx context.Context, file string) (io.WriteCloser,
 		return nil, err
 	}
 	buf := make([]byte, 0, ChunkSize)
-	return &streamWriter{s: stream, buf: blobspb.StreamChunk{Payload: buf}}, nil
+	return &streamWriter{ctx: ctx, s: stream, buf: blobspb.StreamChunk{Payload: buf}}, nil
 }
 
 func (c *remoteClient) List(ctx context.Context, pattern string) ([]string, error) {
