@@ -216,7 +216,6 @@ module.exports = (env, argv) => {
       "react-router": "react-router",
       "react-router-dom": "react-router-dom",
       "react-redux": "react-redux",
-      "redux-saga": "redux-saga",
       "redux": "redux",
     },
   };
