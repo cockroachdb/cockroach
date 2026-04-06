@@ -1662,6 +1662,9 @@ func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 						},
 						AlwaysTryGrantWhenAdmitted: true,
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 				},
 			},
 		})
