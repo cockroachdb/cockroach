@@ -4017,6 +4017,14 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Under duress, the merge transaction's SubsumeRequest processing can take
+	// longer than the global reads lead time (~800ms), causing the clock to
+	// advance past the pushed write timestamp before
+	// maybeCommitWaitBeforeCommitTrigger runs. This makes the commit-wait metric
+	// assertion flaky. The correctness invariant (WriteTimestamp < Now() at
+	// trigger time) still holds, but the explicit sleep is skipped.
+	skip.UnderDuressWithIssue(t, 167522)
+
 	// Detect splits and merges over the global read ranges. Assert that the split
 	// and merge transactions commit with pushed write timestamps, and that the
 	// commit-wait sleep for these transactions is performed before running their
