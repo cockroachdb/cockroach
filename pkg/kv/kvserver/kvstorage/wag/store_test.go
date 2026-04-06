@@ -47,6 +47,9 @@ func TestWrite(t *testing.T) {
 	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
 	rhsID := roachpb.FullReplicaID{RangeID: 567, ReplicaID: 1}
 	write("create", func(w storage.Writer) error { return createReplica(&s, w, id) })
+	// Intentionally introduce a gap in the sequence. We will later make sure that
+	// the iterator correctly skips over this gap.
+	s.seq.Next(1)
 	write("init", func(w storage.Writer) error { return initReplica(&s, w, id, 10) })
 	write("split", func(w storage.Writer) error { return splitReplica(&s, w, id, rhsID, 200) })
 
@@ -55,16 +58,60 @@ func TestWrite(t *testing.T) {
 	out = strings.ReplaceAll(out, "\n\n", "\n")
 	echotest.Require(t, out, filepath.Join("testdata", t.Name()+".txt"))
 
-	// Smoke check that the iterator works.
-	var iter Iterator
-	count := 0
-	for range iter.Iter(context.Background(), s.eng) {
-		count++
+	// readIndices returns the WAG node indices by scanning the engine.
+	readIndices := func() []uint64 {
+		var it Iterator
+		var res []uint64
+		for index := range it.Iter(context.Background(), s.eng) {
+			res = append(res, index)
+		}
+		require.NoError(t, it.Error())
+		return res
 	}
-	require.NoError(t, iter.Error())
+
+	// Verify that the iterator returns nodes with the correct indices.
 	// 3 WAG nodes: create, init, split. The split is a single node with two
 	// events (Split + Init) rather than two separate nodes (dep + event).
-	require.Equal(t, 3, count)
+	require.Equal(t, []uint64{1, 3, 4}, readIndices())
+}
+
+func TestDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	id := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	node := wagpb.Node{
+		Events: []wagpb.Event{
+			{Addr: wagpb.MakeAddr(id, 10), Type: wagpb.EventApply},
+		},
+	}
+
+	// Write 5 WAG nodes with indices 1 through 5.
+	for i := uint64(1); i <= 5; i++ {
+		require.NoError(t, Write(eng, i, node))
+	}
+
+	// Read back all indices.
+	readIndices := func() []uint64 {
+		var it Iterator
+		var res []uint64
+		for index := range it.Iter(context.Background(), eng) {
+			res = append(res, index)
+		}
+		require.NoError(t, it.Error())
+		return res
+	}
+	require.Equal(t, []uint64{1, 2, 3, 4, 5}, readIndices())
+
+	// Delete nodes 2 and 4.
+	require.NoError(t, Delete(eng, 2))
+	require.NoError(t, Delete(eng, 4))
+
+	// Verify that only nodes 1, 3, 5 remain.
+	require.Equal(t, []uint64{1, 3, 5}, readIndices())
 }
 
 type store struct {
