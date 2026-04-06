@@ -8021,7 +8021,7 @@ layers:
       owner: cockroachdb/kv
     - name: rpc.client.bytes.egress
       exported_name: rpc_client_bytes_egress
-      description: Counter of TCP bytes sent via gRPC on connections we initiated.
+      description: Counter of TCP bytes sent via RPC on connections we initiated.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -8030,7 +8030,7 @@ layers:
       owner: cockroachdb/kv
     - name: rpc.client.bytes.ingress
       exported_name: rpc_client_bytes_ingress
-      description: Counter of TCP bytes received via gRPC on connections we initiated.
+      description: Counter of TCP bytes received via RPC on connections we initiated.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -8068,6 +8068,7 @@ layers:
       unit: CONST
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/kv
     - name: rpc.drpc.tls.handshake.errors
       exported_name: rpc_drpc_tls_handshake_errors
       description: Number of TLS handshake errors for DRPC connections.
@@ -8076,7 +8077,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/kv
     - name: rpc.server.request.duration.nanos
       exported_name: rpc_server_request_duration_nanos
       description: Duration of an RPC request at the server in nanoseconds.
