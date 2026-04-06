@@ -210,8 +210,10 @@ type tempSchemaInfo struct {
 	// tblNamesByID maps object IDs to their fully-qualified names, used to
 	// construct DROP statements.
 	tblNamesByID map[descpb.ID]tree.TableName
-	// tblDescsByID maps sequence IDs to their descriptors, used by
-	// cleanupTempSequenceDeps to resolve dependencies on permanent tables.
+	// tblDescsByID maps object IDs to their table descriptors. It is used by
+	// cleanupTempSequenceDeps to identify which dependents are temp objects
+	// (and can be skipped) versus permanent tables that need their default
+	// expressions cleaned up.
 	tblDescsByID map[descpb.ID]catalog.TableDescriptor
 	// databaseIDToTempSchemaID maps database IDs to their temporary schema IDs,
 	// used by the internal executor to resolve temporary schema names.
@@ -331,7 +333,7 @@ func collectTempSchemaObjects(
 		databaseIDToTempSchemaID: make(map[uint32]uint32),
 	}
 
-	_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	if err = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		tbl, ok := desc.(catalog.TableDescriptor)
 		if !ok || desc.Dropped() {
 			return nil
@@ -342,6 +344,8 @@ func collectTempSchemaObjects(
 		)
 		info.databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
+		// Owned sequences are dropped via CASCADE when their owner table is
+		// dropped, so only unowned sequences need to be explicitly dropped.
 		if tbl.IsSequence() &&
 			tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
 			tbl.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
@@ -352,7 +356,9 @@ func collectTempSchemaObjects(
 			info.tables = append(info.tables, desc.GetID())
 		}
 		return nil
-	})
+	}); err != nil {
+		return tempSchemaInfo{}, err
+	}
 	return info, nil
 }
 
@@ -404,6 +410,9 @@ func dropTempSchemaObjectsInBatches(
 						}
 					}
 
+					// IF EXISTS is needed because objects may have been
+					// dropped between Phase 1 and Phase 2 by CASCADE from
+					// a previous batch or by concurrent cleanup.
 					var query strings.Builder
 					query.WriteString("DROP ")
 					query.WriteString(toDelete.typeName)
@@ -446,8 +455,14 @@ func cleanupTempSequenceDeps(
 		if _, ok := info.tblDescsByID[d.ID]; ok {
 			return nil
 		}
+		// The dependent table may have been dropped between Phase 1 (when
+		// we snapshotted the dependency list) and now. Treat this as a
+		// no-op since the dependency is already resolved.
 		dTableDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, d.ID)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				return nil
+			}
 			return err
 		}
 		dDB, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
