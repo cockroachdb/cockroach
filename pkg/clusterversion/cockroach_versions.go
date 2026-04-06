@@ -272,6 +272,9 @@ const (
 	// Do not add new versions to a patch release.
 	// *************************************************
 
+	// V26_2 is CockroachDB v26.2. It's used for all v26.2.x patch releases.
+	V26_2
+
 	numKeys
 )
 
@@ -347,6 +350,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
+
+	V26_2: {Major: 26, Minor: 2, Internal: 0},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster
@@ -359,14 +364,6 @@ const MinSupported Key = V25_4
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
 const PreviousRelease Key = V26_1
-
-// V26_2 is a placeholder that will eventually be replaced by the actual 26.2
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 26.2 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 26.2.
-const V26_2 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -385,7 +382,7 @@ const DevelopmentBranch = false
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
+const finalVersion Key = V26_2
 
 // TestingExtraVersions may be set to true by packages of tests which will
 // intentionally use Keys greater than Latest, which otherwise would crash
