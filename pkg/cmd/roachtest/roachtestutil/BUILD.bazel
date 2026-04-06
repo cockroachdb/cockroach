@@ -4,6 +4,7 @@ go_library(
     name = "roachtestutil",
     srcs = [
         "commandbuilder.go",
+        "disk_snapshot.go",
         "disk_stall.go",
         "disk_usage.go",
         "httpclient.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
