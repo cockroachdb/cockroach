@@ -57,10 +57,7 @@ func DialDRPC(
 		}
 
 		shouldRecordFunc := func() bool {
-			if ShouldRecordRequestMetricsDRPC(rpcCtx.Settings) {
-				return true
-			}
-			return false
+			return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
 		}
 
 		drpcDialOptions = append(drpcDialOptions, drpcclient.WithMetrics(cm))
@@ -70,9 +67,9 @@ func DialDRPC(
 		drpcPoolMetrics := rpcCtx.DRPCPoolMetrics()
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
-			Expiration: defaultDRPCConnIdleTimeout,
-			Metrics:    drpcPoolMetrics,
-			Labels:     map[string]string{"target": target, "class": class.String()},
+			Expiration:   defaultDRPCConnIdleTimeout,
+			Metrics:      drpcPoolMetrics,
+			Labels:       map[string]string{"target": target, "class": class.String()},
 			ShouldRecord: shouldRecordFunc,
 		})
 
