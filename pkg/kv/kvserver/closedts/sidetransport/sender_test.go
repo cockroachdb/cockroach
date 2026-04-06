@@ -8,6 +8,7 @@ package sidetransport
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"slices"
 	"sync"
@@ -37,6 +38,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcconn"
+	"storj.io/drpc/drpcmigrate"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -592,11 +597,173 @@ func (s *mockReceiver) Close() {
 	close(s.stop)
 }
 
+// sideTransportTestServer is an interface for test servers that can be
+// either gRPC or DRPC based.
+type sideTransportTestServer interface {
+	addr() net.Addr
+	mockReceiver() *mockReceiver
+	Close()
+}
+
+var _ sideTransportTestServer = &sideTransportGRPCServer{}
+var _ sideTransportTestServer = &sideTransportDRPCServer{}
+
+// mockDRPCReceiver wraps a mockReceiver to implement
+// DRPCSideTransportServer.
+type mockDRPCReceiver struct {
+	*mockReceiver
+}
+
+func (s *mockDRPCReceiver) PushUpdates(stream ctpb.DRPCSideTransport_PushUpdatesStream) error {
+	if s.called.CompareAndSwap(false, true) {
+		close(s.calledCh)
+	}
+	<-s.stop
+	return nil
+}
+
+// dropDRPCHeaderListener removes the DRPC header from incoming
+// connections. Similar to dropDRPCHeaderListener in
+// pkg/server/start_drpc_listener.go.
+type dropDRPCHeaderListener struct {
+	net.Listener
+}
+
+func (ln *dropDRPCHeaderListener) Accept() (net.Conn, error) {
+	conn, err := ln.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, len(drpcmigrate.DRPCHeader))
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// sideTransportDRPCServer wraps a mockReceiver in a DRPC server
+// listening on a network interface.
+type sideTransportDRPCServer struct {
+	lis net.Listener
+	srv *drpcserver.Server
+	rec *mockReceiver
+}
+
+func (s *sideTransportDRPCServer) Close() {
+	_ = s.lis.Close()
+}
+
+func (s *sideTransportDRPCServer) addr() net.Addr {
+	return s.lis.Addr()
+}
+
+func (s *sideTransportDRPCServer) mockReceiver() *mockReceiver {
+	return s.rec
+}
+
+func newMockSideTransportDRPCServer(
+	ctx context.Context, stopper *stop.Stopper,
+) (*sideTransportDRPCServer, error) {
+	receiver := newMockReceiver()
+	if err := stopper.RunAsyncTask(ctx, "stopper-watcher", func(ctx context.Context) {
+		<-stopper.ShouldQuiesce()
+		receiver.Close()
+	}); err != nil {
+		return nil, err
+	}
+	return newMockSideTransportDRPCServerWithOpts(ctx, stopper, receiver)
+}
+
+func newMockSideTransportDRPCServerWithOpts(
+	ctx context.Context, stopper *stop.Stopper, receiver *mockReceiver,
+) (*sideTransportDRPCServer, error) {
+	lis, err := net.Listen("tcp", "localhost:")
+	if err != nil {
+		return nil, err
+	}
+	success := false
+	defer func() {
+		if !success {
+			_ = lis.Close()
+		}
+	}()
+	drpcL := &dropDRPCHeaderListener{Listener: lis}
+	mux := drpcmux.New()
+	srv := drpcserver.New(mux)
+	drpcRec := &mockDRPCReceiver{receiver}
+	if err := ctpb.DRPCRegisterSideTransport(mux, drpcRec); err != nil {
+		return nil, err
+	}
+	if err := stopper.RunAsyncTask(ctx, "drpcServer", func(ctx context.Context) {
+		if err := srv.Serve(ctx, drpcL); err != nil {
+			log.Dev.Infof(ctx, "drpc server stopped: %v", err)
+		}
+	}); err != nil {
+		return nil, err
+	}
+	if err := stopper.RunAsyncTask(ctx, "drpc-quiesce-watcher", func(ctx context.Context) {
+		<-stopper.ShouldQuiesce()
+		_ = drpcL.Close()
+	}); err != nil {
+		return nil, err
+	}
+	success = true
+	return &sideTransportDRPCServer{
+		lis: lis,
+		srv: srv,
+		rec: receiver,
+	}, nil
+}
+
+// newDRPCServerForReceiver creates a DRPC server that delegates to the
+// given Receiver. It returns the listener address for dialing.
+func newDRPCServerForReceiver(
+	ctx context.Context, stopper *stop.Stopper, receiver *Receiver,
+) (net.Addr, error) {
+	lis, err := net.Listen("tcp", "localhost:")
+	if err != nil {
+		return nil, err
+	}
+	success := false
+	defer func() {
+		if !success {
+			_ = lis.Close()
+		}
+	}()
+	drpcL := &dropDRPCHeaderListener{Listener: lis}
+	mux := drpcmux.New()
+	drpcSrv := drpcserver.New(mux)
+	if err := ctpb.DRPCRegisterSideTransport(
+		mux, receiver.AsDRPCServer(),
+	); err != nil {
+		return nil, err
+	}
+	if err := stopper.RunAsyncTask(
+		ctx, "drpcServer", func(ctx context.Context) {
+			if err := drpcSrv.Serve(ctx, drpcL); err != nil {
+				log.Dev.Infof(ctx, "drpc server stopped: %v", err)
+			}
+		},
+	); err != nil {
+		return nil, err
+	}
+	if err := stopper.RunAsyncTask(ctx, "drpc-quiesce-watcher", func(ctx context.Context) {
+		<-stopper.ShouldQuiesce()
+		_ = drpcL.Close()
+	}); err != nil {
+		return nil, err
+	}
+	success = true
+	return lis.Addr(), nil
+}
+
 type mockDialer struct {
 	mu struct {
 		syncutil.Mutex
-		addrs map[roachpb.NodeID]string
-		conns []*grpc.ClientConn
+		addrs     map[roachpb.NodeID]string
+		conns     []*grpc.ClientConn
+		drpcConns []*drpcconn.Conn
 	}
 }
 
@@ -616,9 +783,11 @@ func newMockDialer(addrs ...nodeAddr) *mockDialer {
 	return d
 }
 
-func newMockSideTransportClientFactory(nd rpcbase.NodeDialer) sideTransportClientFactory {
+func newMockSideTransportClientFactory(
+	nd rpcbase.NodeDialer, useDRPC bool,
+) sideTransportClientFactory {
 	return func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
-		return ctpb.DialSideTransportClient(nd, ctx, nodeID, class, false) // TODO(server): enable DRPC
+		return ctpb.DialSideTransportClient(nd, ctx, nodeID, class, useDRPC)
 	}
 }
 
@@ -649,7 +818,21 @@ func (m *mockDialer) Dial(
 func (m *mockDialer) DRPCDial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ drpc.Conn, _ error) {
-	return nil, errors.New("DRPCDial unimplemented")
+	m.mu.Lock()
+	addr, ok := m.mu.addrs[nodeID]
+	m.mu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("node not configured in mockDialer: n%d", nodeID)
+	}
+	rawConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", addr, drpcmigrate.DRPCHeader)
+	if err != nil {
+		return nil, err
+	}
+	conn := drpcconn.New(rawConn)
+	m.mu.Lock()
+	m.mu.drpcConns = append(m.mu.drpcConns, conn)
+	m.mu.Unlock()
+	return conn, nil
 }
 
 func (m *mockDialer) Close() {
@@ -658,151 +841,185 @@ func (m *mockDialer) Close() {
 	for _, c := range m.mu.conns {
 		_ /* err */ = c.Close() // nolint:grpcconnclose
 	}
+	for _, c := range m.mu.drpcConns {
+		_ /* err */ = c.Close()
+	}
 }
 
 // Test that the stopper quiescence interrupts a stream.Send.
 func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	testutils.RunTrueAndFalse(t, "useDRPC", func(t *testing.T, useDRPC bool) {
+		ctx := context.Background()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	srv, err := newMockSideTransportGRPCServer(ctx, stopper)
-	require.NoError(t, err)
-	dialer := newMockDialer(nodeAddr{
-		nid:  2,
-		addr: srv.addr().String(),
-	})
-	defer dialer.Close()
-
-	ch := make(chan struct{})
-	s, stopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer),
-		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
-			// Try to send an update to ch, if anyone is still listening.
-			ch <- struct{}{}
-		}}))
-	defer stopper.Stop(ctx)
-
-	// Add leaseholders that can close, in order to establish a connection to n2.
-	// We add many of them, and we'll increment their LAIs periodically such that
-	// all messages need to explicitly mention all of them, in order to get large
-	// messages. This speeds up the test, since the large messages make the sender
-	// block quicker.
-	const numReplicas = 10000
-	replicas := make([]*mockReplica, numReplicas)
-	for i := 0; i < numReplicas; i++ {
-		replicas[i] = newMockReplica(roachpb.RangeID(i+1), ctpb.LAG_BY_CLUSTER_SETTING, 1, 2)
-		s.RegisterLeaseholder(ctx, replicas[i], 1 /* leaseSeq */)
-	}
-
-	incrementLAIs := func() {
-		for _, r := range replicas {
-			r.lai++
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		var srv sideTransportTestServer
+		var err error
+		if useDRPC {
+			srv, err = newMockSideTransportDRPCServer(ctx, stopper)
+		} else {
+			srv, err = newMockSideTransportGRPCServer(ctx, stopper)
 		}
-	}
+		require.NoError(t, err)
+		dialer := newMockDialer(nodeAddr{
+			nid:  2,
+			addr: srv.addr().String(),
+		})
+		defer dialer.Close()
 
-	s.publish(ctx)
-	require.Len(t, s.connsMu.conns, 1)
-	// Wait until at least one update has been delivered. This means the rpcConn
-	// task has been started.
-	<-srv.mockReceiver().calledCh
+		// Use a buffered channel so that the first beforeSend can
+		// complete without blocking. With DRPC, the server-side
+		// PushUpdates handler is invoked only after the first message is
+		// delivered (unlike gRPC where the stream is established
+		// eagerly), so beforeSend must not block before stream.Send().
+		ch := make(chan struct{}, 1)
+		s, stopper := newMockSender(newRPCConnFactory(
+			newMockSideTransportClientFactory(dialer, useDRPC),
+			connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
+				// Try to send an update to ch, if anyone is still listening.
+				ch <- struct{}{}
+			}}))
+		defer stopper.Stop(ctx)
 
-	// Now get the rpcConn to keep sending messages by calling s.publish()
-	// repeatedly. We'll detect when the rpcConn is blocked (because the Receiver
-	// is not reading any of the messages).
-	senderBlocked := make(chan struct{})
-	go func() {
-		// Publish enough messages to fill up the network buffers and cause the
-		// stream.Send() to block.
-		for {
-			select {
-			case <-ch:
-				// As soon as the conn send a message, publish another update to cause
-				// the conn to send another message.
-				incrementLAIs()
-				s.publish(ctx)
-			case <-time.After(100 * time.Millisecond):
-				// The conn hasn't sent anything in a while. It must be blocked on Send.
-				close(senderBlocked)
-				return
+		// Add leaseholders that can close, in order to establish a connection to
+		// n2. We add many of them, and we'll increment their LAIs periodically
+		// such that all messages need to explicitly mention all of them, in order
+		// to get large messages. This speeds up the test, since the large messages
+		// make the sender block quicker.
+		const numReplicas = 10000
+		replicas := make([]*mockReplica, numReplicas)
+		for i := 0; i < numReplicas; i++ {
+			replicas[i] = newMockReplica(roachpb.RangeID(i+1), ctpb.LAG_BY_CLUSTER_SETTING, 1, 2)
+			s.RegisterLeaseholder(ctx, replicas[i], 1 /* leaseSeq */)
+		}
+
+		incrementLAIs := func() {
+			for _, r := range replicas {
+				r.lai++
 			}
 		}
-	}()
 
-	// Wait for the sender to appear blocked.
-	<-senderBlocked
+		s.publish(ctx)
+		require.Len(t, s.connsMu.conns, 1)
+		// Wait until at least one update has been delivered. This means the
+		// rpcConn task has been started.
+		<-srv.mockReceiver().calledCh
 
-	// Stop the stopper. If this doesn't timeout, then the rpcConn's task must
-	// have been unblocked.
-	stopper.Stop(ctx)
+		// Now get the rpcConn to keep sending messages by calling s.publish()
+		// repeatedly. We'll detect when the rpcConn is blocked (because the
+		// Receiver is not reading any of the messages).
+		senderBlocked := make(chan struct{})
+		go func() {
+			// Publish enough messages to fill up the network buffers and cause
+			// the stream.Send() to block.
+			for {
+				select {
+				case <-ch:
+					// As soon as the conn send a message, publish another update
+					// to cause the conn to send another message.
+					incrementLAIs()
+					s.publish(ctx)
+				case <-time.After(100 * time.Millisecond):
+					// The conn hasn't sent anything in a while. It must be
+					// blocked on Send.
+					close(senderBlocked)
+					return
+				}
+			}
+		}()
+
+		// Wait for the sender to appear blocked.
+		<-senderBlocked
+
+		// Stop the stopper. If this doesn't timeout, then the rpcConn's task
+		// must have been unblocked.
+		stopper.Stop(ctx)
+	})
 }
 
-// Test a Sender and Receiver talking gRPC to each other.
+// Test a Sender and Receiver talking to each other.
 func TestSenderReceiverIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+	testutils.RunTrueAndFalse(t, "useDRPC", func(t *testing.T, useDRPC bool) {
+		ctx := context.Background()
 
-	// We're going to create Receivers, corresponding to 3 nodes. Node 1 will also
-	// be the Sender, so we won't expect a connection to it (the Sender doesn't
-	// connect to itself).
-	const numNodes = 3
-	receivers := make([]*Receiver, numNodes)
-	dialer := newMockDialer(nodeAddr{})
-	defer dialer.Close()
-	incomingStreamOnN2FromN1Terminated := make(chan error)
-	for i := 0; i < numNodes; i++ {
-		receiverStop := stop.NewStopper()
-		defer func(i int) {
-			receiverStop.Stop(ctx)
-		}(i)
-		nid := &base.NodeIDContainer{}
-		nid.Set(ctx, roachpb.NodeID(i+1))
-		stores := &mockStores{}
-		knobs := receiverTestingKnobs{
-			roachpb.NodeID(1): {
-				onFirstMsg: make(chan struct{}),
-				onMsg:      make(chan *ctpb.Update),
-			},
-		}
-		incomingFromN1Knobs := knobs[1]
-		switch nid.Get() {
-		case 1:
-			// n1 doesn't expect any streams, since the only active sender will be on
-			// n1 and it's not supposed to connect to the local receiver.
-			incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, _ error) {
-				t.Errorf("unexpected receive error on node n%s", nid)
+		// We're going to create Receivers, corresponding to 3 nodes. Node 1
+		// will also be the Sender, so we won't expect a connection to it (the
+		// Sender doesn't connect to itself).
+		const numNodes = 3
+		receivers := make([]*Receiver, numNodes)
+		dialer := newMockDialer(nodeAddr{})
+		defer dialer.Close()
+		incomingStreamOnN2FromN1Terminated := make(chan error)
+		for i := 0; i < numNodes; i++ {
+			receiverStop := stop.NewStopper()
+			defer func(i int) {
+				receiverStop.Stop(ctx)
+			}(i)
+			nid := &base.NodeIDContainer{}
+			nid.Set(ctx, roachpb.NodeID(i+1))
+			stores := &mockStores{}
+			knobs := receiverTestingKnobs{
+				roachpb.NodeID(1): {
+					onFirstMsg: make(chan struct{}),
+					onMsg:      make(chan *ctpb.Update),
+				},
 			}
-		case 2:
-			// n2 gets a special handler.
-			incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, err error) {
-				incomingStreamOnN2FromN1Terminated <- err
+			incomingFromN1Knobs := knobs[1]
+			switch nid.Get() {
+			case 1:
+				// n1 doesn't expect any streams, since the only active sender
+				// will be on n1 and it's not supposed to connect to the local
+				// receiver.
+				incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, _ error) {
+					t.Errorf("unexpected receive error on node n%s", nid)
+				}
+			case 2:
+				// n2 gets a special handler.
+				incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, err error) {
+					incomingStreamOnN2FromN1Terminated <- err
+				}
+			}
+			knobs[1] = incomingFromN1Knobs
+			receivers[i] = NewReceiver(nid, receiverStop, stores, knobs)
+			if useDRPC {
+				addr, err := newDRPCServerForReceiver(
+					ctx, receiverStop, receivers[i],
+				)
+				require.NoError(t, err)
+				dialer.addOrUpdateNode(nid.Get(), addr.String())
+			} else {
+				srv, err := newMockSideTransportGRPCServerWithOpts(
+					ctx, receiverStop, receivers[i],
+				)
+				require.NoError(t, err)
+				dialer.addOrUpdateNode(nid.Get(), srv.addr().String())
 			}
 		}
-		knobs[1] = incomingFromN1Knobs
-		receivers[i] = NewReceiver(nid, receiverStop, stores, knobs)
-		srv, err := newMockSideTransportGRPCServerWithOpts(ctx, receiverStop, receivers[i])
-		dialer.addOrUpdateNode(nid.Get(), srv.addr().String())
-		require.NoError(t, err)
-	}
 
-	s, senderStopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer), connTestingKnobs{}))
-	defer senderStopper.Stop(ctx)
-	s.Run(ctx, roachpb.NodeID(1))
+		s, senderStopper := newMockSender(newRPCConnFactory(
+			newMockSideTransportClientFactory(dialer, useDRPC), connTestingKnobs{},
+		))
+		defer senderStopper.Stop(ctx)
+		s.Run(ctx, roachpb.NodeID(1))
 
-	// Add a replica with replicas on n2 and n3.
-	r1 := newMockReplica(15, ctpb.LAG_BY_CLUSTER_SETTING, 1, 2, 3)
-	s.RegisterLeaseholder(ctx, r1, 1 /* leaseSeq */)
-	// Check that connections to n2,3 are established.
-	<-receivers[1].testingKnobs[1].onFirstMsg
-	<-receivers[2].testingKnobs[1].onFirstMsg
-	// Remove one of the replicas and check that the connection to the respective
-	// Receiver drops (since there's no other ranges with replicas on n2).
-	r1.removeReplica(roachpb.NodeID(2))
-	<-incomingStreamOnN2FromN1Terminated
-	// Check that the other Receiver is still receiving updates.
-	<-receivers[2].testingKnobs[1].onMsg
+		// Add a replica with replicas on n2 and n3.
+		r1 := newMockReplica(15, ctpb.LAG_BY_CLUSTER_SETTING, 1, 2, 3)
+		s.RegisterLeaseholder(ctx, r1, 1 /* leaseSeq */)
+		// Check that connections to n2,3 are established.
+		<-receivers[1].testingKnobs[1].onFirstMsg
+		<-receivers[2].testingKnobs[1].onFirstMsg
+		// Remove one of the replicas and check that the connection to the
+		// respective Receiver drops (since there's no other ranges with
+		// replicas on n2).
+		r1.removeReplica(roachpb.NodeID(2))
+		<-incomingStreamOnN2FromN1Terminated
+		// Check that the other Receiver is still receiving updates.
+		<-receivers[2].testingKnobs[1].onMsg
+	})
 }
 
 type failingDialer struct {
@@ -821,7 +1038,8 @@ func (f *failingDialer) Dial(
 func (f *failingDialer) DRPCDial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ drpc.Conn, err error) {
-	return nil, errors.New("DRPCDial unimplemented")
+	atomic.AddInt32(&f.dialCount, 1)
+	return nil, errors.New("failingDialer")
 }
 
 func (f *failingDialer) callCount() int32 {
@@ -833,40 +1051,41 @@ func (f *failingDialer) callCount() int32 {
 func TestRPCConnStopOnClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "useDRPC", func(t *testing.T, useDRPC bool) {
+		ctx := context.Background()
 
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+		sleepTime := time.Millisecond
 
-	sleepTime := time.Millisecond
+		dialer := &failingDialer{}
+		factory := newRPCConnFactory(
+			newMockSideTransportClientFactory(dialer, useDRPC),
+			connTestingKnobs{sleepOnErrOverride: sleepTime},
+		)
 
-	dialer := &failingDialer{}
-	factory := newRPCConnFactory(newMockSideTransportClientFactory(dialer),
-		connTestingKnobs{sleepOnErrOverride: sleepTime})
+		s, stopper := newMockSender(factory)
+		defer stopper.Stop(ctx)
 
-	s, stopper := newMockSender(factory)
-	defer stopper.Stop(ctx)
+		// While sender is strictly not needed to dial a connection as dialer
+		// always fails dial attempts, it is needed to check if DRPC is enabled
+		// or disabled.
+		connection := factory.new(s, roachpb.NodeID(1))
+		connection.run(ctx, stopper)
 
-	// While sender is strictly not needed to dial a connection as dialer
-	// always fails dial attempts, it is needed to check if DRPC is enabled
-	// or disabled.
-	connection := factory.new(s, roachpb.NodeID(1))
-	connection.run(ctx, stopper)
-
-	// Wait for first dial attempt for sanity reasons.
-	testutils.SucceedsSoon(t, func() error {
-		if dialer.callCount() == 0 {
-			return errors.New("connection didn't dial yet")
-		}
-		return nil
-	})
-	connection.close()
-	// Ensure that dialing stops once connection is stopped.
-	testutils.SucceedsSoon(t, func() error {
-		if stopper.NumTasks() > 0 {
-			return errors.New("connection worker didn't stop yet")
-		}
-		return nil
+		// Wait for first dial attempt for sanity reasons.
+		testutils.SucceedsSoon(t, func() error {
+			if dialer.callCount() == 0 {
+				return errors.New("connection didn't dial yet")
+			}
+			return nil
+		})
+		connection.close()
+		// Ensure that dialing stops once connection is stopped.
+		testutils.SucceedsSoon(t, func() error {
+			if stopper.NumTasks() > 0 {
+				return errors.New("connection worker didn't stop yet")
+			}
+			return nil
+		})
 	})
 }
 
