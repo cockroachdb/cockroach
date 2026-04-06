@@ -71,6 +71,27 @@ func (e *csvEncoder) EncodeValue(
 	return e.buf.Bytes(), nil
 }
 
+// EncodeCSVHeaderRow encodes a single CSV record of column names in the same
+// order as EncodeValue.
+func (e *csvEncoder) EncodeCSVHeaderRow(_ context.Context, row cdcevent.Row) ([]byte, error) {
+	if row.IsDeleted() {
+		return nil, errors.AssertionFailedf(`cannot encode CSV header for deleted rows`)
+	}
+	e.buf.Reset()
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+		e.formatter.Reset()
+		e.formatter.WriteString(col.Name)
+		return e.writer.WriteField(&e.formatter.Buffer)
+	}); err != nil {
+		return nil, err
+	}
+	if err := e.writer.FinishRecord(); err != nil {
+		return nil, err
+	}
+	e.writer.Flush()
+	return e.buf.Bytes(), nil
+}
+
 // EncodeResolvedTimestamp implements the Encoder interface.
 func (e *csvEncoder) EncodeResolvedTimestamp(
 	_ context.Context, _ string, resolved hlc.Timestamp,

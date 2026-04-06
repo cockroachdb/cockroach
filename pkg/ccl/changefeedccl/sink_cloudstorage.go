@@ -362,6 +362,10 @@ type cloudStorageSink struct {
 
 	// testingKnobs may be nil if no knobs are set.
 	testingKnobs *TestingKnobs
+
+	// csvHeaderRow, when true with .csv extension, writes csvColumnHeader bytes once at
+	// the start of each in-memory file buffer (before the first data row).
+	csvHeaderRow bool
 }
 
 type flushRequest struct {
@@ -477,6 +481,7 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.csv`
 		s.rowDelimiter = []byte{'\n'}
+		s.csvHeaderRow = encodingOpts.CsvHeader
 	case changefeedbase.OptFormatParquet:
 		s.ext = `.parquet`
 		s.rowDelimiter = nil
@@ -567,6 +572,7 @@ func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
@@ -598,6 +604,15 @@ func (s *cloudStorageSink) EmitRow(
 		return err
 	}
 	file.mergeAlloc(&alloc)
+
+	if s.csvHeaderRow && file.numMessages == 0 && len(csvColumnHeader) > 0 {
+		if _, err := file.Write(csvColumnHeader); err != nil {
+			return err
+		}
+		if _, err := file.Write(s.rowDelimiter); err != nil {
+			return err
+		}
+	}
 
 	if _, err := file.Write(value); err != nil {
 		return err

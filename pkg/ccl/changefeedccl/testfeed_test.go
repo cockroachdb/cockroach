@@ -1157,24 +1157,34 @@ func (f *cloudFeedFactory) Feed(
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	if createStmt.Select != nil {
+	formatSpecified := false
+	explicitEnvelope := false
+	specifiedFormat := ``
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			formatSpecified = true
+			if opt.Value != nil {
+				val, err := exprAsString(opt.Value)
+				if err == nil {
+					specifiedFormat = val
+				}
+			}
+		}
+		if string(opt.Key) == changefeedbase.OptEnvelope {
+			explicitEnvelope = true
+		}
+	}
+
+	formatSupportsKeyInValue :=
+		specifiedFormat != string(changefeedbase.OptFormatCSV) &&
+			specifiedFormat != string(changefeedbase.OptFormatParquet)
+	if createStmt.Select != nil && formatSupportsKeyInValue {
 		createStmt.Options = append(createStmt.Options,
 			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
 			// this option is not required.  However, we need it to make this
 			// test feed work -- so, set it.
 			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
-	}
-
-	formatSpecified := false
-	explicitEnvelope := false
-	for _, opt := range createStmt.Options {
-		if string(opt.Key) == changefeedbase.OptFormat {
-			formatSpecified = true
-		}
-		if string(opt.Key) == changefeedbase.OptEnvelope {
-			explicitEnvelope = true
-		}
 	}
 
 	if !formatSpecified {
@@ -2266,7 +2276,23 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 
 	// required value
 	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
-	if createStmt.Select != nil {
+
+	specifiedFormat := ``
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			if opt.Value != nil {
+				val, err := exprAsString(opt.Value)
+				if err == nil {
+					specifiedFormat = val
+				}
+			}
+		}
+	}
+
+	formatSupportsKeyInValue :=
+		specifiedFormat != string(changefeedbase.OptFormatCSV) &&
+			specifiedFormat != string(changefeedbase.OptFormatParquet)
+	if createStmt.Select != nil && formatSupportsKeyInValue {
 		// Normally, webhook requires key_in_value; but if we use bare envelope,
 		// this option is not required.  However, we need it to make this
 		// test feed work -- so, set it.

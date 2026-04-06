@@ -117,6 +117,7 @@ const (
 	OptMinCheckpointFrequency             = `min_checkpoint_frequency`
 	OptUpdatedTimestamps                  = `updated`
 	OptMVCCTimestamps                     = `mvcc_timestamp`
+	OptCsvHeader                          = `csv_header`
 	OptDiff                               = `diff`
 	OptCompression                        = `compression`
 	OptSchemaChangeEvents                 = `schema_change_events`
@@ -439,6 +440,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
 	OptPartitionAlg:                       enum("fnv-1a", "murmur2"),
+	OptCsvHeader:                          flagOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -463,10 +465,10 @@ var SQLValidOptions map[string]struct{} = nil
 var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
-var CloudStorageValidOptions = makeStringSet(OptCompression)
+var CloudStorageValidOptions = makeStringSet(OptCompression, OptCsvHeader)
 
 // WebhookValidOptions is options exclusive to webhook sink
-var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders)
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders, OptCsvHeader)
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
@@ -913,6 +915,7 @@ type EncodingOptions struct {
 	CustomKeyColumn             string
 	EnrichedProperties          map[EnrichedProperty]struct{}
 	HeadersJSONColName          string
+	CsvHeader                   bool
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -955,6 +958,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	_, o.MVCCTimestamps = s.m[OptMVCCTimestamps]
 	_, o.Diff = s.m[OptDiff]
 	_, o.EncodeJSONValueNullAsObject = s.m[OptEncodeJSONValueNullAsObject]
+	_, o.CsvHeader = s.m[OptCsvHeader]
 
 	o.SchemaRegistryURI = s.m[OptConfluentSchemaRegistry]
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
@@ -1001,6 +1005,10 @@ func (e EncodingOptions) Validate() error {
 
 	if e.HeadersJSONColName != `` && (e.Format != OptFormatJSON && e.Format != OptFormatAvro) {
 		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
+	}
+
+	if e.CsvHeader && e.Format != OptFormatCSV {
+		return errors.Errorf(`%s is only usable with %s=%s`, OptCsvHeader, OptFormat, OptFormatCSV)
 	}
 
 	// TODO(#140110): refactor this logic.

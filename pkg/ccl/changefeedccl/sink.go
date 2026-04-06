@@ -110,6 +110,7 @@ type EventSink interface {
 		ctx context.Context,
 		topic TopicDescriptor,
 		key, value []byte,
+		csvColumnHeader []byte,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 		headers rowHeaders,
@@ -388,11 +389,12 @@ func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, csvColumnHeader, updated, mvcc, alloc, headers); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -480,6 +482,7 @@ func (s *bufferSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 	_headers rowHeaders,
@@ -592,6 +595,7 @@ func (n *nullSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 	_headers rowHeaders,
@@ -671,13 +675,14 @@ func (s *safeSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers)
+	return s.wrapped.EmitRow(ctx, topic, key, value, csvColumnHeader, updated, mvcc, alloc, headers)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {
