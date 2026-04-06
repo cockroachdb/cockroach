@@ -5,23 +5,29 @@
 
 import { createStore } from "redux";
 
+import { actions as localStorageActions } from "./localStorage";
 import { rootReducer } from "./reducers";
 import { rootActions } from "./rootActions";
-import { actions as sqlStatsActions } from "./sqlStats";
 
 describe("rootReducer", () => {
   it("resets redux state on RESET_STATE action", () => {
     const store = createStore(rootReducer);
     const initState = store.getState();
-    const error = new Error("oops!");
-    store.dispatch(sqlStatsActions.failed(error));
+    store.dispatch(
+      localStorageActions.updateTimeScale({
+        value: {
+          windowSize: null,
+          sampleSize: null,
+          fixedWindowEnd: null,
+          key: "Past 1 Hour",
+        },
+      }),
+    );
     const changedState = store.getState();
     store.dispatch(rootActions.resetState());
     const resetState = store.getState();
 
     expect(initState).toEqual(resetState);
-    expect(resetState.statements.error).not.toEqual(
-      changedState.statements.error,
-    );
+    expect(resetState.localStorage).not.toEqual(changedState.localStorage);
   });
 });

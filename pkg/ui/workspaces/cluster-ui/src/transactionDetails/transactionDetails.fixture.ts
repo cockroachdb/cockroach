@@ -8,7 +8,7 @@ import { createMemoryHistory } from "history";
 import Long from "long";
 import moment from "moment-timezone";
 
-import { StatementsResponse } from "src/store/sqlStats/sqlStats.reducer";
+type StatementsResponse = protos.cockroach.server.serverpb.StatementsResponse;
 
 import { TimeScale } from "../timeScaleDropdown";
 import { RequestError } from "../util";

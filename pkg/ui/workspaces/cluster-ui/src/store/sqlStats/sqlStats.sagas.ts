@@ -4,37 +4,14 @@
 // included in the /LICENSE file.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
+import { all, put, takeLatest } from "redux-saga/effects";
 
-import { resetSQLStats } from "src/api/sqlStatsApi";
-import {
-  getCombinedStatements,
-  StatementsRequest,
-} from "src/api/statementsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
-
-import { maybeError } from "../../util";
 
 import {
   actions as sqlStatsActions,
-  StatementsResponse,
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
-
-export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
-  yield put(sqlStatsActions.request(action.payload));
-}
-
-export function* requestSQLStatsSaga(
-  action: PayloadAction<StatementsRequest>,
-): Generator {
-  try {
-    const result = yield call(getCombinedStatements, action.payload);
-    yield put(sqlStatsActions.received(result as StatementsResponse));
-  } catch (e) {
-    yield put(sqlStatsActions.failed(maybeError(e)));
-  }
-}
 
 export function* updateSQLStatsTimeScaleSaga(
   action: PayloadAction<UpdateTimeScalePayload>,
@@ -47,20 +24,8 @@ export function* updateSQLStatsTimeScaleSaga(
   );
 }
 
-export function* resetSQLStatsSaga() {
-  try {
-    yield call(resetSQLStats);
-    yield all([put(sqlStatsActions.invalidated())]);
-  } catch (e) {
-    yield put(sqlStatsActions.failed(maybeError(e)));
-  }
-}
-
 export function* sqlStatsSaga() {
   yield all([
-    takeLatest(sqlStatsActions.refresh, refreshSQLStatsSaga),
-    takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
     takeLatest(sqlStatsActions.updateTimeScale, updateSQLStatsTimeScaleSaga),
-    takeEvery(sqlStatsActions.reset, resetSQLStatsSaga),
   ]);
 }
