@@ -348,6 +348,13 @@ var tests = []importTestSpec{
 		datasetNames: FromFunc(anyDataset),
 		importRunner: importPauseRunner,
 	},
+	// Test importing a table in two separate IMPORT jobs (split files).
+	{
+		subtestName:  "split",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: splitImportRunner,
+	},
 }
 
 // importTestTimeout is the timeout for import roachtests. This is
@@ -871,6 +878,42 @@ func importPauseRunner(
 	}
 
 	t.WorkerStatus(fmt.Sprintf("job %d completed successfully after %d pause/resume cycles", jobID, numPauses))
+	return nil
+}
+
+// splitImportRunner imports a table's data in two separate IMPORT jobs,
+// splitting the data files into two halves. This verifies that successive
+// imports into the same table produce a correct, complete dataset.
+func splitImportRunner(
+	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset,
+) error {
+	conn := c.Conn(ctx, l, 1)
+	defer conn.Close()
+
+	urls := ds.getDataURLs()
+	var first, second []string
+	for i, url := range urls {
+		if i%2 == 0 {
+			first = append(first, url)
+		} else {
+			second = append(second, url)
+		}
+	}
+
+	t.WorkerStatus(fmt.Sprintf("importing first half (%d files) of %s",
+		len(first), ds.getTableName()))
+	importStmt := formatImportStmt(ds.getTableName(), first, false)
+	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
+		return errors.Wrap(err, "first import")
+	}
+
+	t.WorkerStatus(fmt.Sprintf("importing second half (%d files) of %s",
+		len(second), ds.getTableName()))
+	importStmt = formatImportStmt(ds.getTableName(), second, false)
+	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
+		return errors.Wrap(err, "second import")
+	}
+
 	return nil
 }
 
