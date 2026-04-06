@@ -35,6 +35,7 @@ func registerAdmission(r registry.Registry) {
 	registerTPCCSevereOverload(r)
 	registerIndexOverload(r)
 	registerIndexBackfill(r)
+	registerSingleNodeIndexBackfill(r)
 	registerDatabaseDrop(r)
 	registerIntentResolutionOverload(r)
 	registerElasticIO(r)
