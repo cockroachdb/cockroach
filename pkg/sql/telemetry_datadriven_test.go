@@ -209,13 +209,13 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 
 				newStmtLogCount := stmtSpy.Count()
-				sb.WriteString(strings.Join(stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), newStmtLogCount-stmtLogCount), "\n"))
+				sb.WriteString(strings.Join(stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(), newStmtLogCount-stmtLogCount), "\n"))
 				if newStmtLogCount > stmtLogCount {
 					sb.WriteString("\n")
 				}
 
 				newTxnLogCount := txnsSpy.Count()
-				sb.WriteString(strings.Join(txnsSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), newTxnLogCount-txnLogCount), "\n"))
+				sb.WriteString(strings.Join(txnsSpy.GetLastNLogs(getSampleQueryLoggingChannel(), newTxnLogCount-txnLogCount), "\n"))
 				return sb.String()
 			case "reset-last-sampled":
 				telemetryLogging.resetLastSampledTime()
