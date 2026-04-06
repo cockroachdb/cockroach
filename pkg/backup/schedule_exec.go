@@ -145,7 +145,8 @@ func (e *scheduledBackupExecutor) executeBackup(
 		return nil
 	}
 
-	log.Dev.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
+	log.Dev.Infof(ctx, "starting scheduled backup %d (%s)",
+		sj.ScheduleID(), sj.ScheduleLabel())
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
@@ -218,15 +219,16 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 ) error {
 	if jobState == jobs.StateSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
-		log.Dev.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
+		log.Dev.Infof(ctx, "backup job %d scheduled by %d (%s) succeeded",
+			jobID, schedule.ScheduleID(), schedule.ScheduleLabel())
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
 	}
 
 	e.metrics.NumFailed.Inc(1)
 	err := errors.Errorf(
-		"backup job %d scheduled by %d failed with state %s",
-		jobID, schedule.ScheduleID(), jobState)
-	log.Dev.Errorf(ctx, "backup error: %v	", err)
+		"backup job %d scheduled by %d (%s) failed with state %s",
+		jobID, schedule.ScheduleID(), schedule.ScheduleLabel(), jobState)
+	log.Dev.Errorf(ctx, "backup error: %v", err)
 	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
 	return nil
 }
@@ -466,7 +468,7 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 		}, nil
 	}
 
-	return nil, errors.Newf("unexpect node type %T", node)
+	return nil, errors.Newf("unexpected node type %T", node)
 }
 
 var _ jobs.ScheduledJobController = &scheduledBackupExecutor{}
