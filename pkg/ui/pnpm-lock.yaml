@@ -63,18 +63,6 @@ importers:
       '@popperjs/core':
         specifier: ^2.4.0
         version: 2.4.0
-      '@redux-saga/core':
-        specifier: 1.1.3
-        version: 1.1.3
-      '@redux-saga/is':
-        specifier: 1.1.2
-        version: 1.1.2
-      '@redux-saga/symbols':
-        specifier: 1.1.2
-        version: 1.1.2
-      '@redux-saga/types':
-        specifier: 1.1.0
-        version: 1.1.0
       '@reduxjs/toolkit':
         specifier: ^1.5.0
         version: 1.6.0(react-redux@7.2.4(react-dom@16.12.0(react@16.12.0))(react@16.12.0))(react@16.12.0)
@@ -180,9 +168,6 @@ importers:
       redux:
         specifier: 4.1.0
         version: 4.1.0
-      redux-saga:
-        specifier: '>=1.1.3'
-        version: 1.1.3
       reselect:
         specifier: ^4.0.0
         version: 4.0.0
@@ -316,9 +301,6 @@ importers:
       '@types/react-select':
         specifier: ^4.0.14
         version: 4.0.14
-      '@types/redux-saga':
-        specifier: 0.10.5
-        version: 0.10.5
       '@types/reselect':
         specifier: ^2.2.0
         version: 2.2.0
@@ -427,9 +409,6 @@ importers:
       react-test-renderer:
         specifier: ^16.13.1
         version: 16.13.1(react@16.12.0)
-      redux-saga-test-plan:
-        specifier: 4.0.0-beta.2
-        version: 4.0.0-beta.2(@redux-saga/is@1.1.2)(@redux-saga/symbols@1.1.2)(redux-saga@1.1.3)
       sass:
         specifier: ^1.34.0
         version: 1.34.0
@@ -3510,10 +3489,6 @@ packages:
 
   '@types/recharts@1.8.24':
     resolution: {integrity: sha512-PGugStujgxjMOUUJuGIrw71MIhTtl/FeNzuWZVDTS7Kq8NdiQfMrlC6GXJIvlQcrsUIn9IcXbi6sZJjK+6kfLQ==}
-
-  '@types/redux-saga@0.10.5':
-    resolution: {integrity: sha512-sqan7rs+PylBB5u2reL1hm+f0pDsZY1D1/o1vtgjrS4ErjxthK59zKCQyZhSLRcQDiOh3Pwp4fNQyn4A0CTdGA==}
-    deprecated: This is a stub types definition for redux-saga (https://github.com/redux-saga/redux-saga). redux-saga provides its own type definitions, so you don't need @types/redux-saga installed!
 
   '@types/redux-thunk@2.1.0':
     resolution: {integrity: sha512-8M+kcrnZQYO3A40d8a1lieBFur/ab8EXHqa2dGMQqsmBaVCbNp3gd8ed/HuSjLoLA63ov/trXaXWlkiKVF4VUw==}
@@ -16745,10 +16720,6 @@ snapshots:
     dependencies:
       '@types/d3-shape': 1.3.8
       '@types/react': 16.14.8
-
-  '@types/redux-saga@0.10.5':
-    dependencies:
-      redux-saga: 1.1.3
 
   '@types/redux-thunk@2.1.0(redux@4.1.0)':
     dependencies:

@@ -9,7 +9,6 @@ import { Dispatch } from "redux";
 
 import { SqlStatsSortType } from "src/api/statementsApi";
 import { AppState } from "src/store";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
 
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
@@ -74,8 +73,8 @@ export const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         onTimeScaleChange: (ts: TimeScale) => {
           dispatch(
-            sqlStatsActions.updateTimeScale({
-              ts: ts,
+            localStorageActions.updateTimeScale({
+              value: ts,
             }),
           );
         },
