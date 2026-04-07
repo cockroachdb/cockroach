@@ -211,6 +211,19 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 	return rl.statsLockedWithNow(timeutil.Unix(0, rl.clock.PhysicalNow()))
 }
 
+// StatsWithLocalityInfo returns load stats and the Queries dimension's
+// locality info in a single locked operation. This avoids the overhead of
+// acquiring the mutex twice and computing the current time repeatedly,
+// which matters when called per-replica during Store.Capacity scans
+// (30k+ replicas).
+func (rl *ReplicaLoad) StatsWithLocalityInfo() (ReplicaLoadStats, replicastats.RatedSummary) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
+
+	return rl.statsLockedWithNow(now), rl.mu.stats[Queries].SnapshotRatedSummary(now)
+}
+
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
 func (rl *ReplicaLoad) RequestLocalityInfo() replicastats.RatedSummary {

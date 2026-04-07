@@ -2843,8 +2843,7 @@ func (r *Replica) MeasureRaftCPUNanos(start time.Duration) {
 // usage information matches. Which is dubious in some cases but often
 // reasonable when we only consider the leaseholder.
 func (r *Replica) RangeUsageInfo() allocator.RangeUsageInfo {
-	loadStats := r.LoadStats()
-	localityInfo := r.loadStats.RequestLocalityInfo()
+	loadStats, localityInfo := r.loadStats.StatsWithLocalityInfo()
 	return allocator.RangeUsageInfo{
 		LogicalBytes:             r.GetMVCCStats().Total(),
 		QueriesPerSecond:         loadStats.QueriesPerSecond,
