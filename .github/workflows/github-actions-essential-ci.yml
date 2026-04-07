@@ -135,15 +135,14 @@ jobs:
   label_validation:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: startsWith(github.base_ref, 'release-')
     steps:
-      - name: Check for do-not-merge label on release branches
+      - name: Check for do-not-merge label
         run: |
           if [[ "${{ contains(github.event.pull_request.labels.*.name, 'do-not-merge') }}" == "true" ]]; then
-            echo "Error: PR has 'do-not-merge' label and cannot be merged to release branch"
+            echo "Error: PR has 'do-not-merge' label and cannot be merged"
             exit 1
           else
-            echo "Label validation passed for release branch"
+            echo "Label validation passed"
           fi
   lint:
     runs-on: [self-hosted, ubuntu_huge_2404]
