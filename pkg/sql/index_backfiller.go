@@ -428,6 +428,11 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		return nil
 	}
 
+	if metrics := ib.execCfg.DistSQLSrv.BulkMergeMetrics; metrics != nil {
+		metrics.IndexBackfillCount.Inc(1)
+		metrics.MapPhaseSSTs.RecordValue(int64(len(manifests)))
+	}
+
 	// Convert manifests to SSTFiles format for CombineFileInfo. We create a
 	// single SSTFiles entry containing all manifest data.
 	sstFileInfos := make([]*bulksst.SSTFileInfo, 0, len(manifests))
@@ -582,6 +587,12 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 
 		if len(merged) == 0 {
 			return errors.AssertionFailedf("expected merged sst output: iteration %d", iteration)
+		}
+
+		if iteration == 1 {
+			if metrics := ib.execCfg.DistSQLSrv.BulkMergeMetrics; metrics != nil {
+				metrics.FirstIterationOutputSSTs.RecordValue(int64(len(merged)))
+			}
 		}
 
 		// Convert merged SSTs to manifests for checkpointing. On resume, these

@@ -8580,6 +8580,53 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/sql-queries
+    - name: sql.dist_merge.first_iter.output_sst_count
+      exported_name: sql_dist_merge_first_iter_output_sst_count
+      description: Number of SSTs produced by the first (local) merge iteration
+      y_axis_label: SSTs
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/sql-queries
+    - name: sql.dist_merge.import.count
+      exported_name: sql_dist_merge_import_count
+      labeled_name: 'sql.dist_merge.count{type: import}'
+      description: Number of distributed merge operations for import
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.dist_merge.index.count
+      exported_name: sql_dist_merge_index_count
+      labeled_name: 'sql.dist_merge.count{type: index}'
+      description: Number of distributed merge operations for index backfill
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/sql-queries
+    - name: sql.dist_merge.map_phase.sst_count
+      exported_name: sql_dist_merge_map_phase_sst_count
+      description: Number of SSTs from the map phase input to the first merge iteration
+      y_axis_label: SSTs
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/sql-queries
+    - name: sql.dist_merge.rpc_memory_reserved.bytes
+      exported_name: sql_dist_merge_rpc_memory_reserved_bytes
+      description: Memory reserved for RPC transport buffers in the final merge iteration
+      y_axis_label: Memory
+      type: HISTOGRAM
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/sql-queries
     - name: sql.distsql.cumulative_contention_nanos
       exported_name: sql_distsql_cumulative_contention_nanos
       description: Cumulative contention across all queries (in nanoseconds)
