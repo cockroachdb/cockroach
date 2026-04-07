@@ -456,6 +456,29 @@ func runStartInternal(
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
 
+	// When running under roachtest, write a fatal exit marker file so that
+	// roachtest can detect exactly why the process exited without grepping
+	// logs. This allows roachtest to preserve clusters that hit hard-to-
+	// reproduce failures (e.g. storage corruption, replica inconsistency)
+	// for further investigation. Gated on an env var set by roachtest to
+	// avoid writing unredacted fatal messages to disk on production clusters.
+	if envutil.EnvOrDefaultBool("COCKROACH_INTERNAL_WRITE_FATAL_EXIT_MARKER", false) {
+		log.SetFatalHook(func(format string, args ...interface{}) {
+			msg := fmt.Sprintf(format, args...)
+			for _, ss := range serverCfg.Stores.Specs {
+				if ss.InMemory {
+					continue
+				}
+				auxDir := filepath.Join(ss.Path, base.AuxiliaryDir)
+				_ = os.MkdirAll(auxDir, 0755)
+				_ = os.WriteFile(
+					filepath.Join(auxDir, "_FATAL_EXIT.txt"),
+					[]byte(msg), 0644,
+				)
+			}
+		})
+	}
+
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
 	ambientCtx := serverCfg.AmbientCtx

@@ -2030,18 +2030,79 @@ func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error)
 	return strings.Join(lines, "\n"), err
 }
 
-// maybeSaveClusterDueToInvariantProblems detects rare conditions (such as
-// storage durability crashes) on the cluster and if one is detected,
-// unconditionally preserves the cluster for future debugging. It also creates
-// volume snapshots so that the durable state close to the incident is
-// preserved.
+// fatalExitSkipPatterns lists fatal messages where cluster preservation
+// is not useful (e.g. disk stalls where the on-disk state is not
+// informative). Everything not in this list triggers preservation.
+var fatalExitSkipPatterns = []string{
+	"disk stall detected",
+}
+
+// maybeSaveClusterDueToInvariantProblems checks for fatal exit marker
+// files written by CockroachDB's fatal hook (see
+// log.SetFatalHook in pkg/cli/start.go). If a marker file is found
+// and its message is not in the skip list, the cluster is preserved
+// with volume snapshots for future debugging.
+//
+// It also checks the legacy log-grep detection for raft log corruption
+// to maintain backward compatibility with older binaries that do not
+// write marker files.
 func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	ctx context.Context, t *testImpl, c *clusterImpl,
 ) {
 	if len(c.All()) == 0 {
 		return // test only
 	}
+
+	// Check for fatal exit marker files on all nodes.
 	dets, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
+		"cat /mnt/data*/cockroach/auxiliary/_FATAL_EXIT.txt 2>/dev/null || true",
+	)
+	for _, det := range dets {
+		err = errors.CombineErrors(err, det.Err)
+	}
+	if err != nil {
+		t.L().Printf(
+			"failed to check for fatal exit markers: %s", err,
+		)
+		// Fall through to legacy detection below.
+	} else {
+		for _, det := range dets {
+			if det.Stdout == "" {
+				continue
+			}
+			msg := strings.TrimSpace(det.Stdout)
+
+			// Check if this fatal is in the skip list.
+			skip := false
+			for _, pattern := range fatalExitSkipPatterns {
+				if strings.Contains(msg, pattern) {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				t.L().Printf(
+					"fatal exit detected but skipping preservation: %s", msg,
+				)
+				continue
+			}
+
+			_ = c.Extend(ctx, 7*24*time.Hour, t.L())
+			timestamp := timeutil.Now().UnixMilli()
+			snapName := fmt.Sprintf("fatal-exit-%d", timestamp)
+			if _, err := c.CreateSnapshot(ctx, snapName); err != nil {
+				t.L().Printf("failed to create snapshot %q: %s", snapName, err)
+				snapName = "<failed>"
+			}
+			c.Save(ctx, "fatal exit - snap name "+snapName, t.L())
+			t.Error("fatal exit detected - snap name " + snapName + ":\n" + msg)
+			return
+		}
+	}
+
+	// Legacy detection: grep logs for raft log corruption. This covers
+	// older binaries that do not write _FATAL_EXIT.txt marker files.
+	dets, err = c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
 		"([ -d logs ] && grep -RE '^F.*Was the raft log corrupted' logs) || true",
 	)
 	for _, det := range dets {
@@ -2049,19 +2110,14 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	}
 	if err != nil {
 		t.L().Printf(
-			"failed to check whether to save cluster due to invariant problems: %s",
-			err,
+			"failed to check logs for invariant problems: %s", err,
 		)
 		return
 	}
-
 	for _, det := range dets {
 		if det.Stdout != "" {
 			_ = c.Extend(ctx, 7*24*time.Hour, t.L())
 			timestamp := timeutil.Now().UnixMilli()
-			// We take the risk that two tests could attempt to create a snapshot
-			// at the same exact millisecond, as we have a 63 character limit on
-			// the name and the cluster name usually exceeds this by itself.
 			snapName := fmt.Sprintf("invariant-problem-%d", timestamp)
 			if _, err := c.CreateSnapshot(ctx, snapName); err != nil {
 				t.L().Printf("failed to create snapshot %q: %s", snapName, err)

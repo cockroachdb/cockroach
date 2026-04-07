@@ -41,6 +41,34 @@ func SetMakeProcessUnavailableFunc(fn func()) {
 	makeProcessUnavailableFunc.Unlock()
 }
 
+var fatalHook struct {
+	syncutil.Mutex
+	fn func(format string, args ...interface{})
+}
+
+// SetFatalHook registers a function that is called with the fatal log
+// message before the process exits. The hook receives the raw format
+// string and args (same as passed to Fatalf). The hook must return
+// quickly — it runs in a dying process with an exit timeout.
+//
+// This is used by the server to write a marker file capturing the
+// fatal message for post-mortem analysis (e.g. by roachtest).
+func SetFatalHook(fn func(format string, args ...interface{})) {
+	fatalHook.Lock()
+	fatalHook.fn = fn
+	fatalHook.Unlock()
+}
+
+// invokeFatalHook calls the registered fatal hook, if any.
+func invokeFatalHook(format string, args ...interface{}) {
+	fatalHook.Lock()
+	fn := fatalHook.fn
+	fatalHook.Unlock()
+	if fn != nil {
+		fn(format, args...)
+	}
+}
+
 // SetExitFunc allows setting a function that will be called to exit
 // the process when a Fatal message is generated. The supplied bool,
 // if true, suppresses the stack trace, which is useful for test

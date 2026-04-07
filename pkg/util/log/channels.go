@@ -75,6 +75,7 @@ func logfDepthInternal(
 			err := errors.NewWithDepthf(depth+1, "log.Dev.Fatal: "+format, args...)
 			MaybeSendCrashReport(ctx, err)
 		}
+		invokeFatalHook(format, args...)
 		if ch != channel.OPS {
 			// Tell the OPS channel about this termination.
 			logfDepth(ctx, depth+1, severity.INFO, channel.OPS,
