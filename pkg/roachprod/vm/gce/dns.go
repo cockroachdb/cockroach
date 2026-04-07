@@ -246,7 +246,14 @@ func (n *dnsProvider) deleteRecords(
 			// have been partially deleted.
 			n.clearCacheEntry(name)
 			if err != nil {
-				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
+				outStr := string(out)
+				// Be idempotent: gcloud returns a non-zero exit code when the
+				// record does not exist, with an error message like:
+				//   The 'parameters.name' resource named 'xxxx-0001.roachprod.crdb.io.' does not exist.
+				if strings.Contains(outStr, "does not exist") {
+					return nil
+				}
+				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", outStr), dnsProblemLabel)
 			}
 			return nil
 		})
