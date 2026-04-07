@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -47,15 +46,15 @@ var (
 	}
 )
 
-func handleSchemaChangeWorkloadError(err error) error {
-	// If the UNEXPECTED ERROR detail appears, the workload likely flaked.
-	// Otherwise, the workload could have failed due to other reasons like a node
-	// crash.
+func handleSchemaChangeWorkloadError(ctx context.Context, err error) error {
+	// If the parent context is canceled, the schema change workload did not cause the test to fail.
 	if err != nil {
-		flattenedErr := errors.FlattenDetails(err)
-		if strings.Contains(flattenedErr, "workload run error: ***") || strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
-			return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
+		if ctx.Err() != nil {
+			// Context was cancelled - return unwrapped error.
+			return err
 		}
+		// Context was not cancelled - genuine workload failure.
+		return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
 	}
 	return err
 }
@@ -492,7 +491,7 @@ func initBackgroundWorkloads(
 		initGroup.Go(func(ctx context.Context, l *logger.Logger) (err error) {
 			defer func() {
 				if err != nil {
-					err = handleSchemaChangeWorkloadError(err)
+					err = handleSchemaChangeWorkloadError(ctx, err)
 				}
 			}()
 			if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
@@ -524,7 +523,7 @@ func initBackgroundWorkloads(
 		}
 		if !excluded["schemachange"] {
 			runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-				return handleSchemaChangeWorkloadError(
+				return handleSchemaChangeWorkloadError(ctx,
 					c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()),
 				)
 			}, task.Name("run-schemachange"))
