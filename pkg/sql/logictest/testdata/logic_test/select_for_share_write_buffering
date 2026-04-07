@@ -64,6 +64,11 @@ SET kv_transaction_buffered_writes_enabled = true;
 statement async writeReq count 1
 UPDATE t SET a = 2 WHERE a = 1
 
+# Since we executed the stmt above asynchronously, we're likely to get a new
+# connection here, so we must set the session variable on it too.
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
 onlyif config local-read-committed
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
