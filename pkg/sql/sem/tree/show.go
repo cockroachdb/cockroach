@@ -187,6 +187,7 @@ type ShowBackupOptions struct {
 	CheckConnectionConcurrency  Expr
 
 	RevisionStartTime bool
+	Debug             bool
 }
 
 var _ NodeFormatter = &ShowBackupOptions{}
@@ -254,10 +255,14 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.CheckConnectionDuration)
 	}
 
-	// The following is only used in SHOW BACKUPS.
+	// The following are only used in SHOW BACKUPS.
 	if o.RevisionStartTime {
 		maybeAddSep()
 		ctx.WriteString("REVISION START TIME")
+	}
+	if o.Debug {
+		maybeAddSep()
+		ctx.WriteString("DEBUG")
 	}
 }
 
@@ -273,7 +278,8 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
 		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
-		o.RevisionStartTime == options.RevisionStartTime
+		o.RevisionStartTime == options.RevisionStartTime &&
+		o.Debug == options.Debug
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -359,6 +365,11 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	o.RevisionStartTime, err = combineBools(
 		o.RevisionStartTime, other.RevisionStartTime, "revision start time",
 	)
+	if err != nil {
+		return err
+	}
+
+	o.Debug, err = combineBools(o.Debug, other.Debug, "debug")
 	if err != nil {
 		return err
 	}

@@ -1381,6 +1381,9 @@ func showBackupsInCollectionTypeCheck(
 	}
 
 	if p.SessionData().UseBackupsWithIDs {
+		if backup.Options.Debug {
+			return true, showBackupsWithIDsDebugHeader, nil
+		}
 		return true, showBackupsWithIDsHeader, nil
 	}
 	return true, showBackupsInCollectionHeader, nil
@@ -1394,6 +1397,14 @@ var showBackupsWithIDsHeader = colinfo.ResultColumns{
 	{Name: "id", Typ: types.String},
 	{Name: "backup_time", Typ: types.TimestampTZ},
 	{Name: "revision_start_time", Typ: types.TimestampTZ},
+}
+
+var showBackupsWithIDsDebugHeader = colinfo.ResultColumns{
+	{Name: "id", Typ: types.String},
+	{Name: "backup_time", Typ: types.TimestampTZ},
+	{Name: "revision_start_time", Typ: types.TimestampTZ},
+	{Name: "full_subdir", Typ: types.String},
+	{Name: "start_time", Typ: types.TimestampTZ},
 }
 
 // getTimeRangeOrDefaults parses the NEWER THAN and OLDER THAN expressions from
@@ -1453,6 +1464,7 @@ func showBackupsInCollectionPlanHook(
 	}
 
 	useIDs := p.SessionData().UseBackupsWithIDs
+	debug := showStmt.Options.Debug
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
@@ -1468,8 +1480,9 @@ func showBackupsInCollectionPlanHook(
 			if err != nil {
 				return err
 			}
+			openIndex := showStmt.Options.RevisionStartTime || debug
 			res, exceededMax, err := backupinfo.ListRestorableBackups(
-				ctx, store, newerThan, olderThan, maxCount, showStmt.Options.RevisionStartTime,
+				ctx, store, newerThan, olderThan, maxCount, openIndex,
 			)
 			if err != nil {
 				return err
@@ -1500,10 +1513,25 @@ func showBackupsInCollectionPlanHook(
 						return err
 					}
 				}
+				row := tree.Datums{tree.NewDString(i.ID), backupTime, revStartTime}
+				if debug {
+					sv := p.ExecCfg().SV()
+					row = append(row, tree.NewDString(i.FullSubdir))
+					startTime := tree.DNull
+					if st := i.StartTime(ctx, sv); !st.IsEmpty() {
+						startTime, err = tree.MakeDTimestampTZ(
+							timeutil.Unix(0, st.WallTime), time.Nanosecond,
+						)
+						if err != nil {
+							return err
+						}
+					}
+					row = append(row, startTime)
+				}
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case resultsCh <- tree.Datums{tree.NewDString(i.ID), backupTime, revStartTime}:
+				case resultsCh <- row:
 				}
 			}
 		} else {
@@ -1525,6 +1553,9 @@ func showBackupsInCollectionPlanHook(
 	header := showBackupsInCollectionHeader
 	if useIDs {
 		header = showBackupsWithIDsHeader
+		if debug {
+			header = showBackupsWithIDsDebugHeader
+		}
 	}
 	return fn, header, false, nil
 }

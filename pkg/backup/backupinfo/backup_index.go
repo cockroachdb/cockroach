@@ -258,13 +258,14 @@ type RestorableBackup struct {
 	// EndTime is the exact end time of the backup if .OpenedIndex() is true.
 	// Otherwise, it will only be as precise as backup end times encoded in the
 	// index filename, e.g. tens of milliseconds.
-	EndTime hlc.Timestamp
+	EndTime    hlc.Timestamp
+	FullSubdir string
 
-	// The following fields are only set if `SHOW BACKUPS` was ran with WITH
-	// REVISION START TIME.
+	// The following fields are only populated if .OpenedIndex() is true.
 	openedIndex       bool
 	mvccFilter        backuppb.MVCCFilter
 	revisionStartTime hlc.Timestamp
+	startTime         hlc.Timestamp
 }
 
 // OpenedIndex returns whether the backup index was opened to populate additional
@@ -287,6 +288,17 @@ func (b RestorableBackup) RevisionStartTime(
 	return b.revisionStartTime
 }
 
+// StartTime returns the start time of the backup. You must call .OpenedIndex()
+// first to ensure that the index was opened; otherwise, this method will panic.
+func (b RestorableBackup) StartTime(ctx context.Context, sv *settings.Values) hlc.Timestamp {
+	if !b.openedIndex {
+		logcrash.ReportOrPanic(
+			ctx, sv, "backup index was not opened; cannot retrieve start time",
+		)
+	}
+	return b.startTime
+}
+
 // MVCCFilter returns the MVCC filter used for the backup. You must call
 // .OpenedIndex() first to ensure that the index was opened; otherwise, this
 // method will panic.
@@ -305,9 +317,9 @@ func (b RestorableBackup) MVCCFilter(ctx context.Context, sv *settings.Values) b
 // `metadata/` directory). A maxCount of 0 indicates no limit on the number
 // of backups to return, otherwise, if the number of backups found exceeds
 // maxCount, iteration will stop early and the boolean return value will be
-// set to true. If withRevStartTime is true, the index files will be opened to
-// populate revision history metadata about the backup as well as fetch the
-// exact end time of the backup.
+// set to true. If openIndex is true, the index files will be opened to
+// populate additional metadata about the backup including the exact end time,
+// revision start time, MVCC filter, and start time.
 //
 // NB: Duplicate end times within a chain are elided, as IDs only identify
 // unique end times within a chain. For the purposes of determining which
@@ -325,7 +337,7 @@ func ListRestorableBackups(
 	store cloud.ExternalStorage,
 	newerThan, olderThan time.Time,
 	maxCount uint,
-	withRevStartTime bool,
+	openIndex bool,
 ) ([]RestorableBackup, bool, error) {
 	ctx, trace := tracing.ChildSpan(ctx, "backupinfo.ListRestorableBackups")
 	defer trace.Finish()
@@ -370,7 +382,7 @@ func ListRestorableBackups(
 		filteredIdxs = filteredIdxs[:maxCount]
 	}
 
-	if withRevStartTime {
+	if openIndex {
 		var readTrace *tracing.Span
 		ctx, readTrace = tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
 		defer readTrace.Finish()
@@ -381,10 +393,11 @@ func ListRestorableBackups(
 		if err != nil {
 			return RestorableBackup{}, err
 		}
-		if !withRevStartTime {
+		if !openIndex {
 			return RestorableBackup{
-				ID:      backupID,
-				EndTime: hlc.Timestamp{WallTime: index.end.UnixNano()},
+				ID:         backupID,
+				EndTime:    hlc.Timestamp{WallTime: index.end.UnixNano()},
+				FullSubdir: index.fullEnd.Format(backupbase.DateBasedIntoFolderName),
 			}, nil
 		}
 
@@ -395,9 +408,11 @@ func ListRestorableBackups(
 		return RestorableBackup{
 			ID:                backupID,
 			EndTime:           idxMeta.EndTime,
+			FullSubdir:        index.fullEnd.Format(backupbase.DateBasedIntoFolderName),
 			openedIndex:       true,
 			mvccFilter:        idxMeta.MVCCFilter,
 			revisionStartTime: idxMeta.RevisionStartTime,
+			startTime:         idxMeta.StartTime,
 		}, nil
 	})
 	if err != nil {

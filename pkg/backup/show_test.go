@@ -1050,6 +1050,81 @@ func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
 	})
 }
 
+func TestShowBackupsWithDebug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup-debug"
+
+	sqlDB.Exec(t, `BACKUP INTO $1`, collectionURI)
+	// Sleep between backups so they have different times.
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, collectionURI)
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, collectionURI)
+
+	t.Run("WITH DEBUG", func(t *testing.T) {
+		rows := sqlDB.QueryStr(
+			t,
+			`SELECT id, full_subdir, start_time FROM [SHOW BACKUPS IN $1 WITH DEBUG]`,
+			collectionURI,
+		)
+		require.Len(t, rows, 3, "expected 3 backups")
+
+		// All backups in this chain should share the same full_subdir.
+		fullSubdir := rows[0][1]
+		for idx, row := range rows {
+			require.Equal(
+				t, fullSubdir, row[1],
+				"expected all backups to share the same full_subdir (row %d)", idx,
+			)
+			// The full subdir should be a date-based path like /YYYY/MM/DD-HHMMSS.SS.
+			require.Regexp(
+				t, `/\d{4}/\d{2}/\d{2}-\d{6}\.\d{2}`, row[1],
+				"expected full_subdir to be a date-based path (row %d)", idx,
+			)
+		}
+
+		// The full backup (last row, since results are in descending order)
+		// should have a NULL start_time.
+		lastRow := rows[len(rows)-1]
+		require.Equal(
+			t, "NULL", lastRow[2],
+			"expected full backup to have NULL start_time",
+		)
+
+		// Incremental backups should have non-NULL start times.
+		for idx := len(rows) - 2; idx >= 0; idx-- {
+			require.NotEqual(
+				t, "NULL", rows[idx][2],
+				"expected incremental backup to have non-NULL start_time (row %d)", idx,
+			)
+		}
+	})
+
+	t.Run("WITH DEBUG, REVISION START TIME", func(t *testing.T) {
+		// DEBUG can be combined with REVISION START TIME.
+		rows := sqlDB.QueryStr(
+			t,
+			`SELECT id, revision_start_time, full_subdir, start_time FROM [SHOW BACKUPS IN $1 WITH DEBUG, REVISION START TIME]`,
+			collectionURI,
+		)
+		require.Len(t, rows, 3, "expected 3 backups")
+		for idx, row := range rows {
+			// revision_start_time should be NULL since these backups don't have
+			// revision_history.
+			require.Equal(t, "NULL", row[1], "expected NULL revision_start_time (row %d)", idx)
+			// full_subdir should still be populated.
+			require.NotEqual(t, "NULL", row[2], "expected non-NULL full_subdir (row %d)", idx)
+		}
+	})
+}
+
 func TestShowBackupWithIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
