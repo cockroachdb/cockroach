@@ -51,10 +51,8 @@ func (s *Seq) Init(ctx context.Context, logEngine storage.Reader) error {
 	return nil
 }
 
-// Next allocates the given number of consecutive WAG nodes in the sequence, and
-// returns the index of the first allocated node. The caller can subsequently
-// use indices [Next, Next+count) for writing WAG nodes, and must not use
-// indices outside this span.
+// Next allocates the next WAG node sequence number. The caller can subsequently
+// use this index for writing a WAG node, and must not use any other index.
 //
 // The caller must make sure that conflicting writers call Next and do the
 // corresponding writes according to the topological ordering of these
@@ -62,8 +60,8 @@ func (s *Seq) Init(ctx context.Context, logEngine storage.Reader) error {
 // ordered. Independent / concurrent writers can call Next and perform the
 // corresponding writes in any order (e.g. different ranges can write their
 // events concurrently).
-func (s *Seq) Next(count uint64) uint64 {
-	return s.index.Add(count) - count + 1
+func (s *Seq) Next() uint64 {
+	return s.index.Add(1)
 }
 
 // Write puts the WAG node under the specific sequence number into the given

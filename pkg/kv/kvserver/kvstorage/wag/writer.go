@@ -60,7 +60,7 @@ func (w *Writer) Flush(raftBatch storage.Writer, stateBatchRepr []byte) error {
 	if w.disabled() || len(w.events) == 0 {
 		return nil
 	}
-	return Write(raftBatch, w.seq.Next(1), wagpb.Node{
+	return Write(raftBatch, w.seq.Next(), wagpb.Node{
 		Events:   w.events,
 		Mutation: wagpb.Mutation{Batch: stateBatchRepr},
 	})
