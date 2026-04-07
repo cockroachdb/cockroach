@@ -2330,6 +2330,12 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 
 	defer tc.Stopper().Stop(ctx)
 
+	// Disable delegated snapshots as they can screw up the metric assertions
+	// this test makes.
+	kvserver.NumDelegateLimit.Override(
+		ctx, &tc.Server(0).ClusterSettings().SV, 0,
+	)
+
 	scratchStartKey := tc.ScratchRange(t)
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	// Wait for the expiration lease to upgrade to an epoch or leader lease.
