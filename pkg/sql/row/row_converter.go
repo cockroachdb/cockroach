@@ -484,20 +484,65 @@ func NewDatumRowConverter(
 		// MakeComputedExprs to map that of Datums.
 		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.GetID())] = col
 	}
-	// Here, computeExprs will be nil if there's no computed column, or
-	// the list of computed expressions (including nil, for those columns
-	// that are not computed) otherwise, according to colsOrdered.
-	c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
-		ctx,
-		colsOrdered,
-		c.tableDesc.PublicColumns(),
-		c.tableDesc,
-		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
-		c.EvalCtx,
-		c.SemaCtx,
-	)
-	if err != nil {
-		return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
+
+	// If any computed columns reference UDFs, we need a FunctionResolver
+	// to resolve them by OID during type-checking. Set up a per-instance
+	// resolver using a bare-bones descs.Collection inside a short-lived
+	// txn, and call MakeComputedExprs within the txn so the resolver
+	// remains valid. Each DatumRowConverter instance gets its own
+	// resolver to avoid races when multiple import workers run in
+	// parallel. This mirrors the sequence resolution pattern above.
+	hasComputedCols := false
+	for _, col := range colsOrdered {
+		if col != nil && col.IsComputed() {
+			hasComputedCols = true
+			break
+		}
+	}
+	if hasComputedCols && c.SemaCtx.FunctionResolver == nil && c.db != nil {
+		cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
+		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(evalCtx.SessionDataStack)
+		descsCol := cf.NewCollection(ctx, descs.WithDescriptorSessionDataProvider(dsdp))
+		defer descsCol.ReleaseAll(ctx)
+		err = c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
+				return err
+			}
+			// Use ByIDWithoutLeased because the bare-bones collection
+			// does not have a lease manager.
+			c.SemaCtx.FunctionResolver = descs.NewDistSQLFunctionResolverFromGetter(
+				descsCol.ByIDWithoutLeased(txn).Get(),
+			)
+			c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
+				ctx,
+				colsOrdered,
+				c.tableDesc.PublicColumns(),
+				c.tableDesc,
+				tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
+				c.EvalCtx,
+				c.SemaCtx,
+			)
+			return err
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
+		}
+	} else {
+		// Here, computeExprs will be nil if there's no computed column, or
+		// the list of computed expressions (including nil, for those columns
+		// that are not computed) otherwise, according to colsOrdered.
+		c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
+			ctx,
+			colsOrdered,
+			c.tableDesc.PublicColumns(),
+			c.tableDesc,
+			tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
+			c.EvalCtx,
+			c.SemaCtx,
+		)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
+		}
 	}
 
 	// Here, partialIndexExprs will be nil if there are no partial indexes, or a

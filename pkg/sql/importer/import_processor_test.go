@@ -93,8 +93,9 @@ func TestConverterFlushesBatches(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	params := base.TestServerArgs{}
-	s, _, db := serverutils.StartServer(t, params)
+	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
+	kvDB := s.ApplicationLayer().DB()
 
 	tests := []testSpec{
 		newTestSpec(ctx, t, csvFormat(), "testdata/csv/data-0"),
@@ -121,7 +122,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				kvCh := make(chan row.KVBatch, batchSize)
 				semaCtx := tree.MakeSemaContext(nil /* resolver */)
 				conv, err := makeInputConverter(ctx, &semaCtx, converterSpec, &evalCtx, kvCh,
-					nil /* seqChunkProvider */, db)
+					nil /* seqChunkProvider */, kvDB)
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}

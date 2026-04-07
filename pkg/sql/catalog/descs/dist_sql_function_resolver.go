@@ -34,6 +34,14 @@ func NewDistSQLFunctionResolver(descs *Collection, txn *kv.Txn) *DistSQLFunction
 	}
 }
 
+// NewDistSQLFunctionResolverFromGetter returns a new DistSQLFunctionResolver
+// using the provided ByIDGetter directly. This is useful when the caller
+// needs to control how descriptors are looked up, for example using
+// ByIDWithoutLeased on a bare-bones collection that lacks a lease manager.
+func NewDistSQLFunctionResolverFromGetter(g ByIDGetter) *DistSQLFunctionResolver {
+	return &DistSQLFunctionResolver{g: g}
+}
+
 // ResolveFunction implements tree.FunctionReferenceResolver interface.
 // It only resolves builtin functions.
 // TODO(chengxiong): extract resolution logics in schema_resolver.go into

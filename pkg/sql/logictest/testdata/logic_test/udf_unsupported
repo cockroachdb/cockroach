@@ -1,26 +1,94 @@
-subtest disallow_udf_in_table
+subtest udf_computed_column_limitations
+
+# The following tests verify that UDF patterns which cannot be inlined
+# for schema change backfill are rejected at DDL time (CREATE TABLE,
+# ALTER TABLE ADD COLUMN). While the optimizer can evaluate these
+# patterns directly, rejecting them upfront prevents creating tables
+# that cannot have schema changes performed on them.
+
+# UDFs with OUT parameters cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_out(x INT, OUT result INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x + 1 $$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with OUT or INOUT parameters in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_out_t (a INT PRIMARY KEY, b INT AS (cc_udf_out(a)) STORED);
+
+# Multi-statement UDFs cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_multi_stmt(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + 1;
+  SELECT x + 2
+$$;
+
+statement error pgcode 0A000 unimplemented: multi-statement user-defined functions in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_multi_stmt_t (a INT PRIMARY KEY, b INT AS (cc_udf_multi_stmt(a)) STORED);
+
+# ALTER TABLE ADD COLUMN is also rejected.
+statement ok
+CREATE TABLE cc_udf_multi_stmt_alter_t (a INT PRIMARY KEY);
+
+statement error pgcode 0A000 unimplemented: multi-statement user-defined functions in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_multi_stmt_alter_t ADD COLUMN b INT AS (cc_udf_multi_stmt(a)) STORED;
+
+# PL/pgSQL UDFs cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_plpgsql(x INT) RETURNS INT IMMUTABLE LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN x + 1;
+  END
+$$;
+
+statement error pgcode 0A000 unimplemented: PL/pgSQL user-defined functions in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_plpgsql_t (a INT PRIMARY KEY, b INT AS (cc_udf_plpgsql(a)) STORED);
+
+# Scalar subqueries in UDF body cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_subquery(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + (SELECT 100)
+$$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with subqueries in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_subquery_t (a INT PRIMARY KEY, b INT AS (cc_udf_subquery(a)) STORED);
+
+# CTEs in UDF body cannot be inlined.
+statement ok
+CREATE FUNCTION cc_udf_cte(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  WITH t AS (SELECT x + 10 AS v) SELECT v FROM t
+$$;
+
+statement error pgcode 0A000 unimplemented: user-defined functions with CTEs in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_cte_t (a INT PRIMARY KEY, b INT AS (cc_udf_cte(a)) STORED);
+
+# Generator (set-returning) functions inside a UDF body are rejected.
+# The function itself is not SETOF, but its body contains
+# generate_series which is a generator.
+statement ok
+CREATE FUNCTION cc_udf_gen_body(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT generate_series(1, x)
+$$;
+
+statement error set-returning functions are not allowed in STORED COMPUTED COLUMN
+CREATE TABLE cc_udf_gen_body_t (a INT PRIMARY KEY, b INT AS (cc_udf_gen_body(a)) STORED);
+
+# Nested UDF calls cannot be inlined (the inliner does not recurse).
+statement ok
+CREATE FUNCTION cc_udf_inner(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 10 $$;
 
 statement ok
-CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION cc_udf_outer(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT cc_udf_inner(x) + 1 $$;
 
+statement error pgcode 0A000 unimplemented: nested user-defined function calls in computed columns cannot be evaluated in this context
+CREATE TABLE cc_udf_nested_t (a INT PRIMARY KEY, b INT AS (cc_udf_outer(a)) STORED);
+
+# RECORD-returning UDFs are rejected because the return type (tuple)
+# does not match any valid column type.
 statement ok
-CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+CREATE FUNCTION cc_udf_record(x INT) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x, x+1
+$$;
 
-# Insert a row to verify that backfills that use UDFs are blocked without internal errors.
-statement ok
-INSERT INTO test_tbl_t VALUES (1, 1);
-
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
-
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
-
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-CREATE INDEX t_idx_partial ON test_tbl_t(b) WHERE test_tbl_f() > 0;
-
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-CREATE INDEX idx_b ON test_tbl_t (test_tbl_f());
+statement error expected STORED COMPUTED COLUMN expression to have type int, but .* has type tuple
+CREATE TABLE cc_udf_record_t (a INT PRIMARY KEY, b INT AS (cc_udf_record(a)) STORED);
 
 subtest end
 

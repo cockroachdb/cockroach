@@ -83,6 +83,15 @@ func DequalifyAndValidateExprImpl(
 		return "", nil, colIDs, err
 	}
 
+	// For computed columns, verify that any UDF calls can be inlined for
+	// backfill. A table with a computed column that can't be backfilled
+	// can't have schema changes performed on it, so we reject upfront.
+	if context == tree.StoredComputedColumnExpr || context == tree.VirtualComputedColumnExpr {
+		if _, err := inlineUDFCalls(ctx, typedExpr, semaCtx, context); err != nil {
+			return "", nil, colIDs, err
+		}
+	}
+
 	// We need to do the rewrite here before the expression is serialized because
 	// the serialization would drop the prefixes to functions.
 	//
@@ -465,6 +474,24 @@ func SanitizeVarFreeExpr(
 			"variable sub-expressions are not allowed in %s", context)
 	}
 
+	return sanitizeExpr(ctx, expr, expectedType, context, semaCtx, maxVolatility, allowAssignmentCast)
+}
+
+// sanitizeExpr type-checks an expression, rejects special functions
+// (generators, aggregates, window functions, procedures) and optionally
+// restricts volatility. It is the shared core of SanitizeVarFreeExpr
+// (which additionally rejects variable sub-expressions) and is also used
+// by inlineUDFCalls to validate inlined UDF bodies that legitimately
+// contain column references.
+func sanitizeExpr(
+	ctx context.Context,
+	expr tree.Expr,
+	expectedType *types.T,
+	context tree.SchemaExprContext,
+	semaCtx *tree.SemaContext,
+	maxVolatility volatility.V,
+	allowAssignmentCast bool,
+) (tree.TypedExpr, error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called from another context
 	// which uses the properties field.

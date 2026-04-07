@@ -11,11 +11,9 @@ USE computed_col_db;
 ----
 
 exec-sql
-CREATE FUNCTION public.add_tax(price DECIMAL) RETURNS DECIMAL IMMUTABLE AS $$
-BEGIN
-  RETURN price * 1.1;
-END;
-$$ LANGUAGE PLpgSQL;
+CREATE FUNCTION public.add_tax(price DECIMAL) RETURNS DECIMAL IMMUTABLE LANGUAGE SQL AS $$
+  SELECT price * 1.1
+$$;
 ----
 
 # Test if computed columns with UDFs are supported.
@@ -199,11 +197,9 @@ USE stored_computed_test;
 ----
 
 exec-sql
-CREATE FUNCTION public.format_display(id INT, data TEXT) RETURNS TEXT IMMUTABLE AS $$
-BEGIN
-  RETURN 'ID: ' || id || ', Data: ' || data;
-END;
-$$ LANGUAGE PLpgSQL;
+CREATE FUNCTION public.format_display(id INT, data TEXT) RETURNS TEXT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 'ID: ' || id || ', Data: ' || data
+$$;
 ----
 
 exec-sql
@@ -275,11 +271,9 @@ USE virtual_computed_test;
 ----
 
 exec-sql
-CREATE FUNCTION public.format_display(id INT, data TEXT) RETURNS TEXT IMMUTABLE AS $$
-BEGIN
-  RETURN 'ID: ' || id || ', Data: ' || data;
-END;
-$$ LANGUAGE PLpgSQL;
+CREATE FUNCTION public.format_display(id INT, data TEXT) RETURNS TEXT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 'ID: ' || id || ', Data: ' || data
+$$;
 ----
 
 exec-sql
@@ -374,11 +368,9 @@ $$ LANGUAGE PLpgSQL;
 ----
 
 exec-sql
-CREATE FUNCTION public.calculate_total(base DECIMAL, tax_rate DECIMAL) RETURNS DECIMAL IMMUTABLE AS $$
-BEGIN
-  RETURN base * (1 + tax_rate);
-END;
-$$ LANGUAGE PLpgSQL;
+CREATE FUNCTION public.calculate_total(base DECIMAL, tax_rate DECIMAL) RETURNS DECIMAL IMMUTABLE LANGUAGE SQL AS $$
+  SELECT base * (1 + tax_rate)
+$$;
 ----
 
 exec-sql
