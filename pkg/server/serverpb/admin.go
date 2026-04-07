@@ -7,11 +7,30 @@ package serverpb
 
 import (
 	context "context"
+	"fmt"
+	"regexp"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+// MetricsFilterEntry represents a single filter criterion - either a literal
+// metric name or a regex pattern.
+type MetricsFilterEntry struct {
+	Value   string
+	IsRegex bool
+}
+
+// FilterStats contains statistics from applying a metrics filter.
+// This is only returned when a non-empty filter is provided to
+// GetInternalTimeseriesNamesFromServer; otherwise it is nil.
+type FilterStats struct {
+	// RegexMatchCounts maps each regex pattern to the number of metrics it matched.
+	RegexMatchCounts map[string]int
+	// UnmatchedLiterals contains literal metric names that were not found.
+	UnmatchedLiterals []string
+}
 
 // Add adds values from ots to ts.
 func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {
@@ -74,30 +93,109 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // can't tell what the true prefix for each metric is). Additionally, for histograms
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
+//
+// If filter is non-empty, only metrics matching the filter criteria are returned.
+// Filter entries can be literal metric names or regex patterns (indicated by
+// IsRegex=true). Literal names are matched exactly against the base metric name
+// (without cr.node./cr.store. prefix). Regex patterns are matched against all
+// available metric names.
+//
+// When a filter is provided, stats contains match counts and unmatched literals.
+// When no filter is provided, stats fields are empty/nil.
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient,
-) ([]string, error) {
+	ctx context.Context, ac RPCAdminClient, filter []MetricsFilterEntry,
+) (names []string, stats FilterStats, err error) {
 	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
-		return nil, err
+		return nil, FilterStats{}, err
 	}
-	var sl []string
-	for name, meta := range resp.Metadata {
-		if meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
-			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
-			for _, q := range metric.HistogramMetricComputers {
-				sl = append(sl, name+q.Suffix)
-			}
-		} else {
-			sl = append(sl, name)
+
+	// Determine which metric names to process
+	var namesToProcess []string
+	if len(filter) > 0 {
+		// Apply filtering
+		namesToProcess, stats, err = applyMetricsFilter(resp.Metadata, filter)
+		if err != nil {
+			return nil, FilterStats{}, err
+		}
+	} else {
+		// No filter - use all metrics
+		namesToProcess = make([]string, 0, len(resp.Metadata))
+		for name := range resp.Metadata {
+			namesToProcess = append(namesToProcess, name)
 		}
 	}
-	out := make([]string, 0, 2*len(sl))
+
+	// Expand metrics: for histograms add quantile suffixes, otherwise use as-is
+	var expanded []string
+	for _, name := range namesToProcess {
+		meta, exists := resp.Metadata[name]
+		if exists && meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
+			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
+			for _, q := range metric.HistogramMetricComputers {
+				expanded = append(expanded, name+q.Suffix)
+			}
+		} else {
+			expanded = append(expanded, name)
+		}
+	}
+
+	out := make([]string, 0, 2*len(expanded))
 	for _, prefix := range []string{"cr.node.", "cr.store."} {
-		for _, name := range sl {
+		for _, name := range expanded {
 			out = append(out, prefix+name)
 		}
 	}
 	sort.Strings(out)
-	return out, nil
+	return out, stats, nil
+}
+
+// applyMetricsFilter filters the available metrics based on the provided filter.
+// Returns a list of base metric names (without prefixes) that match the filter criteria,
+// along with FilterStats containing regex match counts and unmatched literal names.
+func applyMetricsFilter(
+	metadata map[string]metric.Metadata, filter []MetricsFilterEntry,
+) ([]string, FilterStats, error) {
+	// Build list of all available metric names for regex matching
+	allMetricNames := make([]string, 0, len(metadata))
+	for name := range metadata {
+		allMetricNames = append(allMetricNames, name)
+	}
+
+	// Resolve entries to actual metric names (expand regex patterns)
+	resolvedNames := make(map[string]struct{})
+	var stats FilterStats
+	stats.RegexMatchCounts = make(map[string]int)
+
+	for _, entry := range filter {
+		if entry.IsRegex {
+			// Compile and match against all available metrics
+			re, err := regexp.Compile(entry.Value)
+			if err != nil {
+				return nil, FilterStats{}, fmt.Errorf("invalid regex pattern: %s: %w", entry.Value, err)
+			}
+			matchCount := 0
+			for _, name := range allMetricNames {
+				if re.MatchString(name) {
+					resolvedNames[name] = struct{}{}
+					matchCount++
+				}
+			}
+			stats.RegexMatchCounts[entry.Value] = matchCount
+		} else {
+			// Literal metric name - only add if it exists in metadata
+			if _, exists := metadata[entry.Value]; exists {
+				resolvedNames[entry.Value] = struct{}{}
+			} else {
+				stats.UnmatchedLiterals = append(stats.UnmatchedLiterals, entry.Value)
+			}
+		}
+	}
+
+	// Convert to slice
+	result := make([]string, 0, len(resolvedNames))
+	for name := range resolvedNames {
+		result = append(result, name)
+	}
+	return result, stats, nil
 }
