@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -90,8 +91,6 @@ func Delete(w storage.Writer, index uint64) error {
 //	if err := iter.Error(); err != nil {
 //		return err
 //	}
-//
-// TODO(pav-kv): make it more flexible, e.g. iterate from a particular index.
 type Iterator struct {
 	// err is the last error encountered during the WAG iteration.
 	err error
@@ -100,6 +99,14 @@ type Iterator struct {
 // Iter returns an iterator that scans the WAG sequence. The iterator yields a
 // pair containing the WAG node index and the WAG node itself.
 func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq2[uint64, wagpb.Node] {
+	return it.IterFrom(ctx, r, keys.StoreWAGPrefix())
+}
+
+// IterFrom is similar to Iter, but allows specifying a starting point for the
+// iteration.
+func (it *Iterator) IterFrom(
+	ctx context.Context, r storage.Reader, seekKey roachpb.Key,
+) iter.Seq2[uint64, wagpb.Node] {
 	prefix := keys.StoreWAGPrefix()
 	mi, err := r.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: prefix.PrefixEnd(),
@@ -108,7 +115,7 @@ func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq2[uint64
 		it.err = err
 		return nil
 	}
-	mi.SeekGE(storage.MakeMVCCMetadataKey(prefix))
+	mi.SeekGE(storage.MakeMVCCMetadataKey(seekKey))
 
 	return func(yield func(uint64, wagpb.Node) bool) {
 		defer mi.Close()

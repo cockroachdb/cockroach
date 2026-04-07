@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
+        "//pkg/roachpb",
         "//pkg/storage",
     ],
 )
@@ -21,6 +22,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":wag"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/kv/kvserver/print",
