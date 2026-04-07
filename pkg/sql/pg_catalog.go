@@ -815,17 +815,20 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 
 var pgCatalogAuthMembersTable = virtualSchemaTable{
 	comment: `role membership
-https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
+https://www.postgresql.org/docs/18/catalog-pg-auth-members.html`,
 	schema: vtable.PGCatalogAuthMembers,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRoleMembershipAtCacheReadTS(ctx, p,
 			func(ctx context.Context, roleName, memberName username.SQLUsername, isAdmin bool) error {
 				return addRow(
-					h.UserOid(roleName),                 // roleid
-					h.UserOid(memberName),               // member
-					tree.DNull,                          // grantor
-					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
+					h.RoleMembershipOid(roleName, memberName), // oid
+					h.UserOid(roleName),                       // roleid
+					h.UserOid(memberName),                     // member
+					tree.DNull,                                // grantor
+					tree.MakeDBool(tree.DBool(isAdmin)),       // admin_option
+					tree.MakeDBool(tree.DBool(true)),          // inherit_option
+					tree.MakeDBool(tree.DBool(true)),          // set_option
 				)
 			},
 		)
@@ -5806,6 +5809,7 @@ const (
 	castTypeTag
 	triggerTypeTag
 	policyTypeTag
+	roleMembershipTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -5936,6 +5940,13 @@ func (h oidHasher) RegProc(name string) tree.Datum {
 func (h oidHasher) UserOid(userName username.SQLUsername) *tree.DOid {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(userName.Normalized())
+	return h.getOid()
+}
+
+func (h oidHasher) RoleMembershipOid(roleName, memberName username.SQLUsername) *tree.DOid {
+	h.writeTypeTag(roleMembershipTypeTag)
+	h.writeStr(roleName.Normalized())
+	h.writeStr(memberName.Normalized())
 	return h.getOid()
 }
 

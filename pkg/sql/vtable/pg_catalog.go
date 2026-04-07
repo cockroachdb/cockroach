@@ -132,13 +132,16 @@ CREATE TABLE pg_catalog.pg_authid (
 
 // PGCatalogAuthMembers describes the schema of the pg_catalog.pg_auth_members
 // table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html,
+// https://www.postgresql.org/docs/18/catalog-pg-auth-members.html,
 const PGCatalogAuthMembers = `
 CREATE TABLE pg_catalog.pg_auth_members (
+	oid OID,
 	roleid OID,
 	member OID,
 	grantor OID,
-	admin_option BOOL
+	admin_option BOOL,
+	inherit_option BOOL,
+	set_option BOOL
 )`
 
 // PGCatalogAvailableExtensions describes the schema of the
