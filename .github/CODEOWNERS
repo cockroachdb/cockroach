@@ -257,7 +257,7 @@
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/sql/export/             @cockroachdb/cdc-prs
 
-/pkg/crosscluster/*.*        @cockroachdb/disaster-recovery
+/pkg/crosscluster/           @cockroachdb/disaster-recovery
 /pkg/crosscluster/logical    @cockroachdb/cdc-prs
 /pkg/crosscluster/ldrrandgen    @cockroachdb/cdc-prs
 /pkg/backup/                 @cockroachdb/disaster-recovery
