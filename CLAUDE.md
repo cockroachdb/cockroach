@@ -77,8 +77,11 @@ good starting point if the overall architecture is relevant to the task.
 
 After editing Go files, run `crlfmt -w -tab 2 <filename>.go` to format them.
 `crlfmt` is CockroachDB's custom formatter (not `gofmt`); it enforces 100-column
-code lines, 80-column comments, and CockroachDB-specific signature wrapping.
-It also handles import grouping. `crlfmt` only accepts one filename at a time.
+code lines, 80-column comments, and CockroachDB-specific signature wrapping. It
+also handles import grouping. `crlfmt` accepts one path argument at a time
+(either a file or directory).
+
+The formatter is not used on checked-in, generated files.
 
 ### Engineering Standards
 
