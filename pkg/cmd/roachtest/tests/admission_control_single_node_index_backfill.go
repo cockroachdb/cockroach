@@ -397,13 +397,13 @@ func runSingleNodeIndexBackfill(
 			avgTotalBW, len(totalBWSamples))
 	}
 
-	// Export backfill duration and mean total bandwidth as scalar metrics
-	// for roachperf.
+	// Export backfill duration, mean total bandwidth, and foreground
+	// workload metrics as scalar metrics for roachperf.
 	if !metricsStart.IsZero() && !metricsEnd.IsZero() {
-		_, err := statCollector.Exporter().Export(
-			ctx, c, t, false, /* dryRun */
+		exportingStats, err := statCollector.Exporter().Export(
+			ctx, c, t, true, /* dryRun */
 			metricsStart, metricsEnd,
-			[]clusterstats.AggQuery{},
+			[]clusterstats.AggQuery{sqlServiceLatencyAgg, indexBackfillQPSAgg},
 			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 				return &roachtestutil.AggregatedMetric{
 					Name:           "index_backfill_duration",
@@ -423,8 +423,24 @@ func runSingleNodeIndexBackfill(
 					IsHigherBetter: true,
 				}
 			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return meanNonNaN(stats, sqlServiceLatency.Query, "mean_p99_latency", "ms", false)
+			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return meanNonNaN(stats, indexBackfillQPS.Query, "mean_qps", "queries/s", true)
+			},
 		)
 		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Replace NaN values to avoid JSON serialization errors.
+		cleanNaN(exportingStats, sqlServiceLatency.Query)
+		cleanNaN(exportingStats, indexBackfillQPS.Query)
+
+		if err := exportingStats.SerializeOutRun(
+			ctx, t, c, t.ExportOpenmetrics(),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}

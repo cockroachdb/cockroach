@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -28,6 +29,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+var indexBackfillQPS = clusterstats.ClusterStat{
+	LabelName: "node",
+	Query:     "rate(sql_query_count[2m])",
+}
+
+var indexBackfillQPSAgg = clusterstats.AggQuery{
+	Stat:  indexBackfillQPS,
+	Query: "sum(rate(sql_query_count[2m]))",
+	Tag:   "Total QPS",
+}
 
 type indexBackfillVariant struct {
 	nameSuffix               string
@@ -416,10 +428,10 @@ func runIndexBackfill(
 
 	// Export metrics to roachperf.
 	if !metricsStart.IsZero() && !metricsEnd.IsZero() {
-		_, err := statCollector.Exporter().Export(
-			ctx, c, t, false, /* dryRun */
+		exportingStats, err := statCollector.Exporter().Export(
+			ctx, c, t, true, /* dryRun */
 			metricsStart, metricsEnd,
-			[]clusterstats.AggQuery{},
+			[]clusterstats.AggQuery{sqlServiceLatencyAgg, indexBackfillQPSAgg},
 			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 				return &roachtestutil.AggregatedMetric{
 					Name:           "index_backfill_duration",
@@ -447,11 +459,73 @@ func runIndexBackfill(
 					IsHigherBetter: true,
 				}
 			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return meanNonNaN(stats, sqlServiceLatency.Query, "mean_p99_latency", "ms", false)
+			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return meanNonNaN(stats, indexBackfillQPS.Query, "mean_qps", "queries/s", true)
+			},
 		)
 		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Replace NaN values to avoid JSON serialization errors.
+		// histogram_quantile returns NaN when there are no queries
+		// in the rate window.
+		cleanNaN(exportingStats, sqlServiceLatency.Query)
+		cleanNaN(exportingStats, indexBackfillQPS.Query)
+
+		if err := exportingStats.SerializeOutRun(
+			ctx, t, c, t.ExportOpenmetrics(),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	t.Status("test completed successfully")
+}
+
+// meanNonNaN computes the mean of non-NaN values in a StatSummary's
+// Value timeseries and returns it as an AggregatedMetric. Returns nil
+// if no valid data points exist.
+func meanNonNaN(
+	stats map[string]clusterstats.StatSummary, key, name, unit string, isHigherBetter bool,
+) *roachtestutil.AggregatedMetric {
+	summary, ok := stats[key]
+	if !ok || len(summary.Value) == 0 {
+		return nil
+	}
+	var sum float64
+	var count int
+	for _, v := range summary.Value {
+		if !math.IsNaN(v) {
+			sum += v
+			count++
+		}
+	}
+	if count == 0 {
+		return nil
+	}
+	return &roachtestutil.AggregatedMetric{
+		Name:           name,
+		Value:          roachtestutil.MetricPoint(sum / float64(count)),
+		Unit:           unit,
+		IsHigherBetter: isHigherBetter,
+	}
+}
+
+// cleanNaN replaces NaN values with 0 in a StatSummary's Value array
+// to avoid JSON serialization errors.
+func cleanNaN(stats *clusterstats.ClusterStatRun, key string) {
+	summary, ok := stats.Stats[key]
+	if !ok {
+		return
+	}
+	for i, val := range summary.Value {
+		if math.IsNaN(val) {
+			summary.Value[i] = 0
+		}
+	}
+	stats.Stats[key] = summary
 }
