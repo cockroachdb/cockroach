@@ -45,6 +45,10 @@ type DescriptorReader interface {
 	// MustReadMutableDescriptor the mutable equivalent to
 	// MustReadImmutableDescriptors.
 	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
+
+	// TestingEnsureLatestLeaseIsAvailable is used in testing to ensure that
+	// the new version is visible.
+	TestingEnsureLatestLeaseIsAvailable(ctx context.Context, ids descpb.IDs) error
 }
 
 // ImmediateMutationStateUpdater contains the methods used to update the
