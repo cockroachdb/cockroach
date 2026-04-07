@@ -1151,6 +1151,8 @@ func (r *testRunner) runWorker(
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
+				logTestParameters(testL, getTestParameters(t, c, vmCreateOpts))
+
 				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL,
 					github, issueInfo)
 			}
@@ -1419,7 +1421,6 @@ func (r *testRunner) runTest(
 				githubMsg := t.getGithubMessage(failureMsg)
 
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
-				logTestParameters(l, params)
 				issue, err := github.MaybePost(t, issueInfo, l, githubMsg, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
