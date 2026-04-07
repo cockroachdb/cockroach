@@ -70,15 +70,17 @@ func ComputeScheduleRecurrence(now time.Time, rec *string) (*ScheduleRecurrence,
 func CheckScheduleAlreadyExists(
 	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
 ) (bool, error) {
+	// IF NOT EXISTS usually is used when it already exists (to noop) so use limit
+	// 1 to stop scanning as soon as we see a match.
 	row, err := p.InternalSQLTxn().QueryRowEx(ctx, "check-sched",
 		p.Txn(), sessiondata.RootUserSessionDataOverride,
-		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
-			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
-
+		fmt.Sprintf("SELECT 1 FROM %s WHERE schedule_name = $1 LIMIT 1",
+			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName()), scheduleLabel,
+	)
 	if err != nil {
 		return false, err
 	}
-	return int64(tree.MustBeDInt(row[0])) != 0, nil
+	return row != nil, nil
 }
 
 // ParseOnError parses schedule option optOnExecFailure into
