@@ -1208,6 +1208,7 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DEBUG'
 	| 'DEBUG_IDS'
 	| 'DECLARE'
 	| 'DELETE'
@@ -2231,8 +2232,8 @@ opt_show_backups_time_filter_clause ::=
 	| 
 
 opt_with_show_backups_options ::=
-	'WITH' show_backups_options
-	| 'WITH' 'OPTIONS' '(' show_backups_options ')'
+	'WITH' show_backups_options_list
+	| 'WITH' 'OPTIONS' '(' show_backups_options_list ')'
 	| 
 
 show_backup_details ::=
@@ -3202,8 +3203,8 @@ extra_var_value ::=
 	| 'NONE'
 	| cockroachdb_extra_reserved_keyword
 
-show_backups_options ::=
-	'REVISION' 'START' 'TIME'
+show_backups_options_list ::=
+	( show_backups_options ) ( ( ',' show_backups_options ) )*
 
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
@@ -3820,6 +3821,9 @@ for_locking_item ::=
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
 
+show_backups_options ::=
+	'REVISION' 'START' 'TIME'
+
 show_backup_options ::=
 	'AS_JSON'
 	| 'CHECK_FILES'
@@ -4192,6 +4196,7 @@ bare_label_keywords ::=
 	| 'DATABASE'
 	| 'DATABASES'
 	| 'DEALLOCATE'
+	| 'DEBUG'
 	| 'DEBUG_IDS'
 	| 'DEC'
 	| 'DECIMAL'
