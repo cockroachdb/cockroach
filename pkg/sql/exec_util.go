@@ -3477,7 +3477,7 @@ func getMessagesForSubtrace(
 		allLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
-			msg:       fmt.Sprintf("=== SPAN START: %s ===", span.Operation),
+			msg:       tracingpb.FormatSpanStartMessage(span.RecordedSpan).StripMarkers(),
 			span:      span,
 			index:     0,
 		},
