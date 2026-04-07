@@ -56,6 +56,7 @@
 /pkg/sql/create_stats*       @cockroachdb/sql-queries-prs
 /pkg/sql/distsql*.go         @cockroachdb/sql-queries-prs
 /pkg/sql/execinfra/          @cockroachdb/sql-queries-prs
+/pkg/sql/execinfra/merge_metrics.go @cockroachdb/sql-foundations
 /pkg/sql/execinfrapb/        @cockroachdb/sql-queries-prs
 /pkg/sql/execstats/          @cockroachdb/sql-queries-prs
 /pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery

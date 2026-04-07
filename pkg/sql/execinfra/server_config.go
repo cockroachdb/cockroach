@@ -125,6 +125,9 @@ type ServerConfig struct {
 	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
 	BulkSenderLimiter limit.ConcurrentRequestLimiter
 
+	// BulkMergeMetrics tracks distributed merge operation metrics.
+	BulkMergeMetrics *BulkMergeMetrics
+
 	// ParentDiskMonitor is normally the root disk monitor. It should only be used
 	// when setting up a server, a child monitor (usually belonging to a sql
 	// execution flow), or in tests. It is used to monitor temporary storage disk

@@ -319,6 +319,9 @@ func (m *bulkMergeProcessor) reserveRPCMemory(ctx context.Context) error {
 	log.Dev.Infof(ctx,
 		"reserved %d bytes for RPC transport buffers (%d remote files, %d estimated inflight)",
 		rpcMemory, remoteFiles, inflight)
+	if metrics := m.flowCtx.Cfg.BulkMergeMetrics; metrics != nil {
+		metrics.RPCMemoryReservedBytes.RecordValue(rpcMemory)
+	}
 	return nil
 }
 

@@ -928,6 +928,12 @@ owners:
   sql_disk_distsql_max: cockroachdb/sql-queries
   sql_disk_distsql_spilled_bytes_read: cockroachdb/sql-queries
   sql_disk_distsql_spilled_bytes_written: cockroachdb/sql-queries
+  sql_dist_merge_count: cockroachdb/sql-foundations
+  sql_dist_merge_first_iter_output_sst_count: cockroachdb/sql-foundations
+  sql_dist_merge_import_count: cockroachdb/sql-foundations
+  sql_dist_merge_index_count: cockroachdb/sql-foundations
+  sql_dist_merge_map_phase_sst_count: cockroachdb/sql-foundations
+  sql_dist_merge_rpc_memory_reserved_bytes: cockroachdb/sql-foundations
   sql_distsql_contended_queries_count: cockroachdb/sql-queries
   sql_distsql_cumulative_contention_nanos: cockroachdb/sql-queries
   sql_distsql_dist_query_rerun_locally_count: cockroachdb/sql-queries
