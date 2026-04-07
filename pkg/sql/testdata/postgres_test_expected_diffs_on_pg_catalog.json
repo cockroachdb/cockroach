@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 20,
-    "DatatypeMismatches": 21
+    "MissingColumns": 19,
+    "DatatypeMismatches": 18
   },
   "diffs": {
     "pg_aios": {},
@@ -15,27 +15,6 @@
         "dataType": "oid",
         "expectedOid": 24,
         "expectedDataType": "regproc"
-      }
-    },
-    "pg_attribute": {
-      "attcompression": null,
-      "attinhcount": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "attndims": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "attstattarget": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
       }
     },
     "pg_auth_members": {

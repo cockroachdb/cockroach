@@ -457,7 +457,7 @@ SELECT
   attisdropped,
   attidentity::TEXT,
   attgenerated::TEXT,
-  ''::text as attcompression,
+  attcompression::TEXT,
   format_type(typ.oid, atttypmod) AS formatted_typname,
   format_type(basetyp.oid, typ.typtypmod) AS formatted_basetypname,
   CASE

@@ -530,9 +530,10 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				zeroVal,                         // attndims
 				negOneVal,                       // attcacheoff
 				tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
-				tree.DNull, // attbyval (see pg_type.typbyval)
-				tree.DNull, // attstorage
-				tree.DNull, // attalign
+				tree.DNull,          // attbyval (see pg_type.typbyval)
+				tree.DNull,          // attstorage
+				tree.NewDString(""), // attcompression
+				tree.DNull,          // attalign
 				tree.MakeDBool(tree.DBool(!column.IsNullable())), // attnotnull
 				tree.MakeDBool(tree.DBool(column.HasDefault() ||
 					column.IsComputed())), // atthasdef
@@ -589,6 +590,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					negOneVal,                           // atttypmod
 					tree.DNull,                          // attbyval (see pg_type.typbyval)
 					tree.DNull,                          // attstorage
+					tree.NewDString(""),                 // attcompression
 					tree.DNull,                          // attalign
 					tree.DBoolFalse,                     // attnotnull
 					tree.DBoolFalse,                     // atthasdef
@@ -4157,6 +4159,7 @@ func addPGAttributeRowForCompositeType(
 			tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
 			tree.DNull,          // attbyval (see pg_type.typbyval)
 			tree.DNull,          // attstorage
+			tree.NewDString(""), // attcompression
 			tree.DNull,          // attalign
 			tree.DBoolFalse,     // attnotnull
 			tree.DBoolFalse,     // atthasdef
