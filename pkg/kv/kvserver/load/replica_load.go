@@ -213,7 +213,7 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
-func (rl *ReplicaLoad) RequestLocalityInfo() *replicastats.RatedSummary {
+func (rl *ReplicaLoad) RequestLocalityInfo() replicastats.RatedSummary {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 

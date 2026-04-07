@@ -368,10 +368,10 @@ func (rs *ReplicaStats) ResetRequestCounts(now time.Time) {
 // SnapshotRatedSummary returns a RatedSummary representing a snapshot of the
 // current replica stats state, summarized by arithmetic mean count,
 // per-locality count and duration recorded over.
-func (rs *ReplicaStats) SnapshotRatedSummary(now time.Time) *RatedSummary {
+func (rs *ReplicaStats) SnapshotRatedSummary(now time.Time) RatedSummary {
 	qps, duration := rs.AverageRatePerSecond(now)
 	localityCounts := rs.PerLocalityDecayingRate(now)
-	return &RatedSummary{
+	return RatedSummary{
 		QPS:            qps,
 		LocalityCounts: localityCounts,
 		Duration:       duration,
