@@ -899,48 +899,30 @@ func RunCommitTrigger(
 			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
 	}
 
-	// Used by both splits and merges. Errors returned from here will fail
-	// the split or merge. Previously, errors were wrapped in
-	// ReplicaCorruptionError, which would crash the process. This was
-	// problematic because transient I/O errors (e.g. cloud storage
-	// timeouts) would be misidentified as corruption. See #165558.
-	//
-	// TODO(tbg): remove this wrapper, now that it's a no-op.
-	maybeWrapReplicaCorruptionError := func(ctx context.Context, err error) error {
-		if err == nil {
-			log.KvExec.Fatalf(ctx, "unexpected nil error")
-		}
-		return err
-	}
-
 	// Stage the commit trigger's side-effects so that they will go into effect on
 	// each Replica when the corresponding Raft log entry is applied. Only one
 	// commit trigger can be set.
+	//
+	// Errors from trigger evaluation are returned as regular evaluation errors.
+	// Since evaluation is pre-Raft (no state has been committed), failing here
+	// simply prevents the proposal; the split/merge queue will retry.
 	if ct.GetSplitTrigger() != nil {
 		sl := MakeStateLoader(rec)
 		lhsLease, err := sl.LoadLease(ctx, batch)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(
-				ctx, errors.Wrap(err, "unable to load lease"),
-			)
+			return result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
 		gcThreshold, err := sl.LoadGCThreshold(ctx, batch)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(
-				ctx, errors.Wrap(err, "unable to load GCThreshold"),
-			)
+			return result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 		gcHint, err := sl.LoadGCHint(ctx, batch)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(
-				ctx, errors.Wrap(err, "unable to load GCHint"),
-			)
+			return result.Result{}, errors.Wrap(err, "unable to load GCHint")
 		}
 		replicaVersion, err := sl.LoadVersion(ctx, batch)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(
-				ctx, errors.Wrap(err, "unable to load replica version"),
-			)
+			return result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
 		in := SplitTriggerHelperInput{
 			LeftLease:      lhsLease,
@@ -953,7 +935,7 @@ func RunCommitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, in, txn.WriteTimestamp,
 		)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(ctx, err)
+			return result.Result{}, err
 		}
 		*ms = newMS
 		return res, nil
@@ -961,7 +943,7 @@ func RunCommitTrigger(
 	if mt := ct.GetMergeTrigger(); mt != nil {
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
 		if err != nil {
-			return result.Result{}, maybeWrapReplicaCorruptionError(ctx, err)
+			return result.Result{}, err
 		}
 		return res, nil
 	}

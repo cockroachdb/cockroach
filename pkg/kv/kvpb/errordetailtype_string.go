@@ -28,7 +28,6 @@ func _() {
 	_ = x[LeaseRejectedErrType-13]
 	_ = x[NodeUnavailableErrType-14]
 	_ = x[RaftGroupDeletedErrType-16]
-	_ = x[ReplicaCorruptionErrType-17]
 	_ = x[ReplicaTooOldErrType-18]
 	_ = x[AmbiguousResultErrType-26]
 	_ = x[StoreNotFoundErrType-27]
@@ -86,8 +85,6 @@ func (i ErrorDetailType) String() string {
 		return "NodeUnavailableErrType"
 	case RaftGroupDeletedErrType:
 		return "RaftGroupDeletedErrType"
-	case ReplicaCorruptionErrType:
-		return "ReplicaCorruptionErrType"
 	case ReplicaTooOldErrType:
 		return "ReplicaTooOldErrType"
 	case AmbiguousResultErrType:

@@ -47,7 +47,6 @@ go_library(
         "replica_closedts.go",
         "replica_command.go",
         "replica_consistency.go",
-        "replica_corruption.go",
         "replica_destroy.go",
         "replica_eval_context.go",
         "replica_eval_context_span.go",
@@ -413,7 +412,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/cli/exit",
         "//pkg/cloud",
         "//pkg/cloud/nodelocal",
         "//pkg/clusterversion",

@@ -456,15 +456,6 @@ message ReplicaUnavailableError {
 message RaftGroupDeletedError {
 }
 
-// A ReplicaCorruptionError indicates that the replica has experienced
-// an error which puts its integrity at risk.
-message ReplicaCorruptionError {
-  optional string error_msg = 1 [(gogoproto.nullable) = false];
-  // processed indicates that the error has been taken into account and
-  // necessary steps will be taken. For now, required for testing.
-  optional bool processed = 2 [(gogoproto.nullable) = false];
-}
-
 // ReplicaTooOldError is sent in response to a raft message when the
 // recipient of the raft message believes the sender of the raft
 // message to have been removed from the raft group

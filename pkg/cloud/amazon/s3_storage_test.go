@@ -860,8 +860,7 @@ func TestCanceledError(t *testing.T) {
 	var aerr error
 	aerr = awserr.New(request.CanceledErrorCode,
 		"request context canceled", err)
-	// Unfortunately, errors.Is returns false, so
-	// kvpb.MaybeWrapReplicaCorruptionError will think this is corruption.
+	// Unfortunately, errors.Is returns false without errors.Mark.
 	require.False(t, errors.Is(aerr, ctx.Err()))
 	aerr = errors.Mark(aerr, ctx.Err())
 	require.True(t, errors.Is(aerr, ctx.Err()))
