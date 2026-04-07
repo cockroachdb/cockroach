@@ -74,6 +74,10 @@ var (
 	// worker encountered an error when trying to POST to GitHub
 	errGithubPostFailed = fmt.Errorf("failed to POST to GitHub")
 
+	// errInvariantViolationDetected error sent after a run in [testRunner.Run]
+	// if any worker detected a storage invariant violation.
+	errInvariantViolationDetected = fmt.Errorf("potential data corruption: storage invariant violation detected")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -303,6 +307,10 @@ type testRunner struct {
 
 	// numGithubPostErrs Counts GitHub post errors across all workers
 	numGithubPostErrs int32
+
+	// invariantViolationDetected is set when a storage invariant violation
+	// is detected by maybeSaveClusterDueToInvariantProblems.
+	invariantViolationDetected atomic.Bool
 }
 
 type perfMetricsCollector struct {
@@ -580,6 +588,10 @@ func (r *testRunner) Run(
 	// For the errors that don't short-circuit the pipeline run, return a joined
 	// error and leave case handling to the caller
 	var err error
+	if r.invariantViolationDetected.Load() {
+		shout(ctx, lopt.runnerL, lopt.stdout, "potential data corruption: invariant violation detected")
+		err = errors.Join(err, errInvariantViolationDetected)
+	}
 	if r.numGithubPostErrs > 0 {
 		shout(ctx, lopt.runnerL, lopt.stdout, "%d errors occurred while posting to github", r.numGithubPostErrs)
 		err = errors.Join(err, errGithubPostFailed)
@@ -2068,6 +2080,7 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 				snapName = "<failed>"
 			}
 			c.Save(ctx, "invariant problem - snap name "+snapName, t.L())
+			r.invariantViolationDetected.Store(true)
 			t.Error("invariant problem - snap name " + snapName + ":\n" + det.Stdout)
 			return
 		}
