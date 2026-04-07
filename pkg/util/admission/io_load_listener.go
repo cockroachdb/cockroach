@@ -692,7 +692,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	}
 	cumCompactionStats := computeCumStoreCompactionStats(metrics.Metrics)
 
-	prevDoLogFlush := io.aux.doLogFlush
+	prevShouldLog := io.aux.shouldLog
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
 		metrics.Levels[0], metrics.WriteStallCount, cumCompactionStats,
 		metrics.WAL.Failover.SecondaryWriteDuration, wt,
@@ -743,10 +743,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM)
-	// NB: we also log if prevDoLogFlush is true, since we often see a single
+	// NB: we also log if prevShouldLog is true, since we often see a single
 	// interval of no overload sandwiched between intervals of overload and we
 	// want to know what happened in that interval.
-	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.prevWriteTokenUtil > 0.8 ||
+	if prevShouldLog || io.aux.shouldLog || io.diskBandwidthLimiter.state.prevWriteTokenUtil > 0.8 ||
 		log.V(1) {
 		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
@@ -794,7 +794,12 @@ type adjustTokensAuxComputations struct {
 	recentUnflushedMemTableTooLarge bool
 
 	perWorkTokensAux perWorkTokensAux
-	doLogFlush       bool
+
+	// shouldLog indicates that something noteworthy happened during this
+	// adjustment interval, so the "IO overload" log message should be emitted.
+	// Examples: L0 compaction score rising above 0.2, flush utilization target
+	// changing, or token limiting kicking in.
+	shouldLog bool
 }
 
 // adjustTokensInner is used for computing tokens based on compaction and
@@ -1022,8 +1027,8 @@ func (io *ioLoadListener) adjustTokensInner(
 		flushUtilTargetFraction = minFlushUtilTargetFraction
 	}
 	numFlushTokens := int64(unlimitedTokens)
-	// doLogFlush becomes true if something interesting is done here.
-	doLogFlush := false
+	// shouldLog becomes true if something interesting is done here.
+	shouldLog := false
 	smoothedNumFlushTokens := prev.smoothedNumFlushTokens
 	// NB: we used to filter based on low flush utilization, defined as
 	// flushWriteThroughput.WorkDuration/flushWriteThroughput.WorkDuration+flushWriteThroughput.IdleDuration.
@@ -1063,7 +1068,7 @@ func (io *ioLoadListener) adjustTokensInner(
 			for i := 0; i < numDecreaseSteps; i++ {
 				if flushUtilTargetFraction >= minFlushUtilTargetFraction+flushUtilTargetFractionIncrement {
 					flushUtilTargetFraction -= flushUtilTargetFractionIncrement
-					doLogFlush = true
+					shouldLog = true
 				} else {
 					break
 				}
@@ -1072,10 +1077,10 @@ func (io *ioLoadListener) adjustTokensInner(
 			intWriteStalls == 0 && highTokenUsage {
 			// No write-stalls, and token usage was high, so give out more tokens.
 			flushUtilTargetFraction += flushUtilTargetFractionIncrement
-			doLogFlush = true
+			shouldLog = true
 		}
 		if highTokenUsage {
-			doLogFlush = true
+			shouldLog = true
 		}
 		flushTokensFloat := flushUtilTargetFraction * smoothedNumFlushTokens
 		if flushTokensFloat < float64(unlimitedTokens) {
@@ -1131,7 +1136,7 @@ func (io *ioLoadListener) adjustTokensInner(
 		}
 		totalNumByteTokens = unlimitedTokens
 	} else {
-		doLogFlush = true
+		shouldLog = true
 		if !updatedSmoothedIntL0CompactedBytes {
 			smoothedCompactionByteTokens = prev.smoothedCompactionByteTokens
 		} else {
@@ -1174,7 +1179,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	// the rare case where score is determined by file count). So score >= 0.2
 	// means that we start shaping when there are 2 sublevels.
 	if score >= 0.2 {
-		doLogFlush = true
+		shouldLog = true
 		if intWALFailover {
 			totalNumElasticByteTokens = 1
 		} else {
@@ -1210,7 +1215,7 @@ func (io *ioLoadListener) adjustTokensInner(
 		// flushes and throttling elastic work, and there should be less need of
 		// this mechanism.
 		if totalNumElasticByteTokens > intL0CompactedBytes {
-			doLogFlush = true
+			shouldLog = true
 			totalNumElasticByteTokens = intL0CompactedBytes
 		}
 	}
@@ -1269,7 +1274,7 @@ func (io *ioLoadListener) adjustTokensInner(
 			tokenKind:                       tokenKind,
 			usedCompactionTokensLowerBound:  usedCompactionTokensLowerBound,
 			recentUnflushedMemTableTooLarge: recentUnflushedMemTableTooLarge,
-			doLogFlush:                      doLogFlush,
+			shouldLog:                       shouldLog,
 		},
 		ioThreshold: ioThreshold,
 	}
