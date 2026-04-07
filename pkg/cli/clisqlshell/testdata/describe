@@ -500,7 +500,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html"
 pg_catalog,pg_attribute,table,node,permanent,prefix,"table columns (incomplete - see also information_schema.columns)
 https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
 pg_catalog,pg_auth_members,table,node,permanent,prefix,"role membership
-https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html"
+https://www.postgresql.org/docs/18/catalog-pg-auth-members.html"
 pg_catalog,pg_authid,table,node,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html"

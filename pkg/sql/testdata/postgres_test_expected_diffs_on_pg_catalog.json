@@ -4,7 +4,7 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 100,
+    "MissingColumns": 97,
     "DatatypeMismatches": 18
   },
   "diffs": {
@@ -16,11 +16,6 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       }
-    },
-    "pg_auth_members": {
-      "inherit_option": null,
-      "oid": null,
-      "set_option": null
     },
     "pg_backend_memory_contexts": {},
     "pg_class": {

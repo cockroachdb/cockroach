@@ -2890,12 +2890,12 @@ DROP ROLE test_dst_replication;
 
 ## pg_catalog.pg_auth_members
 
-query OOOB colnames
-SELECT roleid, member, grantor, admin_option
+query OOOOBBB colnames
+SELECT oid, roleid, member, grantor, admin_option, inherit_option, set_option
 FROM pg_catalog.pg_auth_members
 ----
-roleid      member      grantor  admin_option
-2310524507  1546506610  NULL     true
+oid         roleid      member      grantor  admin_option  inherit_option  set_option
+3818609862  2310524507  1546506610  NULL     true          true            true
 
 ## pg_catalog.pg_user
 
