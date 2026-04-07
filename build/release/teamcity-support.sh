@@ -122,6 +122,28 @@ function is_release_or_master_build(){
   # We don't strictly match the suffix to allow different ones, e.g. "rc" or have none.
 }
 
+# create_and_push_multi_arch_manifest creates a multi-architecture manifest
+# (image index) and pushes it to the registry. Uses `docker buildx imagetools
+# create` which handles both plain manifests and OCI image indexes as sources
+# (newer Docker versions produce the latter even for single-arch builds).
+# Falls back to `docker manifest create` for environments without buildx.
+#
+# Usage: create_and_push_multi_arch_manifest TARGET SOURCE1 SOURCE2 ...
+create_and_push_multi_arch_manifest() {
+  local target=$1
+  shift
+  local sources=("$@")
+
+  if docker buildx imagetools create -t "$target" "${sources[@]}"; then
+    return
+  fi
+
+  echo "Falling back to docker manifest create..."
+  docker manifest rm "$target" || :
+  docker manifest create "$target" "${sources[@]}"
+  docker manifest push "$target"
+}
+
 # Compare the passed version to the latest published version. Returns 0 if the
 # passed version is the latest. Supports stable versions only.
 function is_latest() {
