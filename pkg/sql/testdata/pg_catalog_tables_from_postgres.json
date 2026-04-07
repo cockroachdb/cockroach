@@ -1,5 +1,5 @@
 {
-  "version": "13.3",
+  "version": "18.3 (Homebrew)",
   "tables": {
     "pg_aggregate": {
       "columnNames": [
@@ -114,6 +114,87 @@
         "aggtranstype": {
           "oid": 26,
           "dataType": "oid"
+        }
+      }
+    },
+    "pg_aios": {
+      "columnNames": [
+        "pid",
+        "io_id",
+        "io_generation",
+        "state",
+        "operation",
+        "off",
+        "length",
+        "target",
+        "handle_data_len",
+        "raw_result",
+        "result",
+        "target_desc",
+        "f_sync",
+        "f_localmem",
+        "f_buffered"
+      ],
+      "columns": {
+        "f_buffered": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "f_localmem": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "f_sync": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "handle_data_len": {
+          "oid": 21,
+          "dataType": "int2"
+        },
+        "io_generation": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "io_id": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "length": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "off": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "operation": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "pid": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "raw_result": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "result": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "state": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "target": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "target_desc": {
+          "oid": 25,
+          "dataType": "text"
         }
       }
     },
@@ -261,15 +342,14 @@
         "attrelid",
         "attname",
         "atttypid",
-        "attstattarget",
         "attlen",
         "attnum",
-        "attndims",
-        "attcacheoff",
         "atttypmod",
+        "attndims",
         "attbyval",
-        "attstorage",
         "attalign",
+        "attstorage",
+        "attcompression",
         "attnotnull",
         "atthasdef",
         "atthasmissing",
@@ -279,6 +359,7 @@
         "attislocal",
         "attinhcount",
         "attcollation",
+        "attstattarget",
         "attacl",
         "attoptions",
         "attfdwoptions",
@@ -297,13 +378,13 @@
           "oid": 16,
           "dataType": "bool"
         },
-        "attcacheoff": {
-          "oid": 23,
-          "dataType": "int4"
-        },
         "attcollation": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "attcompression": {
+          "oid": 18,
+          "dataType": "char"
         },
         "attfdwoptions": {
           "oid": 1009,
@@ -326,8 +407,8 @@
           "dataType": "char"
         },
         "attinhcount": {
-          "oid": 23,
-          "dataType": "int4"
+          "oid": 21,
+          "dataType": "int2"
         },
         "attisdropped": {
           "oid": 16,
@@ -350,8 +431,8 @@
           "dataType": "name"
         },
         "attndims": {
-          "oid": 23,
-          "dataType": "int4"
+          "oid": 21,
+          "dataType": "int2"
         },
         "attnotnull": {
           "oid": 16,
@@ -370,8 +451,8 @@
           "dataType": "oid"
         },
         "attstattarget": {
-          "oid": 23,
-          "dataType": "int4"
+          "oid": 21,
+          "dataType": "int2"
         },
         "attstorage": {
           "oid": 18,
@@ -389,10 +470,13 @@
     },
     "pg_auth_members": {
       "columnNames": [
+        "oid",
         "roleid",
         "member",
         "grantor",
-        "admin_option"
+        "admin_option",
+        "inherit_option",
+        "set_option"
       ],
       "columns": {
         "admin_option": {
@@ -403,13 +487,25 @@
           "oid": 26,
           "dataType": "oid"
         },
+        "inherit_option": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "member": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "oid": {
           "oid": 26,
           "dataType": "oid"
         },
         "roleid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "set_option": {
+          "oid": 16,
+          "dataType": "bool"
         }
       }
     },
@@ -556,6 +652,62 @@
         }
       }
     },
+    "pg_backend_memory_contexts": {
+      "columnNames": [
+        "name",
+        "ident",
+        "type",
+        "level",
+        "path",
+        "total_bytes",
+        "total_nblocks",
+        "free_bytes",
+        "free_chunks",
+        "used_bytes"
+      ],
+      "columns": {
+        "free_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "free_chunks": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "ident": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "level": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "path": {
+          "oid": 1007,
+          "dataType": "_int4"
+        },
+        "total_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "total_nblocks": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "type": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "used_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        }
+      }
+    },
     "pg_cast": {
       "columnNames": [
         "oid",
@@ -606,6 +758,7 @@
         "relpages",
         "reltuples",
         "relallvisible",
+        "relallfrozen",
         "reltoastrelid",
         "relhasindex",
         "relisshared",
@@ -636,6 +789,10 @@
         "relacl": {
           "oid": 1009,
           "dataType": "_TEXT"
+        },
+        "relallfrozen": {
+          "oid": 23,
+          "dataType": "int4"
         },
         "relallvisible": {
           "oid": 23,
@@ -774,24 +931,34 @@
         "collencoding",
         "collcollate",
         "collctype",
+        "colllocale",
+        "collicurules",
         "collversion"
       ],
       "columns": {
         "collcollate": {
-          "oid": 19,
-          "dataType": "name"
+          "oid": 25,
+          "dataType": "text"
         },
         "collctype": {
-          "oid": 19,
-          "dataType": "name"
+          "oid": 25,
+          "dataType": "text"
         },
         "collencoding": {
           "oid": 23,
           "dataType": "int4"
         },
+        "collicurules": {
+          "oid": 25,
+          "dataType": "text"
+        },
         "collisdeterministic": {
           "oid": 16,
           "dataType": "bool"
+        },
+        "colllocale": {
+          "oid": 25,
+          "dataType": "text"
         },
         "collname": {
           "oid": 19,
@@ -843,6 +1010,7 @@
         "contype",
         "condeferrable",
         "condeferred",
+        "conenforced",
         "convalidated",
         "conrelid",
         "contypid",
@@ -855,11 +1023,13 @@
         "conislocal",
         "coninhcount",
         "connoinherit",
+        "conperiod",
         "conkey",
         "confkey",
         "conpfeqop",
         "conppeqop",
         "conffeqop",
+        "confdelsetcols",
         "conexclop",
         "conbin"
       ],
@@ -876,9 +1046,17 @@
           "oid": 16,
           "dataType": "bool"
         },
+        "conenforced": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "conexclop": {
           "oid": 1028,
           "dataType": "_oid"
+        },
+        "confdelsetcols": {
+          "oid": 1005,
+          "dataType": "_int2"
         },
         "confdeltype": {
           "oid": 18,
@@ -909,8 +1087,8 @@
           "dataType": "oid"
         },
         "coninhcount": {
-          "oid": 23,
-          "dataType": "int4"
+          "oid": 21,
+          "dataType": "int2"
         },
         "conislocal": {
           "oid": 16,
@@ -935,6 +1113,10 @@
         "conparentid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "conperiod": {
+          "oid": 16,
+          "dataType": "bool"
         },
         "conpfeqop": {
           "oid": 1028,
@@ -1054,15 +1236,19 @@
         "datname",
         "datdba",
         "encoding",
-        "datcollate",
-        "datctype",
+        "datlocprovider",
         "datistemplate",
         "datallowconn",
+        "dathasloginevt",
         "datconnlimit",
-        "datlastsysoid",
         "datfrozenxid",
         "datminmxid",
         "dattablespace",
+        "datcollate",
+        "datctype",
+        "datlocale",
+        "daticurules",
+        "datcollversion",
         "datacl"
       ],
       "columns": {
@@ -1075,16 +1261,20 @@
           "dataType": "bool"
         },
         "datcollate": {
-          "oid": 19,
-          "dataType": "name"
+          "oid": 25,
+          "dataType": "text"
+        },
+        "datcollversion": {
+          "oid": 25,
+          "dataType": "text"
         },
         "datconnlimit": {
           "oid": 23,
           "dataType": "int4"
         },
         "datctype": {
-          "oid": 19,
-          "dataType": "name"
+          "oid": 25,
+          "dataType": "text"
         },
         "datdba": {
           "oid": 26,
@@ -1094,13 +1284,25 @@
           "oid": 20,
           "dataType": "INT8"
         },
+        "dathasloginevt": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "daticurules": {
+          "oid": 25,
+          "dataType": "text"
+        },
         "datistemplate": {
           "oid": 16,
           "dataType": "bool"
         },
-        "datlastsysoid": {
-          "oid": 26,
-          "dataType": "oid"
+        "datlocale": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "datlocprovider": {
+          "oid": 18,
+          "dataType": "char"
         },
         "datminmxid": {
           "oid": 20,
@@ -1155,8 +1357,8 @@
       ],
       "columns": {
         "defaclacl": {
-          "oid": 1034,
-          "dataType": "_aclitem"
+          "oid": 1009,
+          "dataType": "_TEXT"
         },
         "defaclnamespace": {
           "oid": 26,
@@ -1528,6 +1730,8 @@
     },
     "pg_hba_file_rules": {
       "columnNames": [
+        "rule_number",
+        "file_name",
         "line_number",
         "type",
         "database",
@@ -1555,6 +1759,10 @@
           "oid": 25,
           "dataType": "text"
         },
+        "file_name": {
+          "oid": 25,
+          "dataType": "text"
+        },
         "line_number": {
           "oid": 23,
           "dataType": "int4"
@@ -1567,6 +1775,10 @@
           "oid": 1009,
           "dataType": "_text"
         },
+        "rule_number": {
+          "oid": 23,
+          "dataType": "int4"
+        },
         "type": {
           "oid": 25,
           "dataType": "text"
@@ -1577,6 +1789,47 @@
         }
       }
     },
+    "pg_ident_file_mappings": {
+      "columnNames": [
+        "map_number",
+        "file_name",
+        "line_number",
+        "map_name",
+        "sys_name",
+        "pg_username",
+        "error"
+      ],
+      "columns": {
+        "error": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "file_name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "line_number": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "map_name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "map_number": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "pg_username": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "sys_name": {
+          "oid": 25,
+          "dataType": "text"
+        }
+      }
+    },
     "pg_index": {
       "columnNames": [
         "indexrelid",
@@ -1584,6 +1837,7 @@
         "indnatts",
         "indnkeyatts",
         "indisunique",
+        "indnullsnotdistinct",
         "indisprimary",
         "indisexclusion",
         "indimmediate",
@@ -1669,6 +1923,10 @@
           "oid": 21,
           "dataType": "int2"
         },
+        "indnullsnotdistinct": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "indoption": {
           "oid": 22,
           "dataType": "int2vector"
@@ -1718,9 +1976,14 @@
       "columnNames": [
         "inhrelid",
         "inhparent",
-        "inhseqno"
+        "inhseqno",
+        "inhdetachpending"
       ],
       "columns": {
+        "inhdetachpending": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "inhparent": {
           "oid": 26,
           "dataType": "oid"
@@ -1875,7 +2138,8 @@
         "pid",
         "mode",
         "granted",
-        "fastpath"
+        "fastpath",
+        "waitstart"
       ],
       "columns": {
         "classid": {
@@ -1937,6 +2201,10 @@
         "virtualxid": {
           "oid": 25,
           "dataType": "text"
+        },
+        "waitstart": {
+          "oid": 1184,
+          "dataType": "timestamptz"
         }
       }
     },
@@ -2170,6 +2438,27 @@
         }
       }
     },
+    "pg_parameter_acl": {
+      "columnNames": [
+        "oid",
+        "parname",
+        "paracl"
+      ],
+      "columns": {
+        "oid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "paracl": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
+        "parname": {
+          "oid": 25,
+          "dataType": "text"
+        }
+      }
+    },
     "pg_partitioned_table": {
       "columnNames": [
         "partrelid",
@@ -2314,12 +2603,23 @@
         "statement",
         "prepare_time",
         "parameter_types",
-        "from_sql"
+        "result_types",
+        "from_sql",
+        "generic_plans",
+        "custom_plans"
       ],
       "columns": {
+        "custom_plans": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "from_sql": {
           "oid": 16,
           "dataType": "bool"
+        },
+        "generic_plans": {
+          "oid": 20,
+          "dataType": "int8"
         },
         "name": {
           "oid": 25,
@@ -2332,6 +2632,10 @@
         "prepare_time": {
           "oid": 1184,
           "dataType": "timestamptz"
+        },
+        "result_types": {
+          "oid": 2211,
+          "dataType": "_regtype"
         },
         "statement": {
           "oid": 25,
@@ -2536,7 +2840,8 @@
         "pubupdate",
         "pubdelete",
         "pubtruncate",
-        "pubviaroot"
+        "pubviaroot",
+        "pubgencols"
       ],
       "columns": {
         "oid": {
@@ -2550,6 +2855,10 @@
         "pubdelete": {
           "oid": 16,
           "dataType": "bool"
+        },
+        "pubgencols": {
+          "oid": 18,
+          "dataType": "char"
         },
         "pubinsert": {
           "oid": 16,
@@ -2577,20 +2886,51 @@
         }
       }
     },
-    "pg_publication_rel": {
+    "pg_publication_namespace": {
       "columnNames": [
         "oid",
-        "prpubid",
-        "prrelid"
+        "pnpubid",
+        "pnnspid"
       ],
       "columns": {
         "oid": {
           "oid": 26,
           "dataType": "oid"
         },
+        "pnnspid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "pnpubid": {
+          "oid": 26,
+          "dataType": "oid"
+        }
+      }
+    },
+    "pg_publication_rel": {
+      "columnNames": [
+        "oid",
+        "prpubid",
+        "prrelid",
+        "prqual",
+        "prattrs"
+      ],
+      "columns": {
+        "oid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "prattrs": {
+          "oid": 22,
+          "dataType": "int2vector"
+        },
         "prpubid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "prqual": {
+          "oid": 25,
+          "dataType": "TEXT"
         },
         "prrelid": {
           "oid": 26,
@@ -2602,12 +2942,22 @@
       "columnNames": [
         "pubname",
         "schemaname",
-        "tablename"
+        "tablename",
+        "attnames",
+        "rowfilter"
       ],
       "columns": {
+        "attnames": {
+          "oid": 1003,
+          "dataType": "_name"
+        },
         "pubname": {
           "oid": 19,
           "dataType": "name"
+        },
+        "rowfilter": {
+          "oid": 25,
+          "dataType": "text"
         },
         "schemaname": {
           "oid": 19,
@@ -2623,6 +2973,7 @@
       "columnNames": [
         "rngtypid",
         "rngsubtype",
+        "rngmultitypid",
         "rngcollation",
         "rngsubopc",
         "rngcanonical",
@@ -2634,6 +2985,10 @@
           "dataType": "regproc"
         },
         "rngcollation": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "rngmultitypid": {
           "oid": 26,
           "dataType": "oid"
         },
@@ -2712,7 +3067,14 @@
         "restart_lsn",
         "confirmed_flush_lsn",
         "wal_status",
-        "safe_wal_size"
+        "safe_wal_size",
+        "two_phase",
+        "two_phase_at",
+        "inactive_since",
+        "conflicting",
+        "invalidation_reason",
+        "failover",
+        "synced"
       ],
       "columns": {
         "active": {
@@ -2731,6 +3093,10 @@
           "oid": 25,
           "dataType": "TEXT"
         },
+        "conflicting": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "database": {
           "oid": 19,
           "dataType": "name"
@@ -2738,6 +3104,18 @@
         "datoid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "failover": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "inactive_since": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "invalidation_reason": {
+          "oid": 25,
+          "dataType": "text"
         },
         "plugin": {
           "oid": 19,
@@ -2759,9 +3137,21 @@
           "oid": 25,
           "dataType": "text"
         },
+        "synced": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "temporary": {
           "oid": 16,
           "dataType": "bool"
+        },
+        "two_phase": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "two_phase_at": {
+          "oid": 25,
+          "dataType": "TEXT"
         },
         "wal_status": {
           "oid": 25,
@@ -3330,6 +3720,27 @@
         }
       }
     },
+    "pg_shmem_allocations_numa": {
+      "columnNames": [
+        "name",
+        "numa_node",
+        "size"
+      ],
+      "columns": {
+        "name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "numa_node": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "size": {
+          "oid": 20,
+          "dataType": "int8"
+        }
+      }
+    },
     "pg_shseclabel": {
       "columnNames": [
         "objoid",
@@ -3377,6 +3788,7 @@
         "state",
         "backend_xid",
         "backend_xmin",
+        "query_id",
         "query",
         "backend_type"
       ],
@@ -3433,6 +3845,10 @@
           "oid": 25,
           "dataType": "text"
         },
+        "query_id": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "query_start": {
           "oid": 1184,
           "dataType": "timestamptz"
@@ -3475,6 +3891,7 @@
         "relname",
         "indexrelname",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_read",
         "idx_tup_fetch"
       ],
@@ -3499,6 +3916,10 @@
           "oid": 19,
           "dataType": "name"
         },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
         "relid": {
           "oid": 26,
           "dataType": "oid"
@@ -3519,13 +3940,16 @@
         "schemaname",
         "relname",
         "seq_scan",
+        "last_seq_scan",
         "seq_tup_read",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_fetch",
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
         "n_tup_hot_upd",
+        "n_tup_newpage_upd",
         "n_live_tup",
         "n_dead_tup",
         "n_mod_since_analyze",
@@ -3537,7 +3961,11 @@
         "vacuum_count",
         "autovacuum_count",
         "analyze_count",
-        "autoanalyze_count"
+        "autoanalyze_count",
+        "total_vacuum_time",
+        "total_autovacuum_time",
+        "total_analyze_time",
+        "total_autoanalyze_time"
       ],
       "columns": {
         "analyze_count": {
@@ -3569,6 +3997,14 @@
           "dataType": "timestamptz"
         },
         "last_autovacuum": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_seq_scan": {
           "oid": 1184,
           "dataType": "timestamptz"
         },
@@ -3604,6 +4040,10 @@
           "oid": 20,
           "dataType": "int8"
         },
+        "n_tup_newpage_upd": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "n_tup_upd": {
           "oid": 20,
           "dataType": "int8"
@@ -3627,6 +4067,22 @@
         "seq_tup_read": {
           "oid": 20,
           "dataType": "int8"
+        },
+        "total_analyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autoanalyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autovacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_vacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
         },
         "vacuum_count": {
           "oid": 20,
@@ -3677,15 +4133,8 @@
     },
     "pg_stat_bgwriter": {
       "columnNames": [
-        "checkpoints_timed",
-        "checkpoints_req",
-        "checkpoint_write_time",
-        "checkpoint_sync_time",
-        "buffers_checkpoint",
         "buffers_clean",
         "maxwritten_clean",
-        "buffers_backend",
-        "buffers_backend_fsync",
         "buffers_alloc",
         "stats_reset"
       ],
@@ -3694,35 +4143,7 @@
           "oid": 20,
           "dataType": "int8"
         },
-        "buffers_backend": {
-          "oid": 20,
-          "dataType": "int8"
-        },
-        "buffers_backend_fsync": {
-          "oid": 20,
-          "dataType": "int8"
-        },
-        "buffers_checkpoint": {
-          "oid": 20,
-          "dataType": "int8"
-        },
         "buffers_clean": {
-          "oid": 20,
-          "dataType": "int8"
-        },
-        "checkpoint_sync_time": {
-          "oid": 701,
-          "dataType": "float8"
-        },
-        "checkpoint_write_time": {
-          "oid": 701,
-          "dataType": "float8"
-        },
-        "checkpoints_req": {
-          "oid": 20,
-          "dataType": "int8"
-        },
-        "checkpoints_timed": {
           "oid": 20,
           "dataType": "int8"
         },
@@ -3733,6 +4154,67 @@
         "stats_reset": {
           "oid": 1184,
           "dataType": "timestamptz"
+        }
+      }
+    },
+    "pg_stat_checkpointer": {
+      "columnNames": [
+        "num_timed",
+        "num_requested",
+        "num_done",
+        "restartpoints_timed",
+        "restartpoints_req",
+        "restartpoints_done",
+        "write_time",
+        "sync_time",
+        "buffers_written",
+        "slru_written",
+        "stats_reset"
+      ],
+      "columns": {
+        "buffers_written": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "num_done": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "num_requested": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "num_timed": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "restartpoints_done": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "restartpoints_req": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "restartpoints_timed": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "slru_written": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "sync_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "write_time": {
+          "oid": 701,
+          "dataType": "float8"
         }
       }
     },
@@ -3758,9 +4240,22 @@
         "checksum_last_failure",
         "blk_read_time",
         "blk_write_time",
+        "session_time",
+        "active_time",
+        "idle_in_transaction_time",
+        "sessions",
+        "sessions_abandoned",
+        "sessions_fatal",
+        "sessions_killed",
+        "parallel_workers_to_launch",
+        "parallel_workers_launched",
         "stats_reset"
       ],
       "columns": {
+        "active_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
         "blk_read_time": {
           "oid": 701,
           "dataType": "float8"
@@ -3801,9 +4296,41 @@
           "oid": 20,
           "dataType": "int8"
         },
+        "idle_in_transaction_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
         "numbackends": {
           "oid": 23,
           "dataType": "int4"
+        },
+        "parallel_workers_launched": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "parallel_workers_to_launch": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "session_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "sessions": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "sessions_abandoned": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "sessions_fatal": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "sessions_killed": {
+          "oid": 20,
+          "dataType": "int8"
         },
         "stats_reset": {
           "oid": 1184,
@@ -3855,9 +4382,14 @@
         "confl_lock",
         "confl_snapshot",
         "confl_bufferpin",
-        "confl_deadlock"
+        "confl_deadlock",
+        "confl_active_logicalslot"
       ],
       "columns": {
+        "confl_active_logicalslot": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "confl_bufferpin": {
           "oid": 20,
           "dataType": "int8"
@@ -3893,9 +4425,14 @@
         "pid",
         "gss_authenticated",
         "principal",
-        "encrypted"
+        "encrypted",
+        "credentials_delegated"
       ],
       "columns": {
+        "credentials_delegated": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "encrypted": {
           "oid": 16,
           "dataType": "bool"
@@ -3914,6 +4451,112 @@
         }
       }
     },
+    "pg_stat_io": {
+      "columnNames": [
+        "backend_type",
+        "object",
+        "context",
+        "reads",
+        "read_bytes",
+        "read_time",
+        "writes",
+        "write_bytes",
+        "write_time",
+        "writebacks",
+        "writeback_time",
+        "extends",
+        "extend_bytes",
+        "extend_time",
+        "hits",
+        "evictions",
+        "reuses",
+        "fsyncs",
+        "fsync_time",
+        "stats_reset"
+      ],
+      "columns": {
+        "backend_type": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "context": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "evictions": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "extend_bytes": {
+          "oid": 1700,
+          "dataType": "numeric"
+        },
+        "extend_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "extends": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "fsync_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "fsyncs": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "hits": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "object": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "read_bytes": {
+          "oid": 1700,
+          "dataType": "numeric"
+        },
+        "read_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "reads": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "reuses": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "write_bytes": {
+          "oid": 1700,
+          "dataType": "numeric"
+        },
+        "write_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "writeback_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "writebacks": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "writes": {
+          "oid": 20,
+          "dataType": "int8"
+        }
+      }
+    },
     "pg_stat_progress_analyze": {
       "columnNames": [
         "pid",
@@ -3927,7 +4570,8 @@
         "ext_stats_computed",
         "child_tables_total",
         "child_tables_done",
-        "current_child_table_relid"
+        "current_child_table_relid",
+        "delay_time"
       ],
       "columns": {
         "child_tables_done": {
@@ -3949,6 +4593,10 @@
         "datname": {
           "oid": 19,
           "dataType": "name"
+        },
+        "delay_time": {
+          "oid": 701,
+          "dataType": "float8"
         },
         "ext_stats_computed": {
           "oid": 20,
@@ -4082,6 +4730,67 @@
         }
       }
     },
+    "pg_stat_progress_copy": {
+      "columnNames": [
+        "pid",
+        "datid",
+        "datname",
+        "relid",
+        "command",
+        "type",
+        "bytes_processed",
+        "bytes_total",
+        "tuples_processed",
+        "tuples_excluded",
+        "tuples_skipped"
+      ],
+      "columns": {
+        "bytes_processed": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "bytes_total": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "command": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "datid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "datname": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "pid": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "relid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "tuples_excluded": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "tuples_processed": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "tuples_skipped": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "type": {
+          "oid": 25,
+          "dataType": "text"
+        }
+      }
+    },
     "pg_stat_progress_create_index": {
       "columnNames": [
         "pid",
@@ -4179,8 +4888,12 @@
         "heap_blks_scanned",
         "heap_blks_vacuumed",
         "index_vacuum_count",
-        "max_dead_tuples",
-        "num_dead_tuples"
+        "max_dead_tuple_bytes",
+        "dead_tuple_bytes",
+        "num_dead_item_ids",
+        "indexes_total",
+        "indexes_processed",
+        "delay_time"
       ],
       "columns": {
         "datid": {
@@ -4190,6 +4903,14 @@
         "datname": {
           "oid": 19,
           "dataType": "name"
+        },
+        "dead_tuple_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "delay_time": {
+          "oid": 701,
+          "dataType": "float8"
         },
         "heap_blks_scanned": {
           "oid": 20,
@@ -4207,11 +4928,19 @@
           "oid": 20,
           "dataType": "int8"
         },
-        "max_dead_tuples": {
+        "indexes_processed": {
           "oid": 20,
           "dataType": "int8"
         },
-        "num_dead_tuples": {
+        "indexes_total": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "max_dead_tuple_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "num_dead_item_ids": {
           "oid": 20,
           "dataType": "int8"
         },
@@ -4226,6 +4955,62 @@
         "relid": {
           "oid": 26,
           "dataType": "oid"
+        }
+      }
+    },
+    "pg_stat_recovery_prefetch": {
+      "columnNames": [
+        "stats_reset",
+        "prefetch",
+        "hit",
+        "skip_init",
+        "skip_new",
+        "skip_fpw",
+        "skip_rep",
+        "wal_distance",
+        "block_distance",
+        "io_depth"
+      ],
+      "columns": {
+        "block_distance": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "hit": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "io_depth": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "prefetch": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "skip_fpw": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "skip_init": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "skip_new": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "skip_rep": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "wal_distance": {
+          "oid": 23,
+          "dataType": "int4"
         }
       }
     },
@@ -4335,6 +5120,62 @@
         }
       }
     },
+    "pg_stat_replication_slots": {
+      "columnNames": [
+        "slot_name",
+        "spill_txns",
+        "spill_count",
+        "spill_bytes",
+        "stream_txns",
+        "stream_count",
+        "stream_bytes",
+        "total_txns",
+        "total_bytes",
+        "stats_reset"
+      ],
+      "columns": {
+        "slot_name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "spill_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "spill_count": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "spill_txns": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "stream_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stream_count": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stream_txns": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "total_bytes": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "total_txns": {
+          "oid": 20,
+          "dataType": "int8"
+        }
+      }
+    },
     "pg_stat_slru": {
       "columnNames": [
         "name",
@@ -4393,7 +5234,6 @@
         "version",
         "cipher",
         "bits",
-        "compression",
         "client_dn",
         "client_serial",
         "issuer_dn"
@@ -4414,10 +5254,6 @@
         "client_serial": {
           "oid": 1700,
           "dataType": "numeric"
-        },
-        "compression": {
-          "oid": 16,
-          "dataType": "bool"
         },
         "issuer_dn": {
           "oid": 25,
@@ -4441,7 +5277,9 @@
       "columnNames": [
         "subid",
         "subname",
+        "worker_type",
         "pid",
+        "leader_pid",
         "relid",
         "received_lsn",
         "last_msg_send_time",
@@ -4466,6 +5304,10 @@
           "oid": 1184,
           "dataType": "timestamptz"
         },
+        "leader_pid": {
+          "oid": 23,
+          "dataType": "int4"
+        },
         "pid": {
           "oid": 23,
           "dataType": "int4"
@@ -4485,6 +5327,76 @@
         "subname": {
           "oid": 19,
           "dataType": "name"
+        },
+        "worker_type": {
+          "oid": 25,
+          "dataType": "text"
+        }
+      }
+    },
+    "pg_stat_subscription_stats": {
+      "columnNames": [
+        "subid",
+        "subname",
+        "apply_error_count",
+        "sync_error_count",
+        "confl_insert_exists",
+        "confl_update_origin_differs",
+        "confl_update_exists",
+        "confl_update_missing",
+        "confl_delete_origin_differs",
+        "confl_delete_missing",
+        "confl_multiple_unique_conflicts",
+        "stats_reset"
+      ],
+      "columns": {
+        "apply_error_count": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_delete_missing": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_delete_origin_differs": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_insert_exists": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_multiple_unique_conflicts": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_update_exists": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_update_missing": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "confl_update_origin_differs": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "subid": {
+          "oid": 26,
+          "dataType": "oid"
+        },
+        "subname": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "sync_error_count": {
+          "oid": 20,
+          "dataType": "int8"
         }
       }
     },
@@ -4496,6 +5408,7 @@
         "relname",
         "indexrelname",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_read",
         "idx_tup_fetch"
       ],
@@ -4520,6 +5433,10 @@
           "oid": 19,
           "dataType": "name"
         },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
         "relid": {
           "oid": 26,
           "dataType": "oid"
@@ -4540,13 +5457,16 @@
         "schemaname",
         "relname",
         "seq_scan",
+        "last_seq_scan",
         "seq_tup_read",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_fetch",
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
         "n_tup_hot_upd",
+        "n_tup_newpage_upd",
         "n_live_tup",
         "n_dead_tup",
         "n_mod_since_analyze",
@@ -4558,7 +5478,11 @@
         "vacuum_count",
         "autovacuum_count",
         "analyze_count",
-        "autoanalyze_count"
+        "autoanalyze_count",
+        "total_vacuum_time",
+        "total_autovacuum_time",
+        "total_analyze_time",
+        "total_autoanalyze_time"
       ],
       "columns": {
         "analyze_count": {
@@ -4590,6 +5514,14 @@
           "dataType": "timestamptz"
         },
         "last_autovacuum": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_seq_scan": {
           "oid": 1184,
           "dataType": "timestamptz"
         },
@@ -4625,6 +5557,10 @@
           "oid": 20,
           "dataType": "int8"
         },
+        "n_tup_newpage_upd": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "n_tup_upd": {
           "oid": 20,
           "dataType": "int8"
@@ -4648,6 +5584,22 @@
         "seq_tup_read": {
           "oid": 20,
           "dataType": "int8"
+        },
+        "total_analyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autoanalyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autovacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_vacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
         },
         "vacuum_count": {
           "oid": 20,
@@ -4699,6 +5651,7 @@
         "relname",
         "indexrelname",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_read",
         "idx_tup_fetch"
       ],
@@ -4723,6 +5676,10 @@
           "oid": 19,
           "dataType": "name"
         },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
         "relid": {
           "oid": 26,
           "dataType": "oid"
@@ -4743,13 +5700,16 @@
         "schemaname",
         "relname",
         "seq_scan",
+        "last_seq_scan",
         "seq_tup_read",
         "idx_scan",
+        "last_idx_scan",
         "idx_tup_fetch",
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
         "n_tup_hot_upd",
+        "n_tup_newpage_upd",
         "n_live_tup",
         "n_dead_tup",
         "n_mod_since_analyze",
@@ -4761,7 +5721,11 @@
         "vacuum_count",
         "autovacuum_count",
         "analyze_count",
-        "autoanalyze_count"
+        "autoanalyze_count",
+        "total_vacuum_time",
+        "total_autovacuum_time",
+        "total_analyze_time",
+        "total_autoanalyze_time"
       ],
       "columns": {
         "analyze_count": {
@@ -4793,6 +5757,14 @@
           "dataType": "timestamptz"
         },
         "last_autovacuum": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_idx_scan": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "last_seq_scan": {
           "oid": 1184,
           "dataType": "timestamptz"
         },
@@ -4828,6 +5800,10 @@
           "oid": 20,
           "dataType": "int8"
         },
+        "n_tup_newpage_upd": {
+          "oid": 20,
+          "dataType": "int8"
+        },
         "n_tup_upd": {
           "oid": 20,
           "dataType": "int8"
@@ -4852,7 +5828,54 @@
           "oid": 20,
           "dataType": "int8"
         },
+        "total_analyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autoanalyze_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_autovacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
+        "total_vacuum_time": {
+          "oid": 701,
+          "dataType": "float8"
+        },
         "vacuum_count": {
+          "oid": 20,
+          "dataType": "int8"
+        }
+      }
+    },
+    "pg_stat_wal": {
+      "columnNames": [
+        "wal_records",
+        "wal_fpi",
+        "wal_bytes",
+        "wal_buffers_full",
+        "stats_reset"
+      ],
+      "columns": {
+        "stats_reset": {
+          "oid": 1184,
+          "dataType": "timestamptz"
+        },
+        "wal_buffers_full": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "wal_bytes": {
+          "oid": 1700,
+          "dataType": "numeric"
+        },
+        "wal_fpi": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "wal_records": {
           "oid": 20,
           "dataType": "int8"
         }
@@ -4951,7 +5974,8 @@
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
-        "n_tup_hot_upd"
+        "n_tup_hot_upd",
+        "n_tup_newpage_upd"
       ],
       "columns": {
         "idx_scan": {
@@ -4971,6 +5995,10 @@
           "dataType": "int8"
         },
         "n_tup_ins": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "n_tup_newpage_upd": {
           "oid": 20,
           "dataType": "int8"
         },
@@ -5012,7 +6040,8 @@
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
-        "n_tup_hot_upd"
+        "n_tup_hot_upd",
+        "n_tup_newpage_upd"
       ],
       "columns": {
         "idx_scan": {
@@ -5032,6 +6061,10 @@
           "dataType": "int8"
         },
         "n_tup_ins": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "n_tup_newpage_upd": {
           "oid": 20,
           "dataType": "int8"
         },
@@ -5109,7 +6142,8 @@
         "n_tup_ins",
         "n_tup_upd",
         "n_tup_del",
-        "n_tup_hot_upd"
+        "n_tup_hot_upd",
+        "n_tup_newpage_upd"
       ],
       "columns": {
         "idx_scan": {
@@ -5129,6 +6163,10 @@
           "dataType": "int8"
         },
         "n_tup_ins": {
+          "oid": 20,
+          "dataType": "int8"
+        },
+        "n_tup_newpage_upd": {
           "oid": 20,
           "dataType": "int8"
         },
@@ -5725,14 +6763,19 @@
         "stxname",
         "stxnamespace",
         "stxowner",
-        "stxstattarget",
         "stxkeys",
-        "stxkind"
+        "stxstattarget",
+        "stxkind",
+        "stxexprs"
       ],
       "columns": {
         "oid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "stxexprs": {
+          "oid": 25,
+          "dataType": "TEXT"
         },
         "stxkeys": {
           "oid": 22,
@@ -5759,22 +6802,32 @@
           "dataType": "oid"
         },
         "stxstattarget": {
-          "oid": 23,
-          "dataType": "int4"
+          "oid": 21,
+          "dataType": "int2"
         }
       }
     },
     "pg_statistic_ext_data": {
       "columnNames": [
         "stxoid",
+        "stxdinherit",
         "stxdndistinct",
         "stxddependencies",
-        "stxdmcv"
+        "stxdmcv",
+        "stxdexpr"
       ],
       "columns": {
         "stxddependencies": {
           "oid": 17,
           "dataType": "BYTEA"
+        },
+        "stxdexpr": {
+          "oid": 10028,
+          "dataType": "_pg_statistic"
+        },
+        "stxdinherit": {
+          "oid": 16,
+          "dataType": "bool"
         },
         "stxdmcv": {
           "oid": 17,
@@ -5805,7 +6858,10 @@
         "correlation",
         "most_common_elems",
         "most_common_elem_freqs",
-        "elem_count_histogram"
+        "elem_count_histogram",
+        "range_length_histogram",
+        "range_empty_frac",
+        "range_bounds_histogram"
       ],
       "columns": {
         "attname": {
@@ -5856,6 +6912,18 @@
           "oid": 700,
           "dataType": "float4"
         },
+        "range_bounds_histogram": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
+        "range_empty_frac": {
+          "oid": 700,
+          "dataType": "float4"
+        },
+        "range_length_histogram": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
         "schemaname": {
           "oid": 19,
           "dataType": "name"
@@ -5874,7 +6942,9 @@
         "statistics_name",
         "statistics_owner",
         "attnames",
+        "exprs",
         "kinds",
+        "inherited",
         "n_distinct",
         "dependencies",
         "most_common_vals",
@@ -5890,6 +6960,14 @@
         "dependencies": {
           "oid": 17,
           "dataType": "BYTEA"
+        },
+        "exprs": {
+          "oid": 1009,
+          "dataType": "_text"
+        },
+        "inherited": {
+          "oid": 16,
+          "dataType": "bool"
         },
         "kinds": {
           "oid": 1002,
@@ -5937,22 +7015,126 @@
         }
       }
     },
+    "pg_stats_ext_exprs": {
+      "columnNames": [
+        "schemaname",
+        "tablename",
+        "statistics_schemaname",
+        "statistics_name",
+        "statistics_owner",
+        "expr",
+        "inherited",
+        "null_frac",
+        "avg_width",
+        "n_distinct",
+        "most_common_vals",
+        "most_common_freqs",
+        "histogram_bounds",
+        "correlation",
+        "most_common_elems",
+        "most_common_elem_freqs",
+        "elem_count_histogram"
+      ],
+      "columns": {
+        "avg_width": {
+          "oid": 23,
+          "dataType": "int4"
+        },
+        "correlation": {
+          "oid": 700,
+          "dataType": "float4"
+        },
+        "elem_count_histogram": {
+          "oid": 1021,
+          "dataType": "_float4"
+        },
+        "expr": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "histogram_bounds": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
+        "inherited": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "most_common_elem_freqs": {
+          "oid": 1021,
+          "dataType": "_float4"
+        },
+        "most_common_elems": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
+        "most_common_freqs": {
+          "oid": 1021,
+          "dataType": "_float4"
+        },
+        "most_common_vals": {
+          "oid": 1009,
+          "dataType": "_TEXT"
+        },
+        "n_distinct": {
+          "oid": 700,
+          "dataType": "float4"
+        },
+        "null_frac": {
+          "oid": 700,
+          "dataType": "float4"
+        },
+        "schemaname": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "statistics_name": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "statistics_owner": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "statistics_schemaname": {
+          "oid": 19,
+          "dataType": "name"
+        },
+        "tablename": {
+          "oid": 19,
+          "dataType": "name"
+        }
+      }
+    },
     "pg_subscription": {
       "columnNames": [
         "oid",
         "subdbid",
+        "subskiplsn",
         "subname",
         "subowner",
         "subenabled",
+        "subbinary",
+        "substream",
+        "subtwophasestate",
+        "subdisableonerr",
+        "subpasswordrequired",
+        "subrunasowner",
+        "subfailover",
         "subconninfo",
         "subslotname",
         "subsynccommit",
-        "subpublications"
+        "subpublications",
+        "suborigin"
       ],
       "columns": {
         "oid": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "subbinary": {
+          "oid": 16,
+          "dataType": "bool"
         },
         "subconninfo": {
           "oid": 25,
@@ -5962,7 +7144,15 @@
           "oid": 26,
           "dataType": "oid"
         },
+        "subdisableonerr": {
+          "oid": 16,
+          "dataType": "bool"
+        },
         "subenabled": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "subfailover": {
           "oid": 16,
           "dataType": "bool"
         },
@@ -5970,21 +7160,45 @@
           "oid": 19,
           "dataType": "name"
         },
+        "suborigin": {
+          "oid": 25,
+          "dataType": "text"
+        },
         "subowner": {
           "oid": 26,
           "dataType": "oid"
+        },
+        "subpasswordrequired": {
+          "oid": 16,
+          "dataType": "bool"
         },
         "subpublications": {
           "oid": 1009,
           "dataType": "_text"
         },
+        "subrunasowner": {
+          "oid": 16,
+          "dataType": "bool"
+        },
+        "subskiplsn": {
+          "oid": 25,
+          "dataType": "TEXT"
+        },
         "subslotname": {
           "oid": 19,
           "dataType": "name"
         },
+        "substream": {
+          "oid": 18,
+          "dataType": "char"
+        },
         "subsynccommit": {
           "oid": 25,
           "dataType": "text"
+        },
+        "subtwophasestate": {
+          "oid": 18,
+          "dataType": "char"
         }
       }
     },
@@ -6454,6 +7668,7 @@
         "typisdefined",
         "typdelim",
         "typrelid",
+        "typsubscript",
         "typelem",
         "typarray",
         "typinput",
@@ -6590,6 +7805,10 @@
         "typstorage": {
           "oid": 18,
           "dataType": "char"
+        },
+        "typsubscript": {
+          "oid": 24,
+          "dataType": "regproc"
         },
         "typtype": {
           "oid": 18,
@@ -6737,6 +7956,27 @@
         "viewowner": {
           "oid": 19,
           "dataType": "name"
+        }
+      }
+    },
+    "pg_wait_events": {
+      "columnNames": [
+        "type",
+        "name",
+        "description"
+      ],
+      "columns": {
+        "description": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "name": {
+          "oid": 25,
+          "dataType": "text"
+        },
+        "type": {
+          "oid": 25,
+          "dataType": "text"
         }
       }
     }
