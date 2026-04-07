@@ -36,9 +36,10 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Owner:     registry.OwnerAdmissionControl,
 		Timeout:   3 * time.Hour,
 		Benchmark: true,
-		// Disabled on IBM only because the Azure test suite was used as a base
-		// for IBM tests, and this test was disabled on Azure as of 05/2025.
-		CompatibleClouds: registry.AllExceptAzure,
+		// Disabled on Azure and IBM due to inconsistent I/O performance
+		// causing the bandwidth lower-bound check to flake.
+		// See: https://github.com/cockroachdb/cockroach/issues/167455
+		CompatibleClouds: registry.AllExceptAzure.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 		Cluster: r.MakeClusterSpec(
