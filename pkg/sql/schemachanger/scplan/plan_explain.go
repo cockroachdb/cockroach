@@ -330,6 +330,7 @@ func explainOpBodyCompact(op scop.Op) (string, error) {
 
 func opMapTrim(in map[string]interface{}) map[string]interface{} {
 	const jobIDKey = "JobID"
+	const distributedMergeModeKey = "DistributedMergeMode"
 	out := make(map[string]interface{})
 	for k, v := range in {
 		vv := reflect.ValueOf(v)
@@ -337,9 +338,16 @@ func opMapTrim(in map[string]interface{}) map[string]interface{} {
 		case reflect.Bool:
 			out[k] = vv.Bool()
 		case reflect.Float64:
-			if k != jobIDKey || vv.Float() != 1 {
-				out[k] = vv.Float()
+			if k == jobIDKey && vv.Float() == 1 {
+				continue
 			}
+			// DistributedMergeMode is controlled by a metamorphic cluster
+			// setting and can vary between runs. Omit it so that EXPLAIN
+			// output remains deterministic.
+			if k == distributedMergeModeKey {
+				continue
+			}
+			out[k] = vv.Float()
 		case reflect.String:
 			if str := vv.String(); utf8.RuneCountInString(str) > 16 {
 				out[k] = fmt.Sprintf("%.16s...", str)

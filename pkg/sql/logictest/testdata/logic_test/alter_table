@@ -1,4 +1,4 @@
-# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
+# LogicTest: default-configs 3node-tenant !local-prepared
 # We've seen this file take more than an hour under race.
 skip under race
 

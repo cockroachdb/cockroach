@@ -279,6 +279,13 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 				clone.ScheduleID = normalizeScheduleID(scheduleIDMap, clone.ScheduleID)
 				op = &clone
 			}
+			if createJobOp, ok := op.(*scop.CreateSchemaChangerJob); ok {
+				// Normalize DistributedMergeMode since it is controlled by a
+				// metamorphic cluster setting and varies between runs.
+				clone := *createJobOp
+				clone.DistributedMergeMode = 0
+				op = &clone
+			}
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
 			data, err := yaml.Marshal(opMap)

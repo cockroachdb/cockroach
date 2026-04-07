@@ -1,4 +1,4 @@
-# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
+# LogicTest: default-configs 3node-tenant !local-prepared
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,

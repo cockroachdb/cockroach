@@ -15,9 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,7 +52,11 @@ var DistributedMergeIndexBackfillMode = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"bulkio.index_backfill.distributed_merge.mode",
 	"controls when the distributed merge pipeline powers index backfills: disabled/off/false, legacy, declarative, or enabled/on/true",
-	"disabled",
+	metamorphic.ConstantWithTestChoice(
+		"bulkio.index_backfill.distributed_merge.mode",
+		"disabled", /* default value */
+		"enabled",  /* other value */
+	),
 	map[distributedMergeIndexBackfillMode]string{
 		distributedMergeModeDisabled:    "disabled",
 		distributedMergeModeEnabled:     "enabled",
@@ -90,14 +93,21 @@ func shouldEnableDistributedMergeIndexBackfill(
 		// Explicit opt-in skips the sorted-data optimization.
 		result = jobspb.IndexBackfillDistributedMergeMode_Force
 	case distributedMergeModeEnabled, distributedMergeModeAliasTrue, distributedMergeModeAliasOn:
+		// The legacy schema changer's distributed merge implementation is not
+		// functional, so only enable for the declarative schema changer.
+		if consumer != DistributedMergeConsumerDeclarative {
+			return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
+		}
 		result = jobspb.IndexBackfillDistributedMergeMode_Enabled
 	default:
 		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
 			errors.AssertionFailedf("unrecognized distributed merge index backfill mode %d", mode)
 	}
 	if !st.Version.IsActive(ctx, clusterversion.V26_1) {
-		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
-			pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
+		// Distributed merge is not available before 26.1. Fall back to
+		// the legacy backfill path gracefully so that callers during
+		// bootstrap or rolling upgrades are not blocked.
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
 	}
 	return result, nil
 }
