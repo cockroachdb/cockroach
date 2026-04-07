@@ -560,10 +560,7 @@ func TestCreateTables(t *testing.T) {
 		sqlA.Exec(t, "CREATE DATABASE c")
 		sqlA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
 		sqlc := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("c")))
-		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.after.retryable_error'")
-		defer func() {
-			sqlc.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
-		}()
+		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.create_table.after_initial_scan'")
 
 		var jobID jobspb.JobID
 		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
@@ -601,7 +598,9 @@ func TestCreateTables(t *testing.T) {
 		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab FROM TABLE tab ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
 		jobutils.WaitForJobToPause(t, sqlc, jobID)
 
-		// Next, resume it and wait for the table and its dlq table to come online.
+		// Next, clear the pausepoint and resume the job. Wait for the table and
+		// its dlq table to come online.
+		sqlc.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
 		sqlc.Exec(t, "RESUME JOB $1", jobID)
 		sqlc.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW TABLES]", [][]string{{"2"}})
 	})
