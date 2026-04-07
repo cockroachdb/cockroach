@@ -2332,6 +2332,12 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 
 	defer tc.Stopper().Stop(ctx)
 
+	// Disable delegated snapshots as they can screw up the metric assertions
+	// this test makes.
+	kvserver.NumDelegateLimit.Override(
+		ctx, &tc.Server(0).ClusterSettings().SV, 0,
+	)
+
 	scratchStartKey := tc.ScratchRange(t)
 	// sendSnapshotFromServer is a testing helper that sends a learner snapshot
 	// from server[0] to server[serverIndex] and returns the expected size (in
