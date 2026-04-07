@@ -267,6 +267,9 @@ var ErrDRPCDisabled = errors.New("DRPC is not enabled")
 type DRPCServer interface {
 	// Serve starts serving DRPC requests on the provided listener.
 	Serve(ctx context.Context, lis net.Listener) error
+	// Stop closes all tracked listeners and forcefully closes all active
+	// connections, similar to grpc.Server.Stop().
+	Stop()
 	drpc.Mux
 }
 
@@ -417,6 +420,10 @@ func NewDummyDRPCServer() DRPCServer {
 // accepted connections and returns ErrDRPCDisabled for all Serve calls.
 // Register is a no-op.
 type drpcOffServer struct{}
+
+// Stop implements the DRPCServer interface for drpcOffServer. It is a no-op
+// when DRPC is disabled.
+func (srv *drpcOffServer) Stop() {}
 
 // Serve implements the DRPCServer interface for drpcOffServer. It closes any
 // accepted connection and returns ErrDRPCDisabled.

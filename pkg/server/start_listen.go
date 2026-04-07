@@ -175,6 +175,7 @@ func startListenRPCAndSQL(
 		})
 	}
 	stopper.AddCloser(stop.CloserFn(stopGRPC))
+	stopper.AddCloser(stop.CloserFn(drpc.Stop))
 
 	if err := stopper.RunAsyncTask(
 		workersCtx, "grpc-drpc-quiesce", waitForQuiesce,

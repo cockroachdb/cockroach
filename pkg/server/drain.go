@@ -227,6 +227,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
 		s.grpc.Stop()
+		s.drpc.Stop()
 		s.stopTrigger.signalStop(ctx, serverctl.MakeShutdownRequest(serverctl.ShutdownReasonDrainRPC, nil /* err */))
 	}()
 
