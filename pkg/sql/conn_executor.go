@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -165,7 +166,15 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 //
 // The selection is atomic per query — all tables in the query use the same
 // rollout path. Only called for non-internal queries.
-func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) eval.StatsRolloutSelection {
+func canaryRollDice(
+	ctx context.Context, evalCtx *eval.Context, rng *rand.Rand,
+) eval.StatsRolloutSelection {
+	if !evalCtx.Settings.Version.IsActive(
+		ctx,
+		clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn,
+	) {
+		return eval.StatsRolloutDefault
+	}
 	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
 	if threshold == 0 {
 		return eval.StatsRolloutDefault
