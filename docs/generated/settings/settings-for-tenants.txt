@@ -61,7 +61,7 @@ cloudstorage.userfile.read.node_burst_limit	byte size	0 B	burst limit on number 
 cloudstorage.userfile.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.userfile.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.userfile.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
-cluster.auto_upgrade.enabled	boolean	true	disable automatic cluster version upgrade until reset	application
+cluster.auto_upgrade.enabled	boolean	true	when true, enables automatic finalization of major version upgrades once all cluster nodes are running an upgraded binary	application
 cluster.organization	string		organization name	system-visible
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
 debug.zip.redact_addresses.enabled	boolean	false	enables the redaction of hostnames and ip addresses in debug zip	application
