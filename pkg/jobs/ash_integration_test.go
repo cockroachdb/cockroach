@@ -108,6 +108,10 @@ func TestJobKVWorkloadIDPropagation(t *testing.T) {
 	defer cleanup()
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// This test uses kvserver.StoreTestingKnobs.TestingRequestFilter to
+		// intercept KV-level BatchRequests, which only fires on the storage
+		// layer and is not propagated to secondary tenants.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			KeyVisualizer:    &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
