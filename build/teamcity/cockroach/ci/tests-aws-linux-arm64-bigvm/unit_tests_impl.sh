@@ -16,11 +16,6 @@ bazel build //pkg/cmd/bazci
 
 EXTRA_PARAMS=""
 
-if tc_release_branch || is_trunk_branch; then
-  # enable up to 1 retry (2 attempts, worst-case) per test executable to report flakes on release/trunk branches.
-  EXTRA_PARAMS=" --flaky_test_attempts=2"
-fi
-
 $(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=use_ci_timeouts -c fastbuild \
     //pkg:all_tests \
     --profile=/artifacts/profile.gz $EXTRA_PARAMS
