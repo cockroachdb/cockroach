@@ -1210,6 +1210,8 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
+
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
