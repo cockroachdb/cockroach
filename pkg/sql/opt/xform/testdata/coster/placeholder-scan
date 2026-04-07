@@ -605,10 +605,10 @@ opt
 SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = 1
 ----
 scan pg_attribute@pg_attribute_attrelid_idx
- ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attalign:13 attnotnull:14 atthasdef:15 attidentity:16 attgenerated:17 attisdropped:18 attislocal:19 attinhcount:20 attcollation:21 attacl:22 attoptions:23 attfdwoptions:24 atthasmissing:25 attmissingval:26 attishidden:27
+ ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attcompression:13 attalign:14 attnotnull:15 atthasdef:16 attidentity:17 attgenerated:18 attisdropped:19 attislocal:20 attinhcount:21 attcollation:22 attacl:23 attoptions:24 attfdwoptions:25 atthasmissing:26 attmissingval:27 attishidden:28
  ├── constraint: /2/1: [/1 - /1]
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 133.32
+ ├── cost: 133.52
  ├── cost-flags: unbounded-cardinality
  └── fd: ()-->(2)
 
@@ -616,10 +616,10 @@ opt
 SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = $1
 ----
 placeholder-scan pg_attribute@pg_attribute_attrelid_idx
- ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attalign:13 attnotnull:14 atthasdef:15 attidentity:16 attgenerated:17 attisdropped:18 attislocal:19 attinhcount:20 attcollation:21 attacl:22 attoptions:23 attfdwoptions:24 atthasmissing:25 attmissingval:26 attishidden:27
+ ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attcompression:13 attalign:14 attnotnull:15 atthasdef:16 attidentity:17 attgenerated:18 attisdropped:19 attislocal:20 attinhcount:21 attcollation:22 attacl:23 attoptions:24 attfdwoptions:25 atthasmissing:26 attmissingval:27 attishidden:28
  ├── has-placeholder
  ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 133.32
+ ├── cost: 133.52
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2)
  └── span

@@ -67,20 +67,21 @@ CREATE TABLE pg_catalog.pg_attrdef (
 )`
 
 // PGCatalogAttribute describes the schema of the pg_catalog.pg_attribute table.
-// https://www.postgresql.org/docs/12/catalog-pg-attribute.html,
+// https://www.postgresql.org/docs/18/catalog-pg-attribute.html,
 const PGCatalogAttribute = `
 CREATE TABLE pg_catalog.pg_attribute (
 	attrelid OID NOT NULL,
 	attname NAME,
 	atttypid OID,
-	attstattarget INT4,
+	attstattarget INT2,
 	attlen INT2,
 	attnum INT2,
-	attndims INT4,
+	attndims INT2,
 	attcacheoff INT4,
 	atttypmod INT4,
 	attbyval BOOL,
 	attstorage "char",
+	attcompression "char",
 	attalign "char",
 	attnotnull BOOL,
 	atthasdef BOOL,
@@ -88,7 +89,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attgenerated "char",
 	attisdropped BOOL,
 	attislocal BOOL,
-	attinhcount INT4,
+	attinhcount INT2,
 	attcollation OID,
 	attacl STRING[],
 	attoptions STRING[],

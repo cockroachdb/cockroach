@@ -1052,39 +1052,39 @@ WHERE
   a.attname IN ('descriptor_id', 'descriptor_name')
 ----
 project
- ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
+ ├── columns: attname:3!null atttypid:4!null typbasetype:54 typtype:36
  ├── stats: [rows=198]
- ├── cost: 2928.23877
+ ├── cost: 2938.33877
  ├── cost-flags: unbounded-cardinality
  └── inner-join (merge)
-      ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
-      ├── left ordering: +29
+      ├── columns: attname:3!null atttypid:4!null oid:30!null typtype:36 typbasetype:54
+      ├── left ordering: +30
       ├── right ordering: +4
-      ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(29)=17.2927, null(29)=0]
-      ├── cost: 2926.23877
+      ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(30)=17.2927, null(30)=0]
+      ├── cost: 2936.33877
       ├── cost-flags: unbounded-cardinality
-      ├── fd: (4)==(29), (29)==(4)
+      ├── fd: (4)==(30), (30)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
-      │    ├── columns: oid:29!null typtype:35 typbasetype:53
-      │    ├── stats: [rows=1000, distinct(29)=100, null(29)=0]
+      │    ├── columns: oid:30!null typtype:36 typbasetype:54
+      │    ├── stats: [rows=1000, distinct(30)=100, null(30)=0]
       │    ├── cost: 1481.52
       │    ├── cost-flags: unbounded-cardinality
-      │    └── ordering: +29
+      │    └── ordering: +30
       ├── sort
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │    ├── cost: 1433.49877
+      │    ├── cost: 1443.59877
       │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +4
       │    └── select
       │         ├── columns: attname:3!null atttypid:4
       │         ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │         ├── cost: 1430.95
+      │         ├── cost: 1441.05
       │         ├── cost-flags: unbounded-cardinality
       │         ├── scan pg_attribute [as=a]
       │         │    ├── columns: attname:3 atttypid:4
       │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │         │    ├── cost: 1420.92
+      │         │    ├── cost: 1431.02
       │         │    └── cost-flags: unbounded-cardinality
       │         └── filters
       │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
@@ -1106,28 +1106,28 @@ WHERE
   a.attname = 'descriptor_id'
 ----
 project
- ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
+ ├── columns: attname:3!null atttypid:4!null typbasetype:54 typtype:36
  ├── stats: [rows=99]
- ├── cost: 2869.62001
+ ├── cost: 2879.72001
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(3)
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
-      ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
-      ├── key columns: [4] = [29]
-      ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(29)=8.56179, null(29)=0]
-      ├── cost: 2868.61001
+      ├── columns: attname:3!null atttypid:4!null oid:30!null typtype:36 typbasetype:54
+      ├── key columns: [4] = [30]
+      ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(30)=8.56179, null(30)=0]
+      ├── cost: 2878.71001
       ├── cost-flags: unbounded-cardinality
-      ├── fd: ()-->(3), (4)==(29), (29)==(4)
+      ├── fd: ()-->(3), (4)==(30), (30)==(4)
       ├── select
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=10, distinct(3)=1, null(3)=0, distinct(4)=9.56179, null(4)=0.1]
-      │    ├── cost: 1430.95
+      │    ├── cost: 1441.05
       │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(3)
       │    ├── scan pg_attribute [as=a]
       │    │    ├── columns: attname:3 atttypid:4
       │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │    │    ├── cost: 1420.92
+      │    │    ├── cost: 1431.02
       │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
       │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
