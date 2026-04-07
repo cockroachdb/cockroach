@@ -36,6 +36,18 @@ func registerInvariantCheckDetection(r registry.Registry) {
 			},
 		})
 	}
+
+	// Test that local corruption (checksum mismatch) is also detected.
+	r.Add(registry.TestSpec{
+		CompatibleClouds: registry.AllClouds,
+		Name:             "invariant-check-detection/local-corruption",
+		Owner:            registry.OwnerTestEng,
+		Suites:           registry.ManualOnly,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(4), spec.ReuseNone(), spec.VolumeSize(100), spec.VolumeType("pd-ssd")),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLocalCorruptionDetection(ctx, t, c)
+		},
+	})
 }
 
 func runInvariantCheckDetection(ctx context.Context, t test.Test, c cluster.Cluster, failed bool) {
@@ -48,4 +60,15 @@ asdasds
 	if failed {
 		t.Error("boom")
 	}
+}
+
+// runLocalCorruptionDetection plants a fake "local corruption detected"
+// fatal log line and lets teardownTest -> maybeSaveClusterDueToInvariantProblems
+// detect it. The test is expected to fail — maybeSaveClusterDueToInvariantProblems
+// calls t.Error when it preserves the cluster, which marks the test as failed.
+func runLocalCorruptionDetection(ctx context.Context, t test.Test, c cluster.Cluster) {
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+	require.NoError(t, c.PutString(ctx, `
+F260402 03:11:00.515510 2215881 storage/pebble.go:1436 ⋮ [n3,s3,pebble] 2364  local corruption detected: pebble: file 039091: block 8375813/30902: ‹crc32c› checksum mismatch b136961c != ed105766
+`, "logs/cockroach.log", 0644, c.Node(1)))
 }
