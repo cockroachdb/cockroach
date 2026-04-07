@@ -55,6 +55,7 @@ import (
 	"google.golang.org/grpc/stats"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
+	"storj.io/drpc/drpcpool"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -598,10 +599,17 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		}
 		clientRequestMetrics := NewClientRequestMetrics()
 		rpcCtx.metrics.clientRequestMetrics = clientRequestMetrics
+		rpcCtx.metrics.drpcPoolMetrics = NewDRPCPoolMetrics()
+
 		rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
-			NewDRPCUnaryClientRequestMetricsInterceptor(clientRequestMetrics))
+			NewDRPCUnaryClientRequestMetricsInterceptor(clientRequestMetrics, func(method string) bool {
+				return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
+			}))
 		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
-			NewDRPCStreamClientRequestMetricsInterceptor(clientRequestMetrics))
+			NewDRPCStreamClientRequestMetricsInterceptor(clientRequestMetrics, func(method string) bool {
+				return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
+			}))
+
 	}
 
 	rpcCtx.dialbackMu.Lock()
@@ -700,9 +708,20 @@ func (rpcCtx *Context) Metrics() *Metrics {
 	return rpcCtx.metrics
 }
 
-// Metrics returns the Context's ClientRequestMetrics struct.
+// ClientRequestMetrics returns the Context's ClientRequestMetrics struct.
 func (rpcCtx *Context) ClientRequestMetrics() *ClientRequestMetrics {
+	if rpcCtx.metrics == nil {
+		return nil
+	}
 	return rpcCtx.metrics.clientRequestMetrics
+}
+
+// DRPCPoolMetrics returns the Context's DRPCPoolMetrics struct.
+func (rpcCtx *Context) DRPCPoolMetrics() drpcpool.PoolMetrics {
+	if rpcCtx.metrics == nil {
+		return drpcpool.PoolMetrics{}
+	}
+	return rpcCtx.metrics.drpcPoolMetrics
 }
 
 // GetLocalInternalClientForAddr returns the context's internal batch client
