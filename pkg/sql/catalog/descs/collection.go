@@ -1640,6 +1640,15 @@ func (tc *Collection) MaybeSetReplicationSafeTS(ctx context.Context, txn *kv.Txn
 	return txn.SetFixedTimestamp(ctx, tc.leased.lm.GetSafeReplicationTS())
 }
 
+// GetLatestLeaseReadTimestamp returns the latest timestamp from the lease manager.
+func (tc *Collection) GetLatestLeaseReadTimestamp(
+	ctx context.Context, now hlc.Timestamp,
+) hlc.Timestamp {
+	readTS := tc.leased.lm.GetReadTimestamp(ctx, now)
+	defer readTS.Release(ctx)
+	return readTS.GetTimestamp()
+}
+
 // GetConstraintComment implements the scdecomp.CommentGetter interface.
 func (tc *Collection) GetConstraintComment(
 	tableID descpb.ID, constraintID catid.ConstraintID,
