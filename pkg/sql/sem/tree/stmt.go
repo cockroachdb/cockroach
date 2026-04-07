@@ -1330,6 +1330,17 @@ func (*DropRole) StatementTag() string { return "DROP ROLE" }
 func (*DropRole) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*DropProvisionedRoles) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropProvisionedRoles) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropProvisionedRoles) StatementTag() string { return "DROP PROVISIONED ROLES" }
+
+func (*DropProvisionedRoles) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*DropType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.

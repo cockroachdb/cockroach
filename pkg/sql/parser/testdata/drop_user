@@ -29,3 +29,59 @@ DROP ROLE IF EXISTS foo, bar
 DROP ROLE IF EXISTS foo, bar -- fully parenthesized
 DROP ROLE IF EXISTS foo, bar -- literals removed
 DROP ROLE IF EXISTS _, _ -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES
+----
+DROP PROVISIONED ROLES
+DROP PROVISIONED ROLES -- fully parenthesized
+DROP PROVISIONED ROLES -- literals removed
+DROP PROVISIONED ROLES -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com'
+----
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com'
+DROP PROVISIONED ROLES WITH SOURCE = ('ldap:ldap.example.com') -- fully parenthesized
+DROP PROVISIONED ROLES WITH SOURCE = '_' -- literals removed
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE '2025-01-01'
+----
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE '2025-01-01'
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE ('2025-01-01') -- fully parenthesized
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE '_' -- literals removed
+DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE '2025-01-01' -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01'
+----
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01'
+DROP PROVISIONED ROLES WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2025-01-01') -- fully parenthesized
+DROP PROVISIONED ROLES WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+----
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+DROP PROVISIONED ROLES WITH SOURCE = ('ldap:ldap.example.com') LIMIT (10) -- fully parenthesized
+DROP PROVISIONED ROLES WITH SOURCE = '_' LIMIT _ -- literals removed
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10 -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' LIMIT 100
+----
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' LIMIT 100
+DROP PROVISIONED ROLES WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2025-01-01') LIMIT (100) -- fully parenthesized
+DROP PROVISIONED ROLES WITH SOURCE = '_', LAST LOGIN BEFORE '_' LIMIT _ -- literals removed
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' LIMIT 100 -- identifiers removed
+
+parse
+DROP PROVISIONED ROLES LIMIT 5
+----
+DROP PROVISIONED ROLES LIMIT 5
+DROP PROVISIONED ROLES LIMIT (5) -- fully parenthesized
+DROP PROVISIONED ROLES LIMIT _ -- literals removed
+DROP PROVISIONED ROLES LIMIT 5 -- identifiers removed
