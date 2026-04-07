@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/tokenbucket"
 	"golang.org/x/time/rate"
 )
 
@@ -34,11 +36,18 @@ type Limiters struct {
 	ConcurrentExportRequests             limit.ConcurrentRequestLimiter
 	ConcurrentAddSSTableRequests         limit.ConcurrentRequestLimiter
 	ConcurrentAddSSTableAsWritesRequests limit.ConcurrentRequestLimiter
-	// concurrentRangefeedIters is a semaphore used to limit the number of
+	// ConcurrentRangefeedIters is a semaphore used to limit the number of
 	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
 	// is a temporary state at the beginning of a rangefeed which is expensive
 	// because it uses an engine iterator.
 	ConcurrentRangefeedIters limit.ConcurrentRequestLimiter
+	// BulkReadIORate and ConcurrentBulkReadRequests work in concert to
+	// throttle low-priority bulk read operations like TTL (Reverse)Scan.
+	BulkReadIORate struct {
+		syncutil.Mutex
+		tokenbucket.TokenBucket
+	}
+	ConcurrentBulkReadRequests limit.ConcurrentRequestLimiter
 }
 
 // EvalContext is the interface through which command evaluation accesses the
