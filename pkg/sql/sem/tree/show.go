@@ -285,7 +285,7 @@ func combineBools(v1 bool, v2 bool, label string) (bool, error) {
 func combineExpr(v1 Expr, v2 Expr, label string) (Expr, error) {
 	if v1 != nil {
 		if v2 != nil {
-			return v1, errors.Newf("% option specified multiple times", label)
+			return v1, errors.Newf("%s option specified multiple times", label)
 		}
 		return v1, nil
 	}
@@ -296,7 +296,7 @@ func combineStringOrPlaceholderOptList(
 ) (StringOrPlaceholderOptList, error) {
 	if v1 != nil {
 		if v2 != nil {
-			return v1, errors.Newf("% option specified multiple times", label)
+			return v1, errors.Newf("%s option specified multiple times", label)
 		}
 		return v1, nil
 	}
@@ -1010,8 +1010,11 @@ func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
 
 // ShowUsersOptions describes options for the SHOW USERS statement.
 type ShowUsersOptions struct {
-	Source              Expr // SOURCE = 'ldap:...'
-	LastAccessOlderThan Expr // LAST ACCESS TIME OLDER THAN <timestamp>
+	// Source filters users by their PROVISIONSRC role option value.
+	Source Expr
+	// LastLoginBefore filters users whose estimated last login is before
+	// this timestamp.
+	LastLoginBefore Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -1029,10 +1032,10 @@ func (s *ShowUsersOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("SOURCE = ")
 		ctx.FormatNode(s.Source)
 	}
-	if s.LastAccessOlderThan != nil {
+	if s.LastLoginBefore != nil {
 		maybeAddSep()
-		ctx.WriteString("LAST ACCESS TIME OLDER THAN ")
-		ctx.FormatNode(s.LastAccessOlderThan)
+		ctx.WriteString("LAST LOGIN BEFORE ")
+		ctx.FormatNode(s.LastLoginBefore)
 	}
 }
 
@@ -1044,9 +1047,9 @@ func (s *ShowUsersOptions) CombineWith(other *ShowUsersOptions) error {
 	if err != nil {
 		return err
 	}
-	s.LastAccessOlderThan, err = combineExpr(
-		s.LastAccessOlderThan, other.LastAccessOlderThan,
-		"LAST ACCESS TIME OLDER THAN",
+	s.LastLoginBefore, err = combineExpr(
+		s.LastLoginBefore, other.LastLoginBefore,
+		"LAST LOGIN BEFORE",
 	)
 	if err != nil {
 		return err
@@ -1056,7 +1059,7 @@ func (s *ShowUsersOptions) CombineWith(other *ShowUsersOptions) error {
 
 // IsDefault returns true if this options struct has the default (zero) value.
 func (s ShowUsersOptions) IsDefault() bool {
-	return s.Source == nil && s.LastAccessOlderThan == nil
+	return s.Source == nil && s.LastLoginBefore == nil
 }
 
 var _ NodeFormatter = &ShowUsersOptions{}
