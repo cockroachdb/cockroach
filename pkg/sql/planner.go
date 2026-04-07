@@ -661,6 +661,25 @@ func (p *planner) ExecMon() *mon.BytesMonitor {
 	return p.execMon
 }
 
+// MaybeResolveSystemRoleOID is part of the eval.Planner interface.
+func (p *planner) MaybeResolveSystemRoleOID(ctx context.Context, roleOID oid.Oid) (string, bool) {
+	h := makeOidHasher()
+	// Fast-path for the most common built-in role owners to minimize virtual table scans.
+	if roleOID == h.UserOid(username.NodeUserName()).Oid {
+		return username.NodeUser, true
+	}
+	if roleOID == h.UserOid(username.RootUserName()).Oid {
+		return username.RootUser, true
+	}
+	if roleOID == h.UserOid(username.AdminRoleName()).Oid {
+		return username.AdminRole, true
+	}
+	if roleOID == h.UserOid(username.PublicRoleName()).Oid {
+		return username.PublicRole, true
+	}
+	return "", false
+}
+
 // ExecCfg implements the PlanHookState interface.
 func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg

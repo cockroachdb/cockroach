@@ -316,6 +316,11 @@ type Planner interface {
 	// UnsafeDeleteComment is used to delete comments for a non-existent object.
 	UnsafeDeleteComment(ctx context.Context, objectID int64) error
 
+	// MaybeResolveSystemRoleOID returns the role name for the given OID, if it is a
+	// known system role. It returns a boolean indicating if the resolution was
+	// successful. This is an optimization to avoid expensive virtual table joins.
+	MaybeResolveSystemRoleOID(ctx context.Context, roleOID oid.Oid) (string, bool)
+
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
 	// (false, nil) means that the user has NO admin role
