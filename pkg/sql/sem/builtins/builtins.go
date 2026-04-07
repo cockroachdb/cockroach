@@ -13282,9 +13282,16 @@ func rewriteInlineHintsImpl(
 	// Now that we've passed some basic validation, insert into statement_hints.
 	var hint hintpb.StatementHintUnion
 	hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint, optDatabase)
+	hintID, numOverridden, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint, optDatabase)
 	if err != nil {
 		return nil, err
+	}
+	if numOverridden > 0 {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, pgnotice.Newf(
+			"this hint overrides %d existing inline hint(s) for the same statement fingerprint; "+
+				"the older hint(s) will be skipped. Use SHOW STATEMENT HINTS to identify stale hints.",
+			numOverridden,
+		))
 	}
 
 	// Log the statement hint injection event.
@@ -13563,9 +13570,17 @@ func sessionVariableHintImpl(
 		VariableName:  varName,
 		VariableValue: varValue,
 	})
-	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, optDatabase)
+	hintID, numOverridden, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, optDatabase)
 	if err != nil {
 		return nil, err
+	}
+	if numOverridden > 0 {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, pgnotice.Newf(
+			"this hint overrides %d existing session variable hint(s) for %q "+
+				"on the same statement fingerprint; the older hint(s) will be skipped. "+
+				"Use SHOW STATEMENT HINTS to identify stale hints.",
+			numOverridden, varName,
+		))
 	}
 
 	// Log the session variable hint event.

@@ -221,3 +221,40 @@ func TestHintTableOperations(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must specify at least one of row_id or fingerprint")
 }
+
+// TestStatementHintConflicts tests the Conflicts method on StatementHintUnion.
+func TestStatementHintConflicts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	inject1 := &hintpb.StatementHintUnion{}
+	inject1.SetValue(&hintpb.InjectHints{DonorSQL: "SELECT a FROM t@idx1"})
+
+	inject2 := &hintpb.StatementHintUnion{}
+	inject2.SetValue(&hintpb.InjectHints{DonorSQL: "SELECT a FROM t@idx2"})
+
+	varHintA := &hintpb.StatementHintUnion{}
+	varHintA.SetValue(&hintpb.SessionVariableHint{VariableName: "distsql", VariableValue: "off"})
+
+	varHintA2 := &hintpb.StatementHintUnion{}
+	varHintA2.SetValue(&hintpb.SessionVariableHint{VariableName: "distsql", VariableValue: "on"})
+
+	varHintB := &hintpb.StatementHintUnion{}
+	varHintB.SetValue(&hintpb.SessionVariableHint{VariableName: "reorder_joins_limit", VariableValue: "0"})
+
+	// InjectHints vs InjectHints → true.
+	require.True(t, inject1.Conflicts(inject2))
+	require.True(t, inject2.Conflicts(inject1))
+
+	// SessionVariableHint vs SessionVariableHint (same var) → true.
+	require.True(t, varHintA.Conflicts(varHintA2))
+	require.True(t, varHintA2.Conflicts(varHintA))
+
+	// SessionVariableHint vs SessionVariableHint (different var) → false.
+	require.False(t, varHintA.Conflicts(varHintB))
+	require.False(t, varHintB.Conflicts(varHintA))
+
+	// InjectHints vs SessionVariableHint → false.
+	require.False(t, inject1.Conflicts(varHintA))
+	require.False(t, varHintA.Conflicts(inject1))
+}

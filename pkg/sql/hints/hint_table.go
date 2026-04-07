@@ -253,6 +253,45 @@ func InsertHintIntoDB(
 	return int64(tree.MustBeDInt(row[0])), nil
 }
 
+// CountConflictingHintsInDB counts existing enabled hints for the given
+// fingerprint that conflict with the provided hint, excluding the row with
+// excludeRowID. Two hints conflict when only the newer one will be applied at
+// execution time (the older is skipped by deduplication logic).
+func CountConflictingHintsInDB(
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	fingerprint string,
+	hint hintpb.StatementHintUnion,
+	excludeRowID int64,
+) (int64, error) {
+	const opName = "count-conflicting-hints"
+	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
+		return 0, nil
+	}
+	const selectStmt = `SELECT hint FROM system.statement_hints
+WHERE fingerprint = $1 AND hint_type = $2 AND enabled = true AND row_id != $3`
+	rows, err := txn.QueryBufferedEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		selectStmt, fingerprint, hint.HintType(), excludeRowID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	var count int64
+	for _, row := range rows {
+		otherBytes := []byte(tree.MustBeDBytes(row[0]))
+		other, err := hintpb.ParseHintProto(otherBytes)
+		if err != nil {
+			continue
+		}
+		if hint.Conflicts(&other) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // DeleteHintFromDB deletes statement hints from system.statement_hints,
 // filtered by row ID or fingerprint. If the provided rowID is zero, we don't
 // filter on row ID. If the fingerprint is empty string, we don't filter on

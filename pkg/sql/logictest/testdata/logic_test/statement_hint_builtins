@@ -923,3 +923,78 @@ statement ok
 SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM ab WHERE b = _', 'mydb');
 
 subtest end
+
+# Test that NOTICE is emitted when a hint overrides an existing one.
+subtest hint_overwrite_notice
+
+skipif config local-mixed-25.4 local-mixed-26.1
+
+# Clean up any existing hints for the fingerprints used below.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
+# Use pre-fingerprinted inputs to avoid fingerprint normalization notices.
+
+# First inline hint for a fingerprint: no overwrite notice.
+query I noticetrace
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = _',
+  'SELECT * FROM xy@primary WHERE y = _'
+);
+----
+
+# Second inline hint for same fingerprint: overwrite notice mentioning 1
+# existing hint.
+query I noticetrace
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = _',
+  'SELECT * FROM xy@xy_y_idx WHERE y = _'
+);
+----
+NOTICE: this hint overrides 1 existing inline hint(s) for the same statement fingerprint; the older hint(s) will be skipped. Use SHOW STATEMENT HINTS to identify stale hints.
+
+# Third inline hint for same fingerprint: overwrite notice mentioning 2
+# existing hints.
+query I noticetrace
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = _',
+  'SELECT * FROM xy@primary WHERE y = _'
+);
+----
+NOTICE: this hint overrides 2 existing inline hint(s) for the same statement fingerprint; the older hint(s) will be skipped. Use SHOW STATEMENT HINTS to identify stale hints.
+
+# Clean up inline hints.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
+# First session variable hint: no overwrite notice.
+query I noticetrace
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE y = _',
+  'distsql', 'off'
+);
+----
+
+# Second session variable hint for same variable: overwrite notice.
+query I noticetrace
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE y = _',
+  'distsql', 'on'
+);
+----
+NOTICE: this hint overrides 1 existing session variable hint(s) for "distsql" on the same statement fingerprint; the older hint(s) will be skipped. Use SHOW STATEMENT HINTS to identify stale hints.
+
+# Session variable hint for different variable on same fingerprint: no
+# overwrite notice.
+query I noticetrace
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE y = _',
+  'reorder_joins_limit', '0'
+);
+----
+
+# Clean up session variable hints.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
+subtest end

@@ -311,3 +311,46 @@ statement error pgcode 42601 pq: at or near "\|": syntax error
 SELECT fingerprint, hint_type
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ' || 'ab WHERE a = 1']
 ORDER BY created_at DESC, row_id DESC;
+
+# Test that conflicting hints are visible via SHOW STATEMENT HINTS WITH DETAILS.
+subtest show_conflicting_hints
+
+# Clean up any hints for this fingerprint first.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM ab WHERE b = _');
+
+# Create two inline hints for the same fingerprint with different donors.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM ab WHERE b = _',
+  'SELECT * FROM ab@primary WHERE b = _'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM ab WHERE b = _',
+  'SELECT * FROM ab@ab_b_idx WHERE b = _'
+);
+
+# Both hints should be visible via SHOW STATEMENT HINTS WITH DETAILS.
+query I
+SELECT count(*)
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE b = 1' WITH DETAILS]
+WHERE hint_type = 'REWRITE INLINE HINTS';
+----
+2
+
+# The user can distinguish them via the details column (different donor SQL).
+query TT
+SELECT hint_type, details
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE b = 1' WITH DETAILS]
+ORDER BY created_at DESC, row_id DESC;
+----
+REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM ab@ab_b_idx WHERE b = _"}
+REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM ab@primary WHERE b = _"}
+
+# Clean up.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM ab WHERE b = _');
+
+subtest end
