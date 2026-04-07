@@ -252,6 +252,188 @@ func TestServerQuery(t *testing.T) {
 	}
 }
 
+// TestServerQueryPerSource verifies that setting return_sources_separately
+// returns per-source datapoints alongside the aggregated result.
+func TestServerQueryPerSource(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	// Store data for a metric across three sources.
+	tsdb := s.TsDB().(*ts.DB)
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name:   "test.metric",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "source3",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 1.0},
+				{TimestampNanos: 500 * 1e9, Value: 2.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Query with return_sources_separately = true.
+	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:              400 * 1e9,
+		EndNanos:                500 * 1e9,
+		ReturnSourcesSeparately: true,
+		Queries: []tspb.Query{
+			{Name: "test.metric"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, response.Results, 1)
+
+	result := response.Results[0]
+
+	// Aggregated datapoints should be populated (SUM across sources).
+	require.Len(t, result.Datapoints, 2)
+	require.Equal(t, 111.0, result.Datapoints[0].Value)
+	require.Equal(t, 222.0, result.Datapoints[1].Value)
+
+	// Per-source datapoints should have one entry per source.
+	require.Len(t, result.SourceDatapoints, 3)
+
+	// Collect per-source data into a map for order-independent assertions.
+	perSource := make(map[string][]tspb.TimeSeriesDatapoint)
+	for _, sd := range result.SourceDatapoints {
+		perSource[sd.Source] = sd.Datapoints
+	}
+	require.Len(t, perSource["source1"], 2)
+	require.Equal(t, 100.0, perSource["source1"][0].Value)
+	require.Equal(t, 200.0, perSource["source1"][1].Value)
+
+	require.Len(t, perSource["source2"], 2)
+	require.Equal(t, 10.0, perSource["source2"][0].Value)
+	require.Equal(t, 20.0, perSource["source2"][1].Value)
+
+	require.Len(t, perSource["source3"], 2)
+	require.Equal(t, 1.0, perSource["source3"][0].Value)
+	require.Equal(t, 2.0, perSource["source3"][1].Value)
+
+	// Verify that without the flag, source_datapoints is empty.
+	response2, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "test.metric"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, response2.Results, 1)
+	require.Empty(t, response2.Results[0].SourceDatapoints)
+	// Aggregated datapoints should still be present.
+	require.Len(t, response2.Results[0].Datapoints, 2)
+}
+
+// TestServerQueryPerSourceDerivative verifies per-source with derivative.
+func TestServerQueryPerSourceDerivative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name:   "test.counter",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 410 * 1e9, Value: 200.0},
+				{TimestampNanos: 420 * 1e9, Value: 350.0},
+			},
+		},
+		{
+			Name:   "test.counter",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 50.0},
+				{TimestampNanos: 410 * 1e9, Value: 80.0},
+				{TimestampNanos: 420 * 1e9, Value: 90.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:              400 * 1e9,
+		EndNanos:                420 * 1e9,
+		ReturnSourcesSeparately: true,
+		Queries: []tspb.Query{
+			{
+				Name:       "test.counter",
+				Derivative: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, response.Results, 1)
+	result := response.Results[0]
+
+	// Aggregated derivative: SUM of per-source derivatives at each timestamp.
+	// No derivative at 400s (first datapoint, no previous).
+	// 410s: node1(10) + node2(3) = 13, 420s: node1(15) + node2(1) = 16.
+	require.Len(t, result.Datapoints, 2)
+	require.Equal(t, 13.0, result.Datapoints[0].Value)
+	require.Equal(t, 16.0, result.Datapoints[1].Value)
+
+	// Per-source derivatives: first datapoint has no derivative (no previous),
+	// so each source should have 2 derivative values.
+	perSource := make(map[string][]tspb.TimeSeriesDatapoint)
+	for _, sd := range result.SourceDatapoints {
+		perSource[sd.Source] = sd.Datapoints
+	}
+
+	// node1: rate = (200-100)/10s = 10/s, (350-200)/10s = 15/s
+	require.Len(t, perSource["node1"], 2)
+	require.Equal(t, 10.0, perSource["node1"][0].Value)
+	require.Equal(t, 15.0, perSource["node1"][1].Value)
+
+	// node2: rate = (80-50)/10s = 3/s, (90-80)/10s = 1/s
+	require.Len(t, perSource["node2"], 2)
+	require.Equal(t, 3.0, perSource["node2"][0].Value)
+	require.Equal(t, 1.0, perSource["node2"][1].Value)
+}
+
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {

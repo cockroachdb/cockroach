@@ -357,17 +357,19 @@ func (s *Server) Query(
 						},
 					)
 
-					datapoints, sources, err := s.db.Query(
+					datapoints, sources, perSourceDatapoints, err := s.db.Query(
 						ctx,
 						query,
 						Resolution10s,
 						timespan,
 						memContexts[queryIdx],
+						request.ReturnSourcesSeparately,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
-							Query:      query,
-							Datapoints: datapoints,
+							Query:            query,
+							Datapoints:       datapoints,
+							SourceDatapoints: perSourceDatapoints,
 						}
 						response.Results[queryIdx].Sources = sources
 					}

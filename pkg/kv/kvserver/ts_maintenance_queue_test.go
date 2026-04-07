@@ -301,7 +301,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	// getDatapoints queries all datapoints in the series from the beginning
 	// of time to a point in the near future.
 	getDatapoints := func() ([]tspb.TimeSeriesDatapoint, error) {
-		dps, _, err := tsdb.Query(
+		dps, _, _, err := tsdb.Query(
 			context.Background(),
 			tspb.Query{Name: seriesName},
 			ts.Resolution10s,
@@ -312,6 +312,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 				NowNanos:            now + (10 * time.Hour).Nanoseconds(),
 			},
 			memContext,
+			false, /* returnPerSource */
 		)
 		return dps, err
 	}

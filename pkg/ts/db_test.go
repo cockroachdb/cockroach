@@ -533,9 +533,11 @@ func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
 	)
 	defer memContext.Close(context.Background())
-	return mq.modelRunner.DB.Query(
+	datapoints, sources, _, err := mq.modelRunner.DB.Query(
 		context.Background(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
+		false, /* returnPerSource */
 	)
+	return datapoints, sources, err
 }
 
 func (mq *modelQuery) queryModel() testmodel.DataSeries {

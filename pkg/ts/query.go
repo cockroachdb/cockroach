@@ -439,32 +439,41 @@ func (db *DB) Query(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
-) ([]tspb.TimeSeriesDatapoint, []string, error) {
+	returnPerSource bool,
+) ([]tspb.TimeSeriesDatapoint, []string, []tspb.SourceDatapoints, error) {
 	timespan.normalize()
 
 	// Validate incoming parameters.
 	if err := timespan.verifyBounds(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := timespan.verifyDiskResolution(diskResolution); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := verifySourceAggregator(query.GetSourceAggregator()); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := verifyDownsampler(query.GetDownsampler()); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Adjust timespan based on the current time.
 	if err := timespan.adjustForCurrentTime(diskResolution); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var result []tspb.TimeSeriesDatapoint
 
 	// Create sourceSet, which tracks unique sources seen while querying.
 	sourceSet := make(map[string]struct{})
+
+	// When per-source data is requested, accumulate datapoints keyed by source
+	// across chunks. The map is nil when not requested, signaling queryChunk to
+	// skip per-source extraction.
+	var perSourceAccum map[string][]tspb.TimeSeriesDatapoint
+	if returnPerSource {
+		perSourceAccum = make(map[string][]tspb.TimeSeriesDatapoint)
+	}
 
 	resolutions := []Resolution{diskResolution}
 	if rollupResolution, ok := diskResolution.TargetRollupResolution(); ok {
@@ -478,14 +487,14 @@ func (db *DB) Query(
 		// without exceeding the memory budget.
 		maxTimespanWidth, err := mem.GetMaxTimespan(resolution)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
-				ctx, query, resolution, timespan, mem, &result, sourceSet,
+				ctx, query, resolution, timespan, mem, &result, sourceSet, perSourceAccum,
 			); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		} else {
 			// Break up the timespan into "chunks" where each chunk will fit into the
@@ -499,9 +508,9 @@ func (db *DB) Query(
 					chunkTime.EndNanos = timespan.EndNanos
 				}
 				if err := db.queryChunk(
-					ctx, query, resolution, chunkTime, mem, &result, sourceSet,
+					ctx, query, resolution, chunkTime, mem, &result, sourceSet, perSourceAccum,
 				); err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 			}
 		}
@@ -524,7 +533,19 @@ func (db *DB) Query(
 		sources = append(sources, source)
 	}
 
-	return result, sources, nil
+	// Convert per-source accumulator to the response format.
+	var perSourceResult []tspb.SourceDatapoints
+	if perSourceAccum != nil {
+		perSourceResult = make([]tspb.SourceDatapoints, 0, len(perSourceAccum))
+		for source, datapoints := range perSourceAccum {
+			perSourceResult = append(perSourceResult, tspb.SourceDatapoints{
+				Source:     source,
+				Datapoints: datapoints,
+			})
+		}
+	}
+
+	return result, sources, perSourceResult, nil
 }
 
 // queryChunk processes a chunk of a query; this will read the necessary data
@@ -540,6 +561,7 @@ func (db *DB) queryChunk(
 	mem QueryMemoryContext,
 	dest *[]tspb.TimeSeriesDatapoint,
 	sourceSet map[string]struct{},
+	perSourceAccum map[string][]tspb.TimeSeriesDatapoint,
 ) error {
 	acc := mem.workerMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
@@ -587,6 +609,15 @@ func (db *DB) queryChunk(
 	if oldCap > cap(*dest) {
 		if err := mem.resultAccount.Grow(ctx, sizeOfDataPoint*int64(cap(*dest)-oldCap)); err != nil {
 			return err
+		}
+	}
+
+	// Extract per-source datapoints when requested.i
+	if perSourceAccum != nil {
+		for sourceKey, span := range sourceSpans {
+			source, _ := tsutil.DecodeSource(sourceKey)
+			datapoints := extractSingleSourceDatapoints(span, query, timespan)
+			perSourceAccum[source] = append(perSourceAccum[source], datapoints...)
 		}
 	}
 
@@ -764,6 +795,55 @@ func aggregateSpansToDatapoints(
 			Value:          aggregate(query.GetSourceAggregator(), aggregateValues),
 		})
 	}
+}
+
+// extractSingleSourceDatapoints extracts datapoints from a single source's
+// timeSeriesSpan. Unlike aggregateSpansToDatapoints which combines values
+// across multiple sources, this processes one source in isolation — no
+// cross-source aggregation and no incomplete-data filtering.
+func extractSingleSourceDatapoints(
+	span timeSeriesSpan, query tspb.Query, timespan QueryTimespan,
+) []tspb.TimeSeriesDatapoint {
+	iter := makeTimeSeriesSpanIterator(span)
+	iter.seekTimestamp(timespan.StartNanos)
+
+	var result []tspb.TimeSeriesDatapoint
+	for iter.isValid() && iter.timestamp <= timespan.EndNanos {
+		var value float64
+		var valid bool
+
+		switch query.GetDerivative() {
+		case tspb.TimeSeriesQueryDerivative_DERIVATIVE:
+			value, valid = iter.derivative(query.GetDownsampler())
+			if valid {
+				// Convert derivative to seconds.
+				value *= float64(time.Second.Nanoseconds()) / float64(iter.samplePeriod())
+			}
+		case tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE:
+			value, valid = iter.derivative(query.GetDownsampler())
+			if valid {
+				if value < 0 {
+					value = 0
+				} else {
+					// Convert derivative to seconds.
+					value *= float64(time.Second.Nanoseconds()) / float64(iter.samplePeriod())
+				}
+			}
+		default:
+			value = iter.value(query.GetDownsampler())
+			valid = true
+		}
+
+		if valid {
+			result = append(result, tspb.TimeSeriesDatapoint{
+				TimestampNanos: iter.timestamp,
+				Value:          value,
+			})
+		}
+		iter.forward()
+	}
+
+	return result
 }
 
 // aggSum returns the sum value of all points in the provided slice.

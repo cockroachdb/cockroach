@@ -37,6 +37,18 @@ message TimeSeriesData {
   repeated TimeSeriesDatapoint datapoints = 3 [(gogoproto.nullable) = false];
 }
 
+// SourceDatapoints contains the datapoints for a single source within a query
+// result. Used when return_sources_separately is set on the request, allowing
+// a single query to list all desired sources and receive per-source breakdown
+// instead of requiring N separate queries each with one source.
+message SourceDatapoints {
+  option (gogoproto.equal) = true;
+  // The source identifier (e.g. node ID).
+  optional string source = 1 [(gogoproto.nullable) = false];
+  // Datapoints for this source.
+  repeated TimeSeriesDatapoint datapoints = 2 [(gogoproto.nullable) = false];
+}
+
 // TimeSeriesQueryAggregator describes a set of aggregation functions which can
 // be used to combine multiple datapoints into a single datapoint.
 //
@@ -120,6 +132,12 @@ message TimeSeriesQueryRequest {
   // query will be downsampled into periods of the supplied length. The
   // supplied duration must be a multiple of ten seconds.
   optional int64 sample_nanos = 4 [(gogoproto.nullable) = false];
+  // When true, the response includes per-source datapoints in each Result's
+  // source_datapoints field. This allows the client to send one query per
+  // metric with all desired sources listed, instead of N separate queries
+  // each with a single source. The per-source breakdown is returned in the
+  // response, reducing query count from N (one per source) to 1.
+  optional bool return_sources_separately = 5 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries
@@ -131,6 +149,11 @@ message TimeSeriesQueryResponse {
     option (gogoproto.equal) = true;
     optional Query query = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
     repeated TimeSeriesDatapoint datapoints = 2 [(gogoproto.nullable) = false];
+    // Per-source datapoints, populated when the request sets
+    // return_sources_separately. Contains one entry per source found,
+    // each with its own datapoint series. The aggregated datapoints field
+    // above is always populated regardless.
+    repeated SourceDatapoints source_datapoints = 3 [(gogoproto.nullable) = false];
   }
 
   // A set of Results; there will be one result for each Query in the matching
