@@ -150,12 +150,12 @@ distribution: local
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx
             │ equality: (oid) = (attrelid)
-            │ pred: column163 = attnum
+            │ pred: column165 = attnum
             │
             └── • render
                 │
                 └── • hash join
-                    │ equality: (attrelid, attnum) = (oid, column134)
+                    │ equality: (attrelid, attnum) = (oid, column135)
                     │
                     ├── • filter
                     │   │ filter: attrelid = 'b'::REGCLASS
