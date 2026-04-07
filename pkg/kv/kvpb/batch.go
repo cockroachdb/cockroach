@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -425,6 +426,25 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	}
 	// Unreachable.
 	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
+}
+
+// IsBulkLowPriorityRead returns whether a given BatchRequest is a low-priority
+// bulk read-only request that needs to be throttled in the KV server.
+func (ba *BatchRequest) IsBulkLowPriorityRead() bool {
+	if len(ba.Requests) != 1 {
+		return false
+	}
+
+	// This function interprets BulkNormalPri as low-priority for Export
+	// requests because that's how backups emit them up to v26.2.
+	// TODO(disaster-recovery): update this logic when Export priority changes.
+	switch ba.Requests[0].GetInner().(type) {
+	case *ScanRequest, *ReverseScanRequest:
+		return ba.AdmissionHeader.Priority <= int32(admissionpb.BulkLowPri)
+	case *ExportRequest:
+		return ba.AdmissionHeader.Priority <= int32(admissionpb.BulkNormalPri)
+	}
+	return false
 }
 
 // hasFlag returns true iff at least one of the requests within the batch
