@@ -88,9 +88,9 @@ func TestReplicaRankings(t *testing.T) {
 				continue
 			}
 			for i := range want {
-				if repls[i].RangeUsageInfo().Load().Dim(dimension) != want[i] {
+				if repls[i].RangeUsageInfo().LoadDim(dimension) != want[i] {
 					t.Errorf("got %f for %d'th element; want %f (input: %v)",
-						repls[i].RangeUsageInfo().Load().Dim(dimension), i, want, rLoad)
+						repls[i].RangeUsageInfo().LoadDim(dimension), i, want, rLoad)
 					break
 				}
 			}

@@ -113,7 +113,7 @@ func NewReplicaAccumulator(dims ...load.Dimension) *RRAccumulator {
 		dim := dim
 		res.dims[dim] = &rrPriorityQueue{}
 		res.dims[dim].val = func(r CandidateReplica) float64 {
-			return r.RangeUsageInfo().Load().Dim(dim)
+			return r.RangeUsageInfo().LoadDim(dim)
 		}
 	}
 	return res
