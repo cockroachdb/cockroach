@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -900,23 +899,18 @@ func RunCommitTrigger(
 			"commit wait. Was its timestamp bumped after acquiring latches?", txn, ct.Kind())
 	}
 
-	// Used by both splits and merges.
+	// Used by both splits and merges. Errors returned from here will fail
+	// the split or merge. Previously, errors were wrapped in
+	// ReplicaCorruptionError, which would crash the process. This was
+	// problematic because transient I/O errors (e.g. cloud storage
+	// timeouts) would be misidentified as corruption. See #165558.
+	//
+	// TODO(tbg): remove this wrapper, now that it's a no-op.
 	maybeWrapReplicaCorruptionError := func(ctx context.Context, err error) error {
 		if err == nil {
 			log.KvExec.Fatalf(ctx, "unexpected nil error")
 		}
-		if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
-			// Data corruption errors due to external SSTable references getting
-			// deleted should not be wrapped in replica corruption errors. This
-			// ensures that we simply fail the split or merge and propagate the error,
-			// but don't crash the process. In such cases, an excise command should be
-			// used to get out of this data corruption situation.
-			return err
-		}
-		// Otherwise, fail the split or merge with a critical error that crashes the
-		// process. Reporting a replica corruption error ensures this. See
-		// setCorruptRaftMuLocked.
-		return kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
+		return err
 	}
 
 	// Stage the commit trigger's side-effects so that they will go into effect on
