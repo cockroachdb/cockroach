@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package multiregion provides functions and structs for interacting with the
-// static multi-region state configured by users on their databases.
 package multiregion
 
 import (
