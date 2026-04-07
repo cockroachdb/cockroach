@@ -12,13 +12,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/tokenbucket"
 )
 
 // SenderWithWriteBytes is implemented by Store, Stores, and Replica. It
@@ -73,10 +76,10 @@ func (s *Store) SendWithWriteBytes(
 		}
 	}
 
-	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
+	if throttled, err := s.maybeThrottleBatch(ctx, ba); err != nil {
 		return nil, nil, kvpb.NewError(err)
-	} else if res != nil {
-		defer res.Release()
+	} else {
+		defer func() { throttled.performAccounting(br) }()
 	}
 
 	if ba.BoundedStaleness != nil {
@@ -313,19 +316,33 @@ func (s *Store) SendWithWriteBytes(
 	return nil, nil, pErr
 }
 
+// batchThrottleCallback is returned from the maybeThrottleBatch function and is
+// used to perform accounting and cleanup of any rate limiting related state
+// after a SendWithWriteBytes call completes.
+type batchThrottleCallback struct {
+	// reservation is the reservation from a ConcurrentRequestLimiter.
+	reservation limit.Reservation
+	// limiters is a reference to the store's limiters struct. This field is
+	// set whenever a request for low-priority bulk reads was throttled and
+	// needs to account for tokens corresponding to actually read data.
+	limiters *batcheval.Limiters
+}
+
 // maybeThrottleBatch inspects the provided batch and determines whether
 // throttling should be applied to avoid overloading the Store. If so, the
-// method blocks and returns a reservation that must be released after the
-// request has completed.
+// method blocks and returns a struct containing the information needed to
+// perform accounting for rate limiters. The caller must call
+// (batchThrottleCallback).performAccounting with the BatchResponse after the
+// evaluation completes.
 //
 // Of note is that request throttling is all performed above evaluation and
 // before a request acquires latches on a range. Otherwise, the request could
 // inadvertently block others while being throttled.
 func (s *Store) maybeThrottleBatch(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (limit.Reservation, error) {
+) (batchThrottleCallback, error) {
 	if !ba.IsSingleRequest() {
-		return nil, nil
+		return batchThrottleCallback{}, nil
 	}
 
 	switch t := ba.Requests[0].GetInner().(type) {
@@ -337,7 +354,7 @@ func (s *Store) maybeThrottleBatch(
 		before := timeutil.Now()
 		res, err := limiter.Begin(ctx)
 		if err != nil {
-			return nil, err
+			return batchThrottleCallback{}, err
 		}
 		waited := timeutil.Since(before)
 
@@ -345,7 +362,7 @@ func (s *Store) maybeThrottleBatch(
 		if waited > time.Second {
 			log.KvExec.Infof(ctx, "SST ingestion was delayed by %v", waited)
 		}
-		return res, nil
+		return batchThrottleCallback{reservation: res}, nil
 
 	case *kvpb.ExportRequest:
 		// Limit the number of concurrent Export requests, as these often scan and
@@ -353,7 +370,7 @@ func (s *Store) maybeThrottleBatch(
 		before := timeutil.Now()
 		res, err := s.limiters.ConcurrentExportRequests.Begin(ctx)
 		if err != nil {
-			return nil, err
+			return batchThrottleCallback{}, err
 		}
 
 		waited := timeutil.Since(before)
@@ -361,11 +378,95 @@ func (s *Store) maybeThrottleBatch(
 		if waited > time.Second {
 			log.VEventf(ctx, 1, "export request was delayed by %v", waited)
 		}
-		return res, nil
+		return batchThrottleCallback{reservation: res}, nil
 
-	default:
-		return nil, nil
+	case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
+		// Limit the disk read IO bandwidth for (Reverse)Scan requests if the
+		// request has a low priority set in the admission header.
+		if ba.AdmissionHeader.Priority <= int32(admissionpb.BulkLowPri) {
+			before := timeutil.Now()
+
+			// Helper function that tries to obtain tokens from the rate limiter
+			// under a mutex.
+			obtainTokens := func() (bool, time.Duration) {
+				s.limiters.BulkReadIORate.Lock()
+				defer s.limiters.BulkReadIORate.Unlock()
+				return s.limiters.BulkReadIORate.TryToFulfill(1)
+			}
+
+			// Try to throttle based on disk IO first.
+			ok, backoff := obtainTokens()
+
+			// Throttle based on concurrent requests next. If we could not
+			// acquire a reservation, then we should replenish the disk IO token
+			// bucket.
+			res, err := s.limiters.ConcurrentBulkReadRequests.Begin(ctx)
+			if err != nil {
+				if ok {
+					s.limiters.BulkReadIORate.Lock()
+					defer s.limiters.BulkReadIORate.Unlock()
+					s.limiters.BulkReadIORate.Adjust(1)
+				}
+				return batchThrottleCallback{}, err
+			}
+
+			// If we didn't succeed in obtaining tokens for disk IO, then retry.
+			timer := timeutil.Timer{}
+			defer timer.Stop()
+			for !ok {
+				timer.Reset(backoff)
+				select {
+				case <-ctx.Done():
+					res.Release()
+					return batchThrottleCallback{},
+						errors.Wrap(ctx.Err(), "context ended while throttling bulk read request")
+				case <-timer.C:
+					ok, backoff = obtainTokens()
+				}
+			}
+
+			waited := timeutil.Since(before)
+			if waited > time.Second {
+				log.KvExec.Infof(ctx, "bulk low-priority read operation was delayed by %v", waited)
+			}
+
+			return batchThrottleCallback{reservation: res, limiters: &s.limiters}, nil
+		}
 	}
+
+	return batchThrottleCallback{}, nil
+}
+
+// performAccounting must be called after maybeThrottleBatch with the returned
+// batchThrottleCallback and the BatchResponse.
+func (b batchThrottleCallback) performAccounting(br *kvpb.BatchResponse) {
+	if b.reservation != nil {
+		b.reservation.Release()
+	}
+	if b.limiters == nil {
+		return
+	}
+
+	// Calculate the actual token adjustment needed from the BatchResponse. We
+	// get the number of bytes that were read, and then deduct them (less one,
+	// for the token we already got) from the bucket. We don't care about the
+	// token bucket falling too much into -ve, because we have pagination in the
+	// TTL layer and also a ConcurrentRequestLimiter to ensure the bucket
+	// doesn't fall arbitrarily into debt.
+	var bytesRead int64
+	if br != nil {
+		for _, resp := range br.Responses {
+			if scan := resp.GetScan(); scan != nil {
+				bytesRead += scan.NumBytes
+			} else if scan := resp.GetReverseScan(); scan != nil {
+				bytesRead += scan.NumBytes
+			}
+		}
+	}
+
+	b.limiters.BulkReadIORate.Lock()
+	defer b.limiters.BulkReadIORate.Unlock()
+	b.limiters.BulkReadIORate.Adjust(1 - tokenbucket.Tokens(bytesRead))
 }
 
 // executeServerSideBoundedStalenessNegotiation performs the server-side
