@@ -1187,6 +1187,9 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 	taskName := bq.processOpName() + " [outer]"
 	if err := stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: taskName},
 		func(ctx context.Context) {
+			c, cancel := stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+			ctx = c
 			// Release semaphore when finished processing.
 			defer func() { <-bq.processSem }()
 			start := timeutil.Now()
