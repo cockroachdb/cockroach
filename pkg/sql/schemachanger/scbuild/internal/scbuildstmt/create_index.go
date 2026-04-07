@@ -510,6 +510,15 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			for _, col := range idxSpec.columns {
 				if _, ok := implicitColumns[col.ColumnID]; !col.Implicit && ok {
 					if isRegionalByRow {
+						// Allow the implicit partitioning column when it is the
+						// leading KEY column of the index without sharding. This
+						// matches the legacy schema changer behavior where the
+						// column is recognized as the explicit partitioning prefix
+						// and no implicit column is prepended.
+						if idxSpec.secondary.Sharding == nil &&
+							col.Kind == scpb.IndexColumn_KEY && col.OrdinalInKind == 0 {
+							continue
+						}
 						panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
 					} else {
 						panic(sqlerrors.NewIndexIncludeImplicitPartitionColFromPartitionAllBy)

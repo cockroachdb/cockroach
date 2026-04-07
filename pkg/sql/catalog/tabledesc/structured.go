@@ -927,9 +927,16 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				// a PK column listed in StoreColumnNames, colIDs.Contains is true
 				// even though it wasn't explicitly added as a stored column. In
 				// that case we silently skip it rather than returning an error.
+				//
+				// Similarly, implicit partitioning columns (e.g. crdb_region on
+				// REGIONAL BY ROW tables) are prepended to the index key columns
+				// by UpdateIndexPartitioning. If the user also specified such a
+				// column in the STORING clause, silently skip it since the column
+				// is already present in the key.
 				if primaryColIDs.Contains(col.GetID()) &&
-					!idx.CollectKeyColumnIDs().Contains(col.GetID()) &&
-					idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
+					idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding &&
+					(!idx.CollectKeyColumnIDs().Contains(col.GetID()) ||
+						isImplicitPartitioningCol(idx, col.GetID())) {
 					continue
 				}
 				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
@@ -959,6 +966,19 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		}
 	}
 	return nil
+}
+
+// isImplicitPartitioningCol returns true if colID is one of the implicit
+// partitioning key columns in the given index (i.e., within the leading
+// NumImplicitColumns prefix).
+func isImplicitPartitioningCol(idx catalog.Index, colID descpb.ColumnID) bool {
+	n := idx.ImplicitPartitioningColumnCount()
+	for i := 0; i < n && i < idx.NumKeyColumns(); i++ {
+		if idx.GetKeyColumnID(i) == colID {
+			return true
+		}
+	}
+	return false
 }
 
 func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.ColumnID) {
