@@ -6,6 +6,8 @@
 package load
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -174,33 +176,39 @@ func (rl *ReplicaLoad) Reset() {
 	}
 }
 
-// getLocked returns the current value for the LoadStat with ordinal stat. It
-// requires holding a lock.
-func (rl *ReplicaLoad) getLocked(stat LoadStat) float64 {
+// getLockedWithNow returns the current value for the LoadStat with ordinal
+// stat using the provided time. It requires rl.mu to be held.
+func (rl *ReplicaLoad) getLockedWithNow(stat LoadStat, now time.Time) float64 {
+	rl.mu.AssertHeld()
 	var ret float64
 	// Only return the value if the statistics have been gathered for longer
 	// than the minimum duration.
-	if val, dur := rl.mu.stats[stat].AverageRatePerSecond(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
+	if val, dur := rl.mu.stats[stat].AverageRatePerSecond(now); dur >= replicastats.MinStatsDuration {
 		ret = val
 	}
 	return ret
+}
+
+// statsLockedWithNow returns a ReplicaLoadStats populated using the provided
+// time. It requires rl.mu to be held.
+func (rl *ReplicaLoad) statsLockedWithNow(now time.Time) ReplicaLoadStats {
+	return ReplicaLoadStats{
+		QueriesPerSecond:         rl.getLockedWithNow(Queries, now),
+		RequestsPerSecond:        rl.getLockedWithNow(Requests, now),
+		WriteKeysPerSecond:       rl.getLockedWithNow(WriteKeys, now),
+		ReadKeysPerSecond:        rl.getLockedWithNow(ReadKeys, now),
+		WriteBytesPerSecond:      rl.getLockedWithNow(WriteBytes, now),
+		ReadBytesPerSecond:       rl.getLockedWithNow(ReadBytes, now),
+		RequestCPUNanosPerSecond: rl.getLockedWithNow(ReqCPUNanos, now),
+		RaftCPUNanosPerSecond:    rl.getLockedWithNow(RaftCPUNanos, now),
+	}
 }
 
 // Stats returns a current stat summary of replica load.
 func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-
-	return ReplicaLoadStats{
-		QueriesPerSecond:         rl.getLocked(Queries),
-		RequestsPerSecond:        rl.getLocked(Requests),
-		WriteKeysPerSecond:       rl.getLocked(WriteKeys),
-		ReadKeysPerSecond:        rl.getLocked(ReadKeys),
-		WriteBytesPerSecond:      rl.getLocked(WriteBytes),
-		ReadBytesPerSecond:       rl.getLocked(ReadBytes),
-		RequestCPUNanosPerSecond: rl.getLocked(ReqCPUNanos),
-		RaftCPUNanosPerSecond:    rl.getLocked(RaftCPUNanos),
-	}
+	return rl.statsLockedWithNow(timeutil.Unix(0, rl.clock.PhysicalNow()))
 }
 
 // RequestLocalityInfo returns the summary of client localities for requests
