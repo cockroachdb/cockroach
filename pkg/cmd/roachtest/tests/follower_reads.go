@@ -772,7 +772,7 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
-	client := roachtestutil.DefaultHTTPClient(c, l)
+	client := roachtestutil.DefaultHTTPClient(c, l, roachtestutil.HTTPTimeout(15*time.Second))
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
@@ -852,6 +852,7 @@ func verifyHighFollowerReadRatios(
 	// is running on a multitenant deployment.
 	client := roachtestutil.DefaultHTTPClient(
 		c, l, roachtestutil.VirtualCluster(install.SystemInterfaceName),
+		roachtestutil.HTTPTimeout(15*time.Second),
 	)
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
@@ -947,6 +948,7 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			// is running on a multitenant deployment.
 			client := roachtestutil.DefaultHTTPClient(
 				c, l, roachtestutil.VirtualCluster(install.SystemInterfaceName),
+				roachtestutil.HTTPTimeout(15*time.Second),
 			)
 			resp, err := client.Get(ctx, url)
 			if err != nil {
