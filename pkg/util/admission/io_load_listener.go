@@ -748,7 +748,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	// want to know what happened in that interval.
 	if prevShouldLog || io.aux.shouldLog || io.diskBandwidthLimiter.state.prevWriteTokenUtil > 0.8 ||
 		log.V(1) {
-		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
+		log.Dev.Infof(ctx, "IO admission controller:%s", io.formatLog())
 	}
 }
 
@@ -785,7 +785,8 @@ type adjustTokensAuxComputations struct {
 	intFlushDuration time.Duration
 	intWriteStalls   int64
 
-	intWALFailover bool
+	intWALFailover               bool
+	walFailoverUnlimitedOverride bool
 
 	prevTokensUsed                  int64
 	prevTokensUsedByElasticWork     int64
@@ -796,9 +797,9 @@ type adjustTokensAuxComputations struct {
 	perWorkTokensAux perWorkTokensAux
 
 	// shouldLog indicates that something noteworthy happened during this
-	// adjustment interval, so the "IO overload" log message should be emitted.
-	// Examples: L0 compaction score rising above 0.2, flush utilization target
-	// changing, or token limiting kicking in.
+	// adjustment interval, so the "IO admission controller" log message should
+	// be emitted. Examples: L0 compaction score rising above 0.2, flush
+	// utilization target changing, or token limiting kicking in.
 	shouldLog bool
 }
 
@@ -1235,9 +1236,11 @@ func (io *ioLoadListener) adjustTokensInner(
 	if totalNumElasticByteTokens > totalNumByteTokens {
 		totalNumElasticByteTokens = totalNumByteTokens
 	}
+	walFailoverUnlimitedOverride := false
 	if intWALFailover && walFailoverUnlimitedTokens.Get(&io.settings.SV) {
 		totalNumByteTokens = unlimitedTokens
 		totalNumElasticByteTokens = unlimitedTokens
+		walFailoverUnlimitedOverride = true
 	}
 
 	io.l0TokensProduced.Inc(totalNumByteTokens)
@@ -1269,6 +1272,7 @@ func (io *ioLoadListener) adjustTokensInner(
 			intFlushDuration:                flushWriteThroughput.WorkDuration,
 			intWriteStalls:                  intWriteStalls,
 			intWALFailover:                  intWALFailover,
+			walFailoverUnlimitedOverride:    walFailoverUnlimitedOverride,
 			prevTokensUsed:                  prev.byteTokensUsed,
 			prevTokensUsedByElasticWork:     prev.byteTokensUsedByElasticWork,
 			tokenKind:                       tokenKind,
@@ -1292,94 +1296,130 @@ type adjustTokensResult struct {
 	ioThreshold      *admissionpb.IOThreshold // never nil
 }
 
-func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
+// formatLog produces a unified, multi-line log message covering both IO token
+// state and disk bandwidth state.
+func (io *ioLoadListener) formatLog() redact.RedactableString {
+	return redact.Sprintfn(func(p redact.SafePrinter) {
+		d := io.diskBandwidthLimiter
+		diskBWThrottling := d.state.prevRemainingDiskWriteTokens < 0 &&
+			!d.unlimitedTokensOverride
+		io.adjustTokensResult.writeIOSummary(p, diskBWThrottling)
+		d.SafeFormat(p, 'v')
+		io.adjustTokensResult.writeIODetails(p)
+		d.writeDetails(p)
+	})
+}
+
+// writeIOSummary prints the IO token portion of the admission controller log.
+// diskBWThrottling indicates whether disk bandwidth tokens were exhausted,
+// which affects the [status] line when IO tokens are unlimited.
+func (res adjustTokensResult) writeIOSummary(p redact.SafePrinter, diskBWThrottling bool) {
 	ib := humanizeutil.IBytes
-	// NB: "≈" indicates smoothed quantities.
-	p.Printf("compaction score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
-	var recentFlushBackogStr string
-	if res.aux.recentUnflushedMemTableTooLarge {
-		recentFlushBackogStr = " (flush-backlog) "
-	}
-	p.Printf("L0 growth %s%s (write %s (ignored %s) ingest %s (ignored %s)): ",
-		ib(res.aux.intL0AddedBytes),
-		redact.SafeString(recentFlushBackogStr),
-		ib(res.aux.perWorkTokensAux.intL0WriteBytes),
-		ib(res.aux.perWorkTokensAux.intL0IgnoredWriteBytes),
-		ib(res.aux.perWorkTokensAux.intL0IngestedBytes),
-		ib(res.aux.perWorkTokensAux.intL0IgnoredIngestedBytes))
-	// Writes to L0 that we expected because requests told admission control.
-	// This is the "easy path", from an estimation perspective, if all regular
-	// writes accurately tell us what they write, and all ingests tell us what
-	// they ingest and all of ingests into L0.
-	p.Printf("requests %d (%d bypassed) with ", res.aux.perWorkTokensAux.intWorkCount,
-		res.aux.perWorkTokensAux.intBypassedWorkCount)
-	p.Printf("%s acc-write (%s bypassed) + ",
-		ib(res.aux.perWorkTokensAux.intL0WriteAccountedBytes),
-		ib(res.aux.perWorkTokensAux.intL0WriteBypassedAccountedBytes))
-	// Ingestion bytes that we expected because requests told admission control.
-	p.Printf("%s acc-ingest (%s bypassed) + ",
-		ib(res.aux.perWorkTokensAux.intIngestedAccountedBytes),
-		ib(res.aux.perWorkTokensAux.intIngestedBypassedAccountedBytes))
-	// Adjusted LSM writes and disk writes that were used for w-amp estimation.
-	p.Printf("%s adjusted-LSM-writes + %s adjusted-disk-writes + ",
-		ib(res.aux.perWorkTokensAux.intAdjustedLSMWrites),
-		ib(res.aux.perWorkTokensAux.intAdjustedDiskWriteBytes))
-	// The models we are fitting to compute tokens based on the reported size of
-	// the write and ingest.
-	p.Printf("write-model %.2fx+%s (smoothed %.2fx+%s) + ",
-		res.aux.perWorkTokensAux.intL0WriteLinearModel.multiplier,
-		ib(res.aux.perWorkTokensAux.intL0WriteLinearModel.constant),
-		res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant))
-	p.Printf("l0-ingest-model %.2fx+%s (smoothed %.2fx+%s) + ",
-		res.aux.perWorkTokensAux.intL0IngestedLinearModel.multiplier,
-		ib(res.aux.perWorkTokensAux.intL0IngestedLinearModel.constant),
-		res.l0IngestLM.multiplier, ib(res.l0IngestLM.constant))
-	p.Printf("ingest-model %.2fx+%s (smoothed %.2fx+%s) + ",
-		res.aux.perWorkTokensAux.intIngestedLinearModel.multiplier,
-		ib(res.aux.perWorkTokensAux.intIngestedLinearModel.constant),
-		res.ingestLM.multiplier, ib(res.ingestLM.constant))
-	p.Printf("write-amp-model %.2fx+%s (smoothed %.2fx+%s) + ",
-		res.aux.perWorkTokensAux.intWriteAmpLinearModel.multiplier,
-		ib(res.aux.perWorkTokensAux.intWriteAmpLinearModel.constant),
-		res.writeAmpLM.multiplier, ib(res.writeAmpLM.constant))
-	// The tokens used per request at admission time, when no size information
-	// is known.
-	p.Printf("at-admission-tokens %s, ", ib(res.requestEstimates.writeTokens))
-	// How much got compacted out of L0 recently.
-	p.Printf("compacted %s [≈%s], ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
-	// The tokens computed for flush, based on observed flush throughput and
-	// utilization.
-	p.Printf("flushed %s [≈%s] (mult %.2f); ", ib(int64(res.aux.intFlushTokens)),
-		ib(int64(res.smoothedNumFlushTokens)), res.flushUtilTargetFraction)
-	p.Printf("admitting ")
+	totalTokens := res.ioLoadListenerState.totalNumByteTokens
+	elasticTokens := res.ioLoadListenerState.totalNumElasticByteTokens
+
+	// [status]: admission decision with rate and reason.
+	p.Printf("\n  [status] ")
 	if res.aux.intWALFailover {
-		p.Printf("(WAL failover) ")
-	}
-	if n, m := res.ioLoadListenerState.totalNumByteTokens,
-		res.ioLoadListenerState.totalNumElasticByteTokens; n < unlimitedTokens {
-		p.Printf("%s (rate %s/s) (elastic %s rate %s/s)", ib(n), ib(n/adjustmentInterval), ib(m),
-			ib(m/adjustmentInterval))
-		switch res.aux.tokenKind {
-		case compactionTokenKind:
-			// NB: res.smoothedCompactionByteTokens  is the same as
-			// res.ioLoadListenerState.totalNumByteTokens (printed above) when
-			// res.aux.tokenKind == compactionTokenKind.
-			lowerBoundBoolStr := ""
-			if res.aux.usedCompactionTokensLowerBound {
-				lowerBoundBoolStr = "(used token lower bound)"
-			}
-			p.Printf(" due to L0 growth%s", redact.SafeString(lowerBoundBoolStr))
-		case flushTokenKind:
-			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
+		if res.aux.walFailoverUnlimitedOverride {
+			p.SafeString("[WAL failover: unlimited override] ")
+		} else {
+			p.SafeString("[WAL failover] ")
 		}
-	} else if m < unlimitedTokens {
-		p.Printf("elastic %s (rate %s/s) due to L0 growth", ib(m), ib(m/adjustmentInterval))
-	} else {
-		p.SafeString("all")
 	}
-	p.Printf(" (used total: %s elastic %s)", ib(res.aux.prevTokensUsed),
-		ib(res.aux.prevTokensUsedByElasticWork))
-	p.Printf("; write stalls %d", res.aux.intWriteStalls)
+	if totalTokens < unlimitedTokens {
+		p.Printf("throttling all at %s/s (elastic %s/s)",
+			ib(totalTokens/adjustmentInterval),
+			ib(elasticTokens/adjustmentInterval))
+		if res.aux.intWALFailover {
+			p.SafeString(" due to WAL failover")
+		} else {
+			switch res.aux.tokenKind {
+			case compactionTokenKind:
+				p.SafeString(" due to L0 growth")
+			case flushTokenKind:
+				p.SafeString(" due to memtable flush")
+			}
+		}
+	} else if elasticTokens < unlimitedTokens {
+		if res.aux.intWALFailover {
+			p.Printf("throttling elastic only at %s/s due to WAL failover",
+				ib(elasticTokens/adjustmentInterval))
+		} else {
+			p.Printf("throttling elastic only at %s/s due to L0 growth",
+				ib(elasticTokens/adjustmentInterval))
+		}
+	} else if diskBWThrottling {
+		p.SafeString("throttling elastic due to disk bandwidth")
+	} else {
+		p.SafeString("admitting all")
+	}
+	if res.aux.recentUnflushedMemTableTooLarge {
+		p.SafeString(" [flush-backlog]")
+	}
+	if res.aux.usedCompactionTokensLowerBound {
+		p.SafeString(" [used token lower bound]")
+	}
+
+	// [health]: compaction score and write stalls.
+	p.Printf("\n  [health] compaction score %v, write-stalls %d",
+		res.ioThreshold, res.aux.intWriteStalls)
+
+	// [L0]: L0 data flow with write/ingest breakdown and net trend.
+	intL0Out := res.aux.intL0CompactedBytes
+	intL0In := res.aux.intL0AddedBytes
+	p.Printf("\n  [L0] in +%s (writes %s, ingests %s), out -%s (net %s)",
+		ib(intL0In),
+		ib(res.aux.perWorkTokensAux.intL0WriteBytes),
+		ib(res.aux.perWorkTokensAux.intL0IngestedBytes),
+		ib(intL0Out),
+		ib(intL0In-intL0Out))
+}
+
+// writeIODetails prints the internal algorithm state that was previously
+// inlined in the old single-line log. This preserves all information needed
+// for debugging admission control behavior.
+func (res adjustTokensResult) writeIODetails(p redact.SafePrinter) {
+	ib := humanizeutil.IBytes
+	aux := res.aux.perWorkTokensAux
+	p.Printf("\n  [details] ")
+	// Token usage from previous interval.
+	p.Printf("used total %s (elastic %s); ",
+		ib(res.aux.prevTokensUsed), ib(res.aux.prevTokensUsedByElasticWork))
+	// Compaction and flush token internals.
+	p.Printf("compacted %s [≈%s], flushed %s [≈%s] (mult %.2f); ",
+		ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes),
+		ib(int64(res.aux.intFlushTokens)),
+		ib(int64(res.smoothedNumFlushTokens)), res.flushUtilTargetFraction)
+	// Per-request accounting.
+	p.Printf("requests %d (%d bypassed) ",
+		aux.intWorkCount, aux.intBypassedWorkCount)
+	p.Printf("acc-write %s (%s bypassed) acc-ingest %s (%s bypassed) ",
+		ib(aux.intL0WriteAccountedBytes), ib(aux.intL0WriteBypassedAccountedBytes),
+		ib(aux.intIngestedAccountedBytes), ib(aux.intIngestedBypassedAccountedBytes))
+	p.Printf("adj-LSM %s adj-disk %s; ",
+		ib(aux.intAdjustedLSMWrites), ib(aux.intAdjustedDiskWriteBytes))
+	// Linear models.
+	p.Printf("write-model %.2fx+%s [≈%.2fx+%s] ",
+		aux.intL0WriteLinearModel.multiplier, ib(aux.intL0WriteLinearModel.constant),
+		res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant))
+	p.Printf("l0-ingest-model %.2fx+%s [≈%.2fx+%s] ",
+		aux.intL0IngestedLinearModel.multiplier, ib(aux.intL0IngestedLinearModel.constant),
+		res.l0IngestLM.multiplier, ib(res.l0IngestLM.constant))
+	p.Printf("ingest-model %.2fx+%s [≈%.2fx+%s] ",
+		aux.intIngestedLinearModel.multiplier, ib(aux.intIngestedLinearModel.constant),
+		res.ingestLM.multiplier, ib(res.ingestLM.constant))
+	p.Printf("write-amp-model %.2fx+%s [≈%.2fx+%s]; ",
+		aux.intWriteAmpLinearModel.multiplier, ib(aux.intWriteAmpLinearModel.constant),
+		res.writeAmpLM.multiplier, ib(res.writeAmpLM.constant))
+	// At-admission token estimate and ignored bytes.
+	p.Printf("at-admission-tokens %s, ", ib(res.requestEstimates.writeTokens))
+	p.Printf("ignored-write %s ignored-ingest %s",
+		ib(aux.intL0IgnoredWriteBytes), ib(aux.intL0IgnoredIngestedBytes))
+}
+
+func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
+	res.writeIOSummary(p, false)
 }
 
 func (res adjustTokensResult) String() string {
