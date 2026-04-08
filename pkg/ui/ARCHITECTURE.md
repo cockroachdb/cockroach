@@ -1,145 +1,304 @@
 # DB Console Architecture
 
-## Language, Tools, and Frameworks
+## Workspace Structure
 
-This repository uses the Typescript language, and the React, and Redux libraries to
-build a large complex UI app. Familiarity with these 3 technologies is critical
-to understanding what's going on and making changes with intention.
+DB Console is organized as a **pnpm monorepo** under `pkg/ui/workspaces/`:
 
-All three technologies have wonderful documentation which you're encouraged to
-start with when learning.
+- **`cluster-ui`** — Shared component library published as `@cockroachlabs/cluster-ui`. Contains API fetchers, SWR hooks, page-level components, and shared utilities. Used by both DB Console and CockroachCloud.
+- **`db-console`** — The application shell. Provides routing, authentication, layout, and thin wrapper components that bridge any remaining app-level state to cluster-ui components.
+- **`crdb-api-client`** — Protobuf client wrapper.
+- **`e2e-tests`** — End-to-end test suite.
+- **`eslint-plugin-crdb`** — Custom ESLint rules.
 
-### Why it's hard
-> A big obstacle to understanding how React and Redux work is the fact
-> that both libraries **hide the call graph** from your application.
-> This can make it hard to mentally trace code because the calls connecting
-> portions of your app are simply not in your codebase. You are required
-> to understand _some_ React and Redux internals to make the application's 
-> architecture legible.
+### How cluster-ui is consumed
 
-### React
+db-console depends on cluster-ui via a local link (`"@cockroachlabs/cluster-ui": "link:../cluster-ui"`). Components, hooks, and utilities are imported directly:
 
-**Why?** React is a library for building interactive UIs. It lets us use a 
-"Component" pattern to define composable views based on what data inputs we have 
-and then the library takes care of updating those views when the data changes.
+```tsx
+import { ScheduleDetails, useNodes } from "@cockroachlabs/cluster-ui";
+```
 
-The React docs are very good at quickly walking you through what you need to 
-know. You can either follow a 
-[Practical Tutorial](https://reactjs.org/tutorial/tutorial.html) or a tour of 
-[Main Concepts](https://reactjs.org/docs/hello-world.html). Both are great, not 
-too long, and will teach you what you need to be productive.
+---
 
-**Note: It will be hard for you to make progress if you don't understand JSX syntax, and 
-what "props" and "state" are with respect to React Components.**
+## Data Fetching
 
-In addition, the [Thinking in React](https://reactjs.org/docs/thinking-in-react.html)
-page contains some great paradigm-shifting ideas and also links to the [props vs state](https://reactjs.org/docs/faq-state.html#what-is-the-difference-between-state-and-props) FAQ 
-question that is usually the first source of confusion for new developers.
+Data fetching uses [SWR](https://swr.vercel.app/) (stale-while-revalidate). SWR handles caching, request deduplication, automatic revalidation, and error/loading states. Hooks and their fetcher functions are co-located in `cluster-ui/src/api/`.
 
-The [React lifecycle diagram](https://projects.wojtekmaj.pl/react-lifecycle-methods-diagram/)
-is a great tool for understanding how simple React's mental model can be. The key
-to understanding how the Component model works is knowing that anytime the props
-or state change within your Component, the React runtime will automatically call
-`render()` again on your component and all the components underneath it in the
-hierarchy to determine if anything new should be rendered to the DOM.
+### How it works
 
-### Redux
+```
+Component calls useMyData() hook
+  -> hook calls useSwrWithClusterId(key, fetcher, options)
+  -> SWR handles caching, deduplication, revalidation
+  -> component reads { data, error, isLoading } directly
+```
 
-**Why?** Redux is a library for managing complex application state in your UI. We
-use it to retrieve and store all the information DB Console needs from CRDB in 
-one big tree of data and then slice portions of it out to feed into React 
-Components for rendering. In addition, any user interaction with the app that 
-requires interaction with CRDB, will almost certainly pass through the Redux
-framework.
+There is no separate store, reducer, or saga layer. The hook _is_ the data layer.
 
-The Redux docs are very detailed but approachable and use simple examples. It is
-recommended that you work through the [Overview](https://redux.js.org/tutorials/fundamentals/part-1-overview) to get a high-level understanding.
-In particular the [data flow diagram](https://redux.js.org/tutorials/fundamentals/part-1-overview#data-flow) can help with the basics.
+### Base HTTP utilities
 
-**Note: it will be hard for you to make progress if you don't understand what the
-store, reducers, and actions are at a high level.**
+Two fetcher utilities in `cluster-ui/src/api/fetchData.ts` handle the actual HTTP calls:
 
-For the most part, change you make to DB Console will involve reading in new data
-from existing endpoints in order to render something different. Your focus should
-be on the Redux **selectors** which are functions of the global state.
+- **`fetchData(respBuilder, path, reqBuilder?, reqPayload?, timeout?)`** — For protobuf APIs (`_status/*`, `_admin/*`). Encodes requests and decodes responses using protobuf, sets `Grpc-Timeout` header (default 30s).
+- **`fetchDataJSON<ResponseType, RequestType>(path, reqPayload?)`** — For JSON APIs (`/api/v2`). Standard `application/json` content type.
 
-More specifically, we use the [`reselect` library](https://redux.js.org/recipes/computing-derived-data#creating-a-memoized-selector) that provides helpers for
-automatically creating memoized selector functions of our global state. For
-example, one place where we use these is in the Statements Page to compute the
-data we need to render inside our table. The data provided by CRDB isn't in a
- format that can be directly put into the table component so we need to do some
-pre-processing on it (whether the UI should really be responsible for this is
-outside the scope of this doc but that's certainly a good question to ask!).
+Both throw `RequestError` on non-2xx responses with extracted error messages.
 
-#### Concrete example: Statements Page
+### SWR hook variants
 
-Here's a diagram that can help explain how the data on the Statements Page table
-gets there:
+All three live in `cluster-ui/src/util/hooks.ts` and automatically prepend the cluster ID (from `ClusterDetailsContext`) to the SWR cache key. This ensures cache isolation across clusters.
 
-![@startuml
-title "How does the Statements Page get its data when the page loads?"
-React -> "StatementsPage.tsx": render()
-React -> "StatementsPage.tsx": componentDidMount()
-"StatementsPage.tsx" -> Redux: Dispatch refresh()
-Redux -> "cachedDataReducer.ts/refresh": refresh()
-"cachedDataReducer.ts/refresh" -> Redux: Dispatch action: cockroachui/CachedDataReducer/statements/REQUEST
-Redux -> "cachedDataReducer.ts/reducer": Run reducer with REQUEST action
-"cachedDataReducer.ts/reducer" -> Redux: Returns new state for cachedData/statements with `inFlight: true`
-"cachedDataReducer.ts/refresh" -> CRDB: HTTP call to API endpoint
-CRDB -> "cachedDataReducer.ts/refresh": Invoke callback on response
-note right
-async
-end note
-"cachedDataReducer.ts/refresh" -> Redux: Dispatch action: cockroachui/CachedDataReducer/statements/RECEIVE\nwith payload containing statements data
-Redux -> "cachedDataReducer.ts/reducer": Run reducer with RECEIVE action
-"cachedDataReducer.ts/reducer" -> Redux: Returns new state for cachedData/statements subhierarchy with\nnew payload added to state
-Redux -> Redux: Merges cachedData/statements with entire application state
-Redux -> "StatementsPage.tsx/selectStatements": Triggers recomputation of selectors that\nread Statements data
-note right
-When selectors are defined
-using `createSelector` Redux
-is able to track which portion
-of the state can trigger their
-recomputation when it changes
-end note
-"StatementsPage.tsx/selectStatements" -> "StatementsPage.tsx/selectStatements": New version of processed\nStatements data is generated
-"StatementsPage.tsx/selectStatements" -> React: Output of selectStatements\nis a prop of the StatementsPage\ncomponent so once it's changed\nReact triggers a re-render
-note right
-The `selectStatements` selector
-is bound to the component's props
-using the `connect` function in
-StatementsPage.tsx which links
-the output of selectors to props
-the Component expects as input
-end note
-React -> "StatementsPage.tsx": render()
-@enduml](http://www.plantuml.com/plantuml/png/lLL1SzfC3BtxLsYuV5yFANSERLgWanpIfa3R2mUMNO5tSBIUNJaa_xxIujW9pIHqEkq9izBJUtgIr-U9JUJcfYhOSuKmk0XxS04JS8amPyDuWyG9hiqMOOiCNluummRs9LBEgZLK1UFI-q4nGsCPpjx1e0ShzYsdky488fB3-F-Rr_9ikAa3oU74kwlG40lakKojC4FNt8rWubDjs9R2iOcOIa7aI2QnnfRe9g9Rpon6GG_RHA7h8IzcFaidVVX0AjdkOX1quuVZuoB3r6aVpgPVlqtdYzVLvKTHDsi8sd-mzrn2Mw6bBbx6zvhbXvj82GZta0N19aJeqOzK7eXMdZvLVblo23Wsk2fEy6SyctmSmSLYSIsLgmeum8VhIq1oTV34XSPFcSabtOOTvXfhOtSGr8HK1qfOK624gC8A09FkoHPI7_JutqnmFBtyFbrIDgaszxhz0YSsdZnjeS_DxyeVZJfJ_TLHfsPTUemcsl8-iov9O5rVnZbqEiOCwNjfcQumRZ6zj4Nov2E2gUlAMwDz79TwvjKU9gpGSXyGTnOoyYt6117rWcZuK2niu90S9CIbuIL55E7peoaysPeV9T8Zc1613ZUUq4cmIJh5bPKoZFCsQNNeMC9UyjSLgYSSTJVtfRUo227c8O4guX9RuwqXu8DoFVMnWAC6ybNg6MnfIBpiT_aaNtx3mCyorbini7MjZi5YIkYMTEILjhX5mYYdxdGP-LOVmPU6fJTbECvQadgdnFM3IKzhBwcx-Y4526GHFF-NMcz4QUPuC5IBHJmxV5QU3dWXjLV7_Ajkv8SnhaD3kjjPISSiTAemTPl0Mii68e6kODEGpNFpEkjVlMdNeVAqqn8A3hqZ_QQ6ZaLJnbtVU5TBIWAJX45W_JwS-dKzbmVvgFy4)
+| Hook | When to use |
+|------|------------|
+| `useSwrWithClusterId(key, fetcher, config?)` | Standard reads. Supports auto-revalidation, polling, deduplication. |
+| `useSwrImmutableWithClusterId(key, fetcher, config?)` | Data that should be fetched once and never automatically revalidated (e.g. grants on a detail page). If another hook mutates the same cache key, the updated value is still reflected. |
+| `useSwrMutationWithClusterId(key, fetcher, config?)` | Write operations (POST, PUT, DELETE). Returns `{ trigger }` — call `trigger()` to execute the mutation imperatively. |
 
-#### Q: I have new data coming in through an existing endpoint, how do I access it?
-You may need to modify a **selector** function to pass the new piece of data down
-to the component's props for rendering. Otherwise, it may just transparently be
-available in your component's props if it's simply adding a new field and your
-selectors aren't radically changing the data shape after it comes back from the
-API.
+### ClusterDetailsContext
 
-#### Q: I have a new endpoint I want to hook up to
-You will need to define a new `cachedDataReducer` instance or something similar
-if you want to add a big chunk of data to the app state. See `apiReducers.ts`
-for examples of how these are defined.
+```tsx
+type ClusterDetailsContextType = {
+  isTenant?: boolean;   // true when running in tenant (serverless) mode
+  clusterId?: string;   // unique cluster identifier for cache key scoping
+};
+```
 
-#### Q: What does the global application state look like?
-You can see this using the Redux DevTools plugin. Open DB Console, then launch
-DevTools, click on the Redux tab, and then click "State" in the section selector,
-and then the "Tree" tab right below. This will show you an interactive tree with
-the application state.
+Provided at the app root. Hooks use `isTenant` to conditionally disable fetchers for endpoints unavailable in tenant mode (pass `null` as the fetcher to skip).
 
-#### Q: What is the `CachedDataReducer`?
-This is a small internally created library that manages API calls to CRDB and 
-tracks their execution with Redux. It makes the access of endpoints somewhat
-uniform in nature. In addition the library can automatically refresh the data
-for you and report errors if it can't be retrieved etc.
+### Writing a hook
 
-_Note: Many Redux "best practices" are quite new so documentation you read online
-likely won't reflect the patterns you see in this codebase today. It's up to you
-to assess how valuable it might be to refactor or write new Redux code to build
-your feature_
+Hooks live alongside their fetcher functions in `cluster-ui/src/api/<feature>Api.ts`.
+
+```tsx
+// cluster-ui/src/api/nodesApi.ts
+
+// 1. Export the SWR key if other hooks need to share the cache.
+export const NODES_SWR_KEY = "nodesUI";
+
+// 2. Define the fetcher (plain async function).
+export const getNodes = (): Promise<NodesResponse> => {
+  return fetchData(NodesResponse, "_status/nodes_ui");
+};
+
+// 3. Define the hook.
+export const useNodes = (opts?: { refreshInterval?: number }) => {
+  const { isTenant } = useContext(ClusterDetailsContext);
+  const { data, isLoading, error } = useSwrWithClusterId(
+    NODES_SWR_KEY,
+    !isTenant ? getNodes : null,  // null fetcher = skip for tenants
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 10_000,
+      refreshInterval: opts?.refreshInterval,  // caller opts in to polling
+    },
+  );
+
+  // 4. Derive data with useMemo when needed.
+  const nodeStatuses = useMemo(
+    () => accumulateMetrics(data?.nodes ?? []),
+    [data],
+  );
+
+  return { nodeStatuses, isLoading, error };
+};
+```
+
+### SWR key design
+
+- **Simple string** for singleton resources: `"nodesUI"`
+- **Object** for parameterized resources: `{ name: "schedule", id: idStr }`
+- **`null` key** to skip fetching: `shouldFetch ? { name: "logs", nodeId } : null`
+- SWR supports arrays/objects natively — `JSON.stringify` is unnecessary.
+- Export the key constant if other hooks need to share or invalidate the cache.
+
+### SWR configuration
+
+| Option | When to use |
+|--------|------------|
+| `refreshInterval` | Data that should poll (dashboards, live lists). Accept as an option so callers can opt in. |
+| `revalidateOnFocus: false` | Expensive or rarely-changing data. |
+| `dedupingInterval` | How long to dedup identical requests (default 2s). |
+
+### Composing hooks
+
+When a component needs data from multiple sources, compose hooks. SWR automatically deduplicates — if `useNodes()` is called from both `useNodesSummary()` and another component, only one API call is made.
+
+```tsx
+export const useNodesSummary = () => {
+  const { nodeStatuses, isLoading: nodesLoading, error: nodesError } = useNodes();
+  const { livenesses, isLoading: livenessLoading, error: livenessError } = useLiveness();
+
+  const isLoading = nodesLoading || livenessLoading;
+
+  const summary = useMemo(() => {
+    // derive combined data — don't include isLoading in deps
+  }, [nodeStatuses, livenesses]);
+
+  return { ...summary, isLoading, error: nodesError ?? livenessError };
+};
+```
+
+### Cache invalidation after mutations
+
+Use the bound `mutate` from the read hook combined with `useSwrMutationWithClusterId` for writes:
+
+```tsx
+// Read hook — destructure and alias its mutate
+const { data, mutate: refreshFiles } = useSwrWithClusterId(
+  { name: "executionFiles", jobID },
+  () => listExecutionDetailFiles({ job_id: jobID }),
+);
+
+// Write hook — refresh the read cache after success
+const { trigger } = useSwrMutationWithClusterId(
+  { name: "collectDetails", jobID },
+  async () => {
+    const resp = await collectExecutionDetails({ job_id: jobID });
+    if (resp.req_resp) refreshFiles();
+  },
+);
+```
+
+Prefer the bound `mutate` from the hook that owns the cache key over SWR's global `mutate`.
+
+---
+
+## Component Patterns
+
+### Functional components with hooks
+
+All new components should be functional components using React hooks. Components in cluster-ui call SWR hooks directly for data:
+
+```tsx
+export const SchedulesPage: React.FC = () => {
+  const { data, error, isLoading } = useSwrWithClusterId(
+    { name: "schedules", status, limit },
+    () => getSchedules({ status, limit }),
+  );
+
+  return (
+    <Loading loading={isLoading} error={error} page="schedules">
+      {/* render table with data */}
+    </Loading>
+  );
+};
+```
+
+### Loading and error states
+
+Use the `<Loading>` component from cluster-ui:
+
+```tsx
+<Loading
+  loading={isLoading}
+  error={error}
+  page="index details"
+  renderError={() => LoadingError({ statsType: "statements", error })}
+>
+  {/* content rendered when data is available */}
+</Loading>
+```
+
+For multiple data sources, combine errors:
+
+```tsx
+const errors = [nodesError, livenessError].filter(Boolean);
+<Loading loading={isLoading} error={errors} page="overview" />
+```
+
+### db-console wrapper pattern
+
+db-console wrappers are thin functional components that bridge app-level state (like `timeScale` from Redux) to cluster-ui components:
+
+```tsx
+// db-console/src/views/databases/indexDetailsPage/index.tsx
+const IndexDetailsPage: React.FC = () => {
+  const params = useParams<Record<string, string>>();
+  const timeScale = useSelector(selectTimeScale);
+  const dispatch = useDispatch();
+  return (
+    <IndexDetailsPageComponent
+      databaseName={params[databaseNameAttr]}
+      tableName={params[tableNameAttr]}
+      timeScale={timeScale}
+      onTimeScaleChange={ts => dispatch(setGlobalTimeScaleAction(ts))}
+    />
+  );
+};
+```
+
+If the wrapper has no db-console-specific logic, it can be a simple re-export:
+
+```tsx
+export { ScheduleDetails as default } from "@cockroachlabs/cluster-ui";
+```
+
+### URL parameters and routing
+
+DB Console uses React Router v5. Use hooks for routing:
+
+- `useParams<RouteParams>()` — extract URL parameters
+- `useHistory()` — programmatic navigation
+- `useLocation()` — read current URL/search params
+
+Route definitions live in `db-console/src/routes/` and `db-console/ccl/src/routes/`.
+
+---
+
+## App-Level State (Redux)
+
+A small set of concerns are managed in Redux at the db-console level. These are accessed via `useSelector` / `useDispatch` in wrapper components:
+
+| State slice | Purpose | How to access |
+|-------------|---------|---------------|
+| `timeScale` | Global time window for metrics graphs | `useSelector(selectTimeScale)`, `dispatch(setGlobalTimeScaleAction(ts))` |
+| `localSettings` | UI preferences (sort, filter, columns) | `LocalSetting` class with `.selector()` and `.set()` |
+| `login` | Authentication state | Selectors in `src/redux/login` |
+| `flags` | Feature flags | Selectors in `src/redux/flags` |
+
+New data fetching should **not** use Redux. Use SWR hooks in cluster-ui instead.
+
+
+---
+
+## Legacy: Redux and CachedDataReducer
+
+Some older parts of the codebase use Redux with `CachedDataReducer` for data fetching. Understanding this pattern is useful when reading or modifying existing code.
+
+### How it worked
+
+```
+Component (connected via mapStateToProps/mapDispatchToProps)
+  -> dispatch(refresh()) action
+  -> CachedDataReducer makes HTTP call, dispatches REQUEST/RECEIVE actions
+  -> reducer updates the store
+  -> selector reads from store
+  -> mapStateToProps feeds data to component via props
+```
+
+Files involved per feature:
+- `store/<feature>/<feature>.reducer.ts` — Redux reducer
+- `store/<feature>/<feature>.sagas.ts` — Saga watchers/workers (if not using CachedDataReducer)
+- `store/<feature>/<feature>.selectors.ts` — Reselect selectors
+- Connected component using `connect(mapStateToProps, mapDispatchToProps)`
+
+### CachedDataReducer
+
+`CachedDataReducer` is an internal library that managed API calls and tracked their lifecycle (loading, success, error) in Redux state. Instances were registered in `apiReducers.ts` and exported `refresh*` functions. The pattern is uniform but involves significant boilerplate compared to a single SWR hook call.
+
+### Concrete example: Statements Page (legacy flow)
+
+Here's how the Statements Page historically loaded data:
+
+1. React calls `render()` then `componentDidMount()` on `StatementsPage`
+2. `StatementsPage` dispatches `refresh()` via its connected props
+3. `cachedDataReducer.ts/refresh` dispatches a `REQUEST` action and makes an HTTP call
+4. The reducer sets `inFlight: true` in the store
+5. On response, a `RECEIVE` action updates the store with the payload
+6. Redux merges the new state and triggers recomputation of selectors
+7. `selectStatements` (a memoized `createSelector`) produces processed data
+8. The selector output is bound to the component's props via `connect()`, triggering a re-render
+
+### What remains
+
+A small number of components (approximately 13) still use the `connect()` pattern. When modifying these files, prefer converting to hooks (`useSelector`, `useDispatch`, and SWR hooks) rather than extending the legacy pattern. The data fetching should move to an SWR hook in `cluster-ui/src/api/`, and the db-console wrapper should become a thin functional component.
