@@ -198,18 +198,28 @@ function MetricsDataProvider({
   const child = React.Children.only(children);
 
   // Compute the time series queries from child Metric components.
-  const queries = useMemo(() => {
-    const selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(
-      children,
-      Metric,
-    );
-    return map(selectors, s =>
-      queryFromProps(
-        s.props,
-        (child as React.ReactElement<MetricsDataComponentProps>).props,
+  const selectors: React.ReactElement<MetricProps>[] = useMemo(
+    () => findChildrenOfType(children, Metric),
+    [children],
+  );
+
+  const queries = useMemo(
+    () =>
+      map(selectors, s =>
+        queryFromProps(
+          s.props,
+          (child as React.ReactElement<MetricsDataComponentProps>).props,
+        ),
       ),
-    );
-  }, [children, child]);
+    [selectors, child],
+  );
+
+  // If any child Metric has perSource, set the request-level flag so the
+  // server returns per-source breakdown in each Result.
+  const returnSourcesSeparately = useMemo(
+    () => selectors.some(s => s.props.perSource),
+    [selectors],
+  );
 
   // Build the request message from timeInfo and queries.
   const requestMsg = useMemo(() => {
@@ -221,8 +231,9 @@ function MetricsDataProvider({
       end_nanos: timeInfo.end,
       sample_nanos: timeInfo.sampleDuration,
       queries,
+      return_sources_separately: returnSourcesSeparately,
     });
-  }, [timeInfo, queries]);
+  }, [timeInfo, queries, returnSourcesSeparately]);
 
   // Fetch metrics data via SWR with request batching. Multiple
   // MetricsDataProviders rendering in the same cycle have their

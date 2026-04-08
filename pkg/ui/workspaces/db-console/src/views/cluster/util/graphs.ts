@@ -60,19 +60,48 @@ export function formatMetricData(
 
   each(metrics, (s, idx) => {
     const result = data.results[idx];
-    if (result && canShowMetric(result)) {
-      const transform = s.props.transform ?? (d => d);
-      const scale = s.props.scale ?? 1;
-      const scaledAndTransformedValues = transform(result.datapoints).map(
-        v => ({
-          ...v,
-          // if defined scale/transform it, otherwise remain undefined
-          value: v.value && scale * v.value,
-        }),
-      );
+    if (!result) {
+      return;
+    }
 
+    const transform = s.props.transform ?? (d => d);
+    const scale = s.props.scale ?? 1;
+    const applyScaleAndTransform = (
+      datapoints: protos.cockroach.ts.tspb.ITimeSeriesDatapoint[],
+    ) =>
+      transform(datapoints).map(v => ({
+        ...v,
+        value: v.value && scale * v.value,
+      }));
+
+    // When perSource is set and the server returned per-source data,
+    // expand into one series per source instead of using the aggregated
+    // datapoints.
+    if (
+      s.props.perSource &&
+      result.source_datapoints &&
+      result.source_datapoints.length > 0
+    ) {
+      for (const sd of result.source_datapoints) {
+        if (!sd.datapoints || sd.datapoints.length === 0) {
+          continue;
+        }
+        const displayName = s.props.sourceDisplayNames?.[sd.source] ?? sd.source;
+        formattedData.push({
+          values: applyScaleAndTransform(sd.datapoints),
+          key: displayName,
+          area: true,
+          fillOpacity: 0.1,
+          color: s.props.color,
+        });
+      }
+      return;
+    }
+
+    // Default: use aggregated datapoints.
+    if (canShowMetric(result)) {
       formattedData.push({
-        values: scaledAndTransformedValues,
+        values: applyScaleAndTransform(result.datapoints),
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: 0.1,
