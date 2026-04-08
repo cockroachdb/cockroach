@@ -193,7 +193,7 @@ func (src *storeRebalancerControl) phasePrologue(
 			s, src.storeID,
 			kvserver.LoadBasedRebalancingObjective.Get(&src.settings.ST.SV).ToDimension(),
 		),
-		kvserverbase.LoadBasedRebalancingMode.Get(&src.settings.ST.SV),
+		kvserverbase.GetLoadBasedRebalancingMode(&src.settings.ST.SV),
 	)
 
 	if !src.sr.ShouldRebalanceStore(ctx, rctx) {

@@ -2835,7 +2835,7 @@ func (t TransferLeaseDecision) String() string {
 // LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
 // count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
 func (a *Allocator) CountBasedRebalancingDisabled() bool {
-	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
+	return kvserverbase.GetLoadBasedRebalancingMode(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms

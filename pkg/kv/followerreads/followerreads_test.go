@@ -840,7 +840,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 
 	// Further down, we'll set up the test to pin the lease to store 1. Turn off
 	// load based rebalancing to make sure it doesn't move.
-	kvserverbase.LoadBasedRebalancingMode.Override(ctx, &settings.SV, kvserverbase.LBRebalancingOff)
+	kvserverbase.OverrideLoadBasedRebalancingMode(ctx, &settings.SV, kvserverbase.LBRebalancingOff)
 
 	// NB: Tenants need capabilities to be able to relocate ranges.
 	if !tc.Server(0).DeploymentMode().IsSingleTenant() {
