@@ -213,6 +213,10 @@ func readInputFiles(
 		default:
 		}
 		if err := func() error {
+			sanitizedDataFile, sanitizeErr := cloud.SanitizeExternalStorageURI(dataFile, nil)
+			if sanitizeErr != nil {
+				sanitizedDataFile = "<uri_failed_to_redact>"
+			}
 			conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
 			if err != nil {
 				return err
@@ -254,7 +258,7 @@ func readInputFiles(
 								pgcode.DataCorrupted,
 								"too many parsing errors (%d) encountered for file %s",
 								countRejected,
-								dataFile,
+								sanitizedDataFile,
 							)
 						}
 						buf = append(buf, s...)
@@ -292,11 +296,11 @@ func readInputFiles(
 				})
 
 				if err := grp.Wait(); err != nil {
-					return errors.Wrapf(err, "%s", dataFile)
+					return errors.Wrapf(err, "%s", sanitizedDataFile)
 				}
 			} else {
 				if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], nil /* rejected */); err != nil {
-					return errors.Wrapf(err, "%s", dataFile)
+					return errors.Wrapf(err, "%s", sanitizedDataFile)
 				}
 			}
 			return nil
