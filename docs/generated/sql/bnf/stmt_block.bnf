@@ -229,6 +229,7 @@ delete_stmt ::=
 drop_stmt ::=
 	drop_ddl_stmt
 	| drop_role_stmt
+	| drop_provisioned_roles_stmt
 	| drop_schedule_stmt
 	| drop_external_connection_stmt
 
@@ -728,6 +729,9 @@ drop_ddl_stmt ::=
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
 	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' role_spec_list
+
+drop_provisioned_roles_stmt ::=
+	'DROP' 'PROVISIONED' 'ROLES' opt_with_drop_provisioned_roles_options opt_limit_clause
 
 drop_schedule_stmt ::=
 	'DROP' 'SCHEDULE' a_expr
@@ -1445,6 +1449,7 @@ unreserved_keyword ::=
 	| 'PUSH'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONED'
 	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'
@@ -2089,6 +2094,10 @@ drop_trigger_stmt ::=
 drop_policy_stmt ::=
 	'DROP' 'POLICY' name 'ON' table_name opt_drop_behavior
 	| 'DROP' 'POLICY' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior
+
+opt_with_drop_provisioned_roles_options ::=
+	'WITH' drop_provisioned_roles_options_list
+	| 
 
 explain_option_name ::=
 	non_reserved_word
@@ -3046,6 +3055,9 @@ view_name_list ::=
 sequence_name_list ::=
 	db_object_name_list
 
+drop_provisioned_roles_options_list ::=
+	( drop_provisioned_roles_option ) ( ( ',' drop_provisioned_roles_option ) )*
+
 non_reserved_word ::=
 	'identifier'
 	| unreserved_keyword
@@ -3712,6 +3724,10 @@ only_signed_fconst ::=
 
 db_object_name_list ::=
 	( db_object_name ) ( ( ',' db_object_name ) )*
+
+drop_provisioned_roles_option ::=
+	'SOURCE' '=' a_expr
+	| 'LAST' 'LOGIN' 'BEFORE' a_expr
 
 array_subscript ::=
 	'[' a_expr ']'
@@ -4486,6 +4502,7 @@ bare_label_keywords ::=
 	| 'PUSH'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONED'
 	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'

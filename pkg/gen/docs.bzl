@@ -157,6 +157,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:drop_owned_by_stmt.bnf",
     "//docs/generated/sql/bnf:drop_policy_stmt.bnf",
     "//docs/generated/sql/bnf:drop_proc.bnf",
+    "//docs/generated/sql/bnf:drop_provisioned_roles_stmt.bnf",
     "//docs/generated/sql/bnf:drop_role_stmt.bnf",
     "//docs/generated/sql/bnf:drop_schedule_stmt.bnf",
     "//docs/generated/sql/bnf:drop_schema.bnf",
