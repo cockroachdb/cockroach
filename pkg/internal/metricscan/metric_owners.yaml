@@ -23,6 +23,10 @@ owners:
   addsstable_delay_total: cockroachdb/kv
   addsstable_proposals: cockroachdb/kv
   admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.per_tenant.admitted_count.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.per_tenant.tokens_returned.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.per_tenant.tokens_used.%s: cockroachdb/admission-control
+  admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s: cockroachdb/admission-control
   admission.cpu_time_tokens.refill.added.%s.%s: cockroachdb/admission-control
   admission.cpu_time_tokens.refill.removed.%s.%s: cockroachdb/admission-control
   admission_admitted_snapshot_bytes: cockroachdb/admission-control
@@ -494,6 +498,7 @@ owners:
   obs_clustermetrics_flush_metrics_deleted: cockroachdb/obs-prs
   obs_clustermetrics_flush_metrics_written: cockroachdb/obs-prs
   obs_metric_export_child_count: cockroachdb/obs-prs
+  obs_metric_export_codeowner_metric_count: cockroachdb/obs-prs
   obs_metric_export_line_count: cockroachdb/obs-prs
   obs_metric_export_name_count: cockroachdb/obs-prs
   obs_tablemetadata_update_job_duration: cockroachdb/obs-prs

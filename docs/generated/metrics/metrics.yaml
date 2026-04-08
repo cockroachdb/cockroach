@@ -13511,6 +13511,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.admitted_count.system_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_admitted_count_system_tenant
       description: Cumulative number of requests admitted per tenant by CPU time token admission control; use with wait_time_nanos to compute mean wait time via rate(wait_time) / rate(admitted_count)
@@ -13519,6 +13520,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_returned.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_app_tenant
       description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
@@ -13527,6 +13529,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_returned.system_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_returned_system_tenant
       description: Cumulative CPU time tokens returned per tenant, for example when actual CPU usage was lower than the initial estimate; rate() gives the per-tenant token return rate
@@ -13535,6 +13538,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_used.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_app_tenant
       description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
@@ -13543,6 +13547,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.tokens_used.system_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_tokens_used_system_tenant
       description: Cumulative CPU time tokens consumed per tenant by admitted work; rate() gives the per-tenant token consumption rate
@@ -13551,6 +13556,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.app_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_app_tenant
       description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
@@ -13559,6 +13565,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.per_tenant.wait_time_nanos.system_tenant
       exported_name: admission_cpu_time_tokens_per_tenant_wait_time_nanos_system_tenant
       description: Cumulative nanoseconds of admission queue wait time per tenant in CPU time token admission control; use with admitted_count to compute mean wait time via rate(wait_time) / rate(admitted_count)
@@ -13567,6 +13574,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/admission-control
     - name: admission.cpu_time_tokens.refill.added.app_tenant.can_burst
       exported_name: admission_cpu_time_tokens_refill_added_app_tenant_can_burst
       description: Cumulative tokens added to the app_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
@@ -17911,6 +17919,15 @@ layers:
       exported_name: obs_metric_export_child_count
       description: 'Exported-line-weighted child count per parent metric: histogram children count their expanded Prometheus lines, others count 1'
       y_axis_label: Child Instances
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      owner: cockroachdb/obs-prs
+    - name: obs.metric_export.codeowner.metric_count
+      exported_name: obs_metric_export_codeowner_metric_count
+      description: Metric count per CODEOWNER team as ingested (histograms expand to computed metrics)
+      y_axis_label: Metrics
       type: GAUGE
       unit: COUNT
       aggregation: AVG
