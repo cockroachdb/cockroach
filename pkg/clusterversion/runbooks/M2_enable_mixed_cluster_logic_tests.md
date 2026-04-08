@@ -17,8 +17,32 @@ This section provides step-by-step instructions for the M.2 task: "Enable mixed-
 Before starting, ensure:
 1. The release branch exists and is accessible (e.g., `release-25.4`)
 2. M.1 PR exists or is merged (contains V25_4 constant)
-3. You know the release version number (e.g., 25.4)
+3. You know the release version number (e.g., 25.4) — see tip below
 4. You have the M.1 branch checked out or can create a new branch based on it
+
+**How to determine the release version for M.2:**
+
+M.2 targets the version that was *just forked onto a release branch* — NOT the new
+development placeholder on master. Check `pkg/clusterversion/cockroach_versions.go`:
+
+```bash
+grep -E "^const (Latest|V[0-9]+_[0-9]+ =)" pkg/clusterversion/cockroach_versions.go
+```
+
+You'll see something like:
+```
+const Latest Key = numKeys - 1
+const V26_3 = Latest   ← new dev placeholder (do NOT use this for M.2)
+```
+
+And in the version table, the last frozen release key (no `= Latest` alias):
+```
+V26_2: {Major: 26, Minor: 2, Internal: 0},   ← this is the M.2 target
+V26_3_Start: {Major: 26, Minor: 2, Internal: 2},
+```
+
+The frozen key (e.g., `V26_2`) tells you the version number: **26.2**.
+Confirm there's a matching release branch (`release-26.2`) before proceeding.
 
 ### Step-by-Step Checklist
 
