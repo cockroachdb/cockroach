@@ -8057,6 +8057,16 @@ layers:
       unit: CONST
       aggregation: AVG
       derivative: NONE
+      owner: cockroachdb/kv
+    - name: rpc.drpc.tls.handshake.errors
+      exported_name: rpc_drpc_tls_handshake_errors
+      description: Number of TLS handshake errors for DRPC connections.
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: rpc.server.request.duration.nanos
       exported_name: rpc_server_request_duration_nanos
       description: Duration of an RPC request at the server in nanoseconds.

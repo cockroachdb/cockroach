@@ -840,6 +840,11 @@ owners:
   rpc_connection_tcp_rtt_var: cockroachdb/kv
   rpc_connection_unhealthy: cockroachdb/kv
   rpc_connection_unhealthy_nanos: cockroachdb/kv
+  rpc_drpc_enabled: cockroachdb/kv
+  rpc_drpc_pool_hits_total: cockroachdb/kv
+  rpc_drpc_pool_miss_total: cockroachdb/kv
+  rpc_drpc_pool_size: cockroachdb/kv
+  rpc_drpc_tls_handshake_errors: cockroachdb/kv
   rpc_server_request_duration_nanos: cockroachdb/kv
   rpc_streams_mux_rangefeed_active: cockroachdb/kv
   rpc_streams_mux_rangefeed_recv: cockroachdb/kv
