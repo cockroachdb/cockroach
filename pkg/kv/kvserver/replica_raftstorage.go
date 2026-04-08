@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/redact"
 )
 
@@ -852,4 +853,47 @@ func (r *Replica) destroyInfoRaftMuLocked() kvstorage.DestroyReplicaInfo {
 		FullReplicaID: r.ID(),
 		Keys:          r.shMu.state.Desc.RSpan(),
 	}
+}
+
+func convertSharedSSTs(sharedSSTs []kvserverpb.SnapshotRequest_SharedTable) []pebble.SharedSSTMeta {
+	res := make([]pebble.SharedSSTMeta, len(sharedSSTs))
+	pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
+		return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
+	}
+	for i, sst := range sharedSSTs {
+		res[i] = pebble.SharedSSTMeta{
+			Backing:          stubBackingHandle{sst.Backing},
+			Smallest:         pbToInternalKey(sst.Smallest),
+			Largest:          pbToInternalKey(sst.Largest),
+			SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
+			LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
+			SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
+			LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
+			Level:            uint8(sst.Level),
+			Size:             sst.Size_,
+		}
+	}
+	return res
+}
+
+func convertExternalSSTs(
+	externalSSTs []kvserverpb.SnapshotRequest_ExternalTable,
+) []pebble.ExternalFile {
+	res := make([]pebble.ExternalFile, len(externalSSTs))
+	for i, sst := range externalSSTs {
+		res[i] = pebble.ExternalFile{
+			Locator:           remote.MakeLocator(redact.RedactableString(sst.Locator)),
+			ObjName:           sst.ObjectName,
+			StartKey:          sst.StartKey,
+			EndKey:            sst.EndKey,
+			EndKeyIsInclusive: sst.EndKeyIsInclusive,
+			HasPointKey:       sst.HasPointKey,
+			HasRangeKey:       sst.HasRangeKey,
+			SyntheticPrefix:   sst.SyntheticPrefix,
+			SyntheticSuffix:   sst.SyntheticSuffix,
+			Level:             uint8(sst.Level),
+			Size:              sst.Size_,
+		}
+	}
+	return res
 }
