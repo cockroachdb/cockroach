@@ -168,11 +168,12 @@ func (rl *ReplicaLoad) Merge(other *ReplicaLoad) {
 
 // Reset will clear all recorded history.
 func (rl *ReplicaLoad) Reset() {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
 	for i := range rl.mu.stats {
-		rl.mu.stats[i].ResetRequestCounts(timeutil.Unix(0, rl.clock.PhysicalNow()))
+		rl.mu.stats[i].ResetRequestCounts(now)
 	}
 }
 
@@ -206,9 +207,10 @@ func (rl *ReplicaLoad) statsLockedWithNow(now time.Time) ReplicaLoadStats {
 
 // Stats returns a current stat summary of replica load.
 func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	return rl.statsLockedWithNow(timeutil.Unix(0, rl.clock.PhysicalNow()))
+	return rl.statsLockedWithNow(now)
 }
 
 // StatsWithLocalityInfo returns load stats and the Queries dimension's
@@ -217,9 +219,9 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 // which matters when called per-replica during Store.Capacity scans
 // (30k+ replicas).
 func (rl *ReplicaLoad) StatsWithLocalityInfo() (ReplicaLoadStats, replicastats.RatedSummary) {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 
 	return rl.statsLockedWithNow(now), rl.mu.stats[Queries].SnapshotRatedSummary(now)
 }
@@ -227,10 +229,11 @@ func (rl *ReplicaLoad) StatsWithLocalityInfo() (ReplicaLoadStats, replicastats.R
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
 func (rl *ReplicaLoad) RequestLocalityInfo() replicastats.RatedSummary {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	return rl.mu.stats[Queries].SnapshotRatedSummary(timeutil.Unix(0, rl.clock.PhysicalNow()))
+	return rl.mu.stats[Queries].SnapshotRatedSummary(now)
 }
 
 // TestingGetSum returns the sum of recorded values for the LoadStat with
