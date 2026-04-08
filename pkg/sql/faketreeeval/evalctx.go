@@ -238,7 +238,14 @@ func (ep *DummyEvalPlanner) ResetLeaseTimestamp(ctx context.Context) {
 	panic(errors.WithStack(errEvalPlanner))
 }
 
-// UserHasAdminRole is part of the Planner interface.
+// MaybeResolveSystemRoleOID is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) MaybeResolveSystemRoleOID(
+	ctx context.Context, roleOID oid.Oid,
+) (string, bool) {
+	return "", false
+}
+
+// UserHasAdminRole is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
 ) (bool, error) {

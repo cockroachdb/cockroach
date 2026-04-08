@@ -515,11 +515,21 @@ func getNameForArg(
 		if u == username.PublicRoleName() {
 			return username.PublicRole, nil
 		}
+		if pgTable == "pg_roles" {
+			if u == username.NodeUserName() || u == username.RootUserName() || u == username.AdminRoleName() {
+				return u.Normalized(), nil
+			}
+		}
 		arg = tree.NewDString(u.Normalized())
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE %s = $1 LIMIT 1", pgCol, pgTable, pgCol)
 	case *tree.DOid:
 		if t.Oid == username.PublicRoleID {
 			return username.PublicRole, nil
+		}
+		if pgTable == "pg_roles" {
+			if name, ok := evalCtx.Planner.MaybeResolveSystemRoleOID(ctx, t.Oid); ok {
+				return name, nil
+			}
 		}
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
 	default:
