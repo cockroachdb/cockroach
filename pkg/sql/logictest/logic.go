@@ -1662,9 +1662,8 @@ func (t *logicTest) newCluster(
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
 	// schema changes and causing transaction retries.
-	// TODO(radu): replace these with testing knobs.
-	stats.DefaultAsOfTime = 10 * time.Millisecond
-	stats.DefaultRefreshInterval = time.Millisecond
+	stats.DefaultRefreshInterval = time.Second
+	stats.DefaultAsOfTime = 100 * time.Millisecond
 
 	t.cluster = serverutils.StartCluster(t.rootT, cfg.NumNodes, params)
 	t.purgeZoneConfig()
