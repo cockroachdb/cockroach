@@ -204,6 +204,7 @@ go_test(
         "col_types_test.go",
         "collatedstring_test.go",
         "compare_test.go",
+        "constant_race_test.go",
         "constant_test.go",
         "create_routine_test.go",
         "datum_alloc_test.go",
