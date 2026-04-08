@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
@@ -165,6 +166,43 @@ func splitReplica(
 
 func writeStateMachine(w storage.Writer, k, v string) error {
 	return w.PutUnversioned(roachpb.Key(k), []byte(v))
+}
+
+func TestIterFrom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write 3 WAG nodes at indices 1, 5, 10.
+	id := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	node := wagpb.Node{
+		Events: []wagpb.Event{
+			{Addr: wagpb.MakeAddr(id, 10), Type: wagpb.EventApply},
+		},
+	}
+	require.NoError(t, Write(eng, 1, node))
+	require.NoError(t, Write(eng, 5, node))
+	require.NoError(t, Write(eng, 10, node))
+
+	readIndicesFrom := func(fromIndex uint64) []uint64 {
+		var it Iterator
+		var res []uint64
+		for index := range it.IterFrom(ctx, eng, keys.StoreWAGNodeKey(fromIndex)) {
+			res = append(res, index)
+		}
+		require.NoError(t, it.Error())
+		return res
+	}
+
+	require.Equal(t, []uint64{1, 5, 10}, readIndicesFrom(0))
+	require.Equal(t, []uint64{1, 5, 10}, readIndicesFrom(1))
+	require.Equal(t, []uint64{5, 10}, readIndicesFrom(4))
+	require.Equal(t, []uint64{10}, readIndicesFrom(6))
+	require.Equal(t, []uint64{10}, readIndicesFrom(10))
+	require.Empty(t, readIndicesFrom(11))
 }
 
 func TestSeqInit(t *testing.T) {
