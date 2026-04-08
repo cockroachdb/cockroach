@@ -1207,7 +1207,7 @@ func (b *checkpointBuilder) removeSpans(spans []roachpb.Span) error {
 		return err
 	}
 	for sp, ts := range oldFrontier.Entries() {
-		if _, err := newFrontier.Forward(sp, ts); err != nil {
+		if _, _, err := newFrontier.Forward(sp, ts); err != nil {
 			newFrontier.Release()
 			return err
 		}

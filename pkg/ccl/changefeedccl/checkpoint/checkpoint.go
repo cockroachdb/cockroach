@@ -71,7 +71,7 @@ func Make(
 
 // SpanForwarder is an interface for forwarding spans to a changefeed.
 type SpanForwarder interface {
-	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, bool, error)
 }
 
 // Restore restores the saved progress from a checkpoint to the given SpanForwarder.
@@ -81,7 +81,7 @@ func Restore(sf SpanForwarder, checkpoint *jobspb.TimestampSpansMap) error {
 			return errors.AssertionFailedf("checkpoint timestamp is empty")
 		}
 		for _, sp := range spans {
-			if _, err := sf.Forward(sp, ts); err != nil {
+			if _, _, err := sf.Forward(sp, ts); err != nil {
 				return errors.Wrapf(err, "forwarding span %v to %v", sp, ts)
 			}
 		}

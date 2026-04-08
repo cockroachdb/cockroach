@@ -33,13 +33,18 @@ func entriesStr(f Frontier) string {
 }
 
 type frontierForwarder struct {
-	t        *testing.T
-	f        Frontier
-	advanced bool
+	t            *testing.T
+	f            Frontier
+	advanced     bool
+	spanAdvanced bool
 }
 
 func (f frontierForwarder) expectAdvanced(expected bool) frontierForwarder {
 	require.Equal(f.t, expected, f.advanced, entriesStr(f.f))
+	return f
+}
+func (f frontierForwarder) expectSpanAdvanced(expected bool) frontierForwarder {
+	require.Equal(f.t, expected, f.spanAdvanced, entriesStr(f.f))
 	return f
 }
 func (f frontierForwarder) expectFrontier(wall int64) frontierForwarder {
@@ -57,12 +62,13 @@ func makeFrontierForwarded(
 ) func(s roachpb.Span, wall int64) frontierForwarder {
 	t.Helper()
 	return func(s roachpb.Span, wall int64) frontierForwarder {
-		advanced, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
+		advanced, spanForwarded, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
 		require.NoError(t, err)
 		return frontierForwarder{
-			t:        t,
-			f:        f,
-			advanced: advanced,
+			t:            t,
+			f:            f,
+			advanced:     advanced,
+			spanAdvanced: spanForwarded,
 		}
 	}
 }
@@ -89,42 +95,49 @@ func TestSpanFrontier(t *testing.T) {
 	// Untracked spans are ignored
 	forwardFrontier(roachpb.Span{Key: []byte("d"), EndKey: []byte("e")}, 1).
 		expectAdvanced(false).
+		expectSpanAdvanced(false).
 		expectFrontier(0).
 		expectEntries(`{a-d}@0`)
 
 	// Forward the entire tracked spanspace.
 	forwardFrontier(spAD, 1).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(1).
 		expectEntries(`{a-d}@1`)
 
 	// Forward it again.
 	forwardFrontier(spAD, 2).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(2).
 		expectEntries(`{a-d}@2`)
 
 	// Forward to the previous frontier.
 	forwardFrontier(spAD, 2).
 		expectAdvanced(false).
+		expectSpanAdvanced(false).
 		expectFrontier(2).
 		expectEntries(`{a-d}@2`)
 
 	// Forward into the past is ignored.
 	forwardFrontier(spAD, 1).
 		expectAdvanced(false).
+		expectSpanAdvanced(false).
 		expectFrontier(2).
 		expectEntries(`{a-d}@2`)
 
 	// Forward a subset.
 	forwardFrontier(spBC, 3).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(2).
 		expectEntries(`{a-b}@2 {b-c}@3 {c-d}@2`)
 
 	// Forward it more.
 	forwardFrontier(spBC, 4).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(2).
 		expectEntries(`{a-b}@2 {b-c}@4 {c-d}@2`)
 
@@ -133,55 +146,65 @@ func TestSpanFrontier(t *testing.T) {
 	// forwarded span to be split into two spans, one on each side of BC.
 	forwardFrontier(spAD, 3).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(3).
 		expectEntries(`{a-b}@3 {b-c}@4 {c-d}@3`)
 
 	// Forward everything but BC, advances to the min of tracked spans.
 	forwardFrontier(spAB, 5).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(3)
 
 	forwardFrontier(spCD, 5).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(4).
 		expectEntries(`{a-b}@5 {b-c}@4 {c-d}@5`)
 
 	// Catch BC up: spans collapse.
 	forwardFrontier(spBC, 5).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(5).
 		expectEntries(`{a-d}@5`)
 
 	// Forward them all at once.
 	forwardFrontier(spAD, 6).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(6).
 		expectEntries(`{a-d}@6`)
 
 	// Split AC with BD.
 	forwardFrontier(spCD, 7).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(6).
 		expectEntries(`{a-c}@6 {c-d}@7`)
 
 	forwardFrontier(spBD, 8).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(6).
 		expectEntries(`{a-b}@6 {b-d}@8`)
 
 	forwardFrontier(spAB, 8).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(8).
 		expectEntries(`{a-d}@8`)
 
 	// Split BD with AC.
 	forwardFrontier(spAC, 9).
 		expectAdvanced(false).
+		expectSpanAdvanced(true).
 		expectFrontier(8).
 		expectEntries(`{a-c}@9 {c-d}@8`)
 
 	forwardFrontier(spCD, 9).
 		expectAdvanced(true).
+		expectSpanAdvanced(true).
 		expectFrontier(9).
 		expectEntries(`{a-d}@9`)
 }
@@ -292,7 +315,7 @@ func TestSequentialSpans(t *testing.T) {
 		sp.Key = append(sp.Key, byte(r))
 		sp.EndKey = append(sp.EndKey, byte(r+1))
 		wall := r - 'A' + 1
-		_, err := f.Forward(sp, hlc.Timestamp{WallTime: int64(wall)})
+		_, _, err := f.Forward(sp, hlc.Timestamp{WallTime: int64(wall)})
 		require.NoError(t, err)
 		expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", sp, wall))
 	}
@@ -307,7 +330,7 @@ func TestSpanEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	advance := func(f Frontier, s roachpb.Span, wall int64) {
-		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
+		_, _, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
 		require.NoError(t, err)
 	}
 
@@ -517,7 +540,7 @@ func BenchmarkFrontier(b *testing.B) {
 
 			delta := rnd.Int63n(10) - rnd.Int63n(3)
 			rndSpan := corpus[rnd.Intn(corpusSize)]
-			if _, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta}); err != nil {
+			if _, _, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta}); err != nil {
 				b.Fatalf("%+v", err)
 			}
 		}

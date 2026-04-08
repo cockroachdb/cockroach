@@ -165,7 +165,7 @@ RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
 		frontier, err := span.MakeFrontierAt(hw, fooDesc.PrimaryIndexSpan(codec))
 		require.NoError(t, err)
 		for _, id := range []int64{2, 5} {
-			_, err := frontier.Forward(rowSpan(id), ts)
+			_, _, err := frontier.Forward(rowSpan(id), ts)
 			require.NoError(t, err)
 		}
 		err = s.Server.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

@@ -297,7 +297,7 @@ func (w *Watcher) handleCheckpoint(
 		}
 	}()
 
-	frontierAdvanced, err := w.mu.frontier.Forward(span, resolvedTS)
+	frontierAdvanced, _, err := w.mu.frontier.Forward(span, resolvedTS)
 	if err != nil {
 		return errors.Wrapf(err, "unexpected frontier error advancing to %s@%s", span, resolvedTS)
 	}

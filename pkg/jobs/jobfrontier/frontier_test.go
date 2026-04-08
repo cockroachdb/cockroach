@@ -113,7 +113,7 @@ func TestFrontier(t *testing.T) {
 				// Store initial frontier.
 				require.NoError(t, Store(ctx, txn, jobID, "multi", f))
 				// Advance and store again.
-				_, err := f.Forward(sp2, ts2)
+				_, _, err := f.Forward(sp2, ts2)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "multi", f))
 			},
@@ -188,9 +188,9 @@ func TestFrontier(t *testing.T) {
 			var f span.Frontier
 			f, err := span.MakeFrontier(sp1, sp2, sp3)
 			require.NoError(t, err)
-			_, err = f.Forward(sp1, ts1)
+			_, _, err = f.Forward(sp1, ts1)
 			require.NoError(t, err)
-			_, err = f.Forward(sp3, ts1)
+			_, _, err = f.Forward(sp3, ts1)
 			require.NoError(t, err)
 
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -270,7 +270,7 @@ func TestStoreChunked(t *testing.T) {
 			// Advance each span to a unique timestamp
 			for j, sp := range spans {
 				ts := hlc.Timestamp{WallTime: int64(100 + j), Logical: int32(j)}
-				_, err := frontier.Forward(sp, ts)
+				_, _, err := frontier.Forward(sp, ts)
 				require.NoError(t, err)
 			}
 
@@ -339,7 +339,7 @@ func TestGetAllResolvedSpans(t *testing.T) {
 			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
 				f, err := span.MakeFrontier(sp1, sp2, sp3)
 				require.NoError(t, err)
-				_, err = f.Forward(sp1, ts1)
+				_, _, err = f.Forward(sp1, ts1)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "single", f))
 			},
@@ -355,14 +355,14 @@ func TestGetAllResolvedSpans(t *testing.T) {
 				// First frontier with sp1@ts1 and sp2@zero.
 				f1, err := span.MakeFrontier(sp1, sp2)
 				require.NoError(t, err)
-				_, err = f1.Forward(sp1, ts1)
+				_, _, err = f1.Forward(sp1, ts1)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "frontier1", f1))
 
 				// Second frontier with sp3@ts2.
 				f2, err := span.MakeFrontier(sp3)
 				require.NoError(t, err)
-				_, err = f2.Forward(sp3, ts2)
+				_, _, err = f2.Forward(sp3, ts2)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "frontier2", f2))
 			},
@@ -378,14 +378,14 @@ func TestGetAllResolvedSpans(t *testing.T) {
 				// First frontier with sp1@ts1.
 				f1, err := span.MakeFrontier(sp1)
 				require.NoError(t, err)
-				_, err = f1.Forward(sp1, ts1)
+				_, _, err = f1.Forward(sp1, ts1)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "overlap1", f1))
 
 				// Second frontier with sp1@ts2 (different timestamp) and sp2@zero.
 				f2, err := span.MakeFrontier(sp1, sp2)
 				require.NoError(t, err)
-				_, err = f2.Forward(sp1, ts2)
+				_, _, err = f2.Forward(sp1, ts2)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "overlap2", f2))
 			},
@@ -401,14 +401,14 @@ func TestGetAllResolvedSpans(t *testing.T) {
 				// Store first frontier with sp1@ts1.
 				f1, err := span.MakeFrontier(sp1)
 				require.NoError(t, err)
-				_, err = f1.Forward(sp1, ts1)
+				_, _, err = f1.Forward(sp1, ts1)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "keep", f1))
 
 				// Store second frontier with sp2@ts2 then delete it.
 				f2, err := span.MakeFrontier(sp2)
 				require.NoError(t, err)
-				_, err = f2.Forward(sp2, ts2)
+				_, _, err = f2.Forward(sp2, ts2)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "delete", f2))
 				require.NoError(t, Delete(ctx, txn, jobID, "delete"))
@@ -416,7 +416,7 @@ func TestGetAllResolvedSpans(t *testing.T) {
 				// Store third frontier with sp3@ts1.
 				f3, err := span.MakeFrontier(sp3)
 				require.NoError(t, err)
-				_, err = f3.Forward(sp3, ts1)
+				_, _, err = f3.Forward(sp3, ts1)
 				require.NoError(t, err)
 				require.NoError(t, Store(ctx, txn, jobID, "also_keep", f3))
 			},
@@ -494,7 +494,7 @@ func TestRandomizedFrontier(t *testing.T) {
 	// Initialize spans to random timestamps 0-3
 	for _, sp := range spans {
 		ts := hlc.Timestamp{WallTime: int64(rng.Intn(4))}
-		_, err := frontier.Forward(sp, ts)
+		_, _, err := frontier.Forward(sp, ts)
 		require.NoError(t, err)
 	}
 
@@ -548,7 +548,7 @@ func TestRandomizedFrontier(t *testing.T) {
 
 		// If the new ts is less than the current time in the frontier, this will be
 		// a noop.
-		_, err := frontier.Forward(spans[spanIdx], newTs)
+		_, _, err := frontier.Forward(spans[spanIdx], newTs)
 		require.NoError(t, err)
 	}
 

@@ -639,7 +639,7 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	}
 
 	for _, rs := range ca.spec.ResolvedSpans {
-		if _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+		if _, _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
 			return nil, errors.Wrapf(err, "failed to restore frontier")
 		}
 	}
@@ -817,7 +817,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return nil
 	}
 
-	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
+	advanced, _, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
@@ -1445,7 +1445,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 
 	for _, rs := range cf.spec.ResolvedSpans {
-		if _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+		if _, _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
 			log.Changefeed.Warningf(cf.Ctx(),
 				"moving to draining due to error restoring frontier: %v", err)
 			cf.MoveToDraining(err)
@@ -1710,7 +1710,7 @@ func (cf *changeFrontier) forwardFrontier(
 			continue
 		}
 
-		changed, err := cf.frontier.ForwardResolvedSpan(resolved)
+		changed, _, err := cf.frontier.ForwardResolvedSpan(resolved)
 		if err != nil {
 			return false, err
 		}

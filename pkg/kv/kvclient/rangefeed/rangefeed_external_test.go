@@ -862,7 +862,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 			rangefeed.WithDiff(true),
 			rangefeed.WithInitialScan(nil),
 			rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-				_, err := rfFrontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+				_, _, err := rfFrontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
 				require.NoError(t, err)
 				select {
 				case checkpointC <- struct{}{}:

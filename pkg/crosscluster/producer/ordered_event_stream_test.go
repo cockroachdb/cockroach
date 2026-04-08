@@ -261,7 +261,7 @@ consumeStream:
 					)
 				}
 				// Update frontier with this resolved span.
-				_, err := checkpointFrontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+				_, _, err := checkpointFrontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
 				require.NoError(t, err)
 			}
 		}

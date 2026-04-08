@@ -321,7 +321,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return errors.AssertionFailedf("initial span time pair with non-empty timestamp "+
 				"earlier than initial highwater %v: %v", f.initialHighWater, stp)
 		}
-		if _, err := rangeFeedResumeFrontier.Forward(stp.Span, stp.StartAfter); err != nil {
+		if _, _, err := rangeFeedResumeFrontier.Forward(stp.Span, stp.StartAfter); err != nil {
 			return err
 		}
 	}
@@ -340,7 +340,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// for those spans.  Note, since rangefeed start time is *exclusive* (that it, rangefeed
 		// starts from timestamp.Next()), we advanced frontier to the scannedTS.
 		for _, sp := range scannedSpans {
-			if _, err := rangeFeedResumeFrontier.Forward(sp, scannedTS); err != nil {
+			if _, _, err := rangeFeedResumeFrontier.Forward(sp, scannedTS); err != nil {
 				return err
 			}
 		}
@@ -777,7 +777,7 @@ func copyFromSourceToDestUntilTableEvent(
 					}
 				}
 
-				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
+				if _, _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
 					return false, false, err
 				}
 
@@ -805,7 +805,7 @@ func copyFromSourceToDestUntilTableEvent(
 				// at boundary.Prev(). We may not yet know about that boundary.
 				// The logic currently doesn't make this clean.
 				resolved := e.Resolved()
-				if _, err := frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+				if _, _, err := frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
 					return err
 				}
 				return dest.Add(ctx, e)

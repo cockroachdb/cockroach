@@ -243,7 +243,7 @@ func TestCheckpointRestore(t *testing.T) {
 			expectedFrontier, err := span.MakeFrontierAt(tc.initialHighWater, tc.trackedSpans...)
 			require.NoError(t, err)
 			for _, s := range tc.expectedCheckpointedSpans {
-				_, err = expectedFrontier.Forward(s.span, s.ts)
+				_, _, err = expectedFrontier.Forward(s.span, s.ts)
 				require.NoError(t, err)
 			}
 			for sp, ts := range expectedFrontier.Entries() {

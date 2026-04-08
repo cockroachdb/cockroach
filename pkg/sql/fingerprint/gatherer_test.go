@@ -119,7 +119,7 @@ func TestGatherer(t *testing.T) {
 	t.Run("resume", func(t *testing.T) {
 		spans := []roachpb.Span{sp('a'), sp('c')}
 		done, _ := span.MakeFrontier(spans...)
-		_, _ = done.Forward(sp('a'), hlc.Timestamp{WallTime: 1})
+		_, _, _ = done.Forward(sp('a'), hlc.Timestamp{WallTime: 1})
 		p := &testPersister{state: &checkpointState{fingerprint: 100, done: done}}
 		g := newGatherer(spans, p, testPartitioner{}, makeFingerprinter(0, nil))
 		result, err := g.run(ctx)

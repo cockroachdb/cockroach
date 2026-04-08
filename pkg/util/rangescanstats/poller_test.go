@@ -146,13 +146,13 @@ func TestNewPoller(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, span := range tc.completed {
-				_, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
+				_, _, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
 					WallTime: time.Now().UnixNano(),
 				})
 				require.NoError(t, err)
 			}
 			for _, span := range tc.lagging {
-				_, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
+				_, _, err := frontier.Forward(makeSpan(span), hlc.Timestamp{
 					WallTime: time.Now().Add(-laggingSpanThreshold * 2).UnixNano(),
 				})
 				require.NoError(t, err)

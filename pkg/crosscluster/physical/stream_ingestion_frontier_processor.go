@@ -107,7 +107,7 @@ func newStreamIngestionFrontierProcessor(
 		return nil, err
 	}
 	for _, resolvedSpan := range spec.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+		if _, _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return nil, err
 		}
 	}
@@ -315,7 +315,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 				redact.Safe(resolved.Timestamp), redact.Safe(sf.replicatedTimeAtStart))
 		}
 
-		if _, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+		if _, _, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
 			return err
 		}
 	}

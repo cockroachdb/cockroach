@@ -341,7 +341,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		return err
 	}
 	for _, span := range watchSpans {
-		if _, err := frontier.Forward(span, initialTS); err != nil {
+		if _, _, err := frontier.Forward(span, initialTS); err != nil {
 			return err
 		}
 	}

@@ -315,7 +315,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 		}
 	} else if !resumeWithFrontier {
 		for _, sp := range f.spans {
-			if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
+			if _, _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
 				if fn := f.onUnrecoverableError; fn != nil {
 					fn(ctx, err)
 				}
@@ -457,7 +457,7 @@ func (f *RangeFeed) processEvent(
 			ts.Logical = 0
 			ts.WallTime -= ts.WallTime % int64(f.frontierQuantize)
 		}
-		advanced, err := frontier.Forward(ev.Checkpoint.Span, ts)
+		advanced, _, err := frontier.Forward(ev.Checkpoint.Span, ts)
 		if err != nil {
 			return err
 		}

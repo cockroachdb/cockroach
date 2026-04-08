@@ -175,7 +175,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	}
 	s.frontier = span.MakeConcurrentFrontier(frontier)
 	for _, sp := range s.spec.Progress {
-		if _, err := s.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
+		if _, _, err := s.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
 			s.frontier.Release()
 			return err
 		}

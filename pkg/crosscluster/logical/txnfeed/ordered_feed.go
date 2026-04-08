@@ -136,7 +136,7 @@ func (o *OrderedFeed) processEvents(ctx context.Context) error {
 		case crosscluster.CheckpointEvent:
 			checkpoint := ev.GetCheckpoint()
 			for _, ts := range checkpoint.ResolvedSpans {
-				if _, err := o.frontier.Forward(ts.Span, ts.Timestamp); err != nil {
+				if _, _, err := o.frontier.Forward(ts.Span, ts.Timestamp); err != nil {
 					return err
 				}
 			}

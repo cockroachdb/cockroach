@@ -67,8 +67,8 @@ func TestPersist(t *testing.T) {
 		doneFrontier, err := span.MakeFrontier(spans...)
 		require.NoError(t, err)
 		// Forward all spans to non-empty timestamps so the frontier is considered non-empty.
-		_, _ = doneFrontier.Forward(spans[0], hlc.Timestamp{WallTime: 1})
-		_, _ = doneFrontier.Forward(spans[1], hlc.Timestamp{WallTime: 1})
+		_, _, _ = doneFrontier.Forward(spans[0], hlc.Timestamp{WallTime: 1})
+		_, _, _ = doneFrontier.Forward(spans[1], hlc.Timestamp{WallTime: 1})
 
 		state := checkpointState{
 			fingerprint: 12345,

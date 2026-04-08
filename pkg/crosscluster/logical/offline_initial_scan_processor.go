@@ -177,7 +177,7 @@ func (o *offlineInitialScanProcessor) setup(ctx context.Context) error {
 	defer frontier.Release()
 
 	for _, resolvedSpan := range o.spec.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+		if _, _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return err
 		}
 	}

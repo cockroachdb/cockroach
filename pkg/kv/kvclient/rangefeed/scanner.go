@@ -73,7 +73,7 @@ func (f *RangeFeed) runInitialScan(
 				return err
 			}
 		}
-		advanced, err := frontier.Forward(sp, f.initialTimestamp)
+		advanced, _, err := frontier.Forward(sp, f.initialTimestamp)
 		if err != nil {
 			return err
 		}

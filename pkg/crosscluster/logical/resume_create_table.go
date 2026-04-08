@@ -137,7 +137,7 @@ func (r *logicalReplicationResumer) runOfflineInitialScan(
 	}
 
 	for _, resolvedSpan := range progress.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+		if _, _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return err
 		}
 	}

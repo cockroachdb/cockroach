@@ -9403,7 +9403,7 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 			t.Fatal(err)
 		}
 		for _, rs := range allFrontierSpans {
-			_, err := expectedFrontier.Forward(rs.Span, rs.Timestamp)
+			_, _, err := expectedFrontier.Forward(rs.Span, rs.Timestamp)
 			require.NoError(t, err)
 		}
 		expectedFrontierStr := expectedFrontier.String()
@@ -9958,7 +9958,7 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		frontier, err := span.MakeFrontier(fooSpan)
 		require.NoError(t, err)
 		knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
-			_, err := frontier.Forward(rs.Span, rs.Timestamp)
+			_, _, err := frontier.Forward(rs.Span, rs.Timestamp)
 			return false, err
 		}
 

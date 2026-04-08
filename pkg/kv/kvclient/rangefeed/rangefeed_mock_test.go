@@ -507,7 +507,7 @@ func TestRangeFeedMock(t *testing.T) {
 			require.NoError(t, err)
 
 			for sp, ts := range externalFrontier.Entries() {
-				_, err := initFrontier.Forward(sp, ts)
+				_, _, err := initFrontier.Forward(sp, ts)
 				require.NoError(t, err)
 			}
 			require.NoError(t, err)

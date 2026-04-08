@@ -103,7 +103,7 @@ func loadCheckpointFrontier(
 		return nil, err
 	}
 	for _, sp := range persistedSpans {
-		_, err = checkpointFrontier.Forward(sp.Span, sp.Timestamp)
+		_, _, err = checkpointFrontier.Forward(sp.Span, sp.Timestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +224,7 @@ func (pt *progressTracker) ingestUpdate(
 	if newEndKey, ok := pt.nextRequiredSpanKey[updateSpan.EndKey.String()]; ok {
 		updateSpan.EndKey = newEndKey
 	}
-	if _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
+	if _, _, err := pt.mu.checkpointFrontier.Forward(updateSpan, completedSpanTime); err != nil {
 		return false, err
 	}
 	return true, nil

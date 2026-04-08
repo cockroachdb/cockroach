@@ -180,7 +180,7 @@ func newLogicalReplicationWriterProcessor(
 		return nil, err
 	}
 	for _, resolvedSpan := range spec.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+		if _, _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return nil, err
 		}
 	}
@@ -607,7 +607,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	}
 
 	for _, resolvedSpan := range resolvedSpans {
-		_, err := lrw.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+		_, _, err := lrw.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
 		if err != nil {
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}

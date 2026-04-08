@@ -181,8 +181,8 @@ func TestCoordinatorFrontier(t *testing.T) {
 type frontier interface {
 	AddSpansAt(hlc.Timestamp, ...roachpb.Span) error
 	Frontier() hlc.Timestamp
-	Forward(roachpb.Span, hlc.Timestamp) (bool, error)
-	ForwardResolvedSpan(jobspb.ResolvedSpan) (bool, error)
+	Forward(roachpb.Span, hlc.Timestamp) (bool, bool, error)
+	ForwardResolvedSpan(jobspb.ResolvedSpan) (bool, bool, error)
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
@@ -226,7 +226,7 @@ func testBackfillSpan(
 ) {
 	backfillSpan := makeResolvedSpan(start, end, ts, jobspb.ResolvedSpan_NONE)
 	require.True(t, f.InBackfill(backfillSpan))
-	_, err := f.ForwardResolvedSpan(backfillSpan)
+	_, _, err := f.ForwardResolvedSpan(backfillSpan)
 	require.NoError(t, err)
 	require.Equal(t, frontierAfterSpan, f.Frontier())
 }
@@ -240,7 +240,7 @@ func testBoundarySpan(
 	frontierAfterSpan hlc.Timestamp,
 ) {
 	boundarySpan := makeResolvedSpan(start, end, boundaryTS, boundaryType)
-	_, err := f.ForwardResolvedSpan(boundarySpan)
+	_, _, err := f.ForwardResolvedSpan(boundarySpan)
 	require.NoError(t, err)
 
 	if finalBoundarySpan := frontierAfterSpan.Equal(boundaryTS); finalBoundarySpan {
@@ -273,7 +273,7 @@ func testIllegalBoundarySpan(
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) {
 	boundarySpan := makeResolvedSpan(start, end, boundaryTS, boundaryType)
-	_, err := f.ForwardResolvedSpan(boundarySpan)
+	_, _, err := f.ForwardResolvedSpan(boundarySpan)
 	require.True(t, errors.HasAssertionFailure(err))
 }
 
@@ -315,14 +315,14 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 
 	t.Run("advance frontier with no boundary", func(t *testing.T) {
 		// Forwarding part of the span space to 10 should not advance the frontier.
-		forwarded, err := f.ForwardResolvedSpan(
+		forwarded, _, err := f.ForwardResolvedSpan(
 			makeResolvedSpan("a", "b", makeTS(10), jobspb.ResolvedSpan_NONE))
 		require.NoError(t, err)
 		require.False(t, forwarded)
 		require.Zero(t, f.Frontier())
 
 		// Forwarding the rest of the span space to 10 should advance the frontier.
-		forwarded, err = f.ForwardResolvedSpan(
+		forwarded, _, err = f.ForwardResolvedSpan(
 			makeResolvedSpan("b", "f", makeTS(10), jobspb.ResolvedSpan_NONE))
 		require.NoError(t, err)
 		require.True(t, forwarded)
@@ -333,7 +333,7 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 		// Forwarding part of the span space to 10 again with a non-NONE boundary
 		// should be considered forwarding the frontier because we're learning
 		// about a new boundary.
-		forwarded, err := f.ForwardResolvedSpan(
+		forwarded, _, err := f.ForwardResolvedSpan(
 			makeResolvedSpan("c", "f", makeTS(10), jobspb.ResolvedSpan_RESTART))
 		require.NoError(t, err)
 		require.True(t, forwarded)
@@ -342,7 +342,7 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 		// Forwarding the rest of the span space to 10 again with a non-NONE boundary
 		// should not be considered forwarding the frontier because we already
 		// know about the new boundary.
-		forwarded, err = f.ForwardResolvedSpan(
+		forwarded, _, err = f.ForwardResolvedSpan(
 			makeResolvedSpan("a", "c", makeTS(10), jobspb.ResolvedSpan_RESTART))
 		require.NoError(t, err)
 		require.False(t, forwarded)
@@ -425,21 +425,21 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 			require.Equal(t, initialHighWater, f.Frontier())
 
 			// Forward table 10 to timestamp 10.
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:      table10Span,
 				Timestamp: makeTS(10),
 			})
 			require.NoError(t, err)
 
 			// Forward table 20 to timestamp 15.
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:      table20Span,
 				Timestamp: makeTS(15),
 			})
 			require.NoError(t, err)
 
 			// Forward table 30 to timestamp 8.
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:      table30Span,
 				Timestamp: makeTS(8),
 			})
@@ -458,7 +458,7 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 			require.Equal(t, makeTS(8), perTableResolved[30])
 
 			// Forward table 30 to catch up.
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:      table30Span,
 				Timestamp: makeTS(12),
 			})
@@ -537,7 +537,7 @@ func TestFrontierForwardFullTableSpan(t *testing.T) {
 			// Forward both tables to timestamp 20.
 			targetTimestamp := makeTS(20)
 			for _, tableSpan := range []roachpb.Span{table109Span, table110Span} {
-				_, err := f.Forward(tableSpan, targetTimestamp)
+				_, _, err := f.Forward(tableSpan, targetTimestamp)
 				require.NoError(t, err)
 			}
 			require.Equal(t, targetTimestamp, f.Frontier())
@@ -631,7 +631,7 @@ FROM [SHOW RANGES FROM TABLE foo WITH KEYS]`)
 						for n := range b.N {
 							ts := now.AddDuration(time.Second)
 							i := n % len(spans)
-							_, err := f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+							_, _, err := f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 								Span:      spans[order[i]],
 								Timestamp: ts,
 							})
@@ -675,7 +675,7 @@ func TestFrontierAtBoundary(t *testing.T) {
 			// We can't be at boundary until a boundary is set.
 			atBoundary, _, _ := f.AtBoundary()
 			require.False(t, atBoundary)
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:      makeSpan("a", "f"),
 				Timestamp: statementTime,
 			})
@@ -685,7 +685,7 @@ func TestFrontierAtBoundary(t *testing.T) {
 
 			// Set a boundary by forwarding part of the span space.
 			ts := statementTime.AddDuration(3 * time.Second)
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:         makeSpan("a", "c"),
 				Timestamp:    ts,
 				BoundaryType: jobspb.ResolvedSpan_BACKFILL,
@@ -696,7 +696,7 @@ func TestFrontierAtBoundary(t *testing.T) {
 
 			// Verify the boundary is reached after forwarding
 			// the rest of the span space.
-			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+			_, _, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
 				Span:         makeSpan("c", "f"),
 				Timestamp:    ts,
 				BoundaryType: jobspb.ResolvedSpan_BACKFILL,

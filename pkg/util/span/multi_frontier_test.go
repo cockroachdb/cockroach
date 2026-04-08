@@ -83,13 +83,13 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 		require.Equal(t, ts(3), f.Frontier())
 		require.Equal(t, `1: {{a-b}@3} 2: {{d-e}@3}`, multiFrontierStr(f))
 
-		forwarded, err := f.Forward(sp('a', 'b'), ts(5))
+		forwarded, _, err := f.Forward(sp('a', 'b'), ts(5))
 		require.NoError(t, err)
 		require.False(t, forwarded)
 		require.Equal(t, ts(3), f.Frontier())
 		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@3}`, multiFrontierStr(f))
 
-		forwarded, err = f.Forward(sp('d', 'e'), ts(5))
+		forwarded, _, err = f.Forward(sp('d', 'e'), ts(5))
 		require.NoError(t, err)
 		require.True(t, forwarded)
 		require.Equal(t, ts(5), f.Frontier())
@@ -119,29 +119,29 @@ func TestMultiFrontier_Forward(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, `1: {{a-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 
-	forwarded, err := f.Forward(sp('a', 'b'), ts(2))
+	forwarded, _, err := f.Forward(sp('a', 'b'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
 	require.Equal(t, `1: {{a-b}@2 {b-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 
-	_, err = f.Forward(sp('a', 'e'), ts(2))
+	_, _, err = f.Forward(sp('a', 'e'), ts(2))
 	require.ErrorContains(t, err,
 		"got partitioner error when attempting to forward: invalid range")
 
-	forwarded, err = f.Forward(sp('b', 'd'), ts(2))
+	forwarded, _, err = f.Forward(sp('b', 'd'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
 	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 
-	forwarded, err = f.Forward(sp('f', 'k'), ts(2))
+	forwarded, _, err = f.Forward(sp('f', 'k'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
 	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@2}`, multiFrontierStr(f))
 
-	forwarded, err = f.Forward(sp('d', 'f'), ts(2))
+	forwarded, _, err = f.Forward(sp('d', 'f'), ts(2))
 	require.NoError(t, err)
 	require.True(t, forwarded)
 	require.Equal(t, ts(2), f.Frontier())

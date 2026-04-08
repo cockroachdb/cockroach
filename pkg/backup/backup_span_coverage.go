@@ -34,7 +34,7 @@ func checkCoverage(
 	// all layers first to unconditionally advance the introduced spans.
 	for i := range backups {
 		for _, sp := range backups[i].IntroducedSpans {
-			if _, err := frontier.Forward(sp, backups[i].StartTime); err != nil {
+			if _, _, err := frontier.Forward(sp, backups[i].StartTime); err != nil {
 				return err
 			}
 		}
@@ -57,7 +57,7 @@ func checkCoverage(
 
 		// Advance every span the backup covers to its end time.
 		for _, s := range backups[i].Spans {
-			if _, err := frontier.Forward(s, backups[i].EndTime); err != nil {
+			if _, _, err := frontier.Forward(s, backups[i].EndTime); err != nil {
 				return err
 			}
 		}

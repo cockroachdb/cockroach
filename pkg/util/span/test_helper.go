@@ -67,7 +67,7 @@ func checkContiguousFrontier(f Frontier) (startKey, endKey []byte, retErr error)
 // forwardWithErrorCheck forwards span timestamp.
 // It verifies if the returned error is consistent with the input span.
 func forwardWithErrorCheck(f Frontier, s roachpb.Span, wall int64) error {
-	if _, err := f.Forward(s, hlc.Timestamp{WallTime: wall}); err != nil {
+	if _, _, err := f.Forward(s, hlc.Timestamp{WallTime: wall}); err != nil {
 		switch s.Key.Compare(s.EndKey) {
 		case 1:
 			if !errors.Is(err, interval.ErrInvertedRange) {
@@ -163,7 +163,7 @@ type captureHistoryFrontier struct {
 	history []string
 }
 
-func (f *captureHistoryFrontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
+func (f *captureHistoryFrontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, bool, error) {
 	f.history = append(f.history,
 		fmt.Sprintf(`advanceFrontier(t, f, makeSpan(%q, %q), %d)`, span.Key, span.EndKey, ts.WallTime))
 	if len(f.history) > maxHistory {

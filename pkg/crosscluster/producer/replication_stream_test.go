@@ -749,7 +749,7 @@ USE d;
 			source.mu.codec.decode()
 			if codec.e.Checkpoint != nil {
 				for _, rs := range codec.e.Checkpoint.ResolvedSpans {
-					_, err := f.Forward(rs.Span, rs.Timestamp)
+					_, _, err := f.Forward(rs.Span, rs.Timestamp)
 					if err != nil {
 						source.mu.Unlock()
 					}

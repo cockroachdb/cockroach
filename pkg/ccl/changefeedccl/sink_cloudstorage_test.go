@@ -228,7 +228,7 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	forwardFrontier := func(f span.Frontier, s roachpb.Span, wall int64) bool {
-		forwarded, err := f.Forward(s, ts(wall))
+		forwarded, _, err := f.Forward(s, ts(wall))
 		require.NoError(t, err)
 		return forwarded
 	}
@@ -492,7 +492,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Forward the SpanFrontier here and trigger an empty flush to update
 		// the sink's `inclusiveLowerBoundTs`
-		_, err = sf.Forward(testSpan, ts(5))
+		_, _, err = sf.Forward(testSpan, ts(5))
 		require.NoError(t, err)
 		require.NoError(t, s.Flush(ctx))
 
@@ -619,7 +619,7 @@ func TestCloudStorageSink(t *testing.T) {
 						hlcTime := ts(timestamp.UnixNano())
 
 						// Move the frontier and flush to update the dataFilePartition value
-						_, err = sf.Forward(testSpan, hlcTime)
+						_, _, err = sf.Forward(testSpan, hlcTime)
 						require.NoError(t, err)
 						require.NoError(t, s.Flush(ctx))
 

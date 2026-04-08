@@ -435,7 +435,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	}
 
 	for _, sp := range resolvedSpans.ResolvedSpans {
-		if _, err := rh.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
+		if _, _, err := rh.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
 			return err
 		}
 	}

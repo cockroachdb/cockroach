@@ -551,7 +551,7 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 							return false, nil
 						}
 
-						advanced, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+						advanced, _, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
 						if err != nil {
 							return false, err
 						}
@@ -778,7 +778,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 				switch t := event.GetValue().(type) {
 				case *kvpb.RangeFeedCheckpoint:
 					observedStreams.Add(streamID)
-					_, err := frontier.Forward(t.Span, t.ResolvedTS)
+					_, _, err := frontier.Forward(t.Span, t.ResolvedTS)
 					if err != nil {
 						return true, err
 					}

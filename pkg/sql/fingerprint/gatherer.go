@@ -155,7 +155,7 @@ func (g *gatherer) record(result spanResult) error {
 	defer g.mu.Unlock()
 
 	g.mu.fingerprint ^= result.fingerprint
-	if _, err := g.mu.done.Forward(result.span, hlc.Timestamp{WallTime: 1}); err != nil {
+	if _, _, err := g.mu.done.Forward(result.span, hlc.Timestamp{WallTime: 1}); err != nil {
 		return err
 	}
 	g.mu.prog[result.idx].total, g.mu.prog[result.idx].remaining = result.total, result.remaining

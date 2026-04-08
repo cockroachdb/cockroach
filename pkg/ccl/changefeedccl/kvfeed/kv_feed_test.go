@@ -806,7 +806,7 @@ func TestFrontierQuantization(t *testing.T) {
 				if tc.withFrontierQuantization {
 					e.Checkpoint.ResolvedTS = quantizeTS(e.Checkpoint.ResolvedTS, quantize)
 				}
-				_, err := frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
+				_, _, err := frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
 				require.NoError(t, err)
 			}
 			for sp, ts := range frontier.Entries() {
@@ -844,9 +844,9 @@ func TestFrontierQuantizationRand(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range events {
 		quantizedTs := quantizeTS(e.Checkpoint.ResolvedTS, quantize)
-		_, err := quantizedFrontier.Forward(e.Checkpoint.Span, quantizedTs)
+		_, _, err := quantizedFrontier.Forward(e.Checkpoint.Span, quantizedTs)
 		require.NoError(t, err)
-		_, err = frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
+		_, _, err = frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
 		require.NoError(t, err)
 	}
 	quantizedEntries := quantizedFrontier.Len()

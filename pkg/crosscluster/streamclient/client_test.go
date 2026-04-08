@@ -288,7 +288,7 @@ func ExampleClient() {
 							minTS = rs.Timestamp
 						}
 					}
-					_, _ = ingested.Forward(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}, minTS)
+					_, _, _ = ingested.Forward(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}, minTS)
 					fmt.Printf("resolved %d\n", minTS.WallTime)
 				default:
 					panic(fmt.Sprintf("unexpected event type %v", event.Type()))
