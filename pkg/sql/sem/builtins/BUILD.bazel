@@ -124,7 +124,6 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/ltree",
         "//pkg/util/mon",
-        "//pkg/util/pretty",
         "//pkg/util/protoutil",
         "//pkg/util/randident",
         "//pkg/util/randident/randidentcfg",
