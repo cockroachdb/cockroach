@@ -88,9 +88,9 @@ func TestReplicaRankings(t *testing.T) {
 				continue
 			}
 			for i := range want {
-				if repls[i].RangeUsageInfo().Load().Dim(dimension) != want[i] {
+				if repls[i].RangeUsageInfo().LoadDim(dimension) != want[i] {
 					t.Errorf("got %f for %d'th element; want %f (input: %v)",
-						repls[i].RangeUsageInfo().Load().Dim(dimension), i, want, rLoad)
+						repls[i].RangeUsageInfo().LoadDim(dimension), i, want, rLoad)
 					break
 				}
 			}
@@ -654,5 +654,32 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func BenchmarkReplicaAccumulator(b *testing.B) {
+	for _, numReplicas := range []int{128, 1000, 10000, 30000} {
+		b.Run(fmt.Sprintf("replicas=%d", numReplicas), func(b *testing.B) {
+			// Pre-build the candidate replicas.
+			candidates := make([]candidateReplica, numReplicas)
+			for i := range candidates {
+				candidates[i] = candidateReplica{
+					Replica: &Replica{RangeID: roachpb.RangeID(i)},
+					usage: allocator.RangeUsageInfo{
+						QueriesPerSecond:         rand.Float64() * 1000,
+						RequestCPUNanosPerSecond: rand.Float64() * 1e9,
+						RaftCPUNanosPerSecond:    rand.Float64() * 1e8,
+					},
+				}
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				acc := NewReplicaAccumulator(aload.CPU, aload.Queries)
+				for i := range candidates {
+					acc.AddReplica(candidates[i])
+				}
+			}
+		})
 	}
 }

@@ -6,6 +6,8 @@
 package load
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -166,50 +168,72 @@ func (rl *ReplicaLoad) Merge(other *ReplicaLoad) {
 
 // Reset will clear all recorded history.
 func (rl *ReplicaLoad) Reset() {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
 	for i := range rl.mu.stats {
-		rl.mu.stats[i].ResetRequestCounts(timeutil.Unix(0, rl.clock.PhysicalNow()))
+		rl.mu.stats[i].ResetRequestCounts(now)
 	}
 }
 
-// getLocked returns the current value for the LoadStat with ordinal stat. It
-// requires holding a lock.
-func (rl *ReplicaLoad) getLocked(stat LoadStat) float64 {
+// getLockedWithNow returns the current value for the LoadStat with ordinal
+// stat using the provided time. It requires rl.mu to be held.
+func (rl *ReplicaLoad) getLockedWithNow(stat LoadStat, now time.Time) float64 {
+	rl.mu.AssertHeld()
 	var ret float64
 	// Only return the value if the statistics have been gathered for longer
 	// than the minimum duration.
-	if val, dur := rl.mu.stats[stat].AverageRatePerSecond(timeutil.Unix(0, rl.clock.PhysicalNow())); dur >= replicastats.MinStatsDuration {
+	if val, dur := rl.mu.stats[stat].AverageRatePerSecond(now); dur >= replicastats.MinStatsDuration {
 		ret = val
 	}
 	return ret
 }
 
+// statsLockedWithNow returns a ReplicaLoadStats populated using the provided
+// time. It requires rl.mu to be held.
+func (rl *ReplicaLoad) statsLockedWithNow(now time.Time) ReplicaLoadStats {
+	return ReplicaLoadStats{
+		QueriesPerSecond:         rl.getLockedWithNow(Queries, now),
+		RequestsPerSecond:        rl.getLockedWithNow(Requests, now),
+		WriteKeysPerSecond:       rl.getLockedWithNow(WriteKeys, now),
+		ReadKeysPerSecond:        rl.getLockedWithNow(ReadKeys, now),
+		WriteBytesPerSecond:      rl.getLockedWithNow(WriteBytes, now),
+		ReadBytesPerSecond:       rl.getLockedWithNow(ReadBytes, now),
+		RequestCPUNanosPerSecond: rl.getLockedWithNow(ReqCPUNanos, now),
+		RaftCPUNanosPerSecond:    rl.getLockedWithNow(RaftCPUNanos, now),
+	}
+}
+
 // Stats returns a current stat summary of replica load.
 func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return rl.statsLockedWithNow(now)
+}
+
+// StatsWithLocalityInfo returns load stats and the Queries dimension's
+// locality info in a single locked operation. This avoids the overhead of
+// acquiring the mutex twice and computing the current time repeatedly,
+// which matters when called per-replica during Store.Capacity scans
+// (30k+ replicas).
+func (rl *ReplicaLoad) StatsWithLocalityInfo() (ReplicaLoadStats, replicastats.RatedSummary) {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	return ReplicaLoadStats{
-		QueriesPerSecond:         rl.getLocked(Queries),
-		RequestsPerSecond:        rl.getLocked(Requests),
-		WriteKeysPerSecond:       rl.getLocked(WriteKeys),
-		ReadKeysPerSecond:        rl.getLocked(ReadKeys),
-		WriteBytesPerSecond:      rl.getLocked(WriteBytes),
-		ReadBytesPerSecond:       rl.getLocked(ReadBytes),
-		RequestCPUNanosPerSecond: rl.getLocked(ReqCPUNanos),
-		RaftCPUNanosPerSecond:    rl.getLocked(RaftCPUNanos),
-	}
+	return rl.statsLockedWithNow(now), rl.mu.stats[Queries].SnapshotRatedSummary(now)
 }
 
 // RequestLocalityInfo returns the summary of client localities for requests
 // made to this replica.
-func (rl *ReplicaLoad) RequestLocalityInfo() *replicastats.RatedSummary {
+func (rl *ReplicaLoad) RequestLocalityInfo() replicastats.RatedSummary {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	return rl.mu.stats[Queries].SnapshotRatedSummary(timeutil.Unix(0, rl.clock.PhysicalNow()))
+	return rl.mu.stats[Queries].SnapshotRatedSummary(now)
 }
 
 // TestingGetSum returns the sum of recorded values for the LoadStat with

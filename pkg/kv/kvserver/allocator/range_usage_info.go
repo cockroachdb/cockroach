@@ -39,9 +39,23 @@ type RangeRequestLocalityInfo struct {
 // Load returns a load dimension representation of the range usage.
 func (r RangeUsageInfo) Load() load.Load {
 	dims := load.Vector{}
-	dims[load.Queries] = r.QueriesPerSecond
-	dims[load.CPU] = r.RequestCPUNanosPerSecond + r.RaftCPUNanosPerSecond
+	dims[load.Queries] = r.LoadDim(load.Queries)
+	dims[load.CPU] = r.LoadDim(load.CPU)
 	return dims
+}
+
+// LoadDim returns the value of a single load dimension without allocating.
+// Unlike Load().Dim(), this avoids constructing a load.Vector and boxing it
+// into the load.Load interface.
+func (r RangeUsageInfo) LoadDim(dim load.Dimension) float64 {
+	switch dim {
+	case load.Queries:
+		return r.QueriesPerSecond
+	case load.CPU:
+		return r.RequestCPUNanosPerSecond + r.RaftCPUNanosPerSecond
+	default:
+		return 0
+	}
 }
 
 // TransferImpact returns the impact of transferring the lease for the range,

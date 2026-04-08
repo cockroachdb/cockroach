@@ -359,6 +359,7 @@ go_test(
         "replica_learner_test.go",
         "replica_lease_renewal_test.go",
         "replica_lifecycle_datadriven_test.go",
+        "replica_load_bench_test.go",
         "replica_metrics_test.go",
         "replica_probe_test.go",
         "replica_proposal_bench_test.go",
