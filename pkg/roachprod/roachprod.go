@@ -2342,6 +2342,48 @@ func PrometheusSnapshot(
 // SnapshotTTL controls how long volume snapshots are kept around.
 const SnapshotTTL = 30 * 24 * time.Hour // 30 days
 
+// snapshotName returns the name for a volume snapshot. For single-store
+// nodes the format is "{prefix}-{version}-n{nodes}-{node}". For multi-store
+// nodes it additionally encodes the store count and index:
+// "{prefix}-{version}-n{nodes}-s{stores}-{node}-{storeIdx}".
+// The node index is zero-padded to 4 digits and the store index to 2 digits.
+func snapshotName(
+	prefix string, crdbVersion string, nodeCount, numStores, node, storeIdx int,
+) string {
+	if numStores == 1 && storeIdx != 1 {
+		panic(fmt.Sprintf("unexpected storeIdx %d for single-store node", storeIdx))
+	}
+	infix := strings.ReplaceAll(
+		fmt.Sprintf("%s-n%d", crdbVersion, nodeCount), ".", "-")
+	if numStores > 1 {
+		return fmt.Sprintf("%s-%s-s%d-%04d-%02d", prefix, infix, numStores, node, storeIdx)
+	}
+	return fmt.Sprintf("%s-%s-%04d", prefix, infix, node)
+}
+
+// parseSnapshotName extracts the node index and store index from a snapshot
+// name. It expects the name to end with "-{node}" for single-store snapshots
+// or "-{node}-{storeIdx}" for multi-store snapshots, where node is a 4-digit
+// zero-padded integer and storeIdx is a 2-digit zero-padded integer.
+func parseSnapshotName(name string) (nodeIdx, storeIdx int, err error) {
+	parts := strings.Split(name, "-")
+	if len(parts) < 2 {
+		return 0, 0, fmt.Errorf("unable to parse snapshot name %q", name)
+	}
+	lastPart := parts[len(parts)-1]
+	secondLastPart := parts[len(parts)-2]
+	// Try multi-store format: last two parts are node and storeIdx.
+	if si, siErr := strconv.Atoi(lastPart); siErr == nil {
+		if ni, niErr := strconv.Atoi(secondLastPart); niErr == nil && len(secondLastPart) == 4 {
+			// Multi-store: ...-{node}-{storeIdx}
+			return ni, si, nil
+		}
+		// Single-store: ...-{node}
+		return si, 1, nil
+	}
+	return 0, 0, fmt.Errorf("unable to parse snapshot name %q", name)
+}
+
 // CreateSnapshot snapshots all the persistent volumes attached to nodes in the
 // named cluster.
 func CreateSnapshot(
@@ -2415,27 +2457,34 @@ func CreateSnapshot(
 					return fmt.Errorf("node %d does not have any non-bootable persistent volumes attached", node)
 				}
 
-				for _, volume := range volumes {
-					snapshotFingerprintInfix := strings.ReplaceAll(
-						fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
-					snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
-					if len(snapshotName) > 63 {
-						return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
-					}
-					volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
-						vm.VolumeSnapshotCreateOpts{
-							Name:        snapshotName,
-							Labels:      labels,
-							Description: vsco.Description,
-						})
-					if err != nil {
-						return err
-					}
-					l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d\n",
-						volumeSnapshot.Name, volumeSnapshot.ID, volume.Name, volume.ProviderResourceID, node)
-					volumesSnapshotMu.Lock()
-					volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
-					volumesSnapshotMu.Unlock()
+				numStores := len(volumes)
+				g := ctxgroup.WithContext(ctx)
+				for storeIdx, volume := range volumes {
+					g.Go(func() error {
+						snapName := snapshotName(vsco.Name, crdbVersion, len(nodes), numStores, int(node), storeIdx+1)
+						if len(snapName) > 63 {
+							return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapName)
+						}
+						volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
+							vm.VolumeSnapshotCreateOpts{
+								Name:        snapName,
+								Labels:      labels,
+								Description: vsco.Description,
+							})
+						if err != nil {
+							return err
+						}
+						l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d/s%d\n",
+							volumeSnapshot.Name, volumeSnapshot.ID, volume.Name,
+							volume.ProviderResourceID, node, storeIdx+1)
+						volumesSnapshotMu.Lock()
+						volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
+						volumesSnapshotMu.Unlock()
+						return nil
+					})
+				}
+				if err := g.Wait(); err != nil {
+					return err
 				}
 				return nil
 			}); err != nil {
@@ -2484,10 +2533,33 @@ func ApplySnapshots(
 		return err
 	}
 
-	if n := len(c.Nodes); n != len(snapshots) {
-		return fmt.Errorf("mismatched number of snapshots (%d) to node count (%d)", len(snapshots), n)
-		// TODO(irfansharif): Validate labels (version, instance types).
+	// Group snapshots by node index by parsing the trailing
+	// "-{node}-{storeIdx}" or "-{node}" suffix from snapshot names.
+	// For multi-store: "...-0001-01", for single-store: "...-0001".
+	type nodeSnapshot struct {
+		snap     vm.VolumeSnapshot
+		storeIdx int // 1-indexed
 	}
+	snapshotsByNode := make(map[int][]nodeSnapshot)
+	for _, snap := range snapshots {
+		nodeIdx, storeIdx, err := parseSnapshotName(snap.Name)
+		if err != nil {
+			return err
+		}
+		snapshotsByNode[nodeIdx] = append(snapshotsByNode[nodeIdx], nodeSnapshot{
+			snap:     snap,
+			storeIdx: storeIdx,
+		})
+	}
+
+	nodeCount := len(c.Nodes)
+	if len(snapshotsByNode) != nodeCount {
+		return fmt.Errorf(
+			"snapshot node count (%d) does not match cluster node count (%d)",
+			len(snapshotsByNode), nodeCount,
+		)
+	}
+	// TODO(irfansharif): Validate labels (version, instance types).
 
 	// Detach and delete existing volumes. This is destructive.
 	if err := c.Parallel(ctx, l, install.WithNodes(c.Nodes),
@@ -2519,65 +2591,74 @@ func ApplySnapshots(
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
-			volumeOpts := opts // make a copy
-			volumeOpts.Labels = map[string]string{}
-			for k, v := range opts.Labels {
-				volumeOpts.Labels[k] = v
-			}
-
 			// TODO: same issue as above if the target nodes are not sequential starting from 1
 			cVM := &c.VMs[node-1]
 			if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-				volumeOpts.Zone = cVM.Zone
-				// NB: The "-1" signifies that it's the first attached non-boot volume.
-				// This is typical naming convention in GCE clusters.
-				volumeOpts.Name = fmt.Sprintf("%s-%04d-1", clusterName, node)
-				volumeOpts.SourceSnapshotID = snapshots[node-1].ID
-
-				volumes, err := provider.ListVolumes(l, cVM)
-				if err != nil {
-					return err
+				nodeSnaps, ok := snapshotsByNode[int(node)]
+				if !ok {
+					return fmt.Errorf("no snapshots found for node %d", node)
 				}
-				for _, vol := range volumes {
-					if vol.Name == volumeOpts.Name {
-						l.Printf(
-							"volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, node)
+
+				// Create all volumes in parallel since they are
+				// independent GCE disk operations.
+				type createdVolume struct {
+					volume   vm.Volume
+					storeIdx int
+				}
+				createdVolumes := make([]createdVolume, len(nodeSnaps))
+				g := ctxgroup.WithContext(ctx)
+				for i, ns := range nodeSnaps {
+					g.Go(func() error {
+						volumeOpts := opts // make a copy
+						volumeOpts.Labels = map[string]string{}
+						for k, v := range opts.Labels {
+							volumeOpts.Labels[k] = v
+						}
+
+						volumeOpts.Zone = cVM.Zone
+						volumeOpts.Name = fmt.Sprintf("%s-%04d-%d", clusterName, node, ns.storeIdx)
+						volumeOpts.SourceSnapshotID = ns.snap.ID
+
+						volumeOpts.Labels[vm.TagCluster] = clusterName
+						volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
+						volumeOpts.Labels[vm.TagRoachprod] = "true"
+						volumeOpts.Labels[vm.TagCreated] = strings.ToLower(
+							strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")) // format according to gce label naming requirements
+
+						volume, err := provider.CreateVolume(l, volumeOpts)
+						if err != nil {
+							return err
+						}
+						l.Printf("created volume %s from snapshot %s", volume.ProviderResourceID, ns.snap.Name)
+						createdVolumes[i] = createdVolume{volume: volume, storeIdx: ns.storeIdx}
 						return nil
+					})
+				}
+				if err := g.Wait(); err != nil {
+					return err
+				}
+
+				// Attach and mount volumes sequentially since GCE
+				// does not support concurrent instance modifications.
+				for _, cv := range createdVolumes {
+					device, err := cVM.AttachVolume(l, cv.volume)
+					if err != nil {
+						return err
 					}
+					l.Printf("attached volume %s to %s", cv.volume.ProviderResourceID, cVM.ProviderID)
+
+					mountDir := fmt.Sprintf("/mnt/data%d", cv.storeIdx)
+					var buf bytes.Buffer
+					if err := c.Run(ctx, l, &buf, &buf, install.WithNodes([]install.Node{node}),
+						"mounting volume", genMountCommands(device, mountDir)); err != nil {
+						l.Printf(buf.String())
+						return err
+					}
+					l.Printf("mounted %s at %s on %s", cv.volume.ProviderResourceID, mountDir, cVM.ProviderID)
 				}
-
-				volumeOpts.Labels[vm.TagCluster] = clusterName
-				volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
-				volumeOpts.Labels[vm.TagRoachprod] = "true"
-				volumeOpts.Labels[vm.TagCreated] = strings.ToLower(
-					strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")) // format according to gce label naming requirements
-
-				volume, err := provider.CreateVolume(l, volumeOpts)
-				if err != nil {
-					return err
-				}
-				l.Printf("created volume %s", volume.ProviderResourceID)
-
-				device, err := cVM.AttachVolume(l, volume)
-				if err != nil {
-					return err
-				}
-				l.Printf("attached volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-
-				// Save the cluster to cache.
-				if err := saveCluster(l, &c.Cluster); err != nil {
-					return err
-				}
-
-				var buf bytes.Buffer
-				if err := c.Run(ctx, l, &buf, &buf, install.WithNodes([]install.Node{node}),
-					"mounting volume", genMountCommands(device, "/mnt/data1")); err != nil {
-					l.Printf(buf.String())
-					return err
-				}
-				l.Printf("mounted %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-
-				return nil
+				// Save the cluster cache once after all volumes are
+				// attached and mounted for this node.
+				return saveCluster(l, &c.Cluster)
 			}); err != nil {
 				res.Err = err
 			}
