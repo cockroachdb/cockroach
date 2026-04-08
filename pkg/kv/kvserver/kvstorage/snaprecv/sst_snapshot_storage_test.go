@@ -72,18 +72,18 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	require.Equal(t, len(scratch.SSTs()), 1)
 
 	// Check that the storage lazily creates the files on write.
-	for _, fileName := range scratch.SSTs() {
-		_, err := eng.Env().Stat(fileName)
+	for _, sst := range scratch.SSTs() {
+		_, err := eng.Env().Stat(sst.Path)
 		if !oserror.IsNotExist(err) {
-			t.Fatalf("expected %s to not exist", fileName)
+			t.Fatalf("expected %s to not exist", sst.Path)
 		}
 	}
 
 	require.NoError(t, f.Write([]byte("foo")))
 
 	// After writing to files, check that they have been flushed to disk.
-	for _, fileName := range scratch.SSTs() {
-		f, err := eng.Env().Open(fileName)
+	for _, sst := range scratch.SSTs() {
+		f, err := eng.Env().Open(sst.Path)
 		require.NoError(t, err)
 		data, err := io.ReadAll(f)
 		require.NoError(t, err)
@@ -154,18 +154,18 @@ func TestSSTSnapshotStorageConcurrentRange(t *testing.T) {
 		require.Equal(t, len(scratch.SSTs()), 1)
 
 		// Check that the storage lazily creates the files on write.
-		for _, fileName := range scratch.SSTs() {
-			_, err := eng.Env().Stat(fileName)
+		for _, sst := range scratch.SSTs() {
+			_, err := eng.Env().Stat(sst.Path)
 			if !oserror.IsNotExist(err) {
-				return errors.Errorf("expected %s to not exist", fileName)
+				return errors.Errorf("expected %s to not exist", sst.Path)
 			}
 		}
 
 		require.NoError(t, f.Write([]byte("foo")))
 
 		// After writing to files, check that they have been flushed to disk.
-		for _, fileName := range scratch.SSTs() {
-			f, err := eng.Env().Open(fileName)
+		for _, sst := range scratch.SSTs() {
+			f, err := eng.Env().Open(sst.Path)
 			require.NoError(t, err)
 			data, err := io.ReadAll(f)
 			require.NoError(t, err)
@@ -269,10 +269,14 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "interesting", testMultiSSTWriterInitSSTInner)
+	testutils.RunTrueAndFalse(t, "interesting", func(t *testing.T, interesting bool) {
+		testutils.RunTrueAndFalse(t, "blobEnabled", func(t *testing.T, blobEnabled bool) {
+			testMultiSSTWriterInitSSTInner(t, interesting, blobEnabled)
+		})
+	})
 }
 
-func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
+func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool, blobEnabled bool) {
 	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
@@ -298,6 +302,16 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	// The tests rely on specific SST sizes; we cannot use MinLZ as the
 	// compression can depend on the architecture.
 	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
+
+	// Enable value separation for snapshot SSTs if requested. We must override
+	// all the relevant settings since they may be set by metamorphic testing.
+	if blobEnabled {
+		storage.ValueSeparationEnabled.Override(ctx, &st.SV, true)
+		storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &st.SV, true)
+		storage.ValueSeparationMinimumSize.Override(ctx, &st.SV, 256)
+	} else {
+		storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &st.SV, false)
+	}
 
 	msstw, err := NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
@@ -367,27 +381,40 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	logSize(&buf)
 
 	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
-	for _, file := range fileNames {
-		sst, err := fs.ReadFile(eng.Env(), file)
+	localSSTs := msstw.scratch.SSTs()
+	for _, sst := range localSSTs {
+		sstData, err := fs.ReadFile(eng.Env(), sst.Path)
 		require.NoError(t, err)
-		actualSSTs = append(actualSSTs, sst)
+		actualSSTs = append(actualSSTs, sstData)
 	}
 
-	for i := range fileNames {
+	for i := range localSSTs {
 		name := fmt.Sprintf("sst%d", i)
 		require.NoError(t, storageutils.ReportSSTEntries(&buf, name, actualSSTs[i]))
 	}
-	filename := strings.Replace(t.Name(), "/", "_", -1)
-	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", filename)))
+
+	// The echotest golden files are generated without blob files. When blob
+	// files are enabled, we skip the echotest since we're testing the same
+	// logical functionality, just with a different code path. The test values
+	// are too small to trigger value separation anyway.
+	if !blobEnabled {
+		// Use the original golden file name (without the blobEnabled suffix).
+		filename := strings.Replace(t.Name(), "/", "_", -1)
+		filename = strings.Replace(filename, "_blobEnabled=false", "", 1)
+		echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", filename)))
+	}
+
+	// Verify that no blob files were created since the values are too small
+	// to trigger value separation.
+	require.False(t, scratch.HasBlobFiles())
 }
 
 func buildIterForScratch(
 	t *testing.T, keySpans []roachpb.Span, scratch *SSTSnapshotStorageScratch,
 ) (storage.MVCCIterator, error) {
 	var openFiles []objstorage.ReadableFile
-	for _, sstPath := range scratch.SSTs()[len(keySpans)-1:] {
-		f, err := vfs.Default.Open(sstPath)
+	for _, sst := range scratch.SSTs()[len(keySpans)-1:] {
+		f, err := vfs.Default.Open(sst.Path)
 		require.NoError(t, err)
 		openFiles = append(openFiles, f)
 	}
@@ -405,6 +432,10 @@ func buildIterForScratch(
 func TestMultiSSTWriterSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	testutils.RunTrueAndFalse(t, "blobEnabled", testMultiSSTWriterSizeInner)
+}
+
+func testMultiSSTWriterSizeInner(t *testing.T, blobEnabled bool) {
 	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
@@ -419,6 +450,16 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
 	settings := cluster.MakeTestingClusterSettings()
 
+	// Enable value separation for snapshot SSTs if requested.
+	if blobEnabled {
+		storage.ValueSeparationEnabled.Override(ctx, &settings.SV, true)
+		storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &settings.SV, true)
+		// Set minimum size low enough that our test values will be separated.
+		storage.ValueSeparationMinimumSize.Override(ctx, &settings.SV, 256)
+	} else {
+		storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &settings.SV, false)
+	}
+
 	desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKey("d"),
 		EndKey:   roachpb.RKeyMax,
@@ -426,6 +467,18 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	keySpans := rditer.MakeReplicatedKeySpans(&desc)
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
+
+	// When blob files are enabled, use values large enough to trigger value
+	// separation (> 256 bytes). Otherwise use small values.
+	var testValue []byte
+	if blobEnabled {
+		testValue = make([]byte, 512) // large enough to be separated
+		for i := range testValue {
+			testValue[i] = byte(i % 256)
+		}
+	} else {
+		testValue = []byte("foobarbaz")
+	}
 
 	// Make a reference msstw with the default size.
 	referenceMsstw, err := NewMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, MultiSSTWriterOptions{})
@@ -449,10 +502,18 @@ func TestMultiSSTWriterSize(t *testing.T) {
 			require.NoError(t, referenceMsstw.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, referenceMsstw.put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, referenceMsstw.put(ctx, engineKey, testValue))
 	}
 	_, _, err = referenceMsstw.Finish(ctx)
 	require.NoError(t, err)
+
+	// Verify blob files are created when enabled and values are large enough.
+	if blobEnabled {
+		require.True(t, ref.HasBlobFiles(), "expected blob files to be created with large values")
+		// Skip the rest of the test since Pebble's external iterator doesn't
+		// support SSTs with blob references. We verified blob files were created.
+		return
+	}
 
 	refIter, err := buildIterForScratch(t, keySpans, ref)
 	require.NoError(t, err)
@@ -479,12 +540,13 @@ func TestMultiSSTWriterSize(t *testing.T) {
 			require.NoError(t, multiSSTWriter.putRangeKey(
 				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
-		require.NoError(t, multiSSTWriter.put(ctx, engineKey, []byte("foobarbaz")))
+		require.NoError(t, multiSSTWriter.put(ctx, engineKey, testValue))
 	}
 
 	_, _, err = multiSSTWriter.Finish(ctx)
 	require.NoError(t, err)
 	require.Greater(t, len(scratch.SSTs()), len(ref.SSTs()))
+	require.False(t, scratch.HasBlobFiles())
 
 	iter, err := buildIterForScratch(t, keySpans, scratch)
 	require.NoError(t, err)
@@ -551,11 +613,11 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
-	for _, file := range fileNames {
-		sst, err := fs.ReadFile(eng.Env(), file)
+	localSSTs := msstw.scratch.SSTs()
+	for _, sst := range localSSTs {
+		sstData, err := fs.ReadFile(eng.Env(), sst.Path)
 		require.NoError(t, err)
-		actualSSTs = append(actualSSTs, sst)
+		actualSSTs = append(actualSSTs, sstData)
 	}
 
 	// Construct an SST file for each of the key ranges and write a rangedel
@@ -580,7 +642,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	}
 
 	require.Equal(t, len(actualSSTs), len(expectedSSTs))
-	for i := range fileNames {
+	for i := range localSSTs {
 		require.Equal(t, actualSSTs[i], expectedSSTs[i])
 	}
 }
@@ -590,7 +652,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	eng, err := storage.Open(
 		ctx,
 		fs.MustInitPhysicalTestingEnv(dir),
-		cluster.MakeClusterSettings(),
+		cluster.MakeTestingClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
 		t.Fatal(err)
