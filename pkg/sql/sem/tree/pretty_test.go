@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -229,8 +229,9 @@ func TestPrettyBigStatement(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "excessive memory usage")
 
-	// Create a SELECT statement with a 1 million item IN expression. Without
-	// mitigation, this can cause stack overflows - see #91197.
+	// Create a SELECT statement with a 1 million item IN expression.
+	// The iterative pretty-printing algorithm handles this without
+	// stack overflow - see #91197.
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM foo WHERE id IN (")
 	for i := 0; i < 1_000_000; i++ {
@@ -248,7 +249,7 @@ func TestPrettyBigStatement(t *testing.T) {
 
 	cfg := tree.DefaultPrettyCfg()
 	_, err = cfg.Pretty(stmt.AST)
-	assert.Errorf(t, err, "max call stack depth of be exceeded")
+	require.NoError(t, err)
 }
 
 func BenchmarkPrettyData(b *testing.B) {

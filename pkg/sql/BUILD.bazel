@@ -611,7 +611,6 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/pprofutil",
-        "//pkg/util/pretty",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
