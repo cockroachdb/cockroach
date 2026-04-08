@@ -569,13 +569,14 @@ func countTimeSeriesLines(data []byte) int64 {
 
 // countFamilyMetrics counts the number of individual metrics a
 // MetricFamily produces as ingested by downstream systems like
-// Datadog. HELP/TYPE overhead is omitted and histograms expand
-// into their computed metrics (percentiles, count, sum, avg, max).
+// Datadog. HELP/TYPE overhead is omitted and histograms are
+// counted by their bucket count, which determines the size of
+// the histogram as scraped.
 func countFamilyMetrics(family *prometheusgo.MetricFamily) int64 {
 	var count int64
 	for _, m := range family.Metric {
 		if m.Histogram != nil {
-			count += int64(len(metric.HistogramMetricComputers))
+			count += int64(len(m.Histogram.Bucket))
 		} else {
 			count++
 		}

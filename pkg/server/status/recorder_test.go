@@ -1585,7 +1585,7 @@ func TestCountFamilyMetrics(t *testing.T) {
 			expected: 3,
 		},
 		{
-			name: "histogram expands to computed metrics",
+			name: "histogram counts buckets",
 			family: &prometheusgo.MetricFamily{
 				Name: str("test_histo"),
 				Type: mtype(prometheusgo.MetricType_HISTOGRAM),
@@ -1601,7 +1601,7 @@ func TestCountFamilyMetrics(t *testing.T) {
 					}},
 				},
 			},
-			expected: int64(len(metric.HistogramMetricComputers)),
+			expected: 3, // number of buckets
 		},
 		{
 			name: "empty family",
