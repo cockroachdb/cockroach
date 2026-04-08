@@ -1021,7 +1021,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEC DECIMAL DEFAULT DEFAULTS DEFINER
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG DEBUG_IDS DEC DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISABLE DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -1496,7 +1496,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options show_backups_options_list
 %type <*tree.ShowBackupTimeFilter> opt_show_backups_time_filter_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
@@ -9311,11 +9311,11 @@ opt_show_backups_time_filter_clause:
   }
 
 opt_with_show_backups_options:
-  WITH show_backups_options
+  WITH show_backups_options_list
   {
     $$.val = $2.showBackupOptions()
   }
-  | WITH OPTIONS '(' show_backups_options ')'
+  | WITH OPTIONS '(' show_backups_options_list ')'
   {
     $$.val = $4.showBackupOptions()
   }
@@ -9324,10 +9324,27 @@ opt_with_show_backups_options:
     $$.val = &tree.ShowBackupOptions{}
   }
 
+show_backups_options_list:
+  show_backups_options
+  {
+    $$.val = $1.showBackupOptions()
+  }
+| show_backups_options_list ',' show_backups_options
+  {
+    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
 show_backups_options:
   REVISION START TIME
   {
     $$.val = &tree.ShowBackupOptions{RevisionStartTime: true}
+  }
+| DEBUG
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowBackupOptions{Debug: true}
   }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
@@ -18991,6 +19008,7 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
+| DEBUG
 | DEBUG_IDS
 | DECLARE
 | DELETE
@@ -19526,6 +19544,7 @@ bare_label_keywords:
 | DATABASE
 | DATABASES
 | DEALLOCATE
+| DEBUG
 | DEBUG_IDS
 | DEC
 | DECIMAL
