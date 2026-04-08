@@ -780,6 +780,12 @@ func importPlanHook(
 			return pgerror.New(pgcode.FeatureNotSupported,
 				"distributed merge for IMPORT requires all nodes to be running version 26.2 or later")
 		}
+		// The distributed merge pipeline writes temporary SSTs to nodelocal
+		// storage, which requires ExternalIODir to be configured. When it is
+		// not available, fall back to the regular import path.
+		if useDistributedMerge && p.ExecCfg().ExternalIODir == "" {
+			useDistributedMerge = false
+		}
 
 		importDetails := jobspb.ImportDetails{
 			URIs:                  files,
