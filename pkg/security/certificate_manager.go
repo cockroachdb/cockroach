@@ -6,6 +6,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -430,6 +432,19 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if nodeCert.Error != nil {
 			return makeErrorf(nodeCert.Error, "validating node cert")
 		}
+	}
+
+	// Detect actual certificate content changes and record rotation timestamps.
+	if cm.initialized {
+		now := cm.rotationNow()
+		cm.maybeRecordRotation(cm.caCert, caCert, cm.certMetrics.CALastRotation, now)
+		cm.maybeRecordRotation(cm.clientCACert, clientCACert, cm.certMetrics.ClientCALastRotation, now)
+		cm.maybeRecordRotation(cm.uiCACert, uiCACert, cm.certMetrics.UICALastRotation, now)
+		cm.maybeRecordRotation(cm.tenantCACert, tenantCACert, cm.certMetrics.TenantCALastRotation, now)
+		cm.maybeRecordRotation(cm.nodeCert, nodeCert, cm.certMetrics.NodeLastRotation, now)
+		cm.maybeRecordRotation(cm.nodeClientCert, nodeClientCert, cm.certMetrics.NodeClientLastRotation, now)
+		cm.maybeRecordRotation(cm.uiCert, uiCert, cm.certMetrics.UILastRotation, now)
+		cm.maybeRecordRotation(cm.tenantCert, tenantCert, cm.certMetrics.TenantLastRotation, now)
 	}
 
 	// Swap everything.
@@ -906,4 +921,37 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	}
 
 	return ret, nil
+}
+
+// rotationNow returns the current Unix timestamp using the manager's time
+// source. Used by LoadCertificates to stamp rotation metrics.
+func (cm *CertificateManager) rotationNow() int64 {
+	ts := cm.timeSource
+	if ts == nil {
+		ts = defaultTimeSource
+	}
+	return ts.Now().Unix()
+}
+
+// maybeRecordRotation compares old and new certificate file contents. If the
+// certificate content changed (including going from nil to non-nil or vice
+// versa), the rotation gauge is updated to the provided timestamp.
+// cm.mu must be held.
+func (cm *CertificateManager) maybeRecordRotation(
+	oldCert, newCert *CertInfo, gauge *metric.Gauge, nowUnix int64,
+) {
+	oldContents := certFileContents(oldCert)
+	newContents := certFileContents(newCert)
+	if !bytes.Equal(oldContents, newContents) {
+		gauge.Update(nowUnix)
+	}
+}
+
+// certFileContents returns the raw file contents for a CertInfo, or nil if
+// the cert is nil or has an error.
+func certFileContents(ci *CertInfo) []byte {
+	if ci == nil || ci.Error != nil {
+		return nil
+	}
+	return ci.FileContents
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -104,6 +105,199 @@ func TestMetricsValues(t *testing.T) {
 		}
 	}
 
+}
+
+// TestExpiryDaysValues verifies that the days-until-expiry metrics report
+// the correct number of days for each certificate type.
+func TestExpiryDaysValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	// Set now to unix 1. Certificates expire at offsets 2..9
+	// (see writeTestCerts). The TTL in seconds for each cert is
+	// (expiration - 1). Days = ceil(ttlSeconds / 86400).
+	// With these tiny TTLs (1-8 seconds), all should be 1 day.
+	now := timeutil.Unix(1, 0)
+	certsDir := t.TempDir()
+	writeTestCerts(t, certsDir)
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(timeutil.NewManualTime(now)),
+		security.ForTenant(1),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+	checks := []struct {
+		name     string
+		expected int64
+		actual   int64
+	}{
+		{"CA Expiry Days", 1, metrics.CAExpiryDays.Value()},
+		{"Client CA Expiry Days", 1, metrics.ClientCAExpiryDays.Value()},
+		{"Tenant CA Expiry Days", 1, metrics.TenantCAExpiryDays.Value()},
+		{"UI CA Expiry Days", 1, metrics.UICAExpiryDays.Value()},
+		{"Node Expiry Days", 1, metrics.NodeExpiryDays.Value()},
+		{"UI Expiry Days", 1, metrics.UIExpiryDays.Value()},
+		{"Tenant Expiry Days", 1, metrics.TenantExpiryDays.Value()},
+		{"Node Client Expiry Days", 1, metrics.NodeClientExpiryDays.Value()},
+	}
+	for _, check := range checks {
+		require.Equal(t, check.expected, check.actual, check.name)
+	}
+}
+
+// TestExpiryDaysLargerValues verifies days-until-expiry with multi-day
+// expirations to ensure the calculation is correct beyond trivial values.
+func TestExpiryDaysLargerValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	now := timeutil.Unix(0, 0)
+	certsDir := t.TempDir()
+
+	// Write a CA cert expiring in exactly 10 days (864000 seconds).
+	_, certBytes := makeTestCert(t, "", 0, nil, timeutil.Unix(864000, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.crt"), certBytes, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.key"), []byte("key"), 0700))
+
+	// Write a node cert expiring in 2.5 days (216000 seconds) -> ceil = 3 days.
+	_, nodeBytes := makeTestCert(t, "", 0, nil, timeutil.Unix(216000, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.crt"), nodeBytes, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.key"), []byte("key"), 0700))
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(timeutil.NewManualTime(now)),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+	require.Equal(t, int64(10), metrics.CAExpiryDays.Value(), "CA expiry days")
+	require.Equal(t, int64(3), metrics.NodeExpiryDays.Value(), "Node expiry days")
+}
+
+// TestRotationTimestamps verifies that rotation timestamp metrics are zero
+// after initial load and are updated when certificates actually change.
+func TestRotationTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	now := timeutil.NewManualTime(timeutil.Unix(1000, 0))
+	certsDir := t.TempDir()
+	writeTestCerts(t, certsDir)
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(now),
+		security.ForTenant(1),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+
+	// After initial load, all rotation timestamps should be 0
+	// (no rotation has happened yet, only the first load).
+	require.Equal(t, int64(0), metrics.CALastRotation.Value(), "CA rotation before reload")
+	require.Equal(t, int64(0), metrics.NodeLastRotation.Value(), "Node rotation before reload")
+	require.Equal(t, int64(0), metrics.UILastRotation.Value(), "UI rotation before reload")
+	require.Equal(t, int64(0), metrics.TenantLastRotation.Value(), "Tenant rotation before reload")
+
+	// Reload without changing any certificates. Rotation timestamps should
+	// remain 0 because no certificate content changed.
+	now.Advance(100 * time.Second)
+	require.NoError(t, cm.LoadCertificates())
+
+	require.Equal(t, int64(0), metrics.CALastRotation.Value(), "CA rotation after no-op reload")
+	require.Equal(t, int64(0), metrics.NodeLastRotation.Value(), "Node rotation after no-op reload")
+
+	// Change the CA certificate and reload. Only the CA rotation timestamp
+	// should be updated.
+	now.Advance(100 * time.Second)
+	_, newCACert := makeTestCert(t, "", 0, nil, timeutil.Unix(5000, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.crt"), newCACert, 0700))
+	require.NoError(t, cm.LoadCertificates())
+
+	require.Equal(t, int64(1200), metrics.CALastRotation.Value(), "CA rotation after CA change")
+	require.Equal(t, int64(0), metrics.NodeLastRotation.Value(), "Node rotation unchanged after CA change")
+	require.Equal(t, int64(0), metrics.UILastRotation.Value(), "UI rotation unchanged after CA change")
+
+	// Now change the node cert and reload.
+	now.Advance(50 * time.Second)
+	_, newNodeCert := makeTestCert(t, "", 0, nil, timeutil.Unix(6000, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.crt"), newNodeCert, 0700))
+	require.NoError(t, cm.LoadCertificates())
+
+	// CA rotation timestamp should not change; node should be updated.
+	require.Equal(t, int64(1200), metrics.CALastRotation.Value(), "CA rotation stays from previous")
+	require.Equal(t, int64(1250), metrics.NodeLastRotation.Value(), "Node rotation after node change")
+}
+
+// TestRotationTimestampsAllCertTypes verifies rotation timestamps for all
+// certificate types after a full cert rotation.
+func TestRotationTimestampsAllCertTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	now := timeutil.NewManualTime(timeutil.Unix(1000, 0))
+	certsDir := t.TempDir()
+	writeTestCerts(t, certsDir)
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(now),
+		security.ForTenant(1),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+
+	type rotationCheck struct {
+		name     string
+		certFile string
+		gauge    *metric.Gauge
+	}
+	checks := []rotationCheck{
+		{"CA", "ca.crt", metrics.CALastRotation},
+		{"ClientCA", "ca-client.crt", metrics.ClientCALastRotation},
+		{"TenantCA", "ca-client-tenant.crt", metrics.TenantCALastRotation},
+		{"UICA", "ca-ui.crt", metrics.UICALastRotation},
+		{"Node", "node.crt", metrics.NodeLastRotation},
+		{"UI", "ui.crt", metrics.UILastRotation},
+		{"Tenant", "client-tenant.1.crt", metrics.TenantLastRotation},
+		{"NodeClient", "client.node.crt", metrics.NodeClientLastRotation},
+	}
+
+	// All should be 0 after initial load.
+	for _, c := range checks {
+		require.Equal(t, int64(0), c.gauge.Value(), "%s rotation before reload", c.name)
+	}
+
+	// Rotate all certificates at once.
+	now.Advance(500 * time.Second)
+	for _, c := range checks {
+		_, certBytes := makeTestCert(t, "", 0, nil, timeutil.Unix(9999, 0))
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, c.certFile), certBytes, 0700))
+	}
+	require.NoError(t, cm.LoadCertificates())
+
+	// All should now reflect the rotation timestamp.
+	for _, c := range checks {
+		require.Equal(t, int64(1500), c.gauge.Value(), "%s rotation after reload", c.name)
+	}
 }
 
 // TestCertificateReload verifies that when the certificate manager's
