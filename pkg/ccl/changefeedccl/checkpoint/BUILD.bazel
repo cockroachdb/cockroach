@@ -15,6 +15,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
+        "//pkg/util/span",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
     ],

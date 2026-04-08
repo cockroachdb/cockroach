@@ -551,11 +551,11 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 							return false, nil
 						}
 
-						advanced, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+						result, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
 						if err != nil {
 							return false, err
 						}
-						if advanced {
+						if result.FrontierForwarded() {
 							defer frontierHasAdvanced()
 						}
 

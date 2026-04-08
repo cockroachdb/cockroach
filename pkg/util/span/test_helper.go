@@ -163,7 +163,9 @@ type captureHistoryFrontier struct {
 	history []string
 }
 
-func (f *captureHistoryFrontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
+func (f *captureHistoryFrontier) Forward(
+	span roachpb.Span, ts hlc.Timestamp,
+) (ForwardResult, error) {
 	f.history = append(f.history,
 		fmt.Sprintf(`advanceFrontier(t, f, makeSpan(%q, %q), %d)`, span.Key, span.EndKey, ts.WallTime))
 	if len(f.history) > maxHistory {

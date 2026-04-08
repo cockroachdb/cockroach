@@ -297,11 +297,11 @@ func (w *Watcher) handleCheckpoint(
 		}
 	}()
 
-	frontierAdvanced, err := w.mu.frontier.Forward(span, resolvedTS)
+	result, err := w.mu.frontier.Forward(span, resolvedTS)
 	if err != nil {
 		return errors.Wrapf(err, "unexpected frontier error advancing to %s@%s", span, resolvedTS)
 	}
-	if frontierAdvanced {
+	if result.FrontierForwarded() {
 		frontier = w.mu.frontier.Frontier()
 		log.Dev.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 			frontier, timeutil.Since(frontier.GoTime()))

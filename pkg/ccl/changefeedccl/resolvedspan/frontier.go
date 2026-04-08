@@ -48,7 +48,7 @@ func NewAggregatorFrontier(
 // some boundary validation.
 func (f *AggregatorFrontier) ForwardResolvedSpan(
 	r jobspb.ResolvedSpan,
-) (forwarded bool, err error) {
+) (span.ForwardResult, error) {
 	switch boundaryType := r.BoundaryType; boundaryType {
 	case jobspb.ResolvedSpan_NONE:
 	case jobspb.ResolvedSpan_BACKFILL, jobspb.ResolvedSpan_EXIT, jobspb.ResolvedSpan_RESTART:
@@ -56,10 +56,10 @@ func (f *AggregatorFrontier) ForwardResolvedSpan(
 		// serially, where the changefeed won't ever observe a new schema change
 		// boundary until it has progressed past the current boundary.
 		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
-			return false, err
+			return span.ForwardNoChange, err
 		}
 	default:
-		return false, errors.AssertionFailedf("unknown boundary type: %v", boundaryType)
+		return span.ForwardNoChange, errors.AssertionFailedf("unknown boundary type: %v", boundaryType)
 	}
 	return f.resolvedSpanFrontier.ForwardResolvedSpan(r)
 }
@@ -97,7 +97,7 @@ func NewCoordinatorFrontier(
 // some boundary validation.
 func (f *CoordinatorFrontier) ForwardResolvedSpan(
 	r jobspb.ResolvedSpan,
-) (forwarded bool, err error) {
+) (span.ForwardResult, error) {
 	switch boundaryType := r.BoundaryType; boundaryType {
 	case jobspb.ResolvedSpan_NONE:
 	case jobspb.ResolvedSpan_BACKFILL:
@@ -118,7 +118,7 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 			break
 		}
 		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
-			return false, err
+			return span.ForwardNoChange, err
 		}
 		f.backfills = append(f.backfills, boundaryTS)
 	case jobspb.ResolvedSpan_EXIT, jobspb.ResolvedSpan_RESTART:
@@ -126,17 +126,17 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 		// processors to all move to draining and so should not be followed
 		// by any other boundaries.
 		if err := f.assertBoundaryNotEarlierOrDifferent(r); err != nil {
-			return false, err
+			return span.ForwardNoChange, err
 		}
 	default:
-		return false, errors.AssertionFailedf("unknown boundary type: %v", boundaryType)
+		return span.ForwardNoChange, errors.AssertionFailedf("unknown boundary type: %v", boundaryType)
 	}
-	frontierChanged, err := f.resolvedSpanFrontier.ForwardResolvedSpan(r)
+	result, err := f.resolvedSpanFrontier.ForwardResolvedSpan(r)
 	if err != nil {
-		return false, err
+		return span.ForwardNoChange, err
 	}
 	// If the frontier changed, we check if the frontier has advanced past any known backfills.
-	if frontierChanged {
+	if result.FrontierForwarded() {
 		frontier := f.Frontier()
 		i, _ := slices.BinarySearchFunc(f.backfills, frontier,
 			func(elem hlc.Timestamp, ts hlc.Timestamp) int {
@@ -144,7 +144,7 @@ func (f *CoordinatorFrontier) ForwardResolvedSpan(
 			})
 		f.backfills = f.backfills[i:]
 	}
-	return frontierChanged, nil
+	return result, nil
 }
 
 // InBackfill returns whether a resolved span is part of an ongoing backfill
@@ -249,20 +249,22 @@ func newResolvedSpanFrontier(
 // and all the spans are at the boundary timestamp already.
 func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 	r jobspb.ResolvedSpan,
-) (forwarded bool, err error) {
-	forwarded, err = f.Forward(r.Span, r.Timestamp)
+) (span.ForwardResult, error) {
+	result, err := f.Forward(r.Span, r.Timestamp)
 	if err != nil {
-		return false, err
+		return span.ForwardNoChange, err
 	}
 	f.latestTS.Forward(r.Timestamp)
 	boundaryForwarded := f.boundary.Forward(r.Timestamp, r.BoundaryType)
-	if boundaryForwarded && !forwarded {
+	if boundaryForwarded && !result.FrontierForwarded() {
 		// The frontier is considered forwarded if the boundary type
 		// changes to non-NONE and all the spans are at the boundary
 		// timestamp already.
-		forwarded, _, _ = f.AtBoundary()
+		if atBoundary, _, _ := f.AtBoundary(); atBoundary {
+			result = span.ForwardResolvedTime
+		}
 	}
-	return forwarded, nil
+	return result, nil
 }
 
 // AtBoundary returns true at the single moment when all watched spans

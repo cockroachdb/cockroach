@@ -817,10 +817,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return nil
 	}
 
-	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
+	result, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
 	}
+	advanced := result.FrontierForwarded()
 	sv := &ca.FlowCtx.Cfg.Settings.SV
 
 	defer func(ctx context.Context) {
@@ -1710,11 +1711,11 @@ func (cf *changeFrontier) forwardFrontier(
 			continue
 		}
 
-		changed, err := cf.frontier.ForwardResolvedSpan(resolved)
+		result, err := cf.frontier.ForwardResolvedSpan(resolved)
 		if err != nil {
 			return false, err
 		}
-		frontierChanged = frontierChanged || changed
+		frontierChanged = frontierChanged || result.FrontierForwarded()
 	}
 	return frontierChanged, nil
 }

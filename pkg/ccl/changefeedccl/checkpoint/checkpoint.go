@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
@@ -71,7 +72,7 @@ func Make(
 
 // SpanForwarder is an interface for forwarding spans to a changefeed.
 type SpanForwarder interface {
-	Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error)
+	Forward(span roachpb.Span, ts hlc.Timestamp) (span.ForwardResult, error)
 }
 
 // Restore restores the saved progress from a checkpoint to the given SpanForwarder.
