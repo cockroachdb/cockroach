@@ -3503,7 +3503,7 @@ func (ex *connExecutor) makeExecPlan(
 	//   - StatsRolloutStable:  experiment on, use stable (second-newest) stats
 	if !planner.SessionData().Internal {
 		planner.EvalContext().StatsRollout =
-			canaryRollDice(planner.EvalContext(), ex.rng.internal)
+			canaryRollDice(ctx, planner.EvalContext(), ex.rng.internal)
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
