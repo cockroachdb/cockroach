@@ -297,14 +297,17 @@ func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn dea
 		return ld.maybeAdvanceReadTimestamp(ctx, txn)
 	}
 	readTimestamp := txn.ReadTimestamp()
-	ld.leaseTimestampSet = true
+	setTimestamp := func(ts lease.ReadTimestamp) {
+		ld.leaseTimestamp = ts
+		ld.leaseTimestampSet = true
+	}
 	// Fixed timestamp queries will use descriptors at the user-selected timestamp.
 	if txn.ReadTimestampFixed() {
-		ld.leaseTimestamp = lease.TimestampToReadTimestamp(readTimestamp)
+		setTimestamp(lease.TimestampToReadTimestamp(readTimestamp))
 		return nil
 	}
 	// Otherwise, get a safe read timestamp from the lease manager.
-	ld.leaseTimestamp = ld.lm.GetReadTimestamp(ctx, readTimestamp)
+	setTimestamp(ld.lm.GetReadTimestamp(ctx, readTimestamp))
 	return nil
 }
 
