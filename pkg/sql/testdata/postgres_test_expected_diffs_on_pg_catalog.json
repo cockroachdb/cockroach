@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 101,
-    "DatatypeMismatches": 20
+    "MissingColumns": 20,
+    "DatatypeMismatches": 21
   },
   "diffs": {
     "pg_aios": {},
@@ -105,17 +105,7 @@
         "expectedDataType": "_oid"
       }
     },
-    "pg_hba_file_rules": {
-      "file_name": null,
-      "rule_number": null
-    },
     "pg_ident_file_mappings": {},
-    "pg_inherits": {
-      "inhdetachpending": null
-    },
-    "pg_locks": {
-      "waitstart": null
-    },
     "pg_operator": {
       "oprcode": {
         "oid": 26,
@@ -142,18 +132,7 @@
       "generic_plans": null,
       "result_types": null
     },
-    "pg_publication": {
-      "pubgencols": null
-    },
     "pg_publication_namespace": {},
-    "pg_publication_rel": {
-      "prattrs": null,
-      "prqual": null
-    },
-    "pg_publication_tables": {
-      "attnames": null,
-      "rowfilter": null
-    },
     "pg_range": {
       "rngcanonical": {
         "oid": 26,
@@ -161,22 +140,12 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       },
-      "rngmultitypid": null,
       "rngsubdiff": {
         "oid": 26,
         "dataType": "oid",
         "expectedOid": 24,
         "expectedDataType": "regproc"
       }
-    },
-    "pg_replication_slots": {
-      "conflicting": null,
-      "failover": null,
-      "inactive_since": null,
-      "invalidation_reason": null,
-      "synced": null,
-      "two_phase": null,
-      "two_phase_at": null
     },
     "pg_seclabel": {
       "objsubid": {
@@ -207,93 +176,15 @@
         "dataType": "int8",
         "expectedOid": 23,
         "expectedDataType": "int4"
-      },
-      "query_id": null
-    },
-    "pg_stat_all_indexes": {
-      "last_idx_scan": null
-    },
-    "pg_stat_all_tables": {
-      "last_idx_scan": null,
-      "last_seq_scan": null,
-      "n_tup_newpage_upd": null,
-      "total_analyze_time": null,
-      "total_autoanalyze_time": null,
-      "total_autovacuum_time": null,
-      "total_vacuum_time": null
+      }
     },
     "pg_stat_checkpointer": {},
-    "pg_stat_database": {
-      "active_time": null,
-      "idle_in_transaction_time": null,
-      "parallel_workers_launched": null,
-      "parallel_workers_to_launch": null,
-      "session_time": null,
-      "sessions": null,
-      "sessions_abandoned": null,
-      "sessions_fatal": null,
-      "sessions_killed": null
-    },
-    "pg_stat_database_conflicts": {
-      "confl_active_logicalslot": null
-    },
-    "pg_stat_gssapi": {
-      "credentials_delegated": null
-    },
     "pg_stat_io": {},
-    "pg_stat_progress_analyze": {
-      "delay_time": null
-    },
     "pg_stat_progress_copy": {},
-    "pg_stat_progress_vacuum": {
-      "dead_tuple_bytes": null,
-      "delay_time": null,
-      "indexes_processed": null,
-      "indexes_total": null,
-      "max_dead_tuple_bytes": null,
-      "num_dead_item_ids": null
-    },
     "pg_stat_recovery_prefetch": {},
     "pg_stat_replication_slots": {},
-    "pg_stat_subscription": {
-      "leader_pid": null,
-      "worker_type": null
-    },
     "pg_stat_subscription_stats": {},
-    "pg_stat_sys_indexes": {
-      "last_idx_scan": null
-    },
-    "pg_stat_sys_tables": {
-      "last_idx_scan": null,
-      "last_seq_scan": null,
-      "n_tup_newpage_upd": null,
-      "total_analyze_time": null,
-      "total_autoanalyze_time": null,
-      "total_autovacuum_time": null,
-      "total_vacuum_time": null
-    },
-    "pg_stat_user_indexes": {
-      "last_idx_scan": null
-    },
-    "pg_stat_user_tables": {
-      "last_idx_scan": null,
-      "last_seq_scan": null,
-      "n_tup_newpage_upd": null,
-      "total_analyze_time": null,
-      "total_autoanalyze_time": null,
-      "total_autovacuum_time": null,
-      "total_vacuum_time": null
-    },
     "pg_stat_wal": {},
-    "pg_stat_xact_all_tables": {
-      "n_tup_newpage_upd": null
-    },
-    "pg_stat_xact_sys_tables": {
-      "n_tup_newpage_upd": null
-    },
-    "pg_stat_xact_user_tables": {
-      "n_tup_newpage_upd": null
-    },
     "pg_statistic_ext": {
       "stxexprs": null,
       "stxstattarget": {
@@ -304,30 +195,14 @@
       }
     },
     "pg_statistic_ext_data": {
-      "stxdexpr": null,
-      "stxdinherit": null
-    },
-    "pg_stats": {
-      "range_bounds_histogram": null,
-      "range_empty_frac": null,
-      "range_length_histogram": null
-    },
-    "pg_stats_ext": {
-      "exprs": null,
-      "inherited": null
+      "stxdexpr": {
+        "oid": 1009,
+        "dataType": "_text",
+        "expectedOid": 10028,
+        "expectedDataType": "_pg_statistic"
+      }
     },
     "pg_stats_ext_exprs": {},
-    "pg_subscription": {
-      "subbinary": null,
-      "subdisableonerr": null,
-      "subfailover": null,
-      "suborigin": null,
-      "subpasswordrequired": null,
-      "subrunasowner": null,
-      "subskiplsn": null,
-      "substream": null,
-      "subtwophasestate": null
-    },
     "pg_type": {
       "typsubscript": null
     },
