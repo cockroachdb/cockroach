@@ -514,11 +514,13 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		// Disable elastic CPU control for import so it is not throttled.
+		// This setting may not exist on predecessor versions (e.g. 25.3),
+		// where the default is already false.
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false",
 		); err != nil {
-			db.Close()
-			t.Fatal(err)
+			t.L().Printf("ignoring error setting bulkio.import.elastic_control.enabled "+
+				"(may not exist on predecessor): %v", err)
 		}
 		db.Close()
 
