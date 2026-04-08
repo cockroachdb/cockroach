@@ -117,6 +117,10 @@ type subscribeConfig struct {
 	// contain a diff.
 	withDiff bool
 
+	// withMvccOrdering controls whether the producer-side rangefeeds
+	// should emit events in MVCC timestamp order.
+	withMvccOrdering bool
+
 	// batchByteSize requests the producer emit batches up to the specified size.
 	batchByteSize int64
 }
@@ -140,6 +144,14 @@ func WithFiltering(filteringEnabled bool) SubscribeOption {
 func WithDiff(enableDiff bool) SubscribeOption {
 	return func(cfg *subscribeConfig) {
 		cfg.withDiff = enableDiff
+	}
+}
+
+// WithMvccOrdering controls whether the producer-side rangefeeds should emit
+// events in MVCC timestamp order.
+func WithMvccOrdering(ordered bool) SubscribeOption {
+	return func(cfg *subscribeConfig) {
+		cfg.withMvccOrdering = ordered
 	}
 }
 

@@ -492,10 +492,10 @@ func (p *TxnLdrCoordinator) createTxnFeed(
 		}
 	}
 
-	var orderedFeeds []streamclient.Subscription
+	var orderedSubs []streamclient.Subscription
 	for i, partition := range plan.Topology.Partitions {
 		// Create a frontier scoped to this partition's spans so that each
-		// OrderedFeed has its own mutable frontier (no concurrent mutation).
+		// subscription resumes from the correct per-partition progress.
 		partitionFrontier, err := span.MakeFrontierAt(asOf, partition.Spans...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "creating frontier for partition %d", i)
@@ -515,18 +515,15 @@ func (p *TxnLdrCoordinator) createTxnFeed(
 			asOf,
 			partitionFrontier,
 			streamclient.WithDiff(true),
+			streamclient.WithMvccOrdering(true),
 		)
 		if err != nil {
 			return nil, errors.Wrapf(err, "subscribing to partition %d", i)
 		}
-		ordered, err := txnfeed.NewOrderedFeed(sub, partitionFrontier)
-		if err != nil {
-			return nil, errors.Wrapf(err, "creating ordered feed for partition %d", i)
-		}
-		orderedFeeds = append(orderedFeeds, ordered)
+		orderedSubs = append(orderedSubs, sub)
 	}
 
 	sv := &p.execCtx.ExecCfg().Settings.SV
 	targetBatchKVs := int(txnBatchSize.Get(sv))
-	return txnfeed.NewMergeFeed(orderedFeeds, coveringSpan, targetBatchKVs), nil
+	return txnfeed.NewMergeFeed(orderedSubs, coveringSpan, targetBatchKVs), nil
 }
