@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "goodhistogram",
+    srcs = [
+        "export.go",
+        "histogram.go",
+        "quantile.go",
+        "windowed_histogram.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metric/goodhistogram",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "@com_github_prometheus_client_model//go",
+    ],
+)
+
+go_test(
+    name = "goodhistogram_test",
+    srcs = [
+        "histogram_test.go",
+        "mapping_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":goodhistogram"],
+    deps = [
+        "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)
