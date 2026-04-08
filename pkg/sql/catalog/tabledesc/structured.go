@@ -2643,6 +2643,11 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 			appendStorageParam(catpb.AutoPartialStatsEnabledTableSettingName,
 				fmt.Sprintf("%v", value))
 		}
+		if settings.PartialFixupEnabled != nil {
+			value := *settings.PartialFixupEnabled
+			appendStorageParam(catpb.AutoPartialFixupStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
 		if settings.FullEnabled != nil {
 			value := *settings.FullEnabled
 			appendStorageParam(catpb.AutoFullStatsEnabledTableSettingName,

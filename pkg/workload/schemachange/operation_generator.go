@@ -6160,6 +6160,10 @@ func (og *operationGenerator) randStorageParam() (
 			valueGen: func() string { return og.randBoolString() },
 		},
 		{
+			name:     catpb.AutoPartialFixupStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
 			name:     catpb.AutoPartialStatsMinStaleTableSettingName,
 			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
 		},

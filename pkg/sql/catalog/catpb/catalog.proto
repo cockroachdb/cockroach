@@ -218,4 +218,6 @@ message AutoStatsSettings {
   optional double partial_fraction_stale_rows = 6;
   // FullEnabled is table setting sql_stats_automatic_full_collection_enabled.
   optional bool full_enabled = 7;
+  // PartialFixupEnabled is table setting sql_stats_automatic_partial_collection_fix_scan_row_count_enabled.
+  optional bool partial_fixup_enabled = 8;
 }
