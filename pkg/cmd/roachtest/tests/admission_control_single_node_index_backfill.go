@@ -466,9 +466,8 @@ func runSingleNodeIndexBackfill(
 
 func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Check for existing snapshots.
-	snapshotPrefix := versionedSnapshotPrefix(t)
 	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
-		NamePrefix: snapshotPrefix,
+		NamePrefix: t.SnapshotPrefix(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -478,7 +477,7 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 		// No existing snapshots - need to initialize TPC-E and create snapshots.
 		// Use a published CRDB release so the snapshot has a well-defined internal
 		// version that can be upgraded to any newer version.
-		t.L().Printf("=== NO EXISTING SNAPSHOTS FOUND for prefix %q ===", snapshotPrefix)
+		t.L().Printf("=== NO EXISTING SNAPSHOTS FOUND for prefix %q ===", t.SnapshotPrefix())
 		t.L().Printf("=== WILL CREATE NEW SNAPSHOTS after TPC-E init ===")
 
 		// Get the latest predecessor release version.
@@ -547,8 +546,8 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 		c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
 		// Create snapshots.
-		t.Status(fmt.Sprintf("creating snapshots with prefix %q", snapshotPrefix))
-		snapshots, err = c.CreateSnapshot(ctx, snapshotPrefix)
+		t.Status(fmt.Sprintf("creating snapshots with prefix %q", t.SnapshotPrefix()))
+		snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
 		if err != nil {
 			if strings.Contains(err.Error(), "already exists") {
 				// Another concurrent run may have already created snapshots
@@ -558,11 +557,11 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 				t.Fatal(err)
 			}
 		} else {
-			t.L().Printf("=== CREATED %d NEW SNAPSHOT(S) with prefix %q ===", len(snapshots), snapshotPrefix)
+			t.L().Printf("=== CREATED %d NEW SNAPSHOT(S) with prefix %q ===", len(snapshots), t.SnapshotPrefix())
 		}
 	} else {
 		t.L().Printf("found %d existing snapshot(s) with prefix %q",
-			len(snapshots), snapshotPrefix)
+			len(snapshots), t.SnapshotPrefix())
 		roachtestutil.CopySnapshotDataToNodes(ctx, t, c, snapshots)
 	}
 }
