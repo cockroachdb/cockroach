@@ -25,9 +25,9 @@ ALTER INDEX _@_ RENAME TO _ -- identifiers removed
 parse
 ALTER INDEX a@primary RENAME TO like
 ----
-ALTER INDEX a@primary RENAME TO like
-ALTER INDEX a@primary RENAME TO like -- fully parenthesized
-ALTER INDEX a@primary RENAME TO like -- literals removed
+ALTER INDEX a@"primary" RENAME TO like -- normalized!
+ALTER INDEX a@"primary" RENAME TO like -- fully parenthesized
+ALTER INDEX a@"primary" RENAME TO like -- literals removed
 ALTER INDEX _@_ RENAME TO _ -- identifiers removed
 
 parse
@@ -49,9 +49,9 @@ ALTER INDEX IF EXISTS _@_ RENAME TO _ -- identifiers removed
 parse
 ALTER INDEX IF EXISTS a@primary RENAME TO like
 ----
-ALTER INDEX IF EXISTS a@primary RENAME TO like
-ALTER INDEX IF EXISTS a@primary RENAME TO like -- fully parenthesized
-ALTER INDEX IF EXISTS a@primary RENAME TO like -- literals removed
+ALTER INDEX IF EXISTS a@"primary" RENAME TO like -- normalized!
+ALTER INDEX IF EXISTS a@"primary" RENAME TO like -- fully parenthesized
+ALTER INDEX IF EXISTS a@"primary" RENAME TO like -- literals removed
 ALTER INDEX IF EXISTS _@_ RENAME TO _ -- identifiers removed
 
 parse
