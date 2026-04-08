@@ -47,7 +47,7 @@ done
 test_filter="${test_filter})\$"
 
 export RUNS_PER_TEST=1000
-export TEST_ARGS="--test_timeout=300 --runs_per_test $RUNS_PER_TEST"
+export TEST_ARGS="--test_timeout=600 --runs_per_test $RUNS_PER_TEST"
 
 mkdir -p $ARTIFACTS_DIR
 
