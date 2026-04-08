@@ -64,14 +64,9 @@ SET kv_transaction_buffered_writes_enabled = true;
 statement async writeReq count 1
 UPDATE t SET a = 2 WHERE a = 1
 
-# Since we executed the stmt above asynchronously, we're likely to get a new
-# connection here, so we must set the session variable on it too.
-statement ok
-SET kv_transaction_buffered_writes_enabled = true;
-
 onlyif config local-read-committed
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/1/0  Shared         Unreplicated  READ_COMMITTED   true     true
@@ -80,7 +75,7 @@ test           public       t           /Table/106/1/1/0  Shared         Unrepli
 
 onlyif config local-repeatable-read
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/1/0  Shared         Unreplicated  REPEATABLE_READ  true     true
@@ -124,18 +119,24 @@ SELECT * FROM t WHERE a = 2 FOR SHARE
 ----
 2
 
-user testuser2
+# Use newsession to discard the extra pooled connection that the async
+# statement mechanism created earlier, ensuring BEGIN and the subsequent
+# FOR SHARE go to the same connection with write buffering enabled.
+user testuser2 newsession
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
 
 onlyif config local-read-committed
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  READ_COMMITTED   true     false
 
 onlyif config local-repeatable-read
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  REPEATABLE_READ  true     false
@@ -152,7 +153,7 @@ user root
 
 onlyif config local-read-committed
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  READ_COMMITTED   true     false
@@ -160,7 +161,7 @@ test           public       t           /Table/106/1/2/0  Shared         Unrepli
 
 onlyif config local-repeatable-read
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  REPEATABLE_READ  true     false
@@ -209,8 +210,10 @@ user root
 # 1: Shared
 # 2: None
 
-query I
-BEGIN;
+statement ok
+BEGIN
+
+query I retry
 SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 2
