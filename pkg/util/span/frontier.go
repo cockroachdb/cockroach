@@ -37,8 +37,8 @@ type Frontier interface {
 
 	// Forward advances the timestamp for a span. Any part of the span that
 	// doesn't overlap the tracked span set will be ignored. forwarded is true
-	// overall frontier advanced. spanForwarded is true if any individual span's
-	// timestamp was advanced
+	// if the overall frontier advanced. spanForwarded is true if any individual
+	// span's timestamp was advanced.
 	Forward(span roachpb.Span, ts hlc.Timestamp) (forwarded bool, spanForwarded bool, err error)
 
 	// Release removes all items from the frontier. In doing so, it allows memory

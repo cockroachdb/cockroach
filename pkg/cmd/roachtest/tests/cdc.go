@@ -783,6 +783,9 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 	if v, ok := tester.metamorphic.Get(cdcutil.PerTableTrackingEnabled); ok {
 		settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = v
 	}
+	if v, ok := tester.metamorphic.Get(cdcutil.PeriodicAggregatorFlushing); ok {
+		settings.ClusterSettings["changefeed.aggregator.periodic_flushing.enabled"] = v
+	}
 
 	settings.Env = append(settings.Env, envVars...)
 
