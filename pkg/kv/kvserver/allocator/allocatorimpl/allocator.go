@@ -82,7 +82,9 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_lease_rebalancing.enabled",
-	"set to enable rebalancing of range leases based on load and latency",
+	"set to enable rebalancing of range leases based on load and latency;"+
+		" has no effect when kv.allocator.load_based_rebalancing is set"+
+		" to 'multi-metric only' or 'multi-metric and count'",
 	true,
 	settings.WithPublic)
 
@@ -2955,6 +2957,13 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	rebalanceAdjustments map[roachpb.StoreID]float64,
 	candidateLeasesMean float64,
 ) (accessLocalityTransferDecision, roachpb.ReplicaDescriptor) {
+	// When the multi-metric allocator (MMA) is active, follow-the-workload
+	// lease transfers are disabled. The MMA handles load-based rebalancing
+	// directly, so locality-driven lease transfers would conflict with its
+	// decisions.
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(&a.st.SV) {
+		return decideWithoutStats, roachpb.ReplicaDescriptor{}
+	}
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
 	if usageInfo.RequestLocality == nil ||
