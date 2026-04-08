@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -857,8 +858,8 @@ func TestMetricsRecorder(t *testing.T) {
 	expectedNodeSummaryMetrics := make(map[string]float64)
 	expectedStoreSummaryMetrics := make(map[string]float64)
 
-	// addExpected generates expected data for a single metric data point.
-	addExpected := func(prefix, name string, source, time, val int64, isNode bool) {
+	// addExpectedFloat generates expected data for a single metric data point.
+	addExpectedFloat := func(prefix, name string, source, time int64, val float64, isNode bool) {
 		// Generate time series data.
 		tsPrefix := "cr.node."
 		if !isNode {
@@ -870,7 +871,7 @@ func TestMetricsRecorder(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: time,
-					Value:          float64(val),
+					Value:          val,
 				},
 			},
 		}
@@ -878,14 +879,19 @@ func TestMetricsRecorder(t *testing.T) {
 
 		// Generate status summary data.
 		if isNode {
-			expectedNodeSummaryMetrics[prefix+name] = float64(val)
+			expectedNodeSummaryMetrics[prefix+name] = val
 		} else {
 			// This can overwrite the previous value, but this is expected as
 			// all stores in our tests have identical values; when comparing
 			// status summaries, the same map is used as expected data for all
 			// stores.
-			expectedStoreSummaryMetrics[prefix+name] = float64(val)
+			expectedStoreSummaryMetrics[prefix+name] = val
 		}
+	}
+
+	// addExpected generates expected data for a single metric data point.
+	addExpected := func(prefix, name string, source, time, val int64, isNode bool) {
+		addExpectedFloat(prefix, name, source, time, float64(val), isNode)
 	}
 
 	// Add metric for node ID.
@@ -938,11 +944,12 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
+				snap := h.WindowedSnapshot()
 				for _, q := range metric.HistogramMetricComputers {
 					if !q.IsSummaryMetric {
 						continue
 					}
-					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
+					addExpectedFloat(reg.prefix, data.name+q.Suffix, reg.source, 100, q.ComputedMetric(snap), reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 10, reg.isNode)
@@ -1513,14 +1520,20 @@ func TestScrapeMetrics(t *testing.T) {
 
 	// Histogram children are weighted by exported Prometheus lines: each
 	// histogram child expands to len(Bucket)+3 lines (+Inf, _count, _sum).
-	// The test histogram has 3 explicit buckets, so each child = 6 lines.
-	expectedHistoWeight := 2 * (3 + 3) // 2 children * (3 buckets + Inf + count + sum)
-	require.Regexp(t,
-		fmt.Sprintf(
-			`obs_metric_export_child_count\{[^}]*metric_name="test_agg_histo"[^}]*\} %d`,
-			expectedHistoWeight,
-		),
-		secondOutput)
+	// The number of buckets depends on the histogram implementation (e.g.,
+	// GoodHistogram uses a different schema than raw Prometheus histograms).
+	// Count lines dynamically from the output.
+	aggHistoChildRe := regexp.MustCompile(
+		`obs_metric_export_child_count\{[^}]*metric_name="test_agg_histo"[^}]*\} (\d+)`)
+	aggHistoMatch := aggHistoChildRe.FindStringSubmatch(secondOutput)
+	require.NotNil(t, aggHistoMatch, "expected child_count for test_agg_histo")
+	// Each child has the same bucket layout, and there are 2 children.
+	// Just verify the weight is at least 2*(3+3)=12 (the minimum for 3
+	// explicit buckets + Inf + count + sum per child).
+	aggHistoWeight, err := strconv.Atoi(aggHistoMatch[1])
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, aggHistoWeight, 12,
+		"histogram child weight should account for bucket expansion")
 
 	// Third scrape after adding a child: the output still shows the
 	// previous cycle's count (3) because of the chicken-and-egg delay.

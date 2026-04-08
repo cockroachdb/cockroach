@@ -180,7 +180,7 @@ func (g *Histogram) CumulativeSnapshot() metric.HistogramSnapshot {
 	if ch, ok := g.h.(metric.CumulativeHistogram); ok {
 		return ch.CumulativeSnapshot()
 	}
-	return metric.HistogramSnapshot{}
+	return metric.EmptyHistogramSnapshot()
 }
 
 // WindowedSnapshot returns the windowed snapshot for this child histogram.
@@ -189,7 +189,7 @@ func (g *Histogram) WindowedSnapshot() metric.HistogramSnapshot {
 	if wh, ok := g.h.(metric.WindowedHistogram); ok {
 		return wh.WindowedSnapshot()
 	}
-	return metric.HistogramSnapshot{}
+	return metric.EmptyHistogramSnapshot()
 }
 
 // SQLHistogram maintains a histogram as the sum of its children. The histogram will

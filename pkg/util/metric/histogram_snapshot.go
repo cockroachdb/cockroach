@@ -12,27 +12,39 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-// HistogramSnapshot represents a point-in-time snapshot of a Histogram metric, against
-// which calculations like Mean, Total, and Quantiles can be calculated.
+// HistogramSnapshot represents a point-in-time snapshot of a Histogram
+// metric, against which calculations like Mean, Total, and Quantiles can be
+// performed.
 //
-// This allows a consistent dataset to be used across calculations to avoid inaccuracies
-// from one calculation to another, and isolates the supported operations to a single
-// implementation.
-type HistogramSnapshot struct {
+// This interface allows a consistent dataset to be used across calculations
+// to avoid inaccuracies from one calculation to another, and decouples the
+// snapshot contract from any particular histogram implementation.
+type HistogramSnapshot interface {
+	// ValueAtQuantile takes a quantile value [0,100] and returns the
+	// interpolated value at that quantile.
+	ValueAtQuantile(q float64) float64
+	// Mean returns the arithmetic mean of all recorded values.
+	Mean() float64
+	// Total returns the sample count and sample sum.
+	Total() (int64, float64)
+}
+
+// prometheusHistogramSnapshot is a HistogramSnapshot backed by a
+// prometheusgo.Histogram. It uses linear interpolation within buckets
+// for quantile estimation.
+type prometheusHistogramSnapshot struct {
 	h *prometheusgo.Histogram
 }
 
-// MakeHistogramSnapshot returns a new HistogramSnapshot instance, backed by the provided
-// Histogram.
+// MakeHistogramSnapshot returns a new HistogramSnapshot backed by the
+// provided prometheusgo.Histogram.
 func MakeHistogramSnapshot(h *prometheusgo.Histogram) HistogramSnapshot {
-	return HistogramSnapshot{
-		h: h,
-	}
+	return prometheusHistogramSnapshot{h: h}
 }
 
-// ValueAtQuantile takes a quantile value [0,100] and returns the interpolated value
-// at that quantile for this HistogramSnapshot.
-func (hs HistogramSnapshot) ValueAtQuantile(q float64) float64 {
+// ValueAtQuantile takes a quantile value [0,100] and returns the interpolated
+// value at that quantile for this snapshot.
+func (hs prometheusHistogramSnapshot) ValueAtQuantile(q float64) float64 {
 	histogram := hs.h
 	buckets := histogram.Bucket
 	n := float64(histogram.GetSampleCount())
@@ -101,12 +113,24 @@ func (hs HistogramSnapshot) ValueAtQuantile(q float64) float64 {
 	return val
 }
 
-// Mean returns the average for this HistogramSnapshot.
-func (hs HistogramSnapshot) Mean() float64 {
+// Mean returns the average for this snapshot.
+func (hs prometheusHistogramSnapshot) Mean() float64 {
 	return hs.h.GetSampleSum() / float64(hs.h.GetSampleCount())
 }
 
-// Total returns the sample count and sample sum for this HistogramSnapshot.
-func (hs HistogramSnapshot) Total() (int64, float64) {
+// Total returns the sample count and sample sum for this snapshot.
+func (hs prometheusHistogramSnapshot) Total() (int64, float64) {
 	return int64(hs.h.GetSampleCount()), hs.h.GetSampleSum()
+}
+
+// emptyHistogramSnapshot is a HistogramSnapshot with no observations.
+type emptyHistogramSnapshot struct{}
+
+func (emptyHistogramSnapshot) ValueAtQuantile(float64) float64 { return 0 }
+func (emptyHistogramSnapshot) Mean() float64                   { return 0 }
+func (emptyHistogramSnapshot) Total() (int64, float64)         { return 0, 0 }
+
+// EmptyHistogramSnapshot returns a HistogramSnapshot with no observations.
+func EmptyHistogramSnapshot() HistogramSnapshot {
+	return emptyHistogramSnapshot{}
 }

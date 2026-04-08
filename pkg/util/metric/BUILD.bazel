@@ -6,6 +6,7 @@ go_library(
     name = "metric",
     srcs = [
         "doc.go",
+        "good_histogram_wrapper.go",
         "graphite_exporter.go",
         "hdrhistogram.go",
         "histogram_buckets.go",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metamorphic",
+        "//pkg/util/metric/goodhistogram",
         "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

@@ -215,8 +215,8 @@ func TestPrometheusExporterNativeHistogram(t *testing.T) {
 	})
 	require.NoError(t, err)
 	output := buf.String()
-	// Assert that output contains the native histogram schema.
-	require.Regexp(t, "schema: 3", output)
+	// Assert that output contains a native histogram schema field.
+	require.Regexp(t, `schema: \d+`, output)
 
 	buf.Reset()
 	r.RemoveMetric(histogram)

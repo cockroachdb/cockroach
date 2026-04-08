@@ -5,7 +5,11 @@
 
 package metric
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"math"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // staticBucketConfig describes the buckets we want to generate for a specific
 // category of metrics.
@@ -169,4 +173,57 @@ func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 			config.count)
 	}
 	return buckets
+}
+
+// toGoodHistogramConfig converts a staticBucketConfig to the (lo, hi,
+// desiredError) parameters needed by goodhistogram.NewConfig. For Uniform
+// distributions (e.g. Percent100Buckets with min=0), lo is set to 1 since
+// goodhistogram requires lo > 0. The desired error is chosen so that the
+// resulting histogram has at least as many buckets as config.count.
+func (config staticBucketConfig) toGoodHistogramConfig() (lo, hi, desiredError float64) {
+	lo = config.min
+	hi = config.max
+	if lo <= 0 {
+		lo = 1.0
+	}
+	desiredError = desiredErrorForBucketCount(lo, hi, config.count)
+	return lo, hi, desiredError
+}
+
+// bucketsToGoodHistogramConfig infers goodhistogram parameters from an
+// explicit bucket boundary slice. The lo and hi are derived from the first
+// positive boundary and the last boundary. The desired error is chosen to
+// approximate the same number of buckets.
+func bucketsToGoodHistogramConfig(buckets []float64) (lo, hi, desiredError float64) {
+	lo = buckets[0]
+	for _, b := range buckets {
+		if b > 0 {
+			lo = b
+			break
+		}
+	}
+	hi = buckets[len(buckets)-1]
+	if hi <= lo {
+		hi = lo * 2
+	}
+	desiredError = desiredErrorForBucketCount(lo, hi, len(buckets))
+	return lo, hi, desiredError
+}
+
+// desiredErrorForBucketCount picks the coarsest Prometheus schema whose
+// bucket count for the range [lo, hi] is at least targetCount. This ensures
+// the goodhistogram has at least as many buckets as the original config.
+func desiredErrorForBucketCount(lo, hi float64, targetCount int) float64 {
+	// Walk schemas from coarsest (0) to finest (8), return the first one
+	// that produces enough buckets.
+	for s := int32(0); s <= 8; s++ {
+		gamma := math.Pow(2, math.Pow(2, float64(-s)))
+		numBuckets := int(math.Ceil(math.Log(hi/lo) / math.Log(gamma)))
+		if numBuckets >= targetCount {
+			return (gamma - 1) / (gamma + 1)
+		}
+	}
+	// Finest schema.
+	gamma := math.Pow(2, math.Pow(2, float64(-8)))
+	return (gamma - 1) / (gamma + 1)
 }

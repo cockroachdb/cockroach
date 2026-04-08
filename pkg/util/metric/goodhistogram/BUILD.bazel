@@ -27,6 +27,7 @@ go_test(
     embed = [":goodhistogram"],
     deps = [
         "//pkg/util/metric/base2histogram",
+        "//pkg/util/syncutil",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_datadog_sketches_go//ddsketch",
         "@com_github_prometheus_client_golang//prometheus",

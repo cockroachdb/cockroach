@@ -5,8 +5,12 @@ echo
   "sample_sum": 21,
   "bucket": [
     {
-      "cumulative_count": 1,
+      "cumulative_count": 0,
       "upper_bound": 1
+    },
+    {
+      "cumulative_count": 1,
+      "upper_bound": 1.4142135623730951
     },
     {
       "cumulative_count": 1,
@@ -14,7 +18,7 @@ echo
     },
     {
       "cumulative_count": 1,
-      "upper_bound": 3
+      "upper_bound": 2.8284271247461903
     },
     {
       "cumulative_count": 1,
@@ -22,23 +26,49 @@ echo
     },
     {
       "cumulative_count": 3,
-      "upper_bound": 5
+      "upper_bound": 5.656854249492381
     },
     {
       "cumulative_count": 3,
-      "upper_bound": 6
+      "upper_bound": 8
     },
     {
       "cumulative_count": 4,
-      "upper_bound": 10
+      "upper_bound": 11.313708498984761
     },
     {
       "cumulative_count": 4,
-      "upper_bound": 20
+      "upper_bound": 16
+    },
+    {
+      "cumulative_count": 4,
+      "upper_bound": 22.627416997969522
     },
     {
       "cumulative_count": 4,
       "upper_bound": 30
     }
+  ],
+  "schema": 1,
+  "zero_threshold": 5e-324,
+  "zero_count": 0,
+  "positive_span": [
+    {
+      "offset": 1,
+      "length": 1
+    },
+    {
+      "offset": 3,
+      "length": 1
+    },
+    {
+      "offset": 1,
+      "length": 1
+    }
+  ],
+  "positive_delta": [
+    1,
+    1,
+    -1
   ]
 }

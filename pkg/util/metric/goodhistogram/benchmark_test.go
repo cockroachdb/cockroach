@@ -13,12 +13,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/DataDog/sketches-go/ddsketch"
 	"github.com/RaduBerinde/tdigest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/base2histogram"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/codahale/hdrhistogram"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -349,7 +349,7 @@ func BenchmarkBase2HistogramRecordParallel(b *testing.B) {
 }
 
 func BenchmarkHDRHistogramRecord(b *testing.B) {
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	h := hdrhistogram.New(1, hdrMax, hdrSigFig)
 	vals := makeInt64Values(rand.New(rand.NewSource(42)), 10000)
 	b.ResetTimer()
@@ -361,7 +361,7 @@ func BenchmarkHDRHistogramRecord(b *testing.B) {
 }
 
 func BenchmarkHDRHistogramRecordParallel(b *testing.B) {
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	h := hdrhistogram.New(1, hdrMax, hdrSigFig)
 	vals := makeInt64Values(rand.New(rand.NewSource(42)), 10000)
 	b.ResetTimer()
@@ -1073,7 +1073,7 @@ func collectSpeedData() speedData {
 		}
 	})
 	sd.single["HDR Histogram"] = bench(func(b *testing.B) {
-		var mu sync.Mutex
+		var mu syncutil.Mutex
 		h := hdrhistogram.New(1, hdrMax, hdrSigFig)
 		for i := 0; i < b.N; i++ {
 			mu.Lock()
@@ -1142,7 +1142,7 @@ func collectSpeedData() speedData {
 		})
 	})
 	sd.parallel["HDR Histogram"] = bench(func(b *testing.B) {
-		var mu sync.Mutex
+		var mu syncutil.Mutex
 		h := hdrhistogram.New(1, hdrMax, hdrSigFig)
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0

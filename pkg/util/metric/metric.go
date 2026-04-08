@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/goodhistogram"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -421,10 +422,25 @@ func NewHistogram(opt HistogramOptions) IHistogram {
 		} else {
 			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
 		}
-	} else {
-		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets,
-			opt.BucketConfig)
 	}
+	return newGoodHistogramFromOpts(opt)
+}
+
+// newGoodHistogramFromOpts converts HistogramOptions to a goodhistogram
+// Config and creates a GoodHistogramWrapper.
+func newGoodHistogramFromOpts(opt HistogramOptions) *GoodHistogramWrapper {
+	var lo, hi, desiredError float64
+	switch {
+	case opt.BucketConfig.count != 0:
+		lo, hi, desiredError = opt.BucketConfig.toGoodHistogramConfig()
+	case len(opt.Buckets) > 0:
+		lo, hi, desiredError = bucketsToGoodHistogramConfig(opt.Buckets)
+	default:
+		// Fall back to IOLatencyBuckets range.
+		lo, hi, desiredError = IOLatencyBuckets.toGoodHistogramConfig()
+	}
+	config := goodhistogram.NewConfig(lo, hi, desiredError)
+	return newGoodHistogram(opt.Metadata, opt.Duration, config)
 }
 
 // NewHistogram is a prometheus-backed histogram. Depending on the value of

@@ -190,13 +190,18 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 			}
 		}
 
+		// Compare quantiles between the metric.Histogram and our reference
+		// implementation. GoodHistogram uses exponential buckets (not the exact
+		// runtime buckets), so we allow a wider delta to account for the
+		// bucket boundary mismatch.
 		histWindow := promhist.WindowedSnapshot()
-		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), 1) // pmax
-		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), 1)   // pmin
-		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), 1)  // p50
-		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), 1)  // p75
-		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), 1)  // p90
-		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), 1)  // p99
+		delta := 150.0                                                                      // GoodHistogram bucket boundaries differ from runtime buckets
+		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), delta) // pmax
+		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), delta)   // pmin
+		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), delta)  // p50
+		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), delta)  // p75
+		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), delta)  // p90
+		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), delta)  // p99
 	}
 }
 

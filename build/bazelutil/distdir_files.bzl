@@ -1100,7 +1100,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/cmd/protoc-gen-go-grpc/org_golang_google_grpc_cmd_protoc_gen_go_grpc-v1.1.0.zip": "13877d86cbfa30bde4d62fef2bc58dd56377dcb502c16cf78197f6934193009a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/examples/org_golang_google_grpc_examples-v0.0.0-20210324172016-702608ffae4d.zip": "f5cad7b05a93557c91864a02890a35c6bc5c394897222978cff2b880a78f7a11",
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/org_golang_google_grpc-v1.57.2.zip": "4cabfaa890b25757939e2221b93fe22b3097a0b83ffb331e922143a68f3da252",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.35.1.zip": "5a27ed9bbe348c7435d91f699af976d0f7dc40c324542e4f41076a425d9e793e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/airbrake/gobrake.v2/in_gopkg_airbrake_gobrake_v2-v2.0.9.zip": "2db903664908e5a9afafefba94821b9579bbf271e2929c1f0b7b1fdd23f7bbcf",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/alecthomas/kingpin.v2/in_gopkg_alecthomas_kingpin_v2-v2.2.6.zip": "638080591aefe7d2642f2575b627d534c692606f02ea54ba89f42db112ba8839",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/check.v1/in_gopkg_check_v1-v1.0.0-20201130134442-10cb98267c6c.zip": "f555684e5c5dacc2850dddb345fef1b8f93f546b72685589789da6d2b062710e",
