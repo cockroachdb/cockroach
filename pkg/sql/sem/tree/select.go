@@ -519,7 +519,10 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
 	if ih.IndexOnlyHint() {
 		if ih.Index != "" {
-			ctx.FormatNode(&ih.Index)
+			// Format as a restricted identifier so that reserved keywords are
+			// quoted. The parser has LALR conflicts that prevent reserved keywords
+			// from being accepted as unquoted index names after '@'.
+			ctx.FormatNode((*Name)(&ih.Index))
 		} else {
 			ctx.Printf("[%d]", ih.IndexID)
 		}
@@ -919,7 +922,10 @@ func (node *Order) Format(ctx *FmtCtx) {
 			ctx.WriteString("INDEX ")
 			ctx.FormatNode(&node.Table)
 			ctx.WriteByte('@')
-			ctx.FormatNode(&node.Index)
+			// Format as a restricted identifier so that reserved keywords are
+			// quoted. The parser has LALR conflicts that prevent reserved keywords
+			// from being accepted as unquoted index names after '@'.
+			ctx.FormatNode((*Name)(&node.Index))
 		}
 	}
 	if node.Direction != DefaultDirection {

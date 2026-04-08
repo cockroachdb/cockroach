@@ -108,7 +108,7 @@ FROM system.eventlog
 WHERE "eventType" = 'rewrite_inline_hints'
 ORDER BY "timestamp"
 ----
-1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@primary WHERE y = _
+1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@"primary" WHERE y = _
 1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@xy_y_idx WHERE y = _
 1  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b
 
@@ -399,7 +399,7 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
-SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@"primary" WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
 
@@ -409,7 +409,6 @@ SELECT information_schema.crdb_delete_statement_hints(row_id)
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS]
 WHERE details->>'donorSql' LIKE '%xy@primary%';
 ----
-1
 
 query TTT
 SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
@@ -417,6 +416,7 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@"primary" WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
 
@@ -459,7 +459,7 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
-SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@"primary" WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
 SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
 
@@ -507,8 +507,8 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
-SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
-SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@"primary" WHERE y = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@"primary" WHERE y = _
 
 statement ok
 SAVEPOINT s1
@@ -522,7 +522,7 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
-SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@"primary" WHERE y = _
 
 statement ok
 ROLLBACK TO s1
@@ -533,8 +533,8 @@ SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', h
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
-SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
-SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@"primary" WHERE y = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@"primary" WHERE y = _
 
 statement ok
 ROLLBACK
