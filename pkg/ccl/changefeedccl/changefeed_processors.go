@@ -103,8 +103,10 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	flushFrequency time.Duration // how often high watermark can be checkpointed.
-	lastSpanFlush  time.Time     // last time expensive, span based checkpoint was written.
+	flushFrequency       time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush        time.Time     // last time expensive, span based checkpoint was written.
+	periodicFlushEnabled bool          // if true, flush periodically even without frontier advancement.
+	unflushedSpans       bool          // indicates if there is any span that has advanced since we last flushed.
 
 	// frontierFlushLimiter is a rate limiter for flushing the span frontier
 	// to the coordinator because of frontier advancement.
@@ -445,6 +447,11 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.eventConsumer = consumer
 	// Reassign sink, since s may be a wrapped version of the original sink.
 	ca.sink = s
+
+	// Enable periodic flushing unless the sink is cloud storage, which
+	// has ordering violations under partial checkpoints (#155174).
+	ca.periodicFlushEnabled = changefeedbase.PeriodicAggregatorFlush.Get(
+		&ca.FlowCtx.Cfg.Settings.SV) && ca.sink.getConcreteType() != sinkTypeCloudstorage
 
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
@@ -821,15 +828,16 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	if err != nil {
 		return err
 	}
-	advanced := result.FrontierForwarded()
+	frontierAdvanced := result.FrontierForwarded()
+	ca.unflushedSpans = ca.unflushedSpans || result.SpanForwarded()
 	sv := &ca.FlowCtx.Cfg.Settings.SV
 
 	defer func(ctx context.Context) {
-		maybeLogBehindSpan(ctx, "aggregator", ca.frontier, advanced, sv)
+		maybeLogBehindSpan(ctx, "aggregator", ca.frontier, frontierAdvanced, sv)
 	}(ctx)
 
 	// The resolved sliMetric data backs the aggregator_progress metric
-	if advanced {
+	if frontierAdvanced {
 		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
 	}
 
@@ -837,12 +845,14 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return ca.flushFrontier(ctx)
 	}
 
-	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
+	// Always flush at schema change boundaries.
+	forceFlush := frontierAdvanced && resolved.BoundaryType != jobspb.ResolvedSpan_NONE
+	// Flush if the frontier advanced or if we have periodic flushing enabled
+	// and any span in the frontier advanced. This flush is rate limited.
+	shouldFlush := (frontierAdvanced || (ca.periodicFlushEnabled && ca.unflushedSpans)) &&
+		ca.frontierFlushLimiter.canSave(ctx)
 
-	// TODO(#155015): Re-enable periodic frontier flushing.
-	checkpointFrontier := advanced && (forceFlush || ca.frontierFlushLimiter.canSave(ctx))
-
-	if checkpointFrontier {
+	if forceFlush || shouldFlush {
 		now := crtime.NowMono()
 		if err := ca.flushFrontier(ctx); err != nil {
 			return err
@@ -851,9 +861,10 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return nil
 	}
 
-	// At a lower frequency, we checkpoint specific spans in the job progress
-	// either in backfills or if the highwater mark is excessively lagging behind.
-	checkpointSpans := (ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
+	// If periodic flushing is not enabled, we (at a lower frequency) checkpoint specific
+	// spans in the job progress either in backfills or if the highwater mark is excessively
+	// lagging behind.
+	checkpointSpans := !ca.periodicFlushEnabled && (ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
 		canCheckpointSpans(sv, ca.lastSpanFlush)
 
 	if checkpointSpans {
@@ -877,6 +888,7 @@ func (ca *changeAggregator) flushFrontier(ctx context.Context) error {
 	if err := ca.flushBufferedEvents(ctx); err != nil {
 		return err
 	}
+	ca.unflushedSpans = false
 
 	// Iterate frontier spans and build a list of spans to emit.
 	batch := slices.Collect(ca.frontier.All())
