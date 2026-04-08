@@ -434,6 +434,226 @@ func TestServerQueryPerSourceDerivative(t *testing.T) {
 	require.Equal(t, 1.0, perSource["node2"][1].Value)
 }
 
+// TestServerQueryCombinedBatch verifies that the combined-batch optimization
+// in Server.Query works correctly: multiple queries in a single request share
+// one KV batch, and the results are equivalent to querying each metric
+// individually.
+func TestServerQueryCombinedBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for three different metrics across two sources.
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		// metric.cpu: node1 and node2
+		{
+			Name:   "metric.cpu",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+		{
+			Name:   "metric.cpu",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 30.0},
+				{TimestampNanos: 500 * 1e9, Value: 40.0},
+			},
+		},
+		// metric.mem: node1 and node2
+		{
+			Name:   "metric.mem",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		{
+			Name:   "metric.mem",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 300.0},
+				{TimestampNanos: 500 * 1e9, Value: 400.0},
+			},
+		},
+		// metric.disk: node1 only (no explicit source stored, uses empty source
+		// so it will be read via Scan when sources are not specified).
+		{
+			Name: "metric.disk",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 1000.0},
+				{TimestampNanos: 500 * 1e9, Value: 2000.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// First, query each metric individually to establish expected results.
+	individual := make([]*tspb.TimeSeriesQueryResponse, 3)
+	for i, q := range []tspb.Query{
+		{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+		{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+		{Name: "metric.disk"}, // no sources → Scan path
+	} {
+		resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+		individual[i] = resp
+	}
+
+	// Now send all three queries in a single request. The combined batch
+	// should produce identical results.
+	combined, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+			{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+			{Name: "metric.disk"}, // no sources → Scan path
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Results, 3)
+
+	// Verify each combined result matches the corresponding individual result.
+	for i := 0; i < 3; i++ {
+		require.Equal(t, individual[i].Results[0].Datapoints, combined.Results[i].Datapoints,
+			"metric %d datapoints mismatch", i)
+	}
+
+	// Verify actual values.
+	// metric.cpu: SUM(node1, node2) at each timestamp.
+	require.Len(t, combined.Results[0].Datapoints, 2)
+	require.Equal(t, 40.0, combined.Results[0].Datapoints[0].Value) // 10+30
+	require.Equal(t, 60.0, combined.Results[0].Datapoints[1].Value) // 20+40
+
+	// metric.mem: SUM(node1, node2).
+	require.Len(t, combined.Results[1].Datapoints, 2)
+	require.Equal(t, 400.0, combined.Results[1].Datapoints[0].Value) // 100+300
+	require.Equal(t, 600.0, combined.Results[1].Datapoints[1].Value) // 200+400
+
+	// metric.disk: single source (Scan path).
+	require.Len(t, combined.Results[2].Datapoints, 2)
+	require.Equal(t, 1000.0, combined.Results[2].Datapoints[0].Value)
+	require.Equal(t, 2000.0, combined.Results[2].Datapoints[1].Value)
+}
+
+// TestServerQueryCombinedBatchWithPerSource verifies the combined-batch path
+// works correctly together with return_sources_separately.
+func TestServerQueryCombinedBatchWithPerSource(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name: "metric.a", Source: "n1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 1.0},
+				{TimestampNanos: 500 * 1e9, Value: 2.0},
+			},
+		},
+		{
+			Name: "metric.a", Source: "n2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+		{
+			Name: "metric.b", Source: "n1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		{
+			Name: "metric.b", Source: "n2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 300.0},
+				{TimestampNanos: 500 * 1e9, Value: 400.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Two metrics, both with per-source, in one combined request.
+	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:              400 * 1e9,
+		EndNanos:                500 * 1e9,
+		ReturnSourcesSeparately: true,
+		Queries: []tspb.Query{
+			{Name: "metric.a", Sources: []string{"n1", "n2"}},
+			{Name: "metric.b", Sources: []string{"n1", "n2"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, response.Results, 2)
+
+	// metric.a: aggregated = SUM, per-source = individual.
+	resultA := response.Results[0]
+	require.Len(t, resultA.Datapoints, 2)
+	require.Equal(t, 11.0, resultA.Datapoints[0].Value) // 1+10
+	require.Equal(t, 22.0, resultA.Datapoints[1].Value) // 2+20
+
+	perSourceA := make(map[string][]tspb.TimeSeriesDatapoint)
+	for _, sd := range resultA.SourceDatapoints {
+		perSourceA[sd.Source] = sd.Datapoints
+	}
+	require.Len(t, perSourceA, 2)
+	require.Equal(t, 1.0, perSourceA["n1"][0].Value)
+	require.Equal(t, 2.0, perSourceA["n1"][1].Value)
+	require.Equal(t, 10.0, perSourceA["n2"][0].Value)
+	require.Equal(t, 20.0, perSourceA["n2"][1].Value)
+
+	// metric.b: aggregated = SUM, per-source = individual.
+	resultB := response.Results[1]
+	require.Len(t, resultB.Datapoints, 2)
+	require.Equal(t, 400.0, resultB.Datapoints[0].Value) // 100+300
+	require.Equal(t, 600.0, resultB.Datapoints[1].Value) // 200+400
+
+	perSourceB := make(map[string][]tspb.TimeSeriesDatapoint)
+	for _, sd := range resultB.SourceDatapoints {
+		perSourceB[sd.Source] = sd.Datapoints
+	}
+	require.Len(t, perSourceB, 2)
+	require.Equal(t, 100.0, perSourceB["n1"][0].Value)
+	require.Equal(t, 200.0, perSourceB["n1"][1].Value)
+	require.Equal(t, 300.0, perSourceB["n2"][0].Value)
+	require.Equal(t, 400.0, perSourceB["n2"][1].Value)
+}
+
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {

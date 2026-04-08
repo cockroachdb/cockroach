@@ -260,6 +260,21 @@ func (s *Server) RegisterGateway(
 
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
+//
+// The implementation uses a two-phase approach to reduce RPC overhead:
+//
+// Phase 1 (combined read): All queries' KV read operations are collected into
+// a single kv.Batch and executed with one db.Run() call. DistSender splits the
+// batch into per-range RPCs, so queries targeting the same time series ranges
+// share RPCs instead of each issuing independent ones.
+//
+// Phase 2 (parallel processing): The read results are distributed to per-query
+// goroutines for post-processing (key-to-span conversion, downsampling,
+// aggregation, per-source extraction). This CPU-bound work benefits from
+// parallelism.
+//
+// Queries that require memory-based chunking (timespan exceeds budget) fall
+// back to the original per-query read path via db.Query().
 func (s *Server) Query(
 	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
@@ -297,10 +312,6 @@ func (s *Server) Query(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Channel which workers use to report their result, which is either an
-	// error or nil (when successful).
-	workerOutput := make(chan error)
-
 	// Create a separate memory management context for each query, allowing them
 	// to be run in parallel.
 	memContexts := make([]QueryMemoryContext, len(request.Queries))
@@ -316,18 +327,102 @@ func (s *Server) Query(
 		SampleDurationNanos: sampleNanos,
 		NowNanos:            timeutil.Now().UnixNano(),
 	}
+	timespan.normalize()
 
+	if err := timespan.verifyBounds(); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+	if err := timespan.verifyDiskResolution(Resolution10s); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+	if err := timespan.adjustForCurrentTime(Resolution10s); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+
+	// Validate all queries upfront.
+	for _, query := range request.Queries {
+		if err := verifySourceAggregator(query.GetSourceAggregator()); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
+		if err := verifyDownsampler(query.GetDownsampler()); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
+	}
+
+	// Initialize memory contexts and determine which queries can participate
+	// in the combined batch (single-chunk) vs. which need individual chunked
+	// processing.
+	canCombine := make([]bool, len(request.Queries))
+	for i, query := range request.Queries {
+		var estimatedSourceCount int64
+		if len(query.Sources) > 0 {
+			estimatedSourceCount = int64(len(query.Sources))
+		} else {
+			estimatedSourceCount = estimatedClusterNodeCount
+		}
+		memContexts[i] = MakeQueryMemoryContext(
+			s.workerMemMonitor,
+			s.resultMemMonitor,
+			QueryMemoryOptions{
+				BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
+				EstimatedSources:        estimatedSourceCount,
+				InterpolationLimitNanos: interpolationLimit,
+				Columnar:                s.db.WriteColumnar(),
+			},
+		)
+		maxWidth, err := memContexts[i].GetMaxTimespan(Resolution10s)
+		if err != nil {
+			// Insufficient memory budget; will fall back to per-query path
+			// which will return the same error.
+			canCombine[i] = false
+			continue
+		}
+		// Only combine queries that fit in a single chunk. Multi-chunk
+		// queries need the iterative read-process-adjust loop in DB.Query.
+		// Also exclude queries where rollup data may exist, since the
+		// combined batch only reads Resolution10s and would miss rolled-up
+		// data at coarser resolutions.
+		rollupRes, hasRollup := Resolution10s.TargetRollupResolution()
+		needsRollup := hasRollup && timespan.verifyDiskResolution(rollupRes) == nil
+		canCombine[i] = maxWidth > timespan.width() && !needsRollup
+	}
+
+	// Phase 1: Build a combined KV batch for all combinable queries.
+	batch := &kv.Batch{}
+	plans := make([]queryReadPlan, len(request.Queries))
+	for i, query := range request.Queries {
+		if !canCombine[i] {
+			continue
+		}
+		plans[i] = s.db.addQueryReadOps(
+			batch, query, Resolution10s, timespan, interpolationLimit,
+		)
+	}
+
+	// Execute the combined batch in a single db.Run() call. DistSender
+	// splits this into per-range RPCs, so queries targeting overlapping
+	// ranges share RPCs.
+	if len(batch.Results) > 0 {
+		if err := s.db.RunBatch(ctx, batch); err != nil {
+			return nil, err
+		}
+	}
+
+	// Phase 2: Process results in parallel. Combined-batch queries extract
+	// their data from the shared batch; fallback queries use the original
+	// per-query read path.
+	//
+	// Channel which workers use to report their result, which is either an
+	// error or nil (when successful).
+	workerOutput := make(chan error)
 	// Start a task which is itself responsible for starting per-query worker
-	// tasks. This is needed because RunAsyncTaskEx can block; in the
-	// case where a single request has more queries than the semaphore limit,
-	// a deadlock would occur because queries cannot complete until
-	// they have written their result to the "output" channel, which is
-	// processed later in the main function.
+	// tasks. This is needed because RunAsyncTaskEx can block; in the case
+	// where a single request has more queries than the semaphore limit, a
+	// deadlock would occur because queries cannot complete until they have
+	// written their result to the "output" channel, which is processed
+	// later in the main function.
 	if err := s.stopper.RunAsyncTask(ctx, "ts.Server: queries", func(ctx context.Context) {
 		for queryIdx, query := range request.Queries {
-			queryIdx := queryIdx
-			query := query
-
 			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
 				stop.TaskOpts{
@@ -336,42 +431,32 @@ func (s *Server) Query(
 					WaitForSem: true,
 				},
 				func(ctx context.Context) {
-					// Estimated source count is either the count of requested sources
-					// *or* the estimated cluster node count if no sources are specified.
-					var estimatedSourceCount int64
-					if len(query.Sources) > 0 {
-						estimatedSourceCount = int64(len(query.Sources))
+					var err error
+					if canCombine[queryIdx] {
+						err = s.processFromBatch(
+							ctx, batch, plans[queryIdx], query,
+							Resolution10s, timespan, memContexts[queryIdx],
+							request.ReturnSourcesSeparately,
+							&response.Results[queryIdx],
+						)
 					} else {
-						estimatedSourceCount = estimatedClusterNodeCount
-					}
-
-					// Create a memory account for the results of this query.
-					memContexts[queryIdx] = MakeQueryMemoryContext(
-						s.workerMemMonitor,
-						s.resultMemMonitor,
-						QueryMemoryOptions{
-							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
-							EstimatedSources:        estimatedSourceCount,
-							InterpolationLimitNanos: interpolationLimit,
-							Columnar:                s.db.WriteColumnar(),
-						},
-					)
-
-					datapoints, sources, perSourceDatapoints, err := s.db.Query(
-						ctx,
-						query,
-						Resolution10s,
-						timespan,
-						memContexts[queryIdx],
-						request.ReturnSourcesSeparately,
-					)
-					if err == nil {
-						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
-							Query:            query,
-							Datapoints:       datapoints,
-							SourceDatapoints: perSourceDatapoints,
+						// Fallback: per-query read for queries needing chunking.
+						var datapoints []tspb.TimeSeriesDatapoint
+						var sources []string
+						var perSource []tspb.SourceDatapoints
+						datapoints, sources, perSource, err = s.db.Query(
+							ctx, query, Resolution10s, timespan,
+							memContexts[queryIdx],
+							request.ReturnSourcesSeparately,
+						)
+						if err == nil {
+							response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
+								Query:            query,
+								Datapoints:       datapoints,
+								SourceDatapoints: perSource,
+							}
+							response.Results[queryIdx].Sources = sources
 						}
-						response.Results[queryIdx].Sources = sources
 					}
 					select {
 					case workerOutput <- err:
@@ -379,8 +464,8 @@ func (s *Server) Query(
 					}
 				},
 			); err != nil {
-				// Stopper has been closed and is draining. Return an error and
-				// exit the worker-spawning loop.
+				// Stopper has been closed and is draining. Return an error
+				// and exit the worker-spawning loop.
 				select {
 				case workerOutput <- err:
 				case <-ctx.Done():
@@ -407,6 +492,44 @@ func (s *Server) Query(
 	}
 
 	return &response, nil
+}
+
+// processFromBatch extracts a single query's KV data from a shared batch and
+// runs the post-processing pipeline.
+func (s *Server) processFromBatch(
+	ctx context.Context,
+	batch *kv.Batch,
+	plan queryReadPlan,
+	query tspb.Query,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	mem QueryMemoryContext,
+	returnPerSource bool,
+	dest *tspb.TimeSeriesQueryResponse_Result,
+) error {
+	data, err := extractReadResults(batch, plan)
+	if err != nil {
+		return err
+	}
+
+	datapoints, sourceSet, perSource, err := s.db.processQueryData(
+		ctx, data, query, diskResolution, timespan, mem, returnPerSource,
+	)
+	if err != nil {
+		return err
+	}
+
+	*dest = tspb.TimeSeriesQueryResponse_Result{
+		Query:            query,
+		Datapoints:       datapoints,
+		SourceDatapoints: perSource,
+	}
+	sources := make([]string, 0, len(sourceSet))
+	for source := range sourceSet {
+		sources = append(sources, source)
+	}
+	dest.Sources = sources
+	return nil
 }
 
 // Dump returns a stream of raw timeseries data that has been stored on the
