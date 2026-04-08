@@ -71,6 +71,24 @@ var (
 	OverrideMultiRegionTableZoneConfigurationSystem = telemetry.GetCounterOnce(
 		"sql.multiregion.zone_configuration.override.system.table",
 	)
+
+	// AlterDatabaseAddSuperRegionCounter is to be incremented when a super
+	// region is added to a database.
+	AlterDatabaseAddSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.add_super_region",
+	)
+
+	// AlterDatabaseDropSuperRegionCounter is to be incremented when a super
+	// region is dropped from a database.
+	AlterDatabaseDropSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.drop_super_region",
+	)
+
+	// AlterDatabaseAlterSuperRegionCounter is to be incremented when a super
+	// region's regions are altered.
+	AlterDatabaseAlterSuperRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_super_region",
+	)
 )
 
 // CreateDatabaseSurvivalGoalCounter is to be incremented when the survival goal

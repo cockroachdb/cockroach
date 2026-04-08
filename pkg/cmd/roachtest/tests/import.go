@@ -220,6 +220,12 @@ type importTestSpec struct {
 	// with this test.
 	datasetNames stringSource
 
+	// skipDistMerge, when true, skips registration of the distmerge=true
+	// variant. Use this for tests that are incompatible with distributed
+	// merge, e.g. node shutdown tests where the merge phase requires SSTs
+	// from all participating instances.
+	skipDistMerge bool
+
 	// preTestHook is run after tables are created, but before the import starts.
 	preTestHook func(context.Context, test.Test, cluster.Cluster, *rand.Rand)
 	// importRunner is an alternate import runner.
@@ -287,10 +293,14 @@ var tests = []importTestSpec{
 	},
 	// Test job survival if a worker node is shutdown. Exclude lineitem (the
 	// largest dataset) to avoid timeouts when running with only 3 active nodes.
+	// Distributed merge requires SSTs from all participating instances, so a
+	// permanently downed node causes merge to time out waiting for the missing
+	// instance.
 	{
-		subtestName:  "nodeShutdown/worker",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anySmallDataset),
+		subtestName:   "nodeShutdown/worker",
+		nodes:         []int{4},
+		skipDistMerge: true,
+		datasetNames:  FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -302,11 +312,12 @@ var tests = []importTestSpec{
 	},
 	// Test job survival if the coordinator node is shutdown. Exclude lineitem
 	// (the largest dataset) to avoid timeouts when running with only 3 active
-	// nodes.
+	// nodes. See nodeShutdown/worker above for why distmerge is skipped.
 	{
-		subtestName:  "nodeShutdown/coordinator",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anySmallDataset),
+		subtestName:   "nodeShutdown/coordinator",
+		nodes:         []int{4},
+		skipDistMerge: true,
+		datasetNames:  FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -352,6 +363,9 @@ func registerImport(r registry.Registry) {
 		}
 
 		for _, distMerge := range []bool{false, true} {
+			if distMerge && testSpec.skipDistMerge {
+				continue
+			}
 			for _, numNodes := range testSpec.nodes {
 				ts := testSpec
 				numNodes := numNodes
@@ -742,13 +756,18 @@ func importCancellationRunner(
 		// remove the files that succeeded so we don't try to import them again.
 		// If this was the last attempt, this should remove all the remaining
 		// files and `filesToImport` should be empty.
-		if status == "succeeded" {
+		switch status {
+		case "succeeded":
 			t.L().PrintfCtx(ctx, "Removing files [%s] from consideration; completed", strings.Join(urls, ", "))
 			urlsToImport = slices.DeleteFunc(urlsToImport, func(url string) bool {
 				return slices.Contains(urls, url)
 			})
-		} else if status == "failed" {
+		case "canceled":
+			// Expected outcome of cancellation.
+		case "failed":
 			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
+		default:
+			return errors.Newf("job %s in unexpected state %q after completion", jobID, status)
 		}
 	}
 	if len(urlsToImport) != 0 {
@@ -804,15 +823,21 @@ func importPauseRunner(
 			return ctx.Err()
 		}
 
-		// Check if job already completed (might finish before all pauses)
+		// Check if job is still running before attempting to pause.
 		var status string
 		err = conn.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
 		if err != nil {
 			return errors.Wrapf(err, "checking job status before pause %d", i+1)
 		}
-		if status == "succeeded" {
+		switch status {
+		case "running":
+			// Expected — proceed to pause.
+		case "succeeded":
 			t.WorkerStatus(fmt.Sprintf("job %d completed before pause %d/%d", jobID, i+1, numPauses))
 			return nil
+		default:
+			return errors.Newf("job %d in unexpected state %q before pause %d/%d",
+				jobID, status, i+1, numPauses)
 		}
 
 		// Pause the job

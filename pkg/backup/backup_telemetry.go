@@ -286,10 +286,10 @@ func logRestoreTelemetry(
 		requestedTargets = append(requestedTargets, *desc.DescriptorProto())
 	}
 
-	largestScope := getLargestScope(details.DescriptorCoverage == tree.AllDescriptors, requestedTargets)
+	largestScope := getLargestScope(details.DescriptorCoverage != tree.RequestedDescriptors, requestedTargets)
 
 	targetCount := 1
-	if details.DescriptorCoverage != tree.AllDescriptors {
+	if details.DescriptorCoverage == tree.RequestedDescriptors {
 		targetCount = len(requestedTargets)
 	}
 

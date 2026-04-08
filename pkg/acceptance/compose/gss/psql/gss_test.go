@@ -133,22 +133,31 @@ func TestGSS(t *testing.T) {
 	}
 	for i, tc := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			if _, err := db.Exec(`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, tc.conf); !IsError(err, tc.hbaErr) {
+			_, err := db.Exec(
+				`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, tc.conf,
+			)
+			if !IsError(err, tc.hbaErr) {
 				t.Fatalf("expected err %v, got %v", tc.hbaErr, err)
 			}
 			if tc.hbaErr != "" {
 				return
 			}
-			if tc.identMap != "" {
-				if _, err := db.Exec(`SET CLUSTER SETTING server.identity_map.configuration = $1`, tc.identMap); err != nil {
-					t.Fatalf("bad identity_map: %v", err)
-				}
+			if _, err := db.Exec(
+				`SET CLUSTER SETTING server.identity_map.configuration = $1`, tc.identMap,
+			); err != nil {
+				t.Fatalf("bad identity_map: %v", err)
 			}
 			if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS %s`, tc.user)); err != nil {
 				t.Fatal(err)
 			}
+			waitForSettingPropagation(t, db,
+				"server.host_based_authentication.configuration", tc.conf,
+				"server.identity_map.configuration", tc.identMap,
+			)
 			t.Run("libpq", func(t *testing.T) {
-				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require krbspn=postgres/gss_cockroach_1.gss_default", tc.user))
+				userConnector, err := pq.NewConnector(
+					fmt.Sprintf("user=%s sslmode=require krbspn=postgres/gss_cockroach_1.gss_default", tc.user),
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -172,7 +181,10 @@ func TestGSS(t *testing.T) {
 					"--certs-dir", "/certs",
 					// TODO(mjibson): Teach the CLI to not ask for passwords during kerberos.
 					// See #51588.
-					"--url", fmt.Sprintf("postgresql://%s:nopassword@cockroach:26257/?sslmode=require&krbspn=postgres/gss_cockroach_1.gss_default", tc.user),
+					"--url", fmt.Sprintf(
+						"postgresql://%s:nopassword@cockroach:26257/?sslmode=require&krbspn=postgres/gss_cockroach_1.gss_default",
+						tc.user,
+					),
 				).CombinedOutput()
 				err = errors.Wrap(err, strings.TrimSpace(string(out)))
 				if !IsError(err, tc.gssErr) {
@@ -188,6 +200,35 @@ func TestGSS(t *testing.T) {
 	}
 }
 
+func waitForSettingPropagation(t *testing.T, db *gosql.DB, nameValuePairs ...string) {
+	t.Helper()
+	if len(nameValuePairs)%2 != 0 {
+		t.Fatal("nameValuePairs must be even")
+	}
+	for i := 0; i < len(nameValuePairs); i += 2 {
+		name := nameValuePairs[i]
+		expected := nameValuePairs[i+1]
+		var actual string
+		for attempt := 0; attempt < 50; attempt++ {
+			row := db.QueryRow(fmt.Sprintf("SHOW CLUSTER SETTING %s", name))
+			if err := row.Scan(&actual); err != nil {
+				t.Fatalf("error reading setting %s: %v", name, err)
+			}
+			if actual == expected {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if actual != expected {
+			t.Fatalf(
+				"setting %s did not propagate: expected %q, got %q",
+				name, expected, actual,
+			)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+}
+
 func TestGSSFileDescriptorCount(t *testing.T) {
 	t.Skip("#110194")
 	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
@@ -197,7 +238,10 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 	rootDB := gosql.OpenDB(rootConnector)
 	defer rootDB.Close()
 
-	if _, err := rootDB.Exec(`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, "host all all all gss include_realm=0"); err != nil {
+	if _, err := rootDB.Exec(
+		`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`,
+		"host all all all gss include_realm=0",
+	); err != nil {
 		t.Fatal(err)
 	}
 	const user = "tester"
@@ -243,7 +287,9 @@ func IsError(err error, re string) bool {
 // authentication a web session.
 func rootAuthCookie(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie").CombinedOutput()
+	out, err := exec.Command(
+		"/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie",
+	).CombinedOutput()
 	if err != nil {
 		t.Log(string(out))
 		t.Fatal(errors.Wrap(err, "auth-session failed"))

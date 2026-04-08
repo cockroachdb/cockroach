@@ -26,7 +26,7 @@ type grpcServer struct {
 }
 
 func newGRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.RequestMetrics,
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.ServerRequestMetrics,
 ) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
@@ -35,7 +35,7 @@ func newGRPCServer(
 			return s.intercept(path)
 		}), rpc.WithMetricsServerInterceptor(
 			rpc.NewRequestMetricsInterceptor(requestMetrics, func(method string) bool {
-				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+				return rpc.ShouldRecordRequestDuration(rpcCtx.Settings, method)
 			},
 			)))
 	if err != nil {

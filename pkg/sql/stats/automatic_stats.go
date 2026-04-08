@@ -411,17 +411,13 @@ func (r *Refresher) autoStatsEnabled(desc catalog.TableDescriptor) bool {
 
 // autoPartialStatsEnabled returns true if the
 // sql_stats_automatic_partial_collection_enabled setting of the table
-// descriptor set to true. If the table descriptor is nil or the table-level
-// setting is not set, the function returns true if the automatic partial stats
-// cluster setting is enabled.
-func (r *Refresher) autoPartialStatsEnabled(desc catalog.TableDescriptor) bool {
-	if desc == nil {
-		// If the descriptor could not be accessed, defer to the cluster setting.
+// descriptor set to true. If the table-level setting is not set, the function
+// returns true if the automatic partial stats cluster setting is enabled.
+func (r *Refresher) autoPartialStatsEnabled(explicitSettings *catpb.AutoStatsSettings) bool {
+	if explicitSettings == nil {
 		return AutomaticPartialStatisticsClusterMode.Get(&r.st.SV)
 	}
-	enabledForTable := desc.AutoPartialStatsCollectionEnabled()
-	// The table-level setting of sql_stats_automatic_partial_collection_enabled
-	// takes precedence over the cluster setting.
+	enabledForTable := explicitSettings.AutoPartialStatsCollectionEnabled()
 	if enabledForTable == catpb.AutoPartialStatsCollectionNotSet {
 		return AutomaticPartialStatisticsClusterMode.Get(&r.st.SV)
 	}
@@ -429,18 +425,14 @@ func (r *Refresher) autoPartialStatsEnabled(desc catalog.TableDescriptor) bool {
 }
 
 // autoFullStatsEnabled returns true if the
-// sql_stats_automatic_full_collection_enabled setting of the table
-// descriptor set to true. If the table descriptor is nil or the table-level
-// setting is not set, the function returns true if the automatic full stats
-// cluster setting is enabled.
-func (r *Refresher) autoFullStatsEnabled(desc catalog.TableDescriptor) bool {
-	if desc == nil {
-		// If the descriptor could not be accessed, defer to the cluster setting.
+// sql_stats_automatic_full_collection_enabled setting of the table descriptor
+// set to true. If the table-level setting is not set, the function returns true
+// if the automatic full stats cluster setting is enabled.
+func (r *Refresher) autoFullStatsEnabled(explicitSettings *catpb.AutoStatsSettings) bool {
+	if explicitSettings == nil {
 		return AutomaticFullStatisticsClusterMode.Get(&r.st.SV)
 	}
-	enabledForTable := desc.AutoFullStatsCollectionEnabled()
-	// The table-level setting of sql_stats_automatic_full_collection_enabled
-	// takes precedence over the cluster setting.
+	enabledForTable := explicitSettings.AutoFullStatsCollectionEnabled()
 	if enabledForTable == catpb.AutoFullStatsCollectionNotSet {
 		return AutomaticFullStatisticsClusterMode.Get(&r.st.SV)
 	}
@@ -676,8 +668,8 @@ func (r *Refresher) Start(
 								explicitSettings,
 								rowsAffected,
 								r.asOfTime,
-								r.autoPartialStatsEnabled(desc),
-								r.autoFullStatsEnabled(desc),
+								r.autoPartialStatsEnabled(explicitSettings),
+								r.autoFullStatsEnabled(explicitSettings),
 							)
 
 							select {
@@ -965,7 +957,7 @@ func (r *Refresher) EstimateStaleness(
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
-	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	tableStats, _, _, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return 0, err
 	}
@@ -1008,7 +1000,7 @@ func (r *Refresher) mustDoFullRefresh(
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
 	var forecast *bool
-	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	tableStats, _, _, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return false, 0, err
 	}

@@ -11,16 +11,19 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -227,6 +230,21 @@ func (po *Setter) Set(
 		val, err := paramparse.DatumAsBool(ctx, evalCtx, key, expr)
 		if err != nil {
 			return errors.Wrapf(err, "error decoding %q", key)
+		}
+		if val {
+			log.SqlSchema.Warningf(ctx,
+				"skip_unique_checks enabled on index %q; unique constraint enforcement will be bypassed",
+				po.IndexDesc.Name)
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx,
+				errors.WithHint(
+					pgnotice.Newf(
+						"skip_unique_checks bypasses unique constraint enforcement; "+
+							"incorrect usage can lead to unique constraint violations"),
+					"Use INSPECT to check for constraint violations. See "+
+						docs.URL("inspect.html"),
+				),
+			)
 		}
 		po.IndexDesc.SkipUniqueChecks = val
 		return nil

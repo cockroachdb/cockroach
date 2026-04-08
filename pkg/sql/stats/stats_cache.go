@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -288,7 +287,7 @@ func (sc *TableStatisticsCache) GetFreshTableStats(
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	stats, _, err = sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	stats, _, _, err = sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	return stats, err
 }
 
@@ -303,6 +302,10 @@ func (sc *TableStatisticsCache) GetFreshTableStats(
 // uses; it only determines whether this execution is worth recording
 // for canary vs. stable experiment metrics (when false, both paths use
 // identical stats, so recording would add noise).
+// The returned canaryExpiration is the timestamp at which this table's
+// canary window expires. Empty if there is no active canary window or
+// canary and stable stats are already identical (window already expired,
+// only one generation of stats exists, or window size is zero).
 func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -310,9 +313,9 @@ func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
 	stable bool,
 	canaryWindowSize time.Duration,
 	statsAsOf hlc.Timestamp,
-) (stats []*TableStatistic, statsDiffer bool, err error) {
+) (stats []*TableStatistic, statsDiffer bool, canaryExpiration hlc.Timestamp, err error) {
 	if !sc.statsUsageAllowed(table) {
-		return nil, false, nil
+		return nil, false, hlc.Timestamp{}, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
 	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
@@ -422,6 +425,12 @@ func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Set
 
 // getTableStatsFromCache is like GetFreshTableStats but assumes that the table ID
 // is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
+//
+// The returned statsDiffer flag indicates whether the canary and stable
+// statistics genuinely differ. See GetTableStatsMaybeStable for details.
+// The returned canaryExpiration is the timestamp at which the canary window
+// expires, or the empty timestamp if there is no active canary window or
+// canary and stable stats are already identical.
 func (sc *TableStatisticsCache) getTableStatsFromCache(
 	ctx context.Context,
 	tableID descpb.ID,
@@ -431,25 +440,31 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	stable bool,
 	canaryWindowSize time.Duration,
 	statsAsOf hlc.Timestamp,
-) ([]*TableStatistic, bool, error) {
+) (stats []*TableStatistic, statsDiffer bool, canaryExpiration hlc.Timestamp, err error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	asOfTs := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	if !statsAsOf.IsEmpty() {
-		asOfTs = statsAsOf
-	}
+	asOfTs := statsAsOf.OrNow()
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
-			statsDiffer := e.canaryAndStableStatsDiffer(canaryWindowSize, asOfTs)
-			if stable {
-				return e.getStableStatsLocked(ctx, canaryWindowSize, asOfTs), statsDiffer, e.err
+			statsDiffer = e.canaryAndStableStatsDiffer(canaryWindowSize, asOfTs)
+			// Record the canary expiration so that CheckDependencies can
+			// invalidate cached stable-execution memos when the canary stats
+			// ripen (i.e. the window expires and getStableStatsLocked starts
+			// returning different stats). We only set this when statsDiffer is
+			// true — if false, the window has already expired (or never
+			// existed), so there is no pending transition to detect.
+			if statsDiffer {
+				canaryExpiration = e.latestFullStatsTimestamp.AddDuration(canaryWindowSize)
 			}
-			return e.stats, statsDiffer, e.err
+			if stable {
+				return e.getStableStatsLocked(ctx, canaryWindowSize, asOfTs), statsDiffer, canaryExpiration, e.err
+			}
+			return e.stats, statsDiffer, canaryExpiration, e.err
 		}
 	}
 
@@ -602,7 +617,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	stable bool,
 	canaryWindowSize time.Duration,
 	asOf hlc.Timestamp,
-) (stats []*TableStatistic, statsDiffer bool, err error) {
+) (stats []*TableStatistic, statsDiffer bool, canaryExpiration hlc.Timestamp, err error) {
 	defer sc.generation.Add(1)
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
@@ -644,12 +659,18 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	}
 
 	statsDiffer = e.canaryAndStableStatsDiffer(canaryWindowSize, asOf)
-
-	if err == nil && stable {
-		return e.getStableStatsLocked(ctx, canaryWindowSize, asOf), statsDiffer, nil
+	// See the matching comment in getTableStatsFromCache: record the
+	// expiration so cached stable-execution memos are invalidated when
+	// the canary stats ripen.
+	if statsDiffer {
+		canaryExpiration = e.latestFullStatsTimestamp.AddDuration(canaryWindowSize)
 	}
 
-	return stats, statsDiffer, err
+	if err == nil && stable {
+		return e.getStableStatsLocked(ctx, canaryWindowSize, asOf), statsDiffer, canaryExpiration, nil
+	}
+
+	return stats, statsDiffer, canaryExpiration, err
 }
 
 // refreshCacheEntry retrieves table statistics from the database and updates

@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,12 +27,12 @@ func TestRequestMetricRegistered(t *testing.T) {
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(ctx)
 
-	requestMetrics := rpc.NewRequestMetrics()
+	requestMetrics := rpc.NewServerRequestMetrics()
 
 	var histogramVec *metric.HistogramVec
 	registry := ts.MetricsRecorder().AppRegistry()
 	registry.Select(
-		map[string]struct{}{requestMetrics.Duration.Name: {}},
+		map[string]struct{}{requestMetrics.RequestDuration.Name: {}},
 		func(name string, val interface{}) {
 			histogramVec = val.(*metric.HistogramVec)
 		})
@@ -41,9 +40,11 @@ func TestRequestMetricRegistered(t *testing.T) {
 
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Len(t, histogramVec.ToPrometheusMetrics(), 0, "Should not have recorded any metrics yet")
-	serverRPCRequestMetricsEnabled.Override(context.Background(), &ts.ClusterSettings().SV, true)
+	rpc.ServerRPCRequestMetricsEnabled.Override(context.Background(),
+		&ts.ClusterSettings().SV, true)
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
-	require.Len(t, histogramVec.ToPrometheusMetrics(), 1, "Should have recorded metrics for request")
+	require.Greater(t, len(histogramVec.ToPrometheusMetrics()), 0,
+		"Should have recorded metrics for request")
 }
 
 func TestShouldRecordRequestDuration(t *testing.T) {
@@ -54,10 +55,10 @@ func TestShouldRecordRequestDuration(t *testing.T) {
 		metricsEnabled bool
 		expected       bool
 	}{
-		{fmt.Sprintf("%s/test/method", serverPrefix), true, true},
-		{fmt.Sprintf("%s/test/method", tsdbPrefix), true, true},
-		{fmt.Sprintf("%s/test/method", serverPrefix), false, false},
-		{fmt.Sprintf("%s/test/method", tsdbPrefix), false, false},
+		{rpc.ServerPrefix + "/test/method", true, true},
+		{rpc.TsdbPrefix + "/test/method", true, true},
+		{rpc.ServerPrefix + "/test/method", false, false},
+		{rpc.TsdbPrefix + "/test/method", false, false},
 		{"test/noPrefix/metricsEnabled", true, false},
 		{"test/noPrefix/metricsDisabled", false, false},
 	}
@@ -65,8 +66,8 @@ func TestShouldRecordRequestDuration(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	for _, tt := range tests {
 		t.Run(tt.methodName, func(t *testing.T) {
-			serverRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
-			require.Equal(t, tt.expected, shouldRecordRequestDuration(settings, tt.methodName))
+			rpc.ServerRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
+			require.Equal(t, tt.expected, rpc.ShouldRecordRequestDuration(settings, tt.methodName))
 		})
 	}
 }

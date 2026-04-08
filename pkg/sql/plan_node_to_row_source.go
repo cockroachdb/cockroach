@@ -253,19 +253,42 @@ func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMeta
 }
 
 func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
+	if !p.InternalClose() {
+		return nil
+	}
 	var meta []execinfrapb.ProducerMetadata
-	if p.InternalClose() {
-		// Check if we're wrapping a mutation and emit the rows written metric
-		// if so.
-		if m, ok := p.node.(mutationPlanNode); ok {
-			metrics := execinfrapb.GetMetricsMeta()
-			metrics.RowsWritten = m.rowsWritten()
-			metrics.IndexRowsWritten = m.indexRowsWritten()
-			metrics.IndexBytesWritten = m.indexBytesWritten()
-			metrics.KVCPUTime = m.kvCPUTime()
-			meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+	// Check if we're wrapping a mutation and emit the rows written metric if
+	// so.
+	maybeEmitMeta := func(node planNode) {
+		m, ok := node.(mutationPlanNode)
+		if !ok {
+			return
+		}
+		metrics := execinfrapb.GetMetricsMeta()
+		metrics.RowsWritten = m.rowsWritten()
+		metrics.IndexRowsWritten = m.indexRowsWritten()
+		metrics.IndexBytesWritten = m.indexBytesWritten()
+		metrics.KVCPUTime = m.kvCPUTime()
+		meta = append(meta, execinfrapb.ProducerMetadata{Metrics: metrics})
+	}
+	// Note that we could be wrapping multiple planNodes at once, so we have to
+	// traverse the tree until we either reach the first DistSQL-plannable
+	// planNode or the leaf.
+	var visitNode func(node planNode)
+	visitNode = func(node planNode) {
+		if node == p.firstNotWrapped {
+			return
+		}
+		maybeEmitMeta(node)
+		for i, n := 0, node.InputCount(); i < n; i++ {
+			child, err := node.Input(i)
+			if err != nil {
+				continue
+			}
+			visitNode(child)
 		}
 	}
+	visitNode(p.node)
 	return meta
 }
 

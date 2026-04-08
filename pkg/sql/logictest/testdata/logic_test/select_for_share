@@ -214,6 +214,14 @@ CREATE TABLE t(a INT PRIMARY KEY);
 INSERT INTO t VALUES(1), (2);
 GRANT ALL ON t TO testuser;
 
+# Read both keys to ensure the INSERT's intents are resolved before any SKIP
+# LOCKED scan, which would skip unresolved intents (see #167582).
+query I rowsort
+SELECT * FROM t
+----
+1
+2
+
 user testuser
 
 statement ok

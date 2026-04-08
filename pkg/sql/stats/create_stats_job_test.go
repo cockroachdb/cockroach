@@ -854,8 +854,6 @@ func TestReschedulingOnConcurrentCreateStatsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "the test is too sensitive to overload")
-
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
 		stats.DefaultAsOfTime = oldAsOf
@@ -901,17 +899,13 @@ func TestReschedulingOnConcurrentCreateStatsError(t *testing.T) {
 	// Lower the concurrency limit to allow at most one auto full stats job.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_concurrency_limit = 1`)
 
-	// Create two tables. Notably auto stats are enabled on 't2'.
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE d.t2 (x INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = true)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 
-	descT2 := desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), "d", "public", "t2")
-
 	// Block the next stats collection on the table 't'.
-	var tID, t2ID descpb.ID
-	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int, 'd.t2'::regclass::int`).Scan(&tID, &t2ID)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
 	setTableID(tID)
 
 	// Start an auto full stat job and wait until it's done one scan. This will
@@ -926,11 +920,22 @@ func TestReschedulingOnConcurrentCreateStatsError(t *testing.T) {
 	select {
 	case allowRequest <- struct{}{}:
 	case err := <-backgroundAutoFullStatErrCh:
-		t.Fatal(err)
+		if err != nil {
+			t.Fatal(err)
+		} else {
+			t.Fatal("query unexpectedly finished")
+		}
 	}
 
-	// Don't block the other stats jobs.
+	// Don't block other stats jobs.
 	setTableID(descpb.InvalidID)
+
+	// Now create the second table on which we'll test the behavior of the auto
+	// stats refresher.
+	sqlDB.Exec(t, `CREATE TABLE d.t2 (x INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = true)`)
+	var t2ID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t2'::regclass::int`).Scan(&t2ID)
+	descT2 := desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), "d", "public", "t2")
 
 	// This should trigger a refresh on 't2' which should hit the
 	// ConcurrentCreateStatsError (due to global concurrency limit being
@@ -1071,4 +1076,66 @@ func runAutoStatsJob(
 			t.Fatalf("auto stats job should have failed, but it didn't (beforeCount: %d, afterCount: %d)", beforeCount, afterCount)
 		}
 	}
+}
+
+// TestTableLevelStatsSettingsRespected ensures that table-level storage
+// parameters that control whether full or partial auto stats are enabled take
+// precedence over the cluster settings.
+func TestTableLevelStatsSettingsRespected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		stats.DefaultRefreshInterval = oldRefreshInterval
+		stats.DefaultAsOfTime = oldAsOf
+	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
+	stats.DefaultRefreshInterval = time.Second
+	stats.DefaultAsOfTime = 100 * time.Millisecond
+
+	var params base.TestServerArgs
+	params.Knobs.TableStatsKnobs = &stats.TableStatsTestingKnobs{
+		DisableInitialTableCollection: true,
+	}
+	params.Settings = cluster.MakeTestingClusterSettings()
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &params.Settings.SV, false)
+	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &params.Settings.SV, false)
+
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	refresher := s.ExecutorConfig().(sql.ExecutorConfig).StatsRefresher
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// First test that table-level full stats enabled parameter is respected.
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = false`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = false`)
+	runner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true`)
+
+	runner.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY);`)
+	runner.Exec(t, `INSERT INTO t SELECT generate_series(1, 1000);`)
+	runner.Exec(t, `ALTER TABLE t SET (sql_stats_automatic_full_collection_enabled = true);`)
+	desc := desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), "defaultdb", "public", "t")
+	refresher.NotifyMutation(ctx, desc, math.MaxInt32)
+
+	// There should be one full stat for table t.
+	runner.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t]`,
+		[][]string{
+			{"__auto__", "{k}", "1000"},
+		})
+
+	// Now test that table-level partial stats enabled parameter is respected.
+	runner.Exec(t, `ALTER TABLE t SET (sql_stats_automatic_full_collection_enabled = false, sql_stats_automatic_partial_collection_enabled = true);`)
+	// Get the updated table descriptor with new table-level storage params.
+	desc = desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), "defaultdb", "public", "t")
+	refresher.NotifyMutation(ctx, desc, math.MaxInt32)
+
+	// There should be one full and one partial stat for table t.
+	runner.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY 1`,
+		[][]string{
+			{"__auto__", "{k}", "1000"},
+			{"__auto_partial__", "{k}", "0"},
+		})
 }

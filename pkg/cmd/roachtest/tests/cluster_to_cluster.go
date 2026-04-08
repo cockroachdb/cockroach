@@ -533,6 +533,12 @@ type replicationSpec struct {
 
 	clouds registry.CloudSet
 	suites registry.SuiteSet
+
+	// cockroachBinary specifies the type of cockroach binary to use for this test.
+	// If not set (zero value), defaults to RandomizedCockroach.
+	// Set to registry.StandardCockroach to disable runtime assertions for
+	// performance-sensitive tests.
+	cockroachBinary registry.ClusterCockroachBinary
 }
 
 type multiRegionSpecs struct {
@@ -753,6 +759,39 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 		rd.c.Run(ctx, option.WithNodes(rd.setup.workloadNode), initCmd)
 		rd.t.L().Printf("src cluster workload initialization took %s",
 			timeutil.Since(initStart))
+
+		if _, ok := rd.rs.workload.(replicateTPCC); ok {
+			// Ensure all imported tables have stats before starting the
+			// replication stream. Without this, serialized auto-stats collection
+			// can leave some tables without stats for 15+ minutes after import,
+			// causing bad query plans and CPU saturation on the reader tenant
+			// workload. See #164639.
+			rd.t.Status("collecting table statistics on source tenant")
+			analyzeStart := timeutil.Now()
+			srcTenantConn := rd.c.Conn(
+				ctx, rd.t.L(), rd.setup.src.nodes[0],
+				option.VirtualClusterName(rd.setup.src.name),
+				option.DBName("tpcc"),
+				option.User("root"),
+				option.AuthMode(install.AuthRootCert),
+			)
+			defer srcTenantConn.Close()
+			srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
+
+			rows := srcTenantSQL.QueryStr(
+				rd.t, `SELECT table_name FROM [SHOW TABLES]`,
+			)
+			for _, row := range rows {
+				tableName := row[0]
+				rd.t.L().Printf("running ANALYZE on %q", tableName)
+				srcTenantSQL.Exec(
+					rd.t, fmt.Sprintf(`ANALYZE "%s"`, tableName),
+				)
+			}
+			rd.t.L().Printf(
+				"table statistics collection took %s", timeutil.Since(analyzeStart),
+			)
+		}
 	}
 }
 
@@ -1326,6 +1365,7 @@ func c2cRegisterWrapper(
 		CompatibleClouds:          sp.clouds,
 		Suites:                    sp.suites,
 		TestSelectionOptOutSuites: sp.suites,
+		CockroachBinary:           sp.cockroachBinary,
 		Run:                       run,
 		// Read from standby tests also spin up the schema change workload which
 		// uses the workload binary.
@@ -1553,7 +1593,6 @@ func registerClusterToCluster(r registry.Registry) {
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			pdSize:             100,
 			workload:           replicateBulkOps{},
 			timeout:            2 * time.Hour,
 			additionalDuration: 0,
@@ -1570,43 +1609,17 @@ func registerClusterToCluster(r registry.Registry) {
 			// Skipping node distribution check because there is little data on the
 			// source when the replication stream begins.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.OnlyGCE,
-			suites:                    registry.Suites(registry.Nightly),
-		},
-		{
-			name:     "c2c/BulkOps/settings=ac-import",
-			srcNodes: 4,
-			dstNodes: 4,
-			cpus:     8,
-			pdSize:   100,
-			workload: replicateBulkOps{withSettings: []struct{ setting, value string }{
-				{"bulkio.import.elastic_control.enabled", "true"},
-				{"bulkio.elastic_cpu_control.request_duration", "3ms"},
-			}},
-			timeout:            2 * time.Hour,
-			additionalDuration: 0,
-			// Cutover currently takes around 4 minutes, perhaps because we need to
-			// revert 10 GB of replicated data.
-			//
-			// TODO(msbutler): investigate further if cutover can be sped up.
-			cutoverTimeout: 20 * time.Minute,
-			cutover:        5 * time.Minute,
-			// In a few ad hoc runs, the max latency hikes up to 27 minutes before lag
-			// replanning and distributed catch up scans fix the poor initial plan. If
-			// max accepted latency doubles, then there's likely a regression.
-			maxAcceptedLatency: 1 * time.Hour,
-			// Skipping node distribution check because there is little data on the
-			// source when the replication stream begins.
-			skipNodeDistributionCheck: true,
-			clouds:                    registry.OnlyGCE,
-			suites:                    registry.Suites(registry.Nightly),
+			// Never run with runtime assertions as import rollback with tombstones
+			// gets much slower.
+			cockroachBinary: registry.StandardCockroach,
+			clouds:          registry.OnlyGCE,
+			suites:          registry.Suites(registry.Nightly),
 		},
 		{
 			name:               "c2c/BulkOps/singleImport",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			pdSize:             100,
 			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
 			timeout:            2 * time.Hour,
 			cutoverTimeout:     1 * time.Hour,

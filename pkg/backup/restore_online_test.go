@@ -1496,3 +1496,59 @@ func TestOnlineRestoreURIRedaction(t *testing.T) {
 		require.Equal(t, numAccounts, rowCount)
 	})
 }
+
+// TestOnlineRestoreStatusMessages verifies that the correct status messages are
+// written to system.job_message during an online restore with EXPERIMENTAL COPY.
+func TestOnlineRestoreStatusMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	rng, seed := randutil.NewPseudoRand()
+	t.Logf("random seed: %d", seed)
+
+	const numAccounts = 100
+
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFnRestored()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB, rSQLDB)
+
+	// Randomly toggle dist flow setting to test both code paths
+	useDistFlow := rng.Intn(2) == 0
+	t.Logf("using dist flow: %t", useDistFlow)
+	rSQLDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = %t", useDistFlow))
+
+	// Create backup
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	// Create database on restore cluster
+	rSQLDB.Exec(t, "CREATE DATABASE data")
+
+	// Execute EXPERIMENTAL COPY restore in detached mode
+	var jobID int
+	rSQLDB.QueryRow(t,
+		fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, detached", externalStorage),
+	).Scan(&jobID)
+
+	// Wait for job to complete
+	jobutils.WaitForJobToSucceed(t, rSQLDB, jobspb.JobID(jobID))
+
+	// Verify exactly the expected status messages were written to system.job_message
+	rSQLDB.CheckQueryResults(t,
+		fmt.Sprintf(`SELECT message FROM system.job_message WHERE job_id = %d AND kind = 'status' ORDER BY written ASC`, jobID),
+		[][]string{
+			{"Phase 1 of 2: Link External Data"},
+			{"Phase 2 of 2: Downloading restored data"},
+		},
+	)
+
+	// Sanity check: verify restored data is accessible
+	var restoreRowCount int
+	rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+	require.Equal(t, numAccounts, restoreRowCount)
+}

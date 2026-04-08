@@ -275,6 +275,12 @@ FROM [EXPLAIN INSERT INTO t VALUES (19, 190, 1900, 5, 5), (20, 200, 2000, 6, 6)]
 WHERE info ~ 'table:';
 ----
 
+# Verify that skip_unique_checks is cleared on the primary key as well.
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (e ASC),
+
 # Verify that skip_unique_checks is no longer shown in SHOW CREATE TABLE.
 query T
 SELECT show_index(create_statement, 't_a_key') FROM [SHOW CREATE TABLE t]

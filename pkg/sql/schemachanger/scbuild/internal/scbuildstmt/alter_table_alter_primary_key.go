@@ -55,11 +55,6 @@ type alterPrimaryKeySpec struct {
 	Name          tree.Name
 	StorageParams tree.StorageParams
 	Partitioning  *partitioningSpec
-	// IsLocalitySwap is true when the ALTER PRIMARY KEY is triggered by an ALTER
-	// TABLE SET LOCALITY that changes between RBR variants. When true,
-	// skip_unique_checks is preserved from old indexes if the new indexes retain
-	// implicit partitioning.
-	IsLocalitySwap bool
 }
 
 // partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
@@ -248,9 +243,11 @@ func setupStorageParams(
 ) {
 	// Reset to defaults first, since the new PK should not inherit storage
 	// params from the old PK unless explicitly specified in the WITH clause.
-	// For RBR-to-RBR locality swaps, preserve skip_unique_checks from the old
-	// PK since the index remains implicitly partitioned.
-	if t.IsLocalitySwap && partitioning != nil && partitioning.NumImplicitColumns > 0 {
+	// For locality swaps where the new index retains implicit partitioning
+	// (e.g. RBR-to-RBR), preserve skip_unique_checks from the old PK.
+	// For transitions that remove implicit partitioning (e.g. RBR-to-GLOBAL),
+	// clear it since it's only valid on implicitly partitioned indexes.
+	if t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) > 0 {
 		final.SkipUniqueChecks = old.SkipUniqueChecks
 	} else {
 		final.SkipUniqueChecks = false
@@ -450,16 +447,39 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		}
 	}
 
-	if t.Partitioning != nil {
-		newImplicitCols := t.Partitioning.NewImplicitColumns
-		for i := 0; i < min(len(t.Columns), len(newImplicitCols)); i++ {
-			partCol := tree.Name(newImplicitCols[i].Name)
-			if partCol != t.Columns[i].Column && usedColumns[partCol] {
-				panic(errors.WithHint(
-					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-						"cannot add column %q as an implicit partitioning column", partCol),
-					"partitioning columns should already exist in the index or they must be a suffix of the keys",
-				))
+	// Determine implicit partitioning columns from the table's locality (RBR)
+	// or PARTITION ALL BY configuration. Note that RBR and PARTITION ALL BY
+	// cases are mutually exclusive.
+	var implicitColNames map[tree.Name]struct{}
+	isRegionalByRow := false
+	tableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
+	if rbrElem := tableElts.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement(); rbrElem != nil {
+		isRegionalByRow = true
+		regionColName := explicitRegionColName(tree.Name(rbrElem.As))
+		implicitColNames = map[tree.Name]struct{}{regionColName: {}}
+	} else if tableElts.FilterTablePartitioning().MustGetZeroOrOneElement() != nil {
+		// PARTITION ALL BY: the implicit columns are the leading implicit key
+		// columns of the current primary index.
+		primaryIdx := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
+		implicitColNames = make(map[tree.Name]struct{})
+		for _, col := range mustRetrieveKeyIndexColumns(b, tbl.TableID, primaryIdx.IndexID) {
+			if !col.Implicit {
+				break
+			}
+			colName := mustRetrieveColumnName(b, tbl.TableID, col.ColumnID)
+			implicitColNames[tree.Name(colName.Name)] = struct{}{}
+		}
+	}
+
+	// Block implicit partitioning columns that appear as non-leading key
+	// columns, since the implicit column will be prepended and the explicit
+	// reference would create a duplicate.
+	for i, col := range t.Columns {
+		if _, ok := implicitColNames[col.Column]; ok && i != 0 {
+			if isRegionalByRow {
+				panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
+			} else {
+				panic(sqlerrors.NewIndexIncludeImplicitPartitionColFromPartitionAllBy)
 			}
 		}
 	}
