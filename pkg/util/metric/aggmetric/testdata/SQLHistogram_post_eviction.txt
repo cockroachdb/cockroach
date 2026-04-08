@@ -1,7 +1,7 @@
 echo
 ----
 histo_gram_bucket{database="1",application_name="5",le="+Inf"} 1
-histo_gram_bucket{database="1",application_name="5",le="1"} 1
+histo_gram_bucket{database="1",application_name="5",le="1"} 0
 histo_gram_bucket{database="1",application_name="5",le="1.4142135623730951"} 1
 histo_gram_bucket{database="1",application_name="5",le="100"} 1
 histo_gram_bucket{database="1",application_name="5",le="11.313708498984761"} 1
@@ -17,7 +17,7 @@ histo_gram_bucket{database="1",application_name="5",le="64"} 1
 histo_gram_bucket{database="1",application_name="5",le="8"} 1
 histo_gram_bucket{database="1",application_name="5",le="90.50966799187809"} 1
 histo_gram_bucket{database="1",application_name="6",le="+Inf"} 1
-histo_gram_bucket{database="1",application_name="6",le="1"} 1
+histo_gram_bucket{database="1",application_name="6",le="1"} 0
 histo_gram_bucket{database="1",application_name="6",le="1.4142135623730951"} 1
 histo_gram_bucket{database="1",application_name="6",le="100"} 1
 histo_gram_bucket{database="1",application_name="6",le="11.313708498984761"} 1
@@ -33,7 +33,7 @@ histo_gram_bucket{database="1",application_name="6",le="64"} 1
 histo_gram_bucket{database="1",application_name="6",le="8"} 1
 histo_gram_bucket{database="1",application_name="6",le="90.50966799187809"} 1
 histo_gram_bucket{database="1",application_name="7",le="+Inf"} 1
-histo_gram_bucket{database="1",application_name="7",le="1"} 1
+histo_gram_bucket{database="1",application_name="7",le="1"} 0
 histo_gram_bucket{database="1",application_name="7",le="1.4142135623730951"} 1
 histo_gram_bucket{database="1",application_name="7",le="100"} 1
 histo_gram_bucket{database="1",application_name="7",le="11.313708498984761"} 1
@@ -49,7 +49,7 @@ histo_gram_bucket{database="1",application_name="7",le="64"} 1
 histo_gram_bucket{database="1",application_name="7",le="8"} 1
 histo_gram_bucket{database="1",application_name="7",le="90.50966799187809"} 1
 histo_gram_bucket{database="1",application_name="8",le="+Inf"} 1
-histo_gram_bucket{database="1",application_name="8",le="1"} 1
+histo_gram_bucket{database="1",application_name="8",le="1"} 0
 histo_gram_bucket{database="1",application_name="8",le="1.4142135623730951"} 1
 histo_gram_bucket{database="1",application_name="8",le="100"} 1
 histo_gram_bucket{database="1",application_name="8",le="11.313708498984761"} 1
@@ -65,7 +65,7 @@ histo_gram_bucket{database="1",application_name="8",le="64"} 1
 histo_gram_bucket{database="1",application_name="8",le="8"} 1
 histo_gram_bucket{database="1",application_name="8",le="90.50966799187809"} 1
 histo_gram_bucket{database="1",application_name="9",le="+Inf"} 1
-histo_gram_bucket{database="1",application_name="9",le="1"} 1
+histo_gram_bucket{database="1",application_name="9",le="1"} 0
 histo_gram_bucket{database="1",application_name="9",le="1.4142135623730951"} 1
 histo_gram_bucket{database="1",application_name="9",le="100"} 1
 histo_gram_bucket{database="1",application_name="9",le="11.313708498984761"} 1
@@ -161,7 +161,7 @@ histo_gram_bucket{database="2",application_name="14",le="64"} 1
 histo_gram_bucket{database="2",application_name="14",le="8"} 0
 histo_gram_bucket{database="2",application_name="14",le="90.50966799187809"} 1
 histo_gram_bucket{le="+Inf"} 15
-histo_gram_bucket{le="1"} 10
+histo_gram_bucket{le="1"} 0
 histo_gram_bucket{le="1.4142135623730951"} 10
 histo_gram_bucket{le="100"} 15
 histo_gram_bucket{le="11.313708498984761"} 15

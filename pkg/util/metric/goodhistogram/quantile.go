@@ -25,13 +25,37 @@ func (s *Snapshot) ValueAtQuantile(q float64) float64 {
 	if s.TotalCount == 0 {
 		return 0
 	}
-	// Target rank (fractional, 0-based).
+	// Target rank (fractional, 0-based) across all observations,
+	// including underflow and overflow.
 	rank := (q / 100.0) * float64(s.TotalCount)
 	if rank <= 0 {
 		return s.Config.Boundaries[0]
 	}
 	if rank >= float64(s.TotalCount) {
 		return s.Config.Boundaries[len(s.Config.Boundaries)-1]
+	}
+
+	// Underflow and zero observations form an implicit region below lo.
+	// If the quantile falls within this region, clamp to lo.
+	belowLo := float64(s.ZeroCount + s.Underflow)
+	if rank <= belowLo {
+		return s.Config.Lo
+	}
+	// Adjust rank to be relative to the in-range buckets.
+	rank -= belowLo
+
+	// Count of in-range observations (buckets only, excluding
+	// underflow, overflow, and zeros).
+	var inRangeCount uint64
+	for _, c := range s.Counts {
+		inRangeCount += c
+	}
+
+	// If the quantile falls beyond all in-range observations, it's
+	// in the overflow region. Clamp to hi, matching Prometheus's
+	// behavior of clamping to the last explicit bucket boundary.
+	if rank > float64(inRangeCount) {
+		return s.Config.Hi
 	}
 
 	n := len(s.Counts)

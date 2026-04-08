@@ -101,6 +101,7 @@ require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
+	github.com/DataDog/sketches-go v1.4.8
 	github.com/IBM/go-sdk-core/v5 v5.19.0
 	github.com/IBM/networking-go-sdk v0.51.3
 	github.com/IBM/platform-services-go-sdk v0.79.0
@@ -111,6 +112,7 @@ require (
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/RaduBerinde/btreemap v0.0.0-20260105202824-d3184786f603
+	github.com/RaduBerinde/tdigest v0.0.0-20251022152254-90e030c3a314
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
@@ -253,6 +255,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	go.opentelemetry.io/proto/otlp v0.11.0
+	go.uber.org/atomic v1.10.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.3
 	golang.org/x/perf v0.0.0-20251112180420-cfbd823f7301
 	golang.org/x/term v0.37.0
@@ -281,7 +284,6 @@ require (
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
-	github.com/DataDog/sketches-go v1.4.8 // indirect
 	github.com/FastFilter/xorfilter v0.4.2-0.20260120015552-4e5a4d9df65a // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c // indirect
@@ -291,7 +293,6 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/RaduBerinde/axisds/v2 v2.0.0 // indirect
-	github.com/RaduBerinde/tdigest v0.0.0-20251022152254-90e030c3a314 // indirect
 	github.com/abbot/go-http-auth v0.4.1-0.20181019201920-860ed7f246ff // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
@@ -489,7 +490,6 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect

@@ -1,0 +1,123 @@
+Benchmark Results — GCE Worker (Intel Xeon @ 2.80GHz, 24 cores, x86_64, linux)
+===============================================================================
+Date: 2026-04-10
+
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+
+=== Recording Benchmarks (5 runs each) ===
+
+BenchmarkGoodHistogramRecord-24                        	58318036	        20.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecord-24                        	58585591	        20.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecord-24                        	58686004	        20.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecord-24                        	58612320	        20.47 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecord-24                        	58422402	        20.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecordParallel-24                	22140934	        53.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecordParallel-24                	22226755	        53.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecordParallel-24                	21993962	        53.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecordParallel-24                	19605540	        55.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkGoodHistogramRecordParallel-24                	22183909	        53.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-24            	58694085	        20.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-24            	58609726	        20.42 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-24            	58688425	        20.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-24            	58701004	        20.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-24            	58734321	        20.45 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-24               	46700914	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-24               	46748362	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-24               	46722748	        25.65 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-24               	46768803	        25.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-24               	46588218	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-parallel-24   	22289197	        54.33 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-parallel-24   	21879616	        54.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-parallel-24   	22153063	        53.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-parallel-24   	22252515	        53.77 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/without-seqlock-parallel-24   	22203597	        54.22 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-parallel-24      	21328712	        53.12 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-parallel-24      	22686422	        53.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-parallel-24      	22427202	        52.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-parallel-24      	22578597	        53.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSeqlockOverhead/with-seqlock-parallel-24      	22410663	        53.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecord-24                       	38984528	        30.75 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecord-24                       	39022700	        30.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecord-24                       	38766776	        30.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecord-24                       	38879654	        30.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecord-24                       	39023880	        30.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecordParallel-24               	25516387	        46.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecordParallel-24               	25780482	        46.66 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecordParallel-24               	25749670	        46.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecordParallel-24               	25631108	        46.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramRecordParallel-24               	25170206	        47.01 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecord-24                         	42051094	        28.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecord-24                         	42072746	        28.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecord-24                         	42124368	        28.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecord-24                         	42062991	        28.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecord-24                         	42186067	        28.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecordParallel-24                 	 4769234	       250.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecordParallel-24                 	 4770822	       253.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecordParallel-24                 	 4871353	       250.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecordParallel-24                 	 4696254	       254.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHDRHistogramRecordParallel-24                 	 4721158	       253.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecord-24                  	18399638	        65.15 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecord-24                  	18393324	        65.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecord-24                  	16257417	        64.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecord-24                  	18407505	        65.13 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecord-24                  	16275916	        64.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecordParallel-24          	 8081344	       145.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecordParallel-24          	 8173317	       149.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecordParallel-24          	 8162533	       150.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecordParallel-24          	 7963134	       145.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusHistogramRecordParallel-24          	 7994024	       143.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecord-24            	11255991	       103.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecord-24            	11530994	       108.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecord-24            	11560027	       106.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecord-24            	11516955	       106.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecord-24            	11413868	       103.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecordParallel-24    	 6680648	       182.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecordParallel-24    	 7011640	       183.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecordParallel-24    	 6696234	       167.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecordParallel-24    	 6886236	       166.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPrometheusNativeHistogramRecordParallel-24    	 6595267	       176.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecord-24                             	27357984	        43.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecord-24                             	27528007	        43.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecord-24                             	27421760	        43.50 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecord-24                             	27402751	        43.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecord-24                             	27508604	        43.56 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecordParallel-24                     	441152577	         2.720 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecordParallel-24                     	440978620	         2.711 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecordParallel-24                     	441506962	         2.715 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecordParallel-24                     	441866022	         2.716 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchRecordParallel-24                     	442740963	         2.714 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecord-24                              	13345443	        90.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecord-24                              	13345549	        89.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecord-24                              	13358636	        90.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecord-24                              	13350205	        90.00 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecord-24                              	13331829	        90.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecordParallel-24                      	229399644	         5.225 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecordParallel-24                      	229718572	         5.219 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecordParallel-24                      	229463283	         5.223 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecordParallel-24                      	229402125	         5.221 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestRecordParallel-24                      	229051168	         5.220 ns/op	       0 B/op	       0 allocs/op
+
+=== Quantile Benchmarks (5 runs each) ===
+
+BenchmarkGoodHistogramQuantile-24                      	  954828	      1135 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkGoodHistogramQuantile-24                      	 1000000	      1132 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkGoodHistogramQuantile-24                      	 1000000	      1130 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkGoodHistogramQuantile-24                      	  992896	      1131 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkGoodHistogramQuantile-24                      	  994166	      1125 ns/op	    1792 B/op	       2 allocs/op
+BenchmarkBase2HistogramQuantile-24                     	22101117	        54.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramQuantile-24                     	22131214	        54.15 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramQuantile-24                     	22154563	        54.24 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramQuantile-24                     	22123395	        54.24 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBase2HistogramQuantile-24                     	22103463	        54.13 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchQuantile-24                           	 1753851	       683.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchQuantile-24                           	 1757334	       684.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchQuantile-24                           	 1757684	       683.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchQuantile-24                           	 1760578	       682.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDDSketchQuantile-24                           	 1755399	       683.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestQuantile-24                            	 6710388	       178.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestQuantile-24                            	 6714332	       178.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestQuantile-24                            	 6730483	       178.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestQuantile-24                            	 6727054	       178.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTDigestQuantile-24                            	 6722701	       178.1 ns/op	       0 B/op	       0 allocs/op

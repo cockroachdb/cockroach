@@ -1,0 +1,34 @@
+External IP address was not found; defaulting to using IAP tunneling.
+
+To increase the performance of the tunnel, consider installing NumPy. For instructions,
+please see https://cloud.google.com/iap/docs/using-tcp-forwarding#increasing_the_tcp_upload_bandwidth
+
+ERROR: [0] Error during local connection to [stdin]: Error while connecting [4033: 'not authorized'].
+Traceback (most recent call last):
+  File "/Users/briandillmann/Applications/google-cloud-sdk/lib/googlecloudsdk/command_lib/compute/iap_tunnel.py", line 775, in RunReceiveLocalData
+    websocket_conn = self._InitiateConnection(
+        conn,
+    ...<4 lines>...
+        conn_id=conn_id,
+    )
+  File "/Users/briandillmann/Applications/google-cloud-sdk/lib/googlecloudsdk/command_lib/compute/iap_tunnel.py", line 744, in _InitiateConnection
+    new_websocket.InitiateConnection()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/briandillmann/Applications/google-cloud-sdk/lib/googlecloudsdk/api_lib/compute/iap_tunnel_websocket.py", line 152, in InitiateConnection
+    self._WaitForOpenOrRaiseError()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/briandillmann/Applications/google-cloud-sdk/lib/googlecloudsdk/api_lib/compute/iap_tunnel_websocket.py", line 444, in _WaitForOpenOrRaiseError
+    raise ConnectionCreationError(error_msg)
+googlecloudsdk.api_lib.compute.iap_tunnel_websocket.ConnectionCreationError: Error while connecting [4033: 'not authorized'].
+Connection closed by UNKNOWN port 65535
+
+Recommendation: To check for possible causes of SSH connectivity issues and get
+recommendations, rerun the ssh command with the --troubleshoot option.
+
+gcloud compute ssh gceworker-briandillmann --project=cockroach-workers --zone=us-east1-b --troubleshoot
+
+Or, to investigate an IAP tunneling issue:
+
+gcloud compute ssh gceworker-briandillmann --project=cockroach-workers --zone=us-east1-b --troubleshoot --tunnel-through-iap
+
+ERROR: (gcloud.compute.ssh) [/usr/bin/ssh] exited with return code [255].

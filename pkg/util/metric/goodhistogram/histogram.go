@@ -97,8 +97,6 @@ func getLe(key int, schema int32) float64 {
 	return math.Ldexp(frac, exp)
 }
 
-const mantissaMask = (1 << 52) - 1
-
 // subBucketLookupBits is the number of top mantissa bits used to index
 // the sub-bucket lookup table. 8 bits → 256 entries, which is enough
 // precision for all schemas up to 8 (256 sub-buckets).
@@ -267,15 +265,19 @@ func (h *Histogram) Record(v int64) {
 	key := sub + (exp-1)*h.config.NumSubBuckets
 	idx := key - h.config.MinKey
 
-	// Clamp to valid range. Values below Lo land in bucket 0 (and are
-	// counted as underflow); values above Hi land in the last bucket
-	// (and are counted as overflow).
+	// Clamp to valid range. Values outside [lo, hi] are counted in
+	// Underflow/Overflow but are NOT added to any bucket. This matches
+	// the Prometheus convention where out-of-range values go to an
+	// implicit -Inf/+Inf bucket that is excluded from interpolation,
+	// and quantile estimation clamps to lo/hi when the quantile falls
+	// in the overflow/underflow region.
 	if idx < 0 {
 		h.Underflow.Add(1)
-		idx = 0
-	} else if idx >= h.config.NumBuckets {
+		return
+	}
+	if idx >= h.config.NumBuckets {
 		h.Overflow.Add(1)
-		idx = h.config.NumBuckets - 1
+		return
 	}
 	h.counts[idx].Add(1)
 }
@@ -310,9 +312,9 @@ func (h *Histogram) Snapshot() Snapshot {
 		s.Counts[i] = c
 		s.TotalCount += c
 	}
-	// ZeroCount observations are not recorded in any bucket, so add
-	// them to the total.
-	s.TotalCount += s.ZeroCount
+	// Underflow, overflow, and zero observations are not recorded in
+	// any bucket, so add them to the total.
+	s.TotalCount += s.ZeroCount + s.Underflow + s.Overflow
 	return s
 }
 
@@ -371,7 +373,7 @@ func (s *Snapshot) Downsample(maxBuckets int) Snapshot {
 	newSchema := s.Config.Schema - schemaReduction
 	if newSchema < 0 {
 		newSchema = 0
-		mergeFactor = 1 << s.Config.Schema
+		schemaReduction = s.Config.Schema
 	}
 
 	// Compute the new bucket count. The first bucket's alignment may not

@@ -622,73 +622,6 @@ func signedRelError(got, expected float64) float64 {
 	return (got - expected) / expected
 }
 
-// promTrapezoidalQuantile computes a quantile from a conventional Prometheus
-// histogram using trapezoidal interpolation instead of linear. Same bucket
-// data as promValueAtQuantile, but estimates linear density across each bucket
-// using neighbor densities.
-func promTrapezoidalQuantile(h *prometheusgo.Histogram, q float64) float64 {
-	buckets := h.Bucket
-	n := float64(h.GetSampleCount())
-	if n == 0 {
-		return 0
-	}
-	rank := (q / 100.0) * n
-
-	// Convert cumulative counts to per-bucket counts and collect boundaries.
-	numB := len(buckets)
-	counts := make([]float64, numB)
-	bounds := make([]float64, numB+1) // bounds[0] = 0, bounds[i+1] = upper bound of bucket i
-	bounds[0] = 0
-	var prevCum uint64
-	for i, b := range buckets {
-		counts[i] = float64(b.GetCumulativeCount() - prevCum)
-		prevCum = b.GetCumulativeCount()
-		bounds[i+1] = b.GetUpperBound()
-	}
-
-	// Compute average density per bucket.
-	avgDensity := make([]float64, numB)
-	for i := 0; i < numB; i++ {
-		w := bounds[i+1] - bounds[i]
-		if w > 0 && counts[i] > 0 {
-			avgDensity[i] = counts[i] / w
-		}
-	}
-
-	// Boundary densities by averaging neighbors.
-	boundaryD := make([]float64, numB+1)
-	for i := 0; i <= numB; i++ {
-		switch {
-		case i == 0:
-			boundaryD[i] = avgDensity[0]
-		case i == numB:
-			boundaryD[i] = avgDensity[numB-1]
-		default:
-			boundaryD[i] = (avgDensity[i-1] + avgDensity[i]) / 2.0
-		}
-	}
-
-	// Walk buckets to find the one containing the target rank, then solve.
-	var cumCount float64
-	for i := 0; i < numB; i++ {
-		if cumCount+counts[i] >= rank {
-			localRank := rank - cumCount
-			lo := bounds[i]
-			hi := bounds[i+1]
-			w := hi - lo
-			if w <= 0 || counts[i] == 0 {
-				return lo
-			}
-			return trapezoidalSolve(lo, w, counts[i], boundaryD[i], boundaryD[i+1], localRank)
-		}
-		cumCount += counts[i]
-	}
-	if numB > 0 {
-		return bounds[numB]
-	}
-	return 0
-}
-
 // nativeHistogramQuantile computes a quantile from a Prometheus native
 // histogram by decoding its spans and deltas into bucket boundaries and
 // counts, then applying linear interpolation.
@@ -916,8 +849,8 @@ func infoByImpl() map[string]implInfo {
 		"HDR Histogram 1sf":   {hdr1.ByteSize(), fmt.Sprintf("%d", hdr1.ByteSize()/8)},
 		"HDR Histogram 3sf":   {hdr3.ByteSize(), fmt.Sprintf("%d", hdr3.ByteSize()/8)},
 		"Prometheus (60)":     {promBucketCount * 8, fmt.Sprintf("%d", promBucketCount)},
-		// Prometheus Native uses sync.Map for sparse buckets. Each entry costs
-		// ~85 bytes (sync.Map entry struct + interface boxing + *int64 heap alloc),
+		// Prometheus Native uses a synchronized map for sparse buckets. Each entry
+		// costs ~85 bytes (map entry struct + interface boxing + *int64 heap alloc),
 		// and there are 2 copies (hot/cold swap). The conventional []uint64 array
 		// is also always allocated (60 entries * 8 bytes * 2 copies = 960B).
 		"Prometheus Native": {
@@ -1211,16 +1144,6 @@ func writeSpeedReport(out *strings.Builder, sd speedData) {
 
 // ---- Helpers ----
 
-func relError(got, expected float64) float64 {
-	if expected == 0 {
-		if got == 0 {
-			return 0
-		}
-		return math.Inf(1)
-	}
-	return math.Abs(got-expected) / expected
-}
-
 // promValueAtQuantile replicates the standard Prometheus quantile estimation
 // (linear interpolation within buckets) used by CockroachDB.
 func promValueAtQuantile(h *prometheusgo.Histogram, q float64) float64 {
@@ -1264,16 +1187,4 @@ func fmtDuration(ns float64) string {
 	default:
 		return fmt.Sprintf("%.0fns", ns)
 	}
-}
-
-// fmtBytes formats a byte count.
-func fmtBytes(b int) string {
-	if b >= 1024 {
-		return fmt.Sprintf("%.1fKB", float64(b)/1024)
-	}
-	return fmt.Sprintf("%dB", b)
-}
-
-func init() {
-	_ = fmt.Sprintf
 }

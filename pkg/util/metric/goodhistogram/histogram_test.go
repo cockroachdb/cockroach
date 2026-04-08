@@ -261,6 +261,128 @@ func TestQuantileEdgeCases(t *testing.T) {
 		require.GreaterOrEqual(t, snap.ValueAtQuantile(0), 1.0)
 		require.LessOrEqual(t, snap.ValueAtQuantile(100), 1000.0)
 	})
+
+	t.Run("all zeros", func(t *testing.T) {
+		h := New(1, 1000, 0.05)
+		for i := 0; i < 100; i++ {
+			h.Record(0)
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(100), snap.ZeroCount)
+		require.Equal(t, uint64(100), snap.TotalCount)
+		// All observations are zeros (below lo), so every quantile
+		// should clamp to lo.
+		require.Equal(t, 1.0, snap.ValueAtQuantile(50))
+		require.Equal(t, 1.0, snap.ValueAtQuantile(99))
+	})
+
+	t.Run("all underflow", func(t *testing.T) {
+		h := New(100, 10000, 0.05)
+		for i := int64(1); i <= 50; i++ {
+			h.Record(i) // all below lo=100
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(50), snap.Underflow)
+		require.Equal(t, uint64(50), snap.TotalCount)
+		// Every quantile should clamp to lo.
+		require.Equal(t, 100.0, snap.ValueAtQuantile(50))
+		require.Equal(t, 100.0, snap.ValueAtQuantile(99))
+	})
+
+	t.Run("all overflow", func(t *testing.T) {
+		h := New(1, 100, 0.05)
+		for i := int64(200); i <= 300; i++ {
+			h.Record(i)
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(101), snap.Overflow)
+		require.Equal(t, uint64(101), snap.TotalCount)
+		// Every quantile should clamp to hi.
+		require.Equal(t, 100.0, snap.ValueAtQuantile(50))
+		require.Equal(t, 100.0, snap.ValueAtQuantile(99))
+	})
+
+	t.Run("underflow with in-range values", func(t *testing.T) {
+		h := New(100, 10000, 0.05)
+		// 80 underflow values, 20 in-range values.
+		for i := int64(1); i <= 80; i++ {
+			h.Record(i) // underflow
+		}
+		for i := int64(500); i <= 519; i++ {
+			h.Record(i) // in range
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(80), snap.Underflow)
+		require.Equal(t, uint64(100), snap.TotalCount)
+
+		// p50 is at rank 50. With 80 underflow values, rank 50
+		// falls in the underflow region — should clamp to lo.
+		require.Equal(t, 100.0, snap.ValueAtQuantile(50))
+
+		// p90 is at rank 90. Past the 80 underflow values, it falls
+		// in the in-range buckets containing 500–519.
+		p90 := snap.ValueAtQuantile(90)
+		require.Greater(t, p90, 100.0, "p90 should be in the in-range region")
+		require.InDelta(t, 510, p90, 50, "p90 should be near the in-range values")
+	})
+
+	t.Run("overflow with in-range values", func(t *testing.T) {
+		h := New(1, 100, 0.05)
+		// 50 in-range values, 50 overflow values.
+		for i := int64(1); i <= 50; i++ {
+			h.Record(i) // in range
+		}
+		for i := int64(200); i <= 249; i++ {
+			h.Record(i) // overflow
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(50), snap.Overflow)
+		require.Equal(t, uint64(100), snap.TotalCount)
+
+		// p50 falls in the in-range buckets.
+		p50 := snap.ValueAtQuantile(50)
+		require.Greater(t, p50, 0.0)
+		require.LessOrEqual(t, p50, 100.0)
+
+		// p99 should be in the overflow region — clamps to hi.
+		require.Equal(t, 100.0, snap.ValueAtQuantile(99))
+	})
+
+	t.Run("mixed zeros underflow overflow and in-range", func(t *testing.T) {
+		h := New(100, 10000, 0.05)
+		// 10 zeros, 10 underflow, 60 in-range, 20 overflow.
+		for i := 0; i < 10; i++ {
+			h.Record(0)
+		}
+		for i := int64(1); i <= 10; i++ {
+			h.Record(i)
+		}
+		for i := int64(500); i <= 559; i++ {
+			h.Record(i)
+		}
+		for i := int64(20000); i <= 20019; i++ {
+			h.Record(i)
+		}
+		snap := h.Snapshot()
+		require.Equal(t, uint64(10), snap.ZeroCount)
+		require.Equal(t, uint64(10), snap.Underflow)
+		require.Equal(t, uint64(20), snap.Overflow)
+		require.Equal(t, uint64(100), snap.TotalCount)
+
+		// p10 is at rank 10, which falls at the boundary between
+		// zeros and underflow — should clamp to lo.
+		require.Equal(t, 100.0, snap.ValueAtQuantile(10))
+
+		// p50 is at rank 50. With 20 sub-lo values (zeros +
+		// underflow), rank 50 falls in the in-range buckets.
+		p50 := snap.ValueAtQuantile(50)
+		require.Greater(t, p50, 100.0)
+		require.Less(t, p50, 10000.0)
+
+		// p95 is at rank 95. With 80 non-overflow values, rank 95
+		// falls in the overflow region — should clamp to hi.
+		require.Equal(t, 10000.0, snap.ValueAtQuantile(95))
+	})
 }
 
 func TestMeanAndTotal(t *testing.T) {

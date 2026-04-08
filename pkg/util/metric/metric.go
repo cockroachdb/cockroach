@@ -329,21 +329,6 @@ const useNativeHistogramsEnvVar = "COCKROACH_ENABLE_PROMETHEUS_NATIVE_HISTOGRAMS
 
 var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, false)
 
-// nativeHistogramsBucketFactorEnvVar can be used to override the default
-// bucket size exponential factor for Prometheus native histograms, if enabled.
-// If not set, use the default factor of 1.1.
-const nativeHistogramsBucketFactorEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_FACTOR"
-
-var nativeHistogramsBucketFactor = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketFactorEnvVar, 1.1)
-
-// nativeHistogramsBucketCountMultiplierEnvVar can be used to override the
-// default maximum bucket count for Prometheus native histograms, if enabled.
-// The maximum bucket count is set to the number of conventional buckets for
-// the histogram metric multiplied by the multiplier, which defaults to 1.0.
-const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_COUNT_MULTIPLIER"
-
-var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
-
 // maxLabelValuesEnvVar can be used to configure the maximum number of distinct
 // label value combinations for high cardinality metrics before eviction starts.
 const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUES"
@@ -441,49 +426,6 @@ func newGoodHistogramFromOpts(opt HistogramOptions) *GoodHistogramWrapper {
 	}
 	config := goodhistogram.NewConfig(lo, hi, desiredError)
 	return newGoodHistogram(opt.Metadata, opt.Duration, config)
-}
-
-// NewHistogram is a prometheus-backed histogram. Depending on the value of
-// opts.Buckets, this is suitable for recording any kind of quantity. Common
-// sensible choices are {IO,Network}LatencyBuckets.
-func newHistogram(
-	meta Metadata, duration time.Duration, buckets []float64, bucketConfig staticBucketConfig,
-) *Histogram {
-	// TODO(obs-inf): prometheus supports labeled histograms but they require more
-	// plumbing and don't fit into the PrometheusObservable interface any more.
-
-	// If no buckets are provided, generate buckets from bucket configuration
-	if buckets == nil && bucketConfig.count != 0 {
-		buckets = bucketConfig.GetBucketsFromBucketConfig()
-	}
-	opts := prometheus.HistogramOpts{
-		Buckets: buckets,
-	}
-	if bucketConfig.distribution == Exponential && nativeHistogramsEnabled {
-		opts.NativeHistogramBucketFactor = nativeHistogramsBucketFactor
-		opts.NativeHistogramMaxBucketNumber = uint32(float64(len(buckets)) * nativeHistogramsBucketCountMultiplier)
-	}
-	cum := prometheus.NewHistogram(opts)
-	h := &Histogram{
-		Metadata: meta,
-		cum:      cum,
-	}
-	h.windowed.Ticker = tick.NewTicker(
-		now(),
-		// We want to divide the total window duration by the number of windows
-		// because we need to rotate the windows at uniformly distributed
-		// intervals within a histogram's total duration.
-		duration/WindowedHistogramWrapNum,
-		func() {
-			h.windowed.Lock()
-			defer h.windowed.Unlock()
-			if h.windowed.cur.Load() != nil {
-				h.windowed.prev.Store(h.windowed.cur.Load())
-			}
-			h.windowed.cur.Store(prometheus.NewHistogram(opts))
-		})
-	h.windowed.Ticker.OnTick()
-	return h
 }
 
 var _ PrometheusExportable = (*Histogram)(nil)

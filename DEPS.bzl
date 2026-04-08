@@ -2384,9 +2384,11 @@ def go_deps():
         name = "com_github_datadog_sketches_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/sketches-go",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:pFk9BNn+Rzv8IMIoPUttoOpOr3bJOqU3P6EP5wK+Lv8=",
-        version = "v1.4.8",
+        sha256 = "d5366b981d7f9dc36d9cc9bb910580c95e82d74756d2881f01700bd4012bb63e",
+        strip_prefix = "github.com/DataDog/sketches-go@v1.4.8",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/sketches-go/com_github_datadog_sketches_go-v1.4.8.zip",
+        ],
     )
     go_repository(
         name = "com_github_datadog_zstd",
@@ -11258,9 +11260,11 @@ def go_deps():
         name = "org_golang_google_protobuf",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/protobuf",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=",
-        version = "v1.36.11",
+        sha256 = "14983d36c56a814ed91b6d652f2b8f895baba1b84eb43b28a0b132c8637cd274",
+        strip_prefix = "google.golang.org/protobuf@v1.36.11",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.36.11.zip",
+        ],
     )
     go_repository(
         name = "org_golang_x_arch",
