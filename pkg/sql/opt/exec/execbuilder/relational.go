@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -432,7 +433,8 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 					}
 				}
 			}
-			if tab.CanaryAndStableStatsDiffer() {
+			if tab.CanaryAndStableStatsDiffer() &&
+				b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V26_2) {
 				val.CanaryStatsActive = true
 				val.CanaryWindowSize = tab.StatsCanaryWindow()
 			}

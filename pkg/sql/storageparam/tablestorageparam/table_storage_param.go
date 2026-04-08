@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -764,6 +765,10 @@ var tableParams = map[string]tableParam{
 	},
 	catpb.CanaryStatsWindowSettingName: {
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+				return "", pgerror.Newf(pgcode.FeatureNotSupported,
+					"%s cannot be used until the cluster upgrade to v26.2 is finalized", key)
+			}
 			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
 			if err != nil {
 				return "", err
