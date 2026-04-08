@@ -2012,25 +2012,25 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 			name:            "non-final iteration duplicate at start",
 			injectIteration: 1,
 			injectAfterRows: 0,
-			expErrRegex:     `duplicate key:`,
+			expErrRegex:     `duplicate key value violates unique constraint`,
 		},
 		{
 			name:            "non-final iteration duplicate after few rows",
 			injectIteration: 1,
 			injectAfterRows: 80,
-			expErrRegex:     `duplicate key:`,
+			expErrRegex:     `duplicate key value violates unique constraint`,
 		},
 		{
 			name:            "final iteration duplicate at start",
 			injectIteration: maxMergeIterations,
 			injectAfterRows: 0,
-			expErrRegex:     `duplicate key:`,
+			expErrRegex:     `duplicate key value violates unique constraint`,
 		},
 		{
 			name:            "final iteration duplicate after few rows",
 			injectIteration: maxMergeIterations,
 			injectAfterRows: 57,
-			expErrRegex:     `duplicate key:`,
+			expErrRegex:     `duplicate key value violates unique constraint`,
 		},
 	}
 
@@ -2195,11 +2195,12 @@ func TestKVWriteCrossSSTDuplicateDetection(t *testing.T) {
 
 			require.Error(t, err, "expected duplicate key error for cross-SST duplicates")
 
-			// Verify the error indicates a duplicate key violation with key details
-			// (e.g., "/Table/104/2/100/0" or "/Tenant/10/Table/104/2/100/0"). The error
-			// is now detected during the merge process and includes the offending key.
-			require.Regexp(t, `duplicate key: (/Tenant/\d+)?/Table/\d+/\d+/\d+`, err.Error(),
-				"expected error to include key details, got: %v", err)
+			// Verify the error is a proper uniqueness constraint violation. The
+			// DuplicateKeyError from the merge processor crosses the DistSQL
+			// boundary and is converted to a user-facing PG error with
+			// constraint name and key details.
+			require.Regexp(t, `duplicate key value violates unique constraint`, err.Error(),
+				"expected uniqueness constraint violation, got: %v", err)
 		})
 	}
 }
