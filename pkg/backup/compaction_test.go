@@ -673,43 +673,46 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
-	skip.UnderRace(t, "too slow")
-
+	var hookFn func(processorLocality roachpb.Locality, fileLocality string) error
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				OnCompactionFileAccess: &hookFn,
+			},
+		},
+	}
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				ExternalIODir: "/west0",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "west"},
 				}},
+				Knobs: knobs,
 			},
 			1: {
-				ExternalIODir: "/west1",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "west"},
 				}},
+				Knobs: knobs,
 			},
 			2: {
-				ExternalIODir: "/east0",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "east"},
 				}},
+				Knobs: knobs,
 			},
 			3: {
-				ExternalIODir: "/east1",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "east"},
 				}},
+				Knobs: knobs,
 			},
 		},
 	}
@@ -717,162 +720,130 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 	tc, db, _, cleanup := backupRestoreTestSetupWithParams(t, 4, numAccounts, InitManualReplication, args)
 	defer cleanup()
 
-	west1Node, east0Node := sqlutils.MakeSQLRunner(tc.Conns[1]), sqlutils.MakeSQLRunner(tc.Conns[2])
-
 	const targets = "DATABASE data"
-
-	// initBackupChain will create an identical chain of backups in all four node directories.
-	initBackupChain := func(subCollection string) (hlc.Timestamp, hlc.Timestamp) {
+	const numInitialBackups = 4
+	initBackupChain := func(uris []string, opts string) (hlc.Timestamp, hlc.Timestamp) {
 		start := getTime()
-		for i := 1; i <= 4; i++ {
-			db.Exec(t, fullBackupQuery(targets,
-				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
-				start, noOpts))
-		}
+		db.Exec(t, fullBackupQuery(targets, uris, start, opts))
 		db.Exec(t, "UPDATE data.bank SET balance = 200")
-		for i := 1; i <= 4; i++ {
-			db.Exec(t, incBackupQuery(targets,
-				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
-				noAOST, noOpts))
-		}
+		db.Exec(t, incBackupQuery(targets, uris, noAOST, opts))
 		db.Exec(t, "UPDATE data.bank SET balance = 201")
-		for i := 1; i <= 4; i++ {
-			db.Exec(t, incBackupQuery(targets,
-				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
-				noAOST, noOpts))
-		}
+		db.Exec(t, incBackupQuery(targets, uris, noAOST, opts))
 		db.Exec(t, "UPDATE data.bank SET balance = 202")
 		end := getTime()
-		for i := 1; i <= 4; i++ {
-			db.Exec(t, incBackupQuery(targets,
-				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
-				end, noOpts))
-		}
+		db.Exec(t, incBackupQuery(targets, uris, end, opts))
 		return start, end
 	}
-	const numInitialBackups = 4
 
-	t.Run("pin-tier", func(t *testing.T) {
-		ensureLeaseholder(t, db)
-		start, end := initBackupChain("pin-tier")
-
-		// Note that using "nodelocal://0", in combination with setting a unique `ExternalIODir` for
-		// each node, allows us to see which nodes participated in processing the job.
-		// Processor nodes will translate "nodelocal://0" to their respective directories,
-		// meaning only the directories of nodes which participated in processing will be modified.
-		processorCollection := []string{"nodelocal://0/pin-tier"}
-
-		// Run and wait for an execution locality filtered compaction job.
-		jobutils.WaitForJobToSucceed(
-			t, db,
-			triggerCompaction(
-				t, east0Node,
-				fullBackupQuery(targets, processorCollection, start,
-					"WITH EXECUTION LOCALITY = 'tier=0'"),
-				getLatestFullDir(t, db, processorCollection[0]),
-				start, end,
-			),
-		)
-
-		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-tier"})
-		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-tier"})
-		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-tier"})
-		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-tier"})
-
-		// Validate that at least one node matching the locality filter processed the compaction,
-		// and that all nodes which don't match the locality filter did not.
-		require.True(t, numEast0 == numInitialBackups+1 || numWest0 == numInitialBackups+1)
-		require.Equal(t, numWest1, numInitialBackups)
-		require.Equal(t, numEast1, numInitialBackups)
-	})
-
-	t.Run("pin-region", func(t *testing.T) {
-		ensureLeaseholder(t, db)
-		start, end := initBackupChain("pin-region")
-		processorCollection := []string{"nodelocal://0/pin-region"}
-
-		jobutils.WaitForJobToSucceed(
-			t, db,
-			triggerCompaction(
-				t, east0Node,
-				fullBackupQuery(targets, processorCollection, start,
-					"WITH EXECUTION LOCALITY = 'region=east'"),
-				getLatestFullDir(t, db, processorCollection[0]),
-				start, end,
-			),
-		)
-
-		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-region"})
-		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-region"})
-		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-region"})
-		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-region"})
-
-		require.True(t, numEast0 == numInitialBackups+1 || numEast1 == numInitialBackups+1)
-		require.Equal(t, numWest0, numInitialBackups)
-		require.Equal(t, numWest1, numInitialBackups)
-	})
-
-	t.Run("pin-single", func(t *testing.T) {
-		ensureLeaseholder(t, db)
-		start, end := initBackupChain("pin-single")
-		processorCollection := []string{"nodelocal://0/pin-single"}
-
-		jobutils.WaitForJobToSucceed(
-			t, db,
-			triggerCompaction(
-				t, west1Node,
-				fullBackupQuery(targets, processorCollection, start,
-					"WITH EXECUTION LOCALITY = 'tier=1,region=west'"),
-				getLatestFullDir(t, db, processorCollection[0]),
-				start, end,
-			),
-		)
-
-		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-single"})
-		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-single"})
-		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-single"})
-		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-single"})
-
-		// Validate that the expected node processed the compaction, and the rest did not.
-		require.Equal(t, numWest1, numInitialBackups+1)
-		require.Equal(t, numWest0, numInitialBackups)
-		require.Equal(t, numEast0, numInitialBackups)
-		require.Equal(t, numEast1, numInitialBackups)
-
-		// Validate that the expected node's directory restores correctly using the expected number of backups.
-		//
-		// Note that with this test structure, we can only do this restore validation in cases where
-		// we pin the processing to a single node. Using the "nodelocal://0" trick to see which nodes
-		// participated in processing means that, in cases where multiple nodes participate in processing,
-		// the compaction will be split across multiple directories, and thus cannot be restored from correctly.
-		validateCompactedBackupForTables(t, db,
-			[]string{"nodelocal://2/pin-single"},
-			[]string{"bank"}, start, end, noOpts, noOpts,
-			2)
-	})
-
-	t.Run("validate-coordinator", func(t *testing.T) {
-		// The previous subtests only validate that the processor nodes adhere to the locality filter.
-		// This test ensures that the coordinator node also matches the locality filter.
-		ensureLeaseholder(t, db)
-		start, end := initBackupChain("validate-coordinator")
-		processorCollection := []string{"nodelocal://0/validate-coordinator"}
-
-		compactionJobID := triggerCompaction(
-			t, db,
-			fullBackupQuery(targets, processorCollection, start,
-				"WITH EXECUTION LOCALITY = 'tier=1,region=west'"),
-			getLatestFullDir(t, db, processorCollection[0]),
-			start, end,
-		)
-		jobutils.WaitForJobToSucceed(t, db, compactionJobID)
+	validate := func(
+		uris []string,
+		compactionJobID jobspb.JobID,
+		start, end hlc.Timestamp,
+		validCoordinators ...int,
+	) {
+		require.Equal(t, numInitialBackups+1, countBackups(t, db, uris))
+		validateCompactedBackupForTables(t, db, uris, []string{"bank"}, start, end, noOpts, noOpts, 2)
 
 		var instanceId int32
 		db.QueryRow(t, fmt.Sprintf(
 			"select system.jobs.claim_instance_id from system.jobs where system.jobs.id = %d",
 			compactionJobID)).Scan(&instanceId)
+		instanceIds := util.Map(validCoordinators, func(idx int) int32 {
+			return int32(tc.Servers[idx].SQLInstanceID())
+		})
+		require.True(t, slices.Contains(instanceIds, instanceId))
+	}
 
-		require.Equal(t, int32(tc.Servers[1].SQLInstanceID()), instanceId)
+	t.Run("pin-tier", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		uris := []string{"nodelocal://1/pin-tier"}
+		start, end := initBackupChain(uris, noOpts)
+
+		hookFn = func(processorLocality roachpb.Locality, _ string) error {
+			processorTier, ok := processorLocality.Find("tier")
+			if !ok {
+				return errors.New("processor has no tier locality")
+			}
+			if processorTier != "0" {
+				return errors.Newf("processor tier in %s attempted to read file", processorTier)
+			}
+			return nil
+		}
+
+		compactionJobId := triggerCompaction(
+			t, db,
+			fullBackupQuery(targets, uris, start,
+				"WITH EXECUTION LOCALITY = 'tier=0'"),
+			getLatestFullDir(t, db, uris[0]),
+			start, end,
+		)
+		jobutils.WaitForJobToSucceed(t, db, compactionJobId)
+
+		validate(uris, compactionJobId, start, end, 0, 2)
+	})
+
+	t.Run("pin-region", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		uris := []string{"nodelocal://1/pin-region"}
+		start, end := initBackupChain(uris, noOpts)
+
+		hookFn = func(processorLocality roachpb.Locality, _ string) error {
+			processorRegion, ok := processorLocality.Find("region")
+			if !ok {
+				return errors.New("processor has no region locality")
+			}
+			if processorRegion != "east" {
+				return errors.Newf("processor in region %s attempted to read file", processorRegion)
+			}
+			return nil
+		}
+
+		compactionJobId := triggerCompaction(
+			t, db,
+			fullBackupQuery(targets, uris, start,
+				"WITH EXECUTION LOCALITY = 'region=east'"),
+			getLatestFullDir(t, db, uris[0]),
+			start, end,
+		)
+		jobutils.WaitForJobToSucceed(t, db, compactionJobId)
+
+		validate(uris, compactionJobId, start, end, 2, 3)
+	})
+
+	t.Run("pin-single", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		uris := []string{"nodelocal://1/pin-single"}
+		start, end := initBackupChain(uris, noOpts)
+
+		hookFn = func(processorLocality roachpb.Locality, _ string) error {
+			processorRegion, ok := processorLocality.Find("region")
+			if !ok {
+				return errors.New("processor has no region locality")
+			}
+			processorTier, ok := processorLocality.Find("tier")
+			if !ok {
+				return errors.New("processor has no tier locality")
+			}
+
+			if processorTier != "1" {
+				return errors.Newf("processor in tier %s attempted to read file", processorTier)
+			}
+			if processorRegion != "west" {
+				return errors.Newf("processor in region %s attempted to read file", processorRegion)
+			}
+			return nil
+		}
+
+		compactionJobId := triggerCompaction(
+			t, db,
+			fullBackupQuery(targets, uris, start,
+				"WITH EXECUTION LOCALITY = 'tier=1,region=west'"),
+			getLatestFullDir(t, db, uris[0]),
+			start, end,
+		)
+		jobutils.WaitForJobToSucceed(t, db, compactionJobId)
+
+		validate(uris, compactionJobId, start, end, 1)
 	})
 }
 
