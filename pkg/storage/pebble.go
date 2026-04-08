@@ -1431,6 +1431,10 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			// persistent.
 		},
 		DataCorruption: func(info pebble.DataCorruptionInfo) {
+			if corruptBlockData := info.FormatBlockDataAsHex(); corruptBlockData != "" {
+				// Note: the block data is considered PII; the string value will be redacted.
+				log.Dev.Errorf(ctx, "corrupt block data:\n%s", corruptBlockData)
+			}
 			if !info.IsRemote {
 				p.writePreventStartupFile(ctx, info.Details)
 				log.Dev.Fatalf(ctx, "local corruption detected: %+v", info.Details)
