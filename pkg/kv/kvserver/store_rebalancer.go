@@ -168,7 +168,7 @@ func NewStoreRebalancer(
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 		disabled: func() bool {
-			mode := kvserverbase.LoadBasedRebalancingMode.Get(&st.SV)
+			mode := kvserverbase.GetLoadBasedRebalancingMode(&st.SV)
 			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(&st.SV) ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
@@ -214,9 +214,9 @@ type RebalanceContext struct {
 }
 
 // RebalanceMode returns the mode of the store rebalancer. See
-// kvserverbase.LoadBasedRebalancingMode.
+// kvserverbase.GetLoadBasedRebalancingMode.
 func (sr *StoreRebalancer) RebalanceMode() kvserverbase.LBRebalancingMode {
-	return kvserverbase.LoadBasedRebalancingMode.Get(&sr.st.SV)
+	return kvserverbase.GetLoadBasedRebalancingMode(&sr.st.SV)
 }
 
 // RebalanceDimension returns the dimension the store rebalancer is balancing.

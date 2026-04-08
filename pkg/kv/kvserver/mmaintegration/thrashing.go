@@ -108,7 +108,7 @@ import (
 func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *mmaprototype.MMARebalanceAdvisor {
-	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
+	if kvserverbase.GetLoadBasedRebalancingMode(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
 		return mmaprototype.NoopMMARebalanceAdvisor()
 	}
 	return as.mmaAllocator.BuildMMARebalanceAdvisor(existing, cands)
