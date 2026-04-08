@@ -359,9 +359,9 @@ type Context struct {
 	// roll for this query execution. It has three possible values:
 	//
 	//   - StatsRolloutDefault: the canary experiment is not active
-	//     (sql.stats.canary_fraction = 0 or mode is off). The optimizer
-	//     uses whatever stats are available (default behavior). The
-	//     execution is not classified as canary or stable.
+	//     (sql.stats.canary_fraction = 0). The optimizer uses whatever
+	//     stats are available (default behavior). The execution is not
+	//     classified as canary or stable.
 	//
 	//   - StatsRolloutCanary: the canary experiment is active and this
 	//     execution was selected to use canary (newest) table statistics.
@@ -381,9 +381,12 @@ type Context struct {
 	// Only set for non-internal, non-prepared queries. Internal queries
 	// and prepared statements always use StatsRolloutDefault.
 	//
-	// When StatsRolloutCanary, the optimizer bypasses the query cache and
-	// the cached memo within a prepared stmt, building a one-off memo for
-	// this execution. Cached memos are always built with stable stats.
+	// When StatsRolloutCanary and the query references tables with a
+	// positive sql_stats_canary_window setting, the optimizer bypasses
+	// the query cache and the cached memo within a prepared stmt,
+	// building a one-off memo for this execution. For queries that do
+	// not reference any canary-window tables, caching proceeds normally
+	// since canary and stable stats are identical.
 	StatsRollout StatsRolloutSelection
 
 	// WorkloadID for ASH sampling.

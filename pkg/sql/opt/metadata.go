@@ -1047,6 +1047,21 @@ func (md *Metadata) NumTables() int {
 	return len(md.tables)
 }
 
+// HasCanaryWindowTables returns true if any table in the metadata has a
+// positive StatsCanaryWindow and genuinely different canary and stable
+// stats. When canary and stable stats are identical (e.g. the canary
+// window has expired or stats have ripened), the canary plan equals the
+// stable plan so memo reuse is safe.
+func (md *Metadata) HasCanaryWindowTables() bool {
+	for i := range md.tables {
+		if md.tables[i].Table.StatsCanaryWindow() > 0 &&
+			md.tables[i].Table.CanaryAndStableStatsDiffer() {
+			return true
+		}
+	}
+	return false
+}
+
 // AddColumn assigns a new unique id to a column within the query and records
 // its alias and type. If the alias is empty, a "column<ID>" alias is created.
 func (md *Metadata) AddColumn(alias string, typ *types.T) ColumnID {
