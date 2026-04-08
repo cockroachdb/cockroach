@@ -62,19 +62,28 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 	fmt.Fprintf(stderr, "Uploading %s to %s...\n", zipPath, uploadServerCtx.serverURL)
 	start := timeutil.Now()
 
-	// Create a session with placeholder cluster metadata.
-	if err := client.CreateSession(
-		ctx,
-		"from-debug-zip", // clusterID
-		"from-debug-zip", // clusterName
-		nodeCount,        // nodeCount
-		"from-debug-zip", // crdbVersion
-		zipCtx.redact,    // redacted
-		labels,
-	); err != nil {
-		return errors.Wrap(err, "creating upload session")
+	// Reopen an existing session or create a new one.
+	if uploadServerCtx.reuploadSession != "" {
+		if err := client.ReuploadSession(
+			ctx, uploadServerCtx.reuploadSession, "reupload from zip file", nil,
+		); err != nil {
+			return errors.Wrap(err, "reopening upload session")
+		}
+		fmt.Fprintf(stderr, "  Reopened session: %s\n", client.sessionID)
+	} else {
+		if err := client.CreateSession(
+			ctx,
+			"from-debug-zip", // clusterID
+			"from-debug-zip", // clusterName
+			nodeCount,        // nodeCount
+			"from-debug-zip", // crdbVersion
+			zipCtx.redact,    // redacted
+			labels,
+		); err != nil {
+			return errors.Wrap(err, "creating upload session")
+		}
+		fmt.Fprintf(stderr, "  Session ID: %s\n", client.sessionID)
 	}
-	fmt.Fprintf(stderr, "  Session ID: %s\n", client.sessionID)
 
 	// Initialize the GCS client for chunked resumable uploads.
 	if err := client.InitGCSClient(ctx); err != nil {
@@ -143,6 +152,9 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 	fmt.Fprintf(stderr, "  Duration:           %s\n", elapsed.Round(time.Second))
 
 	if errCount > 0 {
+		fmt.Fprintf(stderr, "\nTo retry this upload into the same session, run:\n")
+		fmt.Fprintf(stderr, "  cockroach debug zip upload-server --from-file=%s --reupload-session=%s ...\n",
+			zipPath, client.sessionID)
 		return errors.Newf("%d artifact(s) failed to upload", errCount)
 	}
 	return nil

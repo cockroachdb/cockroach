@@ -237,6 +237,11 @@ const (
 	// columns to the system.statement_hints table.
 	V26_2_StatementHintsTypeColumnBackfilled
 
+	// V26_2_UploadDebugDataJob enables the upload debug data job type, which
+	// allows uploading debug artifacts to a CRL upload server as an async
+	// background job instead of a blocking CLI command.
+	V26_2_UploadDebugDataJob
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -298,6 +303,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_StatementHintsTypeNameEnabledColumnsAdded: {Major: 26, Minor: 1, Internal: 10},
 
 	V26_2_StatementHintsTypeColumnBackfilled: {Major: 26, Minor: 1, Internal: 12},
+
+	V26_2_UploadDebugDataJob: {Major: 26, Minor: 1, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

@@ -5828,6 +5828,7 @@ node to initiate a debug data upload session.
 | node_ids | [int32](#cockroach.server.serverpb.UploadDebugDataRequest-int32) | repeated | node_ids limits which nodes participate. Empty means all nodes. | [reserved](#support-status) |
 | include_range_info | [bool](#cockroach.server.serverpb.UploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
 | include_goroutine_stacks | [bool](#cockroach.server.serverpb.UploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| reupload_session_id | [string](#cockroach.server.serverpb.UploadDebugDataRequest-string) |  | reupload_session_id, when non-empty, reopens the specified session instead of creating a new one. The session must be in a completed or failed state. | [reserved](#support-status) |
 
 
 
@@ -5916,6 +5917,9 @@ node via iterateNodes fan-out.
 | cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadNodeDebugDataRequest-int32) |  |  | [reserved](#support-status) |
 | include_range_info | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
 | include_goroutine_stacks | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| gcs_access_token | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | GCS credentials passed from the coordinator so all nodes upload to the same GCS prefix (single session folder). | [reserved](#support-status) |
+| gcs_bucket | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| gcs_prefix | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -8648,6 +8652,74 @@ so.
 | ----- | ---- | ----- | ----------- | -------------- |
 | read_from | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.roachpb.TenantID) |  |  | [reserved](#support-status) |
 | read_at | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## StartUploadDebugData
+
+`POST /_admin/v1/upload_debug_data`
+
+StartUploadDebugData creates a background job that uploads debug
+data from all nodes to an external upload server. Returns the job
+ID so the caller can track progress via the Jobs API.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+StartUploadDebugDataRequest is the request for StartUploadDebugData.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| server_url | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| api_key | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| cpu_prof_seconds | [int32](#cockroach.server.serverpb.StartUploadDebugDataRequest-int32) |  |  | [reserved](#support-status) |
+| labels | [StartUploadDebugDataRequest.LabelsEntry](#cockroach.server.serverpb.StartUploadDebugDataRequest-cockroach.server.serverpb.StartUploadDebugDataRequest.LabelsEntry) | repeated |  | [reserved](#support-status) |
+| include_range_info | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| include_goroutine_stacks | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| node_ids | [int32](#cockroach.server.serverpb.StartUploadDebugDataRequest-int32) | repeated |  | [reserved](#support-status) |
+| reupload_session_id | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StartUploadDebugDataRequest-cockroach.server.serverpb.StartUploadDebugDataRequest.LabelsEntry"></a>
+#### StartUploadDebugDataRequest.LabelsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  |  |
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+StartUploadDebugDataResponse is the response for StartUploadDebugData.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.StartUploadDebugDataResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

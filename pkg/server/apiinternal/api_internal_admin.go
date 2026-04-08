@@ -51,6 +51,9 @@ func (r *apiInternalServer) registerAdminRoutes() {
 
 		// Multi-tenant metadata.
 		{GET, "/_admin/v1/tenants", createHandler(r.admin.ListTenants)},
+
+		// Debug data upload.
+		{POST, "/_admin/v1/upload_debug_data", createHandler(r.admin.StartUploadDebugData)},
 	}
 
 	for _, route := range routes {

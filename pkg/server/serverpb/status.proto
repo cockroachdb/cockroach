@@ -2286,6 +2286,10 @@ message UploadDebugDataRequest {
   repeated int32 node_ids = 6;
   bool include_range_info = 7;
   bool include_goroutine_stacks = 8;
+  // reupload_session_id, when non-empty, reopens the specified session
+  // instead of creating a new one. The session must be in a completed
+  // or failed state.
+  string reupload_session_id = 9;
 }
 
 // NodeUploadStatus reports the upload outcome for a single node.

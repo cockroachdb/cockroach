@@ -1938,6 +1938,24 @@ connecting to the cluster.
 `,
 	}
 
+	UploadServerReuploadSession = FlagInfo{
+		Name: "reupload-session",
+		Description: `
+Session ID of a previously completed or failed upload session to reopen.
+When set, the command reopens the existing session instead of creating
+a new one, allowing you to retry or supplement a previous upload.
+`,
+	}
+
+	UploadServerNodeIDs = FlagInfo{
+		Name: "node",
+		Description: `
+Node ID(s) to include in the upload. Can be specified multiple times.
+When set, only the specified nodes upload their data; other nodes are
+skipped. Useful with --reupload-session to retry only failed nodes.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

@@ -5,6 +5,7 @@ go_library(
     name = "server",
     srcs = [
         "admin.go",
+        "admin_upload_debug_data.go",
         "api_v2.go",
         "api_v2_constants.go",
         "api_v2_databases_metadata.go",
@@ -85,6 +86,7 @@ go_library(
         "transaction_diagnostics_requests.go",
         "upload_debug_data.go",
         "upload_debug_data_client.go",
+        "upload_debug_data_job.go",
         "user.go",
     ],
     cgo = True,

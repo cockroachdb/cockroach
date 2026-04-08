@@ -1689,6 +1689,17 @@ func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
 	return (*emptySystemTenantOnly[T])(empty)
 }
 
+// UploadDebugDataFanOutFn fans out UploadNodeDebugData RPCs to all
+// (or selected) nodes. The progressFn callback is invoked after each
+// node completes successfully; errorFn is invoked on per-node errors.
+type UploadDebugDataFanOutFn func(
+	ctx context.Context,
+	req *serverpb.UploadNodeDebugDataRequest,
+	nodeIDs []int32,
+	progressFn func(nodeID roachpb.NodeID, resp *serverpb.UploadNodeDebugDataResponse),
+	errorFn func(nodeID roachpb.NodeID, err error),
+) error
+
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
@@ -1717,7 +1728,14 @@ type ExecutorConfig struct {
 	// available when not running as a system tenant.
 	SQLStatusServer     serverpb.SQLStatusServer
 	TenantStatusServer  serverpb.TenantStatusServer
-	MetricsRecorder     limitedMetricsRecorder
+	// UploadDebugDataFanOut is a callback that fans out UploadNodeDebugData
+	// RPCs to all nodes. It is set by the server package at startup and used
+	// by the upload debug data job to distribute work across the cluster.
+	UploadDebugDataFanOut UploadDebugDataFanOutFn
+	// UploadDebugDataClusterInfo provides cluster ID and node count for
+	// upload session creation.
+	UploadDebugDataClusterInfo func(ctx context.Context) (clusterID string, nodeCount int, err error)
+	MetricsRecorder            limitedMetricsRecorder
 	SessionRegistry     *SessionRegistry
 	ClosedSessionCache  *ClosedSessionCache
 	SQLLiveness         sqlliveness.Provider

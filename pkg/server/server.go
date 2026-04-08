@@ -1347,6 +1347,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	sStatus.setTxnDiagnosticsRequester(sqlServer.execCfg.TxnDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
+	// Wire the upload debug data callbacks so the job resumer can fan
+	// out UploadNodeDebugData RPCs and obtain cluster metadata.
+	sqlServer.execCfg.UploadDebugDataFanOut = sStatus.uploadDebugDataFanOut
+	sqlServer.execCfg.UploadDebugDataClusterInfo = sStatus.uploadDebugDataClusterInfo
+
 	// Create a server controller.
 	sc := newServerController(ctx,
 		cfg.BaseConfig.AmbientCtx,

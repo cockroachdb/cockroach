@@ -72,6 +72,12 @@ func runDebugZipUploadServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Convert node IDs from []int to []int32 for the proto.
+	var nodeIDs []int32
+	for _, id := range uploadServerCtx.nodeIDs {
+		nodeIDs = append(nodeIDs, int32(id))
+	}
+
 	// Build the RPC request.
 	req := &serverpb.UploadDebugDataRequest{
 		ServerUrl:              uploadServerCtx.serverURL,
@@ -81,9 +87,16 @@ func runDebugZipUploadServer(cmd *cobra.Command, args []string) error {
 		Labels:                 labels,
 		IncludeRangeInfo:       zipCtx.includeRangeInfo,
 		IncludeGoroutineStacks: zipCtx.includeStacks,
+		ReuploadSessionId:      uploadServerCtx.reuploadSession,
+		NodeIds:                nodeIDs,
 	}
 
-	fmt.Fprintf(stderr, "Streaming debug data to %s...\n", uploadServerCtx.serverURL)
+	if req.ReuploadSessionId != "" {
+		fmt.Fprintf(stderr, "Reopening session %s and streaming debug data to %s...\n",
+			req.ReuploadSessionId, uploadServerCtx.serverURL)
+	} else {
+		fmt.Fprintf(stderr, "Streaming debug data to %s...\n", uploadServerCtx.serverURL)
+	}
 	start := timeutil.Now()
 
 	var resp *serverpb.UploadDebugDataResponse
@@ -119,6 +132,15 @@ func runDebugZipUploadServer(cmd *cobra.Command, args []string) error {
 	}
 
 	if resp.NodesFailed > 0 {
+		var failedNodeArgs string
+		for _, ns := range resp.NodeStatuses {
+			if ns.NodeId != 0 && len(ns.Errors) > 0 {
+				failedNodeArgs += fmt.Sprintf(" --node=%d", ns.NodeId)
+			}
+		}
+		fmt.Fprintf(stderr, "\nTo retry failed nodes into the same session, run:\n")
+		fmt.Fprintf(stderr, "  cockroach debug zip upload-server --reupload-session=%s%s ...\n",
+			resp.SessionId, failedNodeArgs)
 		return errors.Newf("%d node(s) failed during upload", resp.NodesFailed)
 	}
 

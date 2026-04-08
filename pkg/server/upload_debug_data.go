@@ -84,26 +84,41 @@ func (s *systemStatusServer) UploadDebugData(
 
 	clusterID := s.rpcCtx.StorageClusterID.Get().String()
 
-	// Create session on the upload server.
+	// Create or reopen a session on the upload server.
 	client := newUploadServerClientForRPC(req.ServerUrl, req.ApiKey, 5*time.Minute)
-	if err := client.createSession(ctx, clusterID, nodeCount, req.Redact, req.Labels); err != nil {
-		return nil, srverrors.ServerError(ctx, err)
+	if req.ReuploadSessionId != "" {
+		if err := client.reuploadSession(ctx, req.ReuploadSessionId, "reupload via debug zip upload-server", req.NodeIds); err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		log.Ops.Infof(ctx, "upload session reopened: %s", client.sessionID)
+	} else {
+		if err := client.createSession(ctx, clusterID, nodeCount, req.Redact, req.Labels); err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
 	}
 	defer func() { _ = client.closeGCS() }()
-	log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
 
 	// Initialize the GCS client for chunked resumable uploads.
 	if err := client.initGCSClient(ctx); err != nil {
 		return nil, status.Errorf(codes.Internal, "initializing GCS client: %v", err)
 	}
 
-	// Collect cluster-level data (coordinator only).
-	clusterArtifacts, clusterDataErrs := s.uploadClusterData(
-		ctx, client, req,
-	)
-	clusterTableArtifacts, clusterTableErrs := s.uploadClusterTables(
-		ctx, client, req.Redact,
-	)
+	// Collect cluster-level data (coordinator only). Skip when
+	// re-uploading specific nodes since cluster data was already
+	// uploaded in the original session.
+	var clusterArtifacts, clusterTableArtifacts int32
+	var clusterDataErrs, clusterTableErrs []string
+	if req.ReuploadSessionId == "" || len(req.NodeIds) == 0 {
+		clusterArtifacts, clusterDataErrs = s.uploadClusterData(
+			ctx, client, req,
+		)
+		clusterTableArtifacts, clusterTableErrs = s.uploadClusterTables(
+			ctx, client, req.Redact,
+		)
+	} else {
+		log.Ops.Infof(ctx, "skipping cluster-level data collection (reupload with specific nodes)")
+	}
 	clusterAllErrs := append(clusterDataErrs, clusterTableErrs...)
 	clusterTotalArtifacts := clusterArtifacts + clusterTableArtifacts
 
@@ -1932,4 +1947,60 @@ limit 5000;`,
 			FROM system.zones`,
 		queryRedacted: `SELECT "id" FROM system.zones`,
 	},
+}
+
+// uploadDebugDataFanOut implements sql.UploadDebugDataFanOutFn by
+// using the status server's iterateNodes to fan out
+// UploadNodeDebugData RPCs to all (or selected) nodes.
+func (s *systemStatusServer) uploadDebugDataFanOut(
+	ctx context.Context,
+	req *serverpb.UploadNodeDebugDataRequest,
+	nodeIDs []int32,
+	progressFn func(nodeID roachpb.NodeID, resp *serverpb.UploadNodeDebugDataResponse),
+	errorFn func(nodeID roachpb.NodeID, err error),
+) error {
+	requestedNodes := map[int32]bool{}
+	for _, nid := range nodeIDs {
+		requestedNodes[nid] = true
+	}
+
+	nodeFn := func(
+		ctx context.Context,
+		statusClient serverpb.RPCStatusClient,
+		nodeID roachpb.NodeID,
+	) (*serverpb.UploadNodeDebugDataResponse, error) {
+		if len(requestedNodes) > 0 && !requestedNodes[int32(nodeID)] {
+			return &serverpb.UploadNodeDebugDataResponse{}, nil
+		}
+		return statusClient.UploadNodeDebugData(ctx, req)
+	}
+
+	fanoutTimeout := 30 * time.Minute
+	if req.CpuProfSeconds > 0 {
+		fanoutTimeout += time.Duration(req.CpuProfSeconds) * time.Second
+	}
+
+	return iterateNodes(
+		ctx,
+		s.serverIterator,
+		s.stopper,
+		redact.Sprintf("uploading debug data"),
+		fanoutTimeout,
+		s.dialNode,
+		nodeFn,
+		progressFn,
+		errorFn,
+	)
+}
+
+// uploadDebugDataClusterInfo returns cluster ID and node count for
+// upload session creation.
+func (s *systemStatusServer) uploadDebugDataClusterInfo(
+	ctx context.Context,
+) (clusterID string, nodeCount int, err error) {
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
+	if err != nil {
+		return "", 0, err
+	}
+	return s.rpcCtx.StorageClusterID.Get().String(), len(nodeStatuses), nil
 }

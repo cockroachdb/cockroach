@@ -1312,6 +1312,16 @@ service Admin {
   // ReadFromTenantInfo returns the tenant from which the requesting tenant
   // should read, if any.
   rpc ReadFromTenantInfo(ReadFromTenantInfoRequest) returns (ReadFromTenantInfoResponse) {}
+
+  // StartUploadDebugData creates a background job that uploads debug
+  // data from all nodes to an external upload server. Returns the job
+  // ID so the caller can track progress via the Jobs API.
+  rpc StartUploadDebugData(StartUploadDebugDataRequest) returns (StartUploadDebugDataResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/upload_debug_data"
+      body: "*"
+    };
+  }
 }
 
 message ListTenantsRequest{}
@@ -1487,4 +1497,22 @@ message FeatureFlags {
   // debug operations. This is helpful in application tenant contexsts, where these requests
   // can only return errors since the tenant cannot perform the operations.
   bool disable_kv_level_advanced_debug = 3;
+}
+
+// StartUploadDebugDataRequest is the request for StartUploadDebugData.
+message StartUploadDebugDataRequest {
+  string server_url = 1;
+  string api_key = 2;
+  bool redact = 3;
+  int32 cpu_prof_seconds = 4;
+  map<string, string> labels = 5;
+  bool include_range_info = 6;
+  bool include_goroutine_stacks = 7;
+  repeated int32 node_ids = 8;
+  string reupload_session_id = 9;
+}
+
+// StartUploadDebugDataResponse is the response for StartUploadDebugData.
+message StartUploadDebugDataResponse {
+  int64 job_id = 1 [(gogoproto.customname) = "JobID"];
 }

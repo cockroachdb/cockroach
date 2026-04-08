@@ -6633,6 +6633,105 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.currently_idle
+      exported_name: jobs_upload_debug_data_currently_idle
+      labeled_name: 'jobs{type: upload_debug_data, status: currently_idle}'
+      description: Number of upload_debug_data jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.upload_debug_data.currently_paused
+      exported_name: jobs_upload_debug_data_currently_paused
+      labeled_name: 'jobs{name: upload_debug_data, status: currently_paused}'
+      description: Number of upload_debug_data jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.upload_debug_data.currently_running
+      exported_name: jobs_upload_debug_data_currently_running
+      labeled_name: 'jobs{type: upload_debug_data, status: currently_running}'
+      description: Number of upload_debug_data jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.upload_debug_data.expired_pts_records
+      exported_name: jobs_upload_debug_data_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: upload_debug_data}'
+      description: Number of expired protected timestamp records owned by upload_debug_data jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.fail_or_cancel_completed
+      exported_name: jobs_upload_debug_data_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: upload_debug_data, status: completed}'
+      description: Number of upload_debug_data jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.fail_or_cancel_retry_error
+      exported_name: jobs_upload_debug_data_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: upload_debug_data, status: retry_error}'
+      description: Number of upload_debug_data jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.protected_age_sec
+      exported_name: jobs_upload_debug_data_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: upload_debug_data}'
+      description: The age of the oldest PTS record protected by upload_debug_data jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.upload_debug_data.protected_record_count
+      exported_name: jobs_upload_debug_data_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: upload_debug_data}'
+      description: Number of protected timestamp records held by upload_debug_data jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.upload_debug_data.resume_completed
+      exported_name: jobs_upload_debug_data_resume_completed
+      labeled_name: 'jobs.resume{name: upload_debug_data, status: completed}'
+      description: Number of upload_debug_data jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.resume_failed
+      exported_name: jobs_upload_debug_data_resume_failed
+      labeled_name: 'jobs.resume{name: upload_debug_data, status: failed}'
+      description: Number of upload_debug_data jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.upload_debug_data.resume_retry_error
+      exported_name: jobs_upload_debug_data_resume_retry_error
+      labeled_name: 'jobs.resume{name: upload_debug_data, status: retry_error}'
+      description: Number of upload_debug_data jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.protectedts.get_record.failed
       exported_name: kv_protectedts_get_record_failed
       description: number of failed GetRecord operations (ErrNotExists, parsing errors, or execution errors)

@@ -336,6 +336,61 @@ func shouldRetryGCS(err error) bool {
 	return false
 }
 
+// ReuploadSession reopens a completed or failed session on the upload
+// server, obtaining a fresh upload token. This uses the cluster API
+// key (not the upload token) for authentication.
+func (c *uploadServerClient) ReuploadSession(
+	ctx context.Context, sessionID string, reason string, nodeIDs []int32,
+) error {
+	data := map[string]interface{}{}
+	if reason != "" {
+		data["reason"] = reason
+	}
+	if len(nodeIDs) > 0 {
+		data["node_ids"] = nodeIDs
+	}
+	var body []byte
+	if len(data) > 0 {
+		var err error
+		body, err = json.Marshal(data)
+		if err != nil {
+			return errors.Wrap(err, "marshaling reupload request")
+		}
+	}
+
+	url := fmt.Sprintf("%s/api/v1/sessions/%s/reupload", c.serverURL, sessionID)
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bodyReader)
+	if err != nil {
+		return errors.Wrap(err, "creating reupload request")
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "sending reupload request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return readHTTPError(resp)
+	}
+
+	var result createSessionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return errors.Wrap(err, "decoding reupload response")
+	}
+	c.sessionID = result.SessionID
+	c.uploadToken = result.UploadToken
+	return nil
+}
+
 // CompleteSession signals the server that the upload session is done.
 func (c *uploadServerClient) CompleteSession(
 	ctx context.Context, artifactsUploaded int, nodesCompleted []int32,

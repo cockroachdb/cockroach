@@ -7,8 +7,8 @@ import isNil from "lodash/isNil";
 import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect, useSelector } from "react-redux";
-
 import { InlineAlert } from "src/components";
+import { history } from "src/redux/history";
 import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import { nodeIDsStringifiedSelector } from "src/redux/nodes";
@@ -248,6 +248,91 @@ const StatementDiagnosticsConnected = connect(
   },
 )(StatementDiagnosticsSelector);
 
+function UploadDebugDataPanel() {
+  const [serverUrl, setServerUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const resp = await fetch("/_admin/v1/upload_debug_data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          server_url: serverUrl,
+          api_key: apiKey,
+          redact: false,
+          include_goroutine_stacks: true,
+        }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${text}`);
+      }
+      const data = await resp.json();
+      const jobId = data.job_id || data.jobId || data.JobID;
+      if (jobId) {
+        history.push(`/jobs/${jobId}`);
+      } else {
+        setError("No job ID in response: " + JSON.stringify(data));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <PanelPair>
+      <Panel>
+        <a>Upload Debug Data to Support</a>
+        <p>
+          Stream debug data from all nodes directly to a CRL upload server.
+          Progress is tracked as a background job.
+        </p>
+      </Panel>
+      <Panel>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+        >
+          <input
+            type="text"
+            placeholder="Upload server URL"
+            value={serverUrl}
+            onChange={e => setServerUrl(e.target.value)}
+            required
+            style={{ padding: "4px 8px", fontSize: "13px" }}
+          />
+          <input
+            type="password"
+            placeholder="API key"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            required
+            style={{ padding: "4px 8px", fontSize: "13px" }}
+          />
+          <button
+            type="submit"
+            disabled={submitting || !serverUrl || !apiKey}
+            style={{ padding: "4px 12px", fontSize: "13px", alignSelf: "flex-start" }}
+          >
+            {submitting ? "Starting..." : "Start Upload"}
+          </button>
+          {error && (
+            <div style={{ color: "red", fontSize: "12px" }}>{error}</div>
+          )}
+        </form>
+      </Panel>
+    </PanelPair>
+  );
+}
+
 export default function Debug() {
   const [nodeID, setNodeID] = useState<string>(getDataFromServer().NodeID);
 
@@ -303,6 +388,8 @@ export default function Debug() {
           disabled={disable_kv_level_advanced_debug}
         />
         <StatementDiagnosticsConnected />
+        <PanelTitle>Support</PanelTitle>
+        <UploadDebugDataPanel />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
