@@ -113,10 +113,10 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// LoadBasedRebalancingMode controls whether range rebalancing takes
+// loadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
-var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
+var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of load across stores",
@@ -142,7 +142,7 @@ func GetLoadBasedRebalancingMode(sv *settings.Values) LBRebalancingMode {
 	if disableMMA {
 		return LBRebalancingOff
 	}
-	return LoadBasedRebalancingMode.Get(sv)
+	return loadBasedRebalancingMode.Get(sv)
 }
 
 // OverrideLoadBasedRebalancingMode overrides the load-based rebalancing
@@ -150,7 +150,7 @@ func GetLoadBasedRebalancingMode(sv *settings.Values) LBRebalancingMode {
 func OverrideLoadBasedRebalancingMode(
 	ctx context.Context, sv *settings.Values, mode LBRebalancingMode,
 ) {
-	LoadBasedRebalancingMode.Override(ctx, sv, mode)
+	loadBasedRebalancingMode.Override(ctx, sv, mode)
 }
 
 // LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
