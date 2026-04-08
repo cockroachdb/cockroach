@@ -10426,6 +10426,7 @@ show_range_for_row_stmt:
 //   TABLES:  list tables contained per range
 //   DETAILS: add range size, leaseholder and other details
 //   KEYS:    include binary start/end keys
+//   ZONE:    include the resolved zone configuration per range
 //   EXPLAIN: show the SQL queries that produces the result
 //
 // Note: the availability of some of the options listed above is subject
@@ -10472,6 +10473,7 @@ show_ranges_options:
 | INDEXES {  $$.val = &tree.ShowRangesOptions{Mode: tree.ExpandIndexes} }
 | DETAILS {  $$.val = &tree.ShowRangesOptions{Details: true} }
 | KEYS    {  $$.val = &tree.ShowRangesOptions{Keys: true} }
+| ZONE    {  $$.val = &tree.ShowRangesOptions{Zone: true} }
 | EXPLAIN {  $$.val = &tree.ShowRangesOptions{Explain: true} }
 | show_ranges_options ',' TABLES
   {
@@ -10503,6 +10505,12 @@ show_ranges_options:
   {
     o := $1.showRangesOpts()
     o.Keys = true
+    $$.val = o
+  }
+| show_ranges_options ',' ZONE
+  {
+    o := $1.showRangesOpts()
+    o.Zone = true
     $$.val = o
   }
 

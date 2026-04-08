@@ -481,6 +481,19 @@ func StaticSplits() []roachpb.RKey {
 	return staticSplits
 }
 
+// StaticSplitAfter returns the first static split point strictly after key.
+// This is useful for determining the end of a named zone's key span: named
+// zones (meta, liveness, timeseries, system) are bounded by static splits,
+// so the next split after a key gives the zone's upper boundary.
+func StaticSplitAfter(key roachpb.RKey) (roachpb.RKey, bool) {
+	for _, split := range staticSplits {
+		if key.Less(split) {
+			return split, true
+		}
+	}
+	return nil, false
+}
+
 // ComputeSplitKey takes a start and end key and returns the first key at which
 // to split the span [start, end). Returns nil if no splits are required.
 //

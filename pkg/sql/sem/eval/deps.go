@@ -697,6 +697,17 @@ type PrivilegedAccessor interface {
 
 	// IsSystemTable returns if a given descriptor ID is a system table.s
 	IsSystemTable(ctx context.Context, id int64) (bool, error)
+
+	// ResolvedZoneConfigForKey returns the fully resolved (inheritance-applied)
+	// zone configuration for the given range start key, as JSONB.
+	ResolvedZoneConfigForKey(ctx context.Context, key roachpb.Key) (tree.Datum, error)
+
+	// ZoneConfigSpanEnd returns the end key of the zone config span that
+	// the given key belongs to. For named zones this is the next static
+	// split point. For table zones this is the next subzone
+	// (index/partition) boundary within the table, or the table's key
+	// span end if no subzone boundary follows the given key.
+	ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error)
 }
 
 // RegionOperator gives access to the current region, validation for all

@@ -688,6 +688,20 @@ func (ep *DummyPrivilegedAccessor) IsSystemTable(ctx context.Context, id int64) 
 	return false, errors.WithStack(errEvalPrivileged)
 }
 
+// ResolvedZoneConfigForKey is part of the eval.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) ResolvedZoneConfigForKey(
+	ctx context.Context, key roachpb.Key,
+) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPrivileged)
+}
+
+// ZoneConfigSpanEnd is part of the eval.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) ZoneConfigSpanEnd(
+	ctx context.Context, key roachpb.Key,
+) (roachpb.Key, error) {
+	return nil, errors.WithStack(errEvalPrivileged)
+}
+
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
 type DummySessionAccessor struct{}
 
