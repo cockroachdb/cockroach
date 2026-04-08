@@ -1958,6 +1958,8 @@ var logScanRowCountMisestimate = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// TODO(discuss during review): naming of the cluster setting and the
+// table-level storage parameter.
 var fixScanRowCountMisestimate = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.automatic_partial_collection.fix_scan_row_count_misestimate.enabled",
@@ -2003,6 +2005,12 @@ func (r *DistSQLReceiver) makeScanEstimates(
 		//   shouldn't be touching the system tables.
 		// - virtual tables and views since we cannot collect stats on them.
 		if catalog.IsSystemDescriptor(tableDesc) || tableDesc.IsVirtualTable() || tableDesc.IsView() {
+			continue
+		}
+		// Only tables that explicitly opted into the feature are eligible.
+		if explicitSettings := tableDesc.GetAutoStatsSettings(); explicitSettings == nil ||
+			explicitSettings.PartialFixupEnabled == nil ||
+			!*explicitSettings.PartialFixupEnabled {
 			continue
 		}
 		// spans will only be populated if we're fixing misestimates with
