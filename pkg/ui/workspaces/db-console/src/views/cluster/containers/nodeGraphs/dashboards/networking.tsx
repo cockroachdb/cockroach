@@ -12,34 +12,32 @@ import { Axis, Metric } from "src/views/shared/components/metricQuery";
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeDisplayNameByID, tenantSource } = props;
+  const { nodeIDs, nodeSources, nodeDisplayNameByID, tenantSource } = props;
 
   return [
     <LineGraph title="Network Bytes Sent" showMetricsInTooltip={true}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.send.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.net.send.bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.net.recv.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.net.recv.bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -50,15 +48,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.round-trip-latency-p50"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.round-trip-latency-p50"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -69,15 +66,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.round-trip-latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.round-trip-latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -88,15 +84,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="connections">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.rpc.connection.unhealthy"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-          />
-        ))}
+        <Metric
+          name="cr.node.rpc.connection.unhealthy"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+        />
       </Axis>
     </LineGraph>,
 
@@ -150,16 +144,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="segments">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.sys.host.net.send.tcp.retrans_segs"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.net.send.tcp.retrans_segs"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -169,16 +161,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="requests">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.distsender.rpc.proxy.sent"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.distsender.rpc.proxy.sent"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -188,16 +178,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="errors">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.distsender.rpc.proxy.err"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.distsender.rpc.proxy.err"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -207,16 +195,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="requests">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.distsender.rpc.proxy.forward.sent"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.distsender.rpc.proxy.forward.sent"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -226,16 +212,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="errors">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.distsender.rpc.proxy.forward.err"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.distsender.rpc.proxy.forward.err"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          tenantSource={tenantSource}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
   ];

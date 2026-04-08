@@ -9,11 +9,10 @@ import React from "react";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const {
-    nodeIDs,
     nodeSources,
     storeSources,
     nodeDisplayNameByID,
@@ -401,17 +400,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="Records">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.spanconfig.kvsubscriber.protected_record_count"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.spanconfig.kvsubscriber.protected_record_count"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
   ];

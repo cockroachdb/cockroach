@@ -10,12 +10,12 @@ import { cockroach } from "src/js/protos";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources, tenantSource, nodeIDs, nodeDisplayNameByID } = props;
+  const { storeSources, nodeSources, tenantSource, nodeDisplayNameByID } = props;
 
   return [
     <LineGraph
@@ -105,15 +105,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(node => (
-          <Metric
-            key={node}
-            name="cr.node.logical_replication.logical_bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.logical_replication.logical_bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -127,15 +125,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
-        {nodeIDs.map(node => (
-          <Metric
-            key={node}
-            name="cr.node.logical_replication.batch_hist_nanos-p50"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.logical_replication.batch_hist_nanos-p50"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -149,15 +145,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
-        {nodeIDs.map(node => (
-          <Metric
-            key={node}
-            name="cr.node.logical_replication.batch_hist_nanos-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.logical_replication.batch_hist_nanos-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -195,14 +189,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(node => (
-          <Metric
-            key={node}
-            name="cr.node.logical_replication.retry_queue_bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-          />
-        ))}
+        <Metric
+          name="cr.node.logical_replication.retry_queue_bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
   ];

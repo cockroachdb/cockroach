@@ -31,13 +31,12 @@ export default function (props: GraphDashboardProps) {
       tooltip={`CPU utilization of the CockroachDB process as measured by the host, displayed per node.`}
     >
       <Axis units={AxisUnits.Percentage} label="CPU Utilization">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.cpu.combined.percent-normalized"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.cpu.combined.percent-normalized"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -49,15 +48,13 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Relative time the node had exhausted slots for foreground (regular) CPU work per second of wall time. Increased slot exhausted duration indicates CPU resource exhaustion. This is measured in nanoseconds/second from 26.1 onwards, and was microseconds/second before that.`}
     >
       <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.admission.granter.slots_exhausted_duration.kv"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.admission.granter.slots_exhausted_duration.kv"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -130,15 +127,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -150,15 +145,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="Delay Duration">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.admission.elastic_cpu.yield_delay_nanos"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.admission.elastic_cpu.yield_delay_nanos"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -246,17 +239,13 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control elastic CPU queue.`}
     >
       <Axis units={AxisUnits.DurationMillis} label="Delay Duration">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.elastic-cpu-p99"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.admission.wait_durations.elastic-cpu-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -324,16 +313,12 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Queued bytes to be sent across all replication streams on a node in Replication Admission Control. `}
     >
       <Axis units={AxisUnits.Bytes} label="Size">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.kvflowcontrol.send_queue.bytes"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.kvflowcontrol.send_queue.bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -370,17 +355,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.go.scheduler_latency-p99"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.go.scheduler_latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -392,17 +373,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.go.scheduler_latency-p99.9"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.go.scheduler_latency-p99.9"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -414,13 +391,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.runnable.goroutines.per.cpu"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.runnable.goroutines.per.cpu"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 

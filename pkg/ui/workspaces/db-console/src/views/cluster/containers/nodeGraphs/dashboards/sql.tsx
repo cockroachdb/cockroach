@@ -5,7 +5,6 @@
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import map from "lodash/map";
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
@@ -15,13 +14,12 @@ import {
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
   const {
-    nodeIDs,
     nodeSources,
     tooltipSelection,
     nodeDisplayNameByID,
@@ -38,15 +36,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="connections">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.conns"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.conns"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -58,16 +54,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="connections per second">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.new_conns"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampler={TimeSeriesQueryAggregator.MAX}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.new_conns"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampler={TimeSeriesQueryAggregator.MAX}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -251,15 +245,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="full scans per second">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.full.scan.count"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.full.scan.count"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -272,15 +264,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="transaction deadlocks per second">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.store.txnwaitqueue.deadlocks_total"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.store.txnwaitqueue.deadlocks_total"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -293,14 +283,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="flows">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.distsql.flows.active"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.distsql.flows.active"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -330,15 +318,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.conn.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.conn.latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -351,15 +337,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.conn.latency-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.conn.latency-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -380,15 +364,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.service.latency-p99.99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.service.latency-p99.99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -409,15 +391,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.service.latency-p99.9"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.service.latency-p99.9"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -438,15 +418,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.service.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.service.latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -467,15 +445,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.service.latency-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.service.latency-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -489,15 +465,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.exec.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.exec.latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -511,15 +485,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.exec.latency-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.exec.latency-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -622,15 +594,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.txn.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.txn.latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -651,15 +621,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.txn.latency-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.txn.latency-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -672,15 +640,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="allocated bytes">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.mem.root.current"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.mem.root.current"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
