@@ -642,8 +642,8 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// Ingest the SSTs if the snapshot is applied using a Pebble ingestion.
 	ingestStats, err := sw.commit(ctx, snapIngestion{
 		paths:      inSnap.SSTStorageScratch.SSTs(),
-		shared:     convertSharedSSTs(inSnap.sharedSSTs),
-		external:   convertExternalSSTs(inSnap.externalSSTs),
+		shared:     inSnap.sharedSSTs,
+		external:   inSnap.externalSSTs,
 		exciseSpan: desc.KeySpan().AsRawSpanWithNoLocals(),
 	})
 	if err != nil {
