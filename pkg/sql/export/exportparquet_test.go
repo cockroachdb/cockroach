@@ -114,59 +114,11 @@ func validateParquetFile(
 			return fmt.Errorf("reading record failed: %w", err)
 		}
 		for j := 0; j < len(test.cols); j++ {
-			// If we're encoding a DOidWrapper, then we want to cast the wrapped
-			// datum. Note that we don't use eval.UnwrapDatum since we're not
-			// interested in evaluating the placeholders.
-			// TODO(#104278): use ValidateDatum from util/parquet.
-			validateDatum(t, tree.UnwrapDOidWrapper(test.datums[i][j]), tree.UnwrapDOidWrapper(row[j]), test.cols[j].Typ)
+			parquet.ValidateDatum(t, test.datums[i][j], row[j])
 		}
 		i++
 	}
 	return nil
-}
-
-func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *types.T) {
-	switch expected.ResolvedType().Family() {
-	case types.ArrayFamily:
-		eArr := expected.(*tree.DArray)
-		aArr := actual.(*tree.DArray)
-		for i := 0; i < eArr.Len(); i++ {
-			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]),
-				tree.UnwrapDOidWrapper(aArr.Array[i]), typ.ArrayContents())
-		}
-	case types.DateFamily:
-		// pgDate.orig property doesn't matter and can cause the test to fail
-		require.Equal(t, expected.(*tree.DDate).Date.UnixEpochDays(),
-			actual.(*tree.DDate).Date.UnixEpochDays())
-	case types.JsonFamily:
-		// Only the value of the json object matters, not that additional properties
-		require.Equal(t, expected.(*tree.DJSON).JSON.String(),
-			actual.(*tree.DJSON).JSON.String())
-	case types.EnumFamily:
-		// Only the value of the enum string matters, not that additional properties
-		require.Equal(t, expected.(*tree.DEnum).LogicalRep,
-			actual.(*tree.DEnum).LogicalRep)
-	case types.CollatedStringFamily:
-		// Only the value of the collated string matters, not that additional properties
-		require.Equal(t, expected.(*tree.DCollatedString).Contents,
-			actual.(*tree.DCollatedString).Contents)
-	case types.FloatFamily:
-		if typ.Equal(types.Float4) && expected.(*tree.DFloat).String() != "NaN" {
-			// CRDB currently doesn't truncate non NAN float4's correctly, so this
-			// test does it manually :(
-			// https://github.com/cockroachdb/cockroach/issues/73743
-			e := float32(*expected.(*tree.DFloat))
-			a := float32(*expected.(*tree.DFloat))
-			require.Equal(t, e, a)
-		} else {
-			require.Equal(t, expected.String(), actual.String())
-		}
-	case types.DecimalFamily:
-		require.Equal(t, expected.String(), actual.String())
-
-	default:
-		require.Equal(t, expected, actual)
-	}
 }
 
 func TestRandomParquetExports(t *testing.T) {

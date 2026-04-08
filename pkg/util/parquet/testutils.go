@@ -427,6 +427,8 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 		require.Equal(t, expected.String(), actual.String())
 	case types.OidFamily:
 		require.Equal(t, expected.(*tree.DOid).Oid, actual.(*tree.DOid).Oid)
+	case types.DecimalFamily:
+		require.Equal(t, expected.String(), actual.String())
 	default:
 		require.Equal(t, expected, actual)
 	}
