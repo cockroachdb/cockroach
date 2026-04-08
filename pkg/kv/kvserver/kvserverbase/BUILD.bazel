@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvserverbase",
@@ -30,8 +30,21 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
         "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "kvserverbase_test",
+    srcs = ["bulk_adder_test.go"],
+    embed = [":kvserverbase"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
