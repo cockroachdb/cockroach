@@ -108,6 +108,10 @@ func TestRegistryGC(t *testing.T) {
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates table descriptors at the KV layer
+		// using keys.SystemSQLCodec, which is incompatible with secondary
+		// tenants.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// This test directly modifies `system.jobs` and makes over its contents

@@ -2316,7 +2316,11 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		false, /* initializeVersion */
 	)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: st,
+		// This test manipulates cluster version via SET CLUSTER SETTING, which
+		// does not work under a secondary tenant because tenants cannot upgrade
+		// ahead of the storage cluster.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(167929),
+		Settings:          st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
