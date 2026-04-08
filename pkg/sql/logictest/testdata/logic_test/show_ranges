@@ -494,11 +494,11 @@ SELECT index_name FROM crdb_internal.ranges
 
 subtest show_ranges_with_zone
 
-# Assert the schema: WITH ZONE adds zone_config and zone_config_conformant.
+# Assert the schema: WITH ZONE adds zone_config and zone_config_needs_split.
 query TTITTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_needs_split
 
 # Verify zone_config column contains valid JSON with expected fields.
 query ITB
@@ -514,13 +514,13 @@ ORDER BY range_id LIMIT 1
 query TTITTTITTTTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH TABLES, ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
+start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_needs_split
 
 # Combinable with KEYS.
 query TTTTITTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS, ZONE] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
+start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_needs_split
 
 # WITH EXPLAIN + ZONE shows the generated SQL containing the builtins.
 query BB
@@ -534,7 +534,7 @@ true  true
 query TTITTTTTTTB colnames
 SELECT * FROM [SHOW RANGES FROM DATABASE test WITH ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_needs_split
 
 # Zone config changes are immediately reflected (no propagation delay).
 # Note: zone_config_for_key resolves based on the range start key, which
