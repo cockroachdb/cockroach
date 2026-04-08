@@ -223,6 +223,25 @@ type Memo struct {
 	inlineAnyUnnestSubquery                    bool
 	useMinRowCountAntiJoinFix                  bool
 	useBackupsWithIDs                          bool
+	// builtWithStatsRollout records the stats rollout mode under which
+	// this memo was built.
+	//
+	// Motivation: consider PREPARE with StatsRolloutStable, then SET
+	// canary_fraction = 0 (making the rollout mode Default), then
+	// EXECUTE. Without this field the prepared memo would be silently
+	// reused even though it was planned against different (older) stats.
+	//
+	// IsStale uses this field to detect Default↔Stable transitions and
+	// invalidate the memo so it is rebuilt with the correct stats.
+	//
+	// Canary↔Default is not stale because both use the newest stats.
+	//
+	// Canary↔Stable is not checked here because a canary-built memo is
+	// only cached when canary and stable stats are identical (the
+	// write-side guard prevents caching otherwise). The Stable→Canary
+	// direction is handled by the read-side guard
+	// (skipMemoReuseForCanaryExec).
+	builtWithStatsRollout eval.StatsRolloutSelection
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -353,6 +372,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
+		builtWithStatsRollout:                      evalCtx.StatsRollout,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -540,6 +560,25 @@ func (m *Memo) IsStale(
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
 		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {
+		return true, nil
+	}
+
+	// Memo is stale if the stats rollout mode changed between Default and
+	// Stable. Default uses the newest stats while Stable uses the
+	// second-newest (older-generation) stats. Switching between these
+	// modes (e.g. canary_fraction going from >0 to 0 or vice versa)
+	// means the memo was planned against the wrong stats.
+	//
+	// Canary↔Default is not stale because both use the newest stats.
+	//
+	// Canary↔Stable is not checked here. A canary-built memo is only
+	// cached when canary and stable stats are identical (the write-side
+	// guard prevents caching otherwise), so reuse is correct. The
+	// Stable→Canary direction is handled by the read-side guard
+	// (skipMemoReuseForCanaryExec) which skips the memo without
+	// evicting it, avoiding cache thrashing.
+	if (m.builtWithStatsRollout == eval.StatsRolloutStable && evalCtx.StatsRollout == eval.StatsRolloutDefault) ||
+		(m.builtWithStatsRollout == eval.StatsRolloutDefault && evalCtx.StatsRollout == eval.StatsRolloutStable) {
 		return true, nil
 	}
 

@@ -506,9 +506,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
-		// We only allow reusing memo if this plan is not going to use canary stats.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedDescriptors() &&
-			p.EvalContext().StatsRollout != eval.StatsRolloutCanary
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedDescriptors()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
@@ -781,6 +779,18 @@ func (opc *optPlanningCtx) chooseGenericPlan(ctx context.Context) bool {
 func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.Memo, error) {
 	prep := opc.p.stmt.Prepared
 
+	// For canary executions that reference canary-window tables, return
+	// nil without running the staleness check. This is critical because
+	// the staleness check itself could nil the cached stable memo that
+	// future stable executions need, which violates the idea that a
+	// canary execution should never touch the cached stable memo: it
+	// builds a fresh one-time memo and discards it.
+	if opc.skipMemoReuseForCanaryExec(prep.GenericMemo) ||
+		opc.skipMemoReuseForCanaryExec(prep.BaseMemo) {
+		opc.log(ctx, "skipping cached memo for canary exec")
+		return nil, nil
+	}
+
 	if prep.GenericMemo != nil {
 		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
 		if err != nil {
@@ -817,6 +827,20 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 		return prep.GenericMemo, nil
 	}
 	return prep.BaseMemo, nil
+}
+
+// skipMemoReuseForCanaryExec reports whether a previously cached memo
+// should NOT be reused for the current execution. It returns true when
+// the execution is a canary execution and the memo touches tables with
+// a canary window. This is a read-side guard: it prevents a canary
+// execution from reusing a stable-built cached memo. After skipping,
+// a fresh memo is built; the write-side guard (DisableMemoReuse in the
+// optbuilder) then decides whether that fresh memo should be cached,
+// based on whether canary and stable stats actually differ.
+func (opc *optPlanningCtx) skipMemoReuseForCanaryExec(m *memo.Memo) bool {
+	return m != nil &&
+		opc.p.EvalContext().StatsRollout == eval.StatsRolloutCanary &&
+		m.Metadata().HasCanaryWindowTables()
 }
 
 // fetchPreparedMemo attempts to fetch a memo from the prepared statement
@@ -939,13 +963,26 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				// Update the plan in the cache. If the cache entry had Metadata
 				// populated, it may no longer be valid.
 				cachedData.Metadata = nil
-				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+				// Re-check opc.useCache: buildReusableMemo may have cleared it
+				// (via DisableMemoReuse) when the rebuilt memo touches
+				// canary-window tables during a canary execution.
+				if opc.useCache {
+					p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+				}
 				opc.flags.Set(planFlagOptCacheMiss)
+				return opc.reuseMemo(cachedData.Memo)
+			} else if opc.skipMemoReuseForCanaryExec(cachedData.Memo) {
+				// The memo is not stale, but this is a canary execution
+				// that should not reuse the cached stable memo. Fall
+				// through to build from scratch. The cached entry remains
+				// valid for future stable executions; DisableMemoReuse in
+				// the from-scratch build will handle caching correctly.
+				opc.log(ctx, "query cache hit but skipping for canary exec")
 			} else {
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
+				return opc.reuseMemo(cachedData.Memo)
 			}
-			return opc.reuseMemo(cachedData.Memo)
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
@@ -995,12 +1032,12 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// placeholders.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
 		!f.FoldingControl().PermittedStableFold() {
-		opc.log(ctx, "query cache add")
 		memo := opc.optimizer.DetachMemo(ctx)
 		cachedData := querycache.CachedData{
 			SQL:  opc.p.stmt.SQL,
 			Memo: memo,
 		}
+		opc.log(ctx, "query cache add")
 		p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		return memo, nil
 	}
