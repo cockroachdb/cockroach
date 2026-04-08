@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +72,11 @@ func addCheckpoints(
 	for i, kv := range kvs {
 		events = append(events, kv)
 
-		if maxCheckpointAt[i] == lastCheckpoint {
+		// The checkpoint must be >= kv.time (the current KV's timestamp) to
+		// maintain monotonic ordering within the subscription, and <
+		// maxCheckpointAt[i] to avoid resolving a KV not yet emitted.
+		minCP := kv.time
+		if minCP >= maxCheckpointAt[i] || minCP <= lastCheckpoint {
 			continue
 		}
 
@@ -81,7 +84,7 @@ func addCheckpoints(
 			continue
 		}
 
-		lastCheckpoint = rng.Intn(maxCheckpointAt[i]-lastCheckpoint) + lastCheckpoint
+		lastCheckpoint = rng.Intn(maxCheckpointAt[i]-minCP) + minCP
 		events = append(events, checkpoint{
 			start: start, end: end, time: lastCheckpoint,
 		})
@@ -158,29 +161,23 @@ func generateMergeFeedInputs(
 	// non-deterministic.
 	slices.SortFunc(expected, kvEvent.Compare)
 
-	shuffled := slices.Clone(allKVs)
-	rng.Shuffle(len(shuffled), func(i, j int) {
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	})
-
 	subKVs := make([][]kvEvent, opts.numSubs)
-	for _, kv := range shuffled {
+	for _, kv := range allKVs {
 		idx := rng.Intn(opts.numSubs)
 		subKVs[idx] = append(subKVs[idx], kv)
 	}
 
-	// Build each subscription's event list with randomly inserted checkpoints,
-	// then wrap in OrderedFeed.
+	// Sort each subscription's KVs by (time, key) to simulate producer-side
+	// MVCC ordering.
+	for i := range subKVs {
+		slices.SortFunc(subKVs[i], kvEvent.Compare)
+	}
+
+	// Build each subscription's event list with randomly inserted checkpoints.
 	subs = make([]streamclient.Subscription, opts.numSubs)
 	for i := 0; i < opts.numSubs; i++ {
 		events := addCheckpoints(rng, opts.density, subKVs[i], coveringSpan)
-
-		sub := makeTestSubscription(events)
-		frontier, err := span.MakeFrontier(coveringSpan)
-		require.NoError(t, err)
-		orderedFeed, err := NewOrderedFeed(sub, frontier)
-		require.NoError(t, err)
-		subs[i] = orderedFeed
+		subs[i] = makeTestSubscription(events)
 	}
 	return subs, coveringSpan, expected
 }

@@ -265,6 +265,7 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.WrappedEvents = true
 	sps.WithDiff = cfg.withDiff
 	sps.WithFiltering = cfg.withFiltering
+	sps.WithMvccOrdering = cfg.withOrdered
 	sps.Type = streampb.ReplicationType_PHYSICAL
 	sps.Config.BatchByteSize = cfg.batchByteSize
 	if p.logical {
