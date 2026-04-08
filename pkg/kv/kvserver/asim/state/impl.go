@@ -1469,7 +1469,7 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 func (s *state) SetClusterSetting(Key string, Value interface{}) {
 	switch Key {
 	case "LBRebalancingMode":
-		kvserverbase.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserverbase.LBRebalancingMode(Value.(int64)))
+		kvserverbase.OverrideLoadBasedRebalancingMode(context.Background(), &s.settings.ST.SV, kvserverbase.LBRebalancingMode(Value.(int64)))
 	case "LBRebalancingObjective":
 		kvserver.LoadBasedRebalancingObjective.Override(context.Background(), &s.settings.ST.SV, kvserver.LBRebalancingObjective(Value.(int64)))
 	default:

@@ -83,7 +83,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		kvserverbase.LoadBasedRebalancingMode.Override(ctx, &st.SV, kvserverbase.LBRebalancingOff)
+		kvserverbase.OverrideLoadBasedRebalancingMode(ctx, &st.SV, kvserverbase.LBRebalancingOff)
 	}
 
 	const newRanges = 10
