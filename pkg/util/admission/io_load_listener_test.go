@@ -234,8 +234,7 @@ func TestIOLoadListener(t *testing.T) {
 				var buf strings.Builder
 				// Do the ticks until just before next adjustment.
 				res := ioll.adjustTokensResult
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(ioll.diskBandwidthLimiter))
+				fmt.Fprintln(&buf, string(ioll.formatLog()))
 				res.ioThreshold = nil // avoid nondeterminism
 				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(res))
 				if req.buf.Len() > 0 {
