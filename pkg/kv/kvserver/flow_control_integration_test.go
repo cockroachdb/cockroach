@@ -319,6 +319,9 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 							return disableWorkQueueGranting.Load()
 						},
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 				},
 			},
 		})
@@ -431,6 +434,9 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return disableWorkQueueGranting.Load()
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 				},
 			},
@@ -586,6 +592,9 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return true
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 				},
 			},
@@ -1083,6 +1092,9 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 								return disableWorkQueueGranting.Load()
 							},
 						},
+						KVClient: &kvcoord.ClientTestingKnobs{
+							DontRandomizeLeaseholderOnCtxError: true,
+						},
 					},
 				},
 			})
@@ -1215,6 +1227,9 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return disableWorkQueueGranting.Load()
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 				},
 			},
@@ -1441,6 +1456,9 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 							return disableWorkQueueGranting.Load()
 						},
 					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
+					},
 				},
 			},
 		})
@@ -1535,6 +1553,9 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 						DisableWorkQueueGranting: func() bool {
 							return disableWorkQueueGranting.Load()
 						},
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 				},
 			},
@@ -1652,6 +1673,9 @@ func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 							return disableWorkQueueGranting.Load()
 						},
 						AlwaysTryGrantWhenAdmitted: true,
+					},
+					KVClient: &kvcoord.ClientTestingKnobs{
+						DontRandomizeLeaseholderOnCtxError: true,
 					},
 				},
 			},
@@ -1814,6 +1838,9 @@ func TestFlowControlSendQueue(t *testing.T) {
 						idx := i
 						return disableWorkQueueGrantingServers[idx].Load()
 					},
+				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					DontRandomizeLeaseholderOnCtxError: true,
 				},
 			},
 		}
@@ -2233,6 +2260,9 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 						return disableWorkQueueGranting.Load()
 					},
 				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					DontRandomizeLeaseholderOnCtxError: true,
+				},
 			},
 		},
 	})
@@ -2421,6 +2451,9 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 								idx := i
 								return disableWorkQueueGrantingServers[idx].Load()
 							},
+						},
+						KVClient: &kvcoord.ClientTestingKnobs{
+							DontRandomizeLeaseholderOnCtxError: true,
 						},
 					},
 				}
@@ -2638,6 +2671,9 @@ func TestFlowControlRangeSplitMergeMixedVersion(t *testing.T) {
 						idx := i
 						return disableWorkQueueGrantingServers[idx].Load()
 					},
+				},
+				KVClient: &kvcoord.ClientTestingKnobs{
+					DontRandomizeLeaseholderOnCtxError: true,
 				},
 			},
 		}

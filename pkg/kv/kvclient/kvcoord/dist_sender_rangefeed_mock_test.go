@@ -129,7 +129,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					transport.EXPECT().Release().AnyTimes()
 				}
 
-				ds := NewDistSender(DistSenderConfig{
+				ds := NewDistSender(ctx, DistSenderConfig{
 					AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 					Clock:           clock,
 					NodeDescs:       g,
@@ -275,7 +275,7 @@ func TestMuxRangeFeedTransportRace(t *testing.T) {
 		Replica:  desc.InternalReplicas[0],
 		Sequence: 1,
 	}
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:           clock,
 		NodeDescs:       g,
