@@ -74,6 +74,7 @@ func RegisterTests(r registry.Registry) {
 	registerImportTPCC(r)
 	registerImportTPCH(r)
 	registerInconsistency(r)
+	registerInvariantCheckDetection(r)
 	registerIndexes(r)
 	registerJasyncSQL(r)
 	registerJepsen(r)
