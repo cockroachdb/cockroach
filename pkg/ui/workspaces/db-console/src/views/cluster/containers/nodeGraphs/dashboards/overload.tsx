@@ -163,31 +163,30 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The 99th percentile latency of requests waiting in the various Admission Control CPU queues.`}
     >
       <Axis units={AxisUnits.DurationMillis} label="Delay Duration">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.kv-p99"
-              title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.sql-kv-response-p99"
-              title={"SQL-KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.sql-sql-response-p99"
-              title={"SQL-SQL " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.admission.wait_durations.kv-p99"
+          title="KV"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.admission.wait_durations.sql-kv-response-p99"
+          title="SQL-KV"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.admission.wait_durations.sql-sql-response-p99"
+          title="SQL-SQL"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -257,24 +256,22 @@ export default function (props: GraphDashboardProps) {
       tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
     >
       <Axis units={AxisUnits.DurationMillis} label="Flow Token Wait Duration">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
-              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
-              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
+          title="Regular"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
+          title="Elastic"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -286,22 +283,20 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
     >
       <Axis label="Blocked Stream Count">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
-              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-            <Metric
-              key={nid}
-              name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
-              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
+          title="Regular"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
+        <Metric
+          name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
+          title="Elastic"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -330,20 +325,20 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU Utilization">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              name="cr.node.admission.elastic_cpu.utilization"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-            <Metric
-              name="cr.node.admission.elastic_cpu.utilization_limit"
-              title={nodeDisplayName(nodeDisplayNameByID, nid) + " Limit"}
-              sources={[nid]}
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.admission.elastic_cpu.utilization"
+          title="Utilization"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
+        <Metric
+          name="cr.node.admission.elastic_cpu.utilization_limit"
+          title="Limit"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 

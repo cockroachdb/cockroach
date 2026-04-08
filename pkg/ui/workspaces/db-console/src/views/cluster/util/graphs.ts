@@ -87,9 +87,10 @@ export function formatMetricData(
           continue;
         }
         const displayName = s.props.sourceDisplayNames?.[sd.source] ?? sd.source;
+        const key = s.props.title ? `${s.props.title} - ${displayName}` : displayName;
         formattedData.push({
           values: applyScaleAndTransform(sd.datapoints),
-          key: displayName,
+          key,
           area: true,
           fillOpacity: 0.1,
           color: s.props.color,

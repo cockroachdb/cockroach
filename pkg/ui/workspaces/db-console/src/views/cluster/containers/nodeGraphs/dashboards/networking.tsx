@@ -9,10 +9,10 @@ import React from "react";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeSources, nodeDisplayNameByID, tenantSource } = props;
+  const { nodeSources, nodeDisplayNameByID, tenantSource } = props;
 
   return [
     <LineGraph title="Network Bytes Sent" showMetricsInTooltip={true}>
@@ -99,40 +99,42 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="packets">
-        {nodeIDs.flatMap(nid => [
-          <Metric
-            key={`${nid}-recv-err`}
-            name="cr.node.sys.host.net.recv.err"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Recv Errors`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-recv-drop`}
-            name="cr.node.sys.host.net.recv.drop"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Recv Drops`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-send-err`}
-            name="cr.node.sys.host.net.send.err"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Send Errors`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-send-drop`}
-            name="cr.node.sys.host.net.send.drop"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Send Drops`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-        ])}
+        <Metric
+          name="cr.node.sys.host.net.recv.err"
+          title="Recv Errors"
+          sources={nodeSources}
+          tenantSource={tenantSource}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sys.host.net.recv.drop"
+          title="Recv Drops"
+          sources={nodeSources}
+          tenantSource={tenantSource}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sys.host.net.send.err"
+          title="Send Errors"
+          sources={nodeSources}
+          tenantSource={tenantSource}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sys.host.net.send.drop"
+          title="Send Drops"
+          sources={nodeSources}
+          tenantSource={tenantSource}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
