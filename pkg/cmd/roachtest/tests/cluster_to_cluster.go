@@ -1067,9 +1067,7 @@ func (rd *replicationDriver) maybeRunSchemaChangeWorkload(
 			// The workload should only return an error if the roachtest driver cancels the
 			// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
 			if err != nil && ctx.Err() == nil {
-				// Implies the workload context was not cancelled and the workload cmd returned a
-				// different error.
-				return errors.Wrapf(handleSchemaChangeWorkloadError(err), `schema change workload context was not cancelled. Error returned by workload cmd`)
+				return handleSchemaChangeWorkloadError(ctx, err)
 			}
 			return nil
 		})
