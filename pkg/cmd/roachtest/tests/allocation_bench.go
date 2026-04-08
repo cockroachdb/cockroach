@@ -44,7 +44,7 @@ const (
 type allocationBenchSpec struct {
 	nodes, cpus int
 	load        allocBenchLoad
-	lbrMode     string // see kvserverbase.LoadBasedRebalancingMode
+	lbrMode     string // see kvserverbase.GetLoadBasedRebalancingMode
 
 	startRecord time.Duration
 	samples     int

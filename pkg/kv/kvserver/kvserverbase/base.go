@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
 )
@@ -112,10 +113,10 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-// LoadBasedRebalancingMode controls whether range rebalancing takes
+// loadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
-var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
+var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of load across stores",
@@ -130,11 +131,35 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	settings.WithPublic,
 )
 
+// disableMMA is an emergency kill switch that prevents MMA modes from being
+// used. When set and the cluster setting is an MMA mode, the mode falls back
+// to LBRebalancingLeasesAndReplicas. Non-MMA modes are returned as-is.
+// Use when MMA causes crashes too frequent to change the setting.
+var disableMMA = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_MMA", false)
+
+// GetLoadBasedRebalancingMode returns the current load-based rebalancing mode.
+// If COCKROACH_DISABLE_MMA is set and the mode is an MMA mode, it falls back
+// to LBRebalancingLeasesAndReplicas.
+func GetLoadBasedRebalancingMode(sv *settings.Values) LBRebalancingMode {
+	mode := loadBasedRebalancingMode.Get(sv)
+	if disableMMA && mode.IsMMA() {
+		return LBRebalancingLeasesAndReplicas
+	}
+	return mode
+}
+
+// OverrideLoadBasedRebalancingMode overrides the load-based rebalancing
+// mode. Intended for use in tests.
+func OverrideLoadBasedRebalancingMode(
+	ctx context.Context, sv *settings.Values, mode LBRebalancingMode,
+) {
+	loadBasedRebalancingMode.Override(ctx, sv, mode)
+}
+
 // LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
 // uses the multi-metric store rebalancer.
 var LoadBasedRebalancingModeIsMMA = func(sv *settings.Values) bool {
-	mode := LoadBasedRebalancingMode.Get(sv)
-	return mode == LBRebalancingMultiMetricOnly || mode == LBRebalancingMultiMetricAndCount
+	return GetLoadBasedRebalancingMode(sv).IsMMA()
 }
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
@@ -163,6 +188,11 @@ const (
 	// replica counts goal may be in conflict with the store-level load goal.
 	LBRebalancingMultiMetricAndCount
 )
+
+// IsMMA returns true if the mode uses the multi-metric store rebalancer.
+func (m LBRebalancingMode) IsMMA() bool {
+	return m == LBRebalancingMultiMetricOnly || m == LBRebalancingMultiMetricAndCount
+}
 
 func (m LBRebalancingMode) String() string {
 	return redact.StringWithoutMarkers(m)
