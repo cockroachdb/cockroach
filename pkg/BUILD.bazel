@@ -1532,6 +1532,7 @@ GO_TARGETS = [
     "//pkg/crosscluster/logical/txnfeed:txnfeed_test",
     "//pkg/crosscluster/logical/txnlock:txnlock",
     "//pkg/crosscluster/logical/txnlock:txnlock_test",
+    "//pkg/crosscluster/logical/txnmode:txnmode",
     "//pkg/crosscluster/logical/txnmode:txnmode_test",
     "//pkg/crosscluster/logical/txnscheduler:txnscheduler",
     "//pkg/crosscluster/logical/txnscheduler:txnscheduler_test",

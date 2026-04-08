@@ -561,6 +561,9 @@ func TestCreateTables(t *testing.T) {
 		sqlA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
 		sqlc := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("c")))
 		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.create_table.after_initial_scan'")
+		defer func() {
+			sqlc.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
+		}()
 
 		var jobID jobspb.JobID
 		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
