@@ -1662,12 +1662,12 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 statement ok
 SET DATABASE = constraint_db
 
-query OTOOITTTTT colnames,strip-oids
+query OTOOTTITTTTT colnames,strip-oids
 SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
-oid      collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-__OID__  en-US     __OID__        __OID__    6             NULL         NULL       NULL          NULL         NULL
+oid      collname  collnamespace  collowner  collprovider  collisdeterministic  collencoding  colllocale  collicurules  collcollate  collctype  collversion
+__OID__  en-US     __OID__        __OID__    NULL          NULL                 6             NULL        NULL          NULL         NULL       NULL
 
 user testuser
 

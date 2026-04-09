@@ -200,19 +200,21 @@ CREATE TABLE pg_catalog.pg_class (
 )`
 
 // PGCatalogCollation describes the schema of the pg_catalog.pg_collation table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-collation.html,
+// https://www.postgresql.org/docs/18/catalog-pg-collation.html,
 const PGCatalogCollation = `
 CREATE TABLE pg_catalog.pg_collation (
   oid OID,
-  collname STRING,
+  collname NAME,
   collnamespace OID,
   collowner OID,
+  collprovider "char",
+  collisdeterministic BOOL,
   collencoding INT4,
+  colllocale STRING,
+  collicurules STRING,
   collcollate STRING,
   collctype STRING,
-  collprovider "char",
-  collversion STRING,
-  collisdeterministic BOOL
+  collversion STRING
 )`
 
 // PGCatalogConstraint describes the schema of the pg_catalog.pg_constraint
