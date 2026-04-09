@@ -12,29 +12,76 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/time/rate"
 )
 
-// SideloadClearer truncates sideloaded files for a given range up to and
-// including the specified raft log index. Files beyond this index may belong
-// to a newer replica and must be preserved.
-// The SideloadClearer must also sync the sideloaded storage after truncation to
-// avoid leaking the files in case of a node crash.
-type SideloadClearer func(ctx context.Context, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex) error
+// WAGTruncator truncates applied WAG nodes and clears their associated raft
+// state (log entries and sideloaded files). It will be used in two places:
+// 1. On startup, used to truncate all WAG nodes after we replay them.
+// 2. During normal operation, it is used to periodically truncate WAG nodes
+// that are no longer needed.
+// TODO(ibrahim): Add the periodic truncation logic.
+type WAGTruncator struct {
+	stateEngine     storage.Engine
+	raftEngine      storage.Engine
+	clearSideloaded sideloadClearer
+}
 
-// clearReplicaRaftLog clears raft log entries at or below the given index for
-// a destroyed or subsumed replica.
-func clearReplicaRaftLog(
-	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
-) error {
-	return storage.ClearRangeWithHeuristic(
-		ctx, raft.RO, raft.WO,
-		keys.RaftLogPrefix(rangeID),           /* start */
-		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
-		ClearRangeThresholdPointKeys(),
-	)
+// MakeWAGTruncator creates a WAGTruncator.
+func MakeWAGTruncator(
+	st *cluster.Settings,
+	stateEngine storage.Engine,
+	raftEngine storage.Engine,
+	limiter *rate.Limiter,
+) *WAGTruncator {
+	return &WAGTruncator{
+		stateEngine: stateEngine,
+		raftEngine:  raftEngine,
+		clearSideloaded: func(
+			ctx context.Context,
+			rangeID roachpb.RangeID,
+			lastIndex kvpb.RaftIndex,
+		) error {
+			ss := logstore.NewDiskSideloadStorage(st, rangeID, stateEngine.GetAuxiliaryDir(), limiter,
+				stateEngine.Env())
+			if err := ss.TruncateTo(ctx, lastIndex); err != nil {
+				return err
+			}
+			return ss.Sync()
+		},
+	}
+}
+
+// TruncateAll truncates all applied WAG nodes. It's meant to be used at engine
+// startup right after we replay the WAG nodes and sync the state engine.
+func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
+	stateReader := t.stateEngine.NewReader(storage.GuaranteedDurability)
+	defer stateReader.Close()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		b := t.raftEngine.NewWriteBatch()
+		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(
+			ctx, Raft{RO: t.raftEngine, WO: b}, stateReader,
+		)
+		if err == nil && truncated {
+			err = b.Commit(false /* sync */)
+		}
+		b.Close()
+		if err != nil {
+			return err
+		}
+		if !truncated {
+			break
+		}
+	}
+	return nil
 }
 
 // truncateAppliedWAGNodeAndClearRaftState checks the first WAG node and
@@ -51,9 +98,12 @@ func clearReplicaRaftLog(
 // not. If the return value is false, it means that either there are no WAG
 // nodes left, or that the WAG node has not been applied to the state engine.
 // Also, an error is returned if the WAG node could not be fetched or deleted.
+//
+// The caller is responsible for creating and committing/closing the write batch
+// in raft.WO.
 // TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
-func truncateAppliedWAGNodeAndClearRaftState(
-	ctx context.Context, raft Raft, stateRO StateRO, clearSideloaded SideloadClearer,
+func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
+	ctx context.Context, raft Raft, stateRO StateRO,
 ) (bool, error) {
 	var iter wag.Iterator
 	for index, node := range iter.Iter(ctx, raft.RO) {
@@ -80,7 +130,7 @@ func truncateAppliedWAGNodeAndClearRaftState(
 			if err := clearReplicaRaftLog(ctx, raft, event.Addr.RangeID, event.Addr.Index); err != nil {
 				return false, errors.Wrapf(err, "clearing raft log for r%d", event.Addr.RangeID)
 			}
-			if clearSideloaded != nil {
+			if t.clearSideloaded != nil {
 				// In general, we shouldn't delete sideloaded files before committing the
 				// batch that deletes the Raft log entries. However, in this case, we
 				// know that the destroy/subsume event has already been flushed to disk,
@@ -89,7 +139,7 @@ func truncateAppliedWAGNodeAndClearRaftState(
 				// after the batch is committed, we risk leaking the sideloaded files
 				// if a node crash happens after the batch is committed (and synced) and
 				// before the sideloaded files are deleted.
-				if err := clearSideloaded(ctx, event.Addr.RangeID, event.Addr.Index); err != nil {
+				if err := t.clearSideloaded(ctx, event.Addr.RangeID, event.Addr.Index); err != nil {
 					return false, errors.Wrapf(err, "clearing sideloaded files for r%d", event.Addr.RangeID)
 				}
 			}
@@ -97,4 +147,24 @@ func truncateAppliedWAGNodeAndClearRaftState(
 		return true, nil
 	}
 	return false, iter.Error()
+}
+
+// sideloadClearer truncates sideloaded files for a given range up to and
+// including the specified raft log index. Files beyond this index may belong
+// to a newer replica and must be preserved.
+// The sideloadClearer must also sync the sideloaded storage after truncation to
+// avoid leaking the files in case of a node crash.
+type sideloadClearer func(ctx context.Context, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex) error
+
+// clearReplicaRaftLog clears raft log entries at or below the given index for
+// a destroyed or subsumed replica.
+func clearReplicaRaftLog(
+	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
+) error {
+	return storage.ClearRangeWithHeuristic(
+		ctx, raft.RO, raft.WO,
+		keys.RaftLogPrefix(rangeID),           /* start */
+		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
+		ClearRangeThresholdPointKeys(),
+	)
 }
