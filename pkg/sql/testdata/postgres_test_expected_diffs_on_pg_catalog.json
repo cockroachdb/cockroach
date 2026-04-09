@@ -5,7 +5,7 @@
     "TotalColumns": 1283,
     "MissingTables": 15,
     "MissingColumns": 1,
-    "DatatypeMismatches": 17
+    "DatatypeMismatches": 16
   },
   "diffs": {
     "pg_aios": {},
@@ -24,14 +24,6 @@
         "dataType": "oid",
         "expectedOid": 24,
         "expectedDataType": "regproc"
-      }
-    },
-    "pg_default_acl": {
-      "defaclacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
-        "expectedOid": 1009,
-        "expectedDataType": "_TEXT"
       }
     },
     "pg_enum": {
