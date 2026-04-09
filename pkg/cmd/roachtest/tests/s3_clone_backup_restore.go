@@ -154,44 +154,37 @@ type s3BackupRestoreValidator struct {
 
 // checkBackups verifies that there is exactly one full and one incremental backup.
 func (v *s3BackupRestoreValidator) checkBackups(ctx context.Context, conn *gosql.DB) {
-	backups := conn.QueryRowContext(ctx, "SHOW BACKUPS IN 'external://backup_bucket'")
-	var path string
-	if err := backups.Scan(&path); err != nil {
+	if _, err := conn.ExecContext(ctx, "SET use_backups_with_ids = true"); err != nil {
 		v.t.Fatal(err)
 	}
-
-	rows, err := conn.QueryContext(ctx,
-		"SELECT backup_type from [SHOW BACKUP $1 IN 'external://backup_bucket'] WHERE object_type='table'",
-		path)
-
+	rows, err := conn.QueryContext(
+		ctx,
+		"SELECT start_time IS NULL FROM [SHOW BACKUPS IN 'external://backup_bucket' WITH DEBUG]",
+	)
 	if err != nil {
 		v.t.Fatal(err)
 	}
-	var foundFull, foundIncr bool
-	var rowCount int
+	fulls, incs := 0, 0
 	for rows.Next() {
-		var backupType string
-		if err := rows.Scan(&backupType); err != nil {
+		var isFull bool
+		if err := rows.Scan(&isFull); err != nil {
 			v.t.Fatal(err)
 		}
-		if backupType == "full" {
-			foundFull = true
+		if isFull {
+			fulls++
+		} else {
+			incs++
 		}
-		if backupType == "incremental" {
-			foundIncr = true
-		}
-		rowCount++
 	}
-	if !foundFull {
+	if fulls == 0 {
 		v.t.Fatal(errors.Errorf("full backup not found"))
 	}
-	if !foundIncr {
+	if incs == 0 {
 		v.t.Fatal(errors.Errorf("incremental backup not found"))
 	}
-	if rowCount > 2 {
+	if fulls+incs > 2 {
 		v.t.Fatal(errors.Errorf("found more than 2 backups"))
 	}
-
 }
 
 // runImportForS3CloneTesting import the data used to test the S3 clone backup/restore

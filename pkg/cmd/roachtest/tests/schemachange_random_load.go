@@ -156,8 +156,11 @@ func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDir
 	if err != nil {
 		t.L().Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
+	if _, err := db.Exec("SET use_backups_with_ids = true"); err != nil {
+		t.L().Printf("Failed to set use_backups_with_ids on node 1: %v\n", err.Error())
+	}
 	var backupPath string
-	if err := db.QueryRow("SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/schemachange']").Scan(&backupPath); err != nil {
+	if err := db.QueryRow("SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/schemachange' WITH DEBUG]").Scan(&backupPath); err != nil {
 		t.L().Printf("Failed to get backup path from node 1: %v\n", err.Error())
 	}
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange", backupPath)
