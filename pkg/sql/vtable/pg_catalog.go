@@ -582,14 +582,17 @@ CREATE TABLE pg_catalog.pg_prepared_xacts (
 // of the PREPARE statement.
 // The parameter_types field differs from Postgres as the type names in
 // CockroachDB are slightly different.
-// https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html,
+// https://www.postgresql.org/docs/18/view-pg-prepared-statements.html,
 const PGCatalogPreparedStatements = `
 CREATE TABLE pg_catalog.pg_prepared_statements (
 	name TEXT,
 	statement TEXT,
 	prepare_time TIMESTAMPTZ,
 	parameter_types REGTYPE[],
-	from_sql boolean
+	result_types REGTYPE[],
+	from_sql BOOLEAN,
+	custom_plans INT8,
+	generic_plans INT8
 )`
 
 // PGCatalogProc describes the schema of the pg_catalog.pg_proc table.
