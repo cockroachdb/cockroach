@@ -374,7 +374,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				reqs, _ := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, g.Req().Txn, g.Req().Timestamp, g.Req().WaitPolicy, reqs)
-				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(
+					context.Background(), latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
 				reqName := dd.ScanArg[string](t, d, "req")

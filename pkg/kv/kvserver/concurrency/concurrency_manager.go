@@ -974,7 +974,7 @@ func (g *guardImpl) IsolatedAtLaterTimestamps() bool {
 
 // CheckOptimisticNoConflicts implements the Guard interface.
 func (g *guardImpl) CheckOptimisticNoConflicts(
-	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
+	ctx context.Context, latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
 ) (ok bool) {
 	if g.evalKind != OptimisticEval {
 		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.evalKind))
@@ -987,10 +987,15 @@ func (g *guardImpl) CheckOptimisticNoConflicts(
 	}
 	// First check the latches, since a conflict there could mean that racing
 	// requests in the lock table caused a conflicting lock to not be noticed.
-	if g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead) {
-		return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
+	if latchOK, conflictStr := g.lm.CheckOptimisticNoConflicts(g.lg, latchSpansRead); !latchOK {
+		log.VEventf(ctx, 2, "optimistic eval: latch conflict on narrowed spans: %s", conflictStr)
+		return false
 	}
-	return false
+	if lockOK, conflictStr := g.ltg.CheckOptimisticNoConflicts(lockSpansRead); !lockOK {
+		log.VEventf(ctx, 2, "optimistic eval: lock table conflict on narrowed spans: %s", conflictStr)
+		return false
+	}
+	return true
 }
 
 // CheckOptimisticNoLatchConflicts implements the Guard interface.
@@ -1001,7 +1006,8 @@ func (g *guardImpl) CheckOptimisticNoLatchConflicts() (ok bool) {
 	if g.lg == nil {
 		return true
 	}
-	return g.lm.CheckOptimisticNoConflicts(g.lg, g.req.LatchSpans)
+	ok, _ = g.lm.CheckOptimisticNoConflicts(g.lg, g.req.LatchSpans)
+	return ok
 }
 
 // IsKeyLockedByConflictingTxn implements the Guard interface.

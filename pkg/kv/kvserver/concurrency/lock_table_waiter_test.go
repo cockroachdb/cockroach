@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,8 +102,10 @@ func (g *mockLockTableGuard) AddReplicatedToResolveAndSignal(up roachpb.LockUpda
 	default:
 	}
 }
-func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
-	return true
+func (g *mockLockTableGuard) CheckOptimisticNoConflicts(
+	*lockspanset.LockSpanSet,
+) (ok bool, conflictStr redact.RedactableString) {
+	return true, ""
 }
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
 	context.Context, roachpb.Key, lock.Strength,

@@ -894,11 +894,11 @@ func (g *lockTableGuardImpl) canElideWaitingStateUpdate(newState waitingState) b
 
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 	lockSpanSet *lockspanset.LockSpanSet,
-) (ok bool) {
+) (ok bool, conflictStr redact.RedactableString) {
 	if g.waitPolicy == lock.WaitPolicy_SkipLocked {
 		// If the request is using a SkipLocked wait policy, lock conflicts are
 		// handled during evaluation.
-		return true
+		return true, ""
 	}
 	// Temporarily replace the LockSpanSet in the guard.
 	originalSpanSet := g.spans
@@ -916,12 +916,12 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
 			l := iter.Cur()
 			if !l.isNonConflictingLock(g) {
-				return false
+				return false, redact.Sprintf("lock conflict on key %s (span %s)", l.key, span)
 			}
 		}
 		span = stepToNextSpan(g)
 	}
-	return true
+	return true, ""
 }
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(

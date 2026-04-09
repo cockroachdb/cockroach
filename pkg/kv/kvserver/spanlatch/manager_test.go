@@ -611,16 +611,21 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	m := Manager{clock: hlc.NewClockForTesting(nil)}
 
 	ctx := context.Background()
+	checkNoConflicts := func(lg *Guard, ss *spanset.SpanSet) bool {
+		ok, _ := m.CheckOptimisticNoConflicts(lg, ss)
+		return ok
+	}
+
 	// Acquire latches, no conflict.
 	lg1 := m.AcquireOptimistic(spans("d", "f", write, zeroTS), poison.Policy_Error, nil)
-	require.True(t, m.CheckOptimisticNoConflicts(lg1, spans("d", "f", write, zeroTS)), poison.Policy_Error)
+	require.True(t, checkNoConflicts(lg1, spans("d", "f", write, zeroTS)))
 	lg1, err := m.WaitUntilAcquired(ctx, lg1)
 	require.NoError(t, err)
 
 	// Optimistic acquire encounters conflict in some cases.
 	lg2 := m.AcquireOptimistic(spans("a", "e", read, zeroTS), poison.Policy_Error, nil)
-	require.False(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "e", read, zeroTS)))
-	require.True(t, m.CheckOptimisticNoConflicts(lg2, spans("a", "d", read, zeroTS)))
+	require.False(t, checkNoConflicts(lg2, spans("a", "e", read, zeroTS)))
+	require.True(t, checkNoConflicts(lg2, spans("a", "d", read, zeroTS)))
 	waitUntilAcquiredCh := func(g *Guard) Attempt {
 		errCh := make(chan error, 1)
 		go func() {
@@ -636,10 +641,10 @@ func TestLatchManagerOptimistic(t *testing.T) {
 
 	// Optimistic acquire encounters conflict.
 	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil)
-	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	require.False(t, checkNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	m.Release(ctx, lg2)
 	// There is still a conflict even though lg2 has been released.
-	require.False(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	require.False(t, checkNoConflicts(lg3, spans("a", "e", write, zeroTS)))
 	lg3, err = m.WaitUntilAcquired(ctx, lg3)
 	require.NoError(t, err)
 	m.Release(ctx, lg3)
@@ -648,8 +653,8 @@ func TestLatchManagerOptimistic(t *testing.T) {
 	oneTS, twoTS := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}
 	lg4 := m.MustAcquire(spans("c", "e", write, twoTS))
 	lg5 := m.AcquireOptimistic(spans("a", "e", read, oneTS), poison.Policy_Error, nil)
-	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "e", read, oneTS)))
-	require.True(t, m.CheckOptimisticNoConflicts(lg5, spans("a", "c", read, oneTS)))
+	require.True(t, checkNoConflicts(lg5, spans("a", "e", read, oneTS)))
+	require.True(t, checkNoConflicts(lg5, spans("a", "c", read, oneTS)))
 	lg5, err = m.WaitUntilAcquired(ctx, lg5)
 	require.NoError(t, err)
 	m.Release(ctx, lg5)
@@ -681,7 +686,8 @@ func TestLatchManagerWaitFor(t *testing.T) {
 	// Optimistic acquire should _not_ encounter conflict - as WaitFor should
 	// not lay any latches.
 	lg3 := m.AcquireOptimistic(spans("a", "e", write, zeroTS), poison.Policy_Error, nil)
-	require.True(t, m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS)))
+	ok, _ := m.CheckOptimisticNoConflicts(lg3, spans("a", "e", write, zeroTS))
+	require.True(t, ok)
 	lg3, err = m.WaitUntilAcquired(ctx, lg3)
 	require.NoError(t, err)
 	m.Release(ctx, lg3)
