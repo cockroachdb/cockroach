@@ -15,11 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1259,5 +1263,302 @@ func TestEstimateStaleness(t *testing.T) {
 	// 150% staleness.
 	if err = checkEstimatedStaleness(1.5); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSpanToBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const tableID = 100
+	const indexID = 1
+
+	asc := catenumpb.IndexColumn_ASC
+	desc := catenumpb.IndexColumn_DESC
+
+	encodeInt := func(key roachpb.Key, v int, dir catenumpb.IndexColumn_Direction) roachpb.Key {
+		if dir == desc {
+			return encoding.EncodeVarintDescending(key, int64(v))
+		}
+		return encoding.EncodeVarintAscending(key, int64(v))
+	}
+
+	encodeString := func(
+		key roachpb.Key, s string, dir catenumpb.IndexColumn_Direction,
+	) roachpb.Key {
+		if dir == desc {
+			return encoding.EncodeStringDescending(key, s)
+		}
+		return encoding.EncodeStringAscending(key, s)
+	}
+
+	// makeIntKey builds a key with an optional leading integer datum, plus
+	// optional extra trailing bytes.
+	makeIntKey := func(
+		val *int, dir catenumpb.IndexColumn_Direction, extra ...byte,
+	) roachpb.Key {
+		key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+		if val != nil {
+			key = encodeInt(key, *val, dir)
+		}
+		key = append(key, extra...)
+		return key
+	}
+
+	// makeStringKey builds a key with an optional leading string datum, plus
+	// optional extra trailing bytes.
+	makeStringKey := func(
+		val *string, dir catenumpb.IndexColumn_Direction, extra ...byte,
+	) roachpb.Key {
+		key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+		if val != nil {
+			key = encodeString(key, *val, dir)
+		}
+		key = append(key, extra...)
+		return key
+	}
+
+	intPtr := func(v int) *int { return &v }
+	strPtr := func(s string) *string { return &s }
+
+	const colName = "c"
+
+	testCases := []struct {
+		name     string
+		span     roachpb.Span
+		dir      catenumpb.IndexColumn_Direction // asc if unset
+		colType  *types.T                        // types.Int if unset
+		expected string
+	}{
+		// --- Int column ---
+		{
+			name:     "int Get ASC",
+			span:     roachpb.Span{Key: makeIntKey(intPtr(42), asc)},
+			expected: "c = 42",
+		},
+		{
+			name:     "int Get no datum is contradiction",
+			span:     roachpb.Span{Key: makeIntKey(nil, asc)},
+			expected: "false",
+		},
+		{
+			name: "int closed interval ASC same value",
+			span: roachpb.Span{
+				// Note that this is an invalid span, but that's ok.
+				Key:    makeIntKey(intPtr(10), asc),
+				EndKey: makeIntKey(intPtr(10), asc),
+			},
+			expected: "c = 10",
+		},
+		{
+			name: "int closed interval ASC different values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(5), asc),
+				EndKey: makeIntKey(intPtr(15), asc),
+			},
+			expected: "5 <= c AND c <= 15",
+		},
+		{
+			name: "int closed interval DESC different values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(15), desc),
+				EndKey: makeIntKey(intPtr(5), desc),
+			},
+			dir:      desc,
+			expected: "15 >= c AND c >= 5",
+		},
+		{
+			name: "int half-open start only ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), asc),
+				EndKey: makeIntKey(nil, asc),
+			},
+			expected: "c >= 10",
+		},
+		{
+			name: "int half-open start only DESC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), desc),
+				EndKey: makeIntKey(nil, desc),
+			},
+			dir:      desc,
+			expected: "c <= 10",
+		},
+		{
+			name: "int half-open end only ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, asc),
+				EndKey: makeIntKey(intPtr(20), asc),
+			},
+			expected: "c <= 20",
+		},
+		{
+			name: "int half-open end only DESC",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, desc),
+				EndKey: makeIntKey(intPtr(20), desc),
+			},
+			dir:      desc,
+			expected: "c >= 20",
+		},
+		{
+			name: "full index scan is contradiction",
+			span: roachpb.Span{
+				Key:    makeIntKey(nil, asc),
+				EndKey: keys.MakeTableIDIndexID(nil /* key */, tableID, indexID+1),
+			},
+			expected: "false",
+		},
+		{
+			name: "int negative values",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(-100), asc),
+				EndKey: makeIntKey(intPtr(-1), asc),
+			},
+			expected: "-100 <= c AND c <= -1",
+		},
+		{
+			name:     "int zero value Get",
+			span:     roachpb.Span{Key: makeIntKey(intPtr(0), asc)},
+			expected: "c = 0",
+		},
+
+		// --- String column ---
+		{
+			name:     "string Get ASC",
+			span:     roachpb.Span{Key: makeStringKey(strPtr("hello"), asc)},
+			colType:  types.String,
+			expected: "c = 'hello'",
+		},
+		{
+			name: "string closed interval ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("aaa"), asc),
+				EndKey: makeStringKey(strPtr("zzz"), asc),
+			},
+			colType:  types.String,
+			expected: "'aaa' <= c AND c <= 'zzz'",
+		},
+		{
+			name: "string closed interval DESC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("zzz"), desc),
+				EndKey: makeStringKey(strPtr("aaa"), desc),
+			},
+			dir:      desc,
+			colType:  types.String,
+			expected: "'zzz' >= c AND c >= 'aaa'",
+		},
+		{
+			name: "string half-open start ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("foo"), asc),
+				EndKey: makeStringKey(nil, asc),
+			},
+			colType:  types.String,
+			expected: "c >= 'foo'",
+		},
+		{
+			name: "string half-open end ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(nil, asc),
+				EndKey: makeStringKey(strPtr("bar"), asc),
+			},
+			colType:  types.String,
+			expected: "c <= 'bar'",
+		},
+		{
+			name:     "string with special characters",
+			span:     roachpb.Span{Key: makeStringKey(strPtr("it's"), asc)},
+			colType:  types.String,
+			expected: "c = e'it\\'s'",
+		},
+
+		// --- Composite keys (trailing bytes from a second column) ---
+		{
+			// Same first-column value with different trailing bytes from a
+			// second column. Since the function strips trailing bytes via
+			// remainingKey, the first-column prefix is identical, reducing
+			// to equality.
+			name: "composite same first col trailing ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(10), asc, 0x01),
+				EndKey: makeIntKey(intPtr(10), asc, 0x02),
+			},
+			expected: "c = 10",
+		},
+		{
+			// Different first-column values with trailing bytes still
+			// produce a range on the first column.
+			name: "composite different first col with trailing ASC",
+			span: roachpb.Span{
+				Key:    makeIntKey(intPtr(5), asc, 0x01),
+				EndKey: makeIntKey(intPtr(15), asc, 0x02),
+			},
+			expected: "5 <= c AND c <= 15",
+		},
+		{
+			name: "composite string with trailing ASC",
+			span: roachpb.Span{
+				Key:    makeStringKey(strPtr("abc"), asc, 0x01),
+				EndKey: makeStringKey(strPtr("abc"), asc, 0xFF),
+			},
+			colType:  types.String,
+			expected: "c = 'abc'",
+		},
+		{
+			// Simulate a real composite index (c INT, v INT) where the
+			// span covers (c=5, v=1) to (c=5, v=100). The second-column
+			// encoded values differ but the first-column value is the
+			// same, so we get equality on c.
+			name: "composite with different second Int column",
+			span: roachpb.Span{
+				Key:    encodeInt(makeIntKey(intPtr(5), asc), 1, asc),
+				EndKey: encodeInt(makeIntKey(intPtr(5), asc), 100, asc),
+			},
+			expected: "c = 5",
+		},
+		{
+			// Composite index (c INT, v INT), span covers (c=1, v=50)
+			// to (c=10, v=50). Different first-column values produce a
+			// range.
+			name: "composite with different first col and encoded second col",
+			span: roachpb.Span{
+				Key:    encodeInt(makeIntKey(intPtr(1), asc), 50, asc),
+				EndKey: encodeInt(makeIntKey(intPtr(10), asc), 50, asc),
+			},
+			expected: "1 <= c AND c <= 10",
+		},
+		{
+			// Composite index (c STRING, v INT), span covers
+			// (c='foo', v=1) to (c='foo', v=99).
+			name: "composite String first col with different second Int col",
+			span: roachpb.Span{
+				Key:    encodeInt(makeStringKey(strPtr("foo"), asc), 1, asc),
+				EndKey: encodeInt(makeStringKey(strPtr("foo"), asc), 99, asc),
+			},
+			colType:  types.String,
+			expected: "c = 'foo'",
+		},
+	}
+
+	var da tree.DatumAlloc
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			colType := tc.colType
+			if colType == nil {
+				colType = types.Int
+			}
+			info := indexInfo{
+				tableID:       tableID,
+				indexID:       indexID,
+				keyColumnName: colName,
+				keyColumnDir:  tc.dir,
+				keyColumnType: colType,
+			}
+			result, err := spanToBounds(keys.SystemSQLCodec, tc.span, info, &da)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, result)
+		})
 	}
 }
