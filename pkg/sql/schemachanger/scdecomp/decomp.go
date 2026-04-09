@@ -216,9 +216,11 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 			})
 		}
 	} else if domain := typ.AsDomainTypeDescriptor(); domain != nil {
+		baseType := newTypeT(domain.GetBaseType())
 		w.ev(descriptorStatus(typ), &scpb.DomainType{
 			TypeID:      domain.GetID(),
 			ArrayTypeID: domain.GetArrayTypeID(),
+			BaseTypeT:   *baseType,
 		})
 	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
