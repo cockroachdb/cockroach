@@ -141,7 +141,7 @@ func TestDelegateShowRolesExtended(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, d := makeCtx()
-			stmt, err := d.delegateShowRolesExtended(tc.node)
+			stmt, err := d.delegateShowRolesExtended(tc.node.Options, tc.node.Limit)
 			require.NoError(t, err)
 			require.NotNil(t, stmt)
 
@@ -176,7 +176,7 @@ func TestDelegateShowRolesExtendedSQLInjection(t *testing.T) {
 			Source: tree.NewStrVal("ldap:evil' OR 1=1 --"),
 		},
 	}
-	stmt, err := d.delegateShowRolesExtended(n)
+	stmt, err := d.delegateShowRolesExtended(n.Options, n.Limit)
 	require.NoError(t, err)
 
 	query := tree.AsString(stmt)
@@ -192,7 +192,7 @@ func TestDelegateShowRolesExtendedSQLInjection(t *testing.T) {
 			LastLoginBefore: tree.NewStrVal("2024-01-01' OR 1=1 --"),
 		},
 	}
-	stmt2, err := d.delegateShowRolesExtended(n2)
+	stmt2, err := d.delegateShowRolesExtended(n2.Options, n2.Limit)
 	require.NoError(t, err)
 
 	query2 := tree.AsString(stmt2)

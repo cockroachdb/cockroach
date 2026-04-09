@@ -38,21 +38,22 @@ ORDER BY 1;
 	return d.parse(selectClause + selectLastLoginTime + endingClauses)
 }
 
-// delegateShowRolesExtended implements SHOW USERS with optional
-// provisioning filter clauses (SOURCE, LAST LOGIN BEFORE) and LIMIT.
-// It is dispatched from the ShowUsers case in the delegate switch.
-// When no options are specified, it falls back to delegateShowRoles.
-func (d *delegator) delegateShowRolesExtended(n *tree.ShowUsers) (tree.Statement, error) {
-	if (n.Options == nil || n.Options.IsDefault()) && n.Limit == nil {
+// delegateShowRolesExtended implements SHOW USERS / SHOW ROLES with optional
+// provisioning filter clauses (SOURCE, LAST LOGIN BEFORE) and LIMIT. When
+// no options are specified, it falls back to delegateShowRoles.
+func (d *delegator) delegateShowRolesExtended(
+	options *tree.ShowUsersOptions, limit *tree.Limit,
+) (tree.Statement, error) {
+	if (options == nil || options.IsDefault()) && limit == nil {
 		return d.delegateShowRoles()
 	}
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Roles)
 
 	var whereExprs []string
-	if n.Options != nil {
-		if n.Options.Source != nil {
-			sourceStr := tree.AsStringWithFlags(n.Options.Source, tree.FmtBareStrings)
+	if options != nil {
+		if options.Source != nil {
+			sourceStr := tree.AsStringWithFlags(options.Source, tree.FmtBareStrings)
 			whereExprs = append(whereExprs, fmt.Sprintf(
 				`EXISTS (
 	SELECT 1 FROM system.role_options AS src
@@ -61,10 +62,10 @@ func (d *delegator) delegateShowRolesExtended(n *tree.ShowUsers) (tree.Statement
 		AND src.value = %s
 )`, lexbase.EscapeSQLString(sourceStr)))
 		}
-		if n.Options.LastLoginBefore != nil {
+		if options.LastLoginBefore != nil {
 			// Users with a NULL estimated_last_login_time are excluded from
 			// the result since NULL comparisons evaluate to NULL, not true.
-			tsExpr := tree.AsStringWithFlags(n.Options.LastLoginBefore, tree.FmtParsable)
+			tsExpr := tree.AsStringWithFlags(options.LastLoginBefore, tree.FmtParsable)
 			whereExprs = append(whereExprs, fmt.Sprintf(
 				"u.estimated_last_login_time < (%s)::TIMESTAMPTZ",
 				tsExpr))
@@ -78,8 +79,8 @@ func (d *delegator) delegateShowRolesExtended(n *tree.ShowUsers) (tree.Statement
 	}
 
 	var limitClause string
-	if n.Limit != nil && n.Limit.Count != nil {
-		limitClause = fmt.Sprintf("\nLIMIT %s", tree.AsString(n.Limit.Count))
+	if limit != nil && limit.Count != nil {
+		limitClause = fmt.Sprintf("\nLIMIT %s", tree.AsString(limit.Count))
 	}
 
 	query := fmt.Sprintf(`
