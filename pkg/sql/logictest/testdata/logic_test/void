@@ -187,4 +187,3 @@ CREATE TABLE t84224 (a STRING)
 
 statement error pgcode 42704 pq: array of type VOID is not supported
 SELECT ARRAY[a::VOID] FROM t84224
-

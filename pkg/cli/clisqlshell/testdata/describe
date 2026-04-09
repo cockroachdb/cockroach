@@ -1878,7 +1878,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
       AND pg_catalog.pg_type_is_visible(t.oid)
 ORDER BY 1, 2
 Schema,Name,Description
-public,public.mytyp,
+public,mytyp,
 
 cli
 \dT %int[]
