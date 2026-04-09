@@ -397,7 +397,32 @@ func TestTenantRateLimiter(t *testing.T) {
 	require.True(t, matched, "did not match %s:\n\n%s", tenantMetricStr, m)
 }
 
-// Test that KV requests made by a tenant get a context annotated with the tenant ID.
+// TestTenantCtx verifies that KV requests made by a SQL tenant get a context
+// annotated with the tenant ID.
+//
+// The test sets up a host server with a TestingRequestFilter that intercepts
+// Scan and PushTxn requests whose key contains a "magic" value. It then starts
+// a tenant, creates a table, and uses two concurrent transactions to generate
+// these requests:
+//
+//  1. tx1 inserts a row with the magic key, placing an intent (or lock) at KV.
+//  2. tx2 does a SELECT on the same key, which produces a Scan request that
+//     encounters tx1's intent and triggers a PushTxn to resolve the conflict.
+//
+// The filter checks that the Scan carries the tenant ID in its context (since
+// it originates from the tenant's SQL layer), while the PushTxn does NOT carry
+// it (since pushes are internal KV operations).
+//
+// Flake history:
+//   - #158493: Meta2 range lookups matched the magic key but lacked tenant
+//     context. Fixed by skipping Meta2-prefixed keys in the filter.
+//   - #167600: The filter used blocking sends on unbuffered channels. When
+//     the test failed (e.g., due to a slow CI machine hitting the 3s timeout),
+//     tx1 was never rolled back, leaving tx2's SELECT blocked on the intent
+//     forever. The stopper couldn't shut down the blocked goroutines, turning
+//     a 3s timeout into a 12+ minute hang. Fixed by deferring tx1.Rollback(),
+//     using buffered channels with non-blocking sends to prevent filter
+//     goroutines from blocking indefinitely, and increasing the timeout.
 func TestTenantCtx(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -437,8 +462,9 @@ func TestTenantCtx(t *testing.T) {
 							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
 
-						t.Logf("received request with key: %s, isTenantRequest: %t, tenID: %d",
-							key.String(), isTenantRequest, tenID)
+						method := ba.Requests[0].GetInner().Method()
+						t.Logf("received %s with key: %s, isTenantRequest: %t, tenID: %d, isSingle: %t",
+							method, key.String(), isTenantRequest, tenID, ba.IsSingleRequest())
 
 						switch {
 						case scanReq != nil:
@@ -506,18 +532,22 @@ func TestTenantCtx(t *testing.T) {
 			return tx2.Rollback()
 		})
 
-		// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
-		// to unblock tx2.
+		// REPRO(#167600): Use a 1ns timeout to deterministically force the
+		// timeout path. This exposes the stopper hang: after t.Fatal, tx1 is
+		// never rolled back (tx2 stays blocked on the intent), and the
+		// unbuffered channel sends in the filter block goroutines. The test
+		// will hang until the overall test timeout kills it.
+		const waitTimeout = time.Nanosecond
 		select {
 		case err := <-scanErr:
 			require.NoError(t, err)
-		case <-time.After(3 * time.Second):
+		case <-time.After(waitTimeout):
 			t.Fatal("timed out waiting for Scan")
 		}
 		select {
 		case err := <-pushErr:
 			require.NoError(t, err)
-		case <-time.After(3 * time.Second):
+		case <-time.After(waitTimeout):
 			t.Fatal("timed out waiting for PushTxn")
 		}
 		require.NoError(t, tx1.Rollback())
