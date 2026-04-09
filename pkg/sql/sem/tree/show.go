@@ -1118,11 +1118,21 @@ func (node *ShowDefaultSessionVariablesForRole) Format(ctx *FmtCtx) {
 
 // ShowRoles represents a SHOW ROLES statement.
 type ShowRoles struct {
+	Options *ShowUsersOptions
+	Limit   *Limit
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRoles) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ROLES")
+	if node.Options != nil && !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(node.Options)
+	}
+	if node.Limit != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Limit)
+	}
 }
 
 // ShowRanges represents a SHOW RANGES statement.
