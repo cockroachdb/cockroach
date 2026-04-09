@@ -900,6 +900,7 @@ type Store struct {
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator        *raftLogTruncator
+	wagTruncator         *kvstorage.WAGTruncator
 	raftSnapshotQueue    *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue   *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner              *replicaScanner             // Replica scanner
@@ -1673,6 +1674,9 @@ func NewStore(
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.KvDistribution.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
+	s.wagTruncator = kvstorage.MakeWAGTruncator(
+		cfg.Settings, s.StateEngine(), s.LogEngine(), s.limiters.BulkIOWriteRate,
+	)
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
