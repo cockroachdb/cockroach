@@ -1,0 +1,72 @@
+# Basic: both engines register, TrySchedule respects limits.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+try-schedule engine=log
+----
+granted: handle=0
+
+try-schedule engine=state
+----
+granted: handle=0
+
+print-state
+----
+totalRunning: 2
+log: running=1 waiting=false registered=true
+state: running=1 waiting=false registered=true
+
+# Third compaction succeeds (under global max=3).
+
+try-schedule engine=log
+----
+granted: handle=1
+
+print-state
+----
+totalRunning: 3
+log: running=2 waiting=false registered=true
+state: running=1 waiting=false registered=true
+
+# Global max enforcement: fourth compaction is denied.
+
+try-schedule engine=state
+----
+not granted
+
+print-state
+----
+totalRunning: 3
+log: running=2 waiting=false registered=true
+state: running=1 waiting=true registered=true
+
+# Since the state engine has waiting=true, when a compaction completes,
+# GetWaitingCompaction is called on the state engine. Since it returns no
+# waiting compaction, the waiting state becomes false.
+compaction-done engine=state handle=0
+----
+state: GetWaitingCompaction
+
+print-state
+----
+totalRunning: 2
+log: running=2 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+# Since no engine has waiting=true, no call to GetWaitingCompaction happens.
+compaction-done engine=log handle=0
+----
+
+# Since no engine has waiting=true, no call to GetWaitingCompaction happens.
+compaction-done engine=log handle=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
