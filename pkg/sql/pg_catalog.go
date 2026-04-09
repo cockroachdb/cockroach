@@ -986,7 +986,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 
 var pgCatalogCollationTable = virtualSchemaTable{
 	comment: `available collations (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
+https://www.postgresql.org/docs/18/catalog-pg-collation.html`,
 	schema: vtable.PGCatalogCollation,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
@@ -995,18 +995,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 			add := func(collName string) error {
 				return addRow(
 					h.CollationOid(collName),  // oid
-					tree.NewDString(collName), // collname
+					tree.NewDName(collName),   // collname
 					namespaceOid,              // collnamespace
 					nodeOID,                   // collowner
+					tree.DNull,                // collprovider
+					tree.DNull,                // collisdeterministic
 					builtins.DatEncodingUTFId, // collencoding
+					tree.DNull,                // colllocale
+					tree.DNull,                // collicurules
 					// It's not clear how to translate a Go collation tag into the format
 					// required by LC_COLLATE and LC_CTYPE.
 					tree.DNull, // collcollate
 					tree.DNull, // collctype
-					// These columns were automatically created by pg_catalog_test's missing column generator.
-					tree.DNull, // collprovider
 					tree.DNull, // collversion
-					tree.DNull, // collisdeterministic
 				)
 			}
 			for _, tag := range collatedstring.Supported() {

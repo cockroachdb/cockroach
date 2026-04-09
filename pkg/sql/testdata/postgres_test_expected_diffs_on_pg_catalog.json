@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 11,
-    "DatatypeMismatches": 18
+    "MissingColumns": 9,
+    "DatatypeMismatches": 17
   },
   "diffs": {
     "pg_aios": {},
@@ -18,16 +18,6 @@
       }
     },
     "pg_backend_memory_contexts": {},
-    "pg_collation": {
-      "collicurules": null,
-      "colllocale": null,
-      "collname": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 19,
-        "expectedDataType": "name"
-      }
-    },
     "pg_constraint": {
       "conenforced": null,
       "confdelsetcols": null,
