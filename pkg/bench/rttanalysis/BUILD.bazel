@@ -79,5 +79,6 @@ go_test(
         "//pkg/util/envutil",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
