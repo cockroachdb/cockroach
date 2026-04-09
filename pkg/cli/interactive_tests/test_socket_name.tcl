@@ -13,7 +13,7 @@ send "mkdir -p $longname\r"
 eexpect ":/# "
 
 start_test "Check derived Unix socket name is printed in server output"
-send "$argv start-single-node --insecure --listen-addr=`cat /etc/hostname`:0 --pid-file=logs/server_pid --socket-dir=.\r"
+send "$argv start-single-node --insecure --listen-addr=127.0.0.1:0 --pid-file=logs/server_pid --socket-dir=.\r"
 eexpect "CockroachDB node starting"
 expect {
     -re "sql:.*@\[^:\]*:(\[^/\]*)/" { set sql_port $expect_out(1,string) }
@@ -33,17 +33,27 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that the socket is locked from reuse while the server is running."
-# We use 127.0.0.1 so as to not overlap with the default address 0.0.0.0 selected above.
+# Use 127.0.0.2 (different from 127.0.0.1 above) so the TCP bind succeeds and
+# the test isolates the Unix socket lock behavior. Both servers share the same
+# --socket-dir and port, so the socket filename is the same.
 # We also need a different data directory to avoid a conflict there.
-send "$argv start-single-node --insecure --listen-addr=127.0.0.1:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
+send "$argv start-single-node --insecure --listen-addr=127.0.0.2:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
 eexpect ERROR
 eexpect "Socket appears locked by process"
 eexpect ":/# "
 end_test
 
 start_test "Check that stopping the first process abruptly enables the 2nd process to start"
-system "kill -9 `cat logs/server_pid`"
-send "$argv start-single-node --insecure --listen-addr=127.0.0.1:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
+# Kill the server and wait for the process to fully exit so the Unix socket
+# lock file becomes reclaimable by the replacement server.
+system "PID=\$(cat logs/server_pid); kill -9 \$PID
+        for i in \$(seq 1 30); do
+          kill -0 \$PID 2>/dev/null || exit 0
+          sleep 0.1
+        done
+        echo 'process still alive'
+        exit 1"
+send "$argv start-single-node --insecure --listen-addr=127.0.0.2:$sql_port --http-addr=:0 --socket-dir=. -s=path=logs/other\r"
 eexpect "CockroachDB node starting"
 system "test -S .s.PGSQL.$sql_port"
 system "test -r .s.PGSQL.$sql_port.lock"
