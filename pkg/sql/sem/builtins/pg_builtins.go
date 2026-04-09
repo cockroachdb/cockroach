@@ -1218,7 +1218,29 @@ FROM defaults_parsed
 					hasTypmod = true
 					typmod = int(tree.MustBeDInt(maybeTypmod))
 				}
-				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod)), nil
+				// Postgres will append the type name with the schema if type is user defined
+				// and if it does not exist in the search_path.
+				isUserDefined := types.IsOIDUserDefinedType(oid)
+				useFQName := true
+				if isUserDefined && typ.TypeMeta.Name != nil {
+					// Based on the base name, see if the type resolves to the
+					// same OID as the user specified one.
+					lookupName, err := tree.NewUnresolvedObjectName(1, [3]string{typ.TypeMeta.Name.Basename()}, tree.NoAnnotation)
+					if err != nil {
+						return nil, err
+					}
+					resolvedTyp, err := evalCtx.Planner.ResolveType(ctx, lookupName)
+					if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedObject &&
+						!catalog.HasInactiveDescriptorError(err) {
+						return nil, err
+					}
+					// If the type resolved successfully, then determine if we looked up
+					// the same type. Resolution here can fail, which will just cause us
+					// to always fully qualify the name.
+					useFQName = err != nil || resolvedTyp.Oid() != oid
+				}
+
+				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod, useFQName)), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
