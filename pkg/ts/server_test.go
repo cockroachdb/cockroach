@@ -6,16 +6,19 @@
 package ts_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -250,6 +253,112 @@ func TestServerQuery(t *testing.T) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
+}
+
+// TestServerQueryCombinedBatchReducesKVRPCs verifies that sending multiple
+// queries in a single request produces the same number of KV BatchRequests as
+// sending them individually. This serves as a baseline; the combined-batch
+// optimization (when present) should reduce the combined count to 1.
+func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var tsBatchCount atomic.Int64
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+				TestingRequestFilter: func(
+					_ context.Context, req *kvpb.BatchRequest,
+				) *kvpb.Error {
+					for _, ru := range req.Requests {
+						if bytes.HasPrefix(
+							ru.GetInner().Header().Key,
+							keys.TimeseriesPrefix,
+						) {
+							tsBatchCount.Add(1)
+							break
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for 5 metrics across 2 sources.
+	metricCount := 5
+	for i := 0; i < metricCount; i++ {
+		require.NoError(t, tsdb.StoreData(
+			context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node1",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 10)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*10 + 1)},
+					},
+				},
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node2",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 20)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*20 + 1)},
+					},
+				},
+			},
+		))
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	queries := make([]tspb.Query, metricCount)
+	for i := 0; i < metricCount; i++ {
+		queries[i] = tspb.Query{
+			Name:    fmt.Sprintf("metric.%d", i),
+			Sources: []string{"node1", "node2"},
+		}
+	}
+
+	// Measure individual queries: send each metric as a separate request.
+	tsBatchCount.Store(0)
+	for _, q := range queries {
+		_, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+	}
+	individualBatches := tsBatchCount.Load()
+
+	// Measure combined query: send all metrics in a single request.
+	tsBatchCount.Store(0)
+	resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, metricCount)
+	combinedBatches := tsBatchCount.Load()
+
+	t.Logf("individual requests: %d KV batches, combined request: %d KV batches",
+		individualBatches, combinedBatches)
+
+	// On a single-node test server all TS data is on one range, so each
+	// query produces exactly one KV BatchRequest. Without the combined-batch
+	// optimization, a multi-query request issues one batch per query.
+	require.Equal(t, int64(metricCount), individualBatches,
+		"each individual query should produce one KV BatchRequest")
+	require.Equal(t, int64(metricCount), combinedBatches,
+		"without optimization, combined query produces one KV BatchRequest per query")
 }
 
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
