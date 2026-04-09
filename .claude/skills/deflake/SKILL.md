@@ -21,37 +21,43 @@ the fix — no guessing, no "add observability and wait".
 3. **Reproduce** the flake deterministically, by any dirty means necessary.
 4. **Fix** the test (or source code) with proof that the fix handles the
    reproduced scenario.
-5. **Commit** as two separate commits: repro commit + fix commit.
+5. **Commit** as three separate commits: repro, fix, revert of repro.
 
 The repro commit is "proof of work" for the reviewer — it demonstrates
-the failure mechanism and may surface bigger issues to area experts. It
-gets squashed before merge.
+the failure mechanism and may surface bigger issues to area experts.
+The fix commit is applied on top so the test passes. The third commit
+reverts the repro injection, so the three commits squashed together
+produce a clean diff with just the fix.
 
 ## Input
 
-This skill accepts an argument — typically a GitHub issue URL:
+This skill requires a GitHub issue URL:
 
 ```
 /deflake https://github.com/cockroachdb/cockroach/issues/167535
 ```
 
-It can also accept a test name or freeform description:
+The issue provides the test name, failure logs, stack traces, and prior
+analysis from other engineers — all critical context for investigation.
+Every flaky test should have an issue filed; if one doesn't exist, file
+it first with `/file-crdb-issue`.
+
+Use `-i` for interactive mode (pause after each step for confirmation):
 
 ```
-/deflake TestReplicaLatchingOptimisticEvaluationKeyLimit
+/deflake -i https://github.com/cockroachdb/cockroach/issues/167535
 ```
-
-If an issue URL is provided, fetch the issue body and comments to
-extract the test name, failure logs, stack traces, and any prior
-analysis.
 
 ## Workflow
 
-**This skill is interactive.** After completing each step, STOP and
-present your findings or proposed changes to the user. Wait for explicit
-confirmation before moving to the next step. This gives the user a
-chance to course-correct, provide additional context, or skip ahead at
-every stage.
+**This skill runs autonomously by default** — it goes through all steps
+without pausing for confirmation. This works well for most flakes that
+can be one-shotted.
+
+If the user passes `-i` (e.g., `/deflake -i <issue>`), run in
+**interactive mode**: after completing each step, STOP and present
+findings or proposed changes. Wait for explicit confirmation before
+moving to the next step.
 
 ### Step 1: Understand the Flake
 
@@ -125,9 +131,8 @@ failure mode. If there are multiple hypotheses, state which one this
 strategy targets and what you'd try next if it doesn't work.>
 ```
 
-**Checkpoint:** Ask the user to confirm the briefing or provide
-corrections before proceeding. This is especially important here — the
-user may redirect the investigation before any code is modified.
+**Checkpoint (interactive mode only):** Ask the user to confirm the
+briefing or provide corrections before proceeding.
 
 ### Step 3: Reproduce the Flake
 
@@ -135,11 +140,19 @@ The goal is a test modification that makes the flake happen
 **deterministically or near-deterministically**. Any dirty trick is fair
 game — the repro commit is squashed before merge.
 
+**This is often an iterative loop:** form a hypothesis, add
+instrumentation or logging to confirm it, run the test, analyze the
+output, and refine if the hypothesis was wrong or ambiguous. Add
+`t.Log`, `log.Infof`, or `fmt.Fprintf(os.Stderr, ...)` liberally in
+the code paths you suspect — observability helps confirm or disprove
+hypotheses faster than guessing. This debug logging can stay in the
+repro commit; the revert commit (commit 3) removes it.
+
 **Common reproduction techniques:**
 
 - **Inject a blocking operation** via the test's eval filter, request
-  filter, or testing knobs. Hold a latch/lock/lease that creates the
-  exact conflict the flake depends on.
+  filter, or existing testing knobs. Hold a latch/lock/lease that
+  creates the exact conflict the flake depends on.
 - **Add a sleep or channel synchronization** to force the race ordering
   that triggers the bug.
 - **Inject an error** at the right point using testing knobs or mock
@@ -148,6 +161,12 @@ game — the repro commit is squashed before merge.
 - **Disable retries or caching** that mask the underlying issue.
 - **Use `atomic.Bool` + channels** for fine-grained control over when
   injected operations block and unblock.
+- **Use global variables and dirty hacks freely.** The repro commit is
+  squashed — don't waste time adding proper testing knobs or plumbing
+  through clean interfaces. Package-level `var` declarations, direct
+  access to unexported fields via test files, and other shortcuts are
+  all fine. Do NOT add new testing knobs to production code for the
+  repro.
 
 **Injection pattern (common for latch/lock conflicts):**
 
@@ -175,6 +194,39 @@ go func() {
 // Now the resource is held — proceed with the operation that flakes
 ```
 
+**Add detailed comments to the test:**
+
+As part of the repro commit, add comprehensive comments to the test that
+explain everything a newcomer to the codebase would need to understand.
+These comments should survive the squash and remain in the final fix
+commit. Include:
+
+- **Function-level doc comment**: What the test is asserting, what
+  subsystem/abstraction it exercises, and how the mechanism works at a
+  high level. Explain the relevant architecture (e.g., how latches work,
+  how optimistic evaluation works, what a closed timestamp is) — don't
+  assume the reader knows any of this. Use a step-by-step numbered
+  explanation of the code path under test.
+- **What failed and why (flake history)**: Describe the exact failure
+  mode, the chain of events that causes it, and link to the issue(s).
+  This goes in the function doc comment so future readers don't have to
+  re-investigate.
+- **Inline comments on test mechanics**: Explain the channels, atomics,
+  filters, and synchronization — what each piece controls and why it's
+  needed. Label major phases (e.g., "Step 1: block the write",
+  "Step 2: send the read").
+- **Test case comments**: For table-driven tests, explain the reasoning
+  behind each case — why a particular input leads to `interferes=true`
+  vs. `false`, what the narrowed spans look like for each limit value,
+  etc.
+- **Assertion comments**: Explain what each assertion proves. If the
+  assertion is indirect (e.g., "the fact that this doesn't deadlock
+  proves the optimistic path was taken"), say so explicitly.
+
+The goal: a reader with zero context should be able to read the test
+comments alone and fully understand what's being tested, how the
+mechanism works, and what exactly went wrong.
+
 **Verify the repro works:**
 
 Run the specific flaky subtest(s) and confirm they fail deterministically:
@@ -186,9 +238,8 @@ Run the specific flaky subtest(s) and confirm they fail deterministically:
 The test should fail (timeout, wrong result, panic) reliably. If it
 passes, the injection isn't targeting the right thing — iterate.
 
-**Checkpoint:** Show the user the repro results (test output, failure
-mode). Confirm the repro matches the original flake before proceeding
-to the fix.
+**Checkpoint (interactive mode only):** Show the user the repro results
+and confirm before proceeding to the fix.
 
 ### Step 4: Fix the Flake
 
@@ -216,8 +267,8 @@ Run at least 3 times to confirm stability. If some injected subtests hit
 the timeout fallback (by design), that's expected — the key thing is they
 complete without deadlock or failure.
 
-**Checkpoint:** Show the user the fix approach and test results. Confirm
-the fix is acceptable before committing.
+**Checkpoint (interactive mode only):** Show the user the fix approach
+and test results before committing.
 
 ### Step 5: Add Diagnostic Logging (Optional)
 
@@ -226,15 +277,19 @@ previously silent, consider adding a `log.Eventf` or trace event at the
 point of failure. This makes future investigations of similar flakes
 easier without requiring a reproduction first.
 
-### Step 6: Commit as Two Commits
+### Step 6: Commit as Three Commits
 
-Structure the change as two commits on a feature branch:
+Structure the change as three commits on a feature branch. The three
+commits squashed together should produce a clean diff — just the fix,
+no repro scaffolding.
 
-**Commit 1 — Repro (to be squashed before merge):**
+**Commit 1 — Repro (squashed before merge):**
 
-Contains only the injection mechanism. The original (broken) test logic
-is preserved, so the test **intentionally deadlocks/fails** — proving
-the repro works. This commit should NOT include the fix.
+Contains the injection mechanism and detailed comments explaining the
+test, the architecture it exercises, and the flake mechanism. The
+original (broken) test logic is preserved, so the test **intentionally
+deadlocks/fails** — proving the repro works. This commit should NOT
+include the fix.
 
 ```
 <package>: repro flake in <TestName>
@@ -264,14 +319,33 @@ Fixes: #<issue>
 Release note: None
 ```
 
+**Commit 3 — Revert repro:**
+
+Reverts the injection from commit 1, leaving only the clean fix. This
+commit should be mechanical — remove the injected variables, channels,
+filter additions, and any dirty hacks. The detailed test comments
+should be kept if they improve readability.
+
+```
+<package>: revert repro injection for <TestName>
+
+Remove the injection mechanism from the repro commit now that the fix
+is in place. The three commits squash cleanly to just the fix.
+
+Epic: none
+Informs: #<issue>
+Release note: None
+```
+
 ### Step 7: Create the PR
 
-Create a PR with both commits. The description should explain:
+Create a PR with all three commits. The description should explain:
 
 - The root cause of the flake
 - How the repro works (briefly)
 - How the fix handles the scenario
-- That the first commit is proof-of-work and should be squashed before merge
+- That the commits are structured as repro → fix → revert-repro, and
+  squash cleanly to just the fix
 
 Use the `/commit-helper` skill for formatting commit messages and the PR.
 
