@@ -1110,7 +1110,13 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				// Show the body AST text instead.
 				for i, ast := range def.BodyASTs {
 					if ast != nil {
-						n.Childf("stmt%d: %s", i+1, ast.String())
+						var s string
+						if f.RedactableValues {
+							s = tree.AsStringWithFlags(ast, tree.FmtMarkRedactionNode|tree.FmtOmitNameRedaction)
+						} else {
+							s = ast.String()
+						}
+						n.Childf("stmt%d: %s", i+1, s)
 					}
 				}
 			}

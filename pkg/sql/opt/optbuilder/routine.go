@@ -472,10 +472,23 @@ func (b *Builder) buildRoutine(
 			appendedNullForVoidReturn = true
 		}
 
+		// Validate the column definition list (if any) against the return type
+		// at plan time. This doesn't depend on the body being built, so it runs
+		// before the eager/deferred branch. We skip AnyTuple (RETURNS RECORD
+		// without OUT params) because those always take the eager path below,
+		// where the validation happens inside finalizeRoutineReturnType after the
+		// concrete return type has been inferred from the body.
+		if oldInsideDataSource && !f.ResolvedType().Identical(types.AnyTuple) {
+			b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), f.ResolvedType(), inScope)
+		}
+
 		// For routines whose return type needs to be inferred from the body
-		// (RETURNS RECORD without OUT params), we must build eagerly. Otherwise,
-		// defer body building to execution time.
-		if f.ResolvedType().Identical(types.AnyTuple) {
+		// (RETURNS RECORD without OUT params), we must build eagerly. We also
+		// build eagerly when DisableDeferredRoutineBuild is set (e.g. inside
+		// EXPLAIN or EXPLAIN ANALYZE) so that all table references within the
+		// body are tracked in the metadata (needed for explain bundles and plan
+		// formatting). Otherwise, defer body building to execution time.
+		if f.ResolvedType().Identical(types.AnyTuple) || b.DisableDeferredRoutineBuild {
 			body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
 				stmts, bodyScope, f, inScope,
 				isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,

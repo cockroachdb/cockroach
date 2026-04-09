@@ -600,6 +600,9 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	if opc.flags.IsSet(planFlagSessionMigration) {
 		bld.SkipAOST = true
 	}
+	if p.instrumentation.collectBundle {
+		bld.DisableDeferredRoutineBuild = true
+	}
 	if err := bld.Build(); err != nil {
 		return nil, memoTypeUnknown, err
 	}
@@ -1000,6 +1003,9 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 	f.Metadata().SetHintIDs(opc.p.GetHintIDs())
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
+	if p.instrumentation.collectBundle {
+		bld.DisableDeferredRoutineBuild = true
+	}
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}

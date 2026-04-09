@@ -35,6 +35,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		emptyValues := &tree.LiteralValuesClause{Rows: tree.RawRows{}}
 		stmtScope = b.buildLiteralValuesClause(emptyValues, nil /* desiredTypes */, inScope)
 	} else {
+		// Disable deferred routine body building inside EXPLAIN so that all
+		// table references are tracked in the metadata (needed for explain
+		// bundles and plan formatting with redaction).
+		defer func(old bool) { b.DisableDeferredRoutineBuild = old }(b.DisableDeferredRoutineBuild)
+		b.DisableDeferredRoutineBuild = true
 		stmtScope = b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */)
 	}
 
