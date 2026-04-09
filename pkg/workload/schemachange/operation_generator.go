@@ -5638,7 +5638,49 @@ func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, 
 	return realUser, nil
 }
 
-// createTrigger generates a CREATE TRIGGER statement.
+// createTriggerFunction generates a CREATE FUNCTION statement that returns
+// TRIGGER. The function body contains a random SELECT for dependency coverage.
+// Trigger functions created here are referenced by createTrigger.
+func (og *operationGenerator) createTriggerFunction(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
+	if err != nil {
+		return nil, err
+	}
+	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
+	resolvedName := fmt.Sprintf("%s.%s", schemaName, triggerFunctionName)
+
+	// Generate a random SELECT statement for dependency coverage.
+	selectStmt, err := og.selectStmt(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	// The trigger function always returns NEW to avoid breaking inserts.
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(
+		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
+		resolvedName, selectStmt.sql,
+	)
+	og.LogMessage(fmt.Sprintf("createTriggerFunction: %s", opStmt.sql))
+
+	routineAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, triggerFunctionName)
+	if err != nil {
+		return nil, err
+	}
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
+	})
+
+	return opStmt, nil
+}
+
+// createTrigger generates a CREATE TRIGGER statement referencing an existing
+// trigger function. If no trigger functions exist yet, it emits a dummy
+// statement that fails gracefully.
 func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
 	if err != nil {
@@ -5650,76 +5692,60 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
-	if err != nil {
-		return nil, err
-	}
-	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
-	resolvedTriggerFunctionName := fmt.Sprintf("%s.%s", schemaName, triggerFunctionName)
-
-	// Try to generate a random SELECT statement for more coamplex dependencies
-	selectStmt, err := og.selectStmt(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	// Our trigger function will always return the original value to avoid
-	// breaking inserts.
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, resolvedTriggerFunctionName, selectStmt.sql)
-
-	// Check if the routine already exists.
-	routineAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, triggerFunctionName)
+	existingTriggerFunctions, err := og.findExistingTriggerFunctions(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	og.LogMessage(fmt.Sprintf("Created trigger function %s", resolvedTriggerFunctionName))
+	opStmt := makeOpStmt(OpStmtDDL)
 
-	// Create TRIGGER statement components
+	if len(existingTriggerFunctions) == 0 {
+		// No trigger functions exist yet. Emit a statement that will fail,
+		// similar to dropTrigger's dummy fallback.
+		opStmt.sql = `CREATE TRIGGER dummy_trigger BEFORE INSERT ON dummy_table FOR EACH ROW EXECUTE FUNCTION "NoSuchTriggerFunction"()`
+		opStmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		og.LogMessage("createTrigger (no trigger functions): " + opStmt.sql)
+		return opStmt, nil
+	}
+
+	picked, err := PickOne(og.params.rng, existingTriggerFunctions)
+	if err != nil {
+		return nil, err
+	}
+	resolvedTriggerFunctionName := picked["resolved_name"].(string)
+
+	// Randomize trigger timing and events.
 	triggerActionTime := "BEFORE"
 	if og.randIntn(2) == 1 {
 		triggerActionTime = "AFTER"
 	}
 
 	eventTypes := []string{"INSERT", "UPDATE", "DELETE"}
-	numEvents := og.randIntn(3) + 1 // 1-3 events
-	events := make([]string, 0, numEvents)
-	eventsSet := make(map[string]bool)
-
-	for i := 0; i < numEvents; i++ {
-		eventIndex := og.randIntn(len(eventTypes))
-		event := eventTypes[eventIndex]
-		if !eventsSet[event] {
-			events = append(events, event)
-			eventsSet[event] = true
-		}
+	events, err := PickAtLeast(og.params.rng, 1, eventTypes)
+	if err != nil {
+		return nil, err
 	}
 
-	// Join events with OR
 	eventClause := strings.Join(events, " OR ")
-
 	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
 
-	// Build the SQL statement
-	sqlStatement := fmt.Sprintf("%s;CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
-		triggerFunction, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName)
-	og.LogMessage(fmt.Sprintf("createTrigger: %s", sqlStatement))
-
-	opStmt := makeOpStmt(OpStmtDDL)
-	opStmt.sql = sqlStatement
+	opStmt.sql = fmt.Sprintf(
+		"CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+		triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
+	)
+	og.LogMessage(fmt.Sprintf("createTrigger: %s", opStmt.sql))
 
 	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
-		// This checks if the table used for the CREATE TRIGGER statement exists.
-		// It does not catch cases where the select statement in the trigger function
-		// has a select query on a table that doesn't exist.
 		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
-		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
 	})
-
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		// Can be hit if the select statement in the trigger function
-		// has a select query on a table that doesn't exist.
+		// References within the trigger function are evaluated lazily when the
+		// TRIGGER is created. Not when the function is created. What may have
+		// existed when the function was created could no longer exist.
 		{code: pgcode.UndefinedTable, condition: true},
+		{code: pgcode.UndefinedFunction, condition: true},
+		{code: pgcode.UndefinedColumn, condition: true},
 	})
 
 	return opStmt, nil
@@ -5752,6 +5778,24 @@ func (og *operationGenerator) dropTrigger(ctx context.Context, tx pgx.Tx) (*opSt
 type triggerInfo struct {
 	table       tree.TableName
 	triggerName string
+}
+
+// findExistingTriggerFunctions returns existing trigger functions (RETURNS
+// TRIGGER, zero arguments) that can be reused by a new trigger.
+func (og *operationGenerator) findExistingTriggerFunctions(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+		quote_ident(schema_id::REGNAMESPACE::STRING) || '.' || quote_ident(name) AS resolved_name
+	FROM functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
+	  AND prorettype = 'trigger'::REGTYPE
+	  AND pronargs = 0`)
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
 }
 
 // findExistingTrigger returns a triggerInfo struct with the qualified table name and trigger name.

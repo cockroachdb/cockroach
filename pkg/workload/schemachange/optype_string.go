@@ -60,17 +60,18 @@ func _() {
 	_ = x[createView-44]
 	_ = x[createFunction-45]
 	_ = x[createTrigger-46]
-	_ = x[commentOn-47]
-	_ = x[dropFunction-48]
-	_ = x[dropIndex-49]
-	_ = x[dropPolicy-50]
-	_ = x[dropSchema-51]
-	_ = x[dropSequence-52]
-	_ = x[dropTable-53]
-	_ = x[dropTrigger-54]
-	_ = x[dropView-55]
-	_ = x[truncateTable-56]
-	_ = x[inspect-57]
+	_ = x[createTriggerFunction-47]
+	_ = x[commentOn-48]
+	_ = x[dropFunction-49]
+	_ = x[dropIndex-50]
+	_ = x[dropPolicy-51]
+	_ = x[dropSchema-52]
+	_ = x[dropSequence-53]
+	_ = x[dropTable-54]
+	_ = x[dropTrigger-55]
+	_ = x[dropView-56]
+	_ = x[truncateTable-57]
+	_ = x[inspect-58]
 }
 
 func (i opType) String() string {
@@ -169,6 +170,8 @@ func (i opType) String() string {
 		return "createFunction"
 	case createTrigger:
 		return "createTrigger"
+	case createTriggerFunction:
+		return "createTriggerFunction"
 	case commentOn:
 		return "commentOn"
 	case dropFunction:
