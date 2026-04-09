@@ -1343,6 +1343,7 @@ func populateTableConstraints(
 			tblOid,         // conrelid
 			oidZero,        // contypid
 			conindid,       // conindid
+			oidZero,        // conparentid
 			confrelid,      // confrelid
 			confupdtype,    // confupdtype
 			confdeltype,    // confdeltype
@@ -1355,11 +1356,13 @@ func populateTableConstraints(
 			tree.DNull,     // conpfeqop
 			tree.DNull,     // conppeqop
 			tree.DNull,     // conffeqop
+			tree.DNull,     // confdelsetcols
 			tree.DNull,     // conexclop
 			conbin,         // conbin
 			consrc,         // consrc
 			condef,         // condef
-			oidZero,        // conparentid
+			tree.MakeDBool(tree.DBool(c.IsEnforced())), // conenforced
+			tree.DBoolFalse, // conperiod
 		); err != nil {
 			return err
 		}
@@ -1526,7 +1529,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 
 var pgCatalogConstraintTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table constraints (incomplete - see also information_schema.table_constraints)
-https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
+https://www.postgresql.org/docs/18/catalog-pg-constraint.html`,
 	vtable.PGCatalogConstraint,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */

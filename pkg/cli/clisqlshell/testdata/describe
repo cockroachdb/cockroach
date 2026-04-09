@@ -515,7 +515,7 @@ pg_catalog,pg_collation,table,node,permanent,prefix,"available collations (incom
 https://www.postgresql.org/docs/18/catalog-pg-collation.html"
 pg_catalog,pg_config,table,node,permanent,prefix,pg_config was created for compatibility and is currently unimplemented
 pg_catalog,pg_constraint,table,node,permanent,prefix,"table constraints (incomplete - see also information_schema.table_constraints)
-https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html"
+https://www.postgresql.org/docs/18/catalog-pg-constraint.html"
 pg_catalog,pg_conversion,table,node,permanent,prefix,"encoding conversions (empty - unimplemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html"
 pg_catalog,pg_cursors,table,node,permanent,prefix,"contains currently active SQL cursors created with DECLARE
