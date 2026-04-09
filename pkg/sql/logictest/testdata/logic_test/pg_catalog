@@ -1598,34 +1598,34 @@ t6_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
 t6_expr_key    109           u        UNIQUE_(lower(c)_ASC)
 mv1_pkey       109           p        PRIMARY_KEY_(rowid_ASC)
 
-query TTBBBOOO colnames,rowsort
-SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
+query TTBBBOOOB colnames,rowsort
+SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid, conenforced
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
-t1_pkey        p        false          false        true          110       0         3687884466
-t1_a_key       u        false          false        true          110       0         3687884465
-index_key      u        false          false        true          110       0         3687884464
-primary        p        false          false        true          111       0         2342807459
-primary        p        false          false        true          112       0         5181036
-t2_pkey        p        false          false        true          113       0         2955071325
-fk             f        false          false        true          113       0         3687884465
-t3_pkey        p        false          false        true          114       0         2695335054
-check_b        c        false          false        true          114       0         0
-check_c        c        false          false        true          114       0         0
-fk             f        false          false        true          114       0         3687884464
-t4_pkey        p        false          false        true          116       0         3214807592
-unique_a       u        false          false        true          116       0         0
-uwi_b_c        u        false          false        true          116       0         0
-uwi_b_partial  u        false          false        true          116       0         0
-t5_pkey        p        false          false        true          117       0         1869730585
-fk_b_c         f        false          false        true          117       0         0
-t5_a_fkey      f        false          false        true          117       0         0
-t6_pkey        p        false          false        true          120       0         2129466852
-t6_expr_key    u        false          false        true          120       0         2129466848
-mv1_pkey       p        false          false        true          121       0         784389845
+conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid    conenforced
+t1_pkey        p        false          false        true          110       0         3687884466  true
+t1_a_key       u        false          false        true          110       0         3687884465  true
+index_key      u        false          false        true          110       0         3687884464  true
+primary        p        false          false        true          111       0         2342807459  true
+primary        p        false          false        true          112       0         5181036     true
+t2_pkey        p        false          false        true          113       0         2955071325  true
+fk             f        false          false        true          113       0         3687884465  true
+t3_pkey        p        false          false        true          114       0         2695335054  true
+check_b        c        false          false        true          114       0         0           true
+check_c        c        false          false        true          114       0         0           true
+fk             f        false          false        true          114       0         3687884464  true
+t4_pkey        p        false          false        true          116       0         3214807592  true
+unique_a       u        false          false        true          116       0         0           true
+uwi_b_c        u        false          false        true          116       0         0           true
+uwi_b_partial  u        false          false        true          116       0         0           true
+t5_pkey        p        false          false        true          117       0         1869730585  true
+fk_b_c         f        false          false        true          117       0         0           true
+t5_a_fkey      f        false          false        true          117       0         0           true
+t6_pkey        p        false          false        true          120       0         2129466852  true
+t6_expr_key    u        false          false        true          120       0         2129466848  true
+mv1_pkey       p        false          false        true          121       0         784389845   true
 
 query T
 SELECT conname
