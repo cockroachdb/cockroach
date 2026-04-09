@@ -6,13 +6,13 @@
 package txnscheduler
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Transaction contains all of the information about a transaction needed to
 // identify its dependencies.
 type Transaction struct {
-	CommitTime hlc.Timestamp
-	Locks      []txnlock.Lock
+	TxnID ldrdecoder.TxnID
+	Locks []txnlock.Lock
 }

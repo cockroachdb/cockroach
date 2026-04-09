@@ -5,7 +5,7 @@
 
 package txnscheduler
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 
 // readLocksPerBlock is the number of read locks that can be stored in a single
 // lockBlock before a new block must be allocated.
@@ -40,8 +40,8 @@ type lockList struct {
 
 // lockBlock is a link in an unrolled linked list of read locks.
 type lockBlock struct {
-	writeLock hlc.Timestamp
-	readAlloc [readLocksPerBlock]hlc.Timestamp
+	writeLock ldrdecoder.TxnID
+	readAlloc [readLocksPerBlock]ldrdecoder.TxnID
 	readLocks int8
 	next      lockEntryIndex
 }
@@ -72,12 +72,12 @@ func (lt *lockTable) allocateList() lockList {
 }
 
 func (lt *lockTable) appendWriteDependency(
-	list lockList, dependencies []hlc.Timestamp,
-) []hlc.Timestamp {
+	list lockList, dependencies []ldrdecoder.TxnID,
+) []ldrdecoder.TxnID {
 	next := list.head
 	entry := &lt.locks[next]
 
-	if !entry.writeLock.IsEmpty() {
+	if entry.writeLock.IsSet() {
 		dependencies = append(dependencies, entry.writeLock)
 	}
 	for {
@@ -93,16 +93,16 @@ func (lt *lockTable) appendWriteDependency(
 }
 
 func (lt *lockTable) appendReadDependency(
-	list lockList, dependencies []hlc.Timestamp,
-) []hlc.Timestamp {
+	list lockList, dependencies []ldrdecoder.TxnID,
+) []ldrdecoder.TxnID {
 	head := &lt.locks[list.head]
-	if !head.writeLock.IsEmpty() {
+	if head.writeLock.IsSet() {
 		return append(dependencies, head.writeLock)
 	}
 	return dependencies
 }
 
-func (lt *lockTable) removeReadLock(list lockList, lock hlc.Timestamp) (lockList, bool) {
+func (lt *lockTable) removeReadLock(list lockList, lock ldrdecoder.TxnID) (lockList, bool) {
 	head := &lt.locks[list.head]
 	// Locks are removed in hlc order, so if the lock is present it is the first
 	// lock in the block. The lock may not be present if a write lock caused it
@@ -127,7 +127,7 @@ func (lt *lockTable) removeReadLock(list lockList, lock hlc.Timestamp) (lockList
 	}
 
 	copy(head.readAlloc[0:], head.readAlloc[1:head.readLocks+1])
-	head.readAlloc[head.readLocks] = hlc.Timestamp{}
+	head.readAlloc[head.readLocks] = ldrdecoder.TxnID{}
 
 	return list, true
 }
@@ -137,13 +137,13 @@ func (lt *lockTable) free(entry lockEntryIndex) {
 	lt.freeList = append(lt.freeList, entry)
 }
 
-func (lt *lockTable) removeWriteLock(list lockList, lock hlc.Timestamp) (lockList, bool) {
+func (lt *lockTable) removeWriteLock(list lockList, lock ldrdecoder.TxnID) (lockList, bool) {
 	head := &lt.locks[list.head]
 	if head.writeLock != lock {
 		return list, true
 	}
 
-	head.writeLock = hlc.Timestamp{}
+	head.writeLock = ldrdecoder.TxnID{}
 	if head.readLocks == 0 {
 		lt.free(list.head)
 		return lockList{}, false
@@ -152,7 +152,7 @@ func (lt *lockTable) removeWriteLock(list lockList, lock hlc.Timestamp) (lockLis
 	return list, true
 }
 
-func (lt *lockTable) recordWriteLock(list lockList, lock hlc.Timestamp) lockList {
+func (lt *lockTable) recordWriteLock(list lockList, lock ldrdecoder.TxnID) lockList {
 	head := &lt.locks[list.head]
 
 	// If there is more than one block of read locks, we need to free all but the
@@ -178,7 +178,7 @@ func (lt *lockTable) recordWriteLock(list lockList, lock hlc.Timestamp) lockList
 	}
 }
 
-func (lt *lockTable) recordReadLock(list lockList, lock hlc.Timestamp) lockList {
+func (lt *lockTable) recordReadLock(list lockList, lock ldrdecoder.TxnID) lockList {
 	tail := &lt.locks[list.tail]
 	if tail.readLocks < readLocksPerBlock {
 		tail.readAlloc[tail.readLocks] = lock
