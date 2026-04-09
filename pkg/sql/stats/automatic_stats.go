@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1383,6 +1386,123 @@ func (r *Refresher) addMisestimate(mis misestimate) {
 		newIdx++
 	}
 	r.misestimateSpans[id] = updatedSpans
+}
+
+// decodeIndexKey decodes the first key column of the given index key into
+// vals[0]. If the key only contains the TableID / IndexID pair, then vals[0]
+// will remain unset.
+func decodeIndexKey(
+	codec keys.SQLCodec,
+	vals []rowenc.EncDatum,
+	colDirs []catenumpb.IndexColumn_Direction,
+	key []byte,
+) error {
+	key, err := codec.StripTenantPrefix(key)
+	if err != nil {
+		return err
+	}
+	key, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
+	if err != nil {
+		return err
+	}
+	_, _, err = rowenc.DecodeKeyVals(vals, colDirs, key)
+	return err
+}
+
+// spanToBounds takes the given span and returns the filter expression to be
+// used in the Where clause of the partial statistics collections. Given the
+// current limitation of only being able to collect partial stats on a single
+// column, the keys of the span are truncated to a single key column.
+// TODO(#94076): re-evaluate once this limitation is lifted.
+func spanToBounds(
+	ctx context.Context, codec keys.SQLCodec, span roachpb.Span, info indexInfo, da *tree.DatumAlloc,
+) (string, error) {
+	var startArr, endArr [1]rowenc.EncDatum
+	colDirs := []catenumpb.IndexColumn_Direction{info.keyColumnDir}
+	err := decodeIndexKey(codec, startArr[:], colDirs, span.Key)
+	if err != nil {
+		return "", err
+	}
+	// The datum might be left unset, which indicates an open interval (i.e.
+	// scan from the beginning of the index).
+	if !startArr[0].IsUnset() {
+		err = startArr[0].EnsureDecoded(info.keyColumnType, da)
+		if err != nil {
+			return "", err
+		}
+	}
+	if len(span.EndKey) == 0 {
+		// This represented a Get request originally.
+		start := startArr[0].Datum
+		if start == nil {
+			// This code shouldn't be reachable, so we use a contradiction.
+			return "false", nil
+		}
+		return fmt.Sprintf("%s = %s", info.keyColumnName, start), nil
+	}
+	err = decodeIndexKey(codec, endArr[:], colDirs, span.EndKey)
+	if err != nil {
+		return "", err
+	}
+	// The datum might be left unset, which indicates an open interval (i.e.
+	// scan until the end of the index).
+	if !endArr[0].IsUnset() {
+		err = endArr[0].EnsureDecoded(info.keyColumnType, da)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	start := startArr[0].Datum
+	end := endArr[0].Datum
+	if start == tree.DNull || end == tree.DNull {
+		// For simplicity, we currently don't handle NULL boundaries.
+		// TODO(#168079): handle them.
+		return "false", nil
+	}
+
+	isDesc := info.keyColumnDir == catenumpb.IndexColumn_DESC
+	switch {
+	case start != nil && end != nil:
+		// Closed interval on both ends: [start, end]. Note that for simplicity
+		// the interval is inclusive on both ends. (In theory, we could've
+		// checked whether the whole 'end' key was decoded, in which case the
+		// 'end' datum would be exclusive.)
+		// TODO(#168079): make the end bound exclusive when possible.
+		//
+		// It's safe to use nil eval.Context as CompareContext given that we
+		// definitely don't have placeholders as our boundary datums.
+		cmp, err := start.Compare(ctx, (*eval.Context)(nil) /* cmpCtx */, end)
+		if err != nil {
+			return "", err
+		}
+		if cmp == 0 {
+			// The interval is reduced to an equality.
+			return fmt.Sprintf("%s = %s", info.keyColumnName, start), nil
+		}
+		// Inclusive of both ends since we might have cut off a part of the
+		// composite key.
+		if isDesc {
+			return fmt.Sprintf("%[2]s >= %[1]s AND %[1]s >= %[3]s", info.keyColumnName, start, end), nil
+		}
+		return fmt.Sprintf("%[2]s <= %[1]s AND %[1]s <= %[3]s", info.keyColumnName, start, end), nil
+	case start != nil:
+		// Half-open interval: [start, <end of index>).
+		if isDesc {
+			return fmt.Sprintf("%s <= %s", info.keyColumnName, start), nil
+		}
+		return fmt.Sprintf("%s >= %s", info.keyColumnName, start), nil
+	case end != nil:
+		// Half-open interval: (<start of index>, end].
+		if isDesc {
+			return fmt.Sprintf("%s >= %s", info.keyColumnName, end), nil
+		}
+		return fmt.Sprintf("%s <= %s", info.keyColumnName, end), nil
+	default:
+		// Full index scan. This code shouldn't be reachable, so we use a
+		// contradiction.
+		return "false", nil
+	}
 }
 
 // mostRecentAutomaticFullStat finds the most recent automatic statistic
