@@ -108,6 +108,15 @@ func (r *testRegistryImpl) prepareOpSpec(spec *registry.OperationSpec) error {
 		return fmt.Errorf(`%s: unknown owner %q`, spec.Name, spec.Owner)
 	}
 
+	if spec.LongRunning &&
+		spec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
+		return fmt.Errorf(
+			"%s: LongRunning operations cannot use OperationCannotRunConcurrently; "+
+				"the long-running pool is single-threaded so exclusivity is implicit",
+			spec.Name,
+		)
+	}
+
 	return nil
 }
 
