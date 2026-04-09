@@ -796,7 +796,7 @@ CREATE TABLE pg_catalog.pg_trigger (
 )`
 
 // PGCatalogType describes the schema of the pg_catalog.pg_type table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-type.html,
+// https://www.postgresql.org/docs/18/catalog-pg-type.html,
 const PGCatalogType = `
 CREATE TABLE pg_catalog.pg_type (
 	oid OID NOT NULL,
@@ -820,6 +820,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typmodin REGPROC,
 	typmodout REGPROC,
 	typanalyze REGPROC,
+	typsubscript REGPROC,
 	typalign "char",
 	typstorage "char",
 	typnotnull BOOL,

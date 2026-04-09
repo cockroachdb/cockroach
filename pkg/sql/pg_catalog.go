@@ -3849,6 +3849,7 @@ func addPGTypeRowForTable(
 		oidZero,                  // typmodin
 		oidZero,                  // typmodout
 		oidZero,                  // typanalyze
+		oidZero,                  // typsubscript
 
 		tree.DNull,      // typalign
 		tree.DNull,      // typstorage
@@ -3961,6 +3962,7 @@ func addPGTypeRow(
 		oidZero,                         // typmodin
 		oidZero,                         // typmodout
 		oidZero,                         // typanalyze
+		oidZero,                         // typsubscript
 
 		tree.DNull,      // typalign
 		tree.DNull,      // typstorage
