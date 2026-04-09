@@ -2319,3 +2319,41 @@ func TestDistributedMergeRedoCleanupSSTs(t *testing.T) {
 	require.True(t, orphanCleanedBeforeJobEnd.Load(),
 		"expected orphan to be cleaned up before merge task, not by final job cleanup")
 }
+
+// TestDistributedMergeNoExternalIODir verifies behavior when ExternalIODir is
+// not configured and distributed merge is requested. Without ExternalIODir,
+// nodelocal storage is unavailable, so the distributed merge pipeline cannot
+// write temporary SSTs.
+func TestDistributedMergeNoExternalIODir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Intentionally omit ExternalIODir.
+		DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// 'declarative' forces distributed merge unconditionally (Force mode),
+	// which should fail because nodelocal storage is unavailable.
+	t.Run("force-fails", func(t *testing.T) {
+		tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+		tdb.Exec(t, `CREATE TABLE t_force (k INT PRIMARY KEY, v INT)`)
+		tdb.Exec(t, `INSERT INTO t_force SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+		_, err := db.ExecContext(ctx, `CREATE INDEX idx_force ON t_force (v)`)
+		require.Error(t, err)
+	})
+
+	// 'enabled' allows fallback when nodelocal is unavailable. The backfill
+	// should succeed via the non-distributed-merge code path.
+	t.Run("enabled-falls-back", func(t *testing.T) {
+		tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'enabled'`)
+		tdb.Exec(t, `CREATE TABLE t_fallback (k INT PRIMARY KEY, v INT)`)
+		tdb.Exec(t, `INSERT INTO t_fallback SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+
+		tdb.Exec(t, `CREATE INDEX idx_fallback ON t_fallback (v)`)
+	})
+}

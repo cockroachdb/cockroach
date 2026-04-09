@@ -1829,6 +1829,10 @@ type ExecutorConfig struct {
 
 	ExternalIODirConfig base.ExternalIODirConfig
 
+	// ExternalIODir is the path to the directory used for nodelocal storage.
+	// An empty string indicates nodelocal storage is disabled.
+	ExternalIODir string
+
 	GCJobNotifier *gcjobnotifier.Notifier
 
 	RangeFeedFactory *rangefeed.Factory

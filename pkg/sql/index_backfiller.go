@@ -135,7 +135,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
-	useDistributedMerge, err := shouldUseDistributedMerge(ctx, mode, descriptor, progress)
+	useDistributedMerge, err := shouldUseDistributedMerge(ctx, mode, descriptor, progress, ib.execCfg.ExternalIODir)
 	if err != nil {
 		return err
 	}
@@ -371,17 +371,25 @@ func getIndexBackfillDistributedMergeMode(
 // shouldUseDistributedMerge decides whether the backfill should run through
 // the distributed merge pipeline. Force mode always enables it. Enabled mode
 // falls back to the regular path when every destination index shares leading
-// key columns with the source, since the SSTs are already non-overlapping.
+// key columns with the source, since the SSTs are already non-overlapping,
+// or when nodelocal storage is unavailable (ExternalIODir is not configured).
 func shouldUseDistributedMerge(
 	ctx context.Context,
 	mode jobspb.IndexBackfillDistributedMergeMode,
 	descriptor catalog.TableDescriptor,
 	progress scexec.BackfillProgress,
+	externalIODir string,
 ) (bool, error) {
 	if mode == jobspb.IndexBackfillDistributedMergeMode_Force {
 		return true, nil
 	}
 	if mode != jobspb.IndexBackfillDistributedMergeMode_Enabled {
+		return false, nil
+	}
+	// The distributed merge pipeline writes temporary SSTs to nodelocal
+	// storage, which requires ExternalIODir to be configured. When it is
+	// not available, fall back to the regular backfill path.
+	if externalIODir == "" {
 		return false, nil
 	}
 	// Mode is Enabled: check whether the backfill data is already sorted
