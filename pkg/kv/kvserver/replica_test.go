@@ -2830,8 +2830,7 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 					baRead.Add(sArgs1, sArgs2)
 				}
 				// The state that will block a write while holding latches.
-				var blockKey, blockWriter atomic.Value
-				blockKey.Store(roachpb.Key("a"))
+				var blockWriter atomic.Value
 				blockWriter.Store(false)
 				blockCh := make(chan struct{}, 1)
 				blockedCh := make(chan struct{}, 1)
@@ -2841,7 +2840,7 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 				tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 					func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 						// Make sure the direct GC path doesn't interfere with this test.
-						if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+						if !filterArgs.Req.Header().Key.Equal(roachpb.Key(test.writeKey)) {
 							return nil
 						}
 						if filterArgs.Req.Method() == kvpb.Put && blockWriter.Load().(bool) {
@@ -2864,7 +2863,6 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 
 				errCh := make(chan *kvpb.Error, 2)
 				pArgs := putArgs([]byte(test.writeKey), []byte("value"))
-				blockKey.Store(roachpb.Key(test.writeKey))
 				blockWriter.Store(true)
 				go func() {
 					_, pErr := tc.SendWrapped(&pArgs)
