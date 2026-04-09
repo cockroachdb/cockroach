@@ -273,22 +273,26 @@ CREATE TABLE pg_catalog.pg_conversion (
 )`
 
 // PGCatalogDatabase describes the schema of the pg_catalog.pg_database table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-database.html,
+// https://www.postgresql.org/docs/18/catalog-pg-database.html,
 const PGCatalogDatabase = `
 CREATE TABLE pg_catalog.pg_database (
 	oid OID,
 	datname Name,
 	datdba OID,
 	encoding INT4,
-	datcollate STRING,
-	datctype STRING,
+	datlocprovider "char",
 	datistemplate BOOL,
 	datallowconn BOOL,
 	datconnlimit INT4,
-	datlastsysoid OID,
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
+	datcollate STRING,
+	datctype STRING,
+	datlocale STRING,
+	daticurules STRING,
+	datcollversion STRING,
+	dathasloginevt BOOL,
 	datacl STRING[]
 )`
 

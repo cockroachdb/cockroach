@@ -521,7 +521,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html"
 pg_catalog,pg_cursors,table,node,permanent,prefix,"contains currently active SQL cursors created with DECLARE
 https://www.postgresql.org/docs/14/view-pg-cursors.html"
 pg_catalog,pg_database,table,node,permanent,prefix,"available databases (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-database.html"
+https://www.postgresql.org/docs/18/catalog-pg-database.html"
 pg_catalog,pg_db_role_setting,table,node,permanent,prefix,"contains the default values that have been configured for session variables
 https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html"
 pg_catalog,pg_default_acl,table,node,permanent,prefix,"default ACLs; these are the privileges that will be assigned to newly created objects

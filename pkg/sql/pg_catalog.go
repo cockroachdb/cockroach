@@ -1576,7 +1576,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
 
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	comment: `available databases (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
+https://www.postgresql.org/docs/18/catalog-pg-database.html`,
 	schema: vtable.PGCatalogDatabase,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
@@ -1597,17 +1597,21 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 					ownerOid,                    // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
-					builtins.DatEncodingUTFId,  // encoding
-					builtins.DatEncodingEnUTF8, // datcollate
-					builtins.DatEncodingEnUTF8, // datctype
-					tree.DBoolFalse,            // datistemplate
-					tree.DBoolTrue,             // datallowconn
-					negOneVal,                  // datconnlimit
-					oidZero,                    // datlastsysoid
-					tree.DNull,                 // datfrozenxid
-					tree.DNull,                 // datminmxid
-					oidZero,                    // dattablespace
-					datacl,                     // datacl
+					builtins.DatEncodingUTFId,   // encoding
+					builtins.DatLocProviderLibC, // datlocprovider
+					tree.DBoolFalse,             // datistemplate
+					tree.DBoolTrue,              // datallowconn
+					negOneVal,                   // datconnlimit
+					tree.DNull,                  // datfrozenxid
+					tree.DNull,                  // datminmxid
+					oidZero,                     // dattablespace
+					builtins.DatEncodingEnUTF8,  // datcollate
+					builtins.DatEncodingEnUTF8,  // datctype
+					tree.DNull,                  // datlocale
+					tree.DNull,                  // daticurules
+					tree.DNull,                  // datcollversion
+					tree.DBoolFalse,             // dathasloginevt
+					datacl,                      // datacl
 				)
 			})
 	},
