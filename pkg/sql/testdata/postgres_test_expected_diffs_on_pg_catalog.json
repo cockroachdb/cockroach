@@ -4,7 +4,7 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 12,
+    "MissingColumns": 11,
     "DatatypeMismatches": 19
   },
   "diffs": {
@@ -177,9 +177,6 @@
       }
     },
     "pg_stats_ext_exprs": {},
-    "pg_type": {
-      "typsubscript": null
-    },
     "pg_wait_events": {}
   },
   "unimplementedTypes": {
