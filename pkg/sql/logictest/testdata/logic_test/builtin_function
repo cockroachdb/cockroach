@@ -4560,11 +4560,15 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
      AND pg_catalog.pg_type_is_visible(t.oid)
 ORDER BY 1, 2;
 ----
-Schema  Name                    Description
-public  public.concat_enum      ·
-public  public.custom_typ       ·
-public  public.roach_dwellings  ·
-public  public.testenum         ·
+Schema      Name                       Description
+public      concat_enum                ·
+public      custom_typ                 ·
+public      roach_dwellings            ·
+public      testenum                   ·
+
+skipif config local-legacy-schema-changer
+statement ok
+RESET search_path;
 
 subtest end
 
@@ -4712,5 +4716,127 @@ query T
 SELECT substring_index('a..b..c..d', '..', 9223372036854775807);
 ----
 a..b..c..d
+
+subtest end
+
+
+subtest format_type_name_resolution
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE SCHEMA roach_prod;
+CREATE SCHEMA roach_dev;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET search_path=public, roach_prod;
+
+statement ok
+CREATE TYPE roach_prod.roach_dwellings_final AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_dev.roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_dev.roach_dwellings_v8 AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house', 'roach_office');
+
+# This select statement validates that format_type uses fully qualified names
+# names when a name is aliased or not in the search_path.
+skipif config local-legacy-schema-changer
+query TT colnames
+SELECT n.nspname AS "Schema",
+         pg_catalog.format_type(t.oid, NULL) AS "Name"
+    FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+   WHERE (t.typrelid = 0
+         OR (SELECT c.relkind = 'c'
+               FROM pg_catalog.pg_class c
+              WHERE c.oid = t.typrelid))
+     AND (NOT EXISTS(
+         SELECT 1
+           FROM pg_catalog.pg_type el
+          WHERE el.oid = t.typelem AND el.typarray = t.oid))
+     AND n.nspname !~ '^pg_'
+     AND n.nspname <> 'information_schema'
+     AND n.nspname <> 'crdb_internal'
+ORDER BY 1, 2;
+----
+Schema      Name
+public      concat_enum
+public      custom_typ
+public      foo_type
+public      roach_dwellings
+public      testenum
+roach_dev   roach_dev.roach_dwellings
+roach_dev   roach_dwellings_v8
+roach_prod  roach_dwellings_final
+
+# Add roach_dev in the path.
+skipif config local-legacy-schema-changer
+statement ok
+SET search_path=public, roach_dev, roach_prod;
+
+skipif config local-legacy-schema-changer
+query TT colnames
+SELECT n.nspname AS "Schema",
+         pg_catalog.format_type(t.oid, NULL) AS "Name"
+    FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+   WHERE (t.typrelid = 0
+         OR (SELECT c.relkind = 'c'
+               FROM pg_catalog.pg_class c
+              WHERE c.oid = t.typrelid))
+     AND (NOT EXISTS(
+         SELECT 1
+           FROM pg_catalog.pg_type el
+          WHERE el.oid = t.typelem AND el.typarray = t.oid))
+     AND n.nspname !~ '^pg_'
+     AND n.nspname <> 'information_schema'
+     AND n.nspname <> 'crdb_internal'
+ORDER BY 1, 2;
+----
+Schema      Name
+public      concat_enum
+public      custom_typ
+public      foo_type
+public      roach_dwellings
+public      testenum
+roach_dev   roach_dev.roach_dwellings
+roach_dev   roach_dwellings_v8
+roach_prod  roach_dwellings_final
+
+# Have roach_dwellings aliased in roach_prod.
+statement ok
+CREATE TYPE roach_prod.roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+
+skipif config local-legacy-schema-changer
+query TT colnames
+SELECT n.nspname AS "Schema",
+         pg_catalog.format_type(t.oid, NULL) AS "Name"
+    FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+   WHERE (t.typrelid = 0
+         OR (SELECT c.relkind = 'c'
+               FROM pg_catalog.pg_class c
+              WHERE c.oid = t.typrelid))
+     AND (NOT EXISTS(
+         SELECT 1
+           FROM pg_catalog.pg_type el
+          WHERE el.oid = t.typelem AND el.typarray = t.oid))
+     AND n.nspname !~ '^pg_'
+     AND n.nspname <> 'information_schema'
+     AND n.nspname <> 'crdb_internal'
+ORDER BY 1, 2;
+----
+Schema      Name
+public      concat_enum
+public      custom_typ
+public      foo_type
+public      roach_dwellings
+public      testenum
+roach_dev   roach_dev.roach_dwellings
+roach_dev   roach_dwellings_v8
+roach_prod  roach_dwellings_final
+roach_prod  roach_prod.roach_dwellings
+
+skipif config local-legacy-schema-changer
+statement ok
+RESET search_path;
 
 subtest end
