@@ -48,9 +48,14 @@ func (e *mergeEntry) currentKV() streampb.StreamEvent_KV {
 // there are remaining KVs, it updates peekTS and returns. Otherwise it falls
 // through to advanceFromChannel to read the next event.
 func (e *mergeEntry) advanceKV(ctx context.Context) (exhausted bool, _ error) {
+	prevTS := e.peekTS
 	e.peekedKVs = e.peekedKVs[1:]
 	if len(e.peekedKVs) != 0 {
 		e.peekTS = e.peekedKVs[0].KeyValue.Value.Timestamp
+		if e.peekTS.Less(prevTS) {
+			return false, errors.AssertionFailedf(
+				"out-of-order KV in subscription: %s after %s", e.peekTS, prevTS)
+		}
 		return false, nil
 	}
 	return e.advanceFromChannel(ctx)
@@ -59,6 +64,7 @@ func (e *mergeEntry) advanceKV(ctx context.Context) (exhausted bool, _ error) {
 // advanceFromChannel reads the next event from the subscription channel and
 // populates the appropriate peeked fields.
 func (e *mergeEntry) advanceFromChannel(ctx context.Context) (exhausted bool, _ error) {
+	prevTS := e.peekTS
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -81,6 +87,10 @@ func (e *mergeEntry) advanceFromChannel(ctx context.Context) (exhausted bool, _ 
 		default:
 			return false, errors.AssertionFailedf(
 				"unexpected event type in advanceFromChannel: %s", redact.Safe(ev.Type()))
+		}
+		if e.peekTS.Less(prevTS) {
+			return false, errors.AssertionFailedf(
+				"out-of-order event in subscription: %s after %s", e.peekTS, prevTS)
 		}
 		return false, nil
 	}

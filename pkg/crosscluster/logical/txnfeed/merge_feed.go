@@ -21,7 +21,7 @@ import (
 
 // MergeFeed merges multiple ordered Subscriptions into a single
 // globally-ordered stream. Each input subscription must emit events in MVCC
-// timestamp order (as OrderedFeed does). The MergeFeed uses a min-heap to
+// timestamp order (e.g. via producer-side MVCC ordering). The MergeFeed uses a min-heap to
 // merge them.
 //
 // KVs are accumulated into a scratch buffer and flushed as a single batch when
