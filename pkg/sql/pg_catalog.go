@@ -4550,7 +4550,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 
 var pgCatalogStatisticExtTable = virtualSchemaTable{
 	comment: `pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
+https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html`,
 	schema: vtable.PgCatalogStatisticExt,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 
@@ -4614,9 +4614,10 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 				row[1],                       // stxname
 				schemaOid(statSchema),        // stxnamespace
 				nodeOID,                      // stxowner
-				statTgt,                      // stxstattarget
 				columnIDs,                    // stxkeys
+				statTgt,                      // stxstattarget
 				statisticsKind,               // stxkind
+				tree.DNull,                   // stxexprs
 			); err != nil {
 				return err
 			}

@@ -993,17 +993,18 @@ CREATE TABLE pg_catalog.pg_shadow (
 )`
 
 // PgCatalogStatisticExt describes the schema of pg_catalog.pg_statistic_ext
-// https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html
+// https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html
 const PgCatalogStatisticExt = `
 CREATE TABLE pg_catalog.pg_statistic_ext (
 	oid OID,
 	stxrelid OID,
-  stxname NAME,
-  stxnamespace OID,
+	stxname NAME,
+	stxnamespace OID,
 	stxowner OID,
-	stxstattarget INT4,
 	stxkeys INT2VECTOR,
-	stxkind "char"[]
+	stxstattarget INT2,
+	stxkind "char"[],
+	stxexprs STRING
 )`
 
 // PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
