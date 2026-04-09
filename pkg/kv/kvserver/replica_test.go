@@ -2816,6 +2816,10 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 		// Setup filter to block the write.
 		tc := testContext{}
 		tsc := TestStoreConfig(nil)
+		// Force synchronous intent resolution to prevent async ResolveIntent
+		// from a previous subtest's write from racing with the current
+		// subtest's optimistic read. See #167535.
+		tsc.TestingKnobs.IntentResolverKnobs.ForceSyncIntentResolution = true
 		tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 			func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 				// Make sure the direct GC path doesn't interfere with this test.
