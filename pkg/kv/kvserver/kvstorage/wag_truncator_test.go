@@ -330,3 +330,101 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		})
 	}
 }
+
+// TestTruncateGapHandling verifies that truncateAppliedWAGNodeAndClearRaftState
+// handles gaps in WAG node indices correctly based on expectedIndex. When
+// expectedIndex is 0, the first node is deleted regardless of its index. When
+// non-zero, only the node at that exact index is deleted.
+//
+// The test sets up three WAG nodes with gaps between them:
+// [Index: 2] -> [Index: 4] -> [Index: 6]
+func TestTruncateGapHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(1 /* rangeID */)
+
+	type call struct {
+		index             uint64
+		expectedTruncated bool
+		wantWAGIndices    []uint64
+	}
+
+	for _, tc := range []struct {
+		calls []call
+	}{
+		{
+			// index=0 removes the first WAG node regardless of its index.
+			calls: []call{
+				{index: 0, expectedTruncated: true, wantWAGIndices: []uint64{4, 6}},
+				{index: 0, expectedTruncated: true, wantWAGIndices: []uint64{6}},
+				{index: 0, expectedTruncated: true, wantWAGIndices: nil},
+			},
+		},
+		{
+			// A non-existent index is a no-op.
+			calls: []call{
+				{index: 1, expectedTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+				{index: 3, expectedTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+				{index: 5, expectedTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+				{index: 7, expectedTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+			},
+		},
+		{
+			// In theory, we can remove a WAG node at an index that is not the first.
+			calls: []call{
+				{index: 4, expectedTruncated: true, wantWAGIndices: []uint64{2, 6}},
+				{index: 6, expectedTruncated: true, wantWAGIndices: []uint64{2}},
+				{index: 2, expectedTruncated: true, wantWAGIndices: nil},
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			truncator := MakeWAGTruncator(
+				st, e.StateEngine(), e.LogEngine(),
+				rate.NewLimiter(rate.Inf, math.MaxInt64),
+			)
+
+			// Write WAG nodes at indices 2, 4, 6.
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
+			})
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
+			})
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
+			})
+
+			// Set applied state so all WAG nodes are considered applied.
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 20}))
+			require.NoError(t, e.stateEngine.Flush())
+
+			for _, c := range tc.calls {
+				stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
+				b := e.LogEngine().NewWriteBatch()
+				truncated, err := truncator.truncateAppliedWAGNodeAndClearRaftState(
+					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index,
+				)
+				require.NoError(t, err)
+				require.Equal(t, c.expectedTruncated, truncated)
+				if truncated {
+					require.NoError(t, b.Commit(false /* sync */))
+				}
+				b.Close()
+				stateReader.Close()
+				require.Equal(t, c.wantWAGIndices, e.listWAGNodes(t))
+			}
+		})
+	}
+}
