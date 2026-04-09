@@ -470,28 +470,28 @@ oid  datname        datdba      encoding  datcollate  datctype    datistemplate 
 104  test           1546506610  6         en_US.utf8  en_US.utf8  false          true
 108  constraint_db  1546506610  6         en_US.utf8  en_US.utf8  false          true
 
-query OTIOIIOT colnames
-SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+query OTIIIOTT colnames
+SELECT oid, datname, datconnlimit, datfrozenxid, datminmxid, dattablespace, datlocprovider, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid
 ----
-oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
-100  defaultdb      -1            0              NULL          NULL        0              NULL
-102  postgres       -1            0              NULL          NULL        0              NULL
-104  test           -1            0              NULL          NULL        0              {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
-108  constraint_db  -1            0              NULL          NULL        0              NULL
+oid  datname        datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
+1    system         -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
+100  defaultdb      -1            NULL          NULL        0              c               NULL
+102  postgres       -1            NULL          NULL        0              c               NULL
+104  test           -1            NULL          NULL        0              c               {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
+108  constraint_db  -1            NULL          NULL        0              c               NULL
 
 user testuser
 
 # Should be globally visible
-query OTIOIIOT colnames
-SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+query OTIIIOTT colnames
+SELECT oid, datname, datconnlimit, datfrozenxid, datminmxid, dattablespace, datlocprovider, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
-oid  datname  datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system   -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
+oid  datname  datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
+1    system   -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
 
 user root
 

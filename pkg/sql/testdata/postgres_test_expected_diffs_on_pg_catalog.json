@@ -4,7 +4,7 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 6,
+    "MissingColumns": 1,
     "DatatypeMismatches": 16
   },
   "diffs": {
@@ -25,13 +25,6 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       }
-    },
-    "pg_database": {
-      "datcollversion": null,
-      "dathasloginevt": null,
-      "daticurules": null,
-      "datlocale": null,
-      "datlocprovider": null
     },
     "pg_enum": {
       "enumlabel": {
