@@ -311,8 +311,11 @@ func (m *Manager) WaitFor(
 // sufficient to only call Release. If it returns false, the caller will
 // typically call WaitUntilAcquired to wait for latch acquisition. It is also
 // acceptable for the caller to skip WaitUntilAcquired and directly call
-// Release, in which case it never held the latches.
-func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) bool {
+// Release, in which case it never held the latches. If a conflict is found, it
+// returns a description of the conflicting latch for diagnostic purposes.
+func (m *Manager) CheckOptimisticNoConflicts(
+	lg *Guard, spans *spanset.SpanSet,
+) (ok bool, conflictStr redact.RedactableString) {
 	if lg.snap == nil {
 		panic(errors.AssertionFailedf("snap must not be nil"))
 	}
@@ -329,19 +332,22 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 				case spanset.SpanReadOnly:
 					// Search for writes at equal or lower timestamps.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if overlaps(&it, &search, ignoreLater) {
-						return false
+					if held := findOverlap(&it, &search, ignoreLater); held != nil {
+						return false, redact.Sprintf(
+							"read span %s@%s conflicts with write latch %s", sp.Span, sp.Timestamp, held)
 					}
 				case spanset.SpanReadWrite:
 					// Search for all other writes.
 					it := tr[spanset.SpanReadWrite].MakeIter()
-					if overlaps(&it, &search, ignoreNothing) {
-						return false
+					if held := findOverlap(&it, &search, ignoreNothing); held != nil {
+						return false, redact.Sprintf(
+							"write span %s@%s conflicts with write latch %s", sp.Span, sp.Timestamp, held)
 					}
 					// Search for reads at equal or higher timestamps.
 					it = tr[spanset.SpanReadOnly].MakeIter()
-					if overlaps(&it, &search, ignoreEarlier) {
-						return false
+					if held := findOverlap(&it, &search, ignoreEarlier); held != nil {
+						return false, redact.Sprintf(
+							"write span %s@%s conflicts with read latch %s", sp.Span, sp.Timestamp, held)
 					}
 				default:
 					panic("unknown access")
@@ -351,21 +357,22 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 	}
 	// Note that we don't call lg.snap.close() since even when this returns
 	// true, it is acceptable for the caller to call WaitUntilAcquired.
-	return true
+	return true, ""
+}
+
+// findOverlap is like overlaps but returns the conflicting latch (if any).
+func findOverlap(it *iterator, search *latch, ignore ignoreFn) *latch {
+	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
+		held := it.Cur()
+		if !ignore(search.ts, held.ts) {
+			return held
+		}
+	}
+	return nil
 }
 
 func overlaps(it *iterator, search *latch, ignore ignoreFn) bool {
-	for it.FirstOverlap(search); it.Valid(); it.NextOverlap(search) {
-		// The held latch may have already been signaled, but that doesn't allow
-		// us to ignore it, since it could have been held while we were
-		// concurrently evaluating, and we may not have observed the result of
-		// evaluation of that conflicting latch holder.
-		held := it.Cur()
-		if !ignore(search.ts, held.ts) {
-			return true
-		}
-	}
-	return false
+	return findOverlap(it, search, ignore) != nil
 }
 
 // WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts has

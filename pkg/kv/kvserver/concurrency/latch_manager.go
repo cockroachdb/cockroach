@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 )
 
 // Node liveness heartbeats time out at 3s, so log slow latch acquisitions
@@ -38,7 +39,9 @@ func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
 	return lg
 }
 
-func (m *latchManagerImpl) CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool {
+func (m *latchManagerImpl) CheckOptimisticNoConflicts(
+	lg latchGuard, spans *spanset.SpanSet,
+) (bool, redact.RedactableString) {
 	return m.m.CheckOptimisticNoConflicts(lg.(*spanlatch.Guard), spans)
 }
 

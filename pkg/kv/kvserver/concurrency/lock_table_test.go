@@ -507,7 +507,8 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
 				_, lockSpans := scanSpans(t, d, req.Timestamp)
-				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(lockSpans))
+				ok, _ = g.CheckOptimisticNoConflicts(lockSpans)
+				return fmt.Sprintf("no-conflicts: %t", ok)
 
 			case "is-key-locked-by-conflicting-txn":
 				reqName := dd.ScanArg[string](t, d, "r")

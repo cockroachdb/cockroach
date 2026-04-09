@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // Manager is a structure that sequences incoming requests and provides
@@ -496,8 +497,9 @@ type Guard interface {
 	// the new timestamp before the request can evaluate at that later timestamp.
 	IsolatedAtLaterTimestamps() bool
 	// CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
-	// have a conflicting latch, lock.
-	CheckOptimisticNoConflicts(*spanset.SpanSet, *lockspanset.LockSpanSet) bool
+	// have a conflicting latch, lock. If a conflict is found, it returns false
+	// and logs the conflict details to the provided context's trace.
+	CheckOptimisticNoConflicts(context.Context, *spanset.SpanSet, *lockspanset.LockSpanSet) bool
 	// CheckOptimisticNoLatchConflicts checks that the declared latch spans for
 	// the request do not have a conflicting latch.
 	CheckOptimisticNoLatchConflicts() bool
@@ -594,8 +596,9 @@ type latchManager interface {
 	AcquireOptimistic(req Request) latchGuard
 
 	// CheckOptimisticNoConflicts returns true iff the spans in the provided
-	// spanset do not conflict with existing latches.
-	CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) bool
+	// spanset do not conflict with existing latches. If a conflict is found,
+	// it returns false and a description of the conflicting latch.
+	CheckOptimisticNoConflicts(lg latchGuard, spans *spanset.SpanSet) (bool, redact.RedactableString)
 
 	// WaitUntilAcquired is meant to be called when CheckOptimisticNoConflicts
 	// returned false, or some other occurrence (like conflicting locks) is
@@ -919,7 +922,7 @@ type lockTableGuard interface {
 	// already seen any intents (replicated single-key locks) that conflicted,
 	// so this checking is practically only going to find unreplicated locks
 	// that conflict.
-	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool)
+	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool, conflictStr redact.RedactableString)
 
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
 	// a conflicting transaction in the lockTableGuard's snapshot of the lock

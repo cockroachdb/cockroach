@@ -257,7 +257,7 @@ func (r *Replica) executeReadOnlyBatch(
 			}
 			defer latchSpansRead.Release()
 			defer lockSpansRead.Release()
-			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
+			if ok := g.CheckOptimisticNoConflicts(ctx, latchSpansRead, lockSpansRead); !ok {
 				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		} else {

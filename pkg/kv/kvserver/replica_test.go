@@ -110,7 +110,9 @@ func (mg mockGuard) AssertNoLatches() {}
 func (mg mockGuard) IsolatedAtLaterTimestamps() bool {
 	return true
 }
-func (mg mockGuard) CheckOptimisticNoConflicts(*spanset.SpanSet, *lockspanset.LockSpanSet) bool {
+func (mg mockGuard) CheckOptimisticNoConflicts(
+	context.Context, *spanset.SpanSet, *lockspanset.LockSpanSet,
+) bool {
 	return false
 }
 func (mg mockGuard) CheckOptimisticNoLatchConflicts() bool {
@@ -2818,7 +2820,6 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 		tsc := TestStoreConfig(nil)
 		tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 			func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
-				// Make sure the direct GC path doesn't interfere with this test.
 				if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
 					return nil
 				}
