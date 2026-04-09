@@ -4,7 +4,7 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 15,
+    "MissingColumns": 12,
     "DatatypeMismatches": 18
   },
   "diffs": {
@@ -98,11 +98,6 @@
       }
     },
     "pg_parameter_acl": {},
-    "pg_prepared_statements": {
-      "custom_plans": null,
-      "generic_plans": null,
-      "result_types": null
-    },
     "pg_publication_namespace": {},
     "pg_range": {
       "rngcanonical": {
