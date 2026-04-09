@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 9,
-    "DatatypeMismatches": 17
+    "MissingColumns": 6,
+    "DatatypeMismatches": 16
   },
   "diffs": {
     "pg_aios": {},
@@ -18,17 +18,6 @@
       }
     },
     "pg_backend_memory_contexts": {},
-    "pg_constraint": {
-      "conenforced": null,
-      "confdelsetcols": null,
-      "coninhcount": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "conperiod": null
-    },
     "pg_conversion": {
       "conproc": {
         "oid": 26,

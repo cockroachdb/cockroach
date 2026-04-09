@@ -219,7 +219,7 @@ CREATE TABLE pg_catalog.pg_collation (
 
 // PGCatalogConstraint describes the schema of the pg_catalog.pg_constraint
 // table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html,
+// https://www.postgresql.org/docs/18/catalog-pg-constraint.html,
 const PGCatalogConstraint = `
 CREATE TABLE pg_catalog.pg_constraint (
 	oid OID,
@@ -232,25 +232,28 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conrelid OID NOT NULL,
 	contypid OID,
 	conindid OID,
+	conparentid OID,
 	confrelid OID,
 	confupdtype "char",
 	confdeltype "char",
 	confmatchtype "char",
 	conislocal BOOL,
-	coninhcount INT4,
+	coninhcount INT2,
 	connoinherit BOOL,
 	conkey INT2[],
 	confkey INT2[],
 	conpfeqop OID[],
 	conppeqop OID[],
 	conffeqop OID[],
+	confdelsetcols INT2[],
 	conexclop OID[],
 	conbin STRING,
 	consrc STRING,
 	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
 	-- style string, for use by pg_get_constraintdef().
 	condef STRING,
-	conparentid OID,
+	conenforced BOOL,
+	conperiod BOOL,
   INDEX (conrelid)
 )`
 
