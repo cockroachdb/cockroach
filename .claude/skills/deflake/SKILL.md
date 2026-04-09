@@ -49,6 +49,14 @@ Use `-i` for interactive mode (pause after each step for confirmation):
 /deflake -i https://github.com/cockroachdb/cockroach/issues/167535
 ```
 
+Use `--gceworker` when running on a GCE worker with many cores and high
+RAM. This enables stress testing with high parallelism for repro and
+fix verification:
+
+```
+/deflake --gceworker https://github.com/cockroachdb/cockroach/issues/167535
+```
+
 **If no GitHub issue is provided**, the skill will prompt the user for
 failure logs, stack traces, or error messages. These are critical for
 investigation — without them, the skill must rely solely on code reading,
@@ -270,11 +278,29 @@ mechanism works, and what exactly went wrong.
 
 **Verify the repro works:**
 
-Run the specific flaky subtest(s) and confirm they fail deterministically:
+Run the specific flaky subtest(s) and confirm they fail deterministically.
+
+**Without `--gceworker`** (default — local machine):
 
 ```bash
-./dev test <package> -f='<TestName>/<subtest>' -v --timeout=45s --count=1
+./dev test --stress <package> --filter "^<TestName>$" -v --timeout=45s
 ```
+
+**With `--gceworker`** (GCE worker — stress with high parallelism).
+Determine the machine's CPU count and available RAM first, then run:
+
+```bash
+P=100  # adjust to machine's CPU count
+HOST_RAM=$(free -g | awk '/^Mem:/{print $2}')
+./dev test --stress <package> --filter "^<TestName>$" \
+  -- --jobs $P \
+  --local_resources=cpu=$P \
+  --local_resources=memory=${HOST_RAM}
+```
+
+Add `--race` if the flake is a data race. The stress run hammers the
+test with many parallel instances — if the repro injection is correct,
+failures should appear quickly.
 
 The test should fail (timeout, wrong result, panic) reliably. If it
 passes, the injection isn't targeting the right thing — iterate.
@@ -333,14 +359,30 @@ fix patterns:
 
 **After applying the fix**, verify:
 
+**Without `--gceworker`** (default — local machine):
+
 ```bash
 # The test passes with the injection still active
-./dev test <package> -f='<TestName>' -v --count=3
+./dev test --stress <package> --filter "^<TestName>$" -v
 ```
 
-Run at least 3 times to confirm stability. If some injected subtests hit
-the timeout fallback (by design), that's expected — the key thing is they
-complete without deadlock or failure.
+**With `--gceworker`** (GCE worker — stress with high parallelism):
+
+```bash
+P=100  # adjust to machine's CPU count
+HOST_RAM=$(free -g | awk '/^Mem:/{print $2}')
+./dev test --stress <package> --filter "^<TestName>$" \
+  -- --jobs $P \
+  --local_resources=cpu=$P \
+  --local_resources=memory=${HOST_RAM}
+```
+
+Add `--race` if the original flake was a data race. Stress for several
+minutes to confirm stability.
+
+In both cases, if some injected subtests hit the timeout fallback (by
+design), that's expected — the key thing is they complete without
+deadlock or failure.
 
 **Checkpoint (interactive mode only):** Show the user the fix approach
 and test results before committing.
