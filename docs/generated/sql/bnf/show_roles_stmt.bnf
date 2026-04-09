@@ -1,2 +1,2 @@
 show_roles_stmt ::=
-	'SHOW' 'ROLES'
+	'SHOW' 'ROLES' opt_with_show_users_options opt_limit_clause

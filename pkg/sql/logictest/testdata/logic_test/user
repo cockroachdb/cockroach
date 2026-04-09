@@ -307,6 +307,21 @@ SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
 ----
 NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
 
+# SHOW ROLES WITH SOURCE returns the same results as SHOW USERS WITH SOURCE.
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com']
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+prov_user2  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# SHOW ROLES LIMIT works the same as SHOW USERS LIMIT.
+query TTT colnames
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1]
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
 # Clean up provisioned users.
 statement ok
 DROP USER prov_user1
@@ -378,6 +393,13 @@ SELECT username, options, member_of FROM [SHOW USERS WITH LAST LOGIN BEFORE ('$l
 ----
 username  options  member_of
 
+# SHOW ROLES WITH LAST LOGIN BEFORE behaves the same as SHOW USERS.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH LAST LOGIN BEFORE ('$login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options  member_of
+testuser2  {}       {admin}
+
 subtest end
 
 subtest show_users_combined_options
@@ -395,6 +417,13 @@ SELECT estimated_last_login_time FROM system.users WHERE username = 'testuser2'
 # SHOW USERS with both SOURCE and LAST LOGIN BEFORE filters combined.
 query TTT colnames
 SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options                                member_of
+testuser2  {PROVISIONSRC=ldap:ldap.example.com}   {admin}
+
+# Same combined query with SHOW ROLES.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
 ----
 username   options                                member_of
 testuser2  {PROVISIONSRC=ldap:ldap.example.com}   {admin}

@@ -1,2 +1,2 @@
 show_roles_stmt ::=
-	'SHOW' 'LOCALITY'
+	'SHOW' 'LOCALITY' opt_with_show_users_options opt_limit_clause
