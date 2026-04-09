@@ -4532,7 +4532,19 @@ subtest obj_description_with_comment_on_type
 
 skipif config local-legacy-schema-changer
 statement ok
+CREATE SCHEMA roach_prod;
+CREATE SCHEMA roach_dev;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET search_path=public, roach_prod;
+
+skipif config local-legacy-schema-changer
+statement ok
 CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_prod.roach_dwellings_final AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_dev.roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+
 
 skipif config local-legacy-schema-changer
 statement ok
@@ -4557,14 +4569,19 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
      AND n.nspname !~ '^pg_'
      AND n.nspname <> 'information_schema'
      AND n.nspname <> 'crdb_internal'
-     AND pg_catalog.pg_type_is_visible(t.oid)
 ORDER BY 1, 2;
 ----
-Schema  Name                    Description
-public  public.concat_enum      ·
-public  public.custom_typ       ·
-public  public.roach_dwellings  ·
-public  public.testenum         ·
+Schema      Name                       Description
+public      concat_enum                ·
+public      custom_typ                 ·
+public      roach_dwellings            ·
+public      testenum                   ·
+roach_dev   roach_dev.roach_dwellings  ·
+roach_prod  roach_dwellings_final      ·
+
+skipif config local-legacy-schema-changer
+statement ok
+RESET search_path;
 
 subtest end
 
