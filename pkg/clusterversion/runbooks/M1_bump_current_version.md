@@ -238,15 +238,21 @@ When bumping from version X.Y to X.Z (e.g., 26.1 → 26.2):
 
 1. **Do NOT change any existing mappings** - Keep all previous entries as-is
 2. **Find the latest mapping** - For example: `"26.1": predecessor: "25.4"`
-3. **Add a new entry** for the new version with the same predecessor:
+3. **Add a new entry** for the new version pointing to the previous dev series:
 ```yaml
 "26.1":
   predecessor: "25.4"
 "26.2":
-  predecessor: "25.4"   # Use same predecessor as 26.1
+  predecessor: "26.1"
 ```
 
-**Why:** Both 26.1 and 26.2 are development versions that haven't been released yet. They both should upgrade from the last stable release (25.4). This will be corrected later in M.3 when we add actual release data.
+**Why `26.1` and not `25.4`?** Even though 26.1 has not yet shipped as a stable release,
+`predecessorSeries()` in `pkg/testutils/release/releases.go` skips unreleased series
+(those with empty `Latest`) when walking the predecessor chain. So setting
+`predecessor: "26.1"` is safe and produces the same runtime behavior as pointing directly
+to the last stable release. The predecessor only becomes "live" once M.3 adds a `latest`
+to 26.1. Pointing directly to the immediate predecessor (`26.1`) is preferred over
+skipping it (`25.4`) because it correctly reflects the intended upgrade path.
 
 **Example for 26.1 → 26.2 bump:**
 ```bash
@@ -264,13 +270,11 @@ When bumping from version X.Y to X.Z (e.g., 26.1 → 26.2):
 "26.1":
   predecessor: "25.4"    # KEEP this entry
 "26.2":
-  predecessor: "25.4"    # ADD this entry
+  predecessor: "26.1"    # ADD this entry (points to immediate predecessor)
 
 # Verify your changes
 tail -10 pkg/testutils/release/cockroach_releases.yaml
 ```
-
-**Note:** In M.3, when the RC is published, the predecessor relationships will be updated to reflect the actual release hierarchy.
 
 **c) Regenerate scplan test outputs:**
 ```bash
