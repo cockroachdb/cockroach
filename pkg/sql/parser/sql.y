@@ -10356,12 +10356,20 @@ show_default_session_variables_for_role_stmt:
 
 // %Help: SHOW ROLES - list defined roles
 // %Category: Priv
-// %Text: SHOW ROLES
+// %Text:
+// SHOW ROLES [WITH <options>] [LIMIT <n>]
+//
+// Options:
+//   SOURCE = <string>
+//   LAST LOGIN BEFORE <expr>
 // %SeeAlso: CREATE ROLE, ALTER ROLE, DROP ROLE
 show_roles_stmt:
-  SHOW ROLES
+  SHOW ROLES opt_with_show_users_options opt_limit_clause
   {
-    $$.val = &tree.ShowRoles{}
+    $$.val = &tree.ShowRoles{
+      Options: $3.showUsersOptions(),
+      Limit:   $4.limit(),
+    }
   }
 | SHOW ROLES error // SHOW HELP: SHOW ROLES
 

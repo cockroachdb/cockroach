@@ -307,6 +307,21 @@ SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
 ----
 NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
 
+# SHOW ROLES WITH SOURCE returns the same results as SHOW USERS WITH SOURCE.
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com']
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+prov_user2  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# SHOW ROLES LIMIT works the same as SHOW USERS LIMIT.
+query TTT colnames
+select username, options, member_of from [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1]
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
 # Clean up provisioned users.
 statement ok
 DROP USER prov_user1
@@ -377,6 +392,66 @@ query TTT colnames
 SELECT username, options, member_of FROM [SHOW USERS WITH LAST LOGIN BEFORE ('$login_time'::timestamptz - '1 minute'::interval)] WHERE username = 'testuser2'
 ----
 username  options  member_of
+
+# SHOW ROLES WITH LAST LOGIN BEFORE behaves the same as SHOW USERS.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH LAST LOGIN BEFORE ('$login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'testuser2'
+----
+username   options  member_of
+testuser2  {}       {admin}
+
+subtest end
+
+subtest show_users_combined_options
+
+user root
+
+# Create a provisioned user and log in to populate estimated_last_login_time.
+statement ok
+CREATE USER combined_user PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+GRANT admin TO combined_user
+
+user combined_user
+
+query T
+SHOW session_user
+----
+combined_user
+
+user root
+
+query I retry
+SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'combined_user'
+----
+1
+
+let $combined_login_time
+SELECT estimated_last_login_time FROM system.users WHERE username = 'combined_user'
+
+# SHOW USERS with both SOURCE and LAST LOGIN BEFORE filters combined.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'combined_user'
+----
+username       options                                member_of
+combined_user  {PROVISIONSRC=ldap:ldap.example.com}   {admin}
+
+# Same combined query with SHOW ROLES.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz + '1 minute'::interval)] WHERE username = 'combined_user'
+----
+username       options                                member_of
+combined_user  {PROVISIONSRC=ldap:ldap.example.com}   {admin}
+
+# Excluding by login time should filter out even when source matches.
+query TTT colnames
+SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE ('$combined_login_time'::timestamptz - '1 minute'::interval)] WHERE username = 'combined_user'
+----
+username  options  member_of
+
+statement ok
+DROP USER combined_user
 
 subtest end
 

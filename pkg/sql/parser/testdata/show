@@ -634,6 +634,46 @@ SHOW ROLES -- literals removed
 SHOW ROLES -- identifiers removed
 
 parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com'
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com'
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com') -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_' -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' -- identifiers removed
+
+parse
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01'
+SHOW ROLES WITH LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW ROLES WITH LAST LOGIN BEFORE '_' -- literals removed
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+----
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+SHOW ROLES WITH SOURCE = ('ldap:ldap.example.com') LIMIT (10) -- fully parenthesized
+SHOW ROLES WITH SOURCE = '_' LIMIT _ -- literals removed
+SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10 -- identifiers removed
+
+parse
+SHOW ROLES LIMIT 5
+----
+SHOW ROLES LIMIT 5
+SHOW ROLES LIMIT (5) -- fully parenthesized
+SHOW ROLES LIMIT _ -- literals removed
+SHOW ROLES LIMIT 5 -- identifiers removed
+
+parse
 EXPLAIN SHOW ROLES
 ----
 EXPLAIN SHOW ROLES
@@ -706,11 +746,27 @@ SHOW USERS WITH SOURCE = 'a', SOURCE = 'b'
                                         ^
 
 error
+SHOW ROLES WITH SOURCE = 'a', SOURCE = 'b'
+----
+at or near "b": syntax error: SOURCE option specified multiple times
+DETAIL: source SQL:
+SHOW ROLES WITH SOURCE = 'a', SOURCE = 'b'
+                                        ^
+
+error
 SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
 ----
 at or near "2025-01-01": syntax error: LAST LOGIN BEFORE option specified multiple times
 DETAIL: source SQL:
 SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+                                                                   ^
+
+error
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+----
+at or near "2025-01-01": syntax error: LAST LOGIN BEFORE option specified multiple times
+DETAIL: source SQL:
+SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
                                                                    ^
 
 parse
