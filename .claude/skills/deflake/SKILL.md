@@ -57,6 +57,15 @@ fix verification:
 /deflake --gceworker https://github.com/cockroachdb/cockroach/issues/167535
 ```
 
+Use `--remote` together with `--gceworker` to enable EngFlow remote
+execution for stress testing. This runs test executions on remote workers,
+dramatically improving throughput (e.g., 50k runs in ~8 min). Requires
+valid EngFlow credentials (`engflow_auth login mesolite.cluster.engflow.com`):
+
+```
+/deflake --gceworker --remote https://github.com/cockroachdb/cockroach/issues/167535
+```
+
 **If no GitHub issue is provided**, the skill will prompt the user for
 failure logs, stack traces, or error messages. These are critical for
 investigation — without them, the skill must rely solely on code reading,
@@ -298,6 +307,15 @@ HOST_RAM=$(free -g | awk '/^Mem:/{print $2}')
   --local_resources=memory=${HOST_RAM}
 ```
 
+**With `--gceworker --remote`** (GCE worker + EngFlow remote execution).
+Tests execute on remote EngFlow workers, enabling massive parallelism:
+
+```bash
+P=100  # adjust based on desired parallelism
+./dev test --stress <package> --filter "^<TestName>$" \
+  -- --config=engflow --jobs $P
+```
+
 Add `--race` if the flake is a data race. The stress run hammers the
 test with many parallel instances — if the repro injection is correct,
 failures should appear quickly.
@@ -375,6 +393,14 @@ HOST_RAM=$(free -g | awk '/^Mem:/{print $2}')
   -- --jobs $P \
   --local_resources=cpu=$P \
   --local_resources=memory=${HOST_RAM}
+```
+
+**With `--gceworker --remote`** (GCE worker + EngFlow remote execution):
+
+```bash
+P=100  # adjust based on desired parallelism
+./dev test --stress <package> --filter "^<TestName>$" \
+  -- --config=engflow --jobs $P
 ```
 
 Add `--race` if the original flake was a data race. Stress for several
