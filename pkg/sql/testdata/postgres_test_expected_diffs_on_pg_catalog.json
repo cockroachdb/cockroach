@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 1,
-    "DatatypeMismatches": 16
+    "MissingColumns": 0,
+    "DatatypeMismatches": 15
   },
   "diffs": {
     "pg_aios": {},
@@ -123,15 +123,6 @@
     "pg_stat_replication_slots": {},
     "pg_stat_subscription_stats": {},
     "pg_stat_wal": {},
-    "pg_statistic_ext": {
-      "stxexprs": null,
-      "stxstattarget": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      }
-    },
     "pg_statistic_ext_data": {
       "stxdexpr": {
         "oid": 1009,
