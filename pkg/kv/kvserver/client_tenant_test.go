@@ -430,8 +430,13 @@ func TestTenantCtx(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
-		scanErr := make(chan error)
-		pushErr := make(chan error)
+		// Use buffered channels so the filter never blocks request
+		// processing. Without buffering, a channel send in the filter would
+		// block the goroutine evaluating the request. If the test has already
+		// failed (e.g., timeout), nobody reads the channel, and the blocked
+		// goroutine prevents the stopper from shutting down.
+		scanErr := make(chan error, 1)
+		pushErr := make(chan error, 1)
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -473,16 +478,26 @@ func TestTenantCtx(t *testing.T) {
 								err = errors.Newf("expected Scan to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
 									tenantID, isTenantRequest, tenID)
 							}
-							scanErr <- err
+							// Non-blocking send: if the channel buffer is full
+							// (duplicate Scan or test already completed), don't
+							// block this goroutine — that would prevent the request
+							// from completing and the stopper from shutting down.
+							select {
+							case scanErr <- err:
+							default:
+							}
 							return nil
 						case pushReq != nil:
-							// Check that the Push request no longer has the txn request; RPCs
-							// done by KV do not identify the tenant.
+							// Check that the Push request no longer has the txn
+							// request; RPCs done by KV do not identify the tenant.
 							var err error
 							if isTenantRequest {
 								err = errors.Newf("got unexpected tenant in push: %d", tenID)
 							}
-							pushErr <- err
+							select {
+							case pushErr <- err:
+							default:
+							}
 							return nil
 						default:
 							// Unrecognized requests pass through.
@@ -511,10 +526,17 @@ func TestTenantCtx(t *testing.T) {
 			defer tsql.Close()
 		}
 
-		_, err := tsql.Exec("create table t (x int primary key, y int, family (x), family (y))")
+		_, err := tsql.Exec(
+			"create table t (x int primary key, y int, family (x), family (y))",
+		)
 		require.NoError(t, err)
 		tx1, err := tsql.BeginTx(ctx, nil /* opts */)
 		require.NoError(t, err)
+		// Ensure tx1 is always rolled back, even if the test fails early.
+		// tx2's SELECT is blocked by tx1's intent; without this, a test
+		// failure would leave tx2 blocked forever, preventing the stopper
+		// from shutting down.
+		t.Cleanup(func() { _ = tx1.Rollback() })
 		_, err = tx1.Exec("insert into t(x) values ($1)", magicKey)
 		require.NoError(t, err)
 
@@ -532,12 +554,9 @@ func TestTenantCtx(t *testing.T) {
 			return tx2.Rollback()
 		})
 
-		// REPRO(#167600): Use a 1ns timeout to deterministically force the
-		// timeout path. This exposes the stopper hang: after t.Fatal, tx1 is
-		// never rolled back (tx2 stays blocked on the intent), and the
-		// unbuffered channel sends in the filter block goroutines. The test
-		// will hang until the overall test timeout kills it.
-		const waitTimeout = time.Nanosecond
+		// Use a generous timeout to account for slow CI machines
+		// (ARM64, high contention, etc.).
+		const waitTimeout = 30 * time.Second
 		select {
 		case err := <-scanErr:
 			require.NoError(t, err)
