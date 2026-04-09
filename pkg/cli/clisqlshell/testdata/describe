@@ -573,7 +573,7 @@ https://www.postgresql.org/docs/17/view-pg-policies.html"
 pg_catalog,pg_policy,table,node,permanent,prefix,"stores row-level security policies for tables
 https://www.postgresql.org/docs/17/catalog-pg-policy.html"
 pg_catalog,pg_prepared_statements,table,node,permanent,prefix,"prepared statements
-https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
+https://www.postgresql.org/docs/18/view-pg-prepared-statements.html"
 pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
 pg_catalog,pg_proc,table,node,permanent,prefix,"built-in functions (incomplete)

@@ -2799,7 +2799,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
 // cockroach are slightly different.
 var pgCatalogPreparedStatementsTable = virtualSchemaTable{
 	comment: `prepared statements
-https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
+https://www.postgresql.org/docs/18/view-pg-prepared-statements.html`,
 	schema: vtable.PGCatalogPreparedStatements,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for name, stmt := range p.preparedStatements.List() {
@@ -2831,6 +2831,18 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 				fromSQL = tree.DBoolTrue
 			}
 
+			resultTypes := tree.NewDArray(types.RegType)
+			for _, col := range stmt.Metadata.Columns {
+				resultTypes.Array = append(resultTypes.Array, tree.NewDOidWithTypeAndName(
+					col.Typ.Oid(),
+					col.Typ,
+					col.Typ.SQLStandardName(),
+				))
+			}
+			if len(resultTypes.Array) > 0 {
+				resultTypes.SetHasNonNulls(true /* hasNonNulls */)
+			}
+
 			ts, err := tree.MakeDTimestampTZ(stmt.CreatedAt(), time.Microsecond)
 			if err != nil {
 				return err
@@ -2840,7 +2852,10 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name, argumentsStr, stmt.SQL)),
 				ts,
 				paramTypes,
+				resultTypes, // result_types
 				fromSQL,
+				tree.DNull, // custom_plans
+				tree.DNull, // generic_plans
 			); err != nil {
 				return err
 			}
