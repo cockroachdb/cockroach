@@ -1006,10 +1006,6 @@ func (r *Replica) evaluateProposal(
 	}
 
 	if pErr != nil {
-		if _, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
-			return ba, &res, false /* needConsensus */, pErr
-		}
-
 		txn := pErr.GetTxn()
 		if txn != nil && ba.Txn == nil {
 			log.KvExec.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)

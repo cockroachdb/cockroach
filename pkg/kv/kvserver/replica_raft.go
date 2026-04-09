@@ -137,8 +137,6 @@ func (r *Replica) evalAndPropose(
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, nil, "", nil, pErr
-	} else if _, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
-		return nil, nil, "", nil, pErr
 	}
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to

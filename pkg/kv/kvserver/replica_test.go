@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -3418,18 +3417,9 @@ func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 // TestReplicaAbortSpanReadError verifies that an error is returned
 // to the client in the event that a AbortSpan entry is found but is
 // not decodable.
-//
-// This doubles as a test that replica corruption errors are propagated
-// and handled correctly.
 func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	var exitStatus exit.Code
-	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
-		exitStatus = i
-	})
-	defer log.ResetExitFunc()
 
 	ctx := context.Background()
 	tc := testContext{}
@@ -3450,7 +3440,11 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	_, err := storage.MVCCPut(ctx, tc.stateEng, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
+	_, err := storage.MVCCPut(
+		ctx, tc.stateEng, key, hlc.Timestamp{},
+		roachpb.MakeValueFromString("never read in this test"),
+		storage.MVCCWriteOptions{},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3459,12 +3453,8 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(kvpb.Header{
 		Txn: txn,
 	}, args)
-	if !testutils.IsPError(pErr, "replica corruption") {
-		t.Fatal(pErr)
-	}
-	if exitStatus != exit.FatalError() {
-		t.Fatalf("did not fatal (exit status %d)", exitStatus)
-	}
+	require.True(t, testutils.IsPError(pErr, "could not read from AbortSpan"),
+		"unexpected error: %s", pErr)
 }
 
 // TestReplicaAbortSpanOnlyWithIntent verifies that a transactional command
@@ -4231,10 +4221,9 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	}
 
 	assignSeqNumsForReqs(txn, &args)
-	expErr := "range does not match splits"
-	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, expErr) {
-		t.Errorf("unexpected error: %s", pErr)
-	}
+	_, pErr := tc.SendWrappedWith(h, &args)
+	require.True(t, testutils.IsPError(pErr, "range does not match splits"),
+		"unexpected error: %s", pErr)
 }
 
 // TestEndTxnBeforeHeartbeat verifies that a transaction can be
@@ -6527,57 +6516,6 @@ func TestAppliedIndex(t *testing.T) {
 	}
 }
 
-// TestReplicaCorruption verifies that a replicaCorruptionError correctly marks
-// the range as corrupt.
-func TestReplicaCorruption(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var exitStatus exit.Code
-	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
-		exitStatus = i
-	})
-	defer log.ResetExitFunc()
-
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
-			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return kvpb.NewError(kvpb.NewReplicaCorruptionError(errors.New("boom")))
-			}
-			return nil
-		}
-
-	ctx := context.Background()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
-
-	// First send a regular command.
-	args := putArgs(roachpb.Key("test1"), []byte("value"))
-	if _, pErr := tc.SendWrapped(&args); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	key := roachpb.Key("boom")
-
-	args = putArgs(key, []byte("value"))
-	_, pErr := tc.SendWrapped(&args)
-	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
-		t.Fatalf("unexpected error: %s", pErr)
-	}
-
-	// Should have laid down marker file to prevent startup.
-	_, err := tc.raftEng.Env().Stat(base.PreventedStartupFile(tc.raftEng.GetAuxiliaryDir()))
-	require.NoError(t, err)
-
-	// Should have triggered fatal error.
-	if exitStatus != exit.FatalError() {
-		t.Fatalf("unexpected exit status %d", exitStatus)
-	}
-}
-
 // TestChangeReplicasDuplicateError tests that a replica change that would
 // use a NodeID twice in the replica configuration fails.
 func TestChangeReplicasDuplicateError(t *testing.T) {
@@ -7706,37 +7644,6 @@ func TestReplicaAbandonProposal(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestNewReplicaCorruptionError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	for i, tc := range []struct {
-		errStruct *kvpb.ReplicaCorruptionError
-		expErr    string
-	}{
-		{kvpb.NewReplicaCorruptionError(errors.New("")), "replica corruption (processed=false)"},
-		{kvpb.NewReplicaCorruptionError(errors.New("foo")), "replica corruption (processed=false): foo"},
-		{kvpb.NewReplicaCorruptionError(errors.Wrap(errors.New("bar"), "foo")), "replica corruption (processed=false): foo: bar"},
-	} {
-		// This uses fmt.Sprint because that ends up calling Error() and is the
-		// intended use. A previous version of this test called String() directly
-		// which called the wrong (reflection-based) implementation.
-		if errStr := fmt.Sprint(tc.errStruct); errStr != tc.expErr {
-			t.Errorf("%d: expected '%s' but got '%s'", i, tc.expErr, errStr)
-		}
-	}
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-
-	if !errors.HasType(kvpb.MaybeWrapReplicaCorruptionError(ctx, errors.New("foo")), &kvpb.ReplicaCorruptionError{}) {
-		t.Fatal("MaybeWrapReplicaCorruptionError should wrap a non-ctx err")
-	}
-
-	cancel(errors.New("we're done here"))
-	if errors.HasType(kvpb.MaybeWrapReplicaCorruptionError(ctx, ctx.Err()), &kvpb.ReplicaCorruptionError{}) {
-		t.Fatal("MaybeWrapReplicaCorruptionError should not wrap a ctx err")
-	}
 }
 
 func TestSyncSnapshot(t *testing.T) {

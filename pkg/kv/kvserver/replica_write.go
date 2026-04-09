@@ -191,16 +191,6 @@ func (r *Replica) executeWriteBatch(
 	// also return the guard which the caller reassumes ownership of.
 	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx), admissionInfo)
 	if pErr != nil {
-		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
-			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
-			readOnlyCmdMu.RUnlock()
-			readOnlyCmdMu = nil
-
-			r.raftMu.Lock()
-			defer r.raftMu.Unlock()
-			// This exits with a fatal error, but returns in tests.
-			return nil, g, nil, r.setCorruptRaftMuLocked(ctx, cErr)
-		}
 		return nil, g, nil, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse

@@ -263,22 +263,22 @@ type ErrorDetailType int
 //
 //go:generate stringer -type=ErrorDetailType
 const (
-	NotLeaseHolderErrType                   ErrorDetailType = 1
-	RangeNotFoundErrType                    ErrorDetailType = 2
-	RangeKeyMismatchErrType                 ErrorDetailType = 3
-	ReadWithinUncertaintyIntervalErrType    ErrorDetailType = 4
-	TransactionAbortedErrType               ErrorDetailType = 5
-	TransactionPushErrType                  ErrorDetailType = 6
-	TransactionRetryErrType                 ErrorDetailType = 7
-	TransactionStatusErrType                ErrorDetailType = 8
-	WriteIntentErrType                      ErrorDetailType = 9
-	WriteTooOldErrType                      ErrorDetailType = 10
-	OpRequiresTxnErrType                    ErrorDetailType = 11
-	ConditionFailedErrType                  ErrorDetailType = 12
-	LeaseRejectedErrType                    ErrorDetailType = 13
-	NodeUnavailableErrType                  ErrorDetailType = 14
-	RaftGroupDeletedErrType                 ErrorDetailType = 16
-	ReplicaCorruptionErrType                ErrorDetailType = 17
+	NotLeaseHolderErrType                ErrorDetailType = 1
+	RangeNotFoundErrType                 ErrorDetailType = 2
+	RangeKeyMismatchErrType              ErrorDetailType = 3
+	ReadWithinUncertaintyIntervalErrType ErrorDetailType = 4
+	TransactionAbortedErrType            ErrorDetailType = 5
+	TransactionPushErrType               ErrorDetailType = 6
+	TransactionRetryErrType              ErrorDetailType = 7
+	TransactionStatusErrType             ErrorDetailType = 8
+	WriteIntentErrType                   ErrorDetailType = 9
+	WriteTooOldErrType                   ErrorDetailType = 10
+	OpRequiresTxnErrType                 ErrorDetailType = 11
+	ConditionFailedErrType               ErrorDetailType = 12
+	LeaseRejectedErrType                 ErrorDetailType = 13
+	NodeUnavailableErrType               ErrorDetailType = 14
+	RaftGroupDeletedErrType              ErrorDetailType = 16
+	// 17 was ReplicaCorruptionErrType, removed in #165558.
 	ReplicaTooOldErrType                    ErrorDetailType = 18
 	AmbiguousResultErrType                  ErrorDetailType = 26
 	StoreNotFoundErrType                    ErrorDetailType = 27
@@ -334,7 +334,6 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.LeaseRejectedError", &LeaseRejectedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.NodeUnavailableError", &NodeUnavailableError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RaftGroupDeletedError", &RaftGroupDeletedError{})
-	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaCorruptionError", &ReplicaCorruptionError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaTooOldError", &ReplicaTooOldError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.StoreNotFoundError", &StoreNotFoundError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryWithProtoRefreshError", &TransactionRetryWithProtoRefreshError{})
@@ -1232,48 +1231,6 @@ func (e *RaftGroupDeletedError) Type() ErrorDetailType {
 
 var _ ErrorDetailInterface = &RaftGroupDeletedError{}
 
-// NewReplicaCorruptionError creates a new error indicating a corrupt replica.
-// The supplied error is used to provide additional detail in the error message.
-// NB: Take caution when marking errors as replica corruption errors to be sure
-// that they are actually indicative of replica corruption and should be treated
-// as such; for example while in general a failures to apply a command might be,
-// a timeout or context cancellation error may not be, especially if a user
-// request controls that cancellation/timeout. See the helper below in
-// MaybeWrapReplicaCorruptionError.
-func NewReplicaCorruptionError(err error) *ReplicaCorruptionError {
-	return &ReplicaCorruptionError{ErrorMsg: err.Error()}
-}
-
-// MaybeWrapReplicaCorruptionError wraps a passed error as a replica corruption
-// error unless it matches the error in the passed context, which would suggest
-// the whole operation was cancelled due to the latter rather than indicating a
-// fault which implies replica corruption.
-func MaybeWrapReplicaCorruptionError(ctx context.Context, err error) error {
-	if errors.Is(err, ctx.Err()) {
-		return err
-	}
-	return NewReplicaCorruptionError(err)
-}
-
-func (e *ReplicaCorruptionError) Error() string {
-	return redact.Sprint(e).StripMarkers()
-}
-
-func (e *ReplicaCorruptionError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("replica corruption (processed=%t)", e.Processed)
-	if e.ErrorMsg != "" {
-		p.Printf(": %s", e.ErrorMsg)
-	}
-	return nil
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *ReplicaCorruptionError) Type() ErrorDetailType {
-	return ReplicaCorruptionErrType
-}
-
-var _ ErrorDetailInterface = &ReplicaCorruptionError{}
-
 // NewReplicaTooOldError initializes a new ReplicaTooOldError.
 func NewReplicaTooOldError(replicaID roachpb.ReplicaID) *ReplicaTooOldError {
 	return &ReplicaTooOldError{
@@ -1964,7 +1921,6 @@ var _ errors.SafeFormatter = &ConditionFailedError{}
 var _ errors.SafeFormatter = &LeaseRejectedError{}
 var _ errors.SafeFormatter = &NodeUnavailableError{}
 var _ errors.SafeFormatter = &RaftGroupDeletedError{}
-var _ errors.SafeFormatter = &ReplicaCorruptionError{}
 var _ errors.SafeFormatter = &ReplicaTooOldError{}
 var _ errors.SafeFormatter = &AmbiguousResultError{}
 var _ errors.SafeFormatter = &StoreNotFoundError{}

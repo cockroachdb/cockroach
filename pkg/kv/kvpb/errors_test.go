@@ -255,10 +255,6 @@ func TestErrorRedaction(t *testing.T) {
 			expect: "raft group deleted",
 		},
 		{
-			err:    &ReplicaCorruptionError{},
-			expect: "replica corruption (processed=false)",
-		},
-		{
 			err:    &ReplicaTooOldError{},
 			expect: "sender replica too old, discarding message",
 		},
