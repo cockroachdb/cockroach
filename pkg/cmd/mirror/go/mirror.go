@@ -63,6 +63,17 @@ func formatURL(path, version string) string {
 		gcpBucket, formatSubURL(path, version))
 }
 
+func wrapGCPError(err error) error {
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) && gerr.Code == http.StatusForbidden {
+		return fmt.Errorf("%w\n\n"+
+			"Hint: Try re-running `gcloud auth application-default login`. "+
+			"You must be in Division-Engineering@cockroachlabs.com to run --mirror. "+
+			"If you need help, ask in #help-dev-inf on Slack.", err)
+	}
+	return err
+}
+
 func getSha256OfFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -99,19 +110,16 @@ func uploadFile(ctx context.Context, client *storage.Client, localPath, remotePa
 	defer in.Close()
 	out := client.Bucket(gcpBucket).Object(remotePath).If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
 	if _, err := io.Copy(out, in); err != nil {
-		return err
+		return wrapGCPError(err)
 	}
 	if err := out.Close(); err != nil {
 		var gerr *googleapi.Error
-		if errors.As(err, &gerr) {
-			if gerr.Code == http.StatusPreconditionFailed {
-				// In this case the "DoesNotExist" precondition
-				// failed, i.e., the object does already exist.
-				return nil
-			}
-			return gerr
+		if errors.As(err, &gerr) && gerr.Code == http.StatusPreconditionFailed {
+			// In this case the "DoesNotExist" precondition
+			// failed, i.e., the object does already exist.
+			return nil
 		}
-		return err
+		return wrapGCPError(err)
 	}
 	return nil
 }
@@ -355,7 +363,7 @@ func dumpNewDepsBzl(
 		var err error
 		client, err = storage.NewClient(ctx)
 		if err != nil {
-			return err
+			return wrapGCPError(fmt.Errorf("creating GCS client: %w", err))
 		}
 	}
 	g, ctx := errgroup.WithContext(ctx)
