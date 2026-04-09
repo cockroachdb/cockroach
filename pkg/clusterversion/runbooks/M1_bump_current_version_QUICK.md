@@ -110,15 +110,14 @@ Manually update `pkg/testutils/release/cockroach_releases.yaml` — add an entry
 
 ```yaml
 "<NEW_VER>":
-  predecessor: "<PREV_STABLE>"
+  predecessor: "<OLD_VER>"
 ```
 
-**Why `<PREV_STABLE>` and not `<OLD_VER>`?** The `predecessor` field tracks the last
-*released* stable version before this one. At M.1 time, `<OLD_VER>` has not yet shipped
-as a stable release — it is still an in-development version on `release-<OLD_VER>`. So
-both `<OLD_VER>` and `<NEW_VER>` share the same last stable predecessor: `<PREV_STABLE>`.
-This is intentional and expected; it will look like N → N-2 rather than N → N-1, which
-can surprise reviewers.
+**Note:** At M.1 time, `<OLD_VER>` has not yet shipped as a stable release, so this will
+look like N → N-1 where N-1 is unreleased. This is safe: `predecessorSeries()` in
+`pkg/testutils/release/releases.go` already skips unreleased series (those with empty
+`Latest`) when walking the predecessor chain. The predecessor only becomes "live" (actually
+routing tests to that series' binaries) once M.3 adds a `latest` to `<OLD_VER>`.
 
 **IMPORTANT:** After `./dev gen bazel`, remove any `upgradeinterlockccl_test` lines
 from `pkg/BUILD.bazel` before committing. See MEMORY.md.
