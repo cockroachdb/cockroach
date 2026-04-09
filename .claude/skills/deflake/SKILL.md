@@ -31,10 +31,11 @@ produce a clean diff with just the fix.
 
 ## Input
 
-This skill requires a GitHub issue URL:
+This skill accepts a GitHub issue URL, a test name, or a description:
 
 ```
 /deflake https://github.com/cockroachdb/cockroach/issues/167535
+/deflake TestFoo
 ```
 
 The issue provides the test name, failure logs, stack traces, and prior
@@ -47,6 +48,15 @@ Use `-i` for interactive mode (pause after each step for confirmation):
 ```
 /deflake -i https://github.com/cockroachdb/cockroach/issues/167535
 ```
+
+**If no GitHub issue is provided**, the skill will prompt the user for
+failure logs, stack traces, or error messages. These are critical for
+investigation — without them, the skill must rely solely on code reading,
+which is slower and less reliable. When prompting, ask:
+
+> Do you have failure logs, stack traces, or error output from the flaky
+> test? If so, please paste them here (or provide a path to a log file).
+> This significantly speeds up root cause analysis.
 
 ## Workflow
 
@@ -70,6 +80,28 @@ logs, stack traces).
     contain prior analysis, stack traces, or hypotheses from other
     engineers that save significant investigation time.
   - Extract the test name, failure message, and any linked CI artifacts.
+  - **Download CI artifacts**: Look for EngFlow invocation URLs
+    (`mesolite.cluster.engflow.com/invocations/...`) in the issue body
+    and comments. If found, use the `/engflow-artifacts` skill to
+    download test logs:
+    1. Extract the invocation ID from the URL.
+    2. Run `targets` to find the failed target.
+    3. Run `list` to find the shard with artifacts.
+    4. Run `download` to get `test.log` and `outputs.zip`.
+    5. Read the downloaded logs for stack traces, goroutine dumps,
+       race detector output, and error messages.
+  - If no EngFlow URLs are found in the issue, check if the issue
+    contains inline logs or stack traces and use those.
+- If given only a test name or description (no GitHub issue):
+  - **Prompt the user for logs**: Ask if they have failure logs, stack
+    traces, or error output they can paste or point to. These are the
+    single most valuable input for diagnosis.
+  - If the user provides logs, analyze them for the failure message,
+    goroutine dumps, race detector output, or timeout information.
+  - If the user provides an EngFlow URL, use the `/engflow-artifacts`
+    skill to download the artifacts.
+  - If the user has no logs, proceed with code reading alone but note
+    that investigation may take longer.
 - Read the failing test and the code it exercises.
 - Identify the timing/race/ordering assumption that makes it flaky.
 - Look for related fixes in git history (`git log --oneline --all --grep`
@@ -145,8 +177,17 @@ instrumentation or logging to confirm it, run the test, analyze the
 output, and refine if the hypothesis was wrong or ambiguous. Add
 `t.Log`, `log.Infof`, or `fmt.Fprintf(os.Stderr, ...)` liberally in
 the code paths you suspect — observability helps confirm or disprove
-hypotheses faster than guessing. This debug logging can stay in the
-repro commit; the revert commit (commit 3) removes it.
+hypotheses faster than guessing. Throwaway debug logging can stay in
+the repro commit; the revert commit (commit 3) removes it.
+
+**Add permanent diagnostic logging while you're here.** If the flake
+involved a conflict check, retry path, or fallback that was previously
+silent, add a `log.Eventf` or trace event at the point of failure.
+Unlike throwaway `t.Log` calls, these survive the revert commit and
+ship with the fix. This makes future investigations of similar flakes
+faster without requiring a reproduction first. Do this now — it's much
+easier to identify the right logging points while you're actively
+tracing the code paths.
 
 **Common reproduction techniques:**
 
@@ -238,6 +279,40 @@ Run the specific flaky subtest(s) and confirm they fail deterministically:
 The test should fail (timeout, wrong result, panic) reliably. If it
 passes, the injection isn't targeting the right thing — iterate.
 
+**If the repro doesn't work after reasonable attempts** (2-3 different
+hypotheses tried), don't keep guessing. Instead, pivot to an
+**observability-only PR** that makes the flake self-diagnosing the next
+time it fires in CI:
+
+1. **Add targeted vmodule logging** to the code paths involved in your
+   hypotheses. Use `log.VEventf(ctx, 2, ...)` or `log.VInfof(ctx, 2, ...)`
+   so the logging is silent by default but activates with
+   `--vmodule=<file>=2`. This keeps the logging cheap in production.
+2. **Scope the logging to the test.** Prefer adding logging that is
+   useful within the specific test's code paths rather than blanketing
+   an entire subsystem. A few well-placed log lines at decision points
+   (e.g., "took retry path because X", "conflict detected with txn Y",
+   "timed out waiting for Z after Nms") are far more useful than
+   verbose logging everywhere.
+3. **Set vmodule in the test itself.** Add a `log.SetVModule` call at
+   the top of the test (or use the `--test_env` flag) so that when the
+   flake fires in CI, the relevant vmodule logs are captured
+   automatically in the test output without anyone needing to
+   re-trigger with special flags.
+4. **Add a `t.Logf` breadcrumb** at key synchronization points in the
+   test (channel sends/receives, goroutine launches, assertion checks)
+   so the test output shows the ordering of events when it fails.
+5. **Keep the PR small.** The goal is a well-contained change — just
+   the logging additions, no refactoring. Include a clear description
+   of what each log line answers and what hypotheses remain open.
+6. **Skip the test** using `/skip-test-with-issue` if it's failing
+   frequently enough to block CI. Document your hypotheses and what
+   the new logging is designed to answer in the issue.
+
+Use `/commit-helper` to create a single commit with the observability
+improvements. This is a legitimate and valuable outcome — it turns an
+opaque flake into one that explains itself next time.
+
 **Checkpoint (interactive mode only):** Show the user the repro results
 and confirm before proceeding to the fix.
 
@@ -270,12 +345,42 @@ complete without deadlock or failure.
 **Checkpoint (interactive mode only):** Show the user the fix approach
 and test results before committing.
 
-### Step 5: Add Diagnostic Logging (Optional)
+### Step 5: Evaluate Fix Quality
 
-If the flake involved a conflict check, retry path, or fallback that was
-previously silent, consider adding a `log.Eventf` or trace event at the
-point of failure. This makes future investigations of similar flakes
-easier without requiring a reproduction first.
+Before committing, critically evaluate whether the fix is robust or just
+masking the problem. Ask:
+
+1. **Does the fix address the root cause?** A good fix eliminates the
+   race, timing assumption, or incorrect invariant. A bad fix adds a
+   `time.Sleep`, swallows an error, or loosens an assertion to make the
+   symptom go away.
+2. **Would this fix survive a code review from an area expert?** If the
+   fix requires deep knowledge you don't have, or touches production code
+   in ways you're not confident about, it may be too risky.
+3. **Is the fix testable?** The repro injection should prove the fix
+   works. If you can't demonstrate that the fix handles the reproduced
+   scenario, it's suspect.
+4. **Is it a test-only fix or a production code fix?** If the root cause
+   is in production code but you're only patching the test, that's a red
+   flag — the real bug is still there.
+
+**If the fix is too hacky, speculative, or just covering the symptom**,
+do NOT commit a questionable fix. Instead:
+
+1. **Add observability**: Add `log.Eventf`, trace events, or detailed
+   `t.Logf` statements at the key code paths involved in the flake. This
+   makes the next investigation (by you or a human) significantly faster.
+2. **Skip the test with an issue**: Use the `/skip-test-with-issue` skill
+   to disable the test with a tracking issue. Include your investigation
+   findings (root cause hypothesis, repro strategy, what you tried) in
+   the issue so the next person doesn't start from scratch.
+3. **Commit as two commits**: one for the observability additions, one
+   for the skip. The observability commit should be a clean, permanent
+   improvement — not throwaway debug logging.
+
+This is the honest outcome when a flake is too complex to fix
+confidently in one session. Shipping observability + skip is far better
+than shipping a bad fix that hides the problem or introduces new issues.
 
 ### Step 6: Commit as Three Commits
 
