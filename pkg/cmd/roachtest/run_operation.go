@@ -8,12 +8,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"math/rand"
 	"net/http"
 	"os"
 	"slices"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -54,7 +54,6 @@ type deferredCleanup struct {
 type opsRunner struct {
 	clusterName string
 	nodeCount   int
-	opsToRun    []registry.OperationSpec
 
 	workloadClusterName string
 	workloadNodes       int
@@ -114,11 +113,20 @@ func runOperations(register func(registry.Registry), filter, skip, clusterName s
 		return err
 	}
 
+	// Split operations into normal and long-running lists.
+	var normalOps, longRunningOps []registry.OperationSpec
+	for _, op := range opSpecs {
+		if op.LongRunning {
+			longRunningOps = append(longRunningOps, op)
+		} else {
+			normalOps = append(normalOps, op)
+		}
+	}
+
 	metrics := newOperationMetrics(r.PromFactory())
 	or := opsRunner{
 		clusterName:             clusterName,
 		nodeCount:               cluster.VMs.Len(),
-		opsToRun:                opSpecs,
 		seed:                    seed,
 		logger:                  l,
 		metrics:                 metrics,
@@ -164,10 +172,18 @@ func runOperations(register func(registry.Registry), filter, skip, clusterName s
 	var wg errgroup.Group
 	runForever := roachtestflags.RunForever
 	parallelism := min(roachtestflags.OperationParallelism, roachtestflags.MaxOperationParallelism)
-	for i := 1; i <= parallelism; i++ {
-		idx := i
+	if len(normalOps) > 0 {
+		for i := 1; i <= parallelism; i++ {
+			label := fmt.Sprintf("worker-%d", i)
+			wg.Go(func() error {
+				or.runWorker(ctx, label, runForever, normalOps)
+				return nil
+			})
+		}
+	}
+	if len(longRunningOps) > 0 {
 		wg.Go(func() error {
-			or.runWorker(ctx, idx, runForever)
+			or.runWorker(ctx, "long-running", runForever, longRunningOps)
 			return nil
 		})
 	}
@@ -178,38 +194,71 @@ func runOperations(register func(registry.Registry), filter, skip, clusterName s
 	return wgErr
 }
 
-// setWorkerState updates the workerCurrentOperation gauge for a worker,
-// clearing the previous state and setting the new one.
-func (r *opsRunner) setWorkerState(workerLabel, prevOp, prevState, newOp, newState string) {
-	if prevOp != "" && prevState != "" {
-		r.metrics.workerCurrentOperation.
-			WithLabelValues(workerLabel, prevOp, prevState).Set(0)
+// workerStateTracker tracks the current metric state for a single worker,
+// clearing the previous gauge value before setting the new one.
+type workerStateTracker struct {
+	label    string
+	metrics  *operationMetrics
+	curOp    string
+	curState string
+}
+
+func newWorkerStateTracker(label string, metrics *operationMetrics) *workerStateTracker {
+	w := &workerStateTracker{label: label, metrics: metrics}
+	w.setIdle()
+	return w
+}
+
+// transition clears the current gauge and sets the new (op, state) pair.
+func (w *workerStateTracker) transition(op, state string) {
+	if w.curOp != "" && w.curState != "" {
+		w.metrics.workerCurrentOperation.
+			WithLabelValues(w.label, w.curOp, w.curState).Set(0)
 	}
-	if newOp != "" && newState != "" {
-		r.metrics.workerCurrentOperation.
-			WithLabelValues(workerLabel, newOp, newState).Set(1)
+	w.curOp, w.curState = op, state
+	if op != "" && state != "" {
+		w.metrics.workerCurrentOperation.
+			WithLabelValues(w.label, op, state).Set(1)
 	}
 }
 
-// runWorker manages the infinite loop for one operation runner worker.
-func (r *opsRunner) runWorker(ctx context.Context, workerIdx int, runForever bool) {
-	rng := rand.New(rand.NewSource(r.seed + int64(workerIdx)))
-	workerLabel := strconv.Itoa(workerIdx)
+func (w *workerStateTracker) setIdle() {
+	w.transition(workerOperationIdle, workerStateIdle)
+}
 
-	// Start idle.
-	r.setWorkerState(workerLabel, "", "", workerOperationIdle, workerStateIdle)
+func (w *workerStateTracker) setExecuting(opName string) {
+	w.transition(opName, workerStateExecuting)
+}
+
+func (w *workerStateTracker) clear() { w.transition("", "") }
+
+// runWorker manages the loop for one operation runner worker. It
+// selects operations from the given ops slice, executes them, and
+// repeats until the context is cancelled or runForever is false.
+// Both normal and long-running workers use this method — the only
+// difference is the ops slice they receive.
+func (r *opsRunner) runWorker(
+	ctx context.Context, workerLabel string, runForever bool, ops []registry.OperationSpec,
+) {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(workerLabel))
+	rng := rand.New(rand.NewSource(r.seed + int64(h.Sum64())))
+	ws := newWorkerStateTracker(workerLabel, r.metrics)
+	consecutiveMisses := 0
 
 	for {
-		if err := ctx.Err(); err != nil {
-			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, "", "")
+		if ctx.Err() != nil {
+			ws.clear()
 			return
 		}
 
-		opSpec := r.selectOperationToRun(ctx, rng, workerIdx)
+		opSpec := r.selectOperationToRun(ctx, rng, ws, ops)
 		if opSpec == nil {
-			// Already idle, stay idle.
+			consecutiveMisses++
 			sleepDuration := time.Duration(baseSleepTime+rng.Intn(baseSleepTime)) * time.Second
-			r.logger.Printf("[%d] couldn't find candidate operation to run, sleeping for %s", workerIdx, sleepDuration)
+			if consecutiveMisses == 1 || consecutiveMisses%10 == 0 {
+				r.logger.Printf("[%s] couldn't find candidate operation to run (x%d), sleeping for %s", workerLabel, consecutiveMisses, sleepDuration)
+			}
 			select {
 			case <-time.After(sleepDuration):
 			case <-ctx.Done():
@@ -217,31 +266,19 @@ func (r *opsRunner) runWorker(ctx context.Context, workerIdx int, runForever boo
 			}
 			continue
 		}
+		consecutiveMisses = 0
 
-		r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateExecuting)
-		_, deferred := r.runOperation(ctx, opSpec, rng, workerIdx)
-		func() {
-			r.status.Lock()
-			defer r.status.Unlock()
-			defer r.status.operationRunCompleted.Broadcast()
-			if r.status.lockOperationSelection && opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
-				r.status.lockOperationSelection = false
-			}
-			delete(r.status.running, opSpec.NamePrefix())
-			r.status.lastRun[opSpec.NamePrefix()] = timeutil.Now()
-			if deferred {
-				r.status.pendingCleanup[opSpec.NamePrefix()] = struct{}{}
-			}
-		}()
-
-		r.setWorkerState(workerLabel, opSpec.NamePrefix(), workerStateExecuting, workerOperationIdle, workerStateIdle)
+		ws.setExecuting(opSpec.NamePrefix())
+		_, deferred := r.runOperation(ctx, opSpec, rng, workerLabel)
+		r.completeOperation(opSpec, deferred)
+		ws.setIdle()
 
 		if !runForever {
-			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, "", "")
+			ws.clear()
 			return
 		}
 		sleepDuration := time.Duration(1+rng.Intn(2)) * time.Minute
-		r.logger.Printf("[%d] going idle for %s", workerIdx, sleepDuration)
+		r.logger.Printf("[%s] going idle for %s", workerLabel, sleepDuration)
 		select {
 		case <-time.After(sleepDuration):
 		case <-ctx.Done():
@@ -250,63 +287,74 @@ func (r *opsRunner) runWorker(ctx context.Context, workerIdx int, runForever boo
 	}
 }
 
-// selectOperationToRun picks one operation to run, that hasn't been run for at least waitBeforeNextExecution time.
-func (r *opsRunner) selectOperationToRun(
-	ctx context.Context, rng *rand.Rand, workerID int,
-) *registry.OperationSpec {
+// completeOperation updates the status maps after an operation finishes.
+// It removes the operation from running, records lastRun time, optionally
+// marks deferred cleanup, and broadcasts to unblock waiting workers.
+func (r *opsRunner) completeOperation(opSpec *registry.OperationSpec, deferred bool) {
+	r.status.Lock()
+	defer r.status.Unlock()
+	defer r.status.operationRunCompleted.Broadcast()
+	if r.status.lockOperationSelection &&
+		opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
+		r.status.lockOperationSelection = false
+	}
+	key := opSpec.DedupKey()
+	delete(r.status.running, key)
+	r.status.lastRun[key] = timeutil.Now()
+	if deferred {
+		r.status.pendingCleanup[key] = struct{}{}
+	}
+}
 
-	if err := ctx.Err(); err != nil {
+// selectOperationToRun picks one operation from ops to run, that hasn't
+// been run for at least its cadence interval (or the global default).
+func (r *opsRunner) selectOperationToRun(
+	ctx context.Context, rng *rand.Rand, ws *workerStateTracker, ops []registry.OperationSpec,
+) *registry.OperationSpec {
+	if ctx.Err() != nil {
 		return nil
 	}
 
-	// randomly select a candidate operation to run
-	opSpec := r.opsToRun[rng.Intn(len(r.opsToRun))]
+	// Randomly select a candidate operation to run.
+	opSpec := ops[rng.Intn(len(ops))]
 
 	r.status.Lock()
 	defer r.status.Unlock()
 
-	// operation which cannotRunConcurrently with other operation is currently
-	// running by another worker — blocking operation selection for now.
+	// An exclusive operation is currently running — skip selection.
 	if r.status.lockOperationSelection {
 		return nil
 	}
 
-	// operation is already running, choose another one
-	if _, ok := r.status.running[opSpec.NamePrefix()]; ok {
+	if _, ok := r.status.running[opSpec.DedupKey()]; ok {
+		return nil
+	}
+	if _, ok := r.status.pendingCleanup[opSpec.DedupKey()]; ok {
 		return nil
 	}
 
-	// Operation has a deferred cleanup pending; choose another one.
-	if _, ok := r.status.pendingCleanup[opSpec.NamePrefix()]; ok {
-		return nil
-	}
-
-	// If the time since the last run of the operation has not exceeded its
-	// cadence, choose another operation.
-	if lastRun, ok := r.status.lastRun[opSpec.NamePrefix()]; ok {
-		nextRunTime := lastRun.Add(r.waitBeforeNextExecution)
-		if timeutil.Now().Before(nextRunTime) {
+	// Per-operation Cadence overrides the global waitBeforeNextExecution.
+	if lastRun, ok := r.status.lastRun[opSpec.DedupKey()]; ok {
+		cadence := r.waitBeforeNextExecution
+		if opSpec.Cadence > 0 {
+			cadence = opSpec.Cadence
+		}
+		if timeutil.Now().Before(lastRun.Add(cadence)) {
 			return nil
 		}
 	}
 
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.status.lockOperationSelection = true
-		// selected operation cannot run concurrently with other operations —
-		// wait for other running operations and pending cleanups to finish.
-		workerLabel := strconv.Itoa(workerID)
-		for {
-			if len(r.status.running) == 0 && len(r.status.pendingCleanup) == 0 {
-				break
-			}
-			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateWaitingLock)
-			r.logger.Printf("[%d] operation: %s waiting for other operation to complete", workerID, opSpec.Name)
+		for len(r.status.running) > 0 {
+			ws.transition(opSpec.NamePrefix(), workerStateWaitingLock)
+			r.logger.Printf("[%s] operation: %s waiting for other operation to complete", ws.label, opSpec.Name)
 			r.status.operationRunCompleted.Wait()
-			r.setWorkerState(workerLabel, opSpec.NamePrefix(), workerStateWaitingLock, workerOperationIdle, workerStateIdle)
+			ws.setIdle()
 		}
 	}
 
-	r.status.running[opSpec.NamePrefix()] = struct{}{}
+	r.status.running[opSpec.DedupKey()] = struct{}{}
 	return &opSpec
 }
 
@@ -436,7 +484,7 @@ func (r *opsRunner) processCleanups(cleanups []deferredCleanup) {
 		func() {
 			r.status.Lock()
 			defer r.status.Unlock()
-			delete(r.status.pendingCleanup, opName)
+			delete(r.status.pendingCleanup, dc.opSpec.DedupKey())
 			r.status.operationRunCompleted.Broadcast()
 		}()
 	}
@@ -448,13 +496,12 @@ func (r *opsRunner) processCleanups(cleanups []deferredCleanup) {
 // execution and cleanupDeferred is returned as true. The caller must
 // add the operation to pendingCleanup under the status lock.
 func (r *opsRunner) runOperation(
-	ctx context.Context, opSpec *registry.OperationSpec, rng *rand.Rand, workerIdx int,
+	ctx context.Context, opSpec *registry.OperationSpec, rng *rand.Rand, workerLabel string,
 ) (error, bool) {
 	// operationRunID is used for datadog event aggregation and logging.
 	operationRunID := rng.Uint64()
 	opName := opSpec.NamePrefix()
 	owner := string(opSpec.Owner)
-	workerLabel := strconv.Itoa(workerIdx)
 
 	r.metrics.activeOps.WithLabelValues(opName, workerLabel).Inc()
 	defer r.metrics.activeOps.WithLabelValues(opName, workerLabel).Dec()
@@ -490,7 +537,7 @@ func (r *opsRunner) runOperation(
 		startOpts:       config.StartOpts,
 		l:               r.logger,
 		spec:            opSpec,
-		workerId:        workerIdx,
+		workerLabel:     workerLabel,
 	}
 
 	cSpec := spec.ClusterSpec{NodeCount: r.nodeCount}
