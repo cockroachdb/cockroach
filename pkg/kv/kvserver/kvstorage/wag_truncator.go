@@ -7,34 +7,64 @@ package kvstorage
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/time/rate"
 )
 
-// SideloadClearer truncates sideloaded files for a given range up to and
-// including the specified raft log index. Files beyond this index may belong
-// to a newer replica and must be preserved.
-// The SideloadClearer must also sync the sideloaded storage after truncation to
-// avoid leaking the files in case of a node crash.
-type SideloadClearer func(ctx context.Context, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex) error
+// WAGTruncator truncates applied WAG nodes and clears their associated raft
+// state (log entries and sideloaded files). It will be used in two places:
+// 1. On startup, used to truncate all WAG nodes after we replay them.
+// 2. During normal operation, it is used to periodically truncate WAG nodes
+// that are no longer needed.
+// TODO(ibrahim): Add the periodic truncation logic.
+type WAGTruncator struct {
+	st  *cluster.Settings
+	eng Engines
+}
 
-// clearReplicaRaftLog clears raft log entries at or below the given index for
-// a destroyed or subsumed replica.
-func clearReplicaRaftLog(
-	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
-) error {
-	return storage.ClearRangeWithHeuristic(
-		ctx, raft.RO, raft.WO,
-		keys.RaftLogPrefix(rangeID),           /* start */
-		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
-		ClearRangeThresholdPointKeys(),
-	)
+// NewWAGTruncator creates a WAGTruncator.
+func NewWAGTruncator(st *cluster.Settings, eng Engines) *WAGTruncator {
+	return &WAGTruncator{
+		st:  st,
+		eng: eng,
+	}
+}
+
+// TruncateAll truncates all applied WAG nodes. It's meant to be used at engine
+// startup right after we replay the WAG nodes and sync the state engine.
+func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
+	stateReader := t.eng.StateEngine().NewReader(storage.GuaranteedDurability)
+	defer stateReader.Close()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		b := t.eng.LogEngine().NewWriteBatch()
+		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(
+			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader,
+		)
+		if err == nil && truncated {
+			err = b.Commit(false /* sync */)
+		}
+		b.Close()
+		if err != nil {
+			return err
+		}
+		if !truncated {
+			break
+		}
+	}
+	return nil
 }
 
 // truncateAppliedWAGNodeAndClearRaftState checks the first WAG node and
@@ -51,9 +81,12 @@ func clearReplicaRaftLog(
 // not. If the return value is false, it means that either there are no WAG
 // nodes left, or that the WAG node has not been applied to the state engine.
 // Also, an error is returned if the WAG node could not be fetched or deleted.
+//
+// The caller is responsible for creating and committing/closing the write batch
+// in raft.WO.
 // TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
-func truncateAppliedWAGNodeAndClearRaftState(
-	ctx context.Context, raft Raft, stateRO StateRO, clearSideloaded SideloadClearer,
+func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
+	ctx context.Context, raft Raft, stateRO StateRO,
 ) (bool, error) {
 	var iter wag.Iterator
 	for index, node := range iter.Iter(ctx, raft.RO) {
@@ -77,24 +110,56 @@ func truncateAppliedWAGNodeAndClearRaftState(
 			if event.Type != wagpb.EventDestroy && event.Type != wagpb.EventSubsume {
 				continue
 			}
-			if err := clearReplicaRaftLog(ctx, raft, event.Addr.RangeID, event.Addr.Index); err != nil {
+			if err := t.clearReplicaRaftLog(ctx, raft, event.Addr.RangeID, event.Addr.Index); err != nil {
 				return false, errors.Wrapf(err, "clearing raft log for r%d", event.Addr.RangeID)
 			}
-			if clearSideloaded != nil {
-				// In general, we shouldn't delete sideloaded files before committing the
-				// batch that deletes the Raft log entries. However, in this case, we
-				// know that the destroy/subsume event has already been flushed to disk,
-				// and the replica is destroyed. We will not need to reference the
-				// sideloaded files anymore. If we were to delay deleting them till
-				// after the batch is committed, we risk leaking the sideloaded files
-				// if a node crash happens after the batch is committed (and synced) and
-				// before the sideloaded files are deleted.
-				if err := clearSideloaded(ctx, event.Addr.RangeID, event.Addr.Index); err != nil {
-					return false, errors.Wrapf(err, "clearing sideloaded files for r%d", event.Addr.RangeID)
-				}
+			// In general, we shouldn't delete sideloaded files before committing the
+			// batch that deletes the Raft log entries. However, in this case, we
+			// know that the destroy/subsume event has already been flushed to disk,
+			// and the replica is destroyed. We will not need to reference the
+			// sideloaded files anymore. If we were to delay deleting them till
+			// after the batch is committed, we risk leaking the sideloaded files
+			// if a node crash happens after the batch is committed (and synced) and
+			// before the sideloaded files are deleted.
+			if err := t.clearSideloaded(ctx, t.st, t.eng, event.Addr.RangeID, event.Addr.Index); err != nil {
+				return false, errors.Wrapf(err, "clearing sideloaded files for r%d", event.Addr.RangeID)
 			}
 		}
 		return true, nil
 	}
 	return false, iter.Error()
+}
+
+// clearReplicaRaftLog clears raft log entries at or below the given index for
+// a destroyed or subsumed replica.
+func (t *WAGTruncator) clearReplicaRaftLog(
+	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
+) error {
+	return storage.ClearRangeWithHeuristic(
+		ctx, raft.RO, raft.WO,
+		keys.RaftLogPrefix(rangeID),           /* start */
+		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
+		ClearRangeThresholdPointKeys(),
+	)
+}
+
+// clearSideloaded clears sideloaded files belonging to raft log entries at o
+// below the given index for a destroyed or subsumed replica.
+func (t *WAGTruncator) clearSideloaded(
+	ctx context.Context,
+	st *cluster.Settings,
+	eng Engines,
+	rangeID roachpb.RangeID,
+	lastIndex kvpb.RaftIndex,
+) error {
+	// TODO(ibrahim): Consider creating a new logstore struct that is responsible
+	// for deleting sideloaded files only.
+	ss := logstore.NewDiskSideloadStorage(st, rangeID, eng.StateEngine().GetAuxiliaryDir(),
+		rate.NewLimiter(rate.Inf, math.MaxInt64), eng.StateEngine().Env())
+	if err := ss.TruncateTo(ctx, lastIndex); err != nil {
+		return err
+	}
+	// We must sync the sideloaded storage after truncation to avoid leaking the
+	// files in case of a node crash.
+	return ss.Sync()
 }

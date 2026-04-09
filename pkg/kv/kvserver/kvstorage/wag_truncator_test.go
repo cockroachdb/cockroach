@@ -103,46 +103,12 @@ func (e *testEngines) listWAGNodes(t *testing.T) []uint64 {
 	return indices
 }
 
-// makeSideloadClearer returns a SideloadClearer that truncates sideloaded
-// files for a given range using disk-based sideload storage.
-func (e *testEngines) makeSideloadClearer(
-	st *cluster.Settings, baseDir string, env *fs.Env,
-) SideloadClearer {
-	return func(ctx context.Context, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex) error {
-		limiter := rate.NewLimiter(rate.Inf, math.MaxInt64)
-		ss := logstore.NewDiskSideloadStorage(st, rangeID, baseDir, limiter, env)
-		if err := ss.TruncateTo(ctx, lastIndex); err != nil {
-			return err
-		}
-		return ss.Sync()
-	}
-}
-
-// truncateWAGNodes repeatedly calls truncateAppliedWAGNodeAndClearRaftState
-// until no more nodes can be deleted.
-func (e *testEngines) truncateWAGNodes(t *testing.T, clearSideloaded SideloadClearer) {
-	t.Helper()
-	require.NoError(t, e.StateEngine().Flush())
-	stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
-	defer stateReader.Close()
-	for {
-		b := e.LogEngine().NewBatch()
-		ok, err := truncateAppliedWAGNodeAndClearRaftState(context.Background(),
-			Raft{RO: e.LogEngine(), WO: b}, stateReader, clearSideloaded)
-		require.NoError(t, err)
-		require.NoError(t, b.Commit(false /* sync */))
-		b.Close()
-		if !ok {
-			return
-		}
-	}
-}
-
 func TestTruncateApplied(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
 	sl := MakeStateLoader(1 /* rangeID */)
@@ -274,8 +240,10 @@ func TestTruncateApplied(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
+			truncator := NewWAGTruncator(st, e.Engines)
 			tc.setup(t, &e)
-			e.truncateWAGNodes(t, nil /* clearSideloaded */)
+			require.NoError(t, e.stateEngine.Flush())
+			require.NoError(t, truncator.TruncateAll(ctx))
 			require.Equal(t, tc.wantWAGIndices, e.listWAGNodes(t))
 		})
 	}
@@ -289,6 +257,8 @@ func TestTruncateApplied(t *testing.T) {
 func TestTruncateAndClearRaftState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
@@ -298,7 +268,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		t.Run(eventType.String(), func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			ctx := context.Background()
+			truncator := NewWAGTruncator(st, e.Engines)
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
 			e.writeWAGNode(t, wagpb.Event{
@@ -323,18 +293,17 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 				e.writeRaftLogEntry(t, 1 /* rangeID */, kvpb.RaftIndex(idx))
 			}
 
-			// Create sideloaded files using the log engine's VFS.
-			st := cluster.MakeTestingClusterSettings()
-			baseDir := e.LogEngine().GetAuxiliaryDir()
-			env := e.LogEngine().Env()
+			// Create sideloaded files using the state engine's VFS, matching
+			// production where sideloaded entries are on the state engine.
+			baseDir := e.StateEngine().GetAuxiliaryDir()
+			env := e.StateEngine().Env()
 			limiter := rate.NewLimiter(rate.Inf, math.MaxInt64)
 			ss := logstore.NewDiskSideloadStorage(st, 1, baseDir, limiter, env)
 			for _, idx := range []kvpb.RaftIndex{10, 15, 20, 21, 25} {
 				require.NoError(t, ss.Put(ctx, idx, 1 /* term */, []byte("sst-data")))
 			}
-			clearer := e.makeSideloadClearer(st, baseDir, env)
-
-			e.truncateWAGNodes(t, clearer)
+			require.NoError(t, e.stateEngine.Flush())
+			require.NoError(t, truncator.TruncateAll(ctx))
 			// Raft entries <= 20 belong to the old replica and must be deleted. The
 			// rest shouldn't be deleted by the WAG truncator.
 			require.Equal(t,
