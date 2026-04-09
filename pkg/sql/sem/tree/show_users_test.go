@@ -90,6 +90,82 @@ func TestShowUsersFormat(t *testing.T) {
 	}
 }
 
+func TestShowRolesFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name     string
+		node     *tree.ShowRoles
+		expected string
+	}{
+		{
+			name:     "no options",
+			node:     &tree.ShowRoles{},
+			expected: "SHOW ROLES",
+		},
+		{
+			name: "source only",
+			node: &tree.ShowRoles{
+				Options: &tree.ShowUsersOptions{
+					Source: tree.NewStrVal("ldap:ldap.example.com"),
+				},
+			},
+			expected: "SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com'",
+		},
+		{
+			name: "last login before only",
+			node: &tree.ShowRoles{
+				Options: &tree.ShowUsersOptions{
+					LastLoginBefore: tree.NewStrVal("2024-01-01"),
+				},
+			},
+			expected: "SHOW ROLES WITH LAST LOGIN BEFORE '2024-01-01'",
+		},
+		{
+			name: "both options",
+			node: &tree.ShowRoles{
+				Options: &tree.ShowUsersOptions{
+					Source:          tree.NewStrVal("ldap:ldap.example.com"),
+					LastLoginBefore: tree.NewStrVal("2024-01-01"),
+				},
+			},
+			expected: "SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'",
+		},
+		{
+			name: "source with limit",
+			node: &tree.ShowRoles{
+				Options: &tree.ShowUsersOptions{
+					Source: tree.NewStrVal("ldap:ldap.example.com"),
+				},
+				Limit: &tree.Limit{Count: tree.NewDInt(10)},
+			},
+			expected: "SHOW ROLES WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10",
+		},
+		{
+			name: "limit only",
+			node: &tree.ShowRoles{
+				Limit: &tree.Limit{Count: tree.NewDInt(5)},
+			},
+			expected: "SHOW ROLES LIMIT 5",
+		},
+		{
+			name: "nil options pointer",
+			node: &tree.ShowRoles{
+				Options: nil,
+			},
+			expected: "SHOW ROLES",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tree.AsString(tc.node)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
 func TestShowUsersOptionsCombineWith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
