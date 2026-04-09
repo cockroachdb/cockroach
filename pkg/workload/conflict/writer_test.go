@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -166,7 +167,8 @@ func TestWriterRandom(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	rng, _ := randutil.NewTestRand()
-	stmt := ldrrandgen.GenerateLDRTable(ctx, rng, "test_writer", true)
+	writerType := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Default())
+	stmt := ldrrandgen.GenerateLDRTable(ctx, rng, "test_writer", writerType)
 	createStmt := tree.AsStringWithFlags(stmt, tree.FmtParsable)
 
 	runWriterTest(t, ctx, db, "test_writer", createStmt)
