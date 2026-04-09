@@ -512,7 +512,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html"
 pg_catalog,pg_class,table,node,permanent,prefix,"tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html"
 pg_catalog,pg_collation,table,node,permanent,prefix,"available collations (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-collation.html"
+https://www.postgresql.org/docs/18/catalog-pg-collation.html"
 pg_catalog,pg_config,table,node,permanent,prefix,pg_config was created for compatibility and is currently unimplemented
 pg_catalog,pg_constraint,table,node,permanent,prefix,"table constraints (incomplete - see also information_schema.table_constraints)
 https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html"
