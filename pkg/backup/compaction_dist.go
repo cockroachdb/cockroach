@@ -167,9 +167,13 @@ func runCompactionPlan(
 ) error {
 	sql.FinalizePlan(ctx, compactionPlan.planCtx, compactionPlan.plan)
 
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
-			progCh <- meta.BulkProcessorProgress
+			select {
+			case progCh <- meta.BulkProcessorProgress:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 
 		// TODO (kev-cao): Add channel for tracing aggregator events.
