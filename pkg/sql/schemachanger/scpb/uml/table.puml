@@ -157,6 +157,7 @@ object DomainType
 
 DomainType :  TypeID
 DomainType :  ArrayTypeID
+DomainType :  BaseTypeT
 
 object EnumType
 

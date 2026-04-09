@@ -614,6 +614,12 @@ func (p *planner) getFullyQualifiedNamesFromIDs(
 				return nil, err
 			}
 			fullyQualifiedNames = append(fullyQualifiedNames, fName.FQString())
+		case catalog.TypeDescriptor:
+			typeName, err := p.getQualifiedTypeName(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			fullyQualifiedNames = append(fullyQualifiedNames, typeName.FQString())
 		}
 	}
 	return fullyQualifiedNames, nil

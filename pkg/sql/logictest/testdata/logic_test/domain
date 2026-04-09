@@ -736,3 +736,14 @@ statement ok
 DROP DOMAIN d_atom
 
 subtest end
+
+
+# Ensure dropping the base enum type doesn't break the domain.
+subtest domain_drop_base_enum
+
+statement ok
+CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy', 'ecstatic');
+CREATE DOMAIN positive_mood AS mood CHECK (VALUE IN ('happy', 'ecstatic'));
+
+statement error pgcode 2BP01 cannot drop type "mood" because other objects \(\[test.public.positive_mood\]\) still depend on it
+DROP TYPE mood;
