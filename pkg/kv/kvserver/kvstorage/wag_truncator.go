@@ -51,7 +51,7 @@ func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
 		}
 		b := t.eng.LogEngine().NewWriteBatch()
 		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(
-			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader,
+			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader, 0, /* index */
 		)
 		if err == nil && truncated {
 			err = b.Commit(false /* sync */)
@@ -67,29 +67,43 @@ func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
 	return nil
 }
 
-// truncateAppliedWAGNodeAndClearRaftState checks the first WAG node and
-// deletes it if all of its events have been applied to the state engine. For
-// nodes containing EventDestroy or EventSubsume events, it also clears the
-// corresponding raft log prefix from the engine and the sideloaded entries
-// storage.
-//
-// The caller must provide a stateRO reader with GuaranteedDurability so that
-// only state confirmed flushed to persistent storage is visible. This ensures
-// we never delete a WAG node whose mutations aren't flushed yet.
+// truncateAppliedWAGNodeAndClearRaftState deletes a WAG node if all of its
+// events have been applied to the state engine. For nodes containing
+// EventDestroy or EventSubsume events, it also clears the corresponding raft
+// log prefix from the engine and the sideloaded entries storage.
+// If truncateIndex is 0, the function deletes the first WAG node regardless of
+// its index. Otherwise, it only deletes the node matching truncateIndex if it
+// exists.
 //
 // Returns a boolean indicating whether a node was successfully truncated or
 // not. If the return value is false, it means that either there are no WAG
 // nodes left, or that the WAG node has not been applied to the state engine.
 // Also, an error is returned if the WAG node could not be fetched or deleted.
 //
-// The caller is responsible for creating and committing/closing the write batch
-// in raft.WO.
+// The caller must provide a stateRO reader with GuaranteedDurability so that
+// only state confirmed flushed to persistent storage is visible. This ensures
+// we never delete a WAG node whose mutations aren't flushed yet. The caller is
+// also responsible for creating and committing/closing the write batch in
+// raft.WO.
 // TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
 func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
-	ctx context.Context, raft Raft, stateRO StateRO,
+	ctx context.Context, raft Raft, stateRO StateRO, truncateIndex uint64,
 ) (bool, error) {
 	var iter wag.Iterator
-	for index, node := range iter.Iter(ctx, raft.RO) {
+	var iterStartKey roachpb.Key
+	if truncateIndex == 0 {
+		// Delete the first WAG node that exists, regardless of its index.
+		iterStartKey = keys.StoreWAGPrefix()
+	} else {
+		// Only delete the WAG node with the expected index.
+		iterStartKey = keys.StoreWAGNodeKey(truncateIndex)
+	}
+
+	for index, node := range iter.IterFrom(ctx, raft.RO, iterStartKey) {
+		if truncateIndex != 0 && truncateIndex != index {
+			return false, nil
+		}
+
 		// TODO(ibrahim): Right now, the canApplyWAGNode function returns a list of
 		// raftCatchUpTargets that are not needed for the purposes of truncation,
 		// consider refactoring the function to return only the needed info.
