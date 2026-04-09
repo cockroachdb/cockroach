@@ -442,17 +442,14 @@ Informs: #<issue>
 Release note: None
 ```
 
-### Step 7: Create the PR
+### Step 7: Commit and Stop
 
-Create a PR with all three commits. The description should explain:
+Use the `/commit-helper` skill to create the three commits with properly
+formatted messages and release notes.
 
-- The root cause of the flake
-- How the repro works (briefly)
-- How the fix handles the scenario
-- That the commits are structured as repro → fix → revert-repro, and
-  squash cleanly to just the fix
-
-Use the `/commit-helper` skill for formatting commit messages and the PR.
+After committing, **stop**. Do not run `gh pr create` or create a PR.
+Present a summary of what was done and let the user decide when and how
+to create the PR.
 
 ## Reference: Example PR
 
