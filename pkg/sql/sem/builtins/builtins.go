@@ -13012,6 +13012,7 @@ argument is true, then the bundle will be redacted`
 				antiPlanGist,
 				samplingProbability,
 				minExecutionLatency,
+				0, // TODO(#161004): expose maxExecutionLatency in builtin API.
 				expiresAfter,
 				redacted,
 				username,

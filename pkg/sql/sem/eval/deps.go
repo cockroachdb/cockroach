@@ -855,6 +855,7 @@ type StmtDiagnosticsRequestInsertFunc func(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,

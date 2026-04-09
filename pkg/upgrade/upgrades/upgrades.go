@@ -186,6 +186,14 @@ var upgrades = []upgradebase.Upgrade{
 	),
 
 	newFirstUpgrade(clusterversion.V26_3_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
+		"add max_execution_latency column to diagnostics requests tables",
+		clusterversion.V26_3_StmtDiagnosticsMaxLatency.Version(),
+		upgrade.NoPrecondition,
+		diagnosticsAddMaxLatencyColumn,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
