@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -728,6 +729,39 @@ func TestMemoIsStale(t *testing.T) {
 	stale()
 	evalCtx.SessionData().RowSecurity = false
 	notStale()
+
+	// The usingHintInjection staleness check is one-directional (#167322). A
+	// memo built WITHOUT hints should NOT be stale when we're now using hint
+	// injection (allows reusing a prepared memo from a failed hint attempt). A
+	// memo built WITH hints SHOULD be stale when we're no longer using hint
+	// injection (needed for fallback after hint failure at execution time).
+	//
+	// The memo was built with Planner=nil, so usingHintInjection=false.
+	// Setting Planner to one that returns UsingHintInjection()=true should NOT
+	// make it stale.
+	evalCtx.Planner = &hintInjectionPlanner{}
+	notStale()
+
+	// Now build a memo WITH hint injection and verify the reverse: it should be
+	// stale when we're no longer using hint injection.
+	var oHint xform.Optimizer
+	opttestutils.BuildQuery(t, &oHint, catalog, &evalCtx, query)
+	oHint.Memo().Metadata().AddSchema(catalog.Schema())
+	// With the same planner, the hint memo should not be stale.
+	if isStale, err := oHint.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("hint memo should not be stale with hint planner")
+	}
+	// Without hint injection, the hint memo should be stale.
+	evalCtx.Planner = nil
+	if isStale, err := oHint.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if !isStale {
+		t.Errorf("hint memo should be stale without hint planner")
+	}
+
+	notStale() // original (non-hint) memo should still not be stale
 }
 
 // TestStatsAvailable tests that the statisticsBuilder correctly identifies
@@ -834,4 +868,14 @@ func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 			return tester.RunCommand(t, d)
 		})
 	})
+}
+
+// hintInjectionPlanner is a test planner that returns true for
+// UsingHintInjection.
+type hintInjectionPlanner struct {
+	faketreeeval.DummyEvalPlanner
+}
+
+func (p *hintInjectionPlanner) UsingHintInjection() bool {
+	return true
 }

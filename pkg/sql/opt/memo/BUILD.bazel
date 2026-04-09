@@ -87,6 +87,7 @@ go_test(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/username",
         "//pkg/settings/cluster",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",

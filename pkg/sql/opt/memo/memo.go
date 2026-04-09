@@ -531,7 +531,14 @@ func (m *Memo) IsStale(
 		m.clampLowHistogramSelectivity != evalCtx.SessionData().OptimizerClampLowHistogramSelectivity ||
 		m.clampInequalitySelectivity != evalCtx.SessionData().OptimizerClampInequalitySelectivity ||
 		m.useMaxFrequencySelectivity != evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity ||
-		m.usingHintInjection != (evalCtx.Planner != nil && evalCtx.Planner.UsingHintInjection()) ||
+		// A memo built with hint injection is stale when we're no longer using
+		// hint injection (e.g., hints failed at execution time and we need to
+		// fall back). But a memo built without hint injection is NOT stale when
+		// we're now using hint injection — this allows a prepared memo from a
+		// failed hint attempt to be reused without being invalidated on every
+		// execution. Changes to the hints themselves are detected separately by
+		// the hintIDs check in Metadata.CheckDependencies. See #167322.
+		(m.usingHintInjection && !(evalCtx.Planner != nil && evalCtx.Planner.UsingHintInjection())) ||
 		m.useSwapMutations != evalCtx.SessionData().UseSwapMutations ||
 		m.preventUpdateSetColumnDrop != evalCtx.SessionData().PreventUpdateSetColumnDrop ||
 		m.useImprovedRoutineDepsTriggersComputedCols != evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols ||

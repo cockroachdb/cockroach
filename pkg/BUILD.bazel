@@ -1241,6 +1241,8 @@ GO_TARGETS = [
     "//pkg/cmd/github-pull-request-make:github-pull-request-make_test",
     "//pkg/cmd/gossipsim:gossipsim",
     "//pkg/cmd/gossipsim:gossipsim_lib",
+    "//pkg/cmd/importrepl:importrepl",
+    "//pkg/cmd/importrepl:importrepl_lib",
     "//pkg/cmd/kv/datadoggen:datadoggen",
     "//pkg/cmd/kv/datadoggen:datadoggen_lib",
     "//pkg/cmd/kv/datadoggen:datadoggen_test",
