@@ -12,6 +12,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -35,6 +36,9 @@ func TestScheduler(t *testing.T) {
 
 	makeHlc := func(t int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: int64(t)}
+	}
+	makeTxnID := func(t int) ldrdecoder.TxnID {
+		return ldrdecoder.TxnID{Timestamp: makeHlc(t)}
 	}
 
 	testCases := []testCase{
@@ -128,8 +132,8 @@ func TestScheduler(t *testing.T) {
 					})
 				}
 				transaction := Transaction{
-					CommitTime: makeHlc(txn.time),
-					Locks:      locks,
+					TxnID: makeTxnID(txn.time),
+					Locks: locks,
 				}
 				deps, horizon := scheduler.Schedule(transaction, nil)
 				require.Equal(t, makeHlc(txn.expectedHorizon), horizon)
@@ -140,7 +144,7 @@ func TestScheduler(t *testing.T) {
 
 				require.Equal(t, len(txn.expectedDependencies), len(deps))
 				for i, dep := range txn.expectedDependencies {
-					expectedDep := makeHlc(dep)
+					expectedDep := makeTxnID(dep)
 					require.Equal(t, expectedDep, deps[i])
 				}
 			}
@@ -171,6 +175,9 @@ func TestSchedulerAlternatingWriteReadRuns(t *testing.T) {
 	makeHlc := func(ts int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: int64(ts)}
 	}
+	makeTxnID := func(ts int) ldrdecoder.TxnID {
+		return ldrdecoder.TxnID{Timestamp: makeHlc(ts)}
+	}
 
 	rng := rand.New(rand.NewSource(42))
 	scheduler := NewScheduler(10000)
@@ -181,7 +188,7 @@ func TestSchedulerAlternatingWriteReadRuns(t *testing.T) {
 		ts++
 		t.Logf("txn: %d isRead: %t", ts, isRead)
 		return Transaction{
-			CommitTime: makeHlc(ts),
+			TxnID: makeTxnID(ts),
 			Locks: []txnlock.Lock{{
 				Hash: hash,
 				Read: isRead,
@@ -189,8 +196,8 @@ func TestSchedulerAlternatingWriteReadRuns(t *testing.T) {
 		}
 	}
 
-	var lastWriteTxn hlc.Timestamp
-	var readTxns []hlc.Timestamp
+	var lastWriteTxn ldrdecoder.TxnID
+	var readTxns []ldrdecoder.TxnID
 
 	for range 20 {
 		for range rng.Intn(10) + 1 {
@@ -200,12 +207,12 @@ func TestSchedulerAlternatingWriteReadRuns(t *testing.T) {
 			require.True(t, horizon.IsEmpty())
 
 			expect := readTxns
-			if !lastWriteTxn.IsEmpty() {
-				expect = append([]hlc.Timestamp{lastWriteTxn}, readTxns...)
+			if lastWriteTxn.IsSet() {
+				expect = append([]ldrdecoder.TxnID{lastWriteTxn}, readTxns...)
 			}
 			require.Equal(t, expect, dependencies)
 
-			lastWriteTxn = txn.CommitTime
+			lastWriteTxn = txn.TxnID
 			readTxns = nil
 		}
 
@@ -214,9 +221,9 @@ func TestSchedulerAlternatingWriteReadRuns(t *testing.T) {
 
 			dependencies, horizon := scheduler.Schedule(txn, nil)
 			require.True(t, horizon.IsEmpty())
-			require.Equal(t, []hlc.Timestamp{lastWriteTxn}, dependencies)
+			require.Equal(t, []ldrdecoder.TxnID{lastWriteTxn}, dependencies)
 
-			readTxns = append(readTxns, txn.CommitTime)
+			readTxns = append(readTxns, txn.TxnID)
 		}
 	}
 
@@ -254,20 +261,20 @@ func TestSchedulerRandomOracle(t *testing.T) {
 
 				// Filter out oracle dependencies at or before the event
 				// horizon. The scheduler subsumes these into the horizon.
-				var expectedDeps []hlc.Timestamp
+				var expectedDeps []ldrdecoder.TxnID
 				for _, dep := range oracleDeps[txnID] {
-					if gotHorizon.Less(dep) {
+					if gotHorizon.Less(dep.Timestamp) {
 						expectedDeps = append(expectedDeps, dep)
 					}
 				}
 
-				slices.SortFunc(gotDeps, func(a, b hlc.Timestamp) int {
-					return a.Compare(b)
+				slices.SortFunc(gotDeps, func(a, b ldrdecoder.TxnID) int {
+					return a.Timestamp.Compare(b.Timestamp)
 				})
 
 				require.Equal(t, expectedDeps, gotDeps,
 					"txnID=%d commitTime=%s horizon=%s",
-					txnID, txn.CommitTime, gotHorizon,
+					txnID, txn.TxnID, gotHorizon,
 				)
 			}
 
@@ -316,7 +323,7 @@ const (
 // {txn0, txn1}.
 func generateOracleTable(
 	rng *rand.Rand, numTransactions int, numLocks int,
-) (transactions []Transaction, oracleDeps [][]hlc.Timestamp) {
+) (transactions []Transaction, oracleDeps [][]ldrdecoder.TxnID) {
 	// Randomly select the distribution thresholds. noneThreshold is in
 	// [1,98] and readThreshold is in (noneThreshold, 99], so all three
 	// statuses always have a nonzero probability.
@@ -381,25 +388,25 @@ func generateOracleTable(
 	}
 
 	transactions = make([]Transaction, numTransactions)
-	oracleDeps = make([][]hlc.Timestamp, numTransactions)
+	oracleDeps = make([][]ldrdecoder.TxnID, numTransactions)
 	for txnID := range numTransactions {
 		transactions[txnID] = Transaction{
-			CommitTime: hlc.Timestamp{WallTime: int64(txnID + 1)},
-			Locks:      txnLocks[txnID],
+			TxnID: ldrdecoder.TxnID{Timestamp: hlc.Timestamp{WallTime: int64(txnID + 1)}},
+			Locks: txnLocks[txnID],
 		}
 
 		deps := depSets[txnID]
 		if len(deps) == 0 {
 			continue
 		}
-		ts := make([]hlc.Timestamp, 0, len(deps))
+		ids := make([]ldrdecoder.TxnID, 0, len(deps))
 		for dep := range deps {
-			ts = append(ts, hlc.Timestamp{WallTime: int64(dep + 1)})
+			ids = append(ids, ldrdecoder.TxnID{Timestamp: hlc.Timestamp{WallTime: int64(dep + 1)}})
 		}
-		slices.SortFunc(ts, func(a, b hlc.Timestamp) int {
-			return a.Compare(b)
+		slices.SortFunc(ids, func(a, b ldrdecoder.TxnID) int {
+			return a.Timestamp.Compare(b.Timestamp)
 		})
-		oracleDeps[txnID] = ts
+		oracleDeps[txnID] = ids
 	}
 	return transactions, oracleDeps
 }

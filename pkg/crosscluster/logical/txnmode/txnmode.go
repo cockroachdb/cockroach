@@ -356,21 +356,15 @@ func (p *TxnLdrCoordinator) stageSchedule(
 				// table capacity; it ensures the applier waits for all
 				// transactions up to that timestamp before applying.
 				schedulerTxn := txnscheduler.Transaction{
-					CommitTime: batch.transactions[i].TxnID.Timestamp,
-					Locks:      lockSet.Locks,
+					TxnID: batch.transactions[i].TxnID,
+					Locks: lockSet.Locks,
 				}
 				dependencies, eventHorizon := scheduler.Schedule(schedulerTxn, nil)
-
-				// Convert hlc.Timestamp dependencies to TxnIDs.
-				txnDeps := make([]ldrdecoder.TxnID, len(dependencies))
-				for j, ts := range dependencies {
-					txnDeps[j] = ldrdecoder.TxnID{Timestamp: ts, ApplierID: applierID}
-				}
 
 				// Send the scheduled transaction to the applier.
 				scheduled := txnapply.ScheduledTransaction{
 					Transaction:  batch.transactions[i],
-					Dependencies: txnDeps,
+					Dependencies: dependencies,
 					EventHorizon: eventHorizon,
 				}
 

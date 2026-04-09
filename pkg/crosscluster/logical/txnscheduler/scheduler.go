@@ -8,6 +8,7 @@ package txnscheduler
 import (
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -73,15 +74,15 @@ type Scheduler struct {
 // Schedule requires the lock hashes within each transaction to be unique.
 // Duplicates must be filtered out at the lock synthesis phase.
 func (s *Scheduler) Schedule(
-	transaction Transaction, dependenciesBuffer []hlc.Timestamp,
-) ([]hlc.Timestamp, hlc.Timestamp) {
+	transaction Transaction, dependenciesBuffer []ldrdecoder.TxnID,
+) ([]ldrdecoder.TxnID, hlc.Timestamp) {
 	for s.lockTable.availableCapacity() < len(transaction.Locks) {
 		if s.transactions.Len() == 0 {
 			// If we still can't fit the transaction even after forgetting the locks of
 			// every tracked transaction it means the transaction is too big to fit in
 			// the table.
 			horizon := s.eventHorizon
-			s.eventHorizon = transaction.CommitTime
+			s.eventHorizon = transaction.TxnID.Timestamp
 			return nil, horizon
 		}
 		s.pushEventHorizon()
@@ -101,16 +102,16 @@ func (s *Scheduler) Schedule(
 			dependencies = s.lockTable.appendWriteDependency(entryIndex, dependencies)
 		}
 		if lock.Read {
-			s.lockMap[lock.Hash] = s.lockTable.recordReadLock(entryIndex, transaction.CommitTime)
+			s.lockMap[lock.Hash] = s.lockTable.recordReadLock(entryIndex, transaction.TxnID)
 		} else {
-			s.lockMap[lock.Hash] = s.lockTable.recordWriteLock(entryIndex, transaction.CommitTime)
+			s.lockMap[lock.Hash] = s.lockTable.recordWriteLock(entryIndex, transaction.TxnID)
 		}
 	}
 
 	// Its possible we ended up with duplicate dependencies if two transactions
 	// overlap on more than one lock. Filter it out here.
-	slices.SortFunc(dependencies, func(a hlc.Timestamp, b hlc.Timestamp) int {
-		return a.Compare(b)
+	slices.SortFunc(dependencies, func(a, b ldrdecoder.TxnID) int {
+		return a.Timestamp.Compare(b.Timestamp)
 	})
 	dependencies = slices.Compact(dependencies)
 
@@ -123,7 +124,7 @@ func (s *Scheduler) Schedule(
 func (s *Scheduler) pushEventHorizon() {
 	txn := s.transactions.GetFirst()
 	s.transactions.RemoveFirst()
-	s.eventHorizon = txn.CommitTime
+	s.eventHorizon = txn.TxnID.Timestamp
 	for _, lock := range txn.Locks {
 		locks, exists := s.lockMap[lock.Hash]
 		if !exists {
@@ -137,9 +138,9 @@ func (s *Scheduler) pushEventHorizon() {
 		}
 
 		if lock.Read {
-			locks, exists = s.lockTable.removeReadLock(locks, txn.CommitTime)
+			locks, exists = s.lockTable.removeReadLock(locks, txn.TxnID)
 		} else {
-			locks, exists = s.lockTable.removeWriteLock(locks, txn.CommitTime)
+			locks, exists = s.lockTable.removeWriteLock(locks, txn.TxnID)
 		}
 
 		if exists {
