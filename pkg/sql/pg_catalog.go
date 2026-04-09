@@ -890,6 +890,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull,                     // relpages
 			tree.DNull,                     // reltuples
 			zeroVal,                        // relallvisible
+			zeroVal,                        // relallfrozen
 			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 			tree.DBoolFalse, // relisshared
@@ -951,6 +952,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull,                               // relpages
 				tree.DNull,                               // reltuples
 				zeroVal,                                  // relallvisible
+				zeroVal,                                  // relallfrozen
 				oidZero,                                  // reltoastrelid
 				tree.DBoolFalse,                          // relhasindex
 				tree.DBoolFalse,                          // relisshared
@@ -3988,6 +3990,7 @@ func addPGClassRowForCompositeType(
 		tree.DNull,                      // relpages
 		tree.DNull,                      // reltuples
 		zeroVal,                         // relallvisible
+		zeroVal,                         // relallfrozen
 		oidZero,                         // reltoastrelid
 		tree.DBoolFalse,                 // relhasindex (composite types implemented as virtual tables - no indexes)
 		tree.DBoolFalse,                 // relisshared

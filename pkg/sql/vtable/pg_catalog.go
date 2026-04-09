@@ -156,7 +156,7 @@ CREATE TABLE pg_catalog.pg_available_extensions (
 )`
 
 // PGCatalogClass describes the schema of the pg_catalog.pg_class table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-class.html,
+// https://www.postgresql.org/docs/18/catalog-pg-class.html,
 const PGCatalogClass = `
 CREATE TABLE pg_catalog.pg_class (
 	oid OID NOT NULL,
@@ -171,6 +171,7 @@ CREATE TABLE pg_catalog.pg_class (
 	relpages INT4,
 	reltuples FLOAT4,
 	relallvisible INT4,
+	relallfrozen INT4,
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
