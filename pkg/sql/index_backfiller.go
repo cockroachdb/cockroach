@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -567,6 +569,18 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			execinfrapb.BulkMergeSpec_BACKFILL_MONITOR,
 		)
 		if err != nil {
+			// Convert DuplicateKeyError into a user-facing uniqueness
+			// constraint violation, matching the non-distributed backfill
+			// path (see indexBackfiller.wrapDupError).
+			var dupErr *kvserverbase.DuplicateKeyError
+			if errors.As(err, &dupErr) {
+				desc, descErr := descriptor.MakeFirstMutationPublic()
+				if descErr != nil {
+					return descErr
+				}
+				v := &roachpb.Value{RawBytes: dupErr.Value}
+				return row.NewUniquenessConstraintViolationError(ctx, desc, dupErr.Key, v)
+			}
 			return err
 		}
 

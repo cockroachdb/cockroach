@@ -7,6 +7,7 @@ package kvserverbase
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -14,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // BulkAdderOptions is used to configure the behavior of a BulkAdder.
@@ -126,4 +129,46 @@ func NewDuplicateKeyError(key roachpb.Key, value []byte) error {
 	}
 	ret.Value = append(ret.Value, value...)
 	return ret
+}
+
+func encodeDuplicateKeyError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	t := (*DuplicateKeyError)(nil)
+	if !errors.As(err, &t) {
+		return "", nil, nil
+	}
+	details = &errorspb.StringsPayload{
+		Details: []string{
+			hex.EncodeToString(t.Key),
+			hex.EncodeToString(t.Value),
+		},
+	}
+	msgPrefix = t.Error()
+	return msgPrefix, nil, details
+}
+
+func decodeDuplicateKeyError(_ context.Context, _ string, _ []string, payload proto.Message) error {
+	m, ok := payload.(*errorspb.StringsPayload)
+	if !ok || len(m.Details) < 2 {
+		return nil
+	}
+	key, err := hex.DecodeString(m.Details[0])
+	if err != nil {
+		return nil //nolint:returnerrcheck
+	}
+	value, err := hex.DecodeString(m.Details[1])
+	if err != nil {
+		return nil //nolint:returnerrcheck
+	}
+	return &DuplicateKeyError{
+		Key:   key,
+		Value: value,
+	}
+}
+
+func init() {
+	pKey := errors.GetTypeKey((*DuplicateKeyError)(nil))
+	errors.RegisterLeafEncoder(pKey, encodeDuplicateKeyError)
+	errors.RegisterLeafDecoder(pKey, decodeDuplicateKeyError)
 }

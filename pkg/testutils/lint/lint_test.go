@@ -1637,6 +1637,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.gw.go",
 			":!ccl/changefeedccl/changefeedbase/errors.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
+			":!kv/kvserver/kvserverbase/bulk_adder.go",
 			":!spanconfig/errors.go",
 			":!kv/kvpb/replica_unavailable_error.go",
 			":!kv/kvpb/ambiguous_result_error.go",
