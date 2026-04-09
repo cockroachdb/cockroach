@@ -87,7 +87,7 @@ regions: <hidden>
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ execution time: 0µs
-        │ equality: (column85) = (table_id)
+        │ equality: (column86) = (table_id)
         │
         ├── • render
         │   │ execution time: 0µs
@@ -96,7 +96,7 @@ regions: <hidden>
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
         │       │ execution time: 0µs
-        │       │ equality: (column66) = (table_id)
+        │       │ equality: (column67) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render

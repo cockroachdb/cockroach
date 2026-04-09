@@ -4,7 +4,7 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 16,
+    "MissingColumns": 15,
     "DatatypeMismatches": 19
   },
   "diffs": {
@@ -18,9 +18,6 @@
       }
     },
     "pg_backend_memory_contexts": {},
-    "pg_class": {
-      "relallfrozen": null
-    },
     "pg_collation": {
       "collicurules": null,
       "colllocale": null,

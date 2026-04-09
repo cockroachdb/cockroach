@@ -1041,7 +1041,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/t - /t]
@@ -1053,7 +1053,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/3 - /3]
@@ -1065,7 +1065,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/106 - /106]
@@ -1077,7 +1077,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/101 - /101]
