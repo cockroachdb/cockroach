@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -273,16 +274,10 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 			truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{}, e.Engines, &e.seq)
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 10), Type: wagpb.EventInit,
-			})
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 20), Type: eventType,
-			})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 10), Type: wagpb.EventInit})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 20), Type: eventType})
 			// Create a WAG node for a newer replica for the same range.
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r2, 0), Type: wagpb.EventCreate,
-			})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r2, 0), Type: wagpb.EventCreate})
 
 			// Tombstone confirms destruction/subsumption.
 			require.NoError(t, sl.SetRangeTombstone(ctx, e.StateEngine(),
@@ -374,19 +369,11 @@ func TestTruncateAppliedNodes(t *testing.T) {
 			defer e.Close()
 			// Write WAG nodes at indices 2, 4, 5.
 			e.seq.Next()
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
-			})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate})
 			e.seq.Next()
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
-			})
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
-			})
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply,
-			})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply})
+			e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply})
 			truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{}, e.Engines, &e.seq)
 			truncator.lastWAGIndexBeforeStartup = tc.lastIndexBeforeStartup
 			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
@@ -400,4 +387,84 @@ func TestTruncateAppliedNodes(t *testing.T) {
 			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
 		})
 	}
+}
+
+// TestWAGTruncatorBackground verifies that the WAGTruncator background
+// goroutine only truncates WAG nodes when both conditions are met: (1) the
+// state engine has flushed, and (2) there are WAG nodes that are eligible for
+// truncation.
+func TestWAGTruncatorBackground(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	e := makeTestEngines()
+	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+
+	// Initialize replica state so events can be considered applied.
+	require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 100}))
+
+	// Write two WAG nodes whose events are applied with a gap in between them.
+	// This is to simulate some WAG nodes at engine startup.
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 10), Type: wagpb.EventInit})
+	e.seq.Next()
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply})
+
+	// Start the periodic WAG truncation background task with a knob that
+	// signals when truncation completes, so the test can synchronize
+	// deterministically instead of polling.
+	truncationDone := make(chan struct{}, 1)
+	truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{
+		AfterTruncationCallback: func() {
+			truncationDone <- struct{}{}
+		},
+	}, e.Engines, &e.seq,
+	)
+	// Start the periodic WAG truncation background task.
+	require.NoError(t, truncator.Start(ctx, stopper))
+	// Create a WAG node after startup.
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 30), Type: wagpb.EventApply})
+	require.Equal(t, []uint64{1, 3, 4}, e.listWAGNodes(t))
+
+	flushAndWaitForTruncation := func() {
+		require.NoError(t, e.StateEngine().Flush())
+		truncator.DurabilityAdvancedCallback()
+		<-truncationDone
+	}
+	// We expect all WAG nodes to be truncated when the state engine is flushed.
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(4), truncator.lastTruncatedWAGIndex.Load())
+
+	// Write two WAG nodes whose events are applied (index <= 100).
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 40), Type: wagpb.EventApply})
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 50), Type: wagpb.EventApply})
+	require.Equal(t, []uint64{5, 6}, e.listWAGNodes(t))
+
+	// Now flush the state engine and signal again. Both nodes should be
+	// truncated since their events are applied.
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(6), truncator.lastTruncatedWAGIndex.Load())
+
+	// Write another WAG node but it is NOT applied yet.
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 200), Type: wagpb.EventApply})
+	flushAndWaitForTruncation()
+	// Node 7 should remain because its event isn't applied yet.
+	require.Equal(t, []uint64{7}, e.listWAGNodes(t))
+	require.Equal(t, uint64(6), truncator.lastTruncatedWAGIndex.Load())
+
+	// Advance the applied index past 200 and flush. Now node 7 should be
+	// truncated.
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 200}))
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(7), truncator.lastTruncatedWAGIndex.Load())
 }
