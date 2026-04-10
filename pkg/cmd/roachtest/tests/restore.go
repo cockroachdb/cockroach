@@ -842,6 +842,9 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
+	// TODO (kev-cao): Once the restore roachtests are updated to use the IDs, we
+	// can remove this.
+	defer disableUseBackupsWithIDs(ctx, rd.t, conn)()
 	aostCmd := rd.sp.getFullBackupEndTimeCmd(ctx, rd.t, rd.collectionURI)
 	err := conn.QueryRowContext(ctx, aostCmd).Scan(&aost)
 	require.NoError(rd.t, err, fmt.Sprintf("aost cmd failed: %s", aostCmd))

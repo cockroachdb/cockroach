@@ -507,6 +507,44 @@ func (d BackupRestoreTestDriver) getORDownloadJobID(
 func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
+	if _, err := db.ExecContext(ctx, "SET use_backups_with_ids = true"); err != nil {
+		return err
+	}
+	rows, err := db.QueryContext(
+		ctx,
+		`SELECT id FROM [SHOW BACKUPS IN $1]`,
+		collection.uri(),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "failed to query for backup ids in %q", collection.uri())
+	}
+	defer rows.Close()
+	var backupIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return errors.Wrap(err, "error scanning SHOW BACKUPS row")
+		}
+		backupIDs = append(backupIDs, id)
+	}
+
+	for _, backupID := range backupIDs {
+		if err := d.deleteSSTFromBackup(ctx, l, db, collection, backupID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// deleteSSTFromBackup deletes one SST file from the specified backup in a
+// collection.
+func (d *BackupRestoreTestDriver) deleteSSTFromBackup(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	collection *backupCollection,
+	backupID string,
+) error {
 	type sstInfo struct {
 		path, start, end string
 		bytes, rows      int
@@ -519,7 +557,7 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 		// the missing file.
 		`WITH with_dir AS (
 			SELECT *, regexp_replace(path, '/[^/]+\.sst$', '') AS dir
-			FROM [SHOW BACKUP FILES FROM LATEST IN $1]
+			FROM [SHOW BACKUP FILES FROM $1 IN $2]
 		)
 		SELECT path, start_pretty, end_pretty, size_bytes, rows
 		FROM (
@@ -527,10 +565,11 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 			FROM with_dir
 		)
 		WHERE rn = 1`,
+		backupID,
 		collection.uri(),
 	)
 	if err != nil {
-		return errors.Wrapf(err, "failed to query for backup files in %q", collection.uri())
+		return errors.Wrapf(err, "failed to query for backup files in backup %q of collection %q", backupID, collection.uri())
 	}
 	defer rows.Close()
 	var ssts []sstInfo
@@ -545,7 +584,7 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 		return errors.Wrap(rows.Err(), "error iterating over SHOW BACKUP FILES")
 	}
 	if len(ssts) == 0 {
-		return errors.Newf("unexpectedly found no SST files to delete in %q", collection.uri())
+		return errors.Newf("unexpectedly found no SST files to delete in backup %q of collection %q", backupID, collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
@@ -576,7 +615,7 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 			return errors.Wrapf(
 				err, "failed to rename sst %s from backup %s in collection %s",
 				sst.path,
-				collection.name,
+				backupID,
 				uri,
 			)
 		}
@@ -962,8 +1001,11 @@ func (cb *CollectionBuilder) TakeCompacted(
 
 	var fullPath string
 	_, db := cb.driver.testUtils.RandomDB(cb.rng, cb.driver.roachNodes)
+	if _, err := db.ExecContext(ctx, "SET use_backups_with_ids = true"); err != nil {
+		return 0, err
+	}
 	row := db.QueryRowContext(ctx, fmt.Sprintf(
-		`SELECT path FROM [SHOW BACKUPS IN '%s'] ORDER BY path DESC LIMIT 1`,
+		`SELECT full_subdir FROM [SHOW BACKUPS IN '%s' WITH DEBUG] LIMIT 1`,
 		cb.collection.uri(),
 	))
 	if err := row.Scan(&fullPath); err != nil {

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -716,12 +717,16 @@ func (u *CommonTestUtils) checkFiles(
 	if opt := collection.encryptionOption(); opt != nil {
 		options = append(options, opt.String())
 	}
-
+	// TODO (kev-cao): Need to update this once we've decided how we want to
+	// handle CHECK FILES under the new SHOW BACKUPS.
+	_, conn := u.RandomDB(rng, u.roachNodes)
+	defer disableUseBackupsWithIDs(ctx, u.t, conn)()
 	checkFilesStmt := fmt.Sprintf(
 		"SHOW BACKUP LATEST IN '%s' WITH %s",
 		collection.uri(), strings.Join(options, ", "),
 	)
-	return u.Exec(ctx, rng, checkFilesStmt)
+	_, err := conn.Exec(checkFilesStmt)
+	return err
 }
 
 func supportsCheckFiles(rng *rand.Rand, h *mixedversion.Helper) (bool, error) {
@@ -950,4 +955,20 @@ func prepSchemaChangeWorkload(
 		return err
 	}
 	return nil
+}
+
+// disableUseBackupsWithIDs disables the `use_backups_with_ids` session
+// setting and returns a function that restores the previous value. As we
+// migrate towards the new SHOW BACKUPS, this is used as a stop-gap until all
+// old instances are cleaned up.
+func disableUseBackupsWithIDs(ctx context.Context, t test.Test, db *gosql.DB) func() {
+	var oldValue string
+	err := db.QueryRowContext(ctx, "SHOW use_backups_with_ids").Scan(&oldValue)
+	require.NoError(t, err, "failed to query use_backups_with_ids cluster setting")
+	_, err = db.ExecContext(ctx, "SET use_backups_with_ids = false")
+	require.NoError(t, err, "failed to set use_backups_with_ids cluster setting")
+	return func() {
+		_, err := db.ExecContext(ctx, fmt.Sprintf("SET use_backups_with_ids = %s", oldValue))
+		require.NoError(t, err, "failed to restore use_backups_with_ids cluster setting")
+	}
 }

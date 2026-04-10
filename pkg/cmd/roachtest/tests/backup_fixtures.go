@@ -278,6 +278,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	sql := sqlutils.MakeSQLRunner(conn)
+	sql.Exec(bd.t, "SET use_backups_with_ids = true")
 	fixtureURI := bd.registry.URI(bd.fixture.DataPath)
 	const (
 		WaitingFirstFull = iota
@@ -312,11 +313,14 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			}
 		case RunningIncrementals:
 			var backupCount int
-			// We track completed backups via SHOW BACKUP as opposed to SHOW JOBs in
+			// We track completed backups via SHOW BACKUPS as opposed to SHOW JOBs in
 			// the case that a fixture runs for a long enough time that old backup
 			// jobs stop showing up in SHOW JOBS.
+			// Since some fixtures have more than 50 backups in their collections, we
+			// set both OLDER THAN and NEWER THAN to avoid pagination.
 			backupCountQuery := fmt.Sprintf(
-				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN '%s']`, fixtureURI.String(),
+				`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN 'now' NEWER THAN '-1w']`,
+				fixtureURI.String(),
 			)
 			sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
 			bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
@@ -482,11 +486,11 @@ func (bd *backupDriver) getLatestAOST(ctx context.Context) string {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	sql := sqlutils.MakeSQLRunner(conn)
+	sql.Exec(bd.t, "SET use_backups_with_ids = true")
 	uri := bd.registry.URI(bd.fixture.DataPath)
 	query := fmt.Sprintf(
 		`SELECT end_time FROM
 		[SHOW BACKUP FROM LATEST IN '%s']
-		ORDER BY end_time DESC
 		LIMIT 1`,
 		uri.String(),
 	)
