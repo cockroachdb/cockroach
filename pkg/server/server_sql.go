@@ -716,6 +716,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
+	bulkMergeMetrics := execinfra.MakeBulkMergeMetrics(cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(bulkMergeMetrics)
+
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, mon.MakeName("backfill-mon"))
 	backfillMemoryMonitor.MarkLongLiving()
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, mon.MakeName("backup-mon"))
@@ -835,6 +838,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		BulkMonitor:       bulkMemoryMonitor,
 		ChangefeedMonitor: changefeedMemoryMonitor,
 		BulkSenderLimiter: bulkSenderLimiter,
+		BulkMergeMetrics:  &bulkMergeMetrics,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
 		BulkAdder: func(

@@ -472,6 +472,11 @@ func runImportMergeIterations(
 		return err
 	}
 
+	if metrics := execCtx.ExecCfg().DistSQLSrv.BulkMergeMetrics; metrics != nil {
+		metrics.ImportCount.Inc(1)
+		metrics.MapPhaseSSTs.RecordValue(int64(len(inputSSTs)))
+	}
+
 	// Run 2 merge iterations: a local merge (iteration 1) followed by a final
 	// cross-node merge (iteration 2). The local merge reduces network traffic by
 	// having each node merge its local SSTs first.
@@ -517,6 +522,11 @@ func runImportMergeIterations(
 		// Checkpoint via the tracker so manifest serialization uses the
 		// same codepath as map-phase checkpoints.
 		if iteration < maxIterations {
+			if iteration == 1 {
+				if metrics := execCtx.ExecCfg().DistSQLSrv.BulkMergeMetrics; metrics != nil {
+					metrics.FirstIterationOutputSSTs.RecordValue(int64(len(merged.SSTs)))
+				}
+			}
 			manifests := bulksst.MergeOutputToManifests(merged.SSTs)
 			checkpoint.SetMergeIterationResult(manifests, int32(iteration))
 		} else {

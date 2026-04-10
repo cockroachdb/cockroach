@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -81,6 +82,7 @@ func TestReserveRPCMemory(t *testing.T) {
 			})
 		}
 
+		mergeMetrics := execinfra.MakeBulkMergeMetrics(time.Hour)
 		mp := &bulkMergeProcessor{
 			spec: execinfrapb.BulkMergeSpec{
 				SSTs: ssts,
@@ -89,7 +91,8 @@ func TestReserveRPCMemory(t *testing.T) {
 				EvalCtx: &evalCtx,
 				NodeID:  sqlIDContainer,
 				Cfg: &execinfra.ServerConfig{
-					BulkMonitor: budgetMon,
+					BulkMonitor:      budgetMon,
+					BulkMergeMetrics: &mergeMetrics,
 				},
 			},
 		}
@@ -101,12 +104,20 @@ func TestReserveRPCMemory(t *testing.T) {
 		mp := makeProcessor(t, 5, 0, 0.33, 16, 1)
 		err := mp.reserveRPCMemory(ctx)
 		require.NoError(t, err)
+		// No remote files means no RPC memory reservation to record.
+		metrics := mp.flowCtx.Cfg.BulkMergeMetrics
+		count, _ := metrics.RPCMemoryReservedBytes.CumulativeSnapshot().Total()
+		require.Equal(t, int64(0), count)
 	})
 
 	t.Run("flow-control-disabled", func(t *testing.T) {
 		mp := makeProcessor(t, 0, 10, 0.33, 0, 1)
 		err := mp.reserveRPCMemory(ctx)
 		require.NoError(t, err)
+		// Flow control disabled means no bounded reservation to record.
+		metrics := mp.flowCtx.Cfg.BulkMergeMetrics
+		count, _ := metrics.RPCMemoryReservedBytes.CumulativeSnapshot().Total()
+		require.Equal(t, int64(0), count)
 	})
 
 	t.Run("fits-in-budget", func(t *testing.T) {
@@ -119,6 +130,11 @@ func TestReserveRPCMemory(t *testing.T) {
 		mp := makeProcessor(t, 0, 2, 0.60, 16, budget)
 		err := mp.reserveRPCMemory(ctx)
 		require.NoError(t, err)
+
+		// Verify the RPC memory metric was recorded.
+		metrics := mp.flowCtx.Cfg.BulkMergeMetrics
+		count, _ := metrics.RPCMemoryReservedBytes.CumulativeSnapshot().Total()
+		require.Equal(t, int64(1), count)
 	})
 
 	// Error cases: verify the error string contains expected content.
