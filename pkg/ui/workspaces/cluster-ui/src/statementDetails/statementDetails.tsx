@@ -47,6 +47,7 @@ import {
   Duration,
   Count,
   longToInt,
+  DurationToNumber,
 } from "src/util";
 
 import { InsightRecommendation, StatementDiagnosticsReport } from "../api";
@@ -338,6 +339,25 @@ export function StatementDetails(
     prevStatementFingerprintIDRef.current = statementFingerprintID;
   }, [statementFingerprintID]);
 
+  // Extract the aggregation interval from the cluster setting so bar
+  // widths match it exactly.  The value lives on the summary-level
+  // statement entry (same field exists on each per-ts row).
+  // DurationToNumber returns seconds; convert to millis.
+  const aggregationIntervalMillis = useMemo(() => {
+    const dur = statementDetails?.statement?.aggregation_interval;
+    const secs = DurationToNumber(dur);
+    return secs > 0 ? secs * 1e3 : 0;
+  }, [statementDetails]);
+
+  // Shared xScale derived from the user's selected time range.
+  const xScale: XScale = useMemo(() => {
+    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
+    return {
+      graphTsStartMillis: chartsStart.valueOf(),
+      graphTsEndMillis: chartsEnd.valueOf(),
+    };
+  }, [timeScale]);
+
   const renderNoDataTabContent = (): React.ReactElement => (
     <>
       <PageConfig>
@@ -500,11 +520,6 @@ export function StatementDetails(
     }
 
     const duration = (v: number) => Duration(v * 1e9);
-    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
-    const xScale: XScale = {
-      graphTsStartMillis: chartsStart.valueOf(),
-      graphTsEndMillis: chartsEnd.valueOf(),
-    };
 
     return (
       <>
@@ -685,6 +700,7 @@ export function StatementDetails(
                 yAxisUnits={AxisUnits.Duration}
                 title="Statement Times"
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -693,6 +709,7 @@ export function StatementDetails(
                 yAxisUnits={AxisUnits.Count}
                 title="Rows Processed"
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
@@ -710,6 +727,7 @@ export function StatementDetails(
                     </>
                   }
                   xScale={xScale}
+                  aggregationIntervalMillis={aggregationIntervalMillis}
                 />
               </Col>
             </Row>
@@ -721,6 +739,7 @@ export function StatementDetails(
                 yAxisUnits={AxisUnits.Count}
                 title="Execution Retries"
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -729,6 +748,7 @@ export function StatementDetails(
                 yAxisUnits={AxisUnits.Count}
                 title="Execution Count"
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
@@ -740,6 +760,7 @@ export function StatementDetails(
                 title={`Contention Time${noSamples}`}
                 tooltip={unavailableTooltip}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
@@ -749,6 +770,7 @@ export function StatementDetails(
                 title={`SQL CPU Time${noSamples}`}
                 tooltip={unavailableTooltip}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
@@ -774,6 +796,7 @@ export function StatementDetails(
                   </>
                 }
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
@@ -806,12 +829,6 @@ export function StatementDetails(
       statementStatisticsPerAggregatedTsAndPlanHash || [],
     );
     const hasCanaryPlanData = canaryPlanDistData.length > 0;
-
-    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
-    const xScale: XScale = {
-      graphTsStartMillis: chartsStart.valueOf(),
-      graphTsEndMillis: chartsEnd.valueOf(),
-    };
 
     return (
       <>
@@ -860,6 +877,7 @@ export function StatementDetails(
                     </>
                   }
                   xScale={xScale}
+                  aggregationIntervalMillis={aggregationIntervalMillis}
                 />
               </Col>
             </Row>
@@ -878,6 +896,7 @@ export function StatementDetails(
                     </>
                   }
                   xScale={xScale}
+                  aggregationIntervalMillis={aggregationIntervalMillis}
                 />
               </Col>
             </Row>
