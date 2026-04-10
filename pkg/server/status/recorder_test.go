@@ -1650,14 +1650,14 @@ func TestOwnerMetricCount(t *testing.T) {
 	// Register metrics with SourceFile set so CODEOWNERS can resolve
 	// them. The recorder's codeOwners is loaded from the real CODEOWNERS
 	// file, so we use real package paths.
-	g := metric.NewGauge(metric.Metadata{ // nolint:metadatanew
+	g := metric.NewGauge(metric.Metadata{ // nolint:metricmetadatainit
 		Name:       "test_gauge",
 		SourceFile: "pkg/kv/kvserver/metrics.go",
 	})
 	nodeReg.AddMetric(g)
 	g.Update(42)
 
-	c := metric.NewCounter(metric.Metadata{ // nolint:metadatanew
+	c := metric.NewCounter(metric.Metadata{ // nolint:metricmetadatainit
 		Name:       "test_counter",
 		SourceFile: "pkg/sql/exec_util.go",
 	})

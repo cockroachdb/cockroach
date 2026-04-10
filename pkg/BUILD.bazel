@@ -2769,7 +2769,7 @@ GO_TARGETS = [
     "//pkg/testutils/lint/passes/hash:hash_test",
     "//pkg/testutils/lint/passes/leaktestcall:leaktestcall",
     "//pkg/testutils/lint/passes/leaktestcall:leaktestcall_test",
-    "//pkg/testutils/lint/passes/metadatanew:metadatanew",
+    "//pkg/testutils/lint/passes/metricmetadatainit:metricmetadatainit",
     "//pkg/testutils/lint/passes/nilness:nilness",
     "//pkg/testutils/lint/passes/nilness:nilness_test",
     "//pkg/testutils/lint/passes/nocopy:nocopy",

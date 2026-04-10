@@ -3,12 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package metadatanew provides an Analyzer that flags direct construction
-// of metric.Metadata composite literals that are not wrapped in a
-// metric.InitMetadata() call. The constructor records the caller's
-// source file, which is needed to resolve metric ownership via
-// CODEOWNERS at generation time.
-package metadatanew
+// Package metricmetadatainit provides an Analyzer that flags direct
+// construction of metric.Metadata composite literals that are not wrapped
+// in a metric.InitMetadata() or metric.NewMetadata() call. The
+// constructors record the caller's source file, which is needed to
+// resolve metric ownership via CODEOWNERS at generation time.
+package metricmetadatainit
 
 import (
 	"go/ast"
@@ -26,8 +26,8 @@ const metricPkgPath = "github.com/cockroachdb/cockroach/pkg/util/metric"
 // wrapped in a metric.InitMetadata() call. Note that metric.NewMetadata()
 // does not use composite literals, so it is not affected by this check.
 var Analyzer = &analysis.Analyzer{
-	Name:     "metadatanew",
-	Doc:      "checks that metric.Metadata is constructed via metric.InitMetadata()",
+	Name:     "metricmetadatainit",
+	Doc:      "checks that metric.Metadata is constructed via metric.InitMetadata() or metric.NewMetadata()",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
 }
@@ -62,14 +62,14 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		if wrappedLits[lit] {
 			return
 		}
-		if passesutil.HasNolintComment(pass, n, "metadatanew") {
+		if passesutil.HasNolintComment(pass, n, "metricmetadatainit") {
 			return
 		}
 		pass.Report(analysis.Diagnostic{
 			Pos: n.Pos(),
 			Message: "direct metric.Metadata{} literal must be wrapped " +
-				"in metric.InitMetadata() to record the source file for " +
-				"CODEOWNERS resolution",
+				"in metric.InitMetadata() or use metric.NewMetadata() to " +
+				"record the source file for CODEOWNERS resolution",
 		})
 	})
 	return nil, nil

@@ -1655,7 +1655,7 @@
             "pkg/sql/colexec/colexechash/hash\\.go$": "re-implements runtime.noescape for efficient hashing"
         }
     },
-    "metadatanew": {
+    "metricmetadatainit": {
         "exclude_files": {
             "external/": "exclude all third-party code",
             ".*\\.pb\\.go$": "generated code",
