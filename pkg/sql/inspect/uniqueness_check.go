@@ -99,16 +99,16 @@ func (c *uniquenessCheck) Start(
 		keyColNames[i] = col.GetName()
 	}
 
-	lPredicate, lQueryArgs, err := getPredicateAndQueryArgs(
+	lPredicate, lQueryArgs, lHasRows, err := getPredicateAndQueryArgs(
 		ctx, cfg, span, c.tableDesc, c.tableDesc.GetPrimaryIndex(), c.asOf, keyColNames, 1, /* endPlaceholderOffset */
+		false, /* needBoundsWhenEmpty */
 	)
 	if err != nil {
 		return err
 	}
 
-	// An empty predicate means the local span has no rows so the check is done
-	// early.
-	if lPredicate == "" {
+	// No rows in this span so the check is done early.
+	if !lHasRows {
 		c.state = checkDone
 		return nil
 	}
@@ -232,16 +232,16 @@ func (c *uniquenessCheck) getRemotePredicatesAndQueryArgs(
 			}
 		}
 
-		rPredicate, rQueryArgs, err := getPredicateAndQueryArgs(
+		rPredicate, rQueryArgs, rHasRows, err := getPredicateAndQueryArgs(
 			ctx, cfg, remoteSpan, c.tableDesc, c.tableDesc.GetPrimaryIndex(), c.asOf, keyColNames, endPlaceholderOffset+len(remoteArgs)+1,
+			false, /* needBoundsWhenEmpty */
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "getting predicate for region %q", region)
 		}
 
-		// An empty predicate means the remote span has no rows so the span in
-		// that region is skipped.
-		if rPredicate == "" {
+		// No rows in the remote span so the region is skipped.
+		if !rHasRows {
 			continue
 		}
 

@@ -13,15 +13,117 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+// TestRowCountCheckDoubleCountWithEmptySpan verifies that the row count
+// check produces the correct count when one of the primary index spans
+// contains no rows. The table is split so that the range [33, 36) is
+// empty while surrounding ranges hold 100 rows total. The OverrideSpans
+// testing knob injects pre-split sub-spans so the inspect job processes
+// the empty span separately rather than merging it during DistSQL
+// planning.
+func TestRowCountCheckDoubleCountWithEmptySpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// splitSpans is populated after the table is created and split. The
+	// closure below captures it by reference so the knob sees the final
+	// value when the inspect job runs.
+	var splitSpans []roachpb.Span
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			Inspect: &sql.InspectTestingKnobs{
+				OverrideSpans: func(spans []roachpb.Span) []roachpb.Span {
+					return splitSpans
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	codec := s.ApplicationLayer().Codec()
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.Exec(t, `CREATE DATABASE test`)
+
+	// Create a table with a secondary index. The secondary index causes
+	// indexConsistencyCheck instances to be created, which implement
+	// inspectCheckRowCount and provide row counts to rowCountCheck.
+	r.Exec(t, `CREATE TABLE test.t (id INT PRIMARY KEY, val INT, INDEX idx (val))`)
+	defer r.Exec(t, `DROP TABLE test.t`)
+
+	// Split the primary index into multiple ranges, creating an empty range
+	// [33, 36) with no rows.
+	r.Exec(t, `ALTER TABLE test.t SPLIT AT VALUES (33), (36)`)
+
+	// Insert rows only into non-empty ranges: [1, 30] and [41, 110].
+	// Range [33, 36) remains empty. Total: 100 rows.
+	r.Exec(t, `INSERT INTO test.t SELECT i, i*10 FROM generate_series(1, 30) AS g(i)`)
+	r.Exec(t, `INSERT INTO test.t SELECT i, i*10 FROM generate_series(41, 110) AS g(i)`)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
+
+	// Compute sub-spans split at the range boundaries (id=33, id=36).
+	// On a single node PartitionSpans won't split at range boundaries, so
+	// we inject these via the OverrideSpans testing knob.
+	pkSpan := tableDesc.PrimaryIndexSpan(codec)
+	prefix := rowenc.MakeIndexKeyPrefix(
+		codec, tableDesc.GetID(), tableDesc.GetPrimaryIndex().GetID(),
+	)
+	key33 := encoding.EncodeVarintAscending(append([]byte(nil), prefix...), 33)
+	key36 := encoding.EncodeVarintAscending(append([]byte(nil), prefix...), 36)
+	splitSpans = []roachpb.Span{
+		{Key: pkSpan.Key, EndKey: key33},
+		{Key: key33, EndKey: key36},
+		{Key: key36, EndKey: pkSpan.EndKey},
+	}
+
+	expectedRowCount := uint64(100)
+	checks, err := ChecksForTable(ctx, &execCfg, tableDesc, &expectedRowCount)
+	require.NoError(t, err)
+	// With one secondary index + row count check = 2 checks.
+	require.Len(t, checks, 2)
+
+	var timestampStr string
+	r.QueryRow(t, "SELECT cluster_logical_timestamp()::STRING").Scan(&timestampStr)
+	asOfTimestamp, err := hlc.ParseHLC(timestampStr)
+	require.NoError(t, err)
+
+	job, err := TriggerJob(
+		ctx,
+		"test row count double counting bug",
+		&execCfg,
+		checks,
+		asOfTimestamp,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, job)
+
+	err = job.AwaitCompletion(ctx)
+	require.NoError(t, err, "inspect job should succeed with correct expected row count")
+
+	var jobStatus string
+	r.QueryRow(t,
+		`SELECT status FROM [SHOW JOBS] WHERE job_id = $1`,
+		job.ID(),
+	).Scan(&jobStatus)
+	require.Equal(t, "succeeded", jobStatus)
+}
 
 func TestRowCountCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
