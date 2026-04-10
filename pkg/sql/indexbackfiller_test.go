@@ -1073,9 +1073,18 @@ func TestDistributedMergeStoragePrefixPreservedAcrossPauseResume(t *testing.T) {
 		return errors.New("waiting for iteration 1")
 	}, 30*time.Second)
 
-	// Capture storage prefixes before pause.
-	prefixesBeforePause := getStoragePrefixes(jobID)
-	require.NotEmpty(t, prefixesBeforePause, "expected storage prefixes to be recorded before pause")
+	// Wait for storage prefixes to be flushed to the job payload. The tracker
+	// marks progress as dirty in memory; the actual persist happens on the
+	// periodic checkpoint interval, so under stress the flush may lag behind the
+	// iteration-completed signal.
+	var prefixesBeforePause []string
+	testutils.SucceedsWithin(t, func() error {
+		prefixesBeforePause = getStoragePrefixes(jobID)
+		if len(prefixesBeforePause) == 0 {
+			return errors.New("waiting for storage prefixes to be checkpointed")
+		}
+		return nil
+	}, 30*time.Second)
 	t.Logf("storage prefixes before pause: %v", prefixesBeforePause)
 
 	ensureJobState := func(targetState string) {
