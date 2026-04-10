@@ -164,11 +164,9 @@ func (c *indexConsistencyCheck) Start(
 	otherColNames := colNames(otherColumns)
 	allColNames := colNames(c.columns)
 
-	// If no rows exist in the primary index span, we still need to check for dangling
-	// secondary index entries. We run the check with an empty predicate, which will
-	// scan the entire secondary index within the span. Any secondary index entries found
-	// will be dangling since there are no corresponding primary index rows.
-	predicate, queryArgs, err := getPredicateAndQueryArgs(ctx, cfg, span, c.tableDesc, c.priIndex, c.asOf, pkColNames, 1 /* endPlaceholderOffset */)
+	// hasRows is intentionally discarded — even when the primary span
+	// contains no rows, we still check for dangling secondary index entries.
+	predicate, queryArgs, _, err := getPredicateAndQueryArgs(ctx, cfg, span, c.tableDesc, c.priIndex, c.asOf, pkColNames, 1 /* endPlaceholderOffset */)
 	if err != nil {
 		return err
 	}

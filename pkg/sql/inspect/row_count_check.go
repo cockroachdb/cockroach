@@ -139,7 +139,7 @@ func (c *rowCountCheck) CheckSpan(
 	}
 	c.tableDesc = tableDesc
 
-	predicate, queryArgs, err := getPredicateAndQueryArgs(
+	predicate, queryArgs, hasRows, err := getPredicateAndQueryArgs(
 		ctx,
 		&c.execCfg.DistSQLSrv.ServerConfig,
 		span,
@@ -153,9 +153,8 @@ func (c *rowCountCheck) CheckSpan(
 		return err
 	}
 
-	// An empty predicate means the span has no rows so no further counting is
-	// necessary.
-	if predicate == "" {
+	// No rows in this span so no further counting is necessary.
+	if !hasRows {
 		return nil
 	}
 

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -256,8 +259,11 @@ func spanForFullRegion(
 	return span, nil
 }
 
-// getPredicateAndQueryArgs generates query bounds from the span to limit the query to the specified range.
-// When no rows are found in a span, an empty predicate is returned.
+// getPredicateAndQueryArgs generates query bounds from the span to limit the
+// query to the specified range. When the span contains rows, the bounds are
+// derived from the first and last row values. When it does not, the bounds
+// are derived directly from the span's Key and EndKey. hasRows indicates
+// which case applied.
 func getPredicateAndQueryArgs(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
@@ -267,16 +273,16 @@ func getPredicateAndQueryArgs(
 	asOf hlc.Timestamp,
 	pkColNames []string,
 	endPlaceholderOffset int,
-) (predicate string, queryArgs []interface{}, err error) {
+) (predicate string, queryArgs []interface{}, hasRows bool, err error) {
 	// Assert that we get meaningful spans
 	if span.Key.Equal(span.EndKey) || len(span.Key) == 0 || len(span.EndKey) == 0 {
-		return "", nil, errors.AssertionFailedf("received invalid span: Key=%x EndKey=%x", span.Key, span.EndKey)
+		return "", nil, false, errors.AssertionFailedf("received invalid span: Key=%x EndKey=%x", span.Key, span.EndKey)
 	}
 
 	// Get primary key metadata for span conversion
 	pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, priIndex.IndexDesc())
 	if err != nil {
-		return "", nil, errors.Wrap(err, "getting primary key column types")
+		return "", nil, false, errors.Wrap(err, "getting primary key column types")
 	}
 
 	pkColDirs := make([]catenumpb.IndexColumn_Direction, priIndex.NumKeyColumns())
@@ -294,46 +300,112 @@ func getPredicateAndQueryArgs(
 		len(tableDesc.GetFamilies()), span, alloc, asOf,
 	)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "converting span to query bounds")
+		return "", nil, false, errors.Wrap(err, "converting span to query bounds")
 	}
 
-	// If no rows exist in the primary index span, return an empty predicate
-	// and no query arguments. Callers decide how to handle this case.
+	encodedPkColNames := make([]string, len(pkColNames))
+	for i, colName := range pkColNames {
+		encodedPkColNames[i] = encodeColumnName(colName)
+	}
+
 	if !hasRows {
-		// Use empty predicate and no query arguments
-		predicate = ""
-		queryArgs = []interface{}{}
-	} else {
-		if len(bounds.Start) == 0 || len(bounds.End) == 0 {
-			return "", nil, errors.AssertionFailedf("query bounds from span didn't produce start or end: %+v", bounds)
-		}
-
-		// Generate SQL predicate from the bounds
-		// Encode column names for SQL usage
-		encodedPkColNames := make([]string, len(pkColNames))
-		for i, colName := range pkColNames {
-			encodedPkColNames[i] = encodeColumnName(colName)
-		}
-		predicate, err = spanutils.RenderQueryBounds(encodedPkColNames, pkColDirs, pkColTypes, len(bounds.Start), len(bounds.End), true, endPlaceholderOffset)
+		// No rows exist in this span. Derive bounds directly from the span
+		// keys so callers still receive a predicate scoped to the span. The
+		// span.Key is inclusive and span.EndKey is exclusive, matching
+		// roachpb.Span conventions.
+		startDatums, err := decodeSpanKey(cfg.Codec, span.Key, pkColDirs, pkColTypes, alloc)
 		if err != nil {
-			return "", nil, errors.Wrap(err, "rendering query bounds")
+			return "", nil, false, errors.Wrap(err, "decoding span start key")
+		}
+		endDatums, err := decodeSpanKey(cfg.Codec, span.EndKey, pkColDirs, pkColTypes, alloc)
+		if err != nil {
+			return "", nil, false, errors.Wrap(err, "decoding span end key")
 		}
 
-		if strings.TrimSpace(predicate) == "" {
-			return "", nil, errors.AssertionFailedf("query bounds from span didn't produce predicate: %+v", bounds)
+		predicate, err = spanutils.RenderQueryBounds(
+			encodedPkColNames, pkColDirs, pkColTypes,
+			len(startDatums), len(endDatums),
+			true /* startIncl */, endPlaceholderOffset,
+		)
+		if err != nil {
+			return "", nil, false, errors.Wrap(err, "rendering span-key query bounds")
 		}
 
-		// Prepare query arguments: end bounds first, then start bounds
-		queryArgs = make([]interface{}, 0, len(bounds.End)+len(bounds.Start))
-		for _, datum := range bounds.End {
+		queryArgs = make([]interface{}, 0, len(endDatums)+len(startDatums))
+		for _, datum := range endDatums {
 			queryArgs = append(queryArgs, datum)
 		}
-		for _, datum := range bounds.Start {
+		for _, datum := range startDatums {
 			queryArgs = append(queryArgs, datum)
 		}
+
+		return predicate, queryArgs, false, nil
 	}
 
-	return predicate, queryArgs, nil
+	if len(bounds.Start) == 0 || len(bounds.End) == 0 {
+		return "", nil, false, errors.AssertionFailedf("query bounds from span didn't produce start or end: %+v", bounds)
+	}
+
+	predicate, err = spanutils.RenderQueryBounds(
+		encodedPkColNames, pkColDirs, pkColTypes,
+		len(bounds.Start), len(bounds.End),
+		true /* startIncl */, endPlaceholderOffset,
+	)
+	if err != nil {
+		return "", nil, false, errors.Wrap(err, "rendering query bounds")
+	}
+
+	if strings.TrimSpace(predicate) == "" {
+		return "", nil, false, errors.AssertionFailedf("query bounds from span didn't produce predicate: %+v", bounds)
+	}
+
+	// Prepare query arguments: end bounds first, then start bounds.
+	queryArgs = make([]interface{}, 0, len(bounds.End)+len(bounds.Start))
+	for _, datum := range bounds.End {
+		queryArgs = append(queryArgs, datum)
+	}
+	for _, datum := range bounds.Start {
+		queryArgs = append(queryArgs, datum)
+	}
+
+	return predicate, queryArgs, true, nil
+}
+
+// decodeSpanKey decodes a span boundary key into primary key datums. The key is
+// expected to start with the tenant prefix followed by the table/index prefix
+// and zero or more encoded PK column values. If the key contains only the
+// table/index prefix (no column values), an empty datum slice is returned.
+func decodeSpanKey(
+	codec keys.SQLCodec,
+	key roachpb.Key,
+	pkColDirs []catenumpb.IndexColumn_Direction,
+	pkColTypes []*types.T,
+	alloc *tree.DatumAlloc,
+) (tree.Datums, error) {
+	remainder, err := codec.StripTenantPrefix(key)
+	if err != nil {
+		return nil, errors.Wrap(err, "stripping tenant prefix")
+	}
+	remainder, _, _, err = rowenc.DecodePartialTableIDIndexID(remainder)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding table/index ID")
+	}
+	if len(remainder) == 0 {
+		return nil, nil
+	}
+	vals := make([]rowenc.EncDatum, len(pkColTypes))
+	_, numVals, err := rowenc.DecodeKeyVals(vals, pkColDirs, remainder)
+	if err != nil {
+		return nil, errors.Wrap(err, "decoding key column values")
+	}
+	datums := make(tree.Datums, numVals)
+	for i := 0; i < numVals; i++ {
+		if err := vals[i].EnsureDecoded(pkColTypes[i], alloc); err != nil {
+			return nil, errors.Wrapf(err, "decoding datum at position %d", i)
+		}
+		datums[i] = vals[i].Datum
+	}
+	return datums, nil
 }
 
 // errorToInspectIssue converts internal errors to inspect issues so they can be
