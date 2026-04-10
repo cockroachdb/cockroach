@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cached_db_regions.go",
         "db_regions.go",
+        "doc.go",
         "region_provider.go",
         "region_util.go",
     ],

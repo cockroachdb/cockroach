@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package regions provides infrastructure to retrieve the regions available
-// to a tenant.
 package regions
 
 import (
