@@ -38,6 +38,12 @@ const cx = classNames.bind(styles);
 
 const MARGIN = { top: 20, right: 20, bottom: 40, left: 70 };
 
+// The Visualization component wraps charts in a card with 10px
+// horizontal content padding and a 1px border on each side. The
+// ResizeObserver measures the outer wrapper, so we subtract this
+// inset to size the SVG to the actual available space.
+const VISUALIZATION_INSET = 22;
+
 function formatValue(value: number, units: AxisUnits): string {
   switch (units) {
     case AxisUnits.Bytes:
@@ -73,6 +79,10 @@ export interface GroupedBarChartProps {
   title: string;
   tooltip?: React.ReactNode;
   xScale?: XScale;
+  // The aggregation interval in milliseconds, as set by the cluster
+  // setting. When provided, bars are rendered at exactly this width
+  // instead of inferring the interval from data gaps.
+  aggregationIntervalMillis?: number;
 }
 
 export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
@@ -83,6 +93,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   title,
   tooltip,
   xScale: xScaleProp,
+  aggregationIntervalMillis: aggIntervalProp,
 }) => {
   const timezone = useContext(TimezoneContext);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -108,7 +119,9 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   }, []);
 
   const width =
-    measuredWidth > 0 ? Math.min(measuredWidth, maxWidth) : maxWidth;
+    measuredWidth > 0
+      ? Math.min(measuredWidth - VISUALIZATION_INSET, maxWidth)
+      : maxWidth;
 
   const isLayerVisible = useCallback(
     (layerLabel: string) => !hiddenLayers.has(layerLabel),
@@ -118,12 +131,11 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
-  // Compute the aggregation bucket width from the data timestamps.
-  // Use the minimum gap between any two adjacent timestamps — this
-  // gives the true aggregation interval even when some buckets are
-  // missing (e.g., canary was inactive for a period).
-  // Fallback to 1s when there's only one data point.
+  // Use the aggregation interval from the cluster setting when provided.
+  // Otherwise fall back to inferring it from the minimum gap between
+  // adjacent data timestamps.
   const samplingIntervalMillis = useMemo(() => {
+    if (aggIntervalProp > 0) return aggIntervalProp;
     if (data.length < 2) return 1e3;
     let minInterval = Infinity;
     for (let i = 1; i < data.length; i++) {
@@ -131,7 +143,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
       if (gap > 0 && gap < minInterval) minInterval = gap;
     }
     return minInterval === Infinity ? 1e3 : minInterval;
-  }, [data]);
+  }, [data, aggIntervalProp]);
 
   // Time extent: use xScale prop if provided, else derive from data.
   const timeExtent = useMemo(() => {
@@ -189,10 +201,9 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     [yAxisDomain, innerHeight],
   );
 
-  // Bar width per group. The existing uPlot charts render one bar per
-  // timestamp with width = clamp(intervalPx * 0.9, 10, 80). We render
-  // numGroups bars side-by-side in that same space, so each bar is
-  // roughly 1/numGroups of the uPlot bar width.
+  // Bar width per group: bars fill the full aggregation interval so
+  // that, e.g., 1-hour buckets visually span one hour on the axis.
+  // For multi-group charts the interval is split evenly with small gaps.
   const numGroups = data.length > 0 ? data[0].groups.length : 2;
   const groupGapPx = 2;
 
@@ -200,11 +211,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     const intervalPx = Math.abs(
       xTimeScale(samplingIntervalMillis) - xTimeScale(0),
     );
-    const fullBarWidth = Math.min(Math.max(intervalPx * 0.9, 10), 80);
-    return Math.max(
-      (fullBarWidth - groupGapPx * (numGroups - 1)) / numGroups,
-      1,
-    );
+    return Math.max((intervalPx - groupGapPx * (numGroups - 1)) / numGroups, 1);
   }, [xTimeScale, samplingIntervalMillis, numGroups]);
 
   // Y-axis ticks from domain.
