@@ -639,6 +639,10 @@ func (p *Provider) ListVolumeSnapshots(
 		"--format", "json(name,id)",
 	}
 	var filters []string
+	// Only list snapshots that are fully created. Without this filter,
+	// a concurrent run could pick up a snapshot still being uploaded,
+	// causing "resource is not ready" errors when creating disks from it.
+	filters = append(filters, "status:READY")
 	if vslo.NamePrefix != "" {
 		filters = append(filters, fmt.Sprintf("name:%s", vslo.NamePrefix))
 	}
