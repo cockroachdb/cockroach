@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -2861,6 +2862,102 @@ func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
 func (desc *Mutable) SetTableLocalityGlobal() {
 	lc := LocalityConfigGlobal()
 	desc.LocalityConfig = &lc
+}
+
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(rewriter catalog.DescriptorRewriteFn) error {
+	var err error
+	if desc.ID, err = rewriter(desc.ID); err != nil {
+		return err
+	}
+	if desc.ParentID, err = rewriter(desc.ParentID); err != nil {
+		return err
+	}
+	if desc.UnexposedParentSchemaID, err = rewriter(desc.UnexposedParentSchemaID); err != nil {
+		return err
+	}
+	desc.Version = 1
+	desc.ModificationTime = hlc.Timestamp{}
+
+	if err = descutil.RewriteFKs(desc.OutboundFKs, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteFKs(desc.InboundFKs, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteMutations(desc.Mutations, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteIDs(desc.DependsOn, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteIDs(desc.DependsOnTypes, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteIDs(desc.DependsOnFunctions, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteDependedOnBy(desc.DependedOnBy, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewriteUniqueWithoutIndexConstraints(
+		desc.UniqueWithoutIndexConstraints, rewriter); err != nil {
+		return err
+	}
+	for i := range desc.Columns {
+		if err = descutil.RewriteColumn(&desc.Columns[i], rewriter); err != nil {
+			return err
+		}
+	}
+	if desc.IsSequence() && desc.SequenceOpts.HasOwner() {
+		if err = descutil.RewriteSequenceOwner(
+			&desc.SequenceOpts.SequenceOwner, rewriter); err != nil {
+			return err
+		}
+	}
+	if err = descutil.RewriteTriggers(desc.Triggers, rewriter); err != nil {
+		return err
+	}
+	if err = descutil.RewritePolicies(desc.Policies, rewriter); err != nil {
+		return err
+	}
+	if err = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) error {
+		switch typ {
+		case catalog.SQLExpr:
+			newExpr, exprErr := descutil.RewriteExprIDs(*expr, rewriter)
+			if exprErr != nil {
+				return exprErr
+			}
+			*expr = newExpr
+		case catalog.PLpgSQLStmt:
+			newExpr, exprErr := descutil.RewritePLpgSQLBodyIDs(*expr, rewriter)
+			if exprErr != nil {
+				return exprErr
+			}
+			*expr = newExpr
+		case catalog.SQLStmt:
+			// No descriptor IDs to rewrite.
+		default:
+			return errors.AssertionFailedf("unexpected expression type %d", typ)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if desc.IsView() {
+		desc.ViewQuery, err = descutil.RewriteViewQueryIDs(desc.ViewQuery, rewriter)
+		if err != nil {
+			return err
+		}
+	}
+	if state := desc.GetDeclarativeSchemaChangerState(); state != nil {
+		if err = descutil.RewriteSchemaChangerState(state, rewriter); err != nil {
+			return err
+		}
+		desc.SetDeclarativeSchemaChangerState(state)
+	}
+
+	return nil
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

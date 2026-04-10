@@ -2133,6 +2133,7 @@ GO_TARGETS = [
     "//pkg/sql/catalog/descs:descs",
     "//pkg/sql/catalog/descs:descs_test",
     "//pkg/sql/catalog/desctestutils:desctestutils",
+    "//pkg/sql/catalog/descutil:descutil",
     "//pkg/sql/catalog/externalcatalog/externalpb:externalpb",
     "//pkg/sql/catalog/externalcatalog:externalcatalog",
     "//pkg/sql/catalog/externalcatalog:externalcatalog_test",
