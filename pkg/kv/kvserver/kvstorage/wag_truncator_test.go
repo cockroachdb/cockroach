@@ -103,46 +103,12 @@ func (e *testEngines) listWAGNodes(t *testing.T) []uint64 {
 	return indices
 }
 
-// makeSideloadClearer returns a SideloadClearer that truncates sideloaded
-// files for a given range using disk-based sideload storage.
-func (e *testEngines) makeSideloadClearer(
-	st *cluster.Settings, baseDir string, env *fs.Env,
-) SideloadClearer {
-	return func(ctx context.Context, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex) error {
-		limiter := rate.NewLimiter(rate.Inf, math.MaxInt64)
-		ss := logstore.NewDiskSideloadStorage(st, rangeID, baseDir, limiter, env)
-		if err := ss.TruncateTo(ctx, lastIndex); err != nil {
-			return err
-		}
-		return ss.Sync()
-	}
-}
-
-// truncateWAGNodes repeatedly calls truncateAppliedWAGNodeAndClearRaftState
-// until no more nodes can be deleted.
-func (e *testEngines) truncateWAGNodes(t *testing.T, clearSideloaded SideloadClearer) {
-	t.Helper()
-	require.NoError(t, e.StateEngine().Flush())
-	stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
-	defer stateReader.Close()
-	for {
-		b := e.LogEngine().NewBatch()
-		ok, err := truncateAppliedWAGNodeAndClearRaftState(context.Background(),
-			Raft{RO: e.LogEngine(), WO: b}, stateReader, clearSideloaded)
-		require.NoError(t, err)
-		require.NoError(t, b.Commit(false /* sync */))
-		b.Close()
-		if !ok {
-			return
-		}
-	}
-}
-
 func TestTruncateApplied(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
 	sl := MakeStateLoader(1 /* rangeID */)
@@ -274,8 +240,10 @@ func TestTruncateApplied(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
+			truncator := NewWAGTruncator(st, e.Engines)
 			tc.setup(t, &e)
-			e.truncateWAGNodes(t, nil /* clearSideloaded */)
+			require.NoError(t, e.stateEngine.Flush())
+			require.NoError(t, truncator.TruncateAll(ctx))
 			require.Equal(t, tc.wantWAGIndices, e.listWAGNodes(t))
 		})
 	}
@@ -289,6 +257,8 @@ func TestTruncateApplied(t *testing.T) {
 func TestTruncateAndClearRaftState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
@@ -298,7 +268,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		t.Run(eventType.String(), func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			ctx := context.Background()
+			truncator := NewWAGTruncator(st, e.Engines)
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
 			e.writeWAGNode(t, wagpb.Event{
@@ -323,18 +293,17 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 				e.writeRaftLogEntry(t, 1 /* rangeID */, kvpb.RaftIndex(idx))
 			}
 
-			// Create sideloaded files using the log engine's VFS.
-			st := cluster.MakeTestingClusterSettings()
-			baseDir := e.LogEngine().GetAuxiliaryDir()
-			env := e.LogEngine().Env()
+			// Create sideloaded files using the state engine's VFS, matching
+			// production where sideloaded entries are on the state engine.
+			baseDir := e.StateEngine().GetAuxiliaryDir()
+			env := e.StateEngine().Env()
 			limiter := rate.NewLimiter(rate.Inf, math.MaxInt64)
 			ss := logstore.NewDiskSideloadStorage(st, 1, baseDir, limiter, env)
 			for _, idx := range []kvpb.RaftIndex{10, 15, 20, 21, 25} {
 				require.NoError(t, ss.Put(ctx, idx, 1 /* term */, []byte("sst-data")))
 			}
-			clearer := e.makeSideloadClearer(st, baseDir, env)
-
-			e.truncateWAGNodes(t, clearer)
+			require.NoError(t, e.stateEngine.Flush())
+			require.NoError(t, truncator.TruncateAll(ctx))
 			// Raft entries <= 20 belong to the old replica and must be deleted. The
 			// rest shouldn't be deleted by the WAG truncator.
 			require.Equal(t,
@@ -355,6 +324,91 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 			}
 			// Only the WAG node for the newer replica should be left.
 			require.Equal(t, []uint64{3}, e.listWAGNodes(t))
+		})
+	}
+}
+
+// TestTruncateGapHandling verifies that truncateAppliedWAGNodeAndClearRaftState
+// handles gaps in WAG node indices correctly based on expectedIndex. When
+// expectedIndex is 0, the first node is deleted regardless of its index. When
+// non-zero, only the node at that exact index is deleted.
+//
+// The test sets up three WAG nodes with gaps between them:
+// [Index: 2] -> [Index: 4] -> [Index: 6]
+func TestTruncateGapHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(1 /* rangeID */)
+
+	for _, calls := range [][]struct {
+		index          uint64
+		wantTruncated  bool
+		wantWAGIndices []uint64
+	}{
+		{
+			// index=0 removes the first WAG node regardless of its index.
+			{index: 0, wantTruncated: true, wantWAGIndices: []uint64{4, 6}},
+			{index: 0, wantTruncated: true, wantWAGIndices: []uint64{6}},
+			{index: 0, wantTruncated: true, wantWAGIndices: nil},
+		},
+		{
+			// A non-existent index is a no-op.
+			{index: 1, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+			{index: 3, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+			{index: 5, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+			{index: 7, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+		},
+		{
+			// In theory, we can remove a WAG node at an index that is not the first.
+			{index: 4, wantTruncated: true, wantWAGIndices: []uint64{2, 6}},
+			{index: 6, wantTruncated: true, wantWAGIndices: []uint64{2}},
+			{index: 2, wantTruncated: true, wantWAGIndices: nil},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			truncator := NewWAGTruncator(st, e.Engines)
+
+			// Write WAG nodes at indices 2, 4, 6.
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
+			})
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
+			})
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
+			})
+
+			// Set applied state so all WAG nodes are considered applied.
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 20}))
+			require.NoError(t, e.stateEngine.Flush())
+
+			for _, c := range calls {
+				stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
+				b := e.LogEngine().NewWriteBatch()
+				truncated, err := truncator.truncateAppliedWAGNodeAndClearRaftState(
+					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index,
+				)
+				require.NoError(t, err)
+				require.Equal(t, c.wantTruncated, truncated)
+				if truncated {
+					require.NoError(t, b.Commit(false /* sync */))
+				}
+				b.Close()
+				stateReader.Close()
+				require.Equal(t, c.wantWAGIndices, e.listWAGNodes(t))
+			}
 		})
 	}
 }
