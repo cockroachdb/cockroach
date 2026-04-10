@@ -9,8 +9,8 @@ import {
   screen,
   fireEvent,
   waitFor,
+  renderHook,
 } from "@testing-library/react";
-import { renderHook } from "@testing-library/react-hooks";
 import moment from "moment-timezone";
 import React, { ReactNode } from "react";
 import * as SwrModule from "swr";

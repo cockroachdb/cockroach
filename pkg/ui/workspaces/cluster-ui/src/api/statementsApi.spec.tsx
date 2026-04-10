@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook, waitFor } from "@testing-library/react";
 import moment from "moment-timezone";
 import React from "react";
 import { SWRConfig } from "swr";
@@ -68,7 +68,7 @@ describe("useCombinedStatementStats", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useCombinedStatementStats(
           timeScale,
@@ -80,12 +80,12 @@ describe("useCombinedStatementStats", () => {
 
     expect(result.current.isLoading).toBe(true);
 
-    await waitForNextUpdate();
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toBeDefined();
-    expect(result.current.error).toBeUndefined();
-    expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toBeDefined();
+      expect(result.current.error).toBeUndefined();
+      expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("skips fetch when timeScale is null", async () => {
@@ -111,7 +111,7 @@ describe("useCombinedStatementStats", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitFor } = renderHook(
+    const { result } = renderHook(
       () =>
         useCombinedStatementStats(
           timeScale,
@@ -151,19 +151,19 @@ describe("useStatementDetails", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () => useStatementDetails("abc123", "app1,app2", timeScale),
       { wrapper },
     );
 
     expect(result.current.isLoading).toBe(true);
 
-    await waitForNextUpdate();
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toBeDefined();
-    expect(result.current.error).toBeUndefined();
-    expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toBeDefined();
+      expect(result.current.error).toBeUndefined();
+      expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("skips fetch when timeScale is null", () => {
@@ -205,7 +205,7 @@ describe("useStatementDetails", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitFor } = renderHook(
+    const { result } = renderHook(
       () => useStatementDetails("abc123", undefined, timeScale),
       { wrapper },
     );
@@ -235,7 +235,7 @@ describe("useCombinedTransactionStats", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useCombinedTransactionStats(
           timeScale,
@@ -247,12 +247,12 @@ describe("useCombinedTransactionStats", () => {
 
     expect(result.current.isLoading).toBe(true);
 
-    await waitForNextUpdate();
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toBeDefined();
-    expect(result.current.error).toBeUndefined();
-    expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toBeDefined();
+      expect(result.current.error).toBeUndefined();
+      expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("skips fetch when timeScale is null", async () => {
@@ -277,7 +277,7 @@ describe("useCombinedTransactionStats", () => {
       key: "Past 1 Hour",
     };
 
-    const { result, waitFor } = renderHook(
+    const { result } = renderHook(
       () =>
         useCombinedTransactionStats(
           timeScale,

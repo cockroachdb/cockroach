@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { renderHook, act } from "@testing-library/react-hooks";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import Long from "long";
 import React from "react";
 import { SWRConfig } from "swr";
@@ -69,22 +69,22 @@ describe("useStatementDiagnostics", () => {
       makeGetResponse([makeProtoReport(1, true), makeProtoReport(2, false)]),
     );
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () => useStatementDiagnostics(),
       { wrapper },
     );
 
     expect(result.current.isLoading).toBe(true);
 
-    await waitForNextUpdate();
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toHaveLength(2);
-    expect(result.current.data[0].id).toBe("1");
-    expect(result.current.data[0].completed).toBe(true);
-    expect(result.current.data[1].id).toBe("2");
-    expect(result.current.data[1].completed).toBe(false);
-    expect(result.current.error).toBeUndefined();
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toHaveLength(2);
+      expect(result.current.data[0].id).toBe("1");
+      expect(result.current.data[0].completed).toBe(true);
+      expect(result.current.data[1].id).toBe("2");
+      expect(result.current.data[1].completed).toBe(false);
+      expect(result.current.error).toBeUndefined();
+    });
   });
 
   it("returns empty array before data loads", () => {
@@ -102,7 +102,7 @@ describe("useStatementDiagnostics", () => {
       makeGetResponse([makeProtoReport(1, true)]),
     );
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () => ({
         diagnostics: useStatementDiagnostics(),
         create: useCreateDiagnosticsReport(),
@@ -110,8 +110,9 @@ describe("useStatementDiagnostics", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
-    expect(mockFetchData).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockFetchData).toHaveBeenCalledTimes(1);
+    });
 
     // Mock the create response then the revalidation fetch.
     mockFetchData.mockResolvedValueOnce({ report: {} });
@@ -136,7 +137,7 @@ describe("useStatementDiagnostics", () => {
       makeGetResponse([makeProtoReport(1, false)]),
     );
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () => ({
         diagnostics: useStatementDiagnostics(),
         cancel: useCancelDiagnosticsReport(),
@@ -144,7 +145,9 @@ describe("useStatementDiagnostics", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
+    await waitFor(() => {
+      expect(result.current.diagnostics.isLoading).toBe(false);
+    });
 
     // Mock cancel response (no error) then revalidation.
     mockFetchData.mockResolvedValueOnce({ error: "" });

@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook } from "@testing-library/react";
 
 import * as livenessApi from "./livenessApi";
 import * as nodesApi from "./nodesApi";
