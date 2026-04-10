@@ -1622,7 +1622,9 @@ func (m *Manager) acquireNodeLease(
 					return false, err
 				}
 			}
-
+			// If the version of the lease we are acquiring has changed,
+			// then notify any observers.
+			m.maybeAddObserverEvent(id, currentVersion, false /* dropped */)
 			return true, nil
 		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
@@ -1713,12 +1715,18 @@ func (m *Manager) purgeOldVersions(
 	}
 
 	removeInactives := func(dropped bool) {
+		wasOffline := false
 		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
+			wasOffline = t.mu.takenOffline
 			t.setTakenOfflineLocked(dropped)
 			return t.removeInactiveVersions(ctx), t.mu.active.findPreviousToExpire(dropped)
 		}()
+		// Fire a notification for dropped descriptors.
+		if dropped && !wasOffline {
+			m.maybeAddObserverEvent(id, minVersion, true /* dropped */)
+		}
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
 		}
@@ -2019,6 +2027,12 @@ type Manager struct {
 		// activeCloseTimestamps contains the most recent timestamp handles currently
 		// in use by transactions.
 		activeCloseTimestamps []*closeTimeStampHandle
+
+		// observers is list of lease manager observers.
+		observers atomic.Pointer[[]Observer]
+
+		// pendingObserverEvents is a list of observer events.
+		pendingObserverEvents []observerEvent
 	}
 
 	// closeTimeStamp is the most recent closeTimeStamp handle, for
@@ -2043,6 +2057,8 @@ type Manager struct {
 	descDelCh chan descpb.ID
 	// rangeFeedCheckpointCh receives rangefeed checkpoints from the rangefeed.
 	rangeFeedCheckpointCh chan *kvpb.RangeFeedCheckpoint
+	// observerEvent receives an event for the observer.
+	observerEvent chan struct{}
 	// rangefeedErrCh receives any terminal errors from the rangefeed.
 	rangefeedErrCh chan error
 	// leaseGeneration increments any time a new or existing descriptor is
@@ -2176,6 +2192,7 @@ func NewLeaseManager(
 		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
+		observerEvent:    make(chan struct{}, 1),
 	}
 	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
@@ -2257,6 +2274,40 @@ func (m *Manager) findNewest(id descpb.ID) (state *descriptorVersionState, offli
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.mu.active.findNewest(), t.mu.takenOffline
+}
+
+// maybeAddObserverEvent appends a new observer event if the version has changed.
+func (m *Manager) maybeAddObserverEvent(
+	id descpb.ID, currentVersion descpb.DescriptorVersion, dropped bool,
+) {
+	newest, _ := m.findNewest(id)
+	// If the version hasn't changed, then nothing needs to be emitted.
+	if (newest != nil && newest.GetVersion() == currentVersion) || (newest == nil && !dropped) {
+		return
+	}
+	// Append the new observer event.
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		var ts hlc.Timestamp
+		newVersion := currentVersion
+		if dropped {
+			ts = m.storage.clock.Now()
+		} else {
+			ts = newest.GetModificationTime()
+			newVersion = newest.GetVersion()
+		}
+		m.mu.pendingObserverEvents = append(m.mu.pendingObserverEvents, observerEvent{id: id,
+			version:          newVersion,
+			modificationTime: ts,
+		})
+	}()
+	// Signal there is an event waiting, unless the channel is already
+	// posted.
+	select {
+	case m.observerEvent <- struct{}{}:
+	default:
+	}
 }
 
 // SetRegionPrefix sets the prefix this Manager uses to write leases. If val
@@ -3198,11 +3249,11 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 	return forceRefresh
 }
 
-// RunBackgroundLeasingTask runs background leasing tasks which are
+// RunBackgroundLeasingTasks runs background leasing tasks which are
 // responsible for expiring old descriptor versions, monitoring
 // range feed progress / recovery, and supporting legacy expiry
 // based leases.
-func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
+func (m *Manager) RunBackgroundLeasingTasks(ctx context.Context) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	// The refresh loop is used to clean up leases that have expired (because of
 	// a new version), and track range feed availability. This will run based on
@@ -3264,6 +3315,28 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 					log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
 				}
 				descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
+			}
+		}
+	})
+	// Background thread for lease observers.
+	_ = m.stopper.RunAsyncTask(ctx, "lease-observers", func(ctx context.Context) {
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+			case <-m.observerEvent:
+				// Extract all the opending events.
+				events := func() []observerEvent {
+					m.mu.Lock()
+					defer m.mu.Unlock()
+					events := m.mu.pendingObserverEvents
+					m.mu.pendingObserverEvents = nil
+					return events
+				}()
+				// Notify all observers.
+				for _, event := range events {
+					m.notifyObservers(ctx, event.id, event.version, event.modificationTime)
+				}
 			}
 		}
 	})
