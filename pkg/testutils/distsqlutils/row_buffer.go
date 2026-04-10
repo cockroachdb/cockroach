@@ -192,14 +192,20 @@ func (rb *RowBuffer) ConsumerClosed() {
 	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(execinfra.ConsumerClosed))
 }
 
-// NextNoMeta is a version of Next which fails the test if
-// it encounters any metadata.
+// NextNoMeta is a version of Next which fails the test if it encounters any
+// metadata other than the always-on per-flow grunning emission (Metrics-only
+// metadata, which is orthogonal to row data and silently swallowed).
 func (rb *RowBuffer) NextNoMeta(tb testing.TB) rowenc.EncDatumRow {
-	row, meta := rb.Next()
-	if meta != nil {
+	for {
+		row, meta := rb.Next()
+		if meta == nil {
+			return row
+		}
+		if meta.Metrics != nil {
+			continue
+		}
 		tb.Fatalf("unexpected metadata: %v", meta)
 	}
-	return row
 }
 
 // GetRowsNoMeta returns the rows in the buffer; it fails the test if it

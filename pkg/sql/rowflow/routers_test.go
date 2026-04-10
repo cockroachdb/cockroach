@@ -870,6 +870,12 @@ func TestRouterDiskSpill(t *testing.T) {
 		for i := 0; ; i++ {
 			row, meta := rowChan.Next()
 			if meta != nil {
+				// Skip the always-on grunning emission from the router output
+				// goroutine; it is orthogonal to the trace metadata this test
+				// inspects.
+				if meta.Metrics != nil && meta.Err == nil && meta.TraceData == nil {
+					continue
+				}
 				if memErrorWhenConsumingRows {
 					if meta.Err != nil {
 						errMetaSeen = true

@@ -951,10 +951,13 @@ func TestHashRouterOneOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			wg.Wait()
-			// Expect no metadata, this should be a successful run.
-			unexpectedMetadata := ro.DrainMeta()
-			if len(unexpectedMetadata) != 0 {
-				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", unexpectedMetadata)
+			// Expect no metadata other than the always-on Metrics record
+			// carrying the router goroutine's RawSQLCPUTime.
+			for _, meta := range ro.DrainMeta() {
+				if meta.Metrics != nil {
+					continue
+				}
+				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", meta)
 			}
 			if !mtc.skipExpSpillCheck {
 				// If len(sel) == 0, no items will have been enqueued so override an
@@ -1193,8 +1196,20 @@ func TestHashRouterRandom(t *testing.T) {
 
 				wg.Wait()
 				// The waitGroup protects metadataMu from concurrent access, so there's
-				// no need to lock the mutex here.
+				// no need to lock the mutex here. Filter out the always-on grunning
+				// emission from the HashRouter goroutine; it is orthogonal to the
+				// error metadata this test exercises.
 				metadata := metadataMu.metadata
+				for i := range metadata {
+					filtered := metadata[i][:0]
+					for _, m := range metadata[i] {
+						if m.Metrics != nil && m.Err == nil {
+							continue
+						}
+						filtered = append(filtered, m)
+					}
+					metadata[i] = filtered
+				}
 				checkMetadata := func(t *testing.T, expectedErrMsgs []string) {
 					t.Helper()
 					require.Equal(t, 1, len(metadata), "one output (the last to exit) should return metadata")

@@ -934,12 +934,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if grunning.Supported {
 			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTimeNanos)
 		}
-		if !ih.containsMutation && ih.vectorized && grunning.Supported {
-			// Currently we cannot separate SQL CPU time from local KV CPU time for
-			// mutations, since they do not collect statistics. Additionally, CPU time
-			// is only collected for vectorized plans since it is gathered by the
-			// vectorizedStatsCollector operator.
-			// TODO(drewk): lift these restrictions.
+		if grunning.Supported {
 			ob.AddSQLCPUTime(queryStats.SQLCPUTime)
 		}
 		if ih.isTenant && ih.vectorized {
@@ -1130,8 +1125,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 		}
 	}
 
-	noMutations := !p.curPlan.flags.IsSet(planFlagContainsMutation)
-
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
 		wrapped := n.WrappedNode()
@@ -1189,18 +1182,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 					nodeStats.ExecTime.MaybeAdd(stats.Exec.ExecTime)
 					nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
 					nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
-					if noMutations && !makeDeterministic {
-						// Currently we cannot separate SQL CPU time from local
-						// KV CPU time for mutations, since they do not collect
-						// statistics. Additionally, some platforms do not
-						// support usage of the grunning library, so we can't
-						// show this field when a deterministic output is
-						// required.
-						// TODO(drewk): once the grunning library is fully
-						// supported we can unconditionally display the CPU time
-						// here and in output.go and component_stats.go.
-						nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
-					}
+					nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
 					nodeStats.UsedFollowerRead = nodeStats.UsedFollowerRead || stats.KV.UsedFollowerRead
 				}
 			}

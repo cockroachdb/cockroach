@@ -544,9 +544,11 @@ type VectorizedStatsCollector interface {
 func NextNoMeta(op Operator) coldata.Batch {
 	b, meta := op.Next()
 	if meta != nil {
-		if buildutil.CrdbTestBuild && meta.RowNum != nil {
+		if buildutil.CrdbTestBuild && (meta.RowNum != nil || meta.Metrics != nil) {
 			// In test builds, the invariantsChecker can inject RowNum metadata
-			// in arbitrary Operator chains, so we'll just silently swallow it.
+			// in arbitrary Operator chains, and synchronizer / router / outbox
+			// wrappers may emit Metrics metadata carrying the always-on
+			// grunning measurement. Both are silently swallowed.
 			return NextNoMeta(op)
 		}
 		colexecerror.InternalError(errors.AssertionFailedf("non-nil metadata from %T: %v", op, meta))
