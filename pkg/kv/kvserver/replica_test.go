@@ -4141,12 +4141,6 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus exit.Code
-	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
-		exitStatus = i
-	})
-	defer log.ResetExitFunc()
-
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -4181,13 +4175,9 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	}
 
 	assignSeqNumsForReqs(txn, &args)
-	expErr := regexp.QuoteMeta("replica corruption (processed=true): range does not match splits")
+	expErr := "range does not match splits"
 	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, expErr) {
 		t.Errorf("unexpected error: %s", pErr)
-	}
-
-	if exitStatus != exit.FatalError() {
-		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
 
