@@ -484,6 +484,11 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 			t.Fatal(err)
 		}
 
+		// Save the current binary before overwriting with the predecessor.
+		// We restore it after snapshot creation so the workload phase runs
+		// the current version.
+		c.Run(ctx, option.WithNodes(c.All()), "cp ./cockroach ./cockroach.current")
+
 		// Copy over the binary to ./cockroach and run it from there. This test
 		// captures disk snapshots, which are fingerprinted using the binary
 		// version found in this path.
@@ -550,6 +555,10 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 		} else {
 			t.L().Printf("=== CREATED %d NEW SNAPSHOT(S) with prefix %q ===", len(snapshots), snapshotPrefix)
 		}
+
+		// Restore the current binary so the workload phase runs the
+		// current version instead of the predecessor.
+		c.Run(ctx, option.WithNodes(c.All()), "cp ./cockroach.current ./cockroach")
 	} else {
 		t.L().Printf("found %d existing snapshot(s) with prefix %q",
 			len(snapshots), snapshotPrefix)
