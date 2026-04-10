@@ -696,11 +696,12 @@ subtest end
 
 subtest domain_enum_base_type
 
-# Domain over enum type: creation succeeds but casting and back-references
-# don't fully work yet. The domain type inherits EnumFamily from the base
-# type but lacks the EnumData hydration metadata needed for string-to-enum
-# parsing. Back-references from the domain to the enum are also incomplete.
-# TODO(#27796): Fix domain-over-enum support (casting, back-references).
+statement ok
+CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy', 'ecstatic');
+CREATE DOMAIN positive_mood AS mood CHECK (VALUE IN ('happy', 'ecstatic'));
+
+statement error pgcode 2BP01 cannot drop type "mood" because other objects \(\[test.public.positive_mood\]\) still depend on it
+DROP TYPE mood;
 
 subtest end
 
