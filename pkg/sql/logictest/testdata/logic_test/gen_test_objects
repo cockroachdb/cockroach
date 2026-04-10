@@ -179,16 +179,16 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-descriptor_id_seq
-join_tokens
-prepared_\\x7btransactions
-pro\\u9A2Etected_ts_meta
-replication_constraint_stats
-scheduled_jobs
+i😰nspect_errors
+mvcc_statistics
+proteC ted_ts_records
+r\\x86egion_\\U000B092Dlivenes s
+replication_critical_localities
+statement_bundle_chunks
+statement_diagnost ics
 sta😣tement_statistics
-task\\x86_paylo\\U000B092Dads
-transaction_diagno͇stics
-transact😪i|on_statistics
+tab͇le_statistics
+tenant_usage
 users
 
 # Again, the column names are randomized.
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-descriptor_id_seq             "Value"                bigint
-descriptor_id_seq             rowid                  bigint
-join_tokens                   expiration             timestamp with time zone
-join_tokens                   id                     uuid
-join_tokens                   rowid                  bigint
-join_tokens                   secret                 bytea
-"prepared_\\x7btransactions"  """owner"              text
-"prepared_\\x7btransactions"  "%acprepared"          timestamp with time zone
-"prepared_\\x7btransactions"  "Global_id"            text
-"prepared_\\x7btransactions"  database               text
-"prepared_\\x7btransactions"  heuristic              text
-"prepared_\\x7btransactions"  rowid                  bigint
-"prepared_\\x7btransactions"  "t%vransaction_""key"  bytea
-"prepared_\\x7btransactions"  transaction_id         uuid
-"pro\\u9A2Etected_ts_meta"    "\\u7CCAnum_records"   bigint
-"pro\\u9A2Etected_ts_meta"    "num_s""p%pans_"       bigint
-"pro\\u9A2Etected_ts_meta"    rowid                  bigint
-"pro\\u9A2Etected_ts_meta"    "s ingleton"           boolean
-"pro\\u9A2Etected_ts_meta"    "total_bytes           "                         bigint
-"pro\\u9A2Etected_ts_meta"    "v*ersi%d1on"          bigint
+i😰nspect_errors          " id"            oid
+i😰nspect_errors          " primary_key"   text
+i😰nspect_errors          "%verror😌_type"  text
+i😰nspect_errors          aost😹            timestamp with time zone
+i😰nspect_errors          database_id      oid
+i😰nspect_errors          "deta*😫ils"      jsonb
+i😰nspect_errors          error_id         uuid
+i😰nspect_errors          job_id           bigint
+i😰nspect_errors          rowid            bigint
+i😰nspect_errors          "sche m̻%pa_id"  oid
+mvcc_statistics          "Table_id"       bigint
+mvcc_statistics          created_at       timestamp with time zone
+mvcc_statistics          database_id      bigint
+mvcc_statistics          index_id         bigint
+mvcc_statistics          rowid            bigint
+mvcc_statistics          statistics       jsonb
+"proteC ted_ts_records"  "id              "                         uuid
+"proteC ted_ts_records"  meta_type        text
+"proteC ted_ts_records"  m😛eta            bytea
+"proteC ted_ts_records"  "nu m_spans"     bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  rangelog
-"d%qbt_1"  public  "re%qplication_critical_localities"
-"d%qbt_1"  public  "statement_h%pints"
-"d%qbt_2"  public  "cluster_m etrics"
-"d%qbt_2"  public  protected_ts_reco😢rds
-"d%qbt_2"  public  task_payloads
-dbt_3      public  "mi'grations"
-dbt_3      public  rangelog
-dbt_3      public  "ta\\xaable_statistics_locks"
+"d%qbt_1"  public  cluster_metrics
+"d%qbt_1"  public  "job%p_info"
+"d%qbt_1"  public  "tr ansaction_diagnostics_requests"
+"d%qbt_2"  public  rangelog
+"d%qbt_2"  public  "replication_sta ts"
+"d%qbt_2"  public  span_stat̲s_buckets
+dbt_3      public  "descrip%to%qr_id_seq"
+dbt_3      public  replication_stats
+dbt_3      public  statement_activity
 
 
 statement ok

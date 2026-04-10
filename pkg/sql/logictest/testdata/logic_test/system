@@ -21,7 +21,7 @@ skipif config local-mixed-26.1
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
-76
+77
 
 onlyif config local-mixed-26.1
 query I rowsort

@@ -84,6 +84,7 @@ var (
 		catconstants.StatementHintsTableName,
 		catconstants.InspectErrorsTableName,
 		catconstants.TableStatisticsLocksTableName,
+		catconstants.AdvisoryLocksTableName,
 		catconstants.ClusterMetricsTableName,
 		catconstants.StatementsTableName,
 	}
