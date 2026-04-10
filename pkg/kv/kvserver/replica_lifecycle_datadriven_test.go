@@ -879,12 +879,13 @@ func (tc *testCtx) updateReplicaStateFromStorage(
 	require.NoError(t, err)
 	ts, err := sl.LoadRaftTruncatedState(ctx, tc.eng.LogEngine())
 	require.NoError(t, err)
-	replID, err := sl.LoadRaftReplicaID(ctx, tc.eng.StateEngine())
+	mark, err := sl.LoadReplicaMark(ctx, tc.eng.StateEngine())
 	require.NoError(t, err)
+	require.True(t, mark.Exists())
 	rs.replica = &replicaInfo{
 		FullReplicaID: roachpb.FullReplicaID{
 			RangeID:   rs.desc.RangeID,
-			ReplicaID: replID.ReplicaID,
+			ReplicaID: mark.ReplicaID,
 		},
 		hs:      hs,
 		ts:      ts,
