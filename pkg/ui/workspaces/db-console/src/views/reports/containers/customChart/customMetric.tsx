@@ -6,7 +6,7 @@
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
 import * as React from "react";
-import Select, { Option } from "react-select";
+import Select, { SingleValue } from "react-select";
 
 import * as protos from "src/js/protos";
 import { isSystemTenant } from "src/redux/tenants";
@@ -107,21 +107,19 @@ export function CustomMetricRow({
         <div className="metric-table-dropdown">
           <Select
             className="metric-table-dropdown__select"
-            clearable={true}
-            resetValue=""
-            searchable={true}
-            value={metric}
+            isClearable={true}
+            isSearchable={true}
+            value={metricOptions.find(o => o.value === metric) || null}
             options={metricOptions}
-            onChange={(opt: Option<string>) => {
-              changeState({ metric: opt.value });
-              if (opt.value) {
-                trackMetricSelected(opt.value);
+            onChange={(opt: SingleValue<DropdownOption>) => {
+              const val = opt?.value ?? "";
+              changeState({ metric: val });
+              if (val) {
+                trackMetricSelected(val);
               }
             }}
             placeholder="Select a metric..."
-            optionComponent={MetricOption}
-            matchProp="label"
-            ignoreCase={true}
+            components={{ Option: MetricOption }}
           />
         </div>
       </td>
@@ -129,12 +127,14 @@ export function CustomMetricRow({
         <div className="metric-table-dropdown">
           <Select
             className="metric-table-dropdown__select"
-            clearable={false}
-            searchable={false}
-            value={downsampler.toString()}
+            isClearable={false}
+            isSearchable={false}
+            value={downsamplerOptions.find(
+              o => o.value === downsampler.toString(),
+            )}
             options={downsamplerOptions}
-            onChange={(opt: Option<string>) =>
-              changeState({ downsampler: +opt.value })
+            onChange={(opt: SingleValue<DropdownOption>) =>
+              changeState({ downsampler: +(opt?.value ?? 0) })
             }
           />
         </div>
@@ -143,12 +143,14 @@ export function CustomMetricRow({
         <div className="metric-table-dropdown">
           <Select
             className="metric-table-dropdown__select"
-            clearable={false}
-            searchable={false}
-            value={aggregator.toString()}
+            isClearable={false}
+            isSearchable={false}
+            value={aggregatorOptions.find(
+              o => o.value === aggregator.toString(),
+            )}
             options={aggregatorOptions}
-            onChange={(opt: Option<string>) =>
-              changeState({ aggregator: +opt.value })
+            onChange={(opt: SingleValue<DropdownOption>) =>
+              changeState({ aggregator: +(opt?.value ?? 0) })
             }
           />
         </div>
@@ -157,12 +159,14 @@ export function CustomMetricRow({
         <div className="metric-table-dropdown">
           <Select
             className="metric-table-dropdown__select"
-            clearable={false}
-            searchable={false}
-            value={derivative.toString()}
+            isClearable={false}
+            isSearchable={false}
+            value={derivativeOptions.find(
+              o => o.value === derivative.toString(),
+            )}
             options={derivativeOptions}
-            onChange={(opt: Option<string>) =>
-              changeState({ derivative: +opt.value })
+            onChange={(opt: SingleValue<DropdownOption>) =>
+              changeState({ derivative: +(opt?.value ?? 0) })
             }
           />
         </div>
@@ -171,12 +175,12 @@ export function CustomMetricRow({
         <div className="metric-table-dropdown">
           <Select
             className="metric-table-dropdown__select"
-            clearable={false}
-            searchable={false}
-            value={nodeSource}
+            isClearable={false}
+            isSearchable={false}
+            value={nodeOptions.find(o => o.value === nodeSource)}
             options={nodeOptions}
-            onChange={(opt: Option<string>) =>
-              changeState({ nodeSource: opt.value })
+            onChange={(opt: SingleValue<DropdownOption>) =>
+              changeState({ nodeSource: opt?.value ?? "" })
             }
           />
         </div>
@@ -195,12 +199,12 @@ export function CustomMetricRow({
           <div className="metric-table-dropdown">
             <Select
               className="metric-table-dropdown__select"
-              clearable={false}
-              searchable={false}
-              value={tenantSource}
+              isClearable={false}
+              isSearchable={false}
+              value={tenantOptions.find(o => o.value === tenantSource)}
               options={tenantOptions}
-              onChange={(opt: Option<string>) =>
-                changeState({ tenantSource: opt.value })
+              onChange={(opt: SingleValue<DropdownOption>) =>
+                changeState({ tenantSource: opt?.value ?? "" })
               }
             />
           </div>
