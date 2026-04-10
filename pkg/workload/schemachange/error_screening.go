@@ -149,6 +149,27 @@ func (og *operationGenerator) tableHasDependencies(
 	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema(), skipSelfRef)
 }
 
+// sequenceHasDependencies reports whether the given sequence has any schema
+// dependencies (e.g., column defaults, views, or trigger functions that
+// reference the sequence via nextval).
+func (og *operationGenerator) sequenceHasDependencies(
+	ctx context.Context, tx pgx.Tx, seqName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+	SELECT EXISTS(
+		SELECT fd.descriptor_name
+		  FROM crdb_internal.forward_dependencies AS fd
+		 WHERE fd.descriptor_id
+		       = (
+		            SELECT c.oid
+		              FROM pg_catalog.pg_class AS c
+		              JOIN pg_catalog.pg_namespace AS ns ON
+		                    ns.oid = c.relnamespace
+		             WHERE c.relname = $1 AND ns.nspname = $2
+		        )
+	)`, seqName.Object(), seqName.Schema())
+}
+
 func (og *operationGenerator) columnIsDependedOn(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name, includeFKs bool,
 ) (bool, error) {
