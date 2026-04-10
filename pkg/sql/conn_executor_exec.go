@@ -2976,6 +2976,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// https://github.com/cockroachdb/cockroach/issues/99410
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, crtime.NowMono())
 
+	// Start measuring goroutine CPU time for SQL CPU measurement.
+	var cpuStopWatch timeutil.CPUStopWatch
+	cpuStopWatch.Start()
+
 	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(ex.server.cfg.SV()) {
 		if server := ex.server.cfg.DistSQLSrv; server != nil {
 			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
@@ -3215,6 +3219,18 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 	ex.extraTxnState.kvCPUTimeNanos += stats.kvCPUTimeNanos
 
+	// Compute corrected SQL CPU time: add gateway grunning to the
+	// accumulated remote grunning, then subtract local KV CPU time
+	// (which overlaps with grunning).
+	gatewayGrunning := cpuStopWatch.Stop()
+	if gatewayGrunning > 0 {
+		stats.sqlCPUTime += gatewayGrunning
+		stats.sqlCPUTime -= stats.localKVCPUTime
+		if stats.sqlCPUTime < 0 {
+			stats.sqlCPUTime = 0
+		}
+	}
+
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
@@ -3285,6 +3301,12 @@ func populateQueryLevelStats(
 		}
 		log.Dev.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
+		// Use the always-on SQL CPU measurement if it exceeds the trace-derived
+		// value. This ensures always-on accuracy even when tracing provides a
+		// partial picture.
+		if topLevelStats.sqlCPUTime > ih.queryLevelStatsWithErr.Stats.SQLCPUTime {
+			ih.queryLevelStatsWithErr.Stats.SQLCPUTime = topLevelStats.sqlCPUTime
+		}
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
@@ -3618,8 +3640,14 @@ type topLevelQueryStats struct {
 	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
 	kvCPUTimeNanos time.Duration
 	// localKVCPUTime is the goroutine CPU time spent in KV calls on the local
-	// node, as measured by the grunning library.
+	// node, as measured by the grunning library. It is subtracted from the
+	// grunning measurement to compute the SQL-only CPU time.
 	localKVCPUTime time.Duration
+	// sqlCPUTime accumulates uncorrected grunning time from remote flows
+	// (via Metrics.SQLCPUTime metadata). After the statement completes, the
+	// gateway grunning is added and localKVCPUTime is subtracted to
+	// produce the corrected SQL CPU time.
+	sqlCPUTime time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3634,6 +3662,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.clientTime += other.clientTime
 	s.kvCPUTimeNanos += other.kvCPUTimeNanos
 	s.localKVCPUTime += other.localKVCPUTime
+	s.sqlCPUTime += other.sqlCPUTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and

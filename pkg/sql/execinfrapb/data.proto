@@ -338,7 +338,11 @@ message RemoteProducerMetadata {
     // used at the gateway to compute SQL CPU time by subtracting it from the
     // total goroutine CPU time.
     optional int64 local_kv_cpu_time = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "LocalKVCPUTime"];
-    // NEXT ID: 9
+    // SQLCPUTime carries goroutine CPU time (in nanoseconds) for this flow.
+    // Remote flows send their accumulated grunning time here; the gateway
+    // subtracts total LocalKVCPUTime to derive SQL-only CPU.
+    optional int64 sql_cpu_time = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLCPUTime"];
+    // NEXT ID: 10
   }
   oneof value {
     RangeInfos range_info = 1;
