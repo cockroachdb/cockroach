@@ -911,7 +911,8 @@ type DurabilityRequirement int8
 const (
 	// StandardDurability is what should normally be used.
 	StandardDurability DurabilityRequirement = iota
-	// GuaranteedDurability is an advanced option (only for raftLogTruncator).
+	// GuaranteedDurability is an advanced option (only for raftLogTruncator
+	// and WAGTruncator).
 	GuaranteedDurability
 )
 

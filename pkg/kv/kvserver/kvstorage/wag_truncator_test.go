@@ -8,6 +8,7 @@ package kvstorage
 import (
 	"context"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -20,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -101,6 +105,28 @@ func (e *testEngines) listWAGNodes(t *testing.T) []uint64 {
 	}
 	require.NoError(t, iter.Error())
 	return indices
+}
+
+func eventuallyExpectWAGNodesIndices(t *testing.T, e *testEngines, expected []uint64) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		actual := e.listWAGNodes(t)
+		if slices.Equal(expected, actual) {
+			return nil
+		}
+		return errors.Newf("expected WAG nodes %v, got %v", expected, actual)
+	})
+}
+
+func eventuallyExpectLastTruncatedWAGIndex(t *testing.T, truncator *WAGTruncator, expected uint64) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		actual := truncator.lastTruncatedWAGIndex.Load()
+		if actual == expected {
+			return nil
+		}
+		return errors.Newf("expected lastTruncatedWAGIndex %d, got %d", expected, actual)
+	})
 }
 
 func TestTruncateApplied(t *testing.T) {
@@ -240,7 +266,7 @@ func TestTruncateApplied(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
 			tc.setup(t, &e)
 			require.NoError(t, e.stateEngine.Flush())
 			require.NoError(t, truncator.TruncateAll(ctx))
@@ -268,7 +294,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		t.Run(eventType.String(), func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
 			e.writeWAGNode(t, wagpb.Event{
@@ -372,7 +398,7 @@ func TestTruncateGapHandling(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
 
 			// Write WAG nodes at indices 2, 4, 6.
 			e.seq.Next()
@@ -411,4 +437,82 @@ func TestTruncateGapHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWAGTruncatorBackground verifies that the WAGTruncator background
+// goroutine only truncates WAG nodes when both conditions are met: (1) the
+// state engine has flushed, and (2) there are WAG nodes to truncate (i.e.,
+// seq.Load() > lastTruncatedWAGIndex).
+func TestWAGTruncatorBackground(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	e := makeTestEngines()
+	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+
+	// Initialize replica state so events can be considered applied.
+	require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 100}))
+
+	// Start the periodic WAG truncation background task.
+	truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+	require.NoError(t, truncator.Start(ctx, stopper))
+
+	flushStateEngineAndSignal := func() {
+		require.NoError(t, e.StateEngine().Flush())
+		truncator.DurabilityAdvancedCallback()
+	}
+
+	// No WAG nodes exist. Flushing the state engine should not cause the
+	// truncator to do anything (seq.Load() == lastTruncatedWAGIndex == 0).
+	flushStateEngineAndSignal()
+	eventuallyExpectWAGNodesIndices(t, &e, nil)
+	require.Equal(t, truncator.lastTruncatedWAGIndex.Load(), uint64(0))
+
+	// Write two WAG nodes whose events are applied (index <= 100).
+	e.writeWAGNode(t, wagpb.Event{
+		Addr: wagpb.MakeAddr(r1, 10), Type: wagpb.EventInit,
+	})
+	e.writeWAGNode(t, wagpb.Event{
+		Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
+	})
+
+	// WAG nodes exist, but the state engine hasn't flushed yet, so the
+	// GuaranteedDurability reader won't see the replica state. Signal the
+	// truncator without flushing first.
+	truncator.DurabilityAdvancedCallback()
+	eventuallyExpectWAGNodesIndices(t, &e, []uint64{1, 2})
+	require.Equal(t, truncator.lastTruncatedWAGIndex.Load(), uint64(0))
+
+	// Now flush the state engine and signal again. Both nodes should be
+	// truncated since their events are applied (index 10 and 20 <= 100).
+	flushStateEngineAndSignal()
+	eventuallyExpectWAGNodesIndices(t, &e, nil)
+	// The lastTruncatedWAGIndex is stored after truncateAppliedNodes returns,
+	// so there is a small window between the WAG nodes being deleted and the
+	// index being updated. Use an eventually-consistent check.
+	eventuallyExpectLastTruncatedWAGIndex(t, truncator, 2)
+
+	// Write a third WAG node that is NOT applied (index 200 > 100).
+	e.writeWAGNode(t, wagpb.Event{
+		Addr: wagpb.MakeAddr(r1, 200), Type: wagpb.EventApply,
+	})
+	flushStateEngineAndSignal()
+	// Node 3 should remain because its event isn't applied yet.
+	eventuallyExpectWAGNodesIndices(t, &e, []uint64{3})
+	require.Equal(t, truncator.lastTruncatedWAGIndex.Load(), uint64(2))
+
+	// Advance the applied index past 200 and flush. Now node 3 should be
+	// truncated.
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 200}))
+	flushStateEngineAndSignal()
+	eventuallyExpectWAGNodesIndices(t, &e, nil)
+	eventuallyExpectLastTruncatedWAGIndex(t, truncator, 3)
 }
