@@ -1797,6 +1797,12 @@ limit 5000;`,
 			"job_ids",
 		},
 	},
+	"system.advisory_locks": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"lock_key",
+		},
+	},
 	"system.task_payloads": {
 		// `value` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.

@@ -943,6 +943,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.TableStatisticsLocksTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.AdvisoryLocksTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 	systemschema.ClusterMetricsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
