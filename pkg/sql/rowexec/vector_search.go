@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -15,12 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -78,10 +81,24 @@ func newVectorSearchProcessor(
 		flowCtx,
 		processorID,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{},
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// We need to generate metadata before closing the processor
+				// because InternalClose() updates v.Ctx to the "original"
+				// context.
+				trailingMeta := v.generateMeta()
+				v.InternalClose()
+				return trailingMeta
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
+
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		v.ExecStatsForTrace = v.execStatsForTrace
+	}
+
 	return &v, nil
 }
 
@@ -158,6 +175,43 @@ func (v *vectorSearchProcessor) Child(nth int, verbose bool) execopnode.OpNode {
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }
 
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (v *vectorSearchProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	kvStats := v.searcher.KVStats()
+	return &execinfrapb.ComponentStats{
+		KV: execinfrapb.KVStats{
+			BatchRequestsIssued: optional.MakeUint(uint64(kvStats.BatchRequestsIssued)),
+			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
+			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
+			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
+			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
+		},
+	}
+}
+
+// generateMeta produces trailing metadata containing accumulated KV metrics
+// and, if applicable, the leaf transaction's final state.
+func (v *vectorSearchProcessor) generateMeta() []execinfrapb.ProducerMetadata {
+	kvStats := v.searcher.KVStats()
+
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
+	meta := &trailingMeta[0]
+
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.KVCPUTime = kvStats.KVCPUTime
+	meta.Metrics.BytesRead = kvStats.KVBytesRead
+
+	// Currently, vector search is not distributed, but when distribution
+	// support is added, the processor will run on remote nodes using a
+	// LeafTxn. This propagates the leaf's final state back to the RootTxn
+	// on the gateway for transaction correctness.
+	if tfs := execinfra.GetLeafTxnFinalState(v.Ctx(), v.FlowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
+	}
+
+	return trailingMeta
+}
+
 type vectorMutationSearchProcessor struct {
 	execinfra.ProcessorBase
 	input      execinfra.RowSource
@@ -218,10 +272,23 @@ func newVectorMutationSearchProcessor(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{v.input},
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// We need to generate metadata before closing the processor
+				// because InternalClose() updates v.Ctx to the "original"
+				// context.
+				trailingMeta := v.generateMeta()
+				v.InternalClose()
+				return trailingMeta
+			},
 		},
 	); err != nil {
 		return nil, err
 	}
+
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		v.ExecStatsForTrace = v.execStatsForTrace
+	}
+
 	return &v, nil
 }
 
@@ -370,6 +437,42 @@ func (v *vectorMutationSearchProcessor) Child(nth int, verbose bool) execopnode.
 		panic("input to vector mutation search is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (v *vectorMutationSearchProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	kvStats := v.searcher.KVStats()
+	return &execinfrapb.ComponentStats{
+		KV: execinfrapb.KVStats{
+			BatchRequestsIssued: optional.MakeUint(uint64(kvStats.BatchRequestsIssued)),
+			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
+			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
+			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
+			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
+		},
+	}
+}
+
+// generateMeta producfes trailing metadata with KV metrics.
+func (v *vectorMutationSearchProcessor) generateMeta() []execinfrapb.ProducerMetadata {
+	kvStats := v.searcher.KVStats()
+
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
+	meta := &trailingMeta[0]
+
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.KVCPUTime = kvStats.KVCPUTime
+	meta.Metrics.BytesRead = kvStats.KVBytesRead
+
+	// Currently, vector mutation search is not distributed, but when
+	// distribution support is added, the processor will run on remote
+	// nodes using a LeafTxn. This propagates the leaf's final state back
+	// to the RootTxn on the gateway for transaction correctness.
+	if tfs := execinfra.GetLeafTxnFinalState(v.Ctx(), v.FlowCtx.Txn); tfs != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
+	}
+
+	return trailingMeta
 }
 
 func getVectorIndexForSearch(

@@ -52,6 +52,8 @@ func (s *Searcher) Init(
 	s.idx = idx
 	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, fullVecFetchSpec)
 	s.idxCtx.Init(&s.txn)
+
+	s.txn.SetKVStats(s.idxCtx.KVStats())
 	s.evalCtx = evalCtx
 
 	// An index-join + top-k operation will handle the re-ranking, so we skip
@@ -78,6 +80,12 @@ func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T)
 	s.results = s.searchSet.PopResults()
 	s.resultIdx = 0
 	return nil
+}
+
+// KVStats returns a snapshot of the cumulative KV statistics collected during
+// search operations.
+func (s *Searcher) KVStats() cspann.KVStats {
+	return *s.idxCtx.KVStats()
 }
 
 // NextResult iterates over search results. It returns nil when there are no
