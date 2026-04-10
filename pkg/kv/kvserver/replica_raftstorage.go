@@ -850,8 +850,10 @@ func testingAssert(cond bool, msg string) {
 func (r *Replica) destroyInfoRaftMuLocked() kvstorage.DestroyReplicaInfo {
 	r.raftMu.AssertHeld()
 	return kvstorage.DestroyReplicaInfo{
-		FullReplicaID: r.ID(),
-		Keys:          r.shMu.state.Desc.RSpan(),
+		FullReplicaID:    r.ID(),
+		RaftAppliedIndex: r.shMu.state.RaftAppliedIndex,
+		Keys:             r.shMu.state.Desc.RSpan(),
+		Separated:        r.store.EnginesSeparated(),
 	}
 }
 
