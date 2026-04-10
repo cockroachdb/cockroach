@@ -135,6 +135,42 @@ func TestImportDistributedMerge(t *testing.T) {
 	require.Equal(t, [][]string{{"1", "jeff"}}, sqlDB.QueryStr(t, `SELECT id, name FROM customers`))
 }
 
+// TestImportDistributedMergeNoExternalIODir verifies that IMPORT with
+// distributed merge enabled falls back to the regular import path when
+// ExternalIODir is not configured. Without ExternalIODir, nodelocal storage is
+// unavailable, so the distributed merge pipeline cannot write temporary SSTs.
+func TestImportDistributedMergeNoExternalIODir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Intentionally omit ExternalIODir to simulate no-local-access.
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Serve CSV data over HTTP since nodelocal is unavailable.
+	csvData := "1,jeff,user@email.com"
+	httpSrv := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(csvData))
+		}),
+	)
+	defer httpSrv.Close()
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+	tdb.Exec(t, `CREATE TABLE customers (id INT PRIMARY KEY, name STRING, email STRING)`)
+
+	// Should succeed: falls back to non-distributed-merge path when
+	// ExternalIODir is not configured.
+	tdb.Exec(t, `IMPORT INTO customers (id, name, email) CSV DATA ($1)`, httpSrv.URL)
+
+	require.Equal(t, [][]string{{"1", "jeff"}},
+		tdb.QueryStr(t, `SELECT id, name FROM customers`))
+}
+
 // TestImportDistributedMergeDuplicateDetection verifies that IMPORT with
 // distributed merge detects duplicate keys at each phase of the pipeline.
 // These tests cover the fixes for cases 4-6 described in #161447.
