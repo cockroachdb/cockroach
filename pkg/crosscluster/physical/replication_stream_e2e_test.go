@@ -1693,3 +1693,107 @@ func TestAlterExternalConnection(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 }
+
+// TestReplanHighwaterRegression asserts that after an internal replan of the
+// ingestion job, the highwater timestamp does not regress to
+// ReplicationStartTime. This is a regression test for a bug where stale
+// in-memory job progress caused the frontier to re-initialize at timestamp 0
+// after a replan, producing a latency spike in roachtests.
+func TestReplanHighwaterRegression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+	skip.UnderDeadlock(t, "scatter may take too long")
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = 1
+	args.RoutingMode = streamclient.RoutingModeNode
+
+	retryErrorChan := make(chan error)
+	turnOffReplanning := make(chan struct{})
+	var alreadyReplanned atomic.Bool
+
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		AfterRetryIteration: func(err error) {
+			if err != nil && !alreadyReplanned.Load() {
+				retryErrorChan <- err
+				<-turnOffReplanning
+				alreadyReplanned.Swap(true)
+			}
+		},
+	}
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+	defer cleanup()
+
+	// Disable replanning until we're ready to trigger it.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", 0)
+
+	// Speed up progress writes so we have fine-grained entries in job_progress_history.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.job_checkpoint_frequency", time.Millisecond*100)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+	// Get the ReplicationStartTime from the job details.
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(
+		t, ctx, c.DestSysSQL, ingestionJobID)
+	replicationStartTime := stats.IngestionDetails.ReplicationStartTime
+
+	// Let the stream make progress well past the start time.
+	progressTarget := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(progressTarget, jobspb.JobID(ingestionJobID))
+
+	// Add nodes and trigger a replan.
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
+	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
+	require.NoError(t, c.SrcCluster.WaitForFullReplication())
+	replicationtestutils.CreateScatteredTable(t, c, 2)
+
+	// Enable replanning to trigger ErrPlanChanged.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
+
+	require.ErrorContains(t, <-retryErrorChan, sql.ErrPlanChanged.Error())
+
+	// Disable replanning to prevent further restarts.
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
+	close(turnOffReplanning)
+
+	// Let the job resume and make progress after the replan.
+	resumeTarget := c.DestSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(resumeTarget, jobspb.JobID(ingestionJobID))
+
+	// Verify that progress entries are strictly non-decreasing after the
+	// frontier has advanced past progressTarget. Early entries at
+	// ReplicationStartTime are expected before the frontier advances.
+	rows := c.DestSysSQL.QueryStr(t,
+		`SELECT resolved FROM system.job_progress_history WHERE job_id = $1 AND resolved IS NOT NULL ORDER BY written ASC`,
+		ingestionJobID)
+
+	var prevResolved hlc.Timestamp
+	passedProgressTarget := false
+	for i, row := range rows {
+		resolved := replicationtestutils.DecimalTimeToHLC(t, row[0])
+		if !passedProgressTarget {
+			if !resolved.Less(progressTarget) {
+				passedProgressTarget = true
+			}
+			prevResolved = resolved
+			continue
+		}
+		require.False(t, resolved.Less(prevResolved),
+			"highwater regressed at entry %d: %s < %s", i, resolved, prevResolved)
+		prevResolved = resolved
+	}
+	require.True(t, passedProgressTarget, "progress never reached progressTarget")
+	require.True(t, replicationStartTime.Less(prevResolved),
+		"expected progress past ReplicationStartTime %s, last seen %s",
+		replicationStartTime, prevResolved)
+}
