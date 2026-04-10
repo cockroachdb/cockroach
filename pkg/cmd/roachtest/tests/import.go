@@ -373,7 +373,7 @@ func registerImport(r registry.Registry) {
 				name := fmt.Sprintf("import/%s/distmerge=%v/nodes=%d", ts.subtestName, distMerge, numNodes)
 				r.Add(registry.TestSpec{
 					Name:              name,
-					Owner:             registry.OwnerSQLQueries,
+					Owner:             registry.OwnerSQLFoundations,
 					Benchmark:         testSpec.benchmark,
 					Timeout:           importTestTimeout,
 					Cluster:           r.MakeClusterSpec(numNodes),
@@ -1016,7 +1016,7 @@ func registerImportTPCC(r registry.Registry) {
 		timeout := 5 * time.Hour
 		r.Add(registry.TestSpec{
 			Name:              testName,
-			Owner:             registry.OwnerSQLQueries,
+			Owner:             registry.OwnerSQLFoundations,
 			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(numNodes),
 			CompatibleClouds:  registry.AllExceptAWS,
@@ -1052,7 +1052,7 @@ func registerImportTPCC(r registry.Registry) {
 	testName := fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses)
 	r.Add(registry.TestSpec{
 		Name:              testName,
-		Owner:             registry.OwnerSQLQueries,
+		Owner:             registry.OwnerSQLFoundations,
 		Cluster:           r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.GCEZones(geoZones)),
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
