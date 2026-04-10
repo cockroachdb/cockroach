@@ -871,6 +871,23 @@ func TestStreamingAutoReplan(t *testing.T) {
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 
 	require.Greater(t, len(clientAddresses), 1)
+
+	// Verify that progress entries are strictly non-decreasing.
+	stats := replicationtestutils.TestingGetStreamIngestionStatsFromReplicationJob(
+		t, ctx, c.DestSysSQL, ingestionJobID,
+	)
+	replicationStartTime := stats.IngestionDetails.ReplicationStartTime
+	rows := c.DestSysSQL.QueryStr(t,
+		`SELECT resolved FROM system.job_progress_history WHERE job_id = $1 AND resolved IS NOT NULL ORDER BY written ASC`,
+		ingestionJobID,
+	)
+	var prevResolved hlc.Timestamp
+	for _, row := range rows {
+		resolved := replicationtestutils.DecimalTimeToHLC(t, row[0])
+		require.True(t, prevResolved.LessEq(resolved))
+		prevResolved = resolved
+	}
+	require.True(t, replicationStartTime.Less(prevResolved))
 }
 
 // TestStreamingReplanOnLag asserts that the c2c job retries if a node lags far
@@ -1637,9 +1654,9 @@ func splitPrimaryKeyIndexSpan(
 
 func TestAlterExternalConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	pollingInterval := 100 * time.Millisecond
@@ -1683,6 +1700,7 @@ func TestAlterExternalConnection(t *testing.T) {
 		}
 		return nil
 	})
+	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	// Alter the external connection to fix the stream, and ensure replication resumes
 	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER EXTERNAL CONNECTION "%s" AS "%s"`,
