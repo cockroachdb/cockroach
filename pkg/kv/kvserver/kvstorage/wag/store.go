@@ -65,6 +65,11 @@ func (s *Seq) Next() uint64 {
 	return s.index.Add(1)
 }
 
+// Load returns the current WAG sequence number without allocating a new one.
+func (s *Seq) Load() uint64 {
+	return s.index.Load()
+}
+
 // Write puts the WAG node under the specific sequence number into the given
 // writer. The index must have been allocated to the caller by the sequencer.
 func Write(w storage.Writer, index uint64, node wagpb.Node) error {

@@ -8,6 +8,7 @@ package kvstorage
 import (
 	"context"
 	"math"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -17,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
@@ -28,16 +31,77 @@ import (
 //     replayed and made durable in the StateEngine.
 //   - [online] during the normal operation, truncate the WAG nodes that were
 //     durably applied to the state machine.
-//
-// TODO(ibrahim): Add the periodic truncation logic.
 type WAGTruncator struct {
-	st  *cluster.Settings
-	eng Engines
+	stopper *stop.Stopper
+	st      *cluster.Settings
+	eng     Engines
+	seq     *wag.Seq
+	// wakeCh is signaled when there are potential WAG nodes to truncate.
+	wakeCh chan struct{}
+	// lastTruncatedWAGIndex is the index of the last WAG node that was
+	// successfully truncated. This is to be used by online WAG truncation to
+	// quickly seek into the potential WAG nodes to truncate.
+	lastTruncatedWAGIndex atomic.Uint64
 }
 
 // NewWAGTruncator creates a WAGTruncator.
-func NewWAGTruncator(st *cluster.Settings, eng Engines) *WAGTruncator {
-	return &WAGTruncator{st: st, eng: eng}
+func NewWAGTruncator(
+	stopper *stop.Stopper, st *cluster.Settings, eng Engines, seq *wag.Seq,
+) *WAGTruncator {
+	return &WAGTruncator{
+		stopper: stopper,
+		st:      st,
+		eng:     eng,
+		seq:     seq,
+		wakeCh:  make(chan struct{}, 1),
+	}
+}
+
+// Start launches the background goroutine that performs live WAG truncation.
+// It must be called before starting the engine. It sets lastTruncatedWAGIndex,
+// and we need to set it before any WAG node could have been created so that we
+// guarantee that the periodic WAG truncation will start from the first WAG node.
+func (t *WAGTruncator) Start(ctx context.Context) error {
+	t.lastTruncatedWAGIndex.Store(t.seq.Load())
+	return t.stopper.RunAsyncTask(ctx, "wag-truncation", func(ctx context.Context) {
+		ctx, cancel := t.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		for {
+			select {
+			case <-t.wakeCh:
+				t.truncateAppliedNodesLive(ctx)
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
+
+// DurabilityAdvancedCallback is invoked whenever the state engine completes a
+// flush. It checks whether there could possibly be WAG nodes to truncate by
+// comparing lastTruncatedWAGIndex against seq.Load(). If there are potential
+// truncation opportunities, it sends a non-blocking signal to wake the
+// background goroutine. It must return quickly and must not call into the
+// engine to avoid deadlock (see storage.Engine.RegisterFlushCompletedCallback).
+func (t *WAGTruncator) DurabilityAdvancedCallback() {
+	// The key point is the point in time where we call "t.seq.Load()". If the
+	// sequence number is greater than the last truncated WAG sequence number, we
+	// will attempt to truncate if there are any WAG nodes that are ready for
+	// truncation. If it found no WAG nodes that are ready to be truncated, it
+	// will attempt to truncate on every state engine flush until
+	// sequence number == lastTruncatedWAGIndex.
+	seq, lastTruncated := t.seq.Load(), t.lastTruncatedWAGIndex.Load()
+	if seq < lastTruncated {
+		log.KvExec.Fatalf(context.Background(),
+			"WAG seq %d < lastTruncatedWAGIndex %d", seq, lastTruncated)
+	}
+	if seq == lastTruncated {
+		return
+	}
+	select {
+	case t.wakeCh <- struct{}{}:
+	default:
+	}
 }
 
 // TruncateAll truncates all applied WAG nodes. It's meant to be used at engine
@@ -131,6 +195,48 @@ func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
 		return true, nil
 	}
 	return false, iter.Error()
+}
+
+// truncateAppliedNodesLive is called by the background goroutine to truncate
+// applied WAG nodes. Unlike TruncateAll, it only truncates nodes with index
+// after lastTruncatedWAGIndex. This makes it avoid jumping over gaps in WAG
+// node indices.
+//
+// Note that jumping over gaps during WAG truncation should be safe because a
+// WAG node is only truncated if it has been applied to the state engine, and it
+// by definition has all the required events applied. However, we avoid jumping
+// over gaps so that we know the exact index to truncate next, which facilitates
+// seeking past previously deleted WAG garbage.
+func (t *WAGTruncator) truncateAppliedNodesLive(ctx context.Context) {
+	stateReader := t.eng.StateEngine().NewReader(storage.GuaranteedDurability)
+	defer stateReader.Close()
+	for {
+		if err := ctx.Err(); err != nil {
+			return
+		}
+		nextIndex := t.lastTruncatedWAGIndex.Load() + 1
+		b := t.eng.LogEngine().NewWriteBatch()
+		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(
+			ctx,
+			Raft{RO: t.eng.LogEngine(), WO: b},
+			stateReader,
+			nextIndex,
+		)
+		if err == nil && truncated {
+			err = b.Commit(false /* sync */)
+		}
+		b.Close()
+		if err != nil {
+			// TODO(ibrahim): We need to decide if we need to retry truncating this
+			//  WAG node now, or rely on the next state engine flush to do it.
+			log.KvExec.Errorf(ctx, "truncating WAG node %d: %+v", nextIndex, err)
+			return
+		}
+		if !truncated {
+			return
+		}
+		t.lastTruncatedWAGIndex.Store(nextIndex)
+	}
 }
 
 // clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
