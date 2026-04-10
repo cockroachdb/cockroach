@@ -155,40 +155,40 @@ func (p *pendingReplicaDestruction) Close() {
 	p.batch.Close()
 }
 
-// stageDestroyReplica builds a batch that, when committed, will destroy the
-// replica's on-disk state and install a tombstone. The returned
+// stageDestroyRaftMuLocked builds a batch that, when committed, will destroy
+// the replica's on-disk state and install a tombstone. The returned
 // pendingReplicaDestruction must have Close called when it is no longer needed.
 //
-// This function performs engine reads (to validate replica ID and tombstone
+// This method performs engine reads (to validate replica ID and tombstone
 // state) and stages engine writes into a batch, but does not commit. If any
 // engine read fails (e.g. due to context cancellation or I/O error), the error
 // is returned and the caller can abort with no side effects.
-func stageDestroyReplica(
-	ctx context.Context,
-	bf *kvstorage.BatchFactory,
-	stateRO kvstorage.StateRO,
-	raftRO kvstorage.RaftRO,
-	info kvstorage.DestroyReplicaInfo,
-	nextReplicaID roachpb.ReplicaID,
-	ms enginepb.MVCCStats,
+func (r *Replica) stageDestroyRaftMuLocked(
+	ctx context.Context, nextReplicaID roachpb.ReplicaID,
 ) (pendingReplicaDestruction, error) {
+	r.raftMu.AssertHeld()
+	if fn := r.store.TestingKnobs().TestingReplicaDestroyErr; fn != nil {
+		if err := fn(); err != nil {
+			return pendingReplicaDestruction{}, err
+		}
+	}
 	stageTime := timeutil.Now()
-	batch := bf.NewWriteBatch()
+	batch := r.store.batchFactory.NewWriteBatch()
 	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
 	if err := kvstorage.DestroyReplica(
 		ctx, kvstorage.ReadWriter{
-			State: kvstorage.State{RO: stateRO, WO: stateWO},
-			Raft:  kvstorage.Raft{RO: raftRO, WO: raftWO},
+			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
+			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
 		},
-		info, nextReplicaID,
+		r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		batch.Close()
 		return pendingReplicaDestruction{}, err
 	}
 	return pendingReplicaDestruction{
 		batch:       batch,
-		ms:          ms,
-		initialized: len(info.Keys.EndKey) > 0,
+		ms:          r.GetMVCCStats(),
+		initialized: r.shMu.state.Desc.IsInitialized(),
 		stageTime:   stageTime,
 		clearTime:   timeutil.Now(),
 	}, nil
