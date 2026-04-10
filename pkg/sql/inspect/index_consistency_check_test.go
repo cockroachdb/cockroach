@@ -120,12 +120,49 @@ func insertSecondaryIndexEntry(
 	return err
 }
 
-func TestDetectIndexConsistencyErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+// indexConsistencyCheckTestCase defines a test case for index consistency checking.
+type indexConsistencyCheckTestCase struct {
+	// desc is a description of the test case.
+	desc string
+	// splitRangeDDL is the DDL to split the table into multiple ranges. The
+	// table will be populated via generate_series using values up to 1000.
+	splitRangeDDL string
+	// indexDDL is the DDL to create the indexes on the table.
+	indexDDL []string
+	// corruptionTargetIndex specifies which secondary index to corrupt (0-based position).
+	// If not specified, defaults to 0 (first index).
+	corruptionTargetIndex int
+	// missingIndexEntrySelector defines a SQL predicate that selects rows
+	// whose secondary index entries will be manually deleted to simulate
+	// missing index entries (i.e., present in the primary index but not in the
+	// secondary).
+	missingIndexEntrySelector string
+	// danglingIndexEntryInsertQuery is a full SQL SELECT expression that generates
+	// rows to be inserted directly into the secondary index without corresponding
+	// primary index entries, simulating dangling entries.
+	danglingIndexEntryInsertQuery string
+	// postIndexSQL is arbitrary SQL to execute after index creation, before the final
+	// data insertion. Useful for deleting data or other test setup.
+	postIndexSQL string
+	// expectedIssues is the list of expected issues that should be found.
+	expectedIssues []inspectIssue
+	// expectedErrRegex is the regex pattern that the error message should match.
+	// If empty then no error is expected.
+	expectedErrRegex string
+	// expectedInternalErrorPatterns contains patterns for validating internal error details.
+	// Each element corresponds to the issue at the same index in expectedIssues.
+	// For non-internal-error issues, the corresponding element should be nil.
+	expectedInternalErrorPatterns []map[string]string
+	// useTimestampBeforeCorruption uses a timestamp from before corruption is introduced
+	useTimestampBeforeCorruption bool
+	// expectedRowCount is the expected number of rows counted by the check.
+	// If 0, defaults to 2000 (1000 initial + 1000 after index creation).
+	expectedRowCount uint64
+}
 
-	skip.UnderRace(t, "slow test")
-
+// runIndexConsistencyCheckTestCases runs a set of index consistency check test cases
+// with both hash-enabled and hash-disabled configurations.
+func runIndexConsistencyCheckTestCases(t *testing.T, testCases []indexConsistencyCheckTestCase) {
 	issueLogger := &testIssueCollector{}
 	ctx := context.Background()
 	const numNodes = 3
@@ -161,193 +198,6 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	r := sqlutils.MakeSQLRunner(db)
 
-	testCases := []struct {
-		// desc is a description of the test case.
-		desc string
-		// splitRangeDDL is the DDL to split the table into multiple ranges. The
-		// table will be populated via generate_series using values up to 1000.
-		splitRangeDDL string
-		// indexDDL is the DDL to create the indexes on the table.
-		indexDDL []string
-		// corruptionTargetIndex specifies which secondary index to corrupt (0-based position).
-		// If not specified, defaults to 0 (first index).
-		corruptionTargetIndex int
-		// missingIndexEntrySelector defines a SQL predicate that selects rows
-		// whose secondary index entries will be manually deleted to simulate
-		// missing index entries (i.e., present in the primary index but not in the
-		// secondary).
-		missingIndexEntrySelector string
-		// danglingIndexEntryInsertQuery is a full SQL SELECT expression that generates
-		// rows to be inserted directly into the secondary index without corresponding
-		// primary index entries, simulating dangling entries.
-		danglingIndexEntryInsertQuery string
-		// postIndexSQL is arbitrary SQL to execute after index creation, before the final
-		// data insertion. Useful for deleting data or other test setup.
-		postIndexSQL string
-		// expectedIssues is the list of expected issues that should be found.
-		expectedIssues []inspectIssue
-		// expectedErrRegex is the regex pattern that the error message should match.
-		// If empty then no error is expected.
-		expectedErrRegex string
-		// expectedInternalErrorPatterns contains patterns for validating internal error details.
-		// Each element corresponds to the issue at the same index in expectedIssues.
-		// For non-internal-error issues, the corresponding element should be nil.
-		expectedInternalErrorPatterns []map[string]string
-		// useTimestampBeforeCorruption uses a timestamp from before corruption is introduced
-		useTimestampBeforeCorruption bool
-		// expectedRowCount is the expected number of rows counted by the check.
-		// If 0, defaults to 2000 (1000 initial + 1000 after index creation).
-		expectedRowCount uint64
-	}{
-		{
-			desc: "happy path sanity",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (b)",
-			},
-			missingIndexEntrySelector: "", /* nothing corrupted */
-		},
-		{
-			desc:          "3 ranges, secondary index on a, 1 missing entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (333),(666)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a)",
-			},
-			missingIndexEntrySelector: "a = 4",
-			expectedIssues: []inspectIssue{
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(4, \\'d_4\\')'"},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc:          "2 ranges, secondary index on 'b' with storing 'e', 1 missing entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (b) STORING (e)",
-			},
-			missingIndexEntrySelector: "a = 8",
-			expectedIssues: []inspectIssue{
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(8, \\'d_8\\')'"},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc:          "10 ranges, secondary index on c with storing 'f', many missing entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (100),(200),(300),(400),(500),(600),(700),(800),(900)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (c) STORING (f)",
-			},
-			missingIndexEntrySelector: "a BETWEEN 7 AND 10",
-			expectedIssues: []inspectIssue{
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(7, \\'d_7\\')'"},
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(8, \\'d_8\\')'"},
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(9, \\'d_9\\')'"},
-				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(10, \\'d_10\\')'"},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc:          "2 ranges, secondary index on 'a', 1 dangling entry with internal error",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a) STORING (f)",
-			},
-			danglingIndexEntryInsertQuery: "SELECT 3, 30, 300, 'd_3', 'e_3', -56.712",
-			expectedIssues: []inspectIssue{
-				{ErrorType: "internal_error"},
-			},
-			expectedErrRegex: expectedInspectInternalErrors,
-			expectedInternalErrorPatterns: []map[string]string{
-				{
-					"error_message": "error decoding.*float64",
-					"error_type":    "internal_query_error",
-					"index_name":    "idx_t_a",
-					"query":         "FROM.*table_",
-				},
-			},
-		},
-		{
-			desc:          "2 ranges, secondary index on 'b' storing 'f', 1 dangling entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (b) STORING (c)",
-			},
-			danglingIndexEntryInsertQuery: "SELECT 15, 30, 300, 'corrupt', 'e_3', 300.5",
-			expectedIssues: []inspectIssue{
-				{ErrorType: "dangling_secondary_index_entry", PrimaryKey: "e'(15, \\'corrupt\\')'"},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc:          "2 ranges, all data deleted - no rows in spans",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a)",
-			},
-			postIndexSQL:     "DELETE FROM test.t", /* delete all rows to test hasRows=false code path */
-			expectedRowCount: 1000,                 // Only 1000 rows remain after deletion
-		},
-		{
-			desc:          "timestamp before corruption - no issues found",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a) STORING (c)",
-			},
-			danglingIndexEntryInsertQuery: "SELECT 15, 30, 300, 'corrupt', 'e_3', 300.5", // Add dangling entry after timestamp
-			useTimestampBeforeCorruption:  true,                                          // Use timestamp from before corruption
-			expectedRowCount:              1000,                                          // Only 1000 rows exist at the timestamp
-		},
-		{
-			desc:          "2 indexes, corrupt second index, missing entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a)",
-				"CREATE INDEX idx_t_b ON test.t (b) STORING (e)",
-			},
-			corruptionTargetIndex:     1, // Target second index (idx_t_b)
-			missingIndexEntrySelector: "a = 7",
-			expectedIssues: []inspectIssue{
-				{
-					ErrorType:  "missing_secondary_index_entry",
-					PrimaryKey: "e'(7, \\'d_7\\')'",
-					Details: map[redact.RedactableString]interface{}{
-						"index_name": "idx_t_b",
-					},
-				},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc:          "3 indexes, corrupt middle index, dangling entry",
-			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (333),(666)",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a)",
-				"CREATE INDEX idx_t_b ON test.t (b) STORING (c)",
-				"CREATE INDEX idx_t_c ON test.t (c) STORING (f)",
-			},
-			corruptionTargetIndex:         1, // Target second index (middle one)
-			danglingIndexEntryInsertQuery: "SELECT 25, 50, 500, 'corrupt_middle', 'e_25', 125.5",
-			expectedIssues: []inspectIssue{
-				{
-					ErrorType:  "dangling_secondary_index_entry",
-					PrimaryKey: "e'(25, \\'corrupt_middle\\')'",
-					Details: map[redact.RedactableString]interface{}{
-						"index_name": "idx_t_b",
-					},
-				},
-			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
-		},
-		{
-			desc: "multiple indexes, no corruption - all should be checked",
-			indexDDL: []string{
-				"CREATE INDEX idx_t_a ON test.t (a)",
-				"CREATE INDEX idx_t_b ON test.t (b)",
-				"CREATE INDEX idx_t_c ON test.t (c)",
-			},
-			// No corruptionTargetIndex specified, no corruption
-			missingIndexEntrySelector: "", // No corruption
-		},
-	}
 	hashConfigs := []struct {
 		name    string
 		enabled bool
@@ -610,6 +460,194 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDetectIndexConsistencyErrors_Basic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "slow test")
+
+	testCases := []indexConsistencyCheckTestCase{
+		{
+			desc: "happy path sanity",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (b)",
+			},
+			missingIndexEntrySelector: "", /* nothing corrupted */
+		},
+		{
+			desc:          "2 ranges, all data deleted - no rows in spans",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+			},
+			postIndexSQL:     "DELETE FROM test.t", /* delete all rows to test hasRows=false code path */
+			expectedRowCount: 1000,                 // Only 1000 rows remain after deletion
+		},
+		{
+			desc:          "timestamp before corruption - no issues found",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a) STORING (c)",
+			},
+			danglingIndexEntryInsertQuery: "SELECT 15, 30, 300, 'corrupt', 'e_3', 300.5", // Add dangling entry after timestamp
+			useTimestampBeforeCorruption:  true,                                          // Use timestamp from before corruption
+			expectedRowCount:              1000,                                          // Only 1000 rows exist at the timestamp
+		},
+	}
+	runIndexConsistencyCheckTestCases(t, testCases)
+}
+
+func TestDetectIndexConsistencyErrors_MissingEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "slow test")
+
+	testCases := []indexConsistencyCheckTestCase{
+		{
+			desc:          "3 ranges, secondary index on a, 1 missing entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (333),(666)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+			},
+			missingIndexEntrySelector: "a = 4",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(4, \\'d_4\\')'"},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc:          "2 ranges, secondary index on 'b' with storing 'e', 1 missing entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (b) STORING (e)",
+			},
+			missingIndexEntrySelector: "a = 8",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(8, \\'d_8\\')'"},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc:          "10 ranges, secondary index on c with storing 'f', many missing entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (100),(200),(300),(400),(500),(600),(700),(800),(900)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (c) STORING (f)",
+			},
+			missingIndexEntrySelector: "a BETWEEN 7 AND 10",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(7, \\'d_7\\')'"},
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(8, \\'d_8\\')'"},
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(9, \\'d_9\\')'"},
+				{ErrorType: "missing_secondary_index_entry", PrimaryKey: "e'(10, \\'d_10\\')'"},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+	}
+	runIndexConsistencyCheckTestCases(t, testCases)
+}
+
+func TestDetectIndexConsistencyErrors_DanglingEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "slow test")
+
+	testCases := []indexConsistencyCheckTestCase{
+		{
+			desc:          "2 ranges, secondary index on 'a', 1 dangling entry with internal error",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a) STORING (f)",
+			},
+			danglingIndexEntryInsertQuery: "SELECT 3, 30, 300, 'd_3', 'e_3', -56.712",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "internal_error"},
+			},
+			expectedErrRegex: expectedInspectInternalErrors,
+			expectedInternalErrorPatterns: []map[string]string{
+				{
+					"error_message": "error decoding.*float64",
+					"error_type":    "internal_query_error",
+					"index_name":    "idx_t_a",
+					"query":         "FROM.*table_",
+				},
+			},
+		},
+		{
+			desc:          "2 ranges, secondary index on 'b' storing 'f', 1 dangling entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (b) STORING (c)",
+			},
+			danglingIndexEntryInsertQuery: "SELECT 15, 30, 300, 'corrupt', 'e_3', 300.5",
+			expectedIssues: []inspectIssue{
+				{ErrorType: "dangling_secondary_index_entry", PrimaryKey: "e'(15, \\'corrupt\\')'"},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+	}
+	runIndexConsistencyCheckTestCases(t, testCases)
+}
+
+func TestDetectIndexConsistencyErrors_MultiIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "slow test")
+
+	testCases := []indexConsistencyCheckTestCase{
+		{
+			desc:          "2 indexes, corrupt second index, missing entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b) STORING (e)",
+			},
+			corruptionTargetIndex:     1, // Target second index (idx_t_b)
+			missingIndexEntrySelector: "a = 7",
+			expectedIssues: []inspectIssue{
+				{
+					ErrorType:  "missing_secondary_index_entry",
+					PrimaryKey: "e'(7, \\'d_7\\')'",
+					Details: map[redact.RedactableString]interface{}{
+						"index_name": "idx_t_b",
+					},
+				},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc:          "3 indexes, corrupt middle index, dangling entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (333),(666)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b) STORING (c)",
+				"CREATE INDEX idx_t_c ON test.t (c) STORING (f)",
+			},
+			corruptionTargetIndex:         1, // Target second index (middle one)
+			danglingIndexEntryInsertQuery: "SELECT 25, 50, 500, 'corrupt_middle', 'e_25', 125.5",
+			expectedIssues: []inspectIssue{
+				{
+					ErrorType:  "dangling_secondary_index_entry",
+					PrimaryKey: "e'(25, \\'corrupt_middle\\')'",
+					Details: map[redact.RedactableString]interface{}{
+						"index_name": "idx_t_b",
+					},
+				},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc: "multiple indexes, no corruption - all should be checked",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b)",
+				"CREATE INDEX idx_t_c ON test.t (c)",
+			},
+			// No corruptionTargetIndex specified, no corruption
+			missingIndexEntrySelector: "", // No corruption
+		},
+	}
+	runIndexConsistencyCheckTestCases(t, testCases)
 }
 
 // TestDanglingIndexEntryInEmptyTable verifies that INSPECT can detect dangling
