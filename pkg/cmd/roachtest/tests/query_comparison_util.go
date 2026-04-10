@@ -327,14 +327,23 @@ func runOneRoundQueryComparison(
 
 		setup := sqlsmith.Setups[qct.setupName](rnd)
 
+		// Temporarily disable the statement timeout during setup since these are
+		// administrative DDL statements (CREATE TABLE, CREATE INDEX, etc.) that
+		// can exceed the normal timeout on slow hardware (e.g. s390x).
 		t.Status("executing setup")
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+		if _, err := conn.Exec("SET statement_timeout = 0"); err != nil {
+			t.Fatal(err)
+		}
 		for _, stmt := range setup {
 			if _, err := conn.Exec(stmt); err != nil {
 				t.Fatal(err)
 			} else {
 				logStmt(stmt)
 			}
+		}
+		if _, err := conn.Exec(setStmtTimeout); err != nil {
+			t.Fatal(err)
 		}
 
 		conn2 := conn
