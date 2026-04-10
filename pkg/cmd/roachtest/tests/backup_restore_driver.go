@@ -1541,9 +1541,8 @@ func (rh revisionHistory) String() string {
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
 func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
-	possibleOpts := []backupOption{}
+	possibleOpts := []backupOption{revisionHistory{}}
 	if !onlineRestoreExpected {
-		possibleOpts = append(possibleOpts, revisionHistory{})
 		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}
 
