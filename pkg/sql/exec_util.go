@@ -2267,6 +2267,11 @@ type InspectTestingKnobs struct {
 	// OnCheckComplete is called after a check completes. The check interface
 	// is passed to allow the callback to extract metadata (e.g., row counts).
 	OnCheckComplete func(check interface{}) error
+	// OverrideSpans, if set, replaces the primary index spans before they
+	// are passed to PartitionSpans. This gives tests control over the exact
+	// spans used by the inspect job, bypassing the span merge logic in
+	// DistSQL planning.
+	OverrideSpans func(spans []roachpb.Span) []roachpb.Span
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
