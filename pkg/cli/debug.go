@@ -1364,6 +1364,7 @@ var debugCmds = []*cobra.Command{
 	debugResetQuorumCmd,
 	debugSendKVBatchCmd,
 	debugRecoverCmd,
+	debugResolveTxnIDCmd,
 }
 
 // DebugCmd is the root of all debug commands.

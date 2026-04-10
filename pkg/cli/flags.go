@@ -708,6 +708,7 @@ func init() {
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
 		debugListFilesCmd,
+		debugResolveTxnIDCmd,
 		debugSendKVBatchCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
