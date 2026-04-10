@@ -13,10 +13,32 @@ import (
 
 const modulePrefix = "github.com/cockroachdb/cockroach/"
 
+// NewMetadata creates a Metadata with the four fields that almost every
+// metric needs, and automatically sets SourceFile to the caller's
+// source file. Use this for the common case where no labels, visibility,
+// or other optional fields are required.
+//
+// Usage:
+//
+//	var myMeta = metric.NewMetadata(
+//	    "sql.conns", "Number of connections.",
+//	    "Connections", metric.Unit_COUNT,
+//	)
+func NewMetadata(name, help, measurement string, unit Unit) Metadata {
+	return Metadata{
+		Name:        name,
+		Help:        help,
+		Measurement: measurement,
+		Unit:        unit,
+		SourceFile:  callerSourceFile(1),
+	}
+}
+
 // InitMetadata returns a copy of m with SourceFile automatically set to
-// the caller's source file. The source file is used at generation time
-// to resolve the owning team via CODEOWNERS, eliminating the need for
-// a separate AST-scanning step.
+// the caller's source file. Use this when you need to set optional
+// fields beyond Name, Help, Measurement, and Unit (e.g. Labels,
+// Visibility, Category, HowToUse). For the common case, prefer
+// NewMetadata.
 //
 // Usage:
 //
@@ -25,6 +47,7 @@ const modulePrefix = "github.com/cockroachdb/cockroach/"
 //	    Help:        "Number of connections.",
 //	    Measurement: "Connections",
 //	    Unit:        metric.Unit_COUNT,
+//	    Visibility:  metric.Metadata_ESSENTIAL,
 //	})
 func InitMetadata(m Metadata) Metadata {
 	m.SourceFile = callerSourceFile(1)

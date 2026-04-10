@@ -23,7 +23,8 @@ import (
 const metricPkgPath = "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // Analyzer flags metric.Metadata{...} composite literals that are not
-// wrapped in a metric.InitMetadata() call.
+// wrapped in a metric.InitMetadata() call. Note that metric.NewMetadata()
+// does not use composite literals, so it is not affected by this check.
 var Analyzer = &analysis.Analyzer{
 	Name:     "metadatanew",
 	Doc:      "checks that metric.Metadata is constructed via metric.InitMetadata()",
