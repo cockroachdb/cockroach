@@ -174,17 +174,15 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	runQuery := func(query string, hideCPU bool) {
+	runQuery := func(t *testing.T, query string) {
 		rows := db.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 		var err error
-		var foundCPU bool
 		var cpuTime time.Duration
 		for _, row := range rows {
 			if len(row) != 1 {
 				t.Fatalf("expected one column")
 			}
 			if strings.Contains(row[0], "sql cpu time") {
-				foundCPU = true
 				cpuStr := strings.Split(row[0], " ")
 				require.Equal(t, 4, len(cpuStr))
 				cpuTime, err = time.ParseDuration(cpuStr[3])
@@ -192,19 +190,15 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 				break
 			}
 		}
-		if hideCPU {
-			require.Falsef(t, foundCPU, "expected not to output CPU time for query: %s", query)
-		} else {
-			require.NotZerof(t, cpuTime, "expected nonzero CPU time for query: %s", query)
-		}
+		require.NotZerof(t, cpuTime, "expected nonzero CPU time for query: %s", query)
 	}
 
-	// Mutation queries shouldn't output CPU time.
-	runQuery("CREATE TABLE t (x INT PRIMARY KEY, y INT);", true /* hideCPU */)
-	runQuery("INSERT INTO t (SELECT t, t%127 FROM generate_series(1, 10000) g(t));", true /* hideCPU */)
-
-	// Split the table across the nodes in order to make the following test cases
-	// more interesting.
+	// Set up the table and split it across the nodes in order to make the
+	// following test cases more interesting. Setup runs with the default
+	// vectorize setting; the per-mode runs below cover the always-on CPU time
+	// emission for both engines.
+	db.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, y INT)")
+	db.Exec(t, "INSERT INTO t (SELECT t, t%127 FROM generate_series(1, 10000) g(t))")
 	for _, stmt := range []string{
 		`ALTER TABLE t SPLIT AT VALUES (2500)`,
 		`ALTER TABLE t SPLIT AT VALUES (5000)`,
@@ -219,11 +213,23 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 		})
 	}
 
-	runQuery("SELECT * FROM t;", false /* hideCPU */)
-	runQuery("SELECT count(*) FROM t;", false /* hideCPU */)
-	runQuery("SELECT * FROM (SELECT * FROM t WHERE x > 2000 AND x < 3000) s1 JOIN t ON s1.x = t.x", false /* hideCPU */)
-	runQuery("SELECT * FROM (VALUES (1), (2), (3)) v(a) INNER LOOKUP JOIN t ON a = x", false /* hideCPU */)
-	runQuery("SELECT count(*) FROM generate_series(1, 100000)", false /* hideCPU */)
+	queries := []string{
+		// Mutation queries should output CPU time with always-on measurement.
+		"UPDATE t SET y = y + 1 WHERE x < 100",
+		"SELECT * FROM t;",
+		"SELECT count(*) FROM t;",
+		"SELECT * FROM (SELECT * FROM t WHERE x > 2000 AND x < 3000) s1 JOIN t ON s1.x = t.x",
+		"SELECT * FROM (VALUES (1), (2), (3)) v(a) INNER LOOKUP JOIN t ON a = x",
+		"SELECT count(*) FROM generate_series(1, 100000)",
+	}
+	for _, vectorize := range []string{"on", "off"} {
+		t.Run("vectorize="+vectorize, func(t *testing.T) {
+			db.Exec(t, "SET vectorize = "+vectorize)
+			for _, query := range queries {
+				runQuery(t, query)
+			}
+		})
+	}
 }
 
 // TestContentionTimeOnWrites verifies that the contention encountered during a

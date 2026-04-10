@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -515,7 +516,13 @@ func (f *FlowBase) StartInternal(
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
 			}
-			processors[i].Run(ctx, outputs[i])
+			output := outputs[i]
+			if grunning.Supported {
+				w := &grunningMetaOutput{RowReceiver: outputs[i]}
+				w.cpuStopWatch.Start()
+				output = w
+			}
+			processors[i].Run(ctx, output)
 			f.waitGroup.Done()
 		}(i)
 	}
@@ -801,4 +808,24 @@ func MakeCPUHandle(
 		return ctx, nil, nil, err
 	}
 	return newCtx, cpuHandle, gh, err
+}
+
+// grunningMetaOutput wraps a RowReceiver to inject a RawSQLCPUTime metadata
+// entry just before ProducerDone closes the channel. This captures the
+// processor goroutine's raw CPU time via grunning, measured from the start
+// time recorded when the wrapper was created (on the processor goroutine).
+type grunningMetaOutput struct {
+	execinfra.RowReceiver
+	cpuStopWatch timeutil.CPUStopWatch
+}
+
+// ProducerDone implements the execinfra.RowReceiver interface.
+func (g *grunningMetaOutput) ProducerDone() {
+	if delta := g.cpuStopWatch.Stop(); delta > 0 {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		meta.Metrics.RawSQLCPUTime = int64(delta)
+		g.RowReceiver.Push(nil, meta)
+	}
+	g.RowReceiver.ProducerDone()
 }

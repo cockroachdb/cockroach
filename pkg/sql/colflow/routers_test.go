@@ -951,10 +951,13 @@ func TestHashRouterOneOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			wg.Wait()
-			// Expect no metadata, this should be a successful run.
-			unexpectedMetadata := ro.DrainMeta()
-			if len(unexpectedMetadata) != 0 {
-				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", unexpectedMetadata)
+			// Expect no metadata other than the always-on Metrics record
+			// carrying the router goroutine's RawSQLCPUTime.
+			for _, meta := range ro.DrainMeta() {
+				if meta.Metrics != nil {
+					continue
+				}
+				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", meta)
 			}
 			if !mtc.skipExpSpillCheck {
 				// If len(sel) == 0, no items will have been enqueued so override an
