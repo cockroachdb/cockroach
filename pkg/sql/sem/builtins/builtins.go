@@ -90,7 +90,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ltree"
-	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -12866,11 +12865,7 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 	var formattedStmt strings.Builder
 	for idx := range stmts {
 		p, err := p.Pretty(stmts[idx].AST)
-		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
-			// If pretty-printing the statement fails, use the original
-			// statement.
-			p = stmt
-		} else if err != nil {
+		if err != nil {
 			return "", err
 		}
 		formattedStmt.WriteString(p)

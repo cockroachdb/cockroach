@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -187,11 +186,7 @@ func formatViewQueryForDisplay(
 		}
 		var prettyErr error
 		query, prettyErr = cfg.Pretty(parsed.AST)
-		if errors.Is(prettyErr, pretty.ErrPrettyMaxRecursionDepthExceeded) {
-			// Use simple printing if pretty-printing fails.
-			query = tree.AsStringWithFlags(parsed.AST, tree.FmtParsable)
-			return
-		} else if prettyErr != nil {
+		if prettyErr != nil {
 			err = prettyErr
 			return
 		}
