@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/physicalplan",
         "//pkg/sql/privilege",
+        "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowexec",
         "//pkg/sql/schemachanger/scexec",

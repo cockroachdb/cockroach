@@ -206,6 +206,10 @@ func (c *inspectResumer) planInspectProcessors(
 		return nil, nil, err
 	}
 
+	if knobs := jobExecCtx.ExecCfg().InspectTestingKnobs; knobs != nil && knobs.OverrideSpans != nil {
+		entirePKSpans = knobs.OverrideSpans(entirePKSpans)
+	}
+
 	spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, entirePKSpans, sql.PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, nil, err
