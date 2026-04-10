@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -1259,5 +1262,173 @@ func TestEstimateStaleness(t *testing.T) {
 	// 150% staleness.
 	if err = checkEstimatedStaleness(1.5); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAddMisestimate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	span := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	spanFromPoint := func(start string, endByte byte) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: []byte{endByte, 0}}
+	}
+	id := indexInfo{tableID: descpb.ID(1), indexID: descpb.IndexID(1)}
+
+	for _, tc := range []struct {
+		name     string
+		old      roachpb.Spans
+		new      misestimate
+		expected roachpb.Spans
+	}{
+		{
+			name: "add to empty map",
+			new: misestimate{
+				Spans: roachpb.Spans{span("a", "b")},
+			},
+			expected: roachpb.Spans{span("a", "b")},
+		},
+		{
+			name: "point Gets",
+			new: misestimate{
+				Spans: roachpb.Spans{span("a", ""), span("b", "c"), span("d", "")},
+			},
+			expected: roachpb.Spans{spanFromPoint("a", 'a'), span("b", "c"), spanFromPoint("d", 'd')},
+		},
+		{
+			name: "merge adjacent spans",
+			old:  roachpb.Spans{span("b", "c"), span("e", "f")},
+			new: misestimate{
+				Spans: roachpb.Spans{span("a", "b"), span("f", "g")},
+			},
+			expected: roachpb.Spans{span("a", "c"), span("e", "g")},
+		},
+		{
+			name: "non-adjacent span",
+			old:  roachpb.Spans{span("a", "b")},
+			new: misestimate{
+				Spans: roachpb.Spans{span("d", "e")},
+			},
+			expected: roachpb.Spans{span("a", "b"), span("d", "e")},
+		},
+		{
+			name: "all spans are duplicates",
+			old:  roachpb.Spans{span("a", "b"), span("c", "d"), span("e", "f")},
+			new: misestimate{
+				Spans: roachpb.Spans{span("a", "b"), span("e", "f")},
+			},
+			expected: roachpb.Spans{span("a", "b"), span("c", "d"), span("e", "f")},
+		},
+		{
+			name: "spans and point Gets intertwined",
+			old:  roachpb.Spans{span("a", ""), span("c", "d"), span("f", "g"), span("j", "")},
+			new: misestimate{
+				Spans: roachpb.Spans{span("a", "b"), span("c", ""), span("e", "f"), span("i", "j")},
+			},
+			expected: roachpb.Spans{span("a", "b"), span("c", "d"), span("e", "g"), spanFromPoint("i", 'j')},
+		},
+		{
+			name: "multiple spans with different properties",
+			old: roachpb.Spans{
+				span("a", "b"),
+				span("d", "e"),
+				span("i", "o"),
+				span("x", "y"),
+			},
+			new: misestimate{
+				Spans: roachpb.Spans{
+					span("a", "b"), // duplicate
+					span("e", "f"), // adjacent after
+					span("h", "j"), // partial overlap
+					span("k", "l"), // fully contained
+					span("m", "n"), // fully contained
+					span("v", "z"), // fully contains existing one
+				},
+			},
+			expected: roachpb.Spans{
+				span("a", "b"),
+				span("d", "f"),
+				span("h", "o"),
+				span("v", "z"),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Swapping old and new shouldn't change the result.
+			for _, swapped := range []bool{false, true} {
+				old, new := tc.old, tc.new.Spans
+				if swapped {
+					old, new = new, old
+				}
+				t.Run(fmt.Sprintf("swapped=%t", swapped), func(t *testing.T) {
+					r := &Refresher{misestimateSpans: make(map[indexInfo]roachpb.Spans)}
+					if old != nil {
+						r.addMisestimate(misestimate{
+							indexInfo: id,
+							Spans:     old,
+						})
+					}
+					r.addMisestimate(misestimate{
+						indexInfo: id,
+						Spans:     new,
+					})
+
+					result := r.misestimateSpans[id]
+					require.Equal(t, tc.expected, result)
+				})
+			}
+		})
+	}
+}
+
+func TestAddMisestimateRandomized(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewTestRand()
+	span := func(start, end byte) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(string(start)), EndKey: roachpb.Key(string(end))}
+	}
+	dedupAndMerge := func(spans roachpb.Spans) roachpb.Spans {
+		sort.Sort(spans)
+		var result roachpb.Spans
+		result = append(result, spans[0])
+		for i := 1; i < len(spans); i++ {
+			prev := result[len(result)-1]
+			if prev.Contains(spans[i]) {
+				continue
+			}
+			if prev.EndKey.Compare(spans[i].Key) >= 0 {
+				result[len(result)-1].EndKey = spans[i].EndKey
+				continue
+			}
+			result = append(result, spans[i])
+		}
+		return result
+	}
+	makeSpans := func() roachpb.Spans {
+		spans := make(roachpb.Spans, rng.Intn(50)+1)
+		for i := range spans {
+			start, end := 'a'+byte(rng.Intn(26)), 'a'+byte(rng.Intn(26))
+			if start > end {
+				start, end = end, start
+			} else if start == end {
+				end = start + 1
+			}
+			spans[i] = span(start, end)
+		}
+		return dedupAndMerge(spans)
+	}
+	id := indexInfo{tableID: descpb.ID(1), indexID: descpb.IndexID(1)}
+
+	for range 100 {
+		r := &Refresher{misestimateSpans: make(map[indexInfo]roachpb.Spans)}
+		old, new := makeSpans(), makeSpans()
+		r.misestimateSpans[id] = old
+		r.addMisestimate(misestimate{
+			indexInfo: id,
+			Spans:     new,
+		})
+		require.Equal(t, dedupAndMerge(append(old, new...)), r.misestimateSpans[id])
 	}
 }
