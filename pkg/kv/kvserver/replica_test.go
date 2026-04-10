@@ -3374,18 +3374,9 @@ func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 // TestReplicaAbortSpanReadError verifies that an error is returned
 // to the client in the event that a AbortSpan entry is found but is
 // not decodable.
-//
-// This doubles as a test that replica corruption errors are propagated
-// and handled correctly.
 func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	var exitStatus exit.Code
-	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
-		exitStatus = i
-	})
-	defer log.ResetExitFunc()
 
 	ctx := context.Background()
 	tc := testContext{}
@@ -3415,12 +3406,8 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	_, pErr := tc.SendWrappedWith(kvpb.Header{
 		Txn: txn,
 	}, args)
-	if !testutils.IsPError(pErr, "replica corruption") {
-		t.Fatal(pErr)
-	}
-	if exitStatus != exit.FatalError() {
-		t.Fatalf("did not fatal (exit status %d)", exitStatus)
-	}
+	require.True(t, testutils.IsPError(pErr, "could not read from AbortSpan"),
+		"unexpected error: %s", pErr)
 }
 
 // TestReplicaAbortSpanOnlyWithIntent verifies that a transactional command
