@@ -18,22 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
 
 // WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
-type WAGTruncatorTestingKnobs struct{}
+type WAGTruncatorTestingKnobs struct {
+	// AfterTruncationCallback is called after each truncation attempt.
+	AfterTruncationCallback func()
+}
 
 // WAGTruncator truncates applied WAG nodes and clears their associated raft
-// state (log entries and sideloaded files). It supports both offline and online
-// mode of operation:
-//   - [offline] during the store startup, truncate the WAG after it is
-//     replayed and made durable in the StateEngine.
-//   - [online] during the normal operation, truncate the WAG nodes that were
-//     durably applied to the state machine.
-//
-// TODO(ibrahim): Add the periodic truncation logic.
+// state (log entries and sideloaded files).
 type WAGTruncator struct {
 	st  *cluster.Settings
 	eng Engines
@@ -47,12 +45,65 @@ type WAGTruncator struct {
 	// truncIndex is the index of the last WAG node that was successfully
 	// truncated.
 	truncIndex atomic.Uint64
-	knobs      WAGTruncatorTestingKnobs
+	// wakeCh is signaled when there are potential WAG nodes to truncate.
+	wakeCh chan struct{}
+	knobs  WAGTruncatorTestingKnobs
 }
 
 // NewWAGTruncator creates a WAGTruncator.
 func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTruncator {
-	return &WAGTruncator{st: st, eng: eng, seq: seq, initIndex: seq.Load(), knobs: WAGTruncatorTestingKnobs{}}
+	return &WAGTruncator{st: st,
+		eng:       eng,
+		seq:       seq,
+		initIndex: seq.Load(),
+		wakeCh:    make(chan struct{}, 1),
+		knobs:     WAGTruncatorTestingKnobs{},
+	}
+}
+
+// Start launches the background goroutine that performs WAG truncation.
+// TODO(ibrahim): Add a setting for keeping a suffix of the WAG for debugging.
+// For example, setting a maximum number of WAG nodes to retain for debugging
+// purposes. We could also pair it with some time threshold after which all WAG
+// nodes are automatically truncated to maintain a manageable size.
+func (t *WAGTruncator) Start(ctx context.Context, stopper *stop.Stopper) error {
+	return stopper.RunAsyncTask(ctx, "wag-truncation", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		for {
+			select {
+			case <-t.wakeCh:
+				if err := t.truncateAppliedNodes(ctx); err != nil {
+					log.KvExec.Errorf(ctx, "truncating WAG node: %+v", err)
+				}
+				if cb := t.knobs.AfterTruncationCallback; cb != nil {
+					cb()
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
+
+// DurabilityAdvancedCallback is invoked whenever the state engine completes a
+// flush. It checks whether there could possibly be WAG nodes to truncate by
+// comparing truncIndex against seq.Load(). If there are potential
+// truncation opportunities, it sends a non-blocking signal to wake the
+// background goroutine. It must return quickly and must not call into the
+// engine to avoid deadlock (see storage.Engine.RegisterFlushCompletedCallback).
+func (t *WAGTruncator) DurabilityAdvancedCallback() {
+	// NB: logically, lastTruncatedWAGIndex > seq isn't possible because the
+	// sequencer index is incremented before the corresponding WAG node is
+	// written. Physically, the inversion is possible, depending on which
+	// variable is loaded first. Allow that, and treat as a no-op.
+	if t.truncIndex.Load() >= t.seq.Load() {
+		return
+	}
+	select {
+	case t.wakeCh <- struct{}{}:
+	default:
+	}
 }
 
 // truncateAppliedNodes deletes the longest fully applied prefix of the WAG.
