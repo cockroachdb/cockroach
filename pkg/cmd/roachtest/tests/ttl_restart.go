@@ -40,6 +40,17 @@ func registerTTLRestart(r registry.Registry) {
 			},
 		})
 	}
+	r.Add(registry.TestSpec{
+		Name:             "ttl-restart/checkpoint",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(3),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTTLRestartCheckpoint(ctx, t, c)
+		},
+	})
 }
 
 const showRangesQuery = "with r as (show ranges from table ttldb.tab1 with details) select range_id, lease_holder from r"
@@ -220,6 +231,150 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 				return err
 			}
 			return nil
+		}, 6*time.Minute)
+
+		return nil
+	})
+	m.Wait()
+}
+
+// runTTLRestartCheckpoint verifies that TTL job checkpointing works correctly
+// across restarts. It ensures that completed spans are persisted before a node
+// is stopped, and that the checkpoint is loaded on restart to avoid rescanning
+// already-completed spans.
+func runTTLRestartCheckpoint(ctx context.Context, t test.Test, c cluster.Cluster) {
+	startOpts := option.NewStartOpts()
+	settings := install.MakeClusterSettings()
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+	m.Go(func(ctx context.Context) error {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+
+		// Set a short checkpoint interval so checkpoints are written quickly.
+		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.ttl.checkpoint_interval = '1s'"); err != nil {
+			return errors.Wrap(err, "setting checkpoint interval")
+		}
+
+		if err := setupTableAndData(ctx, t, db); err != nil {
+			return err
+		}
+
+		// Use lower rate limits than the restart test so the job runs long
+		// enough for checkpoints to be written before we stop a node.
+		jobInfo, err := enableTTLAndWaitForJobWithRateLimit(ctx, t, c, db, 50 /* rateLimit */)
+		if err != nil {
+			return err
+		}
+
+		// Reconnect via the coordinator node, which will remain up.
+		if err := db.Close(); err != nil {
+			return errors.Wrap(err, "closing connection")
+		}
+		db = c.Conn(ctx, t.L(), jobInfo.CoordinatorID)
+
+		// Wait for TTL activity on at least 2 nodes so that stopping one
+		// non-coordinator node actually triggers a replan.
+		t.Status("check TTL activity distribution across nodes")
+		var ttlNodes map[int]struct{}
+		testutils.SucceedsWithin(t, func() error {
+			var err error
+			ttlNodes, err = findNodesWithJobLogs(ctx, t, c, jobInfo.JobID)
+			if err != nil {
+				return err
+			}
+			if len(ttlNodes) < 2 {
+				return errors.Newf("TTL activity found on only %d nodes (need 2)", len(ttlNodes))
+			}
+			return nil
+		}, 1*time.Minute)
+		t.L().Printf("TTL job %d found on nodes: %v", jobInfo.JobID, ttlNodes)
+
+		// Wait for checkpoint data to be persisted to system.job_info.
+		t.Status("wait for checkpoint data to be written")
+		const checkpointExistsSQL = `
+			SELECT count(*) FROM system.job_info
+			WHERE job_id = $1 AND info_key::string LIKE 'frontier/ttl_completed_spans%'
+		`
+		testutils.SucceedsWithin(t, func() error {
+			var count int
+			if err := db.QueryRowContext(ctx, checkpointExistsSQL, jobInfo.JobID).Scan(&count); err != nil {
+				return errors.Wrap(err, "querying checkpoint data")
+			}
+			if count == 0 {
+				return errors.New("no checkpoint data found yet")
+			}
+			t.L().Printf("found %d checkpoint entries for job %d", count, jobInfo.JobID)
+			return nil
+		}, 2*time.Minute)
+
+		// Stop one non-coordinator node that has TTL activity to trigger a
+		// job restart via replan.
+		t.Status("stop a non-coordinator node with TTL activity")
+		var stoppedNode int
+		for node := 1; node <= c.Spec().NodeCount; node++ {
+			if node == jobInfo.CoordinatorID {
+				continue
+			}
+			if _, found := ttlNodes[node]; found {
+				stoppedNode = node
+				break
+			}
+		}
+		if stoppedNode == 0 {
+			return errors.New("no non-coordinator node with TTL activity found")
+		}
+		m.ExpectDeath()
+		t.L().Printf("stopping node %d", stoppedNode)
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(stoppedNode))
+
+		// Wait for the TTL job to restart.
+		t.Status("ensure TTL job restarts")
+		testutils.SucceedsWithin(t, func() error {
+			jobInfo, err = findRunningJob(ctx, t, c, db, &jobInfo,
+				true /* expectJobRestart */, false /* allowJobSucceeded */)
+			return err
+		}, 6*time.Minute)
+
+		// Verify the checkpoint was loaded on restart by grepping for the log
+		// message emitted in progress.go when initTracker loads completed spans.
+		t.Status("verify checkpoint was used on restart")
+		testutils.SucceedsWithin(t, func() error {
+			cmd := fmt.Sprintf(
+				"grep -c 'TTL job restarting with [0-9]\\+ existing completed spans' {log-dir}/cockroach.log")
+			results, err := c.RunWithDetails(ctx, nil, option.WithNodes(c.Node(jobInfo.CoordinatorID)), cmd)
+			if err != nil {
+				return errors.Wrap(err, "grepping for checkpoint log marker")
+			}
+			for _, result := range results {
+				if result.Err != nil {
+					continue
+				}
+				count, parseErr := strconv.Atoi(strings.TrimSpace(result.Stdout))
+				if parseErr != nil {
+					return errors.Wrapf(parseErr, "parsing grep output: %s", result.Stdout)
+				}
+				if count > 0 {
+					t.L().Printf(
+						"found %d checkpoint restoration log entries on coordinator node %d",
+						count, jobInfo.CoordinatorID)
+					return nil
+				}
+			}
+			return errors.New("checkpoint restoration log message not found")
+		}, 3*time.Minute)
+
+		// Restart the stopped node and wait for the job to finish.
+		t.Status("restart the stopped node")
+		c.Start(ctx, t.L(), startOpts, settings, c.Node(stoppedNode))
+		m.ResetDeaths()
+
+		t.Status("ensure TTL job finishes")
+		testutils.SucceedsWithin(t, func() error {
+			jobInfo, err = findRunningJob(ctx, t, c, db, &jobInfo,
+				true /* expectJobRestart */, true /* allowJobSucceeded */)
+			return err
 		}, 6*time.Minute)
 
 		return nil
@@ -455,6 +610,15 @@ func setupTableAndData(ctx context.Context, t test.Test, db *gosql.DB) error {
 func enableTTLAndWaitForJob(
 	ctx context.Context, t test.Test, c cluster.Cluster, db *gosql.DB,
 ) (ttlJobInfo, error) {
+	return enableTTLAndWaitForJobWithRateLimit(ctx, t, c, db, 100 /* rateLimit */)
+}
+
+// enableTTLAndWaitForJobWithRateLimit enables TTL on the table with the given
+// rate limit for both SELECT and DELETE operations, then waits for the job to
+// start.
+func enableTTLAndWaitForJobWithRateLimit(
+	ctx context.Context, t test.Test, c cluster.Cluster, db *gosql.DB, rateLimit int,
+) (ttlJobInfo, error) {
 	var jobInfo ttlJobInfo
 
 	t.Status("enable TTL")
@@ -469,9 +633,10 @@ func enableTTLAndWaitForJob(
 		SET (ttl_expiration_expression = $$(ts::timestamptz + '1 minutes')$$,
           ttl_select_batch_size=100,
           ttl_delete_batch_size=100,
-          ttl_select_rate_limit=100,
+          ttl_select_rate_limit=%d,
+          ttl_delete_rate_limit=%d,
           ttl_job_cron='%s')`,
-		ttlCronExpression)
+		rateLimit, rateLimit, ttlCronExpression)
 	if _, err := db.ExecContext(ctx, ttlJobSettingSQL); err != nil {
 		return jobInfo, errors.Wrapf(err, "error setting TTL attributes")
 	}
