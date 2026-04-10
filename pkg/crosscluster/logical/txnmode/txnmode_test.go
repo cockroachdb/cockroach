@@ -207,14 +207,13 @@ func TestTxnModeCreateLogicallyReplicated(t *testing.T) {
 	t.Logf("Job %d status: %s", jobID, status)
 
 	// Insert more data in a transaction after replication starts
-	now := s.Clock().Now()
 	sourceDB.Exec(t, `
 		BEGIN;
 		INSERT INTO orders VALUES (2, 100, 75.00);
 		INSERT INTO orders VALUES (3, 101, 100.00);
 		COMMIT;
 	`)
-
+	now := s.Clock().Now()
 	// Wait for replication to catch up
 	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
 
@@ -226,14 +225,13 @@ func TestTxnModeCreateLogicallyReplicated(t *testing.T) {
 	})
 
 	// Test that a multi-statement transaction is replicated atomically
-	now = s.Clock().Now()
 	sourceDB.Exec(t, `
 		BEGIN;
 		UPDATE orders SET amount = amount + 10 WHERE customer_id = 100;
 		INSERT INTO orders VALUES (4, 102, 200.00);
 		COMMIT;
 	`)
-
+	now = s.Clock().Now()
 	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
 
 	// Verify the transaction was applied atomically
