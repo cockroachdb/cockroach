@@ -801,6 +801,8 @@ func (vi *Index) searchForUpdateHelper(
 	// so it will not reflect the effects of this operation. That's OK, since it's
 	// not necessary to split at exactly the point where the partition becomes
 	// oversized.
+	// NB: This runs on the Store (not the Txn), so its KV cost is not
+	// reflected in the processor's KVStats.
 	partitionKey := result.ChildKey.PartitionKey
 	count, err := vi.store.EstimatePartitionCount(ctx, idxCtx.treeKey, partitionKey)
 	if err != nil {
