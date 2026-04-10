@@ -418,13 +418,17 @@ func TestTenantCtx(t *testing.T) {
 
 						tenID, isTenantRequest := roachpb.ClientTenantFromContext(ctx)
 						key := ba.Requests[0].GetInner().Header().Key
-						keyRecognized := strings.Contains(key.String(), magicKey)
-						if !keyRecognized {
+
+						// Only match keys in the tenant's keyspace. System table
+						// operations (jobs, schema changes, etc.) can have auto-generated
+						// IDs that coincidentally contain the magic substring, causing
+						// false positives (#167600). This also subsumes the previous
+						// Meta2 prefix check (#158493).
+						tenantPrefix := keys.MakeTenantPrefix(tenantID)
+						if !bytes.HasPrefix(key, tenantPrefix) {
 							return nil
 						}
-
-						// Skip meta2 range lookups as they don't carry tenant context.
-						if bytes.HasPrefix(key, keys.Meta2Prefix) {
+						if !strings.Contains(key.String(), magicKey) {
 							return nil
 						}
 
