@@ -57,7 +57,7 @@ module.exports = (env, argv) => {
       rules: [
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          type: "asset",
+          type: "asset/inline",
           exclude: /node_modules/,
         },
         // Styles in current project use SCSS preprocessing language with CSS modules.
@@ -70,6 +70,7 @@ module.exports = (env, argv) => {
             {
               loader: "css-loader",
               options: {
+                sourceMap: false,
                 modules: {
                   localIdentName: "[local]--[hash:base64:5]",
                 }
@@ -84,7 +85,7 @@ module.exports = (env, argv) => {
         // dir so it can access external dependencies.
         {
           test: /(?<!\.module)\.scss/,
-          use: ["style-loader", "css-loader", "sass-loader"],
+          use: ["style-loader", { loader: "css-loader", options: { sourceMap: false } }, "sass-loader"],
           exclude: /node_modules/,
         },
         {
@@ -142,6 +143,7 @@ module.exports = (env, argv) => {
             {
               loader: "esbuild-loader",
               options: {
+                sourceMap: false,
                 loader: "css",
                 minify: true,
               },
