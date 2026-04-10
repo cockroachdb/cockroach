@@ -124,17 +124,18 @@ const (
 
 	// CREATE ...
 
-	createTypeEnum      // CREATE TYPE <type> ENUM AS <def>
-	createTypeComposite // CREATE TYPE <type> AS <def>
-	createIndex         // CREATE INDEX <index> ON <table> <def>
-	createPolicy        // CREATE POLICY <policy> ON <table> <def>
-	createSchema        // CREATE SCHEMA <schema>
-	createSequence      // CREATE SEQUENCE <sequence> <def>
-	createTable         // CREATE TABLE <table> <def>
-	createTableAs       // CREATE TABLE <table> AS <def>
-	createView          // CREATE VIEW <view> AS <def>
-	createFunction      // CREATE FUNCTION <function> ...
-	createTrigger       // CREATE TRIGGER <trigger> {...} ON <table> EXECUTE FUNCTION <function>()
+	createTypeEnum        // CREATE TYPE <type> ENUM AS <def>
+	createTypeComposite   // CREATE TYPE <type> AS <def>
+	createIndex           // CREATE INDEX <index> ON <table> <def>
+	createPolicy          // CREATE POLICY <policy> ON <table> <def>
+	createSchema          // CREATE SCHEMA <schema>
+	createSequence        // CREATE SEQUENCE <sequence> <def>
+	createTable           // CREATE TABLE <table> <def>
+	createTableAs         // CREATE TABLE <table> AS <def>
+	createView            // CREATE VIEW <view> AS <def>
+	createFunction        // CREATE FUNCTION <function> ...
+	createTrigger         // CREATE TRIGGER <trigger> {...} ON <table> EXECUTE FUNCTION <function>()
+	createTriggerFunction // CREATE FUNCTION <function>() RETURNS TRIGGER ...
 
 	// COMMENT ON ...
 
@@ -263,6 +264,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createTable:                       (*operationGenerator).createTable,
 	createTableAs:                     (*operationGenerator).createTableAs,
 	createTrigger:                     (*operationGenerator).createTrigger,
+	createTriggerFunction:             (*operationGenerator).createTriggerFunction,
 	createTypeEnum:                    (*operationGenerator).createEnum,
 	createTypeComposite:               (*operationGenerator).createCompositeType,
 	createView:                        (*operationGenerator).createView,
@@ -326,6 +328,7 @@ var opWeights = []int{
 	createTable:                       10,
 	createTableAs:                     1,
 	createTrigger:                     1,
+	createTriggerFunction:             2,
 	createTypeEnum:                    1,
 	createTypeComposite:               1,
 	createView:                        1,
@@ -374,6 +377,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
 	createTrigger:                     clusterversion.V26_2_Start,
+	createTriggerFunction:             clusterversion.V26_2_Start,
 	dropFunction:                      clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
 	dropPolicy:                        clusterversion.MinSupported,
