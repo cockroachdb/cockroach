@@ -8,6 +8,8 @@ package producer
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -273,10 +275,25 @@ func (b *OrderedBuffer) GetEventsFromDisk(
 }
 
 // Close closes the disk map.
-func (b *OrderedBuffer) Close(ctx context.Context) error {
-	if b.diskMap != nil {
-		b.diskMap.Close(ctx)
-		b.diskMap = nil
+func (b *OrderedBuffer) Close(ctx context.Context) (err error) {
+	if b.diskMap == nil {
+		return nil
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			panicStr := fmt.Sprint(r)
+			// If the underlying pebble DB was already closed (e.g., during server
+			// shutdown), the diskMap.Close() will panic with "pebble: closed".
+			// Since the resources are already released, we can safely handle this.
+			if strings.Contains(panicStr, "pebble: closed") {
+				err = nil
+				return
+			}
+			// Re-panic for unexpected panics.
+			panic(r)
+		}
+	}()
+	b.diskMap.Close(ctx)
+	b.diskMap = nil
 	return nil
 }
