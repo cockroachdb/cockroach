@@ -13,6 +13,8 @@ repository root:
 bash pkg/cmd/roachtest/roachstress.sh -c 1 'perturbation/full/restart'
 
 # Run locally (uses local processes instead of cloud VMs).
+# Not all tests support this — check the test implementation first.
+# Many heavier tests require cloud VMs or Linux-specific features (cgroups, etc).
 bash pkg/cmd/roachtest/roachstress.sh -c 1 -l 'acceptance/build-info'
 ```
 
@@ -31,8 +33,9 @@ After modifying test code, you must rebuild before running:
 ./dev build roachtest
 ```
 
-The built binary lands in `bin/roachtest`. You also need pre-built `cockroach`
-and `workload` binaries to pass via `--cockroach` and `--workload`.
+The built binary lands in `bin/roachtest`. When not using `roachstress.sh`, you
+also need pre-built `cockroach` and `workload` binaries to pass via
+`--cockroach` and `--workload`.
 
 ## Test registration
 
