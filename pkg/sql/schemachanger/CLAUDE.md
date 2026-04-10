@@ -166,6 +166,11 @@ CockroachDB is gradually migrating from legacy to declarative:
 3. **Version compatibility**: Old jobs must continue during upgrades
 4. **Extensive testing**: Test coverage in `schemachanger_test.go` and related files
 
+#### Development Notes
+
+As DDL operations are migrated to declarative, the tests for legacy that depend on legacy-specific behavior need the declarative
+disabled using the cluster-wide and session level configurations.
+
 ### Key Benefits of Declarative Approach
 
 1. **Correctness**: Better handling of complex scenarios and rollbacks
