@@ -186,10 +186,19 @@ func TestOutbox(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 
-	if len(metas) != 2 {
-		t.Fatalf("expected 2 metadata records, got: %d", len(metas))
+	// Filter out the always-on Metrics record carrying the outbox goroutine's
+	// RawSQLCPUTime; only the producer's two error metas should remain.
+	errMetas := metas[:0]
+	for _, m := range metas {
+		if m.Metrics != nil {
+			continue
+		}
+		errMetas = append(errMetas, m)
 	}
-	for i, m := range metas {
+	if len(errMetas) != 2 {
+		t.Fatalf("expected 2 metadata records, got: %d", len(errMetas))
+	}
+	for i, m := range errMetas {
 		expectedStr := fmt.Sprintf("meta %d", i)
 		if !testutils.IsError(m.Err, expectedStr) {
 			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
