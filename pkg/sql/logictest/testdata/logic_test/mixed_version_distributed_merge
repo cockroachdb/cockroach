@@ -14,11 +14,13 @@ SHOW CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode;
 statement ok
 SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = enabled
 
-statement error pq: .*distributed merge requires cluster version 26.*
+# Even though distributed merge is enabled and the cluster version is too old to
+# support it, the operations should succeed by falling back to local merge.
+statement ok
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
 # Try an operation that is implemented in the declarative schema changer.
-statement error pq: .*distributed merge requires cluster version 26.*
+statement ok
 ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
 
 statement ok
