@@ -853,6 +853,7 @@ func (r *Replica) destroyInfoRaftMuLocked() kvstorage.DestroyReplicaInfo {
 		FullReplicaID:    r.ID(),
 		RaftAppliedIndex: r.shMu.state.RaftAppliedIndex,
 		Keys:             r.shMu.state.Desc.RSpan(),
+		Separated:        r.store.EnginesSeparated(),
 	}
 }
 

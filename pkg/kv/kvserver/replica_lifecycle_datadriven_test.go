@@ -465,7 +465,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
 					}, kvstorage.DestroyReplicaInfo{
 						FullReplicaID: rhsRS.replica.FullReplicaID,
-						Keys:          rhsRS.desc.RSpan(),
+						// TODO(pav-kv): support the applied index properly.
+						RaftAppliedIndex: kvpb.RaftIndex(rhsRS.replica.hs.Commit),
+						Keys:             rhsRS.desc.RSpan(),
+						Separated:        tc.eng.Separated(),
 					}))
 				})
 				delete(tc.ranges, merge.RightDesc.RangeID)
@@ -477,9 +480,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1)) // ensure replica exists
 
 				destroyInfo := kvstorage.DestroyReplicaInfo{
-					FullReplicaID: rs.replica.FullReplicaID,
+					FullReplicaID:    rs.replica.FullReplicaID,
+					RaftAppliedIndex: kvpb.RaftIndex(rs.replica.hs.Commit),
+					Separated:        tc.eng.Separated(),
 				}
-				// NB: destriyInfo.Keys is only set for initialized replicas.
+				// NB: destroyInfo.Keys is only set for initialized replicas.
 				if rs.replica.initialized() {
 					destroyInfo.Keys = rs.desc.RSpan()
 				}

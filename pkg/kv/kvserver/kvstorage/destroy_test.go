@@ -82,7 +82,12 @@ func TestDestroyReplica(t *testing.T) {
 		}) + mutateSep("destroy", e, func(rw ReadWriter) {
 			require.NoError(t, DestroyReplica(
 				ctx, rw,
-				DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
+				DestroyReplicaInfo{
+					FullReplicaID:    r.id,
+					RaftAppliedIndex: r.applied,
+					Keys:             r.keys,
+					Separated:        e.Separated(),
+				}, r.id.ReplicaID+1,
 			))
 		})
 

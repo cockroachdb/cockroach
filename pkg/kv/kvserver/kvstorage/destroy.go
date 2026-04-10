@@ -68,8 +68,6 @@ const DestroyReplicaTODO = 0
 
 // DestroyReplicaInfo contains the replica's metadata needed for its removal
 // from storage.
-//
-// TODO(pav-kv): for separated storage, add the applied raft log span. #152845
 type DestroyReplicaInfo struct {
 	// FullReplicaID identifies the replica on its store.
 	roachpb.FullReplicaID
@@ -80,6 +78,11 @@ type DestroyReplicaInfo struct {
 	// Keys is the user key span of this replica, taken from its RangeDescriptor.
 	// Non-empty iff the replica is initialized.
 	Keys roachpb.RSpan
+	// Separated indicates that the raft and state machine engines are separated.
+	// When true, only the unapplied suffix of the raft log is cleared (entries
+	// after RaftAppliedIndex), leaving the applied prefix for later log engine
+	// GC. When false, the entire raft log is cleared.
+	Separated bool
 }
 
 // DestroyReplica destroys the entirety of the replica's state in storage, and
@@ -123,7 +126,8 @@ func destroyReplicaImpl(
 	//
 	// All the code below is equivalent to clearing all the spans that the
 	// following SelectOpts represents, and leaving only the RangeTombstoneKey
-	// populated with the specified NextReplicaID.
+	// populated with the specified NextReplicaID. With separated engines, the
+	// applied prefix of the raft log is excluded and left for log engine GC.
 	if buildutil.CrdbTestBuild {
 		_ = rditer.SelectOpts{
 			ReplicatedByRangeID:   true,
@@ -132,16 +136,14 @@ func destroyReplicaImpl(
 		}
 	}
 
+	buf := keys.MakeRangeIDPrefixBuf(info.RangeID)
 	// First, clear all RangeID-local replicated keys. Also, include all
 	// RangeID-local unreplicated keys < RangeTombstoneKey as a drive-by, since we
 	// decided that these (currently none) belong to the state machine engine.
-	span := roachpb.Span{
-		Key:    keys.MakeRangeIDReplicatedPrefix(info.RangeID),
-		EndKey: keys.RangeTombstoneKey(info.RangeID),
-	}
 	if err := storage.ClearRangeWithHeuristic(
 		ctx, rw.State.RO, rw.State.WO,
-		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		buf.ReplicatedPrefix(), sl.RangeTombstoneKey(),
+		ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
@@ -159,28 +161,38 @@ func destroyReplicaImpl(
 	//
 	// TODO(pav-kv): make a helper for piece-wise clearing, instead of using a
 	// series of ClearRangeWithHeuristic.
-	span = roachpb.Span{
-		Key:    span.EndKey.Next(), // RangeTombstoneKey.Next()
-		EndKey: keys.RaftReplicaIDKey(info.RangeID),
-	}
-	// TODO(#152845): with separated raft storage, clear only the unapplied suffix
-	// of the raft log, which is in this span.
-	if err := storage.ClearRangeWithHeuristic(
+	if info.Separated {
+		// With separated engines, only clear the unapplied suffix of the raft log.
+		// The applied entries are cleared during WAG garbage collection.
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, rw.Raft.RO, rw.Raft.WO,
+			buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
+			ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, rw.Raft.RO, rw.Raft.WO,
+			buf.RaftLogKey(info.RaftAppliedIndex+1), sl.RaftReplicaIDKey(),
+			ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+	} else if err := storage.ClearRangeWithHeuristic(
 		ctx, rw.Raft.RO, rw.Raft.WO,
-		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		buf.RangeTombstoneKey().Next(), sl.RaftReplicaIDKey(),
+		ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
 	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
 		return err
 	}
-	span = roachpb.Span{
-		Key:    span.EndKey.Next(), // RaftReplicaIDKey.Next()
-		EndKey: keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
-	}
+
 	if err := storage.ClearRangeWithHeuristic(
 		ctx, rw.Raft.RO, rw.Raft.WO,
-		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		buf.RaftReplicaIDKey().Next(), sl.UnreplicatedPrefix().PrefixEnd(),
+		ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
