@@ -51,7 +51,15 @@ func (s *MutationSearcher) Init(
 	s.idx = idx
 	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, getFullVectorsFetchSpec)
 	s.idxCtx.Init(&s.txn)
+
+	s.txn.SetKVStats(s.idxCtx.KVStats())
 	s.evalCtx = evalCtx
+}
+
+// KVStats returns a snapshot of the cumulative KV statistics collected during
+// mutation search operations.
+func (s *MutationSearcher) KVStats() cspann.KVStats {
+	return *s.idxCtx.KVStats()
 }
 
 // SearchForInsert triggers a search for the partition in which to insert the

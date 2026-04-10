@@ -129,6 +129,23 @@ type SearchOptions struct {
 	UpdateStats bool
 }
 
+// KVStats tracks cumulative KV-layer statistics for vector index operations.
+// It is populated by vecstore.Txn during batch execution and read after the
+// operation completes. It is not thread-safe.
+type KVStats struct {
+	// BatchRequestsIssued is the number of KV batch requests executed.
+	BatchRequestsIssued int64
+	// KVBytesRead is the total number of bytes read from KV.
+	KVBytesRead int64
+	// KVPairsRead is the total number of KV pairs read.
+	KVPairsRead int64
+	// KVTime is the wall-clock time spent in KV batch execution.
+	KVTime time.Duration
+	// KVCPUTime is the CPU time reported by KV, in nanoseconds. This uses
+	// int64 (not time.Duration) to match the BatchResponse.CPUTime field.
+	KVCPUTime int64
+}
+
 // Context contains per-thread state needed during index operations. Callers
 // must call Init before use.
 //
@@ -161,6 +178,11 @@ type Context struct {
 	// vectors and to find partitions in which to insert new vectors.
 	search searcher
 
+	// kvStats accumulates KV-layer statistics across operations performed
+	// using this context. A pointer to this field is shared with the Txn via
+	// SetKVStats so that stats are recorded as batches execute.
+	kvStats KVStats
+
 	tempSearchSet       SearchSet
 	tempResults         [2]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
@@ -173,12 +195,18 @@ type Context struct {
 func (ic *Context) Init(txn Txn) {
 	// Methods on the index are responsible for initializing other private fields.
 	ic.txn = txn
+	ic.kvStats = KVStats{}
 }
 
 // TransformedVector is the randomized, normalized form of the original query
 // vector.
 func (ic *Context) TransformedVector() vector.T {
 	return ic.query.Transformed()
+}
+
+// KVStats returns a pointer to the cumulative KV statistics for this context.
+func (ic *Context) KVStats() *KVStats {
+	return &ic.kvStats
 }
 
 // Index implements the C-SPANN algorithm, which adapts Microsoft's SPANN and
