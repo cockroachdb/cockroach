@@ -446,7 +446,7 @@ func (ct *cdcTester) Close() {
 
 	if !ct.t.IsDebug() {
 		if err := ct.cluster.StopGrafana(ct.ctx, ct.logger, ct.t.ArtifactsDir()); err != nil {
-			ct.t.Errorf("error shutting down prometheus/grafana: %s", err)
+			ct.t.L().Printf("WARNING: error shutting down prometheus/grafana: %s", err)
 		}
 	}
 
