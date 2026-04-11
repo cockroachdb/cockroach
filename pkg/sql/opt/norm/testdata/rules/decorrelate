@@ -1946,7 +1946,7 @@ project
       └── 'foo' [as=cst:5]
 
 # Decorrelate DistinctOn.
-norm expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy disable=PushSelectIntoUnorderedDistinctOn
 SELECT *
 FROM a
 WHERE EXISTS
@@ -2733,32 +2733,18 @@ group-by (hash)
  ├── grouping columns: x:1!null
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── select
+ ├── inner-join (hash)
  │    ├── columns: x:1!null y:2!null i:6!null f:7!null
- │    ├── key: (1,7)
- │    ├── fd: (1)-->(2), (1,7)-->(2,6), (1)==(6), (6)==(1)
- │    ├── distinct-on
- │    │    ├── columns: x:1!null y:2!null i:6 f:7!null
- │    │    ├── grouping columns: x:1!null f:7!null
- │    │    ├── key: (1,7)
- │    │    ├── fd: (1)-->(2), (1,7)-->(2,6)
- │    │    ├── inner-join (cross)
- │    │    │    ├── columns: x:1!null y:2!null i:6 f:7!null
- │    │    │    ├── fd: (1)-->(2)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:1!null y:2
- │    │    │    │    ├── key: (1)
- │    │    │    │    └── fd: (1)-->(2)
- │    │    │    ├── scan a
- │    │    │    │    └── columns: i:6 f:7
- │    │    │    └── filters
- │    │    │         └── y:2 > f:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- │    │    └── aggregations
- │    │         ├── first-agg [as=i:6, outer=(6)]
- │    │         │    └── i:6
- │    │         └── const-agg [as=y:2, outer=(2)]
- │    │              └── y:2
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    └── columns: i:6 f:7
  │    └── filters
+ │         ├── y:2 > f:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
  │         └── x:1 = i:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  └── aggregations
       └── const-agg [as=y:2, outer=(2)]
@@ -2951,76 +2937,36 @@ norm expect=TryDecorrelateLimitOne
 SELECT * FROM a WHERE (SELECT x FROM xy WHERE y=i LIMIT 1)=k AND (SELECT u FROM uv WHERE v=i LIMIT 1)=k
 ----
 project
- ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 u:12!null
-      ├── key: (1)
-      ├── fd: (1)-->(2-5), (1)==(12), (12)==(1)
-      ├── distinct-on
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 u:12
-      │    ├── grouping columns: k:1!null
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,12)
-      │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null u:12 v:13
-      │    │    ├── key: (1,12)
-      │    │    ├── fd: (1)-->(2-5), (12)-->(13), (1)==(8), (8)==(1)
-      │    │    ├── select
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5), (1)==(8), (8)==(1)
-      │    │    │    ├── distinct-on
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8
-      │    │    │    │    ├── grouping columns: k:1!null
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2-5,8)
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
-      │    │    │    │    │    ├── key: (1,8)
-      │    │    │    │    │    ├── fd: (1)-->(2-5), (8)-->(9)
-      │    │    │    │    │    ├── scan a
-      │    │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── const-agg [as=i:2, outer=(2)]
-      │    │    │    │         │    └── i:2
-      │    │    │    │         ├── const-agg [as=f:3, outer=(3)]
-      │    │    │    │         │    └── f:3
-      │    │    │    │         ├── const-agg [as=s:4, outer=(4)]
-      │    │    │    │         │    └── s:4
-      │    │    │    │         ├── const-agg [as=j:5, outer=(5)]
-      │    │    │    │         │    └── j:5
-      │    │    │    │         └── first-agg [as=x:8, outer=(8)]
-      │    │    │    │              └── x:8
-      │    │    │    └── filters
-      │    │    │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    ├── scan uv
-      │    │    │    ├── columns: u:12!null v:13
-      │    │    │    ├── key: (12)
-      │    │    │    └── fd: (12)-->(13)
-      │    │    └── filters
-      │    │         └── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
-      │    └── aggregations
-      │         ├── const-agg [as=i:2, outer=(2)]
-      │         │    └── i:2
-      │         ├── const-agg [as=f:3, outer=(3)]
-      │         │    └── f:3
-      │         ├── const-agg [as=s:4, outer=(4)]
-      │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── first-agg [as=u:12, outer=(12)]
-      │              └── u:12
+ └── inner-join (hash)
+      ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9!null u:12!null v:13!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (12)
+      ├── fd: (1)-->(2-5), (8)-->(9), (12)-->(13), (2)==(9,13), (9)==(2,13), (13)==(2,9), (1)==(8,12), (8)==(1,12), (12)==(1,8)
+      ├── inner-join (hash)
+      │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9!null
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │    ├── key: (8)
+      │    ├── fd: (1)-->(2-5), (8)-->(9), (2)==(9), (9)==(2), (1)==(8), (8)==(1)
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    ├── scan xy
+      │    │    ├── columns: x:8!null y:9
+      │    │    ├── key: (8)
+      │    │    └── fd: (8)-->(9)
+      │    └── filters
+      │         ├── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+      │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      ├── scan uv
+      │    ├── columns: u:12!null v:13
+      │    ├── key: (12)
+      │    └── fd: (12)-->(13)
       └── filters
+           ├── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
            └── k:1 = u:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
 
 # With nested limited queries.
@@ -3039,70 +2985,36 @@ WHERE
 )=k
 ----
 project
- ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── columns: k:1!null i:2!null f:3 s:4 j:5
  ├── key: (1)
  ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null
-      ├── key: (1)
-      ├── fd: (1)-->(2-5), (1)==(8), (8)==(1)
-      ├── distinct-on
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8
-      │    ├── grouping columns: k:1!null
+ └── inner-join (hash)
+      ├── columns: k:1!null i:2!null f:3 s:4 j:5 x:8!null y:9!null u:12!null v:13!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (12)
+      ├── fd: (1)-->(2-5), (8)-->(9), (12)-->(13), (2)==(9,13), (9)==(2,13), (13)==(2,9), (1)==(8,12), (8)==(1,12), (12)==(1,8)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,8)
-      │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9 u:12
-      │    │    ├── key: (1,8)
-      │    │    ├── fd: (1)-->(2-5), (8)-->(9), (8)==(12), (12)==(8)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-5)
-      │    │    ├── select
-      │    │    │    ├── columns: x:8!null y:9 u:12!null
-      │    │    │    ├── key: (8)
-      │    │    │    ├── fd: (8)-->(9), (8)==(12), (12)==(8)
-      │    │    │    ├── distinct-on
-      │    │    │    │    ├── columns: x:8!null y:9 u:12
-      │    │    │    │    ├── grouping columns: x:8!null
-      │    │    │    │    ├── key: (8)
-      │    │    │    │    ├── fd: (8)-->(9,12)
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: x:8!null y:9 u:12 v:13
-      │    │    │    │    │    ├── key: (8,12)
-      │    │    │    │    │    ├── fd: (8)-->(9), (12)-->(13)
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    │    ├── scan uv
-      │    │    │    │    │    │    ├── columns: u:12!null v:13
-      │    │    │    │    │    │    ├── key: (12)
-      │    │    │    │    │    │    └── fd: (12)-->(13)
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── v:13 = y:9 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── const-agg [as=y:9, outer=(9)]
-      │    │    │    │         │    └── y:9
-      │    │    │    │         └── first-agg [as=u:12, outer=(12)]
-      │    │    │    │              └── u:12
-      │    │    │    └── filters
-      │    │    │         └── x:8 = u:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
-      │    │    └── filters
-      │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      │    └── aggregations
-      │         ├── const-agg [as=i:2, outer=(2)]
-      │         │    └── i:2
-      │         ├── const-agg [as=f:3, outer=(3)]
-      │         │    └── f:3
-      │         ├── const-agg [as=s:4, outer=(4)]
-      │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── first-agg [as=x:8, outer=(8)]
-      │              └── x:8
+      │    └── fd: (1)-->(2-5)
+      ├── inner-join (hash)
+      │    ├── columns: x:8!null y:9!null u:12!null v:13!null
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │    ├── key: (12)
+      │    ├── fd: (8)-->(9), (12)-->(13), (9)==(13), (13)==(9), (8)==(12), (12)==(8)
+      │    ├── scan xy
+      │    │    ├── columns: x:8!null y:9
+      │    │    ├── key: (8)
+      │    │    └── fd: (8)-->(9)
+      │    ├── scan uv
+      │    │    ├── columns: u:12!null v:13
+      │    │    ├── key: (12)
+      │    │    └── fd: (12)-->(13)
+      │    └── filters
+      │         ├── v:13 = y:9 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
+      │         └── x:8 = u:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       └── filters
+           ├── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
            └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # With inner join + ORDER BY.
@@ -4070,44 +3982,38 @@ semi-join (hash)
 norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
-project
+distinct-on
  ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── grouping columns: k:1!null
  ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:9!null
-      ├── key: (1)
-      ├── fd: (1)-->(2-5,9), (2)==(9), (9)==(2)
-      ├── distinct-on
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9
-      │    ├── grouping columns: k:1!null
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,9)
-      │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: (1)-->(2-5)
-      │    │    ├── scan a
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-5)
-      │    │    ├── scan xy
-      │    │    │    └── columns: y:9
-      │    │    └── filters
-      │    │         └── y:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-      │    └── aggregations
-      │         ├── const-agg [as=i:2, outer=(2)]
-      │         │    └── i:2
-      │         ├── const-agg [as=f:3, outer=(3)]
-      │         │    └── f:3
-      │         ├── const-agg [as=s:4, outer=(4)]
-      │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── first-agg [as=y:9, outer=(9)]
-      │              └── y:9
-      └── filters
-           └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ ├── fd: (1)-->(2-5), (1)==(2), (2)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:9!null
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── fd: (1)-->(3-5), (1)==(2,9), (2)==(1,9), (9)==(1,2)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(3-5), (1)==(2), (2)==(1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-5)
+ │    │    └── filters
+ │    │         └── k:1 = i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    ├── scan xy
+ │    │    └── columns: y:9
+ │    └── filters
+ │         └── k:1 = y:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ └── aggregations
+      ├── const-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      ├── const-agg [as=f:3, outer=(3)]
+      │    └── f:3
+      ├── const-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── const-agg [as=j:5, outer=(5)]
+           └── j:5
 
 # Multiple other conjuncts, including uncorrelated subquery (don't hoist).
 norm expect=HoistSelectSubquery disable=InlineConstVar
@@ -4190,74 +4096,68 @@ norm expect=HoistSelectSubquery
 SELECT * FROM a
 WHERE (SELECT count(*) FROM xy WHERE y=k) > 0 AND (SELECT y FROM xy WHERE y=k LIMIT 1) = i
 ----
-project
+distinct-on
  ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ ├── grouping columns: k:1!null
  ├── key: (1)
- ├── fd: (1)-->(2-5)
- └── select
-      ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:14!null
-      ├── key: (1)
-      ├── fd: (1)-->(2-5,14), (2)==(14), (14)==(2)
-      ├── distinct-on
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:14
-      │    ├── grouping columns: k:1!null
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,14)
-      │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 count_rows:12!null y:14
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: (1)-->(2-5,12)
-      │    │    ├── select
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 count_rows:12!null
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,12)
-      │    │    │    ├── group-by (hash)
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 count_rows:12!null
-      │    │    │    │    ├── grouping columns: k:1!null
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    ├── fd: (1)-->(2-5,12)
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 y:9
-      │    │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │    │    │    │    │    ├── fd: (1)-->(2-5)
-      │    │    │    │    │    ├── scan a
-      │    │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    └── columns: y:9
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── y:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── count [as=count_rows:12, outer=(9)]
-      │    │    │    │         │    └── y:9
-      │    │    │    │         ├── const-agg [as=i:2, outer=(2)]
-      │    │    │    │         │    └── i:2
-      │    │    │    │         ├── const-agg [as=f:3, outer=(3)]
-      │    │    │    │         │    └── f:3
-      │    │    │    │         ├── const-agg [as=s:4, outer=(4)]
-      │    │    │    │         │    └── s:4
-      │    │    │    │         └── const-agg [as=j:5, outer=(5)]
-      │    │    │    │              └── j:5
-      │    │    │    └── filters
-      │    │    │         └── count_rows:12 > 0 [outer=(12), constraints=(/12: [/1 - ]; tight)]
-      │    │    ├── scan xy
-      │    │    │    └── columns: y:14
-      │    │    └── filters
-      │    │         └── y:14 = k:1 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
-      │    └── aggregations
-      │         ├── const-agg [as=i:2, outer=(2)]
-      │         │    └── i:2
-      │         ├── const-agg [as=f:3, outer=(3)]
-      │         │    └── f:3
-      │         ├── const-agg [as=s:4, outer=(4)]
-      │         │    └── s:4
-      │         ├── const-agg [as=j:5, outer=(5)]
-      │         │    └── j:5
-      │         └── first-agg [as=y:14, outer=(14)]
-      │              └── y:14
-      └── filters
-           └── i:2 = y:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
+ ├── fd: (1)-->(2-5), (1)==(2), (2)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 count_rows:12!null y:14!null
+ │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    ├── fd: (1)-->(3-5,12), (1)==(2,14), (2)==(1,14), (14)==(1,2)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 count_rows:12!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-5,12), (1)==(2), (2)==(1)
+ │    │    ├── group-by (hash)
+ │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 count_rows:12!null
+ │    │    │    ├── grouping columns: k:1!null
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2-5,12), (1)==(2), (2)==(1)
+ │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:9
+ │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │    │    │    │    ├── fd: (1)-->(3-5), (1)==(2), (2)==(1)
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    ├── fd: (1)-->(3-5), (1)==(2), (2)==(1)
+ │    │    │    │    │    ├── scan a
+ │    │    │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    │    └── fd: (1)-->(2-5)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── k:1 = i:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    │    │    │    ├── scan xy
+ │    │    │    │    │    └── columns: y:9
+ │    │    │    │    └── filters
+ │    │    │    │         └── y:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │    │    └── aggregations
+ │    │    │         ├── count [as=count_rows:12, outer=(9)]
+ │    │    │         │    └── y:9
+ │    │    │         ├── const-agg [as=i:2, outer=(2)]
+ │    │    │         │    └── i:2
+ │    │    │         ├── const-agg [as=f:3, outer=(3)]
+ │    │    │         │    └── f:3
+ │    │    │         ├── const-agg [as=s:4, outer=(4)]
+ │    │    │         │    └── s:4
+ │    │    │         └── const-agg [as=j:5, outer=(5)]
+ │    │    │              └── j:5
+ │    │    └── filters
+ │    │         └── count_rows:12 > 0 [outer=(12), constraints=(/12: [/1 - ]; tight)]
+ │    ├── scan xy
+ │    │    └── columns: y:14
+ │    └── filters
+ │         └── k:1 = y:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
+ └── aggregations
+      ├── const-agg [as=i:2, outer=(2)]
+      │    └── i:2
+      ├── const-agg [as=f:3, outer=(3)]
+      │    └── f:3
+      ├── const-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── const-agg [as=j:5, outer=(5)]
+           └── j:5
 
 # Subquery nested below interesting scalar operators like cast, function, tuple,
 # or, etc).
