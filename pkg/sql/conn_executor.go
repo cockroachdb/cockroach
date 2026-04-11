@@ -1834,6 +1834,7 @@ type connExecutor struct {
 		// statements in this txn so far.
 		rowsWritten    int64
 		kvCPUTimeNanos time.Duration
+		sqlCPUTime     time.Duration
 
 		// rowsWrittenLogged and rowsReadLogged indicates whether we have
 		// already logged an event about reaching written/read rows setting,

@@ -418,7 +418,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 				statsBuilder.StatementError(err)
 				return err
 			}
-			statsBuilder.QueryLevelStats(queryStats.bytesRead, queryStats.rowsRead, queryStats.rowsWritten, queryStats.kvCPUTimeNanos.Nanoseconds())
+			statsBuilder.QueryLevelStats(queryStats.bytesRead, queryStats.rowsRead, queryStats.rowsWritten, queryStats.kvCPUTimeNanos.Nanoseconds(), queryStats.sqlCPUTime.Nanoseconds())
 			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)

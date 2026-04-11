@@ -100,6 +100,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "sqlCPUTimeNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "nodes": [{{joinInts .IntArray}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "regions": [{{joinStrings .StringArray}}],
@@ -576,6 +580,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "sqDiff": {{.Float}}
     },
     "kvCPUTimeNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
+    },
+    "sqlCPUTimeNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     }
