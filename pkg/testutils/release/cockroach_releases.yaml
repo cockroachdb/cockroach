@@ -42,7 +42,7 @@
   latest: 25.3.7
   predecessor: "25.2"
 "25.4":
-  latest: 25.4.7
+  latest: 25.4.8
   predecessor: "25.3"
 "26.1":
   latest: 26.1.2
