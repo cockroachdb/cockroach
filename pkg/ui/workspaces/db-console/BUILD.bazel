@@ -257,7 +257,7 @@ jest_test(
         "test.Pool": "large",
     },
     node_modules = ":node_modules",
-    shard_count = 4,
+    shard_count = 8,
 )
 
 # HTTP schema generation tools for converting swagger.json to OpenAPI and TypeScript types.
