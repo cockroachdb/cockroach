@@ -1207,6 +1207,11 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.PartitionByIndex != nil {
 		ctx.FormatNode(node.PartitionByIndex)
 	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
+	}
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
@@ -1216,11 +1221,6 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-node.Invisibility.Value))
 	case node.Invisibility.Value == 1.0:
 		ctx.WriteString(" NOT VISIBLE")
-	}
-	if node.StorageParams != nil {
-		ctx.WriteString(" WITH (")
-		ctx.FormatNode(&node.StorageParams)
-		ctx.WriteString(")")
 	}
 }
 
