@@ -1567,6 +1567,58 @@ func (c *CustomFuncs) MakeAnyNotNullScalarGroupBy(input memo.RelExpr) memo.RelEx
 	)
 }
 
+// CanHoistCorrelatedFiltersAbove returns true if there is at least one
+// correlated filter in the list (i.e. one that references columns outside of
+// inputCols). Columns outside inputCols are assumed to be outer (correlated)
+// references available at any scope level.
+func (c *CustomFuncs) CanHoistCorrelatedFiltersAbove(
+	filters memo.FiltersExpr, inputCols opt.ColSet,
+) bool {
+	for i := range filters {
+		filterCols := filters[i].ScalarProps().OuterCols
+		if !filterCols.SubsetOf(inputCols) {
+			return true
+		}
+	}
+	return false
+}
+
+// AddFirstAggsForHoistedFilters returns the aggregations augmented with
+// FirstAgg columns for any input columns that are referenced by correlated
+// filters but are not already in the DistinctOn's output (outputCols). This
+// makes those columns available above the DistinctOn so that the hoisted
+// filters can reference them. This is valid for an unordered DistinctOn because
+// the choice of row per group is nondeterministic.
+func (c *CustomFuncs) AddFirstAggsForHoistedFilters(
+	aggregations memo.AggregationsExpr, filters memo.FiltersExpr, inputCols, outputCols opt.ColSet,
+) memo.AggregationsExpr {
+	// Collect the set of columns needed by correlated filters that aren't
+	// already in the output.
+	var missing opt.ColSet
+	for i := range filters {
+		filterCols := filters[i].ScalarProps().OuterCols
+		if filterCols.SubsetOf(inputCols) {
+			// Not correlated; will remain inside the DistinctOn.
+			continue
+		}
+		// Add local columns that are missing from the output.
+		missing.UnionWith(filterCols.Intersection(inputCols).Difference(outputCols))
+	}
+	if missing.Empty() {
+		return aggregations
+	}
+	// Add a FirstAgg for each missing column.
+	newAggs := make(memo.AggregationsExpr, len(aggregations), len(aggregations)+missing.Len())
+	copy(newAggs, aggregations)
+	missing.ForEach(func(col opt.ColumnID) {
+		newAggs = append(newAggs, c.f.ConstructAggregationsItem(
+			c.f.ConstructFirstAgg(c.f.ConstructVariable(col)),
+			col,
+		))
+	})
+	return newAggs
+}
+
 // CanHoistUnboundFilterFromExistsSubquery returns true if the
 // HoistUnboundFilterFromExistsSubquery rule is enabled by session-setting.
 func (c *CustomFuncs) CanHoistUnboundFilterFromExistsSubquery() bool {
