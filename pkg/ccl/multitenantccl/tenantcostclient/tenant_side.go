@@ -954,12 +954,6 @@ func (c *tenantSideCostController) onExternalIO(
 	return nil
 }
 
-// GetCPUMovingAvg is used to obtain an exponential moving average estimate
-// for the CPU usage in seconds per each second of wall-clock time.
-func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
-	return math.Float64frombits(c.avgSQLCPUPerSec.Load())
-}
-
 // GetRequestUnitModel is part of the multitenant.TenantSideCostController
 // interface.
 func (c *tenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {

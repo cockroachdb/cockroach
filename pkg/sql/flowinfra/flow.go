@@ -493,13 +493,6 @@ func (f *FlowBase) StartInternal(
 
 	f.setStatus(flowRunning)
 
-	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&f.Cfg.Settings.SV) &&
-		!f.Gateway && f.CollectStats {
-		// Remote flows begin collecting CPU usage here, and finish when the last
-		// outbox finishes. Gateway flows are handled by the connExecutor.
-		f.FlowCtx.TenantCPUMonitor.StartCollection(ctx, f.Cfg.TenantCostController)
-	}
-
 	if log.V(1) {
 		log.Dev.Infof(ctx, "registered flow %s", f.ID.Short())
 	}

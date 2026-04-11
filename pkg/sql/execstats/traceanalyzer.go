@@ -324,9 +324,6 @@ func (a *TraceAnalyzer) ProcessStats() {
 					a.queryLevelStats.MaxDiskUsage = diskUsage
 				}
 			}
-			if v.FlowStats.ConsumedRU.HasValue() {
-				s.RUEstimate += float64(v.FlowStats.ConsumedRU.Value())
-			}
 		}
 	}
 }

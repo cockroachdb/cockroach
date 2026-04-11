@@ -6,9 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/multitenant",
         "//pkg/server/status",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
     ],
 )

@@ -355,7 +355,6 @@ go_library(
         "//pkg/multitenant",
         "//pkg/multitenant/mtinfo",
         "//pkg/multitenant/mtinfopb",
-        "//pkg/multitenant/multitenantcpu",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/obs/ash",

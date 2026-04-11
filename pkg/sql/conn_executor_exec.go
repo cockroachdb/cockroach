@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2980,13 +2979,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var cpuStopWatch timeutil.CPUStopWatch
 	cpuStopWatch.Start()
 
-	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(ex.server.cfg.SV()) {
-		if server := ex.server.cfg.DistSQLSrv; server != nil {
-			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
-			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
-		}
-	}
-
 	// If we've been tasked with backfilling a schema change operation at a
 	// particular system time, it's important that we do planning for the
 	// operation at the timestamp that we're expecting to perform the backfill at,
@@ -3238,7 +3230,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// Note that here we append the cleanup function without a defer since
 		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
+			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
 				ctx, &curPlanner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
 				ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(),
@@ -3246,7 +3238,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			)
 		})
 	} else {
-		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats)
 		ex.recordStatementSummary(
 			ctx, planner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
 			res.RowsAffected(), res.Err(), stats,
@@ -3270,11 +3262,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 //   - queryLevelStatsWithErr contains query-level execution statistics are
 //     collected using the statement's trace and the plan's flow metadata.
 func populateQueryLevelStats(
-	ctx context.Context,
-	p *planner,
-	cfg *ExecutorConfig,
-	topLevelStats *topLevelQueryStats,
-	cpuStats *multitenantcpu.CPUUsageHelper,
+	ctx context.Context, p *planner, cfg *ExecutorConfig, topLevelStats *topLevelQueryStats,
 ) {
 	ih := &p.instrumentation
 	ih.topLevelStats = *topLevelStats
@@ -3314,7 +3302,11 @@ func populateQueryLevelStats(
 				if costCfg := costController.GetRequestUnitModel(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
 					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(networkEgressRUEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += cpuStats.EndCollection(ctx)
+					// Use the always-on SQL CPU measurement (gateway +
+					// remote, corrected for local KV) for the CPU portion
+					// of the RU estimate.
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(
+						costCfg.PodCPUCost(topLevelStats.sqlCPUTime.Seconds()))
 				}
 			}
 		}

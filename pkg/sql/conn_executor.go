@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1890,10 +1889,6 @@ type connExecutor struct {
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
 	statsCollector *sslocal.StatsCollector
-
-	// cpuStatsCollector is used to estimate RU consumption due to CPU usage for
-	// tenants.
-	cpuStatsCollector multitenantcpu.CPUUsageHelper
 
 	// applicationName is the same as sessionData.ApplicationName. It's copied
 	// here as an atomic so that it can be read concurrently by serialize().
