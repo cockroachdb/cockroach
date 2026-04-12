@@ -118,7 +118,7 @@ set_env_var() {
 # setup_env is to set up the environment variables.
 setup_env() {
   set_env_var "COCKROACH_DATABASE" "defaultdb"
-  set_env_var "COCKROACH_USER"
+  set_env_var "COCKROACH_USER" "root"
   set_env_var "COCKROACH_PASSWORD"
 }
 
