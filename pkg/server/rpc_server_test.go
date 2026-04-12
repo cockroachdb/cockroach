@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,7 +41,7 @@ func TestRequestMetricRegistered(t *testing.T) {
 
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Len(t, histogramVec.ToPrometheusMetrics(), 0, "Should not have recorded any metrics yet")
-	rpc.ServerRPCRequestMetricsEnabled.Override(context.Background(),
+	serverRPCRequestMetricsEnabled.Override(context.Background(),
 		&ts.ClusterSettings().SV, true)
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Greater(t, len(histogramVec.ToPrometheusMetrics()), 0,
@@ -55,10 +56,10 @@ func TestShouldRecordRequestDuration(t *testing.T) {
 		metricsEnabled bool
 		expected       bool
 	}{
-		{rpc.ServerPrefix + "/test/method", true, true},
-		{rpc.TsdbPrefix + "/test/method", true, true},
-		{rpc.ServerPrefix + "/test/method", false, false},
-		{rpc.TsdbPrefix + "/test/method", false, false},
+		{fmt.Sprintf("%s/test/method", serverPrefix), true, true},
+		{fmt.Sprintf("%s/test/method", tsdbPrefix), true, true},
+		{fmt.Sprintf("%s/test/method", serverPrefix), false, false},
+		{fmt.Sprintf("%s/test/method", tsdbPrefix), false, false},
 		{"test/noPrefix/metricsEnabled", true, false},
 		{"test/noPrefix/metricsDisabled", false, false},
 	}
@@ -66,8 +67,8 @@ func TestShouldRecordRequestDuration(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	for _, tt := range tests {
 		t.Run(tt.methodName, func(t *testing.T) {
-			rpc.ServerRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
-			require.Equal(t, tt.expected, rpc.ShouldRecordRequestDuration(settings, tt.methodName))
+			serverRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
+			require.Equal(t, tt.expected, shouldRecordRequestDuration(settings, tt.methodName))
 		})
 	}
 }
