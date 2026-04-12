@@ -662,7 +662,6 @@ go_test(
         "@io_storj_drpc//:drpc",
         "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcconn",
-        "@io_storj_drpc//drpcmanager",
         "@io_storj_drpc//drpcmigrate",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
