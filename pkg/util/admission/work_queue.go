@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -1284,6 +1285,26 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 	}
 	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
+	}
+}
+
+// AdmittedSQLWorkDone returns unused reservation tokens to the granter
+// when a SQL statement closes. remaining is always non-negative since
+// the CAS-based deduction in SQLCPUHandle never drives reservation
+// below zero.
+func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int64) {
+	if remaining == 0 {
+		return
+	}
+	if remaining < 0 && buildutil.CrdbTestBuild {
+		log.Dev.Fatalf(q.ambientCtx, "AdmittedSQLWorkDone: remaining %d is negative", remaining)
+	}
+	q.adjustTenantUsed(tenantID, -remaining)
+	if remaining < 0 {
+		// Should never happen, but account for it defensively.
+		q.granter.tookWithoutPermission(-remaining)
+	} else {
+		q.granter.returnGrant(remaining)
 	}
 }
 
