@@ -22,7 +22,6 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmanager"
-	"storj.io/drpc/drpcmetrics"
 	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcpool"
@@ -43,36 +42,22 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 
 // TODO(server): unexport this once dial methods are added in rpccontext.
 func DialDRPC(
-	rpcCtx *Context, cm *drpcmetrics.ClientMetrics,
+	rpcCtx *Context,
 ) func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 		transport := tcpTransport
 		if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 			transport = loopbackTransport
 		}
-
 		drpcDialOptions, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
 		if err != nil {
 			return nil, err
 		}
 
-		shouldRecordFunc := func() bool {
-			return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
-		}
-
-		drpcDialOptions = append(drpcDialOptions, drpcclient.WithMetrics(cm))
-		drpcDialOptions = append(drpcDialOptions,
-			drpcclient.WithShouldRecordFunc(shouldRecordFunc))
-
-		drpcPoolMetrics := rpcCtx.DRPCPoolMetrics()
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
-			Expiration:   defaultDRPCConnIdleTimeout,
-			Metrics:      drpcPoolMetrics,
-			Labels:       map[string]string{"target": target, "class": class.String()},
-			ShouldRecord: shouldRecordFunc,
+			Expiration: defaultDRPCConnIdleTimeout,
 		})
-
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
 			return drpcclient.DialContext(ctx, target, drpcDialOptions...)
@@ -155,7 +140,7 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 	return drpcDialOpts, nil
 }
 
-// drpcDialOptsLocal is similar to dialOptsLocal but for drpc connections.
+// drpcDialOptsLocal is simialar to dialOptsLocal but for drpc connections.
 func (rpcCtx *Context) drpcDialOptsLocal() ([]drpcclient.DialOption, error) {
 	drpcDialOpts, err := rpcCtx.drpcDialOptsNetworkCredentials()
 	if err != nil {
@@ -416,7 +401,6 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		},
 		TLSConfig:         o.tlsConfig,
 		TLSCipherRestrict: o.tlsCipherRestrict,
-		Metrics:           o.drpcServerMetrics,
 	})
 	d.Mux = mux
 
@@ -455,16 +439,12 @@ func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[drpc.Conn] {
-	pm, lm := rpcCtx.metrics.acquire(k, locality, rpcProtocolDRPC)
-	clientMetrics := &drpcmetrics.ClientMetrics{
-		BytesSent: lm.ConnectionBytesSent,
-		BytesRecv: lm.ConnectionBytesRecv,
-	}
+	pm, _ := rpcCtx.metrics.acquire(k, locality, rpcProtocolDRPC)
 	return &peerOptions[drpc.Conn]{
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
 		connOptions: &ConnectionOptions[drpc.Conn]{
-			dial: DialDRPC(rpcCtx, clientMetrics),
+			dial: DialDRPC(rpcCtx),
 			connEquals: func(a, b drpc.Conn) bool {
 				return a == b
 			},
