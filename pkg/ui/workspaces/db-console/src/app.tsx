@@ -109,6 +109,7 @@ export interface AppProps {
   store: Store<AdminUIState, Action>;
 }
 
+// Random change
 export const App: React.FC<AppProps> = (props: AppProps) => {
   const { store, history } = props;
 
