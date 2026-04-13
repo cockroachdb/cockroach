@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
@@ -556,16 +557,31 @@ func runBackupProcessor(
 								return nil
 							})
 						if exportRequestErr != nil {
-							// If we got a write intent error because we requested it rather
-							// than blocking, either put the request on the back of the queue
-							// to revisit later or, if the request was resuming in the middle
-							// of a key, reattempt it immediately.
-							if lockErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok && header.WaitPolicy == lock.WaitPolicy_Error {
+							// Check if this is a timeout from the intent resolver
+							// batcher, which indicates the span has unresolved intents.
+							// Ideally KV would surface these as WriteIntentErrors
+							// directly, but for now the intent resolver returns a
+							// TimeoutError whose operation name identifies it.
+							var isIrBatcherTimeout bool
+							if te := (*timeutil.TimeoutError)(nil); errors.As(exportRequestErr, &te) {
+								isIrBatcherTimeout = strings.Contains(string(te.Operation()), "intent_resolver")
+							}
+							// If we got a write intent error (or an intent resolver
+							// batcher timeout) because we requested non-blocking intent
+							// handling, either put the request on the back of the queue
+							// to revisit later or, if the request was resuming in the
+							// middle of a key, reattempt it immediately.
+							lockErr, isWriteIntentErr := pErr.GetDetail().(*kvpb.WriteIntentError)
+							if (isWriteIntentErr && header.WaitPolicy == lock.WaitPolicy_Error) || isIrBatcherTimeout {
 								// TODO(dt): send a progress update to update job progress to note
 								// the intents being hit.
 								span.lastTried = timeutil.Now()
 								span.attempts++
-								log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
+								if isWriteIntentErr {
+									log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, lockErr.Error())
+								} else {
+									log.VEventf(ctx, 1, "retrying ExportRequest for span %s; intent resolver batcher timed out: %s", span.span, exportRequestErr)
+								}
 								// If we're not mid-span we can put this on the the queue to
 								// give it time to resolve on its own while we work on other
 								// spans; if we've flushed any of this span though we finish it

@@ -7659,6 +7659,74 @@ func TestBackupDoesNotHangOnIntent(t *testing.T) {
 	require.Error(t, tx.Commit())
 }
 
+// TestBackupRetriesOnIRBatcherTimeout verifies that backup retries an
+// ExportRequest when the intent resolver batcher times out, rather than
+// failing with a timeout error. The intent resolver batcher timeout
+// produces a TimeoutError with an operation name starting with
+// "intent_resolver", which backup treats like a WriteIntentError.
+func TestBackupRetriesOnIRBatcherTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t)
+
+	// Create a TimeoutError that looks like it came from the intent
+	// resolver batcher. We use RunWithTimeout since TimeoutError fields
+	// are unexported.
+	irTimeoutErr := timeutil.RunWithTimeout(
+		context.Background(),
+		"intent_resolver_ir_batcher.sendBatch",
+		time.Nanosecond,
+		func(ctx context.Context) error {
+			time.Sleep(time.Millisecond)
+			return ctx.Err()
+		},
+	)
+	require.Error(t, irTimeoutErr)
+	require.True(t, errors.HasType(irTimeoutErr, (*timeutil.TimeoutError)(nil)))
+
+	// Inject the IR batcher timeout for the first few ExportRequests.
+	// After that, let them succeed so that backup completes.
+	var injectCount atomic.Int32
+	const maxInjects = 3
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(
+						ctx context.Context, ba *kvpb.BatchRequest,
+					) *kvpb.Error {
+						for _, ru := range ba.Requests {
+							if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+								if injectCount.Add(1) <= maxInjects {
+									return kvpb.NewError(irTimeoutErr)
+								}
+							}
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '100ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_retry_delay = '10ms'")
+
+	// Backup should succeed despite the injected IR batcher timeouts
+	// because the retry logic treats them like WriteIntentErrors.
+	sqlDB.Exec(t, "BACKUP TABLE data.bank INTO 'nodelocal://1/ir-timeout'")
+
+	// Verify that we actually injected timeouts.
+	require.GreaterOrEqual(t, injectCount.Load(), int32(maxInjects))
+}
+
 func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
