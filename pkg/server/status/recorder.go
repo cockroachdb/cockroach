@@ -164,7 +164,7 @@ func newScrapeMetrics() *ScrapeMetrics {
 		}, []string{"metric_name"}),
 		OwnerMetricCount: metric.NewExportedGaugeVec(metric.Metadata{
 			Name:        "obs.metric_export.codeowner.metric_count",
-			Help:        "Metric count per CODEOWNER team as ingested (histograms expand to computed metrics)",
+			Help:        "Metric count per CODEOWNER team in the Prometheus scrape (histograms expand to buckets plus count and sum)",
 			Measurement: "Metrics",
 			Unit:        metric.Unit_COUNT,
 		}, []string{"codeowner"}),
@@ -575,15 +575,16 @@ func countTimeSeriesLines(data []byte) int64 {
 	return count
 }
 
-// countFamilyMetrics counts the number of individual metrics a
-// MetricFamily produces as ingested by downstream systems like
-// Datadog. HELP/TYPE overhead is omitted and histograms expand
-// into their computed metrics (percentiles, count, sum, avg, max).
+// countFamilyMetrics counts the number of individual time series a
+// MetricFamily produces in the Prometheus scrape output. HELP/TYPE
+// overhead is omitted. Histograms expand into their buckets plus
+// _count and _sum lines.
 func countFamilyMetrics(family *prometheusgo.MetricFamily) int64 {
 	var count int64
 	for _, m := range family.Metric {
-		if m.Histogram != nil {
-			count += int64(len(metric.HistogramMetricComputers))
+		if h := m.Histogram; h != nil {
+			// Each histogram produces one line per bucket, plus _count and _sum.
+			count += int64(len(h.Bucket)) + 2
 		} else {
 			count++
 		}
