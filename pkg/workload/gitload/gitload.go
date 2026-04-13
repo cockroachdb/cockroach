@@ -3,26 +3,25 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package gitload implements a workload that ingests a git repository's commit
-// history into CockroachDB and verifies data integrity using git as an oracle.
-// Any discrepancy between database state and git ground truth indicates a
+// Package gitload implements a workload that ingests git commit history into
+// CockroachDB and verifies data integrity using git as an oracle. Any
+// discrepancy between database state and git ground truth indicates a
 // CockroachDB bug.
 //
-// The workload continuously cycles through: clear all tables, ingest the
-// repo with a new random topological ordering, and repeat. Different seeds
-// produce different lock orderings, FK reference patterns, and contention
-// profiles.
-//
-// Verification is available via `workload check gitload` which runs three
-// oracle levels: repo_stats consistency, file_latest path set comparison
-// against git, and full diff chain replay.
+// Multiple concurrent agents (controlled by --concurrency) each ingest their
+// own synthetic git repo into shared tables, creating contention on blob dedup,
+// FK validation, and secondary index maintenance. Each agent continuously
+// cycles through: clear its data, ingest with a new topological ordering,
+// and repeat.
 package gitload
 
 import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -42,7 +42,8 @@ const (
 	)`
 
 	commitsSchema = `(
-		hash STRING PRIMARY KEY,
+		agent_id STRING NOT NULL,
+		hash STRING NOT NULL,
 		tree_hash STRING NOT NULL,
 		author_name STRING NOT NULL,
 		author_email STRING NOT NULL,
@@ -51,37 +52,40 @@ const (
 		committer_email STRING NOT NULL,
 		committer_date STRING NOT NULL,
 		message STRING NOT NULL,
-		topo_order INT NOT NULL
+		topo_order INT NOT NULL,
+		PRIMARY KEY (agent_id, hash)
 	)`
 
-	// commit_parents has no inline FK; constraints are added in PostLoad.
 	commitParentsSchema = `(
+		agent_id STRING NOT NULL,
 		commit_hash STRING NOT NULL,
 		parent_hash STRING NOT NULL,
 		parent_index INT NOT NULL,
-		PRIMARY KEY (commit_hash, parent_index)
+		PRIMARY KEY (agent_id, commit_hash, parent_index)
 	)`
 
-	// commit_diffs has no inline FK; constraints are added in PostLoad.
 	commitDiffsSchema = `(
+		agent_id STRING NOT NULL,
 		commit_hash STRING NOT NULL,
 		file_path STRING NOT NULL,
 		op STRING NOT NULL,
 		old_path STRING,
 		file_mode STRING,
 		blob_sha256 STRING,
-		PRIMARY KEY (commit_hash, file_path)
+		PRIMARY KEY (agent_id, commit_hash, file_path)
 	)`
 
 	fileLatestSchema = `(
-		file_path STRING PRIMARY KEY,
+		agent_id STRING NOT NULL,
+		file_path STRING NOT NULL,
 		last_commit_hash STRING NOT NULL,
 		last_topo_order INT NOT NULL,
-		blob_sha256 STRING
+		blob_sha256 STRING,
+		PRIMARY KEY (agent_id, file_path)
 	)`
 
 	repoStatsSchema = `(
-		id INT PRIMARY KEY,
+		agent_id STRING PRIMARY KEY,
 		total_commits INT NOT NULL DEFAULT 0,
 		total_files_changed INT NOT NULL DEFAULT 0,
 		total_blobs_bytes INT NOT NULL DEFAULT 0
@@ -93,33 +97,41 @@ const (
 	defaultVerifyEvery     = 100
 	defaultInlineVerifySec = 0
 	defaultRepoPath        = "/tmp/gitload-repo"
+	defaultConcurrency     = 4
+	defaultBatchSize       = 50
 )
+
+func makeAgentID(i int) string {
+	return fmt.Sprintf("agent-%d", i)
+}
+
+func agentRepoPath(basePath, agentID string) string {
+	return filepath.Join(basePath, agentID)
+}
 
 // fkConstraints defines the FK constraints added during PostLoad. These are
 // deferred from the schema to avoid validation overhead during bulk ingestion
 // (same pattern as TPCC). Uses IF NOT EXISTS so re-running init is safe.
 var fkConstraints = []string{
 	`ALTER TABLE commit_parents ADD CONSTRAINT IF NOT EXISTS fk_commit_parents_commit
-	 FOREIGN KEY (commit_hash) REFERENCES commits (hash)`,
+	 FOREIGN KEY (agent_id, commit_hash) REFERENCES commits (agent_id, hash)`,
 	`ALTER TABLE commit_diffs ADD CONSTRAINT IF NOT EXISTS fk_commit_diffs_commit
-	 FOREIGN KEY (commit_hash) REFERENCES commits (hash)`,
+	 FOREIGN KEY (agent_id, commit_hash) REFERENCES commits (agent_id, hash)`,
 	`ALTER TABLE commit_diffs ADD CONSTRAINT IF NOT EXISTS fk_commit_diffs_blob
 	 FOREIGN KEY (blob_sha256) REFERENCES blobs (sha256)`,
 	`ALTER TABLE file_latest ADD CONSTRAINT IF NOT EXISTS fk_file_latest_commit
-	 FOREIGN KEY (last_commit_hash) REFERENCES commits (hash)`,
+	 FOREIGN KEY (agent_id, last_commit_hash) REFERENCES commits (agent_id, hash)`,
 	`ALTER TABLE file_latest ADD CONSTRAINT IF NOT EXISTS fk_file_latest_blob
 	 FOREIGN KEY (blob_sha256) REFERENCES blobs (sha256)`,
 }
 
-// secondaryIndexes defines the secondary indexes added during PostLoad for
-// index consistency verification.
 var secondaryIndexes = []string{
 	`CREATE INDEX IF NOT EXISTS idx_commit_diffs_file_path
-	 ON commit_diffs(file_path)`,
+	 ON commit_diffs(agent_id, file_path)`,
 	`CREATE INDEX IF NOT EXISTS idx_commits_topo_order
-	 ON commits(topo_order)`,
+	 ON commits(agent_id, topo_order)`,
 	`CREATE INDEX IF NOT EXISTS idx_file_latest_last_commit
-	 ON file_latest(last_commit_hash)`,
+	 ON file_latest(agent_id, last_commit_hash)`,
 }
 
 type gitload struct {
@@ -133,6 +145,8 @@ type gitload struct {
 	skipContent     bool
 	verifyEveryN    int
 	inlineVerifySec int
+	batchSize       int
+	clean           bool
 }
 
 var gitloadMeta = workload.Meta{
@@ -150,6 +164,8 @@ var gitloadMeta = workload.Meta{
 			"skip-content":  {RuntimeOnly: true},
 			"verify-every":  {RuntimeOnly: true},
 			"inline-verify": {RuntimeOnly: true},
+			"batch-size":    {RuntimeOnly: true},
+			"clean":         {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.repoPath, "repo", defaultRepoPath,
 			"Path to the git repository (created during init)")
@@ -165,7 +181,15 @@ var gitloadMeta = workload.Meta{
 			"Verify tree at every Nth commit during replay (0 = final only)")
 		g.flags.IntVar(&g.inlineVerifySec, "inline-verify", defaultInlineVerifySec,
 			"Run verification concurrently with ingestion every N seconds (0 = disabled)")
+		g.flags.IntVar(&g.batchSize, "batch-size", defaultBatchSize,
+			"Number of commits per transaction during ingestion")
+		g.flags.BoolVar(&g.clean, "clean", false,
+			"Remove existing git repos before generating new ones (use with --drop for a full reset)")
 		g.connFlags = workload.NewConnFlags(&g.flags)
+		if f := g.connFlags.Lookup("concurrency"); f != nil {
+			f.DefValue = fmt.Sprintf("%d", defaultConcurrency)
+			g.connFlags.Concurrency = defaultConcurrency
+		}
 		return g
 	},
 }
@@ -218,9 +242,47 @@ func (g *gitload) Hooks() workload.Hooks {
 			return nil
 		},
 		PostLoad: func(ctx context.Context, db *gosql.DB) error {
-			// Generate the synthetic git repo.
-			if err := generateRepo(ctx, g.repoPath, g.numCommits, g.seed); err != nil {
-				return errors.Wrap(err, "generating synthetic repo")
+			numAgents := g.connFlags.Concurrency
+			db.SetMaxOpenConns(numAgents + 2)
+			db.SetMaxIdleConns(numAgents + 2)
+
+			if g.clean {
+				fmt.Printf("--clean: removing existing git repos at %s\n", g.repoPath)
+				if err := os.RemoveAll(g.repoPath); err != nil {
+					return errors.Wrap(err, "cleaning repo path")
+				}
+			}
+
+			for i := 0; i < numAgents; i++ {
+				aid := makeAgentID(i)
+				if _, err := db.ExecContext(ctx,
+					`INSERT INTO repo_stats (agent_id, total_commits, total_files_changed, total_blobs_bytes)
+					 VALUES ($1, 0, 0, 0)
+					 ON CONFLICT (agent_id) DO NOTHING`, aid,
+				); err != nil {
+					return errors.Wrapf(err, "initializing repo_stats for %s", aid)
+				}
+			}
+
+			eg, egCtx := errgroup.WithContext(ctx)
+			for i := 0; i < numAgents; i++ {
+				aid := makeAgentID(i)
+				repoPath := agentRepoPath(g.repoPath, aid)
+				agentSeed := g.seed + int64(i)
+
+				eg.Go(func() error {
+					if err := generateRepo(egCtx, repoPath, g.numCommits, agentSeed); err != nil {
+						return errors.Wrapf(err, "generating repo for %s", aid)
+					}
+					return ingest(
+						egCtx, db, repoPath, agentSeed,
+						g.numCommits, g.maxBlobSize, g.skipContent, nil, aid,
+						g.batchSize,
+					)
+				})
+			}
+			if err := eg.Wait(); err != nil {
+				return err
 			}
 
 			for _, fk := range fkConstraints {
@@ -235,15 +297,6 @@ func (g *gitload) Hooks() workload.Hooks {
 				}
 			}
 
-			// Initialize the repo_stats singleton row (idempotent).
-			if _, err := db.ExecContext(ctx,
-				`INSERT INTO repo_stats (id, total_commits, total_files_changed, total_blobs_bytes)
-				 VALUES (1, 0, 0, 0)
-				 ON CONFLICT (id) DO NOTHING`,
-			); err != nil {
-				return errors.Wrap(err, "initializing repo_stats")
-			}
-
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
@@ -252,13 +305,11 @@ func (g *gitload) Hooks() workload.Hooks {
 	}
 }
 
-// Ops implements the Opser interface. It returns a QueryLoad with a single
-// ingestion worker that continuously cycles through: clear -> ingest with new
-// seed -> repeat. Each cycle uses a different seed, producing different
-// topological orderings that exercise different lock orderings and contention
-// profiles. When --inline-verify is set, a second worker runs verification
-// concurrently with ingestion, reading consistent snapshots via AS OF SYSTEM
-// TIME follower_read_timestamp().
+// Ops implements the Opser interface. It returns a QueryLoad with one
+// ingestion worker per agent (controlled by --concurrency). Each agent
+// continuously cycles through: clear its data, ingest with a new seed,
+// and repeat. When --inline-verify is set, an additional worker runs
+// verification concurrently.
 func (g *gitload) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
@@ -266,14 +317,29 @@ func (g *gitload) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	maxConns := 2
-	if g.inlineVerifySec > 0 {
-		maxConns = 4 // extra headroom for the verification worker
-	}
+	numAgents := g.connFlags.Concurrency
+	maxConns := numAgents + 2
 	db.SetMaxOpenConns(maxConns)
 	db.SetMaxIdleConns(maxConns)
 
-	var cycle atomic.Int64
+	for i := 0; i < numAgents; i++ {
+		aid := makeAgentID(i)
+		repoPath := agentRepoPath(g.repoPath, aid)
+		agentSeed := g.seed + int64(i)
+
+		if err := generateRepo(ctx, repoPath, g.numCommits, agentSeed); err != nil {
+			db.Close()
+			return workload.QueryLoad{}, errors.Wrapf(err, "generating repo for %s", aid)
+		}
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO repo_stats (agent_id, total_commits, total_files_changed, total_blobs_bytes)
+			 VALUES ($1, 0, 0, 0)
+			 ON CONFLICT (agent_id) DO NOTHING`, aid,
+		); err != nil {
+			db.Close()
+			return workload.QueryLoad{}, errors.Wrapf(err, "initializing repo_stats for %s", aid)
+		}
+	}
 
 	ql := workload.QueryLoad{
 		Close: func(_ context.Context) error {
@@ -281,39 +347,40 @@ func (g *gitload) Ops(
 		},
 	}
 
-	hists := reg.GetHandle()
-	workerFn := func(ctx context.Context) error {
-		c := cycle.Add(1)
-		currentSeed := g.seed + c
+	for i := 0; i < numAgents; i++ {
+		aid := makeAgentID(i)
+		repoPath := agentRepoPath(g.repoPath, aid)
+		agentSeed := g.seed + int64(i)
+		hists := reg.GetHandle()
+		var cycle atomic.Int64
 
-		fmt.Printf("starting ingestion cycle %d with seed %d\n", c, currentSeed)
+		workerFn := func(ctx context.Context) error {
+			c := cycle.Add(1)
+			currentSeed := agentSeed + c*int64(numAgents)
 
-		// Clear all tables.
-		if err := clearAllTables(ctx, db); err != nil {
-			return errors.Wrapf(err, "clearing tables for cycle %d", c)
+			start := timeutil.Now()
+			if err := clearAgentData(ctx, db, aid); err != nil {
+				return errors.Wrapf(err, "%s: clearing data", aid)
+			}
+			if err := ingest(
+				ctx, db, repoPath, currentSeed,
+				g.numCommits, g.maxBlobSize, g.skipContent, hists, aid,
+				g.batchSize,
+			); err != nil {
+				return errors.Wrapf(err, "%s: ingestion cycle %d", aid, c)
+			}
+			fmt.Printf("%s: cycle %d complete in %s\n",
+				aid, c, timeutil.Since(start))
+			return nil
 		}
-
-		// Ingest with the current seed. Per-commit latencies are recorded
-		// by ingest() via the histogram handle.
-		start := timeutil.Now()
-		if err := ingest(
-			ctx, db, g.repoPath, currentSeed,
-			g.numCommits, g.maxBlobSize, g.skipContent, hists,
-		); err != nil {
-			return errors.Wrapf(err, "ingestion cycle %d", c)
-		}
-
-		fmt.Printf("completed ingestion cycle %d in %s\n", c, timeutil.Since(start))
-		return nil
+		ql.WorkerFns = append(ql.WorkerFns, workerFn)
 	}
-	ql.WorkerFns = append(ql.WorkerFns, workerFn)
 
-	// Add a background verification worker that periodically checks
-	// consistency while ingestion is in progress.
 	if g.inlineVerifySec > 0 {
 		interval := time.Duration(g.inlineVerifySec) * time.Second
 		repoPath := g.repoPath
 		verifyEveryN := g.verifyEveryN
+		hists := reg.GetHandle()
 		verifierFn := func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
@@ -325,8 +392,7 @@ func (g *gitload) Ops(
 			if err := runInlineChecks(ctx, db, repoPath, verifyEveryN); err != nil {
 				return errors.Wrap(err, "inline verification")
 			}
-			elapsed := timeutil.Since(start)
-			hists.Get("inline-verify").Record(elapsed)
+			hists.Get("inline-verify").Record(timeutil.Since(start))
 			return nil
 		}
 		ql.WorkerFns = append(ql.WorkerFns, verifierFn)

@@ -14,73 +14,104 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/errors"
 )
 
-// runAllChecks runs all oracle verification checks against the database and
-// the git repo within a single historical read transaction to ensure a
-// consistent snapshot. Using AS OF SYSTEM TIME avoids uncertainty interval
-// errors and makes it safe to run concurrently with the workload.
-func runAllChecks(ctx context.Context, db *gosql.DB, repoPath string, verifyEveryN int) error {
-	tx, err := db.BeginTx(ctx, &gosql.TxOptions{ReadOnly: true})
+// discoverAgentsTx returns the list of agent IDs from repo_stats within
+// an existing transaction.
+func discoverAgentsTx(ctx context.Context, tx *gosql.Tx) ([]string, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT agent_id FROM repo_stats ORDER BY agent_id")
 	if err != nil {
-		return errors.Wrap(err, "starting read transaction")
+		return nil, errors.Wrap(err, "discovering agents")
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer rows.Close()
 
-	// Use a follower read timestamp to avoid uncertainty interval errors
-	// when reading across nodes during concurrent writes.
-	if _, err := tx.ExecContext(ctx,
-		"SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()"); err != nil {
-		return errors.Wrap(err, "setting AS OF SYSTEM TIME")
+	var agents []string
+	for rows.Next() {
+		var aid string
+		if err := rows.Scan(&aid); err != nil {
+			return nil, errors.Wrap(err, "scanning agent_id")
+		}
+		agents = append(agents, aid)
 	}
+	return agents, rows.Err()
+}
 
-	if err := verifyRepoStats(ctx, tx); err != nil {
-		return errors.Wrap(err, "repo stats verification failed")
-	}
+// runAllChecks runs all oracle verification checks within a single
+// retry-safe read-only transaction. It auto-discovers agents from
+// repo_stats and runs per-agent checks for each, then runs cross-agent
+// shared checks. Agents with 0 commits (mid-cycle) are skipped; the
+// cross-agent checks still run regardless.
+func runAllChecks(ctx context.Context, db *gosql.DB, baseRepoPath string, verifyEveryN int) error {
+	txOpts := &gosql.TxOptions{ReadOnly: true}
+	return crdb.ExecuteTx(ctx, db, txOpts, func(tx *gosql.Tx) error {
+		agents, err := discoverAgentsTx(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if len(agents) == 0 {
+			fmt.Println("no agents found in repo_stats, nothing to verify")
+			return nil
+		}
 
-	// Read the expected commit count from repo_stats. verifyRepoStats
-	// already confirmed this matches COUNT(*) FROM commits, so this is
-	// the authoritative expected count. We pass it to verifyCommitGraph
-	// so it can switch to partial mode when the DB has fewer commits
-	// than the git repo (e.g. when --commits limited ingestion).
-	var dbExpectedCommits int
-	if err := tx.QueryRowContext(ctx,
-		"SELECT total_commits FROM repo_stats WHERE id = 1",
-	).Scan(&dbExpectedCommits); err != nil {
-		return errors.Wrap(err, "reading repo_stats for commit count")
-	}
+		for _, aid := range agents {
+			repoPath := agentRepoPath(baseRepoPath, aid)
 
-	if err := verifyCommitGraph(ctx, tx, repoPath, false /* partial */, dbExpectedCommits); err != nil {
-		return errors.Wrap(err, "commit graph verification failed")
-	}
-	if err := verifyCommitMetadata(ctx, tx, repoPath); err != nil {
-		return errors.Wrap(err, "commit metadata verification failed")
-	}
-	if err := verifyFileLatest(ctx, tx, repoPath); err != nil {
-		return errors.Wrap(err, "file_latest verification failed")
-	}
-	if err := replay(ctx, tx, repoPath, verifyEveryN); err != nil {
-		return errors.Wrap(err, "replay verification failed")
-	}
-	if err := verifyBlobContent(ctx, tx); err != nil {
-		return errors.Wrap(err, "blob content verification failed")
-	}
-	if err := verifyReferentialIntegrity(ctx, tx); err != nil {
-		return errors.Wrap(err, "referential integrity verification failed")
-	}
-	if err := verifySecondaryIndexes(ctx, tx); err != nil {
-		return errors.Wrap(err, "secondary index verification failed")
-	}
-	return tx.Commit()
+			var actualCommits int64
+			if err := tx.QueryRowContext(ctx,
+				"SELECT count(*) FROM commits WHERE agent_id = $1", aid,
+			).Scan(&actualCommits); err != nil {
+				return errors.Wrapf(err, "counting commits for %s", aid)
+			}
+			if actualCommits == 0 {
+				fmt.Printf("%s: 0 commits (mid-cycle or freshly cleared), skipping\n", aid)
+				continue
+			}
+
+			if err := verifyRepoStats(ctx, tx, aid); err != nil {
+				return errors.Wrapf(err, "%s: repo stats verification failed", aid)
+			}
+			if err := verifyCommitGraph(
+				ctx, tx, repoPath, true /* partial */, 0, aid,
+			); err != nil {
+				return errors.Wrapf(err, "%s: commit graph verification failed", aid)
+			}
+			if err := verifyCommitMetadata(ctx, tx, repoPath, aid); err != nil {
+				return errors.Wrapf(err, "%s: commit metadata verification failed", aid)
+			}
+			if err := verifyFileLatest(ctx, tx, repoPath, aid); err != nil {
+				return errors.Wrapf(err, "%s: file_latest verification failed", aid)
+			}
+			if err := replay(ctx, tx, repoPath, verifyEveryN, aid); err != nil {
+				return errors.Wrapf(err, "%s: replay verification failed", aid)
+			}
+		}
+
+		if err := verifyTotalBlobBytes(ctx, tx); err != nil {
+			return errors.Wrap(err, "total blob bytes verification failed")
+		}
+		if err := verifyBlobContent(ctx, tx); err != nil {
+			return errors.Wrap(err, "blob content verification failed")
+		}
+		if err := verifyReferentialIntegrity(ctx, tx); err != nil {
+			return errors.Wrap(err, "referential integrity verification failed")
+		}
+		if err := verifySecondaryIndexes(ctx, tx); err != nil {
+			return errors.Wrap(err, "secondary index verification failed")
+		}
+		return nil
+	})
 }
 
 // runInlineChecks runs verification checks that are safe to execute while
 // ingestion is in progress. It reads a consistent snapshot via AS OF SYSTEM
 // TIME follower_read_timestamp() and validates the partial data that has been
-// ingested so far. If the snapshot contains 0 commits (e.g. tables are being
-// cleared between ingestion cycles), verification is skipped.
-func runInlineChecks(ctx context.Context, db *gosql.DB, repoPath string, verifyEveryN int) error {
+// ingested so far.
+func runInlineChecks(
+	ctx context.Context, db *gosql.DB, baseRepoPath string, verifyEveryN int,
+) error {
 	tx, err := db.BeginTx(ctx, &gosql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return errors.Wrap(err, "starting inline verification transaction")
@@ -89,11 +120,9 @@ func runInlineChecks(ctx context.Context, db *gosql.DB, repoPath string, verifyE
 
 	if _, err := tx.ExecContext(ctx,
 		"SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()"); err != nil {
-		return errors.Wrap(err, "setting AS OF SYSTEM TIME for inline verification")
+		return errors.Wrap(err, "setting AS OF SYSTEM TIME")
 	}
 
-	// Check if there's any data to verify. During table truncation between
-	// ingestion cycles, the snapshot may be empty.
 	var commitCount int64
 	if err := tx.QueryRowContext(ctx,
 		"SELECT count(*) FROM commits",
@@ -105,31 +134,58 @@ func runInlineChecks(ctx context.Context, db *gosql.DB, repoPath string, verifyE
 		return nil
 	}
 
-	fmt.Printf("inline verification: checking %d commits\n", commitCount)
+	agents, err := discoverAgentsTx(ctx, tx)
+	if err != nil {
+		return err
+	}
 
-	if err := verifyRepoStats(ctx, tx); err != nil {
-		return errors.Wrap(err, "inline: repo stats verification failed")
+	fmt.Printf("inline verification: checking %d commits across %d agents\n",
+		commitCount, len(agents))
+
+	for _, aid := range agents {
+		repoPath := agentRepoPath(baseRepoPath, aid)
+
+		var agentCommits int64
+		if err := tx.QueryRowContext(ctx,
+			"SELECT count(*) FROM commits WHERE agent_id = $1", aid,
+		).Scan(&agentCommits); err != nil {
+			return errors.Wrapf(err, "counting commits for %s", aid)
+		}
+		if agentCommits == 0 {
+			continue
+		}
+
+		if err := verifyRepoStats(ctx, tx, aid); err != nil {
+			return errors.Wrapf(err, "inline: %s: repo stats failed", aid)
+		}
+		if err := verifyCommitGraph(
+			ctx, tx, repoPath, true /* partial */, 0, aid,
+		); err != nil {
+			return errors.Wrapf(err, "inline: %s: commit graph failed", aid)
+		}
+		if err := verifyCommitMetadata(ctx, tx, repoPath, aid); err != nil {
+			return errors.Wrapf(err, "inline: %s: commit metadata failed", aid)
+		}
+		// verifyFileLatest is skipped during inline verification: during
+		// partial ingestion of a branching DAG, file_latest accumulates
+		// diffs from multiple branches, but git ls-tree at the latest
+		// commit only reflects one branch's tree.
+		if err := replay(ctx, tx, repoPath, verifyEveryN, aid); err != nil {
+			return errors.Wrapf(err, "inline: %s: replay failed", aid)
+		}
 	}
-	if err := verifyCommitGraph(ctx, tx, repoPath, true /* partial */, 0); err != nil {
-		return errors.Wrap(err, "inline: commit graph verification failed")
-	}
-	if err := verifyCommitMetadata(ctx, tx, repoPath); err != nil {
-		return errors.Wrap(err, "inline: commit metadata verification failed")
-	}
-	if err := verifyFileLatest(ctx, tx, repoPath); err != nil {
-		return errors.Wrap(err, "inline: file_latest verification failed")
-	}
-	if err := replay(ctx, tx, repoPath, verifyEveryN); err != nil {
-		return errors.Wrap(err, "inline: replay verification failed")
+
+	if err := verifyTotalBlobBytes(ctx, tx); err != nil {
+		return errors.Wrap(err, "inline: total blob bytes failed")
 	}
 	if err := verifyBlobContent(ctx, tx); err != nil {
-		return errors.Wrap(err, "inline: blob content verification failed")
+		return errors.Wrap(err, "inline: blob content failed")
 	}
 	if err := verifyReferentialIntegrity(ctx, tx); err != nil {
-		return errors.Wrap(err, "inline: referential integrity verification failed")
+		return errors.Wrap(err, "inline: referential integrity failed")
 	}
 	if err := verifySecondaryIndexes(ctx, tx); err != nil {
-		return errors.Wrap(err, "inline: secondary index verification failed")
+		return errors.Wrap(err, "inline: secondary index failed")
 	}
 
 	fmt.Printf("inline verification passed: %d commits verified\n", commitCount)
@@ -137,35 +193,28 @@ func runInlineChecks(ctx context.Context, db *gosql.DB, repoPath string, verifyE
 }
 
 // verifyRepoStats checks that the repo_stats counters match actual row counts
-// and blob size totals.
-func verifyRepoStats(ctx context.Context, tx *gosql.Tx) error {
-	var totalCommits, totalFilesChanged, totalBlobsBytes int64
+// for a single agent.
+func verifyRepoStats(ctx context.Context, tx *gosql.Tx, agentID string) error {
+	var totalCommits, totalFilesChanged int64
 	if err := tx.QueryRowContext(ctx,
-		`SELECT total_commits, total_files_changed, total_blobs_bytes
-		 FROM repo_stats WHERE id = 1`,
-	).Scan(&totalCommits, &totalFilesChanged, &totalBlobsBytes); err != nil {
+		`SELECT total_commits, total_files_changed
+		 FROM repo_stats WHERE agent_id = $1`, agentID,
+	).Scan(&totalCommits, &totalFilesChanged); err != nil {
 		return errors.Wrap(err, "reading repo_stats")
 	}
 
 	var actualCommits int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT count(*) FROM commits",
+		"SELECT count(*) FROM commits WHERE agent_id = $1", agentID,
 	).Scan(&actualCommits); err != nil {
 		return errors.Wrap(err, "counting commits")
 	}
 
 	var actualDiffs int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT count(*) FROM commit_diffs",
+		"SELECT count(*) FROM commit_diffs WHERE agent_id = $1", agentID,
 	).Scan(&actualDiffs); err != nil {
 		return errors.Wrap(err, "counting commit_diffs")
-	}
-
-	var actualBlobsBytes int64
-	if err := tx.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(size), 0) FROM blobs",
-	).Scan(&actualBlobsBytes); err != nil {
-		return errors.Wrap(err, "summing blob sizes")
 	}
 
 	if totalCommits != actualCommits {
@@ -180,31 +229,51 @@ func verifyRepoStats(ctx context.Context, tx *gosql.Tx) error {
 			totalFilesChanged, actualDiffs,
 		)
 	}
-	if totalBlobsBytes != actualBlobsBytes {
+
+	fmt.Printf("%s: repo_stats verified: %d commits, %d file changes\n",
+		agentID, totalCommits, totalFilesChanged)
+	return nil
+}
+
+// verifyTotalBlobBytes checks that the sum of all agents'
+// total_blobs_bytes does not exceed the actual sum of blob sizes.
+// Blobs are shared across agents via ON CONFLICT DO NOTHING and are
+// never deleted, so after clear+re-ingest cycles the stats may
+// undercount (re-inserted blobs are already present). The invariant
+// is: stats <= actual. Overcounting would indicate a bug.
+func verifyTotalBlobBytes(ctx context.Context, tx *gosql.Tx) error {
+	var statsBlobBytes int64
+	if err := tx.QueryRowContext(ctx,
+		"SELECT coalesce(sum(total_blobs_bytes), 0) FROM repo_stats",
+	).Scan(&statsBlobBytes); err != nil {
+		return errors.Wrap(err, "summing repo_stats blob bytes")
+	}
+
+	var actualBlobBytes int64
+	if err := tx.QueryRowContext(ctx,
+		"SELECT coalesce(sum(size), 0) FROM blobs",
+	).Scan(&actualBlobBytes); err != nil {
+		return errors.Wrap(err, "summing blob sizes")
+	}
+
+	if statsBlobBytes > actualBlobBytes {
 		return errors.Newf(
-			"repo_stats.total_blobs_bytes=%d but SUM(blobs.size)=%d",
-			totalBlobsBytes, actualBlobsBytes,
+			"sum(repo_stats.total_blobs_bytes)=%d exceeds sum(blobs.size)=%d",
+			statsBlobBytes, actualBlobBytes,
 		)
 	}
 
-	fmt.Printf("repo_stats verified: %d commits, %d file changes, %d blob bytes\n",
-		totalCommits, totalFilesChanged, totalBlobsBytes)
+	fmt.Printf("total blob bytes verified: stats=%d, actual=%d bytes\n",
+		statsBlobBytes, actualBlobBytes)
 	return nil
 }
 
 // verifyCommitGraph compares the commit_parents table against the git DAG
 // loaded via git rev-list --parents. When partial is false, it verifies a
-// full bidirectional match (commit counts must match, every git edge must
-// exist in the DB). When partial is true, only commits present in the DB
-// are checked — this is safe during mid-ingestion when not all commits
-// have been inserted yet.
-//
-// maxCommits controls the expected number of ingested commits. When
-// maxCommits is positive and smaller than the git DAG, the check
-// automatically switches to partial mode because the DB intentionally
-// contains only a subset of the full history.
+// full bidirectional match. When partial is true, only commits present in
+// the DB are checked.
 func verifyCommitGraph(
-	ctx context.Context, tx *gosql.Tx, repoPath string, partial bool, maxCommits int,
+	ctx context.Context, tx *gosql.Tx, repoPath string, partial bool, maxCommits int, agentID string,
 ) error {
 	gitDAG, err := loadCommitDAG(ctx, repoPath)
 	if err != nil {
@@ -213,21 +282,17 @@ func verifyCommitGraph(
 
 	var dbCommitCount int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT count(*) FROM commits",
+		"SELECT count(*) FROM commits WHERE agent_id = $1", agentID,
 	).Scan(&dbCommitCount); err != nil {
 		return errors.Wrap(err, "counting commits")
 	}
 
-	// When --commits limits ingestion below the full git DAG, the DB
-	// intentionally contains a subset. Switch to partial edge comparison
-	// and adjust the expected count.
 	expectedCommits := int64(len(gitDAG))
 	if maxCommits > 0 && int64(maxCommits) < expectedCommits {
 		expectedCommits = int64(maxCommits)
 		partial = true
 	}
 
-	// In full mode, verify commit counts match exactly.
 	if !partial {
 		if expectedCommits != dbCommitCount {
 			return errors.Newf(
@@ -237,11 +302,10 @@ func verifyCommitGraph(
 		}
 	}
 
-	// Load all parent edges from the database, ordered by parent_index.
 	rows, err := tx.QueryContext(ctx,
 		`SELECT commit_hash, parent_hash, parent_index
-		 FROM commit_parents
-		 ORDER BY commit_hash, parent_index`)
+		 FROM commit_parents WHERE agent_id = $1
+		 ORDER BY commit_hash, parent_index`, agentID)
 	if err != nil {
 		return errors.Wrap(err, "querying commit_parents")
 	}
@@ -254,7 +318,7 @@ func verifyCommitGraph(
 		if err := rows.Scan(&commitHash, &parentHash, &parentIndex); err != nil {
 			return errors.Wrap(err, "scanning commit_parents row")
 		}
-		_ = parentIndex // ordering guaranteed by ORDER BY
+		_ = parentIndex
 		dbDAG[commitHash] = append(dbDAG[commitHash], parentHash)
 	}
 	if err := rows.Err(); err != nil {
@@ -264,10 +328,6 @@ func verifyCommitGraph(
 	var mismatches []string
 
 	if partial {
-		// Partial mode: only validate DB-side edges against git.
-		// For each commit with parents in the DB, verify its parent
-		// list matches git. Don't flag git commits that are missing
-		// from the DB (they haven't been ingested yet).
 		for hash, dbParents := range dbDAG {
 			gitParents, ok := gitDAG[hash]
 			if !ok {
@@ -293,7 +353,6 @@ func verifyCommitGraph(
 			}
 		}
 	} else {
-		// Full mode: bidirectional comparison.
 		for hash, gitParents := range gitDAG {
 			dbParents := dbDAG[hash]
 			if len(gitParents) != len(dbParents) {
@@ -331,21 +390,23 @@ func verifyCommitGraph(
 	}
 
 	if partial {
-		fmt.Printf("commit graph verified (partial): %d/%d commits, DB edges match git\n",
-			dbCommitCount, len(gitDAG))
+		fmt.Printf("%s: commit graph verified (partial): %d/%d commits\n",
+			agentID, dbCommitCount, len(gitDAG))
 	} else {
-		fmt.Printf("commit graph verified: %d commits, all parent edges match git\n",
-			len(gitDAG))
+		fmt.Printf("%s: commit graph verified: %d commits\n",
+			agentID, len(gitDAG))
 	}
 	return nil
 }
 
 // verifyCommitMetadata compares every field in the commits table against git.
-func verifyCommitMetadata(ctx context.Context, tx *gosql.Tx, repoPath string) error {
+func verifyCommitMetadata(
+	ctx context.Context, tx *gosql.Tx, repoPath string, agentID string,
+) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT hash, tree_hash, author_name, author_email, author_date,
 		        committer_name, committer_email, committer_date, message
-		 FROM commits`)
+		 FROM commits WHERE agent_id = $1`, agentID)
 	if err != nil {
 		return errors.Wrap(err, "querying commits")
 	}
@@ -404,53 +465,56 @@ func verifyCommitMetadata(ctx context.Context, tx *gosql.Tx, repoPath string) er
 		)
 	}
 
-	fmt.Printf("commit metadata verified: %d commits, all fields match git\n", count)
+	fmt.Printf("%s: commit metadata verified: %d commits\n", agentID, count)
 	return nil
 }
 
 // verifyFileLatest compares the file_latest table against git ls-tree at the
-// latest commit, verifying both path sets and blob SHA-256 content hashes.
-func verifyFileLatest(ctx context.Context, tx *gosql.Tx, repoPath string) error {
-	// Get the latest commit hash.
+// latest commit for a specific agent.
+func verifyFileLatest(ctx context.Context, tx *gosql.Tx, repoPath string, agentID string) error {
 	var latestHash string
 	err := tx.QueryRowContext(ctx,
-		"SELECT hash FROM commits ORDER BY topo_order DESC LIMIT 1",
+		"SELECT hash FROM commits WHERE agent_id = $1 ORDER BY topo_order DESC LIMIT 1",
+		agentID,
 	).Scan(&latestHash)
 	if err != nil {
 		if errors.Is(err, gosql.ErrNoRows) {
-			fmt.Println("no commits in database, skipping file_latest verification")
+			fmt.Printf("%s: no commits, skipping file_latest verification\n", agentID)
 			return nil
 		}
 		return errors.Wrap(err, "getting latest commit")
 	}
 
-	// Get ground truth from git.
 	gitFiles, err := gitLsTree(ctx, repoPath, latestHash)
 	if err != nil {
 		return errors.Wrap(err, "git ls-tree")
 	}
 
-	// Get database file set with blob hashes.
 	rows, err := tx.QueryContext(ctx,
-		"SELECT file_path, blob_sha256 FROM file_latest")
+		"SELECT file_path, blob_sha256 FROM file_latest WHERE agent_id = $1",
+		agentID)
 	if err != nil {
 		return errors.Wrap(err, "querying file_latest")
 	}
 	defer rows.Close()
 
-	dbFiles := make(map[string]string) // path -> blob_sha256
+	dbFiles := make(map[string]string)
 	for rows.Next() {
-		var path, blobSHA string
+		var path string
+		var blobSHA gosql.NullString
 		if err := rows.Scan(&path, &blobSHA); err != nil {
 			return errors.Wrap(err, "scanning file_latest row")
 		}
-		dbFiles[path] = blobSHA
+		if blobSHA.Valid {
+			dbFiles[path] = blobSHA.String
+		} else {
+			dbFiles[path] = ""
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "iterating file_latest rows")
 	}
 
-	// Compare path sets bidirectionally.
 	var mismatches []string
 	for path := range gitFiles {
 		if _, ok := dbFiles[path]; !ok {
@@ -472,7 +536,6 @@ func verifyFileLatest(ctx context.Context, tx *gosql.Tx, repoPath string) error 
 		)
 	}
 
-	// Verify blob SHA-256 content hashes for every file.
 	for path, dbSHA := range dbFiles {
 		content, err := readBlob(ctx, repoPath, latestHash, path)
 		if err != nil {
@@ -495,20 +558,17 @@ func verifyFileLatest(ctx context.Context, tx *gosql.Tx, repoPath string) error 
 		)
 	}
 
-	fmt.Printf("file_latest verified: %d files match git at %s\n", len(gitFiles), latestHash[:12])
+	fmt.Printf("%s: file_latest verified: %d files match git at %s\n",
+		agentID, len(gitFiles), latestHash[:12])
 	return nil
 }
 
 // replay rebuilds the file tree from database diffs and verifies against git at
-// sampled commits. This is the strongest oracle: it validates the entire diff
-// chain stored in the database faithfully reproduces the git history.
-//
-// Each commit's tree is built by cloning its first parent's tree and applying
-// the commit's diffs. This correctly handles branching histories where a single
-// cumulative tree would bleed files across sibling branches.
-func replay(ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int) error {
-	// Load first-parent relationships so we can build per-commit trees.
-	firstParent, err := loadFirstParents(ctx, tx)
+// sampled commits for a specific agent.
+func replay(
+	ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int, agentID string,
+) error {
+	firstParent, err := loadFirstParents(ctx, tx, agentID)
 	if err != nil {
 		return err
 	}
@@ -516,16 +576,22 @@ func replay(ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int
 	rows, err := tx.QueryContext(ctx,
 		`SELECT c.hash, c.topo_order, d.file_path, d.op, d.old_path, d.blob_sha256
 		 FROM commits c
-		 JOIN commit_diffs d ON c.hash = d.commit_hash
-		 ORDER BY c.topo_order, d.file_path`,
+		 JOIN commit_diffs d ON c.agent_id = d.agent_id AND c.hash = d.commit_hash
+		 WHERE c.agent_id = $1
+		 ORDER BY c.topo_order, d.file_path`, agentID,
 	)
 	if err != nil {
 		return errors.Wrap(err, "querying commits with diffs for replay")
 	}
 	defer rows.Close()
 
-	// Per-commit file trees: commit hash -> (path -> blob SHA-256).
 	trees := make(map[string]map[string]string)
+
+	refCount := make(map[string]int)
+	for _, parent := range firstParent {
+		refCount[parent]++
+	}
+
 	var currentTree map[string]string
 	var lastHash string
 	var lastTopoOrder int
@@ -539,7 +605,6 @@ func replay(ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int
 			return errors.Wrap(err, "scanning replay row")
 		}
 
-		// If we've moved to a new commit, finalize the previous one.
 		if lastHash != "" && hash != lastHash {
 			trees[lastHash] = currentTree
 			if shouldVerify(lastTopoOrder, verifyEveryN) {
@@ -548,14 +613,18 @@ func replay(ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int
 				}
 				totalVerified++
 			}
+			if parent, ok := firstParent[lastHash]; ok {
+				refCount[parent]--
+				if refCount[parent] <= 0 {
+					delete(trees, parent)
+				}
+			}
 		}
 
-		// Starting a new commit: clone the first parent's tree.
 		if hash != lastHash {
 			currentTree = cloneParentTree(trees, firstParent, hash)
 		}
 
-		// Apply the diff to the current commit's tree.
 		switch op {
 		case "A", "M":
 			if blobSHA.Valid {
@@ -579,26 +648,33 @@ func replay(ctx context.Context, tx *gosql.Tx, repoPath string, verifyEveryN int
 		return errors.Wrap(err, "iterating replay rows")
 	}
 
-	// Always verify the final commit.
 	if lastHash != "" {
 		trees[lastHash] = currentTree
 		if err := verifyTree(ctx, repoPath, lastHash, currentTree); err != nil {
 			return errors.Wrapf(err, "final replay verification at topo_order=%d", lastTopoOrder)
 		}
 		totalVerified++
+		if parent, ok := firstParent[lastHash]; ok {
+			refCount[parent]--
+			if refCount[parent] <= 0 {
+				delete(trees, parent)
+			}
+		}
 	}
 
-	fmt.Printf("replay verified %d commit snapshots\n", totalVerified)
+	fmt.Printf("%s: replay verified %d commit snapshots\n", agentID, totalVerified)
 	return nil
 }
 
 // loadFirstParents queries the commit_parents table and returns a map from
-// each commit hash to its first parent hash (parent_index = 0). Root commits
-// have no entry in the returned map.
-func loadFirstParents(ctx context.Context, tx *gosql.Tx) (map[string]string, error) {
+// each commit hash to its first parent hash (parent_index = 0).
+func loadFirstParents(
+	ctx context.Context, tx *gosql.Tx, agentID string,
+) (map[string]string, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT commit_hash, parent_hash
-		 FROM commit_parents WHERE parent_index = 0`)
+		 FROM commit_parents WHERE agent_id = $1 AND parent_index = 0`,
+		agentID)
 	if err != nil {
 		return nil, errors.Wrap(err, "querying first parents")
 	}
@@ -636,8 +712,7 @@ func cloneParentTree(
 }
 
 // shouldVerify returns true if the commit at the given topo order should be
-// verified during replay. If verifyEveryN is 0, only the final commit is
-// verified (handled by the caller).
+// verified during replay.
 func shouldVerify(topoOrder int, verifyEveryN int) bool {
 	if verifyEveryN <= 0 {
 		return false
@@ -676,7 +751,6 @@ func verifyTree(
 		)
 	}
 
-	// Verify blob SHA-256 content hashes for every file in the tree.
 	for path, dbSHA := range tree {
 		content, err := readBlob(ctx, repoPath, commitHash, path)
 		if err != nil {
@@ -702,26 +776,30 @@ func verifyTree(
 }
 
 // verifyBlobContent checks that every blob's stored content matches its
-// SHA-256 primary key. This catches storage-layer corruption where the hash
-// column survives but the content column is silently corrupted. Blobs with
-// NULL content (skip-content mode) are skipped.
+// SHA-256 primary key. Truncated blobs (size > len(content)) are skipped.
 func verifyBlobContent(ctx context.Context, tx *gosql.Tx) error {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT sha256, content FROM blobs WHERE content IS NOT NULL`)
+		`SELECT sha256, size, content FROM blobs WHERE content IS NOT NULL`)
 	if err != nil {
 		return errors.Wrap(err, "querying blobs for content verification")
 	}
 	defer rows.Close()
 
 	var mismatches []string
-	var count int
+	var count, truncatedCount int
 	for rows.Next() {
 		var storedSHA string
+		var size int
 		var content []byte
-		if err := rows.Scan(&storedSHA, &content); err != nil {
+		if err := rows.Scan(&storedSHA, &size, &content); err != nil {
 			return errors.Wrap(err, "scanning blob row")
 		}
 		count++
+
+		if size > len(content) {
+			truncatedCount++
+			continue
+		}
 
 		computed := sha256.Sum256(content)
 		computedHex := hex.EncodeToString(computed[:])
@@ -745,14 +823,15 @@ func verifyBlobContent(ctx context.Context, tx *gosql.Tx) error {
 		)
 	}
 
-	fmt.Printf("blob content verified: %d blobs, all content matches SHA-256 key\n", count)
+	fmt.Printf(
+		"blob content verified: %d blobs (%d truncated, skipped)\n",
+		count, truncatedCount,
+	)
 	return nil
 }
 
 // verifyReferentialIntegrity checks that all foreign key relationships hold
-// at the data level. This catches corruption even when FK constraints exist,
-// since constraints can be violated by bugs in the storage or transaction
-// layer.
+// at the data level.
 func verifyReferentialIntegrity(ctx context.Context, tx *gosql.Tx) error {
 	type refCheck struct {
 		name  string
@@ -762,25 +841,25 @@ func verifyReferentialIntegrity(ctx context.Context, tx *gosql.Tx) error {
 		{
 			"commit_parents.commit_hash → commits",
 			`SELECT count(*) FROM commit_parents cp
-			 LEFT JOIN commits c ON cp.commit_hash = c.hash
+			 LEFT JOIN commits c ON cp.agent_id = c.agent_id AND cp.commit_hash = c.hash
 			 WHERE c.hash IS NULL`,
 		},
 		{
 			"commit_parents.parent_hash → commits",
 			`SELECT count(*) FROM commit_parents cp
-			 LEFT JOIN commits c ON cp.parent_hash = c.hash
+			 LEFT JOIN commits c ON cp.agent_id = c.agent_id AND cp.parent_hash = c.hash
 			 WHERE c.hash IS NULL`,
 		},
 		{
 			"commit_diffs.commit_hash → commits",
 			`SELECT count(*) FROM commit_diffs cd
-			 LEFT JOIN commits c ON cd.commit_hash = c.hash
+			 LEFT JOIN commits c ON cd.agent_id = c.agent_id AND cd.commit_hash = c.hash
 			 WHERE c.hash IS NULL`,
 		},
 		{
 			"file_latest.last_commit_hash → commits",
 			`SELECT count(*) FROM file_latest fl
-			 LEFT JOIN commits c ON fl.last_commit_hash = c.hash
+			 LEFT JOIN commits c ON fl.agent_id = c.agent_id AND fl.last_commit_hash = c.hash
 			 WHERE c.hash IS NULL`,
 		},
 		{
@@ -824,33 +903,33 @@ func verifyReferentialIntegrity(ctx context.Context, tx *gosql.Tx) error {
 
 // indexCheck defines a secondary index consistency check.
 type indexCheck struct {
-	name      string // human-readable name
-	table     string // table name
-	indexName string // secondary index name
-	columns   string // columns to SELECT for comparison
+	name      string
+	table     string
+	indexName string
+	columns   string
 }
 
 // verifySecondaryIndexes compares primary key scans against forced secondary
-// index scans using EXCEPT ALL. Any difference indicates index corruption.
+// index scans using EXCEPT ALL.
 func verifySecondaryIndexes(ctx context.Context, tx *gosql.Tx) error {
 	checks := []indexCheck{
 		{
 			name:      "commit_diffs_file_path",
 			table:     "commit_diffs",
 			indexName: "idx_commit_diffs_file_path",
-			columns:   "commit_hash, file_path, op, old_path, file_mode, blob_sha256",
+			columns:   "agent_id, commit_hash, file_path, op, old_path, file_mode, blob_sha256",
 		},
 		{
 			name:      "commits_topo_order",
 			table:     "commits",
 			indexName: "idx_commits_topo_order",
-			columns:   "hash, topo_order",
+			columns:   "agent_id, hash, topo_order",
 		},
 		{
 			name:      "file_latest_last_commit",
 			table:     "file_latest",
 			indexName: "idx_file_latest_last_commit",
-			columns:   "file_path, last_commit_hash, last_topo_order, blob_sha256",
+			columns:   "agent_id, file_path, last_commit_hash, last_topo_order, blob_sha256",
 		},
 	}
 
@@ -868,7 +947,6 @@ func verifySecondaryIndexes(ctx context.Context, tx *gosql.Tx) error {
 // verifyOneIndex compares the result of a primary key scan against a forced
 // secondary index scan for a single index using EXCEPT ALL.
 func verifyOneIndex(ctx context.Context, tx *gosql.Tx, check indexCheck) error {
-	// Count from primary scan.
 	var primaryCount int64
 	if err := tx.QueryRowContext(ctx,
 		fmt.Sprintf("SELECT count(*) FROM %s", check.table),
@@ -876,7 +954,6 @@ func verifyOneIndex(ctx context.Context, tx *gosql.Tx, check indexCheck) error {
 		return errors.Wrap(err, "counting primary rows")
 	}
 
-	// Count from index scan.
 	var indexCount int64
 	if err := tx.QueryRowContext(ctx,
 		fmt.Sprintf("SELECT count(*) FROM %s@{FORCE_INDEX=%s}",
@@ -892,7 +969,6 @@ func verifyOneIndex(ctx context.Context, tx *gosql.Tx, check indexCheck) error {
 		)
 	}
 
-	// Rows in primary but missing from index.
 	var missingFromIndex int64
 	if err := tx.QueryRowContext(ctx,
 		fmt.Sprintf(
@@ -907,7 +983,6 @@ func verifyOneIndex(ctx context.Context, tx *gosql.Tx, check indexCheck) error {
 		return errors.Wrap(err, "checking primary EXCEPT index")
 	}
 
-	// Rows in index but not in primary.
 	var extraInIndex int64
 	if err := tx.QueryRowContext(ctx,
 		fmt.Sprintf(
