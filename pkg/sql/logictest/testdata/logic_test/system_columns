@@ -360,3 +360,169 @@ ALTER TABLE tab3 DROP COLUMN crdb_internal_mvcc_timestamp;
 
 statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"
 ALTER TABLE tab3 ALTER COLUMN crdb_internal_mvcc_timestamp SET NOT NULL;
+
+subtest pg_dump_compatibility
+
+# By default, pg_catalog tables use CockroachDB's internal descriptor IDs as
+# their tableoid.
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+4294967048
+
+# Enable pg_dump compatibility mode.
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# With pg_dump_compatibility, pg_catalog tables should return standard
+# PostgreSQL tableoid values.
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+2615
+
+query O
+SELECT DISTINCT tableoid FROM pg_class LIMIT 1
+----
+1259
+
+query O
+SELECT DISTINCT tableoid FROM pg_type LIMIT 1
+----
+1247
+
+query O
+SELECT DISTINCT tableoid FROM pg_proc LIMIT 1
+----
+1255
+
+# Non-pg_catalog virtual tables should still return their descriptor IDs even
+# with pg_dump_compatibility enabled.
+let $is_tables_oid2
+SELECT oid FROM pg_class WHERE relname = 'tables' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'information_schema')
+
+query B
+SELECT bool_and(tableoid = $is_tables_oid2) FROM information_schema.tables
+----
+true
+
+# crdb_internal tables should be hidden from pg_class so pg_dump does
+# not try to dump them.
+query I
+SELECT count(*) FROM pg_class WHERE relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal')
+----
+0
+
+# crdb_internal and information_schema functions should be hidden from
+# pg_proc so pg_dump does not try to dump them.
+query I
+SELECT count(*) FROM pg_proc WHERE pronamespace IN (SELECT oid FROM pg_namespace WHERE nspname IN ('crdb_internal', 'information_schema'))
+----
+0
+
+# LOCK TABLE is a no-op when pg_dump_compatibility is enabled.
+statement ok
+LOCK TABLE pg_namespace IN ACCESS SHARE MODE
+
+# Multiple tables work too (pg_dump batches locks).
+statement ok
+LOCK TABLE pg_class, pg_namespace IN ACCESS SHARE MODE
+
+# NOWAIT variant also works.
+statement ok
+LOCK TABLE pg_class IN ACCESS SHARE MODE NOWAIT
+
+# Other lock modes also work.
+statement ok
+LOCK TABLE pg_class IN ROW SHARE MODE
+
+statement ok
+LOCK TABLE pg_class IN ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE pg_class IN SHARE MODE
+
+statement ok
+LOCK TABLE pg_class IN EXCLUSIVE MODE
+
+# Turn it back off and verify default behavior is restored.
+statement ok
+SET pg_dump_compatibility = 'off'
+
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+4294967048
+
+# LOCK TABLE is not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE pg_namespace IN ACCESS SHARE MODE
+
+# Verify that invalid values produce an error.
+statement error invalid value for parameter "pg_dump_compatibility": "invalid"
+SET pg_dump_compatibility = 'invalid'
+
+# Verify SHOW returns the correct value.
+statement ok
+SET pg_dump_compatibility = 'cockroachdb'
+
+query T
+SHOW pg_dump_compatibility
+----
+cockroachdb
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+query T
+SHOW pg_dump_compatibility
+----
+off
+
+subtest end
+
+subtest pg_dump_compatibility_storage_params
+
+# In postgres mode, CRDB-specific storage params should be omitted
+# from SHOW CREATE TABLE output.
+statement ok
+CREATE TABLE t_schema_locked (id INT PRIMARY KEY) WITH (schema_locked = true)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+) WITH (schema_locked = true);
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+);
+
+# cockroachdb mode should still show storage params.
+statement ok
+SET pg_dump_compatibility = 'cockroachdb'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+) WITH (schema_locked = true);
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+statement ok
+DROP TABLE t_schema_locked
+
+subtest end

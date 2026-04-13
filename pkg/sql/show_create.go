@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -202,7 +203,8 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	storageParams, err := desc.GetStorageParams(true /* spaceBetweenEqual */)
+	pgCompat := p.SessionData().PgDumpCompatibility == sessiondatapb.PgDumpCompatibilityPostgres
+	storageParams, err := desc.GetStorageParams(true /* spaceBetweenEqual */, pgCompat)
 	if err != nil {
 		return "", err
 	}
@@ -212,8 +214,11 @@ func ShowCreateTable(
 		f.Buffer.WriteString(`)`)
 	}
 
-	if err := showCreateLocality(desc, f); err != nil {
-		return "", err
+	// Suppress CRDB-specific LOCALITY clause in postgres compat mode.
+	if !pgCompat {
+		if err := showCreateLocality(desc, f); err != nil {
+			return "", err
+		}
 	}
 
 	if !displayOptions.IgnoreComments {

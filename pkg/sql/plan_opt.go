@@ -102,7 +102,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 		*tree.CreateStats,
 		*tree.Deallocate, *tree.Discard, *tree.DropDatabase, *tree.DropIndex,
 		*tree.DropTable, *tree.DropView, *tree.DropSequence, *tree.DropType,
-		*tree.Grant, *tree.GrantRole,
+		*tree.Grant, *tree.GrantRole, *tree.LockTable,
 		*tree.Prepare, *tree.PrepareTransaction,
 		*tree.ReleaseSavepoint, *tree.RenameColumn, *tree.RenameDatabase,
 		*tree.RenameIndex, *tree.RenameTable, *tree.Revoke, *tree.RevokeRole,

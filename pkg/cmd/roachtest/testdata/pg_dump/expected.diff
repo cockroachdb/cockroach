@@ -1,0 +1,17 @@
+--- source.sql
++++ target.sql
+@@ -63,14 +63,6 @@
+ 
+ 
+ --
+--- Name: active_basics; Type: VIEW; Schema: public; Owner: -
+---
+-
+-CREATE VIEW public.active_basics AS
+-SELECT id, name FROM public.basic_types WHERE active = true;
+-
+-
+---
+ -- Name: basic_types; Type: TABLE; Schema: public; Owner: -
+ --
+ 

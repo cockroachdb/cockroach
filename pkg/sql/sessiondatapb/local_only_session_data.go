@@ -432,6 +432,34 @@ func (e QoSLevel) ValidateInternal() QoSLevel {
 	panic(errors.AssertionFailedf("use of illegal internal QoSLevel: %s", e.String()))
 }
 
+// PgDumpCompatibility values for the pg_dump_compatibility session setting.
+const (
+	PgDumpCompatibilityOff         = "off"
+	PgDumpCompatibilityPostgres    = "postgres"
+	PgDumpCompatibilityCockroachDB = "cockroachdb"
+)
+
+// IsPgDumpCompatibilityEnabled returns true if the pg_dump_compatibility
+// setting is set to anything other than "off" (or the zero value).
+func IsPgDumpCompatibilityEnabled(val string) bool {
+	return val != "" && val != PgDumpCompatibilityOff
+}
+
+// PgDumpCompatibilityFromString converts a string into a validated
+// pg_dump_compatibility value. Returns false if the input is not recognized.
+func PgDumpCompatibilityFromString(val string) (_ string, ok bool) {
+	switch strings.ToLower(val) {
+	case PgDumpCompatibilityOff:
+		return PgDumpCompatibilityOff, true
+	case PgDumpCompatibilityPostgres:
+		return PgDumpCompatibilityPostgres, true
+	case PgDumpCompatibilityCockroachDB:
+		return PgDumpCompatibilityCockroachDB, true
+	default:
+		return "", false
+	}
+}
+
 // CanaryStatsMode controls whether all queries will deterministically use
 // canary or stable stats. See the comments on each mode for details.
 // This session variable is intended for troubleshooting.
