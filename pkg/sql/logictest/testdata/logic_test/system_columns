@@ -258,7 +258,7 @@ query OT colnames
 SELECT t.tableoid, t.nspname FROM pg_namespace t WHERE t.nspname = 'pg_catalog'
 ----
 tableoid    nspname
-4294967048  pg_catalog
+4294967045  pg_catalog
 
 # Verify tableoid works with WHERE clause filtering.
 query B
@@ -368,7 +368,7 @@ subtest pg_dump_compatibility
 query O
 SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
 ----
-4294967048
+4294967045
 
 # Enable pg_dump compatibility mode.
 statement ok
@@ -459,7 +459,7 @@ SET pg_dump_compatibility = 'off'
 query O
 SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
 ----
-4294967048
+4294967045
 
 # Verify that invalid values produce an error.
 statement error invalid value for parameter "pg_dump_compatibility": "invalid"

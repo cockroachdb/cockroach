@@ -148,6 +148,7 @@ var pgCatalog = virtualSchema{
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
 		catconstants.PgCatalogAggregateTableID:                  pgCatalogAggregateTable,
+		catconstants.PgCatalogAiosTableID:                       pgCatalogAiosTable,
 		catconstants.PgCatalogAmTableID:                         pgCatalogAmTable,
 		catconstants.PgCatalogAmopTableID:                       pgCatalogAmopTable,
 		catconstants.PgCatalogAmprocTableID:                     pgCatalogAmprocTable,
@@ -157,6 +158,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogAuthMembersTableID:                pgCatalogAuthMembersTable,
 		catconstants.PgCatalogAvailableExtensionVersionsTableID: pgCatalogAvailableExtensionVersionsTable,
 		catconstants.PgCatalogAvailableExtensionsTableID:        pgCatalogAvailableExtensionsTable,
+		catconstants.PgCatalogBackendMemoryContextsTableID:      pgCatalogBackendMemoryContextsTable,
 		catconstants.PgCatalogCastTableID:                       pgCatalogCastTable,
 		catconstants.PgCatalogClassTableID:                      pgCatalogClassTable,
 		catconstants.PgCatalogCollationTableID:                  pgCatalogCollationTable,
@@ -178,6 +180,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogForeignTableTableID:               pgCatalogForeignTableTable,
 		catconstants.PgCatalogGroupTableID:                      pgCatalogGroupTable,
 		catconstants.PgCatalogHbaFileRulesTableID:               pgCatalogHbaFileRulesTable,
+		catconstants.PgCatalogIdentFileMappingsTableID:          pgCatalogIdentFileMappingsTable,
 		catconstants.PgCatalogIndexTableID:                      pgCatalogIndexTable,
 		catconstants.PgCatalogIndexesTableID:                    pgCatalogIndexesTable,
 		catconstants.PgCatalogInheritsTableID:                   pgCatalogInheritsTable,
@@ -191,12 +194,14 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogOpclassTableID:                    pgCatalogOpclassTable,
 		catconstants.PgCatalogOperatorTableID:                   pgCatalogOperatorTable,
 		catconstants.PgCatalogOpfamilyTableID:                   pgCatalogOpfamilyTable,
+		catconstants.PgCatalogParameterACLTableID:               pgCatalogParameterACLTable,
 		catconstants.PgCatalogPartitionedTableTableID:           pgCatalogPartitionedTableTable,
 		catconstants.PgCatalogPoliciesTableID:                   pgCatalogPoliciesTable,
 		catconstants.PgCatalogPolicyTableID:                     pgCatalogPolicyTable,
 		catconstants.PgCatalogPreparedStatementsTableID:         pgCatalogPreparedStatementsTable,
 		catconstants.PgCatalogPreparedXactsTableID:              pgCatalogPreparedXactsTable,
 		catconstants.PgCatalogProcTableID:                       pgCatalogProcTable,
+		catconstants.PgCatalogPublicationNamespaceTableID:       pgCatalogPublicationNamespaceTable,
 		catconstants.PgCatalogPublicationRelTableID:             pgCatalogPublicationRelTable,
 		catconstants.PgCatalogPublicationTableID:                pgCatalogPublicationTable,
 		catconstants.PgCatalogPublicationTablesTableID:          pgCatalogPublicationTablesTable,
@@ -216,23 +221,30 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogSharedDescriptionTableID:          pgCatalogSharedDescriptionView,
 		catconstants.PgCatalogSharedSecurityLabelTableID:        pgCatalogSharedSecurityLabelTable,
 		catconstants.PgCatalogShdependTableID:                   pgCatalogShdependTable,
+		catconstants.PgCatalogShmemAllocationsNumaTableID:       pgCatalogShmemAllocationsNumaTable,
 		catconstants.PgCatalogShmemAllocationsTableID:           pgCatalogShmemAllocationsTable,
 		catconstants.PgCatalogStatActivityTableID:               pgCatalogStatActivityTable,
 		catconstants.PgCatalogStatAllIndexesTableID:             pgCatalogStatAllIndexesTable,
 		catconstants.PgCatalogStatAllTablesTableID:              pgCatalogStatAllTablesTable,
 		catconstants.PgCatalogStatArchiverTableID:               pgCatalogStatArchiverTable,
 		catconstants.PgCatalogStatBgwriterTableID:               pgCatalogStatBgwriterTable,
+		catconstants.PgCatalogStatCheckpointerTableID:           pgCatalogStatCheckpointerTable,
 		catconstants.PgCatalogStatDatabaseConflictsTableID:      pgCatalogStatDatabaseConflictsTable,
 		catconstants.PgCatalogStatDatabaseTableID:               pgCatalogStatDatabaseTable,
 		catconstants.PgCatalogStatGssapiTableID:                 pgCatalogStatGssapiTable,
+		catconstants.PgCatalogStatIoTableID:                     pgCatalogStatIoTable,
 		catconstants.PgCatalogStatProgressAnalyzeTableID:        pgCatalogStatProgressAnalyzeTable,
 		catconstants.PgCatalogStatProgressBasebackupTableID:     pgCatalogStatProgressBasebackupTable,
 		catconstants.PgCatalogStatProgressClusterTableID:        pgCatalogStatProgressClusterTable,
+		catconstants.PgCatalogStatProgressCopyTableID:           pgCatalogStatProgressCopyTable,
 		catconstants.PgCatalogStatProgressCreateIndexTableID:    pgCatalogStatProgressCreateIndexTable,
 		catconstants.PgCatalogStatProgressVacuumTableID:         pgCatalogStatProgressVacuumTable,
+		catconstants.PgCatalogStatRecoveryPrefetchTableID:       pgCatalogStatRecoveryPrefetchTable,
+		catconstants.PgCatalogStatReplicationSlotsTableID:       pgCatalogStatReplicationSlotsTable,
 		catconstants.PgCatalogStatReplicationTableID:            pgCatalogStatReplicationTable,
 		catconstants.PgCatalogStatSlruTableID:                   pgCatalogStatSlruTable,
 		catconstants.PgCatalogStatSslTableID:                    pgCatalogStatSslTable,
+		catconstants.PgCatalogStatSubscriptionStatsTableID:      pgCatalogStatSubscriptionStatsTable,
 		catconstants.PgCatalogStatSubscriptionTableID:           pgCatalogStatSubscriptionTable,
 		catconstants.PgCatalogStatSysIndexesTableID:             pgCatalogStatSysIndexesTable,
 		catconstants.PgCatalogStatSysTablesTableID:              pgCatalogStatSysTablesTable,
@@ -240,6 +252,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogStatUserIndexesTableID:            pgCatalogStatUserIndexesTable,
 		catconstants.PgCatalogStatUserTablesTableID:             pgCatalogStatUserTablesTable,
 		catconstants.PgCatalogStatWalReceiverTableID:            pgCatalogStatWalReceiverTable,
+		catconstants.PgCatalogStatWalTableID:                    pgCatalogStatWalTable,
 		catconstants.PgCatalogStatXactAllTablesTableID:          pgCatalogStatXactAllTablesTable,
 		catconstants.PgCatalogStatXactSysTablesTableID:          pgCatalogStatXactSysTablesTable,
 		catconstants.PgCatalogStatXactUserFunctionsTableID:      pgCatalogStatXactUserFunctionsTable,
@@ -256,6 +269,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogStatisticExtDataTableID:           pgCatalogStatisticExtDataTable,
 		catconstants.PgCatalogStatisticExtTableID:               pgCatalogStatisticExtTable,
 		catconstants.PgCatalogStatisticTableID:                  pgCatalogStatisticTable,
+		catconstants.PgCatalogStatsExtExprsTableID:              pgCatalogStatsExtExprsTable,
 		catconstants.PgCatalogStatsExtTableID:                   pgCatalogStatsExtTable,
 		catconstants.PgCatalogStatsTableID:                      pgCatalogStatsTable,
 		catconstants.PgCatalogSubscriptionRelTableID:            pgCatalogSubscriptionRelTable,
@@ -276,6 +290,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogUserMappingsTableID:               pgCatalogUserMappingsTable,
 		catconstants.PgCatalogUserTableID:                       pgCatalogUserTable,
 		catconstants.PgCatalogViewsTableID:                      pgCatalogViewsTable,
+		catconstants.PgCatalogWaitEventsTableID:                 pgCatalogWaitEventsTable,
 	},
 	// Postgres's catalogs are ill-defined when there is no current
 	// database set. Simply reject any attempts to use them in that
@@ -5610,6 +5625,141 @@ var pgCatalogPublicationRelTable = virtualSchemaTable{
 var pgCatalogAvailableExtensionVersionsTable = virtualSchemaTable{
 	comment: "pg_available_extension_versions was created for compatibility and is currently unimplemented",
 	schema:  vtable.PgCatalogAvailableExtensionVersions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatWalTable = virtualSchemaTable{
+	comment: "pg_stat_wal was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatWal,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatRecoveryPrefetchTable = virtualSchemaTable{
+	comment: "pg_stat_recovery_prefetch was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatRecoveryPrefetch,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatCheckpointerTable = virtualSchemaTable{
+	comment: "pg_stat_checkpointer was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatCheckpointer,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogAiosTable = virtualSchemaTable{
+	comment: "pg_aios was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogAios,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogParameterACLTable = virtualSchemaTable{
+	comment: "pg_parameter_acl was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogParameterACL,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatProgressCopyTable = virtualSchemaTable{
+	comment: "pg_stat_progress_copy was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatProgressCopy,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogShmemAllocationsNumaTable = virtualSchemaTable{
+	comment: "pg_shmem_allocations_numa was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogShmemAllocationsNuma,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatsExtExprsTable = virtualSchemaTable{
+	comment: "pg_stats_ext_exprs was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatsExtExprs,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogPublicationNamespaceTable = virtualSchemaTable{
+	comment: "pg_publication_namespace was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogPublicationNamespace,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatReplicationSlotsTable = virtualSchemaTable{
+	comment: "pg_stat_replication_slots was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatReplicationSlots,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatSubscriptionStatsTable = virtualSchemaTable{
+	comment: "pg_stat_subscription_stats was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatSubscriptionStats,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogBackendMemoryContextsTable = virtualSchemaTable{
+	comment: "pg_backend_memory_contexts was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogBackendMemoryContexts,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogWaitEventsTable = virtualSchemaTable{
+	comment: "pg_wait_events was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogWaitEvents,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogIdentFileMappingsTable = virtualSchemaTable{
+	comment: "pg_ident_file_mappings was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogIdentFileMappings,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var pgCatalogStatIoTable = virtualSchemaTable{
+	comment: "pg_stat_io was created for compatibility and is currently unimplemented",
+	schema:  vtable.PgCatalogStatIo,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},

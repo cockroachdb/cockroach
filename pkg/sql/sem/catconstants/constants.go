@@ -329,6 +329,7 @@ const (
 	InformationSchemaCrdbIndexUsageStatsiticsTableID
 	PgCatalogID
 	PgCatalogAggregateTableID
+	PgCatalogAiosTableID
 	PgCatalogAmTableID
 	PgCatalogAmopTableID
 	PgCatalogAmprocTableID
@@ -338,6 +339,7 @@ const (
 	PgCatalogAuthMembersTableID
 	PgCatalogAvailableExtensionVersionsTableID
 	PgCatalogAvailableExtensionsTableID
+	PgCatalogBackendMemoryContextsTableID
 	PgCatalogCastTableID
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
@@ -359,6 +361,7 @@ const (
 	PgCatalogForeignTableTableID
 	PgCatalogGroupTableID
 	PgCatalogHbaFileRulesTableID
+	PgCatalogIdentFileMappingsTableID
 	PgCatalogIndexTableID
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
@@ -372,12 +375,14 @@ const (
 	PgCatalogOpclassTableID
 	PgCatalogOperatorTableID
 	PgCatalogOpfamilyTableID
+	PgCatalogParameterACLTableID
 	PgCatalogPartitionedTableTableID
 	PgCatalogPoliciesTableID
 	PgCatalogPolicyTableID
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
+	PgCatalogPublicationNamespaceTableID
 	PgCatalogPublicationRelTableID
 	PgCatalogPublicationTableID
 	PgCatalogPublicationTablesTableID
@@ -397,23 +402,30 @@ const (
 	PgCatalogSharedDescriptionTableID
 	PgCatalogSharedSecurityLabelTableID
 	PgCatalogShdependTableID
+	PgCatalogShmemAllocationsNumaTableID
 	PgCatalogShmemAllocationsTableID
 	PgCatalogStatActivityTableID
 	PgCatalogStatAllIndexesTableID
 	PgCatalogStatAllTablesTableID
 	PgCatalogStatArchiverTableID
 	PgCatalogStatBgwriterTableID
+	PgCatalogStatCheckpointerTableID
 	PgCatalogStatDatabaseConflictsTableID
 	PgCatalogStatDatabaseTableID
 	PgCatalogStatGssapiTableID
+	PgCatalogStatIoTableID
 	PgCatalogStatProgressAnalyzeTableID
 	PgCatalogStatProgressBasebackupTableID
 	PgCatalogStatProgressClusterTableID
+	PgCatalogStatProgressCopyTableID
 	PgCatalogStatProgressCreateIndexTableID
 	PgCatalogStatProgressVacuumTableID
+	PgCatalogStatRecoveryPrefetchTableID
+	PgCatalogStatReplicationSlotsTableID
 	PgCatalogStatReplicationTableID
 	PgCatalogStatSlruTableID
 	PgCatalogStatSslTableID
+	PgCatalogStatSubscriptionStatsTableID
 	PgCatalogStatSubscriptionTableID
 	PgCatalogStatSysIndexesTableID
 	PgCatalogStatSysTablesTableID
@@ -421,6 +433,7 @@ const (
 	PgCatalogStatUserIndexesTableID
 	PgCatalogStatUserTablesTableID
 	PgCatalogStatWalReceiverTableID
+	PgCatalogStatWalTableID
 	PgCatalogStatXactAllTablesTableID
 	PgCatalogStatXactSysTablesTableID
 	PgCatalogStatXactUserFunctionsTableID
@@ -437,6 +450,7 @@ const (
 	PgCatalogStatisticExtDataTableID
 	PgCatalogStatisticExtTableID
 	PgCatalogStatisticTableID
+	PgCatalogStatsExtExprsTableID
 	PgCatalogStatsExtTableID
 	PgCatalogStatsTableID
 	PgCatalogSubscriptionRelTableID
@@ -457,6 +471,7 @@ const (
 	PgCatalogUserMappingsTableID
 	PgCatalogUserTableID
 	PgCatalogViewsTableID
+	PgCatalogWaitEventsTableID
 	PgExtensionSchemaID
 	PgExtensionGeographyColumnsTableID
 	PgExtensionGeometryColumnsTableID
