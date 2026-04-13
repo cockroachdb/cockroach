@@ -615,7 +615,7 @@ func (ex *connExecutor) execBind(
 
 	if log.V(2) {
 		log.Dev.Infof(ctx, "portal: %q for %q, args %q, formats %q",
-			portalName, ps.Statement, qargs, columnFormatCodes)
+			portalName, ps.Statement.SQL, qargs, columnFormatCodes)
 	}
 
 	return nil, nil

@@ -466,7 +466,7 @@ distribution: local
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: (classoid != 4294967071) AND (compat_classoid = <oid>)
+        │       │                               │ filter: (classoid != 4294967069) AND (compat_classoid = <oid>)
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary
