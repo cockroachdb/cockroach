@@ -6,3 +6,10 @@
 .settings-note {
   padding: 18px 0;
 }
+
+.settings-changed-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
