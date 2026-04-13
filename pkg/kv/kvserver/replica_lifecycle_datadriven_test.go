@@ -9,7 +9,6 @@
 package kvserver
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -733,7 +731,7 @@ func (tc *testCtx) mutate(t *testing.T, write func(b *kvstorage.Batch[storage.Ba
 	// batch, verify it matches and omit the state engine output — the WAG
 	// node in the raft output already contains it.
 	var stateOutput string
-	if assertWAGMutationBatch(t, raftRepr, stateRepr) {
+	if wag.AssertMutationBatch(t, raftRepr, stateRepr) {
 		stateOutput = "(matches WAG node)\n"
 	} else {
 		var err error
@@ -762,34 +760,6 @@ func (tc *testCtx) mutate(t *testing.T, write func(b *kvstorage.Batch[storage.Ba
 		sb.WriteString(raftOutput)
 	}
 	return sb.String()
-}
-
-// assertWAGMutationBatch asserts that at most one WAG node in the raft batch
-// carries an embedded state engine batch, and that it matches stateRepr at
-// the byte level. Returns true if such a node was found.
-func assertWAGMutationBatch(t *testing.T, raftRepr, stateRepr []byte) bool {
-	t.Helper()
-	r, err := storage.NewBatchReader(raftRepr)
-	require.NoError(t, err)
-	var found bool
-	for r.Next() {
-		key, err := r.EngineKey()
-		require.NoError(t, err)
-		if !bytes.HasPrefix(key.Key, keys.StoreWAGPrefix()) {
-			continue
-		}
-		var node wagpb.Node
-		require.NoError(t, node.Unmarshal(r.Value())) // nolint:protounmarshal
-		if len(node.Mutation.Batch) == 0 {
-			continue
-		}
-		require.False(t, found,
-			"expected exactly one WAG node with a mutation batch, found multiple")
-		found = true
-		require.Equal(t, stateRepr, node.Mutation.Batch,
-			"WAG mutation batch should match state engine batch")
-	}
-	return found
 }
 
 // createRangeDesc creates a new RangeDescriptor for the given keys span and list

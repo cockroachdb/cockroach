@@ -4,6 +4,7 @@ go_library(
     name = "wag",
     srcs = [
         "store.go",
+        "testing_util.go",
         "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag",
@@ -13,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
