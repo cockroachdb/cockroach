@@ -113,8 +113,8 @@ func (r *logicalReplicationResumer) runOfflineInitialScan(
 		return err
 	}
 
-	planner := makeLogicalReplicationPlanner(jobExecCtx, r.job, client)
-	sourcePlan, err := planner.getSourcePlan(ctx)
+	planner := MakeLogicalReplicationPlanner(jobExecCtx, r.job, client)
+	sourcePlan, err := planner.GetSourcePlan(ctx)
 	if err != nil {
 		return err
 	}
@@ -127,11 +127,11 @@ func (r *logicalReplicationResumer) runOfflineInitialScan(
 	if err != nil {
 		return err
 	}
-	if err := r.checkpointPartitionURIs(ctx, uris, planInfo.partitionPgUrls); err != nil {
+	if err := r.checkpointPartitionURIs(ctx, uris, planInfo.PartitionPgUrls); err != nil {
 		return err
 	}
 
-	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.sourceSpans...)
+	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.SourceSpans...)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (r *logicalReplicationResumer) runOfflineInitialScan(
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
 			rangeStats: replicationutils.NewAggregateRangeStatsCollector(
-				planInfo.writeProcessorCount,
+				planInfo.WriteProcessorCount,
 			),
 			r: r,
 		}
@@ -267,17 +267,17 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 	})
 }
 
-func (p *logicalReplicationPlanner) planOfflineInitialScan(
+func (p *LogicalReplicationPlanner) planOfflineInitialScan(
 	ctx context.Context, dsp *sql.DistSQLPlanner, sourcePlan streamclient.LogicalReplicationPlan,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, logicalReplicationPlanInfo, error) {
+) (*sql.PhysicalPlan, *sql.PlanningCtx, LogicalReplicationPlanInfo, error) {
 	var (
-		execCfg  = p.jobExecCtx.ExecCfg()
-		evalCtx  = p.jobExecCtx.ExtendedEvalContext()
-		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
-		info     = logicalReplicationPlanInfo{
-			sourceSpans:     sourcePlan.SourceSpans,
-			partitionPgUrls: sourcePlan.Topology.SerializedClusterUris(),
+		execCfg  = p.JobExecCtx.ExecCfg()
+		evalCtx  = p.JobExecCtx.ExtendedEvalContext()
+		progress = p.Job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = p.Job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+		info     = LogicalReplicationPlanInfo{
+			SourceSpans:     sourcePlan.SourceSpans,
+			PartitionPgUrls: sourcePlan.Topology.SerializedClusterUris(),
 		}
 	)
 
@@ -326,7 +326,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 		destNodeLocalities,
 		payload.ReplicationStartTime,
 		progress.Checkpoint,
-		p.job.ID(),
+		p.Job.ID(),
 		streampb.StreamID(payload.StreamID),
 		rekeys,
 		payload.MetricsLabel,
@@ -343,7 +343,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 				SQLInstanceID: instanceID,
 				Core:          execinfrapb.ProcessorCoreUnion{LogicalReplicationOfflineScan: &spec},
 			})
-			info.writeProcessorCount++
+			info.WriteProcessorCount++
 		}
 	}
 

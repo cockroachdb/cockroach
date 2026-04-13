@@ -73,8 +73,8 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
-	planner := makeLogicalReplicationPlanner(jobExecCtx, r.job, client)
-	sourcePlan, err := planner.getSourcePlan(ctx)
+	planner := MakeLogicalReplicationPlanner(jobExecCtx, r.job, client)
+	sourcePlan, err := planner.GetSourcePlan(ctx)
 	if err != nil {
 		return err
 	}
@@ -83,18 +83,18 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
-	if err := r.checkpointPartitionURIs(ctx, uris, planInfo.partitionPgUrls); err != nil {
+	if err := r.checkpointPartitionURIs(ctx, uris, planInfo.PartitionPgUrls); err != nil {
 		return err
 	}
 	// Update the local progress copy as it was just updated.
 	progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.DestTableBySrcID)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
 
-	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.sourceSpans...)
+	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.SourceSpans...)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (r *logicalReplicationResumer) ingest(
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
 		initialPlan,
-		planner.generatePlan,
+		planner.GeneratePlan,
 		jobExecCtx,
 		replanOracle,
 		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(execCfg.SV()) },
@@ -148,7 +148,7 @@ func (r *logicalReplicationResumer) ingest(
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
 			rangeStats: replicationutils.NewAggregateRangeStatsCollector(
-				planInfo.writeProcessorCount,
+				planInfo.WriteProcessorCount,
 			),
 			r: r,
 		}
@@ -206,18 +206,18 @@ func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount i
 	return src, dst, count
 }
 
-func (p *logicalReplicationPlanner) planRowReplication(
+func (p *LogicalReplicationPlanner) planRowReplication(
 	ctx context.Context, dsp *sql.DistSQLPlanner, sourcePlan streamclient.LogicalReplicationPlan,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, logicalReplicationPlanInfo, error) {
+) (*sql.PhysicalPlan, *sql.PlanningCtx, LogicalReplicationPlanInfo, error) {
 	var (
-		execCfg  = p.jobExecCtx.ExecCfg()
-		evalCtx  = p.jobExecCtx.ExtendedEvalContext()
-		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
-		info     = logicalReplicationPlanInfo{
-			sourceSpans:      sourcePlan.SourceSpans,
-			partitionPgUrls:  sourcePlan.Topology.SerializedClusterUris(),
-			destTableBySrcID: make(map[descpb.ID]dstTableMetadata),
+		execCfg  = p.JobExecCtx.ExecCfg()
+		evalCtx  = p.JobExecCtx.ExtendedEvalContext()
+		progress = p.Job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = p.Job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+		info     = LogicalReplicationPlanInfo{
+			SourceSpans:      sourcePlan.SourceSpans,
+			PartitionPgUrls:  sourcePlan.Topology.SerializedClusterUris(),
+			DestTableBySrcID: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 
@@ -272,7 +272,7 @@ func (p *logicalReplicationPlanner) planRowReplication(
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.destTableBySrcID[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
+			info.DestTableBySrcID[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
@@ -307,7 +307,7 @@ func (p *logicalReplicationPlanner) planRowReplication(
 		progress.Checkpoint,
 		tableMetadataByDestID,
 		sourcePlan.SourceTypes,
-		p.job.ID(),
+		p.Job.ID(),
 		streampb.StreamID(payload.StreamID),
 		payload.Discard,
 		payload.Mode,
@@ -338,7 +338,7 @@ func (p *logicalReplicationPlanner) planRowReplication(
 					LogicalReplicationWriter: &sp,
 				},
 			})
-			info.writeProcessorCount++
+			info.WriteProcessorCount++
 		}
 	}
 
