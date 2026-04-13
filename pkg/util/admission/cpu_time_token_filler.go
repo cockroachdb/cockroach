@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Below two are the non-burstable utilization goals. See resetInterval for
-// more.
+// Serverless per-tier non-burstable utilization goals. See resetInterval
+// for more details.
 var KVCPUTimeAppUtilGoal = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util.app_tenant",
