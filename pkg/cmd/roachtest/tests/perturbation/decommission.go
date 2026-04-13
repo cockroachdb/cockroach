@@ -28,7 +28,7 @@ var _ perturbation = decommission{}
 
 func (d decommission) setup() variations {
 	d.drain = true
-	return setup(d, 5.0)
+	return setup(d, noImpactThresholds())
 }
 
 func (d decommission) setupMetamorphic(rng *rand.Rand) variations {

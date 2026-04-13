@@ -9,12 +9,16 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/artifactsutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -89,10 +94,11 @@ type variations struct {
 	leaseType            registry.LeaseType
 	perturbation         perturbation
 	workload             workloadType
-	acceptableChange     float64
+	impact               acceptableImpact
 	cloud                registry.CloudSet
 	acMode               admissionControlMode
 	diskBandwidthLimit   string
+	histogramArgs        string // set at test start for workload histogram export
 	profileOptions       []roachtestutil.ProfileOptionFunc
 	specOptions          []spec.Option
 	clusterSettings      map[string]string
@@ -191,6 +197,96 @@ func (a admissionControlMode) getSettings() map[string]string {
 	}
 }
 
+// acceptableImpact defines max-impact-ratio pass/fail criteria. Each ratio
+// mirrors the roachperf top-line metric so the threshold is directly
+// comparable to the number shown on the dashboard.
+//
+// All ratios are derived from per-second workload measurements ("ticks").
+// Each tick records the p50 and p99 latency and throughput (ops/s) observed
+// during that one-second window. We drop the worst 5% of ticks for each
+// series before comparing the worst measurements (i.e. we compare their
+// p95s). This filters out brief outlier seconds while still catching
+// sustained degradation, striking a balance between spurious test failures
+// caused e.g. by infrastructure hiccups and learning about significant
+// slowdowns proactively with a full set of artifacts in place.
+// Regardless of whether a particular run fails due to the impact thresholds
+// below, it will show up on roachperf.
+type acceptableImpact struct {
+	// maxP99Impact is the maximum allowed p99 latency impact ratio between
+	// the current interval (perturbation active or the recovery interval
+	// following the perturbation) and the pre-perturbation baseline interval.
+	//
+	// Numerator: collect the p99 latency from every one-second tick during
+	// the measured interval, sort them, and drop the worst 5% of seconds.
+	// The value at the boundary is the numerator.
+	// Denominator: same computation over the baseline interval.
+	//
+	// Example: baseline ticks have p99s [2ms 3ms 2ms 4ms ...]; after
+	// dropping the worst 5% of seconds, the boundary value is 5ms.
+	// Perturbation ticks have p99s [10ms 20ms 8ms ...]; after dropping the
+	// worst 5%, the boundary is 25ms. Ratio = 25/5 = 5.0.
+	//
+	// A ratio of ~1.0 means no measurable latency change. The test fails if
+	// the ratio exceeds this value.
+	maxP99Impact float64
+
+	// maxP50Impact is the maximum allowed p50 (median) latency impact ratio.
+	// Computed identically to maxP99Impact but using per-second p50 latencies
+	// instead. Less noisy than p99, useful for catching sustained latency
+	// shifts that affect all operations rather than just outliers.
+	maxP50Impact float64
+
+	// maxThroughputImpact is the maximum allowed throughput impact ratio
+	// between the current interval (perturbation active or the recovery
+	// interval following the perturbation) and the pre-perturbation baseline
+	// interval.
+	//
+	// Numerator: collect the throughput (ops/s) from every one-second tick
+	// during the baseline interval, sort them, and drop the worst 5% of
+	// seconds. The value at the boundary is the numerator.
+	// Denominator: same computation over the measured interval.
+	//
+	// The ratio is inverted (baseline / measured) so that the direction
+	// matches latency: higher = worse.
+	//
+	// Example: baseline ticks have throughputs [900 950 920 ...] ops/s;
+	// after dropping the worst 5% of seconds, the boundary is 850.
+	// Perturbation ticks have [400 500 450 ...]; after dropping the worst
+	// 5%, the boundary is 380. Ratio = 850/380 ≈ 2.2, meaning throughput
+	// dropped to ~45% of baseline.
+	//
+	// A ratio of ~1.0 means no measurable throughput change. The test fails
+	// if the ratio exceeds this value.
+	maxThroughputImpact float64
+}
+
+// noImpactThresholds returns thresholds that never fail.
+func noImpactThresholds() acceptableImpact {
+	return acceptableImpact{
+		maxP99Impact:        math.Inf(1),
+		maxP50Impact:        math.Inf(1),
+		maxThroughputImpact: math.Inf(1),
+	}
+}
+
+// aggregatedStat holds summary statistics for per-tick metrics over a
+// measurement interval. Used for display/logging and pass/fail validation.
+type aggregatedStat struct {
+	medianP99  time.Duration // median of per-second p99 latencies
+	medianTput float64       // median of per-second throughput
+	p99        time.Duration // p95 of per-second p99 latencies
+	p50        time.Duration // p95 of per-second p50 latencies
+	throughput float64       // p5 of per-second throughput
+	ticks      int           // number of 1s ticks
+}
+
+func (s aggregatedStat) String() string {
+	return fmt.Sprintf(
+		"median(p99/s): %v, median(tput/s): %.0f ops/s, "+
+			"p95(p99/s): %v, p95(p50/s): %v, p5(tput/s): %.0f ops/s (%d ticks)",
+		s.medianP99, s.medianTput, s.p99, s.p50, s.throughput, s.ticks)
+}
+
 // getParameterMap returns a map of the parameters used for the test in
 // stringified format. They can be used in logging to more easily identify the
 // test reproduction.
@@ -240,7 +336,7 @@ func (v variations) randomize(rng *rand.Rand) variations {
 }
 
 // setup sets up the full test with a fixed set of parameters.
-func setup(p perturbation, acceptableChange float64) variations {
+func setup(p perturbation, impact acceptableImpact) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
 	v.leaseType = registry.LeaderLeases
@@ -265,7 +361,7 @@ func setup(p perturbation, acceptableChange float64) variations {
 		roachtestutil.ProfProbabilityToInclude(0.001),
 		roachtestutil.ProfMultipleFromP99(10),
 	}
-	v.acceptableChange = acceptableChange
+	v.impact = impact
 	v.clusterSettings = make(map[string]string)
 	// Having the io_load_listener logs makes it easier to debug failures.
 	v.clusterSettings["server.debug.default_vmodule"] = "io_load_listener=1"
@@ -411,7 +507,7 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 		aggregatedMeanMetrics = append(aggregatedMeanMetrics, &roachtestutil.AggregatedMetric{
 			Name:             fmt.Sprintf("%s_%s_mean", test, key),
 			Value:            value / 1e6,
-			Unit:             "score(ms)",
+			Unit:             "x baseline",
 			IsHigherBetter:   false,
 			AdditionalLabels: nil,
 		})
@@ -460,7 +556,7 @@ func addFull(r registry.Registry, p perturbation, skipReason string) {
 func addDev(r registry.Registry, p perturbation) {
 	v := p.setup()
 	// Dev tests never fail on latency increases.
-	v.acceptableChange = math.Inf(1)
+	v.impact = noImpactThresholds()
 	// Make the tests faster for development.
 	v.splits = 1
 	v.numNodes = 5
@@ -490,6 +586,7 @@ func addDev(r registry.Registry, p perturbation) {
 		Owner:                  registry.OwnerKV,
 		Cluster:                v.makeClusterSpec(),
 		Leases:                 v.leaseType,
+		Benchmark:              true,
 		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
 		Run:                    v.runTest,
 	})
@@ -517,11 +614,10 @@ type perturbation interface {
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
 }
 
-func prettyPrint(title string, stats map[string]trackedStat) string {
+func prettyPrint(title string, stats map[string]aggregatedStat) string {
 	var outputStr strings.Builder
 	outputStr.WriteString(title + "\n")
-	keys := sortedStringKeys(stats)
-	for _, name := range keys {
+	for _, name := range slices.Sorted(maps.Keys(stats)) {
 		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", name, stats[name]))
 	}
 	return outputStr.String()
@@ -543,8 +639,7 @@ func intervalSince(d time.Duration) interval {
 }
 
 type workloadData struct {
-	score scoreCalculator
-	data  map[string]map[time.Time]trackedStat
+	data map[string]map[time.Time]trackedStat
 }
 
 func (w workloadData) String() string {
@@ -577,47 +672,68 @@ func (w workloadData) addTicks(ticks []cli.Tick) {
 		}
 		stat := w.convert(tick)
 		if _, ok := w.data[tick.Type][tick.Time]; ok {
-			w.data[tick.Type][tick.Time] = w.data[tick.Type][tick.Time].merge(stat, w.score)
+			w.data[tick.Type][tick.Time] = w.data[tick.Type][tick.Time].merge(stat)
 		} else {
 			w.data[tick.Type][tick.Time] = stat
 		}
 	}
 }
 
-// calculateScore calculates the score for a given tick. It can be interpreted
-// as the single core operation latency.
-func (v variations) calculateScore(t cli.Tick) time.Duration {
-	if t.Throughput == 0 {
-		// Use a non-infinite score that is still very high if there was a period of no throughput.
-		return time.Hour
-	}
-	return time.Duration(math.Sqrt((float64(v.numNodes*v.vcpu) * float64((t.P50+t.P99)/2)) / t.Throughput * float64(time.Second)))
-}
-
 func (w workloadData) convert(t cli.Tick) trackedStat {
 	// Align to the second boundary to make the stats from different nodes overlap.
 	t.Time = t.Time.Truncate(time.Second)
-	return trackedStat{Tick: t, score: w.score(t)}
+	return trackedStat{Tick: t}
 }
 
-// worstStats returns the worst stats for a given interval for each of the
-// tracked data types.
-func (w workloadData) worstStats(i interval) map[string]trackedStat {
-	m := make(map[string]trackedStat)
+// ticksInInterval returns per-second ticks grouped by operation type for the
+// given time interval.
+func (w workloadData) ticksInInterval(i interval) map[string][]trackedStat {
+	result := make(map[string][]trackedStat)
 	for name, stats := range w.data {
-		for time, stat := range stats {
-			if time.After(i.start) && time.Before(i.end) {
-				if cur, ok := m[name]; ok {
-					if stat.score > cur.score {
-						m[name] = stat
-					}
-				} else {
-					m[name] = stat
-				}
+		for t, stat := range stats {
+			if t.After(i.start) && t.Before(i.end) {
+				result[name] = append(result[name], stat)
 			}
 		}
 	}
-	return m
+	return result
+}
+
+// aggregateStats computes summary statistics for each operation type within
+// the given interval. Used for display/logging only.
+func (w workloadData) aggregateStats(i interval) map[string]aggregatedStat {
+	ticksByType := w.ticksInInterval(i)
+
+	result := make(map[string]aggregatedStat)
+	for name, ticks := range ticksByType {
+		p50s := make([]time.Duration, len(ticks))
+		p99s := make([]time.Duration, len(ticks))
+		tputs := make([]float64, len(ticks))
+		for i, t := range ticks {
+			p50s[i] = t.P50
+			p99s[i] = t.P99
+			tputs[i] = t.Throughput
+		}
+		slices.Sort(p50s)
+		slices.Sort(p99s)
+		slices.Sort(tputs)
+
+		result[name] = aggregatedStat{
+			medianP99:  p99s[percentileIdx(len(p99s), 0.50)],
+			medianTput: tputs[percentileIdx(len(tputs), 0.50)],
+			p99:        p99s[percentileIdx(len(p99s), 0.95)],
+			p50:        p50s[percentileIdx(len(p50s), 0.95)],
+			throughput: tputs[percentileIdx(len(tputs), 0.05)],
+			ticks:      len(ticks),
+		}
+	}
+	return result
+}
+
+// percentileIdx returns the index corresponding to the given percentile in a
+// sorted slice of length n.
+func percentileIdx(n int, pct float64) int {
+	return min(int(float64(n)*pct), n-1)
 }
 
 // runTest is the main entry point for all the tests. Its ste
@@ -657,7 +773,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	_, err := v.workload.runWorkload(ctx, v, v.fillDuration, 0)
 	require.NoError(t, err)
 
-	// Start the consistent workload and begin collecting profiles.
+	// Start the consistent workload and begin collecting profiles. Enable
+	// histogram export for this workload (not the fill) and disable the
+	// temp file so that data is written directly — the measurement workload
+	// is cancelled via context, and the temp-file-then-rename pattern would
+	// lose all data on cancellation.
+	v.histogramArgs = " " + roachtestutil.GetWorkloadHistogramString(t, c, nil, true /* disableTempFile */)
 	var stableRatePerNode int
 	select {
 	case rate := <-clusterMaxRate:
@@ -695,12 +816,15 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("Perturbation interval : %s", perturbationInterval)
 	t.L().Printf("Recovery interval     : %s", afterInterval)
 
+	// Write phase boundaries so roachperf can annotate workload charts.
+	writePhases(ctx, t, v, baselineInterval, perturbationInterval, afterInterval)
+
 	cancelWorkload()
 	require.NoError(t, m.WaitE())
 
-	baselineStats := data.worstStats(baselineInterval)
-	perturbationStats := data.worstStats(perturbationInterval)
-	afterStats := data.worstStats(afterInterval)
+	baselineStats := data.aggregateStats(baselineInterval)
+	perturbationStats := data.aggregateStats(perturbationInterval)
+	afterStats := data.aggregateStats(afterInterval)
 
 	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
 	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
@@ -711,10 +835,15 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
-	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
+	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.impact)
 	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
-	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
+	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.impact)...)
+	if len(failures) > 0 {
+		// Collect perf artifacts before failing so that roachperf still gets
+		// the data for this run.
+		artifactsutil.CollectPerfArtifacts(ctx, t, c)
+		require.True(t, false, strings.Join(failures, "\n"))
+	}
 	// TODO(baptist): Look at the time for token return in actual tests to
 	// determine if this can be lowered further.
 	tokenReturnTime := 10 * time.Minute
@@ -737,62 +866,91 @@ func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
 	}
 }
 
-// trackedStat is a collection of the relevant values from the histogram. The
-// score is computed based on the time per operation per core and blended
-// latency of P50 and P99. Lower scores are better.
+// trackedStat wraps a cli.Tick to support merging stats from multiple nodes at
+// the same timestamp.
 type trackedStat struct {
 	cli.Tick
-	score time.Duration
 }
-
-type scoreCalculator func(cli.Tick) time.Duration
 
 func (t trackedStat) String() string {
-	return fmt.Sprintf("%s: score: %s, qps: %d, p50: %s, p99: %s, pMax: %s",
-		t.Time, t.score, int(t.Throughput), t.P50, t.P99, t.PMax)
+	return fmt.Sprintf("%s: qps: %d, p50: %s, p99: %s, pMax: %s",
+		t.Time, int(t.Throughput), t.P50, t.P99, t.PMax)
 }
 
-// merge two stats together. Note that this isn't really a merge of the P99, but
-// the other merges are fairly accurate.
-func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
-	tick := cli.Tick{
+// merge combines stats from two nodes at the same timestamp. Throughput is
+// summed, latency percentiles are averaged (an approximation, but workable
+// given similar node profiles), and pMax takes the worst case.
+func (t trackedStat) merge(o trackedStat) trackedStat {
+	return trackedStat{Tick: cli.Tick{
 		Time:       t.Time,
 		Throughput: t.Throughput + o.Throughput,
 		P50:        (t.P50 + o.P50) / 2,
 		P99:        (t.P99 + o.P99) / 2,
 		PMax:       max(t.PMax, o.PMax),
-	}
-	return trackedStat{
-		Tick:  tick,
-		score: max(t.score, o.score),
-	}
+	}}
 }
 
-// isAcceptableChange determines if a change from the baseline is acceptable.
-// It compares all the metrics rather than failing fast. Normally multiple
-// metrics will fail at once if a test is going to fail and it is helpful to see
-// all the differences.
-// This returns an array of strings with the reason(s) the change was too large.
+// isAcceptableChange checks whether the impact ratios (same values shown on
+// roachperf) stay within the configured limits. For each operation type it
+// compares the p95(p99/s), p95(p50/s), and p5(tput/s) of the measured
+// interval against the baseline.
 func isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
+	logger *logger.Logger, baseline, other map[string]aggregatedStat, limits acceptableImpact,
 ) []string {
-	// This can happen if we aren't measuring one of the phases.
 	var failures []string
-	if len(other) == 0 {
-		return failures
-	}
-	keys := sortedStringKeys(baseline)
+	for _, name := range slices.Sorted(maps.Keys(baseline)) {
+		stats, ok := other[name]
+		if !ok {
+			continue
+		}
+		base := baseline[name]
 
-	for _, name := range keys {
-		baseStat := baseline[name]
-		otherStat := other[name]
-		increase := float64(otherStat.score) / float64(baseStat.score)
-		if increase > acceptableChange {
-			failure := fmt.Sprintf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-			logger.Printf(failure)
-			failures = append(failures, failure)
-		} else {
-			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
+		// p99 latency impact: p95(p99/s) ratio.
+		if base.p99 > 0 {
+			ratio := float64(stats.p99) / float64(base.p99)
+			if ratio > limits.maxP99Impact {
+				f := fmt.Sprintf(
+					"FAILURE: %-15s: p99 ratio %.2fx exceeds limit %.1fx (baseline: %v, measured: %v)",
+					name, ratio, limits.maxP99Impact, base.p99, stats.p99)
+				logger.Printf(f)
+				failures = append(failures, f)
+			} else {
+				logger.Printf(
+					"PASSED : %-15s: p99 ratio %.2fx within limit %.1fx",
+					name, ratio, limits.maxP99Impact)
+			}
+		}
+
+		// p50 latency impact: p95(p50/s) ratio.
+		if base.p50 > 0 {
+			ratio := float64(stats.p50) / float64(base.p50)
+			if ratio > limits.maxP50Impact {
+				f := fmt.Sprintf(
+					"FAILURE: %-15s: p50 ratio %.2fx exceeds limit %.1fx (baseline: %v, measured: %v)",
+					name, ratio, limits.maxP50Impact, base.p50, stats.p50)
+				logger.Printf(f)
+				failures = append(failures, f)
+			} else {
+				logger.Printf(
+					"PASSED : %-15s: p50 ratio %.2fx within limit %.1fx",
+					name, ratio, limits.maxP50Impact)
+			}
+		}
+
+		// Throughput impact: p5(tput/s) ratio (inverted so higher = worse).
+		if base.throughput > 0 {
+			ratio := base.throughput / nonZero(stats.throughput)
+			if ratio > limits.maxThroughputImpact {
+				f := fmt.Sprintf(
+					"FAILURE: %-15s: throughput ratio %.2fx exceeds limit %.1fx (baseline: %.0f ops/s, measured: %.0f ops/s)",
+					name, ratio, limits.maxThroughputImpact, base.throughput, stats.throughput)
+				logger.Printf(f)
+				failures = append(failures, f)
+			} else {
+				logger.Printf(
+					"PASSED : %-15s: throughput ratio %.2fx within limit %.1fx",
+					name, ratio, limits.maxThroughputImpact)
+			}
 		}
 	}
 	return failures
@@ -906,22 +1064,49 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func sortedStringKeys(m map[string]trackedStat) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// writePhases writes a phases.json file alongside the workload's stats.json so
+// that roachperf can annotate charts with phase boundaries. The timestamps use
+// RFC3339Nano, matching the "Now" field in the workload's stats.json output.
+func writePhases(
+	ctx context.Context, t test.Test, v variations, baseline, perturbation, after interval,
+) {
+	type phaseInterval struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
 	}
-	sort.Strings(keys)
-	return keys
+	phases := map[string]phaseInterval{
+		"baseline":     {baseline.start.Format(time.RFC3339Nano), baseline.end.Format(time.RFC3339Nano)},
+		"perturbation": {perturbation.start.Format(time.RFC3339Nano), perturbation.end.Format(time.RFC3339Nano)},
+		"recovery":     {after.start.Format(time.RFC3339Nano), after.end.Format(time.RFC3339Nano)},
+	}
+	buf, err := json.Marshal(phases)
+	if err != nil {
+		t.L().Printf("failed to marshal phases: %v", err)
+		return
+	}
+	dest := filepath.Join(t.PerfArtifactsDir(), "phases.json")
+	if err := v.PutString(ctx, string(buf), dest, 0644, v.workloadNodes()); err != nil {
+		t.L().Printf("failed to write phases.json: %v", err)
+	}
 }
 
-// writePerfArtifacts writes the stats file in the right format to node 1 so it
-// can be picked up by roachperf. Currently it only writes the write stats since
-// there would be too many lines on the graph otherwise.
+// writePerfArtifacts writes the stats file in the right format to node 1 so
+// it can be picked up by roachperf. For each operation type and phase, it
+// records threshold-independent impact ratios:
+//
+//   - p95(p99/s) ratio: p95 of per-second p99 latencies / baseline median p99.
+//     ~1.0 when healthy, higher = worse. The p95 filters single-second spikes
+//     while catching sustained degradation.
+//   - p5(tput/s) ratio: baseline median throughput / p5 of per-second throughput.
+//     ~1.0 when healthy, higher = worse (inverted so direction matches latency).
+//
+// To pass ratios through the HDR histogram pipeline (which expects
+// time.Duration nanoseconds) and roachperf's perturbationValues (which
+// divides by 1e6), we record time.Duration(ratio * float64(time.Millisecond)).
+// The 1e6 cancels out, yielding the raw ratio value.
 func (v variations) writePerfArtifacts(
-	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]trackedStat,
+	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]aggregatedStat,
 ) error {
-
 	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, v)
 
 	reg := histogram.NewRegistryWithExporter(
@@ -935,16 +1120,59 @@ func (v variations) writePerfArtifacts(
 	exporter.Init(&writer)
 	defer roachtestutil.CloseExporter(ctx, exporter, t, v, bytesBuf, v.Node(1), "")
 
-	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
-	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
-	reg.GetHandle().Get("recovery").Record(recovery["write"].score)
+	for _, op := range slices.Sorted(maps.Keys(baseline)) {
+		base := baseline[op]
+
+		// p95(p99/s) ratio relative to baseline p95(p99/s). ~1.0 = no change.
+		if base.p99 > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := float64(stats.p99) / float64(base.p99)
+				reg.GetHandle().Get(op + "/p99_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+
+		// p95(p50/s) ratio relative to baseline p95(p50/s). Less noisy than
+		// the p99 ratio, useful for detecting sustained latency shifts.
+		if base.p50 > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := float64(stats.p50) / float64(base.p50)
+				reg.GetHandle().Get(op + "/p50_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+
+		// p5(tput/s) ratio relative to baseline p5(tput/s). ~1.0 = no change,
+		// >1 = throughput dropped.
+		if base.throughput > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := base.throughput / nonZero(stats.throughput)
+				reg.GetHandle().Get(op + "/tput_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+	}
 
 	var err error
 	reg.Tick(func(tick histogram.Tick) {
 		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
-	if err != nil {
-		return err
+	return err
+}
+
+// nonZero returns v if positive, or 1e-9 to avoid division by zero.
+func nonZero(v float64) float64 {
+	if v > 0 {
+		return v
 	}
-	return nil
+	return 1e-9
 }
