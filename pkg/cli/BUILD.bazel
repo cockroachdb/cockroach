@@ -270,6 +270,7 @@ go_library(
         "//pkg/workload/cli/fixturescmd",
         "//pkg/workload/debug",
         "//pkg/workload/examples",
+        "//pkg/workload/gitload",
         "//pkg/workload/insights",
         "//pkg/workload/kv",
         "//pkg/workload/movr",
