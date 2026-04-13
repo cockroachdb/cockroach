@@ -25,7 +25,7 @@ export function getClusterSettings(
 ): Promise<SettingsResponseMessage> {
   const urlParams = new URLSearchParams();
   urlParams.append("unredacted_values", "true");
-  if (req.keys) {
+  if (req.keys?.length) {
     urlParams.append("keys", req.keys.join(","));
   }
 
@@ -75,7 +75,9 @@ const formatProtoResponse = (
       value: kv.value,
       type: kv.type as ClusterSettingType,
       description: kv.description,
-      lastUpdated: TimestampToMoment(kv.last_updated),
+      lastUpdated: kv.last_updated?.seconds?.toNumber()
+        ? TimestampToMoment(kv.last_updated)
+        : null,
       public: kv.public ?? false,
     };
   });
