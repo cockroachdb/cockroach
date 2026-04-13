@@ -622,8 +622,7 @@ func ShouldEnableDRPC(ctx context.Context, t TestLogger, option base.DefaultTest
 	case base.TestDRPCEnabled:
 		enableDRPC = true
 	case base.TestDRPCEnabledRandomly:
-		rng, _ := randutil.NewTestRand()
-		enableDRPC = rng.Intn(2) == 0
+		enableDRPC = true
 	case base.TestDRPCUnset:
 		return false
 	}
