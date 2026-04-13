@@ -9,7 +9,7 @@ environment:
   CLUSTER_NODES: 6
   WORKLOAD_CLUSTER: workload-upgrade-test
   WORKLOAD_NODES: 1
-  COCKROACH_VERSION: v24.3.8
+  COCKROACH_VERSION: v25.4.6
 
 targets:
   - target_name: $CLUSTER
@@ -100,12 +100,17 @@ targets:
       - command: put
         args:
           - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
           - pkg/cmd/drtprod/scripts/mixed_version.sh
       - command: run
         args:
           - $WORKLOAD_CLUSTER
           - --
-          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; sudo systemctl start cron.service ; echo \"crontab -l ; echo '0 4 * * * /home/ubuntu/mixed_version.sh $CLUSTER >> /home/ubuntu/mixed_version.log' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; sudo systemctl start cron.service ; echo \"crontab -l ; echo '0 4 * * * /home/ubuntu/mixed_version.sh $CLUSTER $WORKLOAD_CLUSTER gce >> /home/ubuntu/mixed_version.log' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
   - target_name: post_tasks
     dependent_targets:
       - $CLUSTER
