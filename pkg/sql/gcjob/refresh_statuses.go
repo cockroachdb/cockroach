@@ -284,7 +284,7 @@ func getIndexTTL(tableTTL int32, placeholder *zonepb.ZoneConfig, indexID descpb.
 
 func getTableTTL(defTTL int32, zoneCfg *zonepb.ZoneConfig) int32 {
 	ttlSeconds := defTTL
-	if zoneCfg != nil {
+	if zoneCfg != nil && zoneCfg.GC != nil {
 		ttlSeconds = zoneCfg.GC.TTLSeconds
 	}
 	return ttlSeconds
@@ -426,7 +426,7 @@ func refreshTenant(
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	zoneCfg, err := cfg.GetZoneConfigForObject(keys.SystemSQLCodec, keys.TenantsRangesID)
 	if err == nil {
-		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
+		tenantTTLSeconds = getTableTTL(tenantTTLSeconds, zoneCfg)
 	} else {
 		log.Dev.Errorf(ctx, "zone config for tenants range: err = %+v", err)
 	}
