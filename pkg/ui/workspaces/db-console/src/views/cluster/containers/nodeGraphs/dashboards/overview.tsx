@@ -86,15 +86,13 @@ export default function (props: GraphDashboardProps) {
       preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.sql.service.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.sql.service.latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
     <LineGraph

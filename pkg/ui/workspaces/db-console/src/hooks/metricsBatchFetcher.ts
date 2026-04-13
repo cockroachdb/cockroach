@@ -49,6 +49,7 @@ function timespanKey(req: TSRequest): string {
     req.start_nanos?.toString(),
     req.end_nanos?.toString(),
     req.sample_nanos?.toString(),
+    req.return_sources_separately ? "ps" : "",
   ].join(":");
 }
 

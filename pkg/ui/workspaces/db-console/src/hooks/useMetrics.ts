@@ -56,6 +56,7 @@ function serializeRequest(req: TSRequest) {
     req.start_nanos?.toString() ?? "",
     req.end_nanos?.toString() ?? "",
     req.sample_nanos?.toString() ?? "",
+    req.return_sources_separately ? "ps" : "",
     req.queries.map(q => [
       q.name ?? "",
       q.sources ?? [],

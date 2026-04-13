@@ -114,6 +114,15 @@ export interface MetricProps {
   derivative?: TimeSeriesQueryDerivative;
   aggregator?: TimeSeriesQueryAggregator;
   downsampler?: TimeSeriesQueryAggregator;
+
+  // When true, the server returns per-source datapoints alongside the
+  // aggregated result. This allows a single Metric element to replace N
+  // per-node Metric elements, expanding into one chart series per source.
+  perSource?: boolean;
+  // Optional display names for sources. When perSource is true, these are
+  // used as chart series labels. Keys are source IDs (e.g. node IDs),
+  // values are display names (e.g. "n1 - myhost").
+  sourceDisplayNames?: Record<string, string>;
 }
 
 /**

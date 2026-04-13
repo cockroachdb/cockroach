@@ -38,13 +38,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.cpu.combined.percent-normalized"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.cpu.combined.percent-normalized"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -56,13 +55,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.cpu.host.combined.percent-normalized"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.cpu.host.combined.percent-normalized"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -74,13 +72,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.rss"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.rss"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -91,14 +88,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.disk.read.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.disk.read.bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -109,14 +105,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.disk.write.bytes"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.disk.write.bytes"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -127,14 +122,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.disk.read.count"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.disk.read.count"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -145,14 +139,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="IOPS">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.disk.write.count"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            nonNegativeRate
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.disk.write.count"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -163,13 +156,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="Ops">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.host.disk.iopsinprogress"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.host.disk.iopsinprogress"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 

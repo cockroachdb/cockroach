@@ -356,6 +356,12 @@ func (db *DB) Metrics() *TimeSeriesMetrics {
 	return db.metrics
 }
 
+// RunBatch executes a pre-built kv.Batch. This is used by the server to run
+// combined read batches without reaching into the private kv.DB field.
+func (db *DB) RunBatch(ctx context.Context, b *kv.Batch) error {
+	return db.db.Run(ctx, b)
+}
+
 // WriteColumnar returns true if this DB should write data in the newer columnar
 // format.
 func (db *DB) WriteColumnar() bool {

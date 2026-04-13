@@ -4,16 +4,16 @@
 // included in the /LICENSE file.
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
-import map from "lodash/map";
+
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeSources, nodeDisplayNameByID, tenantSource } = props;
+  const { nodeSources, nodeDisplayNameByID, tenantSource } = props;
 
   return [
     <LineGraph
@@ -106,15 +106,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.txn.durations-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.txn.durations-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -126,15 +124,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.txn.durations-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.txn.durations-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -147,15 +143,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.liveness.heartbeatlatency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.liveness.heartbeatlatency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -168,15 +162,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {map(nodeIDs, node => (
-          <Metric
-            key={node}
-            name="cr.node.liveness.heartbeatlatency-p90"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
-            downsampleMax
-          />
-        ))}
+        <Metric
+          name="cr.node.liveness.heartbeatlatency-p90"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
   ];

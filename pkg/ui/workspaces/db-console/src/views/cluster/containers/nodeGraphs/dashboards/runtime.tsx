@@ -4,17 +4,15 @@
 // included in the /LICENSE file.
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
-import map from "lodash/map";
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { GraphDashboardProps } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const {
-    nodeIDs,
     nodeSources,
     tooltipSelection,
     nodeDisplayNameByID,
@@ -81,14 +79,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Count} label="goroutines">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.sys.goroutines"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.goroutines"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -100,17 +96,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.go.scheduler_latency-p99"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        <Metric
+          name="cr.node.go.scheduler_latency-p99"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -123,13 +115,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
-        {nodeIDs.map(nid => (
-          <Metric
-            name="cr.node.sys.runnable.goroutines.per.cpu"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.sys.runnable.goroutines.per.cpu"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
 
@@ -265,14 +256,12 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="offset" units={AxisUnits.Duration}>
-        {map(nodeIDs, nid => (
-          <Metric
-            key={nid}
-            name="cr.node.clock-offset.meannanos"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-          />
-        ))}
+        <Metric
+          name="cr.node.clock-offset.meannanos"
+          sources={nodeSources}
+          perSource
+          sourceDisplayNames={nodeDisplayNameByID}
+        />
       </Axis>
     </LineGraph>,
   ];
