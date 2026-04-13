@@ -2729,7 +2729,7 @@ func TestLint(t *testing.T) {
 			stream.Sort(),
 			stream.Uniq(),
 			stream.Grep(`cockroach/pkg/cmd/roachtest/.*: `),
-			stream.GrepNot(`cockroach/pkg/cmd/roachtest/roachtestutil/(mixedversion|task): `),
+			stream.GrepNot(`cockroach/pkg/cmd/roachtest/roachtestutil/(artifactsutil|mixedversion|task): `),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
 			_, importedPkg := pkgStr[0], pkgStr[1]

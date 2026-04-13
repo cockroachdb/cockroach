@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/artifactsutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -45,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1203,11 +1203,11 @@ func (r *testRunner) runWorker(
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
 			if t.spec.Benchmark {
-				dstDirFn := func(nodeIdx int) string {
-					return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
-				}
-				getPerfArtifacts(ctx, c, t, dstDirFn)
+				artifactsutil.CollectPerfArtifacts(ctx, t, c)
 				if t.ExportOpenmetrics() {
+					dstDirFn := func(nodeIdx int) string {
+						return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
+					}
 					r.postProcessPerfMetrics(ctx, t, c, dstDirFn)
 				}
 			}
@@ -1237,77 +1237,6 @@ func (r *testRunner) destroyClusterAsync(
 		// We use a context that can't be canceled for the Destroy().
 		ci.Destroy(context.Background(), closeLogger, l)
 	}(c)
-}
-
-// getArtifacts retrieves artifacts (like perf or go cover) produced by a
-// successful test.
-//
-// Any errors are logged but otherwise don't cause a test failure.
-func getArtifacts(
-	ctx context.Context,
-	c *clusterImpl,
-	t test.Test,
-	srcDirOnNode string,
-	dstDirFn func(nodeIdx int) string,
-) {
-	fetchNode := func(ctx context.Context, node int) error {
-		testCmd := `'ARTIFACTS_DIR="` + srcDirOnNode + `"
-if [[ -d "${ARTIFACTS_DIR}" ]]; then
-    echo true
-elif [[ -e "${ARTIFACTS_DIR}" ]]; then
-    ls -la "${ARTIFACTS_DIR}"
-    exit 1
-else
-    echo false
-fi'`
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(node)), "bash", "-c", testCmd)
-		if err != nil {
-			return errors.Wrapf(err, "failed to check for artifacts in %q", srcDirOnNode)
-		}
-		out := strings.TrimSpace(result.Stdout)
-		switch out {
-		case "true":
-			return c.Get(ctx, t.L(), srcDirOnNode, dstDirFn(node), c.Node(node))
-		case "false":
-			t.L().PrintfCtx(ctx, "no artifacts exist in %q on node %v", srcDirOnNode, c.Node(node))
-			return nil
-		default:
-			return errors.Errorf("unexpected output when checking for artifacts in %q: %s", srcDirOnNode, out)
-		}
-	}
-	g := ctxgroup.WithContext(ctx)
-	for _, i := range c.All() {
-		node := i
-		g.GoCtx(func(ctx context.Context) error {
-			return fetchNode(ctx, node)
-		})
-	}
-	if err := g.Wait(); err != nil {
-		t.L().PrintfCtx(ctx, "failed to get artifacts from %q: %v", srcDirOnNode, err)
-	}
-}
-
-// getPerfArtifacts retrieves the perf artifacts for the test.
-func getPerfArtifacts(
-	ctx context.Context, c *clusterImpl, t test.Test, dstDirFn func(nodeIdx int) string,
-) {
-	getArtifacts(ctx, c, t, t.PerfArtifactsDir(), dstDirFn)
-}
-
-// getGoCoverArtifacts retrieves the go coverage artifacts for the test.
-func getGoCoverArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
-	dstDirFn := func(nodeIdx int) string {
-		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, goCoverArtifactsDir)
-	}
-	getArtifacts(ctx, c, t, t.GoCoverArtifactsDir(), dstDirFn)
-}
-
-// getCpuProfileArtifacts retrieves the pprof (CPU profile) artifacts for the test.
-func getCpuProfileArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
-	dstDirFn := func(nodeIdx int) string {
-		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, cpuProfilesDir)
-	}
-	getArtifacts(ctx, c, t, filepath.Join("logs", cpuProfilesDir), dstDirFn)
 }
 
 // An error is returned if the test is still running (on another goroutine) when
@@ -1919,7 +1848,8 @@ func (r *testRunner) teardownTest(
 
 		stopped = true
 		t.L().Printf("Retrieving go cover artifacts")
-		getGoCoverArtifacts(ctx, c, t)
+		goCoverDir := t.GoCoverArtifactsDir()
+		artifactsutil.CollectRemoteArtifacts(ctx, t, c, goCoverDir, goCoverDir)
 	}
 
 	if roachtestflags.ForceCpuProfile {
@@ -1934,7 +1864,8 @@ func (r *testRunner) teardownTest(
 		}
 
 		t.L().Printf("Retrieving pprof artifacts")
-		getCpuProfileArtifacts(ctx, c, t)
+		artifactsutil.CollectRemoteArtifacts(
+			ctx, t, c, filepath.Join("logs", cpuProfilesDir), cpuProfilesDir)
 	}
 	return nil
 }
