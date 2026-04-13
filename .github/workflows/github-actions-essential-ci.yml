@@ -274,17 +274,26 @@ jobs:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 120
     steps:
+      - name: calculate commit depth
+        if: github.event.pull_request.commits
+        run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           # By default, checkout merges the PR into the current master.
           # Instead, we want to check out the PR as is.
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: ${{ env.COMMIT_DEPTH || 1 }}
+      - name: Fetch the base commit
+        if: github.event.pull_request.base.sha
+        run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/unit-tests.sh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
       - name: generate code
         if: failure()
         # NB: To correctly report test owners, we'll have to make sure all Go
