@@ -172,16 +172,16 @@ func canaryRollDice(
 	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
 		return eval.StatsRolloutDefault
 	}
-	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
-	if threshold == 0 {
-		return eval.StatsRolloutDefault
-	}
 	switch m := evalCtx.SessionData().CanaryStatsMode; m {
-	case sessiondatapb.CanaryStatsModeOff:
+	case sessiondatapb.CanaryStatsModeForceStable:
 		return eval.StatsRolloutStable
-	case sessiondatapb.CanaryStatsModeOn:
+	case sessiondatapb.CanaryStatsModeForceCanary:
 		return eval.StatsRolloutCanary
 	case sessiondatapb.CanaryStatsModeAuto:
+		threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
+		if threshold == 0 {
+			return eval.StatsRolloutDefault
+		}
 		if rng.Float64() < threshold {
 			return eval.StatsRolloutCanary
 		}
