@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1728,7 +1727,9 @@ func TestShowJobs(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	session, err := s.SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
+	al := s.ApplicationLayer()
+	execCfg := al.ExecutorConfig().(sql.ExecutorConfig)
+	session, err := execCfg.SQLLiveness.Session(ctx)
 	require.NoError(t, err)
 
 	// row represents a row returned from crdb_internal.jobs, but
@@ -1749,7 +1750,7 @@ func TestShowJobs(t *testing.T) {
 		details           jobspb.Details
 	}
 
-	const instanceID = 7
+	instanceID := roachpb.NodeID(al.SQLInstanceID())
 	for _, in := range []row{
 		{
 			id:                42,
