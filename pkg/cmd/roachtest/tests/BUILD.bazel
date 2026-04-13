@@ -343,6 +343,7 @@ go_library(
         "@com_github_aws_smithy_go//logging",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_ttycolor//:ttycolor",

@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
@@ -95,14 +94,6 @@ var (
 		"settings":     "SHOW CLUSTER SETTINGS",
 		"users":        "SHOW USERS",
 		"zones":        "SHOW ZONE CONFIGURATIONS",
-	}
-
-	// retry options while waiting for a backup to complete
-	backupCompletionRetryOptions = retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     1 * time.Minute,
-		Multiplier:     1.5,
-		MaxRetries:     80,
 	}
 
 	possibleNumIncrementalBackups = []int{
