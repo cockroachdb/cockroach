@@ -6,16 +6,19 @@
 package ts_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"reflect"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -250,6 +253,514 @@ func TestServerQuery(t *testing.T) {
 		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
 			response, expectedResult)
 	}
+}
+
+// TestServerQueryCombinedBatchReducesKVRPCs verifies that the combined-batch
+// optimization actually reduces the number of KV BatchRequests compared to
+// querying each metric individually. This is the core performance property of
+// the optimization.
+func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var tsBatchCount atomic.Int64
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+				TestingRequestFilter: func(
+					_ context.Context, req *kvpb.BatchRequest,
+				) *kvpb.Error {
+					for _, ru := range req.Requests {
+						if bytes.HasPrefix(
+							ru.GetInner().Header().Key,
+							keys.TimeseriesPrefix,
+						) {
+							tsBatchCount.Add(1)
+							break
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for 5 metrics across 2 sources.
+	metricCount := 5
+	for i := 0; i < metricCount; i++ {
+		require.NoError(t, tsdb.StoreData(
+			context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node1",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 10)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*10 + 1)},
+					},
+				},
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node2",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 20)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*20 + 1)},
+					},
+				},
+			},
+		))
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	queries := make([]tspb.Query, metricCount)
+	for i := 0; i < metricCount; i++ {
+		queries[i] = tspb.Query{
+			Name:    fmt.Sprintf("metric.%d", i),
+			Sources: []string{"node1", "node2"},
+		}
+	}
+
+	// Measure individual queries: send each metric as a separate request.
+	tsBatchCount.Store(0)
+	for _, q := range queries {
+		_, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+	}
+	individualBatches := tsBatchCount.Load()
+
+	// Measure combined query: send all metrics in a single request.
+	tsBatchCount.Store(0)
+	resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, metricCount)
+	combinedBatches := tsBatchCount.Load()
+
+	t.Logf("individual requests: %d KV batches, combined request: %d KV batches",
+		individualBatches, combinedBatches)
+
+	// On a single-node test server all TS data is on one range, so:
+	// - Individual: each request produces its own BatchRequest = metricCount.
+	// - Combined: all queries share a single BatchRequest = 1.
+	require.Equal(t, int64(metricCount), individualBatches,
+		"each individual query should produce one KV BatchRequest")
+	require.Equal(t, int64(1), combinedBatches,
+		"combined query should produce exactly one KV BatchRequest")
+
+	// Disable the combined-batch optimization and verify that a multi-query
+	// request falls back to per-query reads, producing the same number of
+	// KV batches as individual requests.
+	ts.CombinedBatchEnabled.Override(context.Background(), &s.ClusterSettings().SV, false)
+
+	tsBatchCount.Store(0)
+	resp, err = client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, metricCount)
+	disabledBatches := tsBatchCount.Load()
+
+	t.Logf("combined request with setting disabled: %d KV batches", disabledBatches)
+	require.Equal(t, int64(metricCount), disabledBatches,
+		"with combined batch disabled, each query should produce its own KV BatchRequest")
+}
+
+// TestServerQueryCombinedBatch verifies that the combined-batch optimization
+// in Server.Query works correctly: multiple queries in a single request share
+// one KV batch, and the results are equivalent to querying each metric
+// individually.
+func TestServerQueryCombinedBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for three different metrics across two sources.
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		// metric.cpu: node1 and node2
+		{
+			Name:   "metric.cpu",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+		{
+			Name:   "metric.cpu",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 30.0},
+				{TimestampNanos: 500 * 1e9, Value: 40.0},
+			},
+		},
+		// metric.mem: node1 and node2
+		{
+			Name:   "metric.mem",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		{
+			Name:   "metric.mem",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 300.0},
+				{TimestampNanos: 500 * 1e9, Value: 400.0},
+			},
+		},
+		// metric.disk: no explicit source stored, uses empty source
+		// so it will be read via Scan when sources are not specified.
+		{
+			Name: "metric.disk",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 1000.0},
+				{TimestampNanos: 500 * 1e9, Value: 2000.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// First, query each metric individually to establish expected results.
+	individual := make([]*tspb.TimeSeriesQueryResponse, 3)
+	for i, q := range []tspb.Query{
+		{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+		{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+		{Name: "metric.disk"}, // no sources -> Scan path
+	} {
+		resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+		individual[i] = resp
+	}
+
+	// Now send all three queries in a single request. The combined batch
+	// should produce identical results.
+	combined, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+			{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+			{Name: "metric.disk"}, // no sources -> Scan path
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Results, 3)
+
+	// Verify each combined result matches the corresponding individual result.
+	for i := 0; i < 3; i++ {
+		sort.Strings(individual[i].Results[0].Sources)
+		sort.Strings(combined.Results[i].Sources)
+		require.Equal(t, individual[i].Results[0].Datapoints, combined.Results[i].Datapoints,
+			"metric %d datapoints mismatch", i)
+		require.Equal(t, individual[i].Results[0].Sources, combined.Results[i].Sources,
+			"metric %d sources mismatch", i)
+	}
+
+	// Verify actual values.
+	// metric.cpu: SUM(node1, node2) at each timestamp.
+	require.Len(t, combined.Results[0].Datapoints, 2)
+	require.Equal(t, 40.0, combined.Results[0].Datapoints[0].Value) // 10+30
+	require.Equal(t, 60.0, combined.Results[0].Datapoints[1].Value) // 20+40
+
+	// metric.mem: SUM(node1, node2).
+	require.Len(t, combined.Results[1].Datapoints, 2)
+	require.Equal(t, 400.0, combined.Results[1].Datapoints[0].Value) // 100+300
+	require.Equal(t, 600.0, combined.Results[1].Datapoints[1].Value) // 200+400
+
+	// metric.disk: single source (Scan path).
+	require.Len(t, combined.Results[2].Datapoints, 2)
+	require.Equal(t, 1000.0, combined.Results[2].Datapoints[0].Value)
+	require.Equal(t, 2000.0, combined.Results[2].Datapoints[1].Value)
+}
+
+// TestServerQueryMixedCombinedAndFallback verifies that when a single request
+// contains queries that take the combined-batch path and queries that require
+// the per-query chunked read fallback, both produce correct results.
+func TestServerQueryMixedCombinedAndFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	workerCount := 8
+	// Compute budget using columnar slab sizes (the default format).
+	samplesPerSlab := ts.Resolution10s.SlabDuration() / ts.Resolution10s.SampleDuration()
+	sizeOfTimeSeriesData := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
+	// Columnar format: each sample is int32 (offset) + float64 (value).
+	sizeOfSlab := sizeOfTimeSeriesData +
+		(int64(unsafe.Sizeof(int32(0)))+int64(unsafe.Sizeof(float64(0))))*samplesPerSlab
+
+	// Set budget so that queries with few sources are combinable but queries
+	// with many sources exceed the per-worker budget for the query timespan.
+	//
+	// Per-worker budget = 300 * sizeOfSlab.
+	// For 2 sources: maxWidth ≈ (150 - 2) hours >> 3 hours → combinable.
+	// For 100 sources: maxWidth ≈ (3 - 2) hours = 1 hour < 3 hours → fallback.
+	budget := 300 * sizeOfSlab * int64(workerCount)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant:           base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		TimeSeriesQueryWorkerMax:    workerCount,
+		TimeSeriesQueryMemoryBudget: budget,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store 4 hours of data for two metrics. The query timespan will be 3 hours.
+	var data []tspb.TimeSeriesData
+	for hour := 0; hour < 4; hour++ {
+		baseTs := int64(hour) * 3600 * 1e9
+		for _, src := range []string{"node1", "node2"} {
+			data = append(data,
+				tspb.TimeSeriesData{
+					Name:   "metric.small",
+					Source: src,
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*10 + 1)},
+					},
+				},
+				tspb.TimeSeriesData{
+					Name:   "metric.large",
+					Source: src,
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*100 + 1)},
+					},
+				},
+			)
+		}
+	}
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, data))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Build a list of 100 sources for the large query. Only node1 and node2
+	// have data; the rest produce empty Gets but inflate EstimatedSources
+	// enough to force the query into the chunked fallback path.
+	largeSources := make([]string, 100)
+	largeSources[0] = "node1"
+	largeSources[1] = "node2"
+	for i := 2; i < 100; i++ {
+		largeSources[i] = fmt.Sprintf("node%d", i+1)
+	}
+
+	startNanos := int64(0)
+	endNanos := int64(3 * 3600 * 1e9)
+
+	// Query individually to establish expected results.
+	smallResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries:    []tspb.Query{{Name: "metric.small", Sources: []string{"node1", "node2"}}},
+	})
+	require.NoError(t, err)
+
+	largeResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries:    []tspb.Query{{Name: "metric.large", Sources: largeSources}},
+	})
+	require.NoError(t, err)
+
+	// Combined request: small query (combinable) + large query (fallback).
+	combined, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries: []tspb.Query{
+			{Name: "metric.small", Sources: []string{"node1", "node2"}},
+			{Name: "metric.large", Sources: largeSources},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Results, 2)
+
+	require.Equal(t, smallResp.Results[0].Datapoints, combined.Results[0].Datapoints,
+		"small metric (combined path) datapoints mismatch")
+	require.Equal(t, largeResp.Results[0].Datapoints, combined.Results[1].Datapoints,
+		"large metric (fallback path) datapoints mismatch")
+}
+
+// TestServerQueryRollupFallback verifies that queries with a sample duration
+// compatible with the rollup resolution (Resolution30m) correctly fall back to
+// the per-query read path. The combined batch only reads Resolution10s and
+// would miss rolled-up data at coarser resolutions.
+func TestServerQueryRollupFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data at Resolution10s spanning multiple hours.
+	var data []tspb.TimeSeriesData
+	for hour := 0; hour < 3; hour++ {
+		baseTs := int64(hour) * 3600 * 1e9
+		data = append(data, tspb.TimeSeriesData{
+			Name:   "metric.rollup",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*10 + 1)},
+			},
+		})
+	}
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, data))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Query with 30-minute sample duration, which triggers needsRollup=true
+	// because SampleDurationNanos is compatible with Resolution30m. This forces
+	// the query through the per-query fallback path (db.Query), which tries
+	// Resolution30m first then falls back to Resolution10s data.
+	resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:  0,
+		EndNanos:    3 * 3600 * 1e9,
+		SampleNanos: 30 * 60 * 1e9, // 30 minutes
+		Queries: []tspb.Query{
+			{Name: "metric.rollup", Sources: []string{"node1"}},
+		},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.Results[0].Datapoints,
+		"rollup fallback should return data from Resolution10s")
+}
+
+// TestServerQueryCombinedBatchTenant verifies that tenant-scoped queries
+// correctly filter data when going through the combined-batch path. Both the
+// scan path (no explicit sources) and the get path (explicit sources) in
+// extractReadResults must respect tenant boundaries.
+func TestServerQueryCombinedBatchTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store aggregate data (no tenant prefix) and per-tenant data (tenant 2).
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		// Aggregate source "1" contains the sum across all tenants.
+		{
+			Name:   "sql.query.count",
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		// Tenant 2's individual contribution, stored with source "1-2".
+		{
+			Name:   "sql.query.count",
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	tenantID := roachpb.MustMakeTenantID(2)
+
+	// Query with tenant ID set and no explicit sources (scan path through
+	// extractReadResults). The scan returns all rows; extractReadResults
+	// filters to only tenant 2's data.
+	scanResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: tenantID},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, scanResp.Results[0].Datapoints, 2)
+	require.Equal(t, 10.0, scanResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 20.0, scanResp.Results[0].Datapoints[1].Value)
+
+	// Query with tenant ID and explicit sources (get path through
+	// addQueryReadOps, which formats keys with MakeTenantSource).
+	getResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: tenantID, Sources: []string{"1"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, getResp.Results[0].Datapoints, 2)
+	require.Equal(t, 10.0, getResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 20.0, getResp.Results[0].Datapoints[1].Value)
+
+	// System tenant should see the aggregate data, not double-counted.
+	systemID := roachpb.MustMakeTenantID(1)
+	sysResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: systemID},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, sysResp.Results[0].Datapoints, 2)
+	require.Equal(t, 100.0, sysResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 200.0, sysResp.Results[0].Datapoints[1].Value)
 }
 
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
