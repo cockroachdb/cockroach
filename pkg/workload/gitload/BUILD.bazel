@@ -23,7 +23,7 @@ go_library(
 
 go_test(
     name = "gitload_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "gitload_test.go",
         "main_test.go",

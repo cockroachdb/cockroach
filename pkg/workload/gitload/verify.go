@@ -163,7 +163,7 @@ func verifyRepoStats(ctx context.Context, tx *gosql.Tx) error {
 
 	var actualBlobsBytes int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(size), 0) FROM blobs",
+		"SELECT coalesce(sum(size), 0) FROM blobs",
 	).Scan(&actualBlobsBytes); err != nil {
 		return errors.Wrap(err, "summing blob sizes")
 	}
@@ -182,7 +182,7 @@ func verifyRepoStats(ctx context.Context, tx *gosql.Tx) error {
 	}
 	if totalBlobsBytes != actualBlobsBytes {
 		return errors.Newf(
-			"repo_stats.total_blobs_bytes=%d but SUM(blobs.size)=%d",
+			"repo_stats.total_blobs_bytes=%d but sum(blobs.size)=%d",
 			totalBlobsBytes, actualBlobsBytes,
 		)
 	}

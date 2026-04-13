@@ -37,6 +37,7 @@ func TestGitloadIngestAndVerify(t *testing.T) {
 		UseDatabase: "defaultdb",
 	})
 	defer srv.Stopper().Stop(ctx)
+	disableAutoStats(t, ctx, db)
 
 	repoPath := t.TempDir()
 	numCommits := 60
@@ -66,7 +67,7 @@ func TestGitloadIngestAndVerify(t *testing.T) {
 	verifyAll(t, ctx, db, repoPath)
 
 	// Phase 6: Test a second cycle with a different seed.
-	require.NoError(t, clearAllTables(ctx, db))
+	require.NoError(t, deleteAllRows(ctx, db))
 	newSeed := int64(99)
 	require.NoError(t, ingest(ctx, db, repoPath, newSeed,
 		numCommits, 0 /* maxBlobSize */, false /* skipContent */, nil /* hists */))
@@ -109,6 +110,7 @@ func TestGitloadInlineVerification(t *testing.T) {
 		UseDatabase: "defaultdb",
 	})
 	defer srv.Stopper().Stop(ctx)
+	disableAutoStats(t, ctx, db)
 
 	repoPath := t.TempDir()
 	numCommits := 60
@@ -139,8 +141,10 @@ func TestGitloadInlineVerification(t *testing.T) {
 
 	// Test 3: Ingest all remaining commits, then run full verification.
 	t.Run("full", func(t *testing.T) {
-		// Clear and re-ingest all commits.
-		require.NoError(t, clearAllTables(ctx, db))
+		// Clear and re-ingest all commits. Uses DELETE FROM instead of
+		// TRUNCATE to avoid schema change GC jobs that cause lock
+		// contention with subsequent inserts in CI.
+		require.NoError(t, deleteAllRows(ctx, db))
 		require.NoError(t, ingest(ctx, db, repoPath, seed,
 			numCommits, 0 /* maxBlobSize */, false /* skipContent */, nil /* hists */))
 
@@ -177,6 +181,44 @@ func verifyPartial(t *testing.T, ctx context.Context, db *gosql.DB, repoPath str
 	require.NoError(t, verifyReferentialIntegrity(ctx, tx))
 	require.NoError(t, verifySecondaryIndexes(ctx, tx))
 	require.NoError(t, tx.Commit())
+}
+
+// disableAutoStats turns off automatic statistics collection to prevent
+// background stats jobs from causing lock contention during ingestion.
+func disableAutoStats(t *testing.T, ctx context.Context, db *gosql.DB) {
+	t.Helper()
+	_, err := db.ExecContext(ctx,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	require.NoError(t, err)
+}
+
+// deleteAllRows deletes all rows from gitload tables using DELETE FROM
+// (in FK-safe order) instead of TRUNCATE. This avoids spawning schema change
+// GC jobs that cause lock contention with subsequent inserts in CI.
+func deleteAllRows(ctx context.Context, db *gosql.DB) error {
+	// Delete children before parents to satisfy FK constraints.
+	tables := []string{
+		"commit_diffs",
+		"commit_parents",
+		"file_latest",
+		"commits",
+		"blobs",
+		"repo_stats",
+	}
+	for _, tbl := range tables {
+		if _, err := db.ExecContext(ctx,
+			fmt.Sprintf("DELETE FROM %s WHERE true", tbl),
+		); err != nil {
+			return fmt.Errorf("deleting from %s: %w", tbl, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO repo_stats (id, total_commits, total_files_changed, total_blobs_bytes)
+		 VALUES (1, 0, 0, 0)`,
+	); err != nil {
+		return fmt.Errorf("initializing repo_stats: %w", err)
+	}
+	return nil
 }
 
 // verifyAll runs all oracle verification levels within a plain read-only
