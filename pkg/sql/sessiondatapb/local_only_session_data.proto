@@ -750,8 +750,9 @@ message LocalOnlySessionData {
   // some jobs were created in the txn.
   bool disable_wait_for_jobs_notice = 192;
   // CanaryStatsMode controls whether queries in the session use
-  // canary statistics (mode == on), stable statistics (mode == off), or
-  // let the system decide based on random selection (mode == auto).
+  // canary statistics (mode == force_canary), stable statistics
+  // (mode == force_stable), or let the system decide based on
+  // the canary fraction cluster setting (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
   // UseSwapMutations, when true, enables use of the update swap and delete swap
   // operators.

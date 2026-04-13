@@ -160,9 +160,16 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 
 // canaryRollDice determines the stats rollout selection for a query.
 // The result is one of:
-//   - StatsRolloutDefault: experiment not active, use default stats.
-//   - StatsRolloutCanary:  experiment active, dice selected canary (newest) stats.
-//   - StatsRolloutStable:  experiment active, dice selected stable (second-newest) stats.
+//   - StatsRolloutDefault: auto mode with canary_fraction=0, use default
+//     stats.
+//   - StatsRolloutCanary: force_canary session mode, or auto mode with
+//     canary_fraction > 0 and dice selected canary (newest) stats.
+//   - StatsRolloutStable: force_stable session mode, or auto mode with
+//     canary_fraction > 0 and dice selected stable (second-newest) stats.
+//
+// Forced session modes (force_canary, force_stable) override the cluster
+// setting and can yield non-Default rollouts even when canary_fraction is
+// zero.
 //
 // The selection is atomic per query — all tables in the query use the same
 // rollout path. Only called for non-internal queries.
@@ -172,16 +179,16 @@ func canaryRollDice(
 	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
 		return eval.StatsRolloutDefault
 	}
-	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
-	if threshold == 0 {
-		return eval.StatsRolloutDefault
-	}
 	switch m := evalCtx.SessionData().CanaryStatsMode; m {
-	case sessiondatapb.CanaryStatsModeOff:
+	case sessiondatapb.CanaryStatsModeForceStable:
 		return eval.StatsRolloutStable
-	case sessiondatapb.CanaryStatsModeOn:
+	case sessiondatapb.CanaryStatsModeForceCanary:
 		return eval.StatsRolloutCanary
 	case sessiondatapb.CanaryStatsModeAuto:
+		threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
+		if threshold == 0 {
+			return eval.StatsRolloutDefault
+		}
 		if rng.Float64() < threshold {
 			return eval.StatsRolloutCanary
 		}
