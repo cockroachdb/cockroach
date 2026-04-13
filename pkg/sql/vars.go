@@ -4815,7 +4815,7 @@ var varGen = map[string]sessionVar{
 		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
 			if !ok {
-				return newVarValueError(`canary_stats_mode`, s, "auto", "off", "on")
+				return newVarValueError(`canary_stats_mode`, s, "auto", "force_stable", "force_canary")
 			}
 			m.SetCanaryStatsMode(mode)
 			return nil

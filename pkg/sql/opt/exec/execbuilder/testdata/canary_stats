@@ -72,14 +72,9 @@ subtest canary_stats_with_query_cache
 # Phase 1: Warm-up — stable executions populate the cache normally.
 # --------------------------------------------------------------------------
 
-# Use a positive canary_fraction so that the experiment is active, but force
-# stable stats for this session via canary_stats_mode=off. (fraction=0 would
-# mean experiment-off, i.e. StatsRolloutDefault, not StatsRolloutStable.)
+# Force stable stats for this session via canary_stats_mode=force_stable.
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
-
-statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -133,7 +128,7 @@ query cache add
 # stats are identical (there is nothing to canary).
 
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 # canary_table (has canary window but no stats injected yet, so canary
 # and stable are identical): the read gate does NOT fire and the cached
@@ -170,7 +165,7 @@ query cache hit
 # Switch back to stable. Both tables hit the cache — canary reused
 # the same cached memo (stats don't differ), so stable is unaffected.
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -231,7 +226,7 @@ SET stats_as_of = '2000-01-01 00:01:10.000000'
 # Re-warm the cache: stable execution rebuilds the now-stale entry.
 # (The stale-rebuild path does not log "query cache add".)
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -253,7 +248,7 @@ query cache hit but needed update
 # Contrast with Phase 2a above, where the same path produced a
 # "query cache add" because stats didn't differ there.
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -271,7 +266,7 @@ query cache hit but needed update
 
 # Stable execution still hits the cache — canary did not corrupt it.
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -301,7 +296,7 @@ statement ok
 SELECT crdb_internal.clear_query_plan_cache();
 
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -349,7 +344,7 @@ statement ok
 SELECT crdb_internal.clear_query_plan_cache();
 
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -369,7 +364,7 @@ query cache miss
 
 # Switch to stable. The cache is still empty, so stable gets a miss + add.
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -420,7 +415,7 @@ statement ok
 SELECT crdb_internal.clear_query_plan_cache();
 
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 # Confirm we are genuinely on the canary path (not accidentally default).
 # Both canary and stable see row_count=20 because stats_as_of is past the
@@ -439,7 +434,7 @@ table stats mode: canary
   spans: FULL SCAN
 
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM canary_table
@@ -473,7 +468,7 @@ query cache add
 # Stable execution hits the cache that canary just populated (plans are
 # identical, so this is safe).
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -546,7 +541,7 @@ query cache hit (prepare)
 
 # Stable EXECUTE reuses the prepared memo.
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -565,11 +560,11 @@ SET TRACING = "off";
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
 reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
+rebuilding cached memo
 reusing cached memo
 
 # --------------------------------------------------------------------------
@@ -617,7 +612,7 @@ statement ok
 SET stats_as_of = '2000-01-01 00:01:10.000000'
 
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 statement ok
 PREPARE p5 AS SELECT * from canary_table;
@@ -724,7 +719,7 @@ reusing cached memo
 # --------------------------------------------------------------------------
 
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -752,7 +747,7 @@ subtest interleaved_canary_stable_execute
 
 # Test that interleaving canary and stable EXECUTEs does not corrupt the
 # prepared statement's cached memo. The sequence is:
-#   1. PREPARE with stable stats (canary_stats_mode=off).
+#   1. PREPARE with stable stats (canary_stats_mode=force_stable).
 #   2. Stable EXECUTE → row_count=10 (stable stats).
 #   3. Canary EXECUTE → row_count=20 (canary stats), does NOT write back.
 #   4. Stable EXECUTE → row_count=10 (still the original stable memo).
@@ -787,7 +782,7 @@ statement ok
 SET stats_as_of = '2000-01-01 00:01:10.000000'
 
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 # Use a full scan (no placeholder) so the row estimate directly reflects
 # which stats were used: stable=10, canary=20.
@@ -836,7 +831,7 @@ quality of service: regular
 # Step 3: canary execute — should rebuild from scratch with row_count=20.
 # (Can be seen from "plan type: generic, re-optimized")
 statement ok
-SET canary_stats_mode = on;
+SET canary_stats_mode = force_canary;
 
 query T
 EXPLAIN ANALYZE (VERBOSE) EXECUTE pinterleave
@@ -879,7 +874,7 @@ quality of service: regular
 # still be intact.
 # (Can be seen from "plan type: generic, reused")
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 query T
 EXPLAIN ANALYZE (VERBOSE) EXECUTE pinterleave
@@ -974,7 +969,7 @@ PREPARE pfrac AS SELECT * FROM canary_table WHERE x = $1;
 # Stable EXECUTE should reuse the cached memo, proving PREPARE built
 # and cached it with stable stats.
 statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -1010,6 +1005,65 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 skipping cached memo for canary exec
 rebuilding cached memo
 
+# --------------------------------------------------------------------------
+# Phase 2: force_canary + fraction=0
+# --------------------------------------------------------------------------
+# Verify that PREPARE also forces stable when canary_stats_mode=force_canary
+# and canary_fraction=0. Without the PREPARE guard for force_canary, PREPARE
+# would use StatsRolloutDefault (via the auto path with fraction=0), but
+# EXECUTE would use StatsRolloutCanary (force_canary ignores fraction).
+# This mismatch would cause every EXECUTE to skip the cached memo.
+statement ok
+DEALLOCATE ALL;
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+statement ok
+SET canary_stats_mode = force_canary;
+
+statement ok
+PREPARE pfrac2 AS SELECT * FROM canary_table WHERE x = $1;
+
+# force_canary EXECUTE should rebuild since canary_table has a canary window
+# and stats genuinely differ (stats_as_of is still within the window).
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE pfrac2(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+skipping cached memo for canary exec
+rebuilding cached memo
+
+# force_stable EXECUTE should reuse the prepared memo, proving PREPARE built
+# it with stable stats despite fraction=0.
+statement ok
+SET canary_stats_mode = force_stable;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE pfrac2(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+
 statement ok
 RESET stats_as_of;
 
@@ -1020,15 +1074,8 @@ subtest end
 
 subtest rollout_mode_switch_invalidation
 
-# Verify that switching between Default and Stable stats rollout modes
-# (via canary_fraction cluster setting) correctly invalidates cached
+# Verify that switching stats rollout modes correctly invalidates cached
 # memos through the IsStale check on statsRolloutAtBuildTime.
-#
-# The scenario:
-#   1. PREPARE with canary_fraction > 0 → memo built with StatsRolloutStable
-#   2. SET canary_fraction = 0           → rollout becomes StatsRolloutDefault
-#   3. EXECUTE                           → must NOT reuse the stale stable memo
-#
 
 statement ok
 DEALLOCATE ALL;
@@ -1059,14 +1106,11 @@ SET stats_as_of = '2000-01-01 00:01:10.000000'
 # --------------------------------------------------------------------------
 # Phase 1: Query cache — Stable → Default.
 # --------------------------------------------------------------------------
-# Populate the query cache with a stable-built memo, then switch to Default
-# and verify that IsStale detects the mode change.
+# Populate the query cache with a force_stable-built memo, then switch to
+# auto + fraction=0 (Default) and verify that IsStale detects the change.
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
-
-statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SELECT * FROM canary_table;
@@ -1086,8 +1130,11 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 ----
 query cache hit
 
-# Switch to Default: canary_fraction = 0 makes canaryRollDice() return
-# StatsRolloutDefault regardless of canary_stats_mode.
+# This changes the rollout from StatsRolloutStable (force_stable) to
+# StatsRolloutDefault (auto + fraction=0).
+statement ok
+SET canary_stats_mode = auto;
+
 statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction='0';
 
@@ -1118,15 +1165,12 @@ statement ok
 SELECT crdb_internal.clear_query_plan_cache();
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
-
-statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 PREPARE p_mode AS SELECT * FROM canary_table;
 
-# Stable EXECUTE reuses the prepared memo.
+# force_stable EXECUTE reuses the prepared memo.
 statement ok
 SET TRACING = "on", cluster;
 
@@ -1141,7 +1185,10 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 ----
 reusing cached memo
 
-# Switch to Default: canary_fraction = 0.
+# Switch to auto + fraction=0 → Default. The Stable memo is now stale.
+statement ok
+SET canary_stats_mode = auto;
+
 statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction='0';
 
@@ -1178,13 +1225,10 @@ reusing cached memo
 # --------------------------------------------------------------------------
 # Phase 3: Default → Stable (reverse direction).
 # --------------------------------------------------------------------------
-# Switch back to Stable and verify the Default-built memo is invalidated.
+# Switch back to force_stable and verify the Default-built memo is invalidated.
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
-
-statement ok
-SET canary_stats_mode = off;
+SET canary_stats_mode = force_stable;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -1216,6 +1260,61 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 reusing cached memo
 
 # --------------------------------------------------------------------------
+# Phase 4: force_stable is immune to fraction changes.
+# --------------------------------------------------------------------------
+# With force_stable, the rollout is always StatsRolloutStable regardless
+# of canary_fraction. Changing the fraction should NOT invalidate the memo.
+
+statement ok
+DEALLOCATE ALL;
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
+
+statement ok
+SET canary_stats_mode = force_stable;
+
+statement ok
+PREPARE p_immune AS SELECT * FROM canary_table;
+
+# Confirm force_stable EXECUTE reuses the prepared memo.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p_immune;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+
+# Change fraction to 0. force_stable ignores this — rollout stays Stable.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p_immune;
+
+statement ok
+SET TRACING = "off";
+
+# Still reuses the cached memo — the rollout hasn't changed.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+
+# --------------------------------------------------------------------------
 # Cleanup.
 # --------------------------------------------------------------------------
 
@@ -1231,10 +1330,6 @@ SET CLUSTER SETTING sql.stats.canary_fraction = '0';
 subtest end
 
 subtest simple_auto_stats_collection
-
-# Set sql.stats.canary_fraction to be non-zero so that we're in "experiment on" mode.
-statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
 
 statement ok
 SET optimizer_use_forecasts = off
@@ -1265,7 +1360,7 @@ statement ok
 SET stats_as_of = '2000-01-01 00:00:30.000000'
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1288,7 +1383,7 @@ table stats mode: canary
 
 # Stable path should see stats missing.
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1384,7 +1479,7 @@ statement ok
 SET stats_as_of = '2000-01-01 00:05:10.000000'
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1410,7 +1505,7 @@ table stats mode: canary
 # So for stable path, we will pick the second latest stats (row_count = 40)
 # for planning.
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1450,7 +1545,7 @@ created                        statistics_name  column_names  row_count  delay_d
 2000-01-01 00:01:00 +0000 UTC  __auto__         {a}           10         false
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1472,7 +1567,7 @@ table stats mode: canary
       spans: FULL SCAN
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 # For the stable path, we are using the "old" forecast stats (row_count=50),
 # which is calculated based on the auto stats with row_count={10, 20, 30, 40}.
@@ -1634,7 +1729,7 @@ statement ok
 ALTER TABLE t SET (sql_stats_canary_window = '3600s');
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1656,7 +1751,7 @@ table stats mode: canary
       spans: FULL SCAN
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1723,7 +1818,7 @@ created                        statistics_name  column_names  row_count  delay_d
 
 # For the canary path, it should use the latest merged stats (row_count = 16).
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1746,7 +1841,7 @@ table stats mode: canary
 
 # For the stable path, it should use the second latest full stats (row_count = 9).
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1819,7 +1914,7 @@ statement ok
 SET stats_as_of = '1988-08-09 00:00:10.000000'
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM t;
@@ -1841,7 +1936,7 @@ table stats mode: canary
       spans: FULL SCAN
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 # For the stable path, we are using the previous __merged__ stats (with row_count = 16).
 query T
@@ -1888,7 +1983,7 @@ ALTER TABLE t INJECT STATISTICS '[
 ]'
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 # Set stats_as_of to before the stable stats (2024-01-01 10:00:00.000000).
 statement ok
@@ -1975,9 +2070,6 @@ ALTER TABLE t_metrics INJECT STATISTICS '[
 ]'
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
-
-statement ok
 SET stats_as_of = '2000-01-01 00:01:10.000000'
 
 # ── Test 1: canary path records canary count ──
@@ -1987,7 +2079,7 @@ statement ok
 SELECT crdb_internal.reset_sql_stats()
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 statement ok
 SELECT * FROM t_metrics
@@ -2009,7 +2101,7 @@ statement ok
 SELECT crdb_internal.reset_sql_stats()
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 statement ok
 SELECT * FROM t_metrics
@@ -2039,7 +2131,7 @@ statement ok
 SELECT crdb_internal.reset_sql_stats()
 
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 statement ok
 SELECT * FROM t_metrics
@@ -2073,7 +2165,7 @@ SELECT crdb_internal.reset_sql_stats()
 # We only need to test with stable path since the canary path doesn't
 # reuse memo.
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 statement ok
 PREPARE p_metrics AS SELECT * FROM t_metrics
@@ -2121,7 +2213,8 @@ WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
 ----
 1  0  1
 
-# Turn off the experiment.
+# Set canary_fraction to 0. Since the session uses force_stable, the
+# rollout is still StatsRolloutStable — the fraction has no effect.
 statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction = '0'
 
@@ -2131,18 +2224,8 @@ SELECT crdb_internal.reset_sql_stats()
 statement ok
 EXECUTE p_metrics
 
-statement ok
-SET TRACING = "off"
-
-query T
-SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
-----
-reusing cached memo
-
-# Though the experiment is off _now_, we are executing a prepared statement
-# whose plan was built while the experiment was on, so it's execution
-# statistics still serves as useful datapoint for stable table stats
-# evaluation.
+# force_stable ignores the fraction change — the stable count is still
+# recorded because the session is still in the stable arm.
 query III retry
 SELECT
   (statistics->'statistics'->>'cnt')::INT,
@@ -2151,7 +2234,7 @@ SELECT
 FROM crdb_internal.cluster_statement_statistics
 WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
 ----
-1  0  0
+1  0  1
 
 statement ok
 SET CLUSTER SETTING sql.stats.flush.enabled = true
@@ -2166,9 +2249,6 @@ subtest multi_table_canary_window
 # Verify that when a query joins two tables, only the table with a canary
 # window configured shows the per-scan "canary window" annotation, while
 # the query-level "table stats mode" still reflects the dice roll.
-
-statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
 
 statement ok
 SET optimizer_use_forecasts = off
@@ -2227,7 +2307,7 @@ SET stats_as_of = '2000-01-01 00:01:30.000000'
 
 # Canary path: t_canary shows "canary window", t_normal does not.
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
@@ -2261,7 +2341,7 @@ table stats mode: canary
 
 # Stable path: t_canary still shows "canary window", t_normal still does not.
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
@@ -2296,7 +2376,7 @@ table stats mode: stable
 # EXPLAIN ANALYZE (VERBOSE) should show both the query-level table stats
 # mode and the per-scan canary window annotation.
 statement ok
-SET canary_stats_mode = on
+SET canary_stats_mode = force_canary
 
 query T
 EXPLAIN ANALYZE (VERBOSE) SELECT count(*) FROM t_canary;
@@ -2356,9 +2436,6 @@ statement ok
 RESET optimizer_use_forecasts
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction = 0
-
-statement ok
 DROP TABLE IF EXISTS t_canary;
 
 statement ok
@@ -2387,9 +2464,6 @@ subtest canary_window_expiration_digest_fast_path
 
 statement ok
 SET optimizer_use_forecasts = off
-
-statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
 
 statement ok
 DROP TABLE IF EXISTS t_exp
@@ -2436,7 +2510,7 @@ statement ok
 SET stats_as_of = '2000-01-01 00:01:10.000000'
 
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 statement ok
 SET catalog_digest_staleness_check_enabled = true
@@ -2961,7 +3035,7 @@ reusing cached memo
 
 # Force stable execution so all EXECUTEs below use the stable stats path.
 statement ok
-SET canary_stats_mode = off
+SET canary_stats_mode = force_stable
 
 statement ok
 DEALLOCATE ALL
