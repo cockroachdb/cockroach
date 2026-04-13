@@ -853,10 +853,15 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// Only adding leaseholder CPU.
 		addedLoad[CPURate] = rstate.load.Load[CPURate] - rstate.load.RaftCPU
 		if addedLoad[CPURate] < 0 {
-			// TODO(sumeer): remove this panic once we are not in an
-			// experimental phase.
-			addedLoad[CPURate] = 0
-			panic("raft cpu higher than total cpu")
+			// Per the RangeLoad.RaftCPU invariant, this is unreachable: both
+			// fields are derived from a single atomic LoadStats snapshot in
+			// MakePhysicalRangeLoad. Log loudly and skip the range rather
+			// than panic if a future change breaks the invariant.
+			log.KvDistribution.Errorf(ctx,
+				"invariant violation: raft cpu %s exceeds total cpu %s for r%d",
+				time.Duration(rstate.load.RaftCPU), time.Duration(rstate.load.Load[CPURate]), rangeID)
+			re.passObs.leaseShed(rangeTransient)
+			continue
 		}
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, &means, true, CPURate) {
 			re.passObs.leaseShed(noCandidateToAcceptLoad)
