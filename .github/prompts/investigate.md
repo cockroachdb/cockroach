@@ -186,6 +186,32 @@ Artifacts can be large; explore with listing first if unsure of the
 exact path, but for roachtests the pattern above works on the first
 try.
 
+**Jepsen artifacts:** Jepsen roachtests (tests named `jepsen/*`) produce
+different artifacts from typical roachtests. On failure, the primary
+artifact is `failure-logs.tbz` — a bzip2-compressed tar archive bundled
+**inside** `artifacts.zip`. Extract it in two steps:
+
+```bash
+unzip -j "$DEST/artifacts.zip" "failure-logs.tbz" -d "$DEST"
+tar -xjf "$DEST/failure-logs.tbz" -C "$DEST"
+```
+
+The archive contains:
+
+```
+invoke.log                          # stdout/stderr from the Jepsen JAR
+store/latest/                       # Jepsen output directory
+  jepsen.log                        # main Jepsen execution log
+  jepsen-version.txt                # Jepsen version used
+  <ip>/                             # per-node subdirectory (one per CRDB node)
+    cockroach.stderr                # CockroachDB stderr output
+    trace.pcap                      # network packet capture
+    version.txt                     # CockroachDB version
+```
+
+For Jepsen failures, read `.github/prompts/jepsen-triage.md` for
+detailed triage steps, common failure patterns, and key log signatures.
+
 Log files are generally large. Prefer searching them with grep first
 to find interesting sections, but `test.log` is often worth reading
 in full.
