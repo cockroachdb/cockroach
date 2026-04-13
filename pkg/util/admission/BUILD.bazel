@@ -97,6 +97,7 @@ go_test(
     embed = [":admission"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/clusterversion",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",

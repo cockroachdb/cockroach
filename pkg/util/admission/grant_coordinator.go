@@ -199,9 +199,11 @@ func NewGrantCoordinators(
 			sqlKVWorkQueue.SetOverrideAllToBypassAdmission(override)
 			sqlSQLWorkQueue.SetOverrideAllToBypassAdmission(override)
 		}
-		cpuTimeTokenACEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		onSettingChange := func(ctx context.Context) {
 			setLatestOverride()
-		})
+		}
+		cpuTimeTokenACMode.SetOnChange(&st.SV, onSettingChange)
+		cpuTimeTokenACEnabled.SetOnChange(&st.SV, onSettingChange)
 		// Initialize.
 		setLatestOverride()
 	}
