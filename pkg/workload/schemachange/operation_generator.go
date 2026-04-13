@@ -2125,20 +2125,29 @@ func (og *operationGenerator) dropSequence(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	ifExists := og.randIntn(2) == 0
-	dropSeq := &tree.DropSequence{
-		Names:    tree.TableNames{*sequenceName},
-		IfExists: ifExists,
-	}
-
-	stmt := makeOpStmt(OpStmtDDL)
 	sequenceExists, err := og.sequenceExists(ctx, tx, sequenceName)
 	if err != nil {
 		return nil, err
 	}
-	if !sequenceExists && !ifExists {
-		stmt.expectedExecErrors.add(pgcode.UndefinedTable)
+	seqHasDependencies, err := og.sequenceHasDependencies(ctx, tx, sequenceName)
+	if err != nil {
+		return nil, err
 	}
+
+	dropBehavior := tree.DropBehavior(og.randIntn(3))
+
+	ifExists := og.randIntn(2) == 0
+	dropSeq := &tree.DropSequence{
+		Names:        tree.TableNames{*sequenceName},
+		IfExists:     ifExists,
+		DropBehavior: dropBehavior,
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.UndefinedTable, !ifExists && !sequenceExists},
+		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && seqHasDependencies},
+	})
 	stmt.sql = tree.Serialize(dropSeq)
 	return stmt, nil
 }
@@ -5657,11 +5666,26 @@ func (og *operationGenerator) createTriggerFunction(
 		return nil, err
 	}
 
+	// Sometimes include a sequence reference to exercise trigger-sequence
+	// dependency tracking.
+	seqSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		seqName, err := og.randSequence(ctx, tx, og.alwaysExisting(), "")
+		if err != nil {
+			// No sequences exist — skip the sequence reference.
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, err
+			}
+		} else {
+			seqSelectStmt = fmt.Sprintf("SELECT nextval('%s');", seqName.String())
+		}
+	}
+
 	// The trigger function always returns NEW to avoid breaking inserts.
 	opStmt := makeOpStmt(OpStmtDDL)
 	opStmt.sql = fmt.Sprintf(
-		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
-		resolvedName, selectStmt.sql,
+		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
+		resolvedName, seqSelectStmt, selectStmt.sql,
 	)
 	og.LogMessage(fmt.Sprintf("createTriggerFunction: %s", opStmt.sql))
 
