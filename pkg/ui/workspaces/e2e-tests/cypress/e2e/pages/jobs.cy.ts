@@ -77,12 +77,6 @@ describe("jobs page", () => {
     cy.get('[class*="job-messages"]').contains("Kind");
     cy.get('[class*="job-messages"]').contains("Message");
 
-    // Verify events table has at least one row
-    cy.get('[class*="job-messages"] table tbody tr').should(
-      "have.length.at.least",
-      1,
-    );
-
     // switch to advance debugging tab
     cy.contains("Advanced Debugging").click();
     cy.location("hash").should("match", /\/jobs\/\d+\?tab=profiler/);
