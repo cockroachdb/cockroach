@@ -329,21 +329,23 @@ func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 	}
 	if resp.Enabled {
 		buffer := resp.requestedCount - remaining
-		h.mu.Lock()
-		if h.mu.closed {
-			h.mu.Unlock()
-			// Close already ran and drained reservation. Return
-			// the buffer directly.
-			if buffer > 0 {
-				h.wq.AdmittedSQLWorkDone(h.workInfo.TenantID, buffer)
+		closed := func() bool {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.mu.closed {
+				return true
 			}
-		} else {
 			// NB: closed check and reservation.Add must be atomic under mu. Without
 			// the lock, this goroutine could read closed=false, then Close sets
 			// closed=true and Swap(0) drains reservation, then this goroutine does
 			// Add(buffer), leaking tokens.
 			h.mu.reservation.Add(buffer)
-			h.mu.Unlock()
+			return false
+		}()
+		// Close already ran and drained reservation. Return the buffer
+		// directly.
+		if closed && buffer > 0 {
+			h.wq.AdmittedSQLWorkDone(h.workInfo.TenantID, buffer)
 		}
 	}
 	return nil
