@@ -30,6 +30,34 @@ paths:
 - **Protobuf messages/enums**: document each value with context on when it
   applies and how it relates to the overall state machine or protocol.
 
+## Writing Principles
+
+- Use ASCII diagrams for architecture, request flow, and state machines.
+- Formal, impersonal tone. "The processor stops" not "we stop the processor."
+- Document invariants explicitly with an `Invariant:` marker. State contracts
+  (preconditions, postconditions, return value semantics) on methods.
+- Document locking: mutex ordering, which locks a method holds or requires
+  (use `REQUIRES:`), and exceptions to the ordering.
+- Field comments: state access rules (which goroutine/lock guards the field),
+  mutation lifecycle, and ownership.
+- Use temporal language ("before," "during," "once," "after") for lifecycles
+  and guarantee boundaries.
+- Introduce concepts progressively: simple case first, define terms on first
+  use, differentiate easily confused concepts.
+- Prefer concrete examples (values, state snapshots, before/after) over
+  abstract descriptions.
+- Document design rationale: why this approach, what tradeoffs, when to revisit.
+- Surface edge cases and caveats explicitly ("However,"). Do not bury them.
+- Use `NB:` for qualifications, `NOTE:` for design context.
+- Document known races: the race, why fixing is worse, recovery mechanism.
+- Document call-ordering constraints on interface methods (how many times,
+  what order).
+- Document backward compatibility: how old and new versions interact during
+  rolling upgrades.
+
+When writing substantial comments (type/package/interface docs, algorithm
+explanations), read `.claude/docs/commenting-guide.md` for detailed examples.
+
 ## Comment Maintenance
 
 - Add explanations when you discover valuable missing knowledge.
