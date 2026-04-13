@@ -79,7 +79,7 @@ jobs:
       run: |
         bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
-        pnpm build
+        pnpm build:release
 
     - name: Create version tag and push
       if: steps.version-check.outputs.published == 'no'
