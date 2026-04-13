@@ -46,21 +46,29 @@ while true; do
     ((j++))
     LOG=./gitload_\$j.txt
 
-    # Init: creates tables, generates synthetic repo, adds FK constraints.
-    # Safe to re-run: reuses existing repo if it has enough commits.
+    # Init: creates tables, generates synthetic repos (one per agent),
+    # ingests commits, and adds FK constraints.
+    # Safe to re-run: reuses existing repos if they have enough commits.
     ./cockroach workload init gitload \
         --commits 1000 \
         --seed 42 \
         --max-blob-size 65536 \
+        --batch-size 50 \
+        --concurrency 4 \
         --repo /tmp/gitload-repo \
         --secure \
         "\${PGURLS_ARR[@]}" 2>&1 | tee -a "\$LOG"
 
-    # Run: continuous TRUNCATE -> ingest cycles with different seeds.
+    # Run: continuous clear -> re-ingest cycles with rotating seeds.
+    # Each agent clears its data and re-ingests with a new topological
+    # ordering, creating sustained write load with FK/index contention.
     ./cockroach workload run gitload \
         --commits 1000 \
         --seed 42 \
         --max-blob-size 65536 \
+        --batch-size 50 \
+        --concurrency 4 \
+        --inline-verify 300 \
         --repo /tmp/gitload-repo \
         --histograms gitload/stats.json \
         --prometheus-port 2115 \
