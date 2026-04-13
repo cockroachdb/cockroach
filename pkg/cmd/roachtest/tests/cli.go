@@ -27,51 +27,19 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
-	require.NoError(t, err)
-
 	// Create user ranges at default 3x replication. With 5 nodes and 2 killed,
 	// some of these ranges will lose quorum — the test verifies that
 	// "node status" still works in that scenario.
-	_, err = db.ExecContext(ctx, `CREATE TABLE defaultdb.t (k INT PRIMARY KEY)`)
+	_, err := db.ExecContext(ctx, `CREATE TABLE defaultdb.t (k INT PRIMARY KEY)`)
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `ALTER TABLE defaultdb.t SPLIT AT SELECT generate_series(1, 100)`)
 	require.NoError(t, err)
-	err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
-	require.NoError(t, err)
 
-	// System database ranges and meta ranges default to 5x replication
-	// (DefaultSystemZoneConfig). Wait for them to reach 5 replicas, since
-	// we're going to kill 2 nodes and need these ranges to retain quorum.
-	// Without this, SQL connections fail and `node status` (which uses SQL)
-	// won't work. We check database_name = 'system' (for system tables) and
-	// start_key LIKE '/Meta%' (for meta addressing ranges). Other pre-table
-	// system ranges (liveness, etc.) also replicate to 5 but upreplicate
-	// quickly. We must NOT include timeseries ranges (start_key LIKE
-	// '/System/tsd%') — those inherit num_replicas=3 from the default zone
-	// config and would never reach 5.
-	t.L().Printf("waiting for system/meta ranges to reach 5 replicas")
-	for i := 0; ; i++ {
-		var n int
-		if err := db.QueryRowContext(ctx, `
-			SELECT count(*) FROM [SHOW CLUSTER RANGES WITH TABLES]
-			WHERE (database_name = 'system' OR start_key LIKE '/Meta%')
-			AND array_length(replicas, 1) < 5`,
-		).Scan(&n); err != nil {
-			t.Fatalf("querying system range replication: %v", err)
-		}
-		if n == 0 {
-			t.L().Printf("all system/meta ranges at 5 replicas")
-			break
-		}
-		if i%10 == 0 {
-			t.L().Printf("waiting for %d system/meta ranges to reach 5 replicas", n)
-		}
-		if i > 300 {
-			t.Fatalf("timed out waiting for system/meta range replication (still %d ranges < 5 replicas)", n)
-		}
-		time.Sleep(time.Second)
-	}
+	// Wait for all ranges to reach their configured replication factor.
+	// In particular, system/meta ranges need to reach 5x before we kill
+	// nodes, so SQL stays available.
+	err = roachtestutil.WaitForFullReplication(ctx, t.L(), db, "")
+	require.NoError(t, err)
 
 	lastWords := func(s string) []string {
 		var result []string
