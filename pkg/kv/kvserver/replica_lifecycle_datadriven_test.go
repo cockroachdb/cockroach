@@ -491,7 +491,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, kvstorage.DestroyReplica(ctx, kvstorage.ReadWriter{
 						State: kvstorage.WrapState(b.State()),
 						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
-					}, destroyInfo, rs.desc.NextReplicaID))
+					}, b.WagWriter(), destroyInfo, rs.desc.NextReplicaID))
 				})
 				rs.replica = nil // clear the replica from the range state
 				return output
