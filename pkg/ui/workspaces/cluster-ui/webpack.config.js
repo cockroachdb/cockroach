@@ -57,7 +57,7 @@ module.exports = (env, argv) => {
       rules: [
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          type: "asset/inline",
+          type: env["inline-assets"] ? "asset/inline" : "asset",
           exclude: /node_modules/,
         },
         // Styles in current project use SCSS preprocessing language with CSS modules.

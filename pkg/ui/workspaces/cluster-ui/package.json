@@ -15,6 +15,8 @@
   "scripts": {
     "build": "npm-run-all -p build:typescript build:bundle",
     "build:bundle": "NODE_ENV=production webpack --mode=production",
+    "build:release": "npm-run-all -p build:typescript build:release-bundle",
+    "build:release-bundle": "NODE_ENV=production webpack --mode=production --env inline-assets",
     "build:typescript": "tsc",
     "build:watch": "webpack --watch --mode=development --env WEBPACK_WATCH",
     "tsc:watch": "node build/typescript/watchWithMultipleDests.js --no-interactive",
