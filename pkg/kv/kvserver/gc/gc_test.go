@@ -2396,3 +2396,100 @@ func TestInfoSafeFormat(t *testing.T) {
 	echotest.Require(t, redacted,
 		datapathutils.TestDataPath(t, t.Name()))
 }
+
+// TestGCClearRangeConcurrentWriteAfterSnapshot verifies that a concurrent write
+// landing between the GC snapshot and clear range execution causes
+// MVCCGarbageCollectPointsWithClearRange to fail with an "above threshold"
+// error. This is the error path that increments ClearRangeSpanFailures,
+// which the guard in gc.Run uses to skip range tombstone GC.
+// See #166091.
+func TestGCClearRangeConcurrentWriteAfterSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(tablePrefix),
+		EndKey:   roachpb.RKey(tablePrefix.PrefixEnd()),
+	}
+
+	mkKey := func(suffix string) roachpb.Key {
+		return append(tablePrefix[:len(tablePrefix):len(tablePrefix)], suffix...)
+	}
+	mkTs := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: int64(seconds) * time.Second.Nanoseconds()}
+	}
+
+	keyA := mkKey("a")
+	keyB := mkKey("b")
+	keyC := mkKey("c")
+	keyD := mkKey("d")
+
+	gcThreshold := mkTs(10)
+	value := roachpb.MakeValueFromString("val")
+
+	// Point keys below threshold, covered by range tombstone — garbage.
+	for _, key := range []roachpb.Key{keyA, keyB, keyC} {
+		_, err := storage.MVCCPut(ctx, eng, key, mkTs(3), value, storage.MVCCWriteOptions{})
+		require.NoError(t, err)
+	}
+
+	// Range tombstone [a, d) at ts=7, below threshold.
+	require.NoError(t, eng.PutMVCCRangeKey(
+		storage.MVCCRangeKey{StartKey: keyA, EndKey: keyD, Timestamp: mkTs(7)},
+		storage.MVCCValue{},
+	))
+	require.NoError(t, eng.Flush())
+
+	// Snapshot for GC planning.
+	snap := eng.NewSnapshot()
+	defer snap.Close()
+
+	// Concurrent write after snapshot: B@15 above threshold.
+	_, err := storage.MVCCPut(ctx, eng, keyB, mkTs(15), value, storage.MVCCWriteOptions{})
+	require.NoError(t, err)
+
+	// Plan GC against the snapshot.
+	gcer := makeFakeGCer()
+	now := mkTs(20)
+	_, err = Run(ctx, &desc, snap, now, gcThreshold,
+		RunOptions{
+			LockAgeThreshold:    time.Nanosecond * time.Duration(now.WallTime),
+			TxnCleanupThreshold: txnCleanupThreshold,
+			ClearRangeMinKeys:   1,
+		},
+		time.Second,
+		&gcer,
+		gcer.resolveIntents,
+		gcer.resolveIntentsAsync,
+	)
+	require.NoError(t, err)
+
+	clearRanges := gcer.clearRanges()
+	require.NotEmpty(t, clearRanges, "expected at least one clear range request")
+
+	// Apply clear ranges to the LIVE engine. The span was planned from the
+	// snapshot, but the live engine now has B@15 above threshold.
+	var clearRangeErr error
+	for _, r := range clearRanges {
+		if r.StartKeyTimestamp.IsEmpty() {
+			continue
+		}
+		err := storage.MVCCGarbageCollectPointsWithClearRange(
+			ctx, eng, nil, r.StartKey, r.EndKey,
+			r.StartKeyTimestamp, gcThreshold,
+		)
+		if err != nil {
+			clearRangeErr = err
+		}
+	}
+
+	require.Error(t, clearRangeErr,
+		"expected clear range to fail due to concurrent write above threshold")
+	require.Contains(t, clearRangeErr.Error(), "above threshold",
+		"expected 'above threshold' error from concurrent write at B@15")
+}
