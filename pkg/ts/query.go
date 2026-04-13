@@ -822,6 +822,157 @@ func aggregate(agg tspb.TimeSeriesQueryAggregator, values []float64) float64 {
 	panic(fmt.Sprintf("unknown aggregator option encountered: %v", agg))
 }
 
+// queryReadPlan tracks the location of a single query's KV operations within a
+// shared kv.Batch. Used by Server.Query to combine reads across queries.
+type queryReadPlan struct {
+	// opStart is the index of the first operation in the shared batch.
+	opStart int
+	// opCount is the number of operations added for this query.
+	opCount int
+	// isScan is true when the query reads all sources via a Scan (no explicit
+	// source list). When false, the operations are individual Gets.
+	isScan bool
+	// tenantID is recorded for post-read filtering of scan results.
+	tenantID roachpb.TenantID
+}
+
+// addQueryReadOps adds the KV read operations for a single query to the
+// provided shared batch. It returns a queryReadPlan describing where the
+// query's operations are located in the batch. The caller is responsible for
+// running the batch and extracting results using extractReadResults.
+//
+// The scan path mirrors readAllSourcesFromDatabase and the get path mirrors
+// readFromDatabase. Changes to key construction or tenant handling in those
+// methods must be reflected here and in extractReadResults.
+func (db *DB) addQueryReadOps(
+	b *kv.Batch,
+	query tspb.Query,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	interpolationLimitNanos int64,
+) queryReadPlan {
+	diskTimespan := timespan
+	diskTimespan.expand(interpolationLimitNanos)
+
+	plan := queryReadPlan{
+		opStart:  len(b.Results),
+		tenantID: query.TenantID,
+	}
+
+	if len(query.Sources) == 0 {
+		startKey := MakeDataKey(
+			query.Name, "" /* source */, diskResolution, diskTimespan.StartNanos,
+		)
+		endKey := MakeDataKey(
+			query.Name, "" /* source */, diskResolution, diskTimespan.EndNanos,
+		).PrefixEnd()
+		b.Scan(startKey, endKey)
+		plan.isScan = true
+	} else {
+		startTimestamp := diskResolution.normalizeToSlab(diskTimespan.StartNanos)
+		kd := diskResolution.SlabDuration()
+		for cursor := startTimestamp; cursor <= diskTimespan.EndNanos; cursor += kd {
+			for _, source := range query.Sources {
+				if query.TenantID.IsSet() && !query.TenantID.IsSystem() {
+					source = tsutil.MakeTenantSource(source, query.TenantID.String())
+				}
+				key := MakeDataKey(query.Name, source, diskResolution, cursor)
+				b.Get(key)
+			}
+		}
+	}
+
+	plan.opCount = len(b.Results) - plan.opStart
+	return plan
+}
+
+// extractReadResults extracts the KV rows belonging to a query from a
+// completed shared batch, using the plan returned by addQueryReadOps.
+func extractReadResults(b *kv.Batch, plan queryReadPlan) ([]kv.KeyValue, error) {
+	if plan.opStart+plan.opCount > len(b.Results) {
+		return nil, errors.AssertionFailedf(
+			"queryReadPlan references results [%d,%d) but batch has %d results",
+			plan.opStart, plan.opStart+plan.opCount, len(b.Results),
+		)
+	}
+	var rows []kv.KeyValue
+	for i := plan.opStart; i < plan.opStart+plan.opCount; i++ {
+		result := b.Results[i]
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		if plan.isScan {
+			// Scan: filter rows by tenant, same logic as readAllSourcesFromDatabase.
+			for _, row := range result.Rows {
+				_, source, _, _, err := DecodeDataKey(row.Key)
+				if err != nil {
+					return nil, err
+				}
+				_, tenantSource := tsutil.DecodeSource(source)
+				if !plan.tenantID.IsSet() || plan.tenantID.IsSystem() {
+					if tenantSource == "" {
+						rows = append(rows, row)
+					}
+				} else if tenantSource == plan.tenantID.String() {
+					rows = append(rows, row)
+				}
+			}
+		} else {
+			// Get: skip nil values (key not found).
+			if len(result.Rows) == 1 && result.Rows[0].Value == nil {
+				continue
+			}
+			rows = append(rows, result.Rows...)
+		}
+	}
+	return rows, nil
+}
+
+// processQueryData takes pre-read KV data for a single query and runs the
+// post-read processing pipeline: convertKeysToSpans, downsampling, and
+// aggregation. It mirrors the post-read logic in queryChunk but operates on
+// pre-fetched data so that multiple queries can share a single KV read.
+func (db *DB) processQueryData(
+	ctx context.Context,
+	data []kv.KeyValue,
+	query tspb.Query,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	mem QueryMemoryContext,
+) ([]tspb.TimeSeriesDatapoint, map[string]struct{}, error) {
+	acc := mem.workerMonitor.MakeBoundAccount()
+	defer acc.Close(ctx)
+
+	sourceSpans, err := convertKeysToSpans(ctx, data, &acc)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(sourceSpans) == 0 {
+		return nil, nil, nil
+	}
+
+	if timespan.SampleDurationNanos != diskResolution.SampleDuration() {
+		downsampleSpans(sourceSpans, timespan.SampleDurationNanos, query.GetDownsampler())
+		query.Downsampler = tspb.TimeSeriesQueryAggregator_SUM.Enum()
+	}
+
+	var result []tspb.TimeSeriesDatapoint
+	aggregateSpansToDatapoints(sourceSpans, query, timespan, mem.InterpolationLimitNanos, &result)
+	if len(result) > 0 {
+		if err := mem.resultAccount.Grow(ctx, sizeOfDataPoint*int64(cap(result))); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	sourceSet := make(map[string]struct{})
+	for k := range sourceSpans {
+		source, _ := tsutil.DecodeSource(k)
+		sourceSet[source] = struct{}{}
+	}
+
+	return result, sourceSet, nil
+}
+
 // readFromDatabase retrieves data for the given series name, at the given disk
 // resolution, across the supplied time span, for only the given list of
 // sources.
