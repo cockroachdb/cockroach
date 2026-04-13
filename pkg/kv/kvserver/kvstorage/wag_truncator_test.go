@@ -243,7 +243,9 @@ func TestTruncateApplied(t *testing.T) {
 			truncator := NewWAGTruncator(st, e.Engines)
 			tc.setup(t, &e)
 			require.NoError(t, e.stateEngine.Flush())
-			require.NoError(t, truncator.TruncateAll(ctx))
+			_, err := truncator.truncateAppliedNodes(ctx, 0, /* startIndex */
+				math.MaxUint64 /* lastIndex */, true /* ignoreGaps */)
+			require.NoError(t, err)
 			require.Equal(t, tc.wantWAGIndices, e.listWAGNodes(t))
 		})
 	}
@@ -303,7 +305,9 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 				require.NoError(t, ss.Put(ctx, idx, 1 /* term */, []byte("sst-data")))
 			}
 			require.NoError(t, e.stateEngine.Flush())
-			require.NoError(t, truncator.TruncateAll(ctx))
+			_, err := truncator.truncateAppliedNodes(ctx, 0, /* startIndex */
+				math.MaxUint64 /* lastIndex */, true /* ignoreGaps */)
+			require.NoError(t, err)
 			// Raft entries <= 20 belong to the old replica and must be deleted. The
 			// rest shouldn't be deleted by the WAG truncator.
 			require.Equal(t,
@@ -329,9 +333,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 }
 
 // TestTruncateGapHandling verifies that truncateAppliedWAGNodeAndClearRaftState
-// handles gaps in WAG node indices correctly based on expectedIndex. When
-// expectedIndex is 0, the first node is deleted regardless of its index. When
-// non-zero, only the node at that exact index is deleted.
+// handles gaps in WAG node indices correctly.
 //
 // The test sets up three WAG nodes with gaps between them:
 // [Index: 2] -> [Index: 4] -> [Index: 6]
@@ -345,28 +347,56 @@ func TestTruncateGapHandling(t *testing.T) {
 	sl := MakeStateLoader(1 /* rangeID */)
 
 	for _, calls := range [][]struct {
-		index          uint64
-		wantTruncated  bool
-		wantWAGIndices []uint64
+		index                  uint64
+		lastIndex              uint64
+		ignoreGaps             bool
+		wantTruncated          bool
+		wantLastTruncatedIndex uint64
+		wantWAGIndices         []uint64
 	}{
 		{
-			// index=0 removes the first WAG node regardless of its index.
-			{index: 0, wantTruncated: true, wantWAGIndices: []uint64{4, 6}},
-			{index: 0, wantTruncated: true, wantWAGIndices: []uint64{6}},
-			{index: 0, wantTruncated: true, wantWAGIndices: nil},
+			// Using index=0, lastIndex=math.MaxUint64 removes
+			// the first WAG node regardless of its index.
+			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
+			// Attempting to truncate when there are no WAG nodes should not cause
+			//an error.
+			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: nil},
 		},
 		{
-			// A non-existent index is a no-op.
-			{index: 1, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
-			{index: 3, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
-			{index: 5, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
-			{index: 7, wantTruncated: false, wantWAGIndices: []uint64{2, 4, 6}},
+			// Exact same case as above, but with tighter bounds to verify that index
+			// and lastIndex are inclusive.
+			{index: 0, lastIndex: 6, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+			{index: 2, lastIndex: 6, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+			{index: 4, lastIndex: 6, ignoreGaps: true,
+				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
 		},
 		{
-			// In theory, we can remove a WAG node at an index that is not the first.
-			{index: 4, wantTruncated: true, wantWAGIndices: []uint64{2, 6}},
-			{index: 6, wantTruncated: true, wantWAGIndices: []uint64{2}},
-			{index: 2, wantTruncated: true, wantWAGIndices: nil},
+			// When ignoreGaps=false, we can only truncate the WAG node with the exact
+			// index.
+			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{2, 4, 6}},
+			{index: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+			{index: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{4, 6}},
+			{index: 4, lastIndex: 4, ignoreGaps: false,
+				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+			{index: 5, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{6}},
+			{index: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
+			// Attempting to truncate when there are no WAG nodes should not cause an
+			// error.
+			{index: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
+				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: nil},
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -397,11 +427,12 @@ func TestTruncateGapHandling(t *testing.T) {
 			for _, c := range calls {
 				stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
 				b := e.LogEngine().NewWriteBatch()
-				truncated, err := truncator.truncateAppliedWAGNodeAndClearRaftState(
-					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index,
+				truncated, lastTruncatedIndex, err := truncator.truncateAppliedWAGNodeAndClearRaftState(
+					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index, c.lastIndex, c.ignoreGaps,
 				)
 				require.NoError(t, err)
 				require.Equal(t, c.wantTruncated, truncated)
+				require.Equal(t, c.wantLastTruncatedIndex, lastTruncatedIndex)
 				if truncated {
 					require.NoError(t, b.Commit(false /* sync */))
 				}
@@ -409,6 +440,118 @@ func TestTruncateGapHandling(t *testing.T) {
 				stateReader.Close()
 				require.Equal(t, c.wantWAGIndices, e.listWAGNodes(t))
 			}
+		})
+	}
+}
+
+// TestTruncateAppliedNodes exercises truncateAppliedNodes across all
+// combinations of startIndex, lastIndex, and ignoreGaps. The test sets up WAG
+// nodes at indices [2, 4, 5, 6]. Node 6 isn't ready for truncation yet.
+func TestTruncateAppliedNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+
+	for _, tc := range []struct {
+		startIndex        uint64
+		lastIndex         uint64
+		ignoreGaps        bool
+		wantLastTruncated uint64
+		wantRemaining     []uint64
+	}{
+		// --- ignoreGaps=true: skips over gaps in WAG indices ---
+		{
+			startIndex: 0, lastIndex: 1, ignoreGaps: true,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+		{
+			startIndex: 0, lastIndex: 2, ignoreGaps: true,
+			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+		},
+		{
+			startIndex: 0, lastIndex: 6, ignoreGaps: true,
+			wantLastTruncated: 5, wantRemaining: []uint64{6},
+		},
+		{
+			startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+			wantLastTruncated: 5, wantRemaining: []uint64{6},
+		},
+		{
+			startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: true,
+			wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
+		},
+		{
+			startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: true,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+		// --- ignoreGaps=false: stops at first gap in WAG indices ---
+		{
+			startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+		{
+			startIndex: 2, lastIndex: 2, ignoreGaps: false,
+			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+		},
+		{
+			startIndex: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+		},
+		{
+			startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+		{
+			startIndex: 4, lastIndex: 4, ignoreGaps: false,
+			wantLastTruncated: 4, wantRemaining: []uint64{2, 5, 6},
+		},
+		{
+			startIndex: 4, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
+		},
+		{
+			startIndex: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+		{
+			startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: false,
+			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			truncator := NewWAGTruncator(st, e.Engines)
+
+			// Write WAG nodes at indices 2, 4, 5.
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
+			})
+			e.seq.Next()
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
+			})
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
+			})
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply,
+			})
+
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 20}))
+			require.NoError(t, e.stateEngine.Flush())
+
+			lastTruncated, err := truncator.truncateAppliedNodes(ctx, tc.startIndex, tc.lastIndex, tc.ignoreGaps)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantLastTruncated, lastTruncated)
+			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
 		})
 	}
 }
