@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -330,14 +331,17 @@ func (ex *connExecutor) populatePrepared(
 		}
 	}
 
-	// When the canary experiment is active (canary_fraction > 0), force
-	// StatsRolloutStable during PREPARE so the cached memo is built with
-	// stable (baseline) stats. During EXECUTE, the dice is rolled per
-	// query: stable executions reuse this memo; canary executions skip it
-	// and rebuild from scratch with canary stats (see the canary guard in
-	// chooseValidPreparedMemo).
+	// Force StatsRolloutStable during PREPARE so the cached memo is built
+	// with stable (baseline) stats. This applies when:
+	//   - canary_fraction > 0 (auto mode may roll canary during EXECUTE), or
+	//   - canary_stats_mode is force_canary or force_stable (session
+	//     overrides the rollout, and EXECUTE will use a non-Default rollout).
+	// During EXECUTE, the dice is rolled per query: stable executions reuse
+	// this memo; canary executions skip it and rebuild from scratch with
+	// canary stats (see the canary guard in chooseValidPreparedMemo).
 	if !p.SessionData().Internal &&
-		stats.CanaryFraction.Get(&p.EvalContext().Settings.SV) > 0 {
+		(stats.CanaryFraction.Get(&p.EvalContext().Settings.SV) > 0 ||
+			p.SessionData().CanaryStatsMode != sessiondatapb.CanaryStatsModeAuto) {
 		p.EvalContext().StatsRollout = eval.StatsRolloutStable
 	}
 

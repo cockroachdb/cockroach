@@ -24,7 +24,7 @@ var sessionVarDescriptions = map[string]string{
 	"buffered_writes_use_locking_on_non_unique_indexes":               "Controls whether buffered writes use locking on non-unique indexes.",
 	"bypass_pcr_reader_catalog_aost":                                  "Disables the AOST used by all user queries on the PCR reader catalog.",
 	"bytea_output":                                                    "Controls how to encode byte arrays when converting to string.",
-	"canary_stats_mode":                                               "When sql.stats.canary_fraction > 0, controls which table statistics are used for query planning: 'on' always uses the newest stats as soon as they are available, 'off' delays using new stats until they outlive the canary window, and 'auto' selects probabilistically based on the canary fraction. Has no effect when sql.stats.canary_fraction is 0.",
+	"canary_stats_mode":                                               "Controls which table statistics are used for query planning: 'force_canary' always uses the newest stats, 'force_stable' always uses the second-newest stats, and 'auto' (default) defers to the sql.stats.canary_fraction cluster setting to decide probabilistically.",
 	"catalog_digest_staleness_check_enabled":                          "Controls whether to use catalog digest information for fast memo staleness checks.",
 	"check_function_bodies":                                           "Controls whether functions are validated during function creation.",
 	"client_encoding":                                                 "Controls the client-side character encoding. Only UTF8 is supported.",
