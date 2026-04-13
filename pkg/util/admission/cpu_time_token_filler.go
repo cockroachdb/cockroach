@@ -37,6 +37,37 @@ var KVCPUTimeSystemUtilGoal = settings.RegisterFloatSetting(
 	0.95,
 	settings.FloatWithMinimum(minTargetUtilFrac))
 
+// KVCPUTimeUtilTarget is the non-burstable CPU utilization target in
+// resource manager mode. Resource groups that have not qualified for
+// burst are limited to this target.
+//
+// TODO(wenyihu): This setting is not yet consumed; it will be wired
+// into the filler when resourceManagerMode is implemented.
+var KVCPUTimeUtilTarget = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.cpu_time_tokens.target_util",
+	"the non-burstable CPU utilization target in resource manager mode, "+
+		"value is in the interval [0,1] where 1 means all cores",
+	0.75,
+	settings.FloatInRange(minTargetUtilFrac, 1.0))
+
+// KVCPUTimeUtilBurstDeltaRM is the delta added to KVCPUTimeUtilTarget
+// to compute the burstable utilization ceiling in resource manager
+// mode. For example, with target_util=0.75 and burst_delta_rm=0.25,
+// the burstable ceiling is 1.0. Resource groups configured with
+// FULLY_UTILIZE are always allowed to burst up to this ceiling.
+//
+// TODO(wenyihu): This setting is not yet consumed; it will be wired
+// into the filler when resourceManagerMode is implemented.
+var KVCPUTimeUtilBurstDeltaRM = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.cpu_time_tokens.target_util.burst_delta_rm",
+	"the delta added to admission.cpu_time_tokens.target_util to compute "+
+		"the burstable utilization ceiling in resource manager mode, "+
+		"value is in the interval (0,1]",
+	0.25,
+	settings.PositiveFloat)
+
 // Burstable work is given this much CPU headroom above non-burstable. See
 // resetInterval for more.
 var KVCPUTimeUtilBurstDelta = settings.RegisterFloatSetting(
