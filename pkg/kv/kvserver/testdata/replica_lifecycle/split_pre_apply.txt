@@ -48,15 +48,18 @@ Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1
 destroy-replica range-id=2
 ----
 state engine:
-Put: 0,0 /Local/RangeID/2/u/RangeTombstone (0x01698a757266746200): next_replica_id:4 
-Delete: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): 
+(matches WAG node)
+log engine:
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r2/1:0,EventDestroy)
+> Put: 0,0 /Local/RangeID/2/u/RangeTombstone (0x01698a757266746200): next_replica_id:4 
+> Delete: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): 
 
 apply-split range-id=1
 ----
 state engine:
 (matches WAG node)
 log engine:
-Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r1/1:11,EventSplit)
+Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): (r1/1:11,EventSplit)
 > Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 > Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
 > Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
@@ -108,7 +111,7 @@ apply-split range-id=1
 state engine:
 (matches WAG node)
 log engine:
-Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): (r1/1:12,EventSplit)
+Put: 0,0 /Local/Store/wag/3 (0x01737761676e000000000000000300): (r1/1:12,EventSplit)
 > Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 > Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,1 pro=0,0 acq=Unspecified
 > Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0.000000004,0
@@ -152,7 +155,7 @@ log engine:
 Put: 0,0 /Local/RangeID/4/u/RaftHardState (0x01698c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/4/u/RaftTruncatedState (0x01698c757266747400): index:10 term:5 
 Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0,0
-Put: 0,0 /Local/Store/wag/3 (0x01737761676e000000000000000300): (r1/1:13,EventSplit)
+Put: 0,0 /Local/Store/wag/4 (0x01737761676e000000000000000400): (r1/1:13,EventSplit)
 > Put: 0,0 /Local/Range"c"/QueueLastProcessed/"consistencyChecker" (0x016b12630001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 > Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,2 pro=0,0 acq=Unspecified
 > Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0.000000004,0

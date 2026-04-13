@@ -180,6 +180,7 @@ func (r *Replica) stageDestroyRaftMuLocked(
 			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
 			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
 		},
+		batch.WagWriter(),
 		r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		batch.Close()

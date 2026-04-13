@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -92,8 +94,13 @@ type DestroyReplicaInfo struct {
 // This call issues all writes ordered by key. This is to support a large
 // variety of uses, including SSTable generation for snapshot application.
 func DestroyReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+	ctx context.Context,
+	rw ReadWriter,
+	w *wag.Writer,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
 ) error {
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventDestroy)
 	return destroyReplicaImpl(ctx, rw, info, next)
 }
 

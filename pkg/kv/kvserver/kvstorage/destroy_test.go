@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -50,13 +51,26 @@ func TestDestroyReplica(t *testing.T) {
 		require.NoError(t, b.Commit(false))
 		return str
 	}
-	mutateSep := func(name string, eng Engines, write func(ReadWriter)) string {
+	mutateSep := func(name string, eng Engines, write func(ReadWriter, *wag.Writer)) string {
 		b := makeTestBatch(eng)
 		defer b.close()
-		write(b.readWriter())
+		w := wag.MakeWriter(&wag.Seq{})
+		write(b.readWriter(), &w)
+
 		var str string
 		if eng.Separated() {
-			str = printBatch(name+"/state", b.batch) + printBatch(name+"/raft", b.raftBatch)
+			stateRepr := b.batch.Repr()
+			require.NoError(t, w.Flush(b.raftBatch, stateRepr))
+			// If the raft batch contains a WAG node with an embedded state
+			// engine batch, verify it matches and omit the state engine output
+			// — the WAG node in the raft output already contains it.
+			var stateOutput string
+			if wag.AssertMutationBatch(t, b.raftBatch.Repr(), stateRepr) {
+				stateOutput = fmt.Sprintf(">> %s/state:\n(matches WAG node)\n", name)
+			} else {
+				stateOutput = printBatch(name+"/state", b.batch)
+			}
+			str = stateOutput + printBatch(name+"/raft", b.raftBatch)
 		} else {
 			str = printBatch(name, b.batch)
 		}
@@ -79,9 +93,9 @@ func TestDestroyReplica(t *testing.T) {
 			r.createRaftState(ctx, t, w)
 		}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
 			r.createStateMachine(ctx, t, w)
-		}) + mutateSep("destroy", e, func(rw ReadWriter) {
+		}) + mutateSep("destroy", e, func(rw ReadWriter, w *wag.Writer) {
 			require.NoError(t, DestroyReplica(
-				ctx, rw,
+				ctx, rw, w,
 				DestroyReplicaInfo{
 					FullReplicaID:    r.id,
 					RaftAppliedIndex: r.applied,
