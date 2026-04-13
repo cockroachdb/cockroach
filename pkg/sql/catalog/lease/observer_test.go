@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -121,7 +122,12 @@ func TestLeaseObserver(t *testing.T) {
 	// Add the first column and validate all versions are observed.
 	sqlRunner.Exec(t, "ALTER TABLE t ADD COLUMN v INT")
 	// Validate the schema change was observed.
-	require.Greaterf(t, maxVersion.Load(), int64(1), "new versions were not detected")
+	testutils.SucceedsSoon(t, func() error {
+		if maxVersion.Load() <= int64(1) {
+			return errors.New("new versions were not detected")
+		}
+		return nil
+	})
 	// Confirm the observer stops firing after unregistering.
 	unregisterFn()
 	maybeCloseSchemaChangeComplete()
