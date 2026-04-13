@@ -454,16 +454,20 @@ func MakeReplicaTypeChange(
 	return change
 }
 
-// makeRebalanceReplicaChanges creates to replica changes, adding a replica and
+// makeRebalanceReplicaChanges creates two replica changes, adding a replica and
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
+//
+// Returns ok=false if the removeTarget is not found in existingReplicas, which
+// can happen if an external change (e.g. replicate queue) removed the replica
+// before the rebalancer's state was refreshed.
 func makeRebalanceReplicaChanges(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	existingReplicas []StoreIDAndReplicaState,
 	rLoad RangeLoad,
 	addTarget, removeTarget roachpb.ReplicationTarget,
-) [2]ReplicaChange {
+) (_ [2]ReplicaChange, ok bool) {
 	var remove StoreIDAndReplicaState
 	for _, replica := range existingReplicas {
 		if replica.StoreID == removeTarget.StoreID {
@@ -471,7 +475,9 @@ func makeRebalanceReplicaChanges(
 		}
 	}
 	if remove == (StoreIDAndReplicaState{}) {
-		log.KvDistribution.Fatalf(ctx, "remove target %s not in existing replicas", removeTarget)
+		log.KvDistribution.Warningf(ctx,
+			"remove target %s not in existing replicas for r%d", removeTarget, rangeID)
+		return [2]ReplicaChange{}, false
 	}
 
 	addIDAndType := ReplicaIDAndType{
@@ -480,7 +486,7 @@ func makeRebalanceReplicaChanges(
 	}
 	addReplicaChange := MakeAddReplicaChange(rangeID, rLoad, addIDAndType, addTarget)
 	removeReplicaChange := MakeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
-	return [2]ReplicaChange{addReplicaChange, removeReplicaChange}
+	return [2]ReplicaChange{addReplicaChange, removeReplicaChange}, true
 }
 
 func mapReplicaTypeToVoterOrNonVoter(rType roachpb.ReplicaType) roachpb.ReplicaType {

@@ -631,8 +631,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				"add=%v==remove_target=%v range_id=%v candidates=%v",
 				addTarget, removeTarget, rangeID, cands.candidates))
 		}
-		replicaChanges := makeRebalanceReplicaChanges(ctx,
+		replicaChanges, ok := makeRebalanceReplicaChanges(ctx,
 			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
+		if !ok {
+			re.passObs.replicaShed(rangeTransient)
+			continue
+		}
 		rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
 		if err = re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
 			panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
