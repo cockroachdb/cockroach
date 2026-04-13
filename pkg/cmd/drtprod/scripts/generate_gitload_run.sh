@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright 2025 The Cockroach Authors.
+# Copyright 2026 The Cockroach Authors.
 #
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
@@ -37,6 +37,7 @@ PGURLS=$(drtprod pgurl $CLUSTER --external | sed s/\'//g)
 # Create the workload script
 cat <<EOF >/tmp/gitload_run.sh
 #!/usr/bin/env bash
+set -o pipefail
 
 read -r -a PGURLS_ARR <<< "$PGURLS"
 
@@ -46,30 +47,37 @@ while true; do
     ((j++))
     LOG=./gitload_\$j.txt
 
-    # Init: creates tables, generates synthetic repo, adds FK constraints.
-    # Safe to re-run: reuses existing repo if it has enough commits.
+    # Init: creates tables, generates synthetic repos (one per agent),
+    # ingests commits, and adds FK constraints.
+    # Safe to re-run: reuses existing repos if they have enough commits.
     ./cockroach workload init gitload \
         --commits 1000 \
         --seed 42 \
         --max-blob-size 65536 \
+        --batch-size 50 \
+        --concurrency 4 \
         --repo /tmp/gitload-repo \
         --secure \
         "\${PGURLS_ARR[@]}" 2>&1 | tee -a "\$LOG"
 
-    # Run: continuous TRUNCATE -> ingest cycles with different seeds.
+    # Run: continuous clear -> re-ingest cycles with rotating seeds.
+    # Each agent clears its data and re-ingests with a new topological
+    # ordering, creating sustained write load with FK/index contention.
     ./cockroach workload run gitload \
         --commits 1000 \
         --seed 42 \
         --max-blob-size 65536 \
+        --batch-size 50 \
+        --concurrency 4 \
+        --inline-verify 300 \
         --repo /tmp/gitload-repo \
         --histograms gitload/stats.json \
         --prometheus-port 2115 \
         --display-every 5s \
         --duration 12h \
-        --tolerate-errors \
         --secure \
         "\${PGURLS_ARR[@]}" 2>&1 | tee -a "\$LOG"
-    if [ \$? -eq 0 ]; then
+    if [ \${PIPESTATUS[0]} -eq 0 ]; then
         rm "\$LOG"
     fi
     sleep 1

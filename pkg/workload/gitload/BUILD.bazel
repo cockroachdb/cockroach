@@ -18,12 +18,13 @@ go_library(
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
 go_test(
     name = "gitload_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "gitload_test.go",
         "main_test.go",
