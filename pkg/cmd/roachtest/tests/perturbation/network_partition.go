@@ -8,7 +8,6 @@ package perturbation
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -32,7 +31,7 @@ var _ perturbation = partition{}
 
 func (p partition) setup() variations {
 	p.partitionSite = true
-	v := setup(p, math.Inf(1))
+	v := setup(p, noImpactThresholds())
 	v.leaseType = registry.ExpirationLeases
 	// TODO(baptist): Remove this setting once #120073 is fixed.
 	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"

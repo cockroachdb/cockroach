@@ -8,7 +8,6 @@ package perturbation
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -33,7 +32,7 @@ var _ perturbation = &slowDisk{}
 func (s *slowDisk) setup() variations {
 	s.slowLiveness = true
 	s.walFailover = true
-	return setup(s, math.Inf(1))
+	return setup(s, noImpactThresholds())
 }
 
 func (s *slowDisk) setupMetamorphic(rng *rand.Rand) variations {

@@ -21,7 +21,7 @@ type addNode struct{}
 var _ perturbation = addNode{}
 
 func (a addNode) setup() variations {
-	return setup(a, 5.0)
+	return setup(a, noImpactThresholds())
 }
 
 func (a addNode) setupMetamorphic(rng *rand.Rand) variations {

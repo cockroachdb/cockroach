@@ -25,7 +25,7 @@ type backup struct{}
 var _ perturbation = backup{}
 
 func (b backup) setup() variations {
-	return setup(b, 15.0)
+	return setup(b, noImpactThresholds())
 }
 
 // TODO(baptist): Add variation for incremental backup.
