@@ -650,12 +650,68 @@ SHOW USERS -- literals removed
 SHOW USERS -- identifiers removed
 
 parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com') -- fully parenthesized
+SHOW USERS WITH SOURCE = '_' -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' -- identifiers removed
+
+parse
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01'
+SHOW USERS WITH LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW USERS WITH LAST LOGIN BEFORE '_' -- literals removed
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2024-01-01') -- fully parenthesized
+SHOW USERS WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01' -- identifiers removed
+
+parse
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+----
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10
+SHOW USERS WITH SOURCE = ('ldap:ldap.example.com') LIMIT (10) -- fully parenthesized
+SHOW USERS WITH SOURCE = '_' LIMIT _ -- literals removed
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 10 -- identifiers removed
+
+parse
+SHOW USERS LIMIT 5
+----
+SHOW USERS LIMIT 5
+SHOW USERS LIMIT (5) -- fully parenthesized
+SHOW USERS LIMIT _ -- literals removed
+SHOW USERS LIMIT 5 -- identifiers removed
+
+parse
 EXPLAIN SHOW USERS
 ----
 EXPLAIN SHOW USERS
 EXPLAIN SHOW USERS -- fully parenthesized
 EXPLAIN SHOW USERS -- literals removed
 EXPLAIN SHOW USERS -- identifiers removed
+
+error
+SHOW USERS WITH SOURCE = 'a', SOURCE = 'b'
+----
+at or near "b": syntax error: SOURCE option specified multiple times
+DETAIL: source SQL:
+SHOW USERS WITH SOURCE = 'a', SOURCE = 'b'
+                                        ^
+
+error
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+----
+at or near "2025-01-01": syntax error: LAST LOGIN BEFORE option specified multiple times
+DETAIL: source SQL:
+SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01', LAST LOGIN BEFORE '2025-01-01'
+                                                                   ^
 
 parse
 SHOW JOB 1234
