@@ -6,7 +6,6 @@
 package admission
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -202,37 +201,38 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
-	var unlimitedPrefix string
-	if d.unlimitedTokensOverride {
-		unlimitedPrefix = " (unlimited)"
-	}
 
-	var overadmissionStr string
+	// [disk-bw] and [disk-tokens]: observed bandwidth, provisioned bandwidth,
+	// and token budget/usage. When provisioned bandwidth is not configured,
+	// the limiter is a no-op and we elide both lines to reduce noise.
+	if d.state.prevDiskLoad.intProvisionedDiskBytes == 0 {
+		return
+	}
+	p.Printf("\n  [disk-bw] observed write %s/s read %s/s, provisioned %s/s",
+		ib(d.state.prevDiskLoad.intWriteBytes/adjustmentInterval),
+		ib(d.state.prevDiskLoad.intReadBytes/adjustmentInterval),
+		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval))
+	if d.unlimitedTokensOverride {
+		p.SafeString(" [unlimited]")
+	}
 	if d.state.prevRemainingDiskWriteTokens < 0 {
-		overadmissionStr = fmt.Sprintf(" overadmission %s/s",
+		p.Printf(" [%s/s over budget]",
 			ib(-d.state.prevRemainingDiskWriteTokens/adjustmentInterval))
 	}
-
-	p.Printf("diskBandwidthLimiter%s (writeUtil %.2f, tokensUsed (elastic %s, "+
-		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
-		"readBW %s/s, provisioned %s/s, err(cum,abs) write: %s,%s read: %s,%s)%s",
-		redact.SafeString(unlimitedPrefix),
-		d.state.prevWriteTokenUtil,
+	p.Printf("\n  [disk-tokens] budget: write %s, read %s (prev: write %s, read %s); "+
+		"used: elastic %s, snapshot %s, regular %s; "+
+		"err(cum,abs): write (%s,%s), read (%s,%s)",
+		ib(d.state.tokens.writeByteTokens),
+		ib(d.state.tokens.readByteTokens),
+		ib(d.state.prevTokens.writeByteTokens),
+		ib(d.state.prevTokens.readByteTokens),
 		ib(d.state.prevUsedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
 		ib(d.state.prevUsedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
 		ib(d.state.prevUsedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
-		ib(d.state.tokens.writeByteTokens),
-		ib(d.state.prevTokens.writeByteTokens),
-		ib(d.state.tokens.readByteTokens),
-		ib(d.state.prevTokens.readByteTokens),
-		ib(d.state.prevDiskLoad.intWriteBytes/adjustmentInterval),
-		ib(d.state.prevDiskLoad.intReadBytes/adjustmentInterval),
-		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval),
 		ib(d.state.prevDiskErrorStats.cumError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.cumError.readByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.readByteTokens),
-		redact.SafeString(overadmissionStr),
 	)
 }
 
