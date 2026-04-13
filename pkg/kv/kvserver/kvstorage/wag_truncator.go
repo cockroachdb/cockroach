@@ -33,52 +33,66 @@ import (
 type WAGTruncator struct {
 	st  *cluster.Settings
 	eng Engines
+	seq *wag.Seq
+	// initIndex is the WAG index at which the sequencer and truncator were
+	// initialized. New WAG nodes are guaranteed to be written at > initIndex.
+	// Any gaps at <= initIndex are thus never filled.
+	//
+	// Due to concurrent WAG writes in normal operation, indices > initIndex may
+	// temporarily have gaps, guaranteed to be filled eventually. Only an abrupt
+	// shutdown/crash can cause these gaps to become permanent.
+	//
+	// We don't truncate ahead of gaps at > initIndex, and wait for them to be
+	// filled. This makes an invariant: only an entire prefix is truncated which
+	// allows more efficient Pebble scans that skip over tombstones.
+	initIndex uint64
 }
 
 // NewWAGTruncator creates a WAGTruncator.
-func NewWAGTruncator(st *cluster.Settings, eng Engines) *WAGTruncator {
-	return &WAGTruncator{st: st, eng: eng}
+func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTruncator {
+	return &WAGTruncator{st: st, eng: eng, seq: seq, initIndex: seq.Load()}
 }
 
-// TruncateAll truncates all applied WAG nodes. It's meant to be used at engine
-// startup right after we replay the WAG nodes and sync the state engine.
-func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
+// truncateAppliedNodes deletes the longest fully applied prefix of the WAG.
+// Does so iteratively, splitting its work into batches.
+func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context, startIndex uint64) error {
 	stateReader := t.eng.StateEngine().NewReader(storage.GuaranteedDurability)
 	defer stateReader.Close()
+	nextIndex := startIndex
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		b := t.eng.LogEngine().NewWriteBatch()
-		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(
-			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader, 0, /* index */
+		truncatedIdx, err := t.truncateAppliedWAGNodeAndClearRaftState(
+			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader, nextIndex,
 		)
-		if err == nil && truncated {
+		if err == nil && truncatedIdx != 0 {
 			err = b.Commit(false /* sync */)
 		}
 		b.Close()
 		if err != nil {
 			return err
 		}
-		if !truncated {
-			break
+		if truncatedIdx == 0 {
+			return nil
 		}
+		// At this point we know that the last truncation succeeded and the batch
+		// was committed, and we can move on to the next node.
+		nextIndex = truncatedIdx + 1
 	}
-	return nil
 }
 
 // truncateAppliedWAGNodeAndClearRaftState deletes a WAG node if all of its
 // events have been applied to the state engine. For nodes containing
 // EventDestroy or EventSubsume events, it also clears the corresponding raft
 // log prefix from the engine and the sideloaded entries storage.
-// If truncateIndex is 0, the function deletes the first WAG node regardless of
-// its index. Otherwise, it only deletes the node matching truncateIndex if it
-// exists.
 //
-// Returns a boolean indicating whether a node was successfully truncated or
-// not. If the return value is false, it means that either there are no WAG
-// nodes left, or that the WAG node has not been applied to the state engine.
-// Also, an error is returned if the WAG node could not be fetched or deleted.
+// It iterates from truncateIndex and attempts to delete the first WAG node it
+// sees.
+//
+// Returns the index of the last WAG node that was deleted, or 0 if no nodes
+// were deleted.
 //
 // The caller must provide a stateRO reader with GuaranteedDurability so that
 // only state confirmed flushed to persistent storage is visible. This ensures
@@ -88,35 +102,27 @@ func (t *WAGTruncator) TruncateAll(ctx context.Context) error {
 // TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
 func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
 	ctx context.Context, raft Raft, stateRO StateRO, truncateIndex uint64,
-) (bool, error) {
+) (uint64, error) {
 	var iter wag.Iterator
-	var iterStartKey roachpb.Key
-	if truncateIndex == 0 {
-		// Delete the first WAG node that exists, regardless of its index.
-		iterStartKey = keys.StoreWAGPrefix()
-	} else {
-		// Only delete the WAG node with the expected index.
-		iterStartKey = keys.StoreWAGNodeKey(truncateIndex)
-	}
-
+	iterStartKey := keys.StoreWAGNodeKey(truncateIndex)
 	for index, node := range iter.IterFrom(ctx, raft.RO, iterStartKey) {
-		if truncateIndex != 0 && truncateIndex != index {
-			return false, nil
+		if truncateIndex != index && index > t.initIndex {
+			// We cannot ignore gaps for WAG indices > initIndex.
+			return 0, nil
 		}
-
 		// TODO(ibrahim): Right now, the canApplyWAGNode function returns a list of
 		// raftCatchUpTargets that are not needed for the purposes of truncation,
 		// consider refactoring the function to return only the needed info.
-		replayAction, err := canApplyWAGNode(ctx, node, stateRO)
+		action, err := canApplyWAGNode(ctx, node, stateRO)
 		if err != nil {
-			return false, err
+			return 0, err
 		}
-		if replayAction.apply {
+		if action.apply {
 			// If an event needs to be applied, the WAG node cannot be deleted yet.
-			return false, nil
+			return 0, nil
 		}
 		if err := wag.Delete(raft.WO, index); err != nil {
-			return false, err
+			return 0, err
 		}
 
 		// Clean up the raft log prefix of a destroyed/subsumed replica.
@@ -125,12 +131,12 @@ func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
 				continue
 			}
 			if err := t.clearReplicaRaftLogAndSideloaded(ctx, raft, event.Addr.RangeID, event.Addr.Index); err != nil {
-				return false, err
+				return 0, err
 			}
 		}
-		return true, nil
+		return index, nil
 	}
-	return false, iter.Error()
+	return 0, iter.Error()
 }
 
 // clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
