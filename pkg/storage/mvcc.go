@@ -102,7 +102,9 @@ var TargetBytesPerLockConflictError = settings.RegisterIntSetting(
 	settings.WithName("storage.mvcc.target_bytes_per_lock_conflict_error"),
 )
 
-var defaultMaxConcurrentCompactions = getDefaultMaxConcurrentCompactions()
+// DefaultMaxConcurrentCompactions is the default maximum number of concurrent
+// compactions per store.
+var DefaultMaxConcurrentCompactions = getDefaultMaxConcurrentCompactions()
 
 // By default, we use up to min(GOMAXPROCS-1, 3) threads for background
 // compactions per store (reserving the final process for flushes).
