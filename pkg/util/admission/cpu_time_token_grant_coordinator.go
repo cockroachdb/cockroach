@@ -19,12 +19,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// cpuTimeTokenACEnabled is the legacy bool setting for enabling CPU time
+// token AC. Deprecated in favor of cpuTimeTokenACMode. Kept registered
+// so that clusters upgrading from older versions (where this was set to
+// true) continue to function. The cpuTimeTokenACIsEnabled helper checks
+// cpuTimeTokenACMode first and falls back to this setting. This setting
+// will be retired in 26.4 once all clusters have migrated to the new
+// mode setting.
 var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"admission.cpu_time_tokens.enabled",
 	"if true, CPU time token AC will be used for foreground KVWork, instead of slots-based AC -- "+
-		"note that this is not supported in production except on multi-tenant Serverless clusters",
+		"deprecated in favor of admission.cpu_time_tokens.mode",
 	false)
+
+// cpuTimeTokenMode selects between off (slot-based AC), Serverless
+// (2 WorkQueues, per-tier settings), and Resource Manager (1 WorkQueue,
+// resource groups) modes.
+type cpuTimeTokenMode int64
+
+const (
+	// offMode disables CPU time token AC; slot-based AC is used instead.
+	// When the mode is off, the legacy bool setting is checked as a
+	// fallback.
+	offMode cpuTimeTokenMode = iota
+	// serverlessMode uses 2 WorkQueues (systemTenant, appTenant), per-tier
+	// utilization targets, and 4 buckets (2 tiers x 2 burst quals).
+	serverlessMode
+	// resourceManagerMode will use 1 WorkQueue with N resource groups,
+	// a single utilization target, and 2 buckets (1 tier x 2 burst quals).
+	// TODO(wenyihu): In RM mode, only queue[0] should receive work;
+	// queue[1] will sit idle. This routing is not yet implemented.
+	resourceManagerMode
+)
+
+// cpuTimeTokenACMode selects the CPU time token admission control
+// mode. Can be changed at runtime without a restart. When set to off,
+// the legacy admission.cpu_time_tokens.enabled bool is checked as a
+// fallback for backward compatibility.
+var cpuTimeTokenACMode = settings.RegisterEnumSetting[cpuTimeTokenMode](
+	settings.ApplicationLevel,
+	"admission.cpu_time_tokens.mode",
+	"selects the CPU time token admission control mode: off uses "+
+		"slot-based AC (or falls back to the legacy enabled bool), "+
+		"serverless uses 2 queues with per-tier targets, "+
+		"resource_manager uses 1 queue with resource groups",
+	"off",
+	map[cpuTimeTokenMode]string{
+		offMode:             "off",
+		serverlessMode:      "serverless",
+		resourceManagerMode: "resource_manager",
+	},
+)
 
 // cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time
 // token AC regardless of the cluster setting. This is useful when SQL is
@@ -32,48 +78,56 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 var cpuTimeTokenACKillSwitch = envutil.EnvOrDefaultBool(
 	"COCKROACH_DISABLE_CPU_TIME_TOKEN_AC", false)
 
-// cpuTimeTokenACIsEnabled returns true if CPU time token AC is enabled. It
-// checks both the cluster setting and the env var kill switch. The kill switch
-// takes precedence over the cluster setting.
+// cpuTimeTokenACIsEnabled returns true if CPU time token AC is enabled.
+// It checks cpuTimeTokenACMode first; if that is off, it falls back
+// to the legacy cpuTimeTokenACEnabled bool for backward compatibility.
+// The env var kill switch takes precedence over both settings.
 func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
-	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
+	if cpuTimeTokenACKillSwitch {
+		return false
+	}
+	if cpuTimeTokenACMode.Get(sv) != offMode {
+		return true
+	}
+	return cpuTimeTokenACEnabled.Get(sv)
 }
 
 var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"admission.sql_cpu_time_tokens.enabled",
 	"when true, SQL CPU usage is admitted through the same CPU time token "+
-		"budget as KV work; has no effect unless admission.cpu_time_tokens.enabled "+
-		"is also true",
+		"budget as KV work; has no effect unless CPU time token AC is enabled "+
+		"via admission.cpu_time_tokens.mode or the legacy enabled setting",
 	false,
 )
 
-// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU usage is admitted through
-// the same CPU time token AC as KV work. It has no effect unless
-// admission.cpu_time_tokens.enabled is also true.
+// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU usage is admitted
+// through the same CPU time token AC as KV work. It has no effect unless
+// CPU time token AC is enabled.
 func sqlCPUTimeTokenACIsEnabled(sv *settings.Values) bool {
 	return cpuTimeTokenACIsEnabled(sv) && sqlCPUTimeTokenACEnabled.Get(sv)
 }
 
-// CPUGrantCoordinators's main purpose is to act as a shim. Depending on
-// whether admission.cpu_time_tokens.enabled is true or false, a WorkQueue
-// that does slot-based or CPU time token AC is returned from
-// GetKVWorkQueue. This way, we support both, without requiring a process
-// restart.
+// CPUGrantCoordinators acts as a shim. Depending on
+// admission.cpu_time_tokens.mode (off, serverless, resource_manager),
+// a WorkQueue that does slot-based or CPU time token AC is returned
+// from GetKVWorkQueue. This way, we support both, without requiring a
+// process restart.
 type CPUGrantCoordinators struct {
 	st           *cluster.Settings
 	slotsCoord   *GrantCoordinator
 	cpuTimeCoord *cpuTimeTokenGrantCoordinator
 }
 
-// GetKVWorkQueue returns a WorkQueue to use for KVWork. If
-// admission.cpu_time_tokens.enabled is true, it returns a WorkQueue that
-// implements CPU time token AC. Else it returns a WorkQueue that does
-// slots-based AC. If CPU time token AC, there is one WorkQueue for system
-// tenant work and another for app tenant work. The system tenant WorkQueue
-// is backed by a granter that allows greater resource usage than the app
-// tenant WorkQueue. This is a prioritization scheme. For details regarding
-// the granters, see cpu_time_token_granter.go.
+// GetKVWorkQueue returns a WorkQueue to use for KVWork. If CPU time
+// token AC is enabled (via admission.cpu_time_tokens.mode or the legacy
+// enabled bool), it returns a WorkQueue that implements CPU time token
+// AC. Else it returns a WorkQueue that does slots-based AC. If CPU time
+// token AC, there is one WorkQueue for system tenant work and another
+// for app tenant work. The system tenant WorkQueue is backed by a
+// granter that allows greater resource usage than the app tenant
+// WorkQueue. This is a prioritization scheme. For details regarding the
+// granters, see cpu_time_token_granter.go.
 func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
@@ -203,13 +257,15 @@ func makeCPUTimeTokenGrantCoordinator(
 				filler.start(ambientCtx.AnnotateCtx(context.Background()))
 			})
 		}
-		cpuTimeTokenACEnabled.SetOnChange(&settings.SV, func(ctx context.Context) {
+		startIfEnabled := func(ctx context.Context) {
 			if cpuTimeTokenACIsEnabled(&settings.SV) {
 				once.Do(func() {
 					filler.start(ambientCtx.AnnotateCtx(context.Background()))
 				})
 			}
-		})
+		}
+		cpuTimeTokenACMode.SetOnChange(&settings.SV, startIfEnabled)
+		cpuTimeTokenACEnabled.SetOnChange(&settings.SV, startIfEnabled)
 	}
 
 	return coordinator
