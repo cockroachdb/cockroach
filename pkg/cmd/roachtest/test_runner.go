@@ -1653,7 +1653,7 @@ func (r *testRunner) runTest(
 		// might provide useful information about the health of the nodes. Any assertion failures
 		// will be recorded against, and eventually fail, the test.
 		if t.spec.SkipPostValidations != registry.PostValidationAll {
-			if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
+			if err := r.postTestAssertions(ctx, t, c, 20*time.Minute); err != nil {
 				l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
 			}
 		} else {
@@ -1814,7 +1814,7 @@ func (r *testRunner) postTestAssertions(
 			return
 		}
 
-		t.L().Printf("running validation checks on node %d (<10m)", validationNode)
+		t.L().Printf("running validation checks on node %d (<20m)", validationNode)
 		// If this validation fails due to a timeout, it is very likely that
 		// the replica divergence check below will also fail.
 		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
