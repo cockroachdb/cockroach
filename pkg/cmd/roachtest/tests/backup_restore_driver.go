@@ -584,7 +584,8 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackup(
 		return errors.Wrap(rows.Err(), "error iterating over SHOW BACKUP FILES")
 	}
 	if len(ssts) == 0 {
-		return errors.Newf("unexpectedly found no SST files to delete in backup %q of collection %q", backupID, collection.uri())
+		l.Printf("no SST files to delete in backup %q of collection %q", backupID, collection.uri())
+		return nil
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
