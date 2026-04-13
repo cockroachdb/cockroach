@@ -5998,6 +5998,14 @@ func (og *operationGenerator) setTableStorageParam(
 		if hasPgcodeBug {
 			stmt.potentialExecErrors.add(pgcode.Uncategorized)
 		}
+	} else if param == catpb.CanaryStatsWindowSettingName {
+		canaryNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if canaryNotSupported {
+			stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		}
 	}
 
 	return stmt, nil
