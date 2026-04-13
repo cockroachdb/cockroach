@@ -4484,19 +4484,6 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				COALESCE((descriptor->'state')::INT != 0, false) AS non_public
 			FROM enums
 		`)
-	enumMemberQuery := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"enums", enumDescsQuery},
-		{"enum_members", enumMemberDescsQuery},
-	}, `SELECT
-				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
-				quote_literal(member->>'logicalRepresentation') AS value,
-				(
-					COALESCE(member->>'direction' = 'REMOVE', false) OR
-					COALESCE(member->>'capability' = 'READ_ONLY', false)
-				) AS non_public
-			FROM enum_members
-		`)
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
@@ -4519,7 +4506,7 @@ FROM
 	if err != nil {
 		return nil, err
 	}
-	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, enumMemberQuery)
+	enumMembers, err := og.collectEnumMembers(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -5681,11 +5668,36 @@ func (og *operationGenerator) createTriggerFunction(
 		}
 	}
 
+	// Sometimes include an enum cast expression to exercise trigger-enum
+	// dependency tracking (TriggerDeps.uses_type_ids).
+	enumSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		enumMembers, err := og.collectEnumMembers(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		var publicEnumExprs []string
+		for _, member := range enumMembers {
+			if member["non_public"].(bool) {
+				continue
+			}
+			publicEnumExprs = append(publicEnumExprs,
+				fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
+		}
+		if len(publicEnumExprs) > 0 {
+			picked, err := PickOne(og.params.rng, publicEnumExprs)
+			if err != nil {
+				return nil, err
+			}
+			enumSelectStmt = fmt.Sprintf("SELECT %s;", picked)
+		}
+	}
+
 	// The trigger function always returns NEW to avoid breaking inserts.
 	opStmt := makeOpStmt(OpStmtDDL)
 	opStmt.sql = fmt.Sprintf(
-		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
-		resolvedName, seqSelectStmt, selectStmt.sql,
+		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
+		resolvedName, seqSelectStmt, enumSelectStmt, selectStmt.sql,
 	)
 	og.LogMessage(fmt.Sprintf("createTriggerFunction: %s", opStmt.sql))
 
@@ -5764,12 +5776,16 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
 	})
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		// References within the trigger function are evaluated lazily when the
-		// TRIGGER is created. Not when the function is created. What may have
-		// existed when the function was created could no longer exist.
+		// References within the trigger function body (tables, functions,
+		// columns, enum types, enum members) are evaluated lazily at CREATE
+		// TRIGGER time, not when the function is created. Any referenced
+		// object may have been dropped or transitioned to a non-public state
+		// in the interim.
 		{code: pgcode.UndefinedTable, condition: true},
 		{code: pgcode.UndefinedFunction, condition: true},
 		{code: pgcode.UndefinedColumn, condition: true},
+		{code: pgcode.UndefinedObject, condition: true},
+		{code: pgcode.InvalidParameterValue, condition: true},
 	})
 
 	return opStmt, nil
@@ -5802,6 +5818,28 @@ func (og *operationGenerator) dropTrigger(ctx context.Context, tx pgx.Tx) (*opSt
 type triggerInfo struct {
 	table       tree.TableName
 	triggerName string
+}
+
+// collectEnumMembers returns all enum members in the current database. Each
+// result row is a map with keys "name" (qualified enum type name), "value"
+// (quoted member literal), and "non_public" (bool indicating a DROPPING member).
+func (og *operationGenerator) collectEnumMembers(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
+		{"enum_members", enumMemberDescsQuery},
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+			quote_literal(member->>'logicalRepresentation') AS value,
+			(
+				COALESCE(member->>'direction' = 'REMOVE', false) OR
+				COALESCE(member->>'capability' = 'READ_ONLY', false)
+			) AS non_public
+		FROM enum_members
+	`)
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
 }
 
 // findExistingTriggerFunctions returns existing trigger functions (RETURNS
