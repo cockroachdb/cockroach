@@ -17947,7 +17947,7 @@ layers:
       owner: cockroachdb/obs-prs
     - name: obs.metric_export.codeowner.metric_count
       exported_name: obs_metric_export_codeowner_metric_count
-      description: Metric count per CODEOWNER team as ingested (histograms expand to computed metrics)
+      description: Metric count per CODEOWNER team in the Prometheus scrape (histograms expand to buckets plus count and sum)
       y_axis_label: Metrics
       type: GAUGE
       unit: COUNT
