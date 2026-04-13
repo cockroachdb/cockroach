@@ -875,6 +875,22 @@ func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job
 	return j, nil
 }
 
+// LoadClaimedJobWithTxn is like LoadClaimedJob but uses the provided
+// transaction to load the job. Passing a nil transaction is equivalent
+// to calling LoadClaimedJob.
+func (r *Registry) LoadClaimedJobWithTxn(
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn,
+) (*Job, error) {
+	j, err := r.getClaimedJob(jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := j.WithTxn(txn).load(ctx); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
 // LoadJobWithTxn does the same as above, but using the transaction passed in
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.
