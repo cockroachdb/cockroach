@@ -288,6 +288,9 @@ func (vm *VM) ZoneEntry() (string, error) {
 }
 
 func (vm *VM) AttachVolume(l *logger.Logger, v Volume) (deviceName string, _ error) {
+	// N.B. The volume is appended before calling the provider so that
+	// provider implementations can use len(NonBootAttachedVolumes) to
+	// derive the device index.
 	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
 	if err := ForProvider(vm.Provider, func(provider Provider) error {
 		var err error
@@ -450,6 +453,9 @@ type ProviderOpts interface {
 type VolumeSnapshot struct {
 	ID   string
 	Name string
+	// Region is set and used by the AWS provider to scope snapshot
+	// operations to the correct region. Other providers may leave it empty.
+	Region string
 }
 
 type VolumeSnapshots []VolumeSnapshot

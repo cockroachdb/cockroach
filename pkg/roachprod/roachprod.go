@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -2411,6 +2412,14 @@ func CreateSnapshot(
 	// probably the predecessor one. Also ensure that any running CRDB processes
 	// have been stopped since we're taking raw disk snapshots cluster-wide.
 
+	// Count total volumes across all nodes for the progress spinner.
+	totalVolumes := 0
+	for _, node := range nodes {
+		totalVolumes += len(c.VMs[node-1].NonBootAttachedVolumes)
+	}
+	spinner := ui.NewDefaultCountingSpinner(l, "creating snapshots", totalVolumes)
+	defer spinner.Start()()
+
 	volumesSnapshotMu := struct {
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
@@ -2474,11 +2483,9 @@ func CreateSnapshot(
 						if err != nil {
 							return err
 						}
-						l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d/s%d\n",
-							volumeSnapshot.Name, volumeSnapshot.ID, volume.Name,
-							volume.ProviderResourceID, node, storeIdx+1)
 						volumesSnapshotMu.Lock()
 						volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
+						spinner.CountStatus(len(volumesSnapshotMu.snapshots))
 						volumesSnapshotMu.Unlock()
 						return nil
 					})
@@ -2578,6 +2585,7 @@ func ApplySnapshots(
 					}
 					l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
 				}
+				cVM.NonBootAttachedVolumes = nil
 				return nil
 			}); err != nil {
 				res.Err = err
@@ -2645,7 +2653,7 @@ func ApplySnapshots(
 					if err != nil {
 						return err
 					}
-					l.Printf("attached volume %s to %s", cv.volume.ProviderResourceID, cVM.ProviderID)
+					l.Printf("attached volume %s to %s", cv.volume.ProviderResourceID, cVM.Name)
 
 					mountDir := fmt.Sprintf("/mnt/data%d", cv.storeIdx)
 					var buf bytes.Buffer
