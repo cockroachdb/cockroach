@@ -395,12 +395,13 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	if err != nil {
 		return nil, err
 	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateRelation, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
-		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
 	})
 
@@ -513,6 +514,20 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 						stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
 					}
 				}
+			}
+
+			// Check if any existing indexes are incompatible with the region
+			// column becoming an implicit partitioning column.
+			regionCol := tree.Name(tree.RegionalByRowRegionDefaultCol)
+			if columnForAsUsed {
+				regionCol = columnForAs.name
+			}
+			hasIncompat, err := og.tableHasIncompatibleIndexesForRBR(ctx, tx, tableName, regionCol)
+			if err != nil {
+				return "", err
+			}
+			if hasIncompat {
+				stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
 
 			return ret, nil
@@ -802,19 +817,30 @@ func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (*op
 			pgcode.InvalidName, pgcode.InvalidDatabaseDefinition), nil
 	}
 
-	// Conversion to multi-region is only allowed if the data is not already
-	// partitioned.
 	stmt := makeOpStmt(OpStmtDDL)
-	hasPartitioning, err := og.databaseHasTablesWithPartitioning(ctx, tx, database)
+
+	// Changing the primary region is blocked while a REGIONAL BY ROW transition
+	// is in progress on any table in the database. This is a potential error
+	// because the RBR change may complete before the primary region change executes.
+	databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	if hasPartitioning {
-		stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
-	}
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionalByRowChange},
+	})
 
 	// No regions in database, set a random region to be the PRIMARY REGION.
+	// Conversion to multi-region is only allowed if the data is not already
+	// partitioned.
 	if len(regionsInDB) == 0 {
+		hasPartitioning, err := og.databaseHasTablesWithPartitioning(ctx, tx, database)
+		if err != nil {
+			return nil, err
+		}
+		if hasPartitioning {
+			stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+		}
 		idx := og.params.rng.Intn(len(regionInfos))
 		stmt.sql = fmt.Sprintf(
 			`ALTER DATABASE %s PRIMARY REGION "%s"`,
@@ -1070,18 +1096,12 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
 	isStoringVirtualComputed := false
-	regionColStored := false
 	storingPKCol := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
 			def.Storing[i] = columnNames[i].name
-
-			// The region column can not be stored.
-			if tableIsRegionalByRow && columnNames[i].name == regionColumn {
-				regionColStored = true
-			}
 
 			colIsPK, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
 			if err != nil {
@@ -1159,7 +1179,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Type == idxtype.INVERTED},
 			{code: pgcode.InvalidSQLStatementName, condition: def.Type == idxtype.INVERTED && len(def.Storing) > 0},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
-			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
@@ -2235,6 +2254,7 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping,
 				COALESCE(json_array_length(descriptor->'referencingDescriptorIds') > 0, false) AS has_references
 			FROM enum_members
+			WHERE name NOT LIKE 'crdb_internal_region'
 	`)
 
 	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, query)
@@ -3075,6 +3095,17 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 		},
 	})
 
+	// Changing the survival goal is blocked while a REGIONAL BY ROW transition
+	// is in progress on any table in the database. This is a potential error
+	// because the RBR change may complete before the survival goal change executes.
+	databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionalByRowChange},
+	})
+
 	dbName, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -3094,7 +3125,8 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	  JOIN pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
 	  WHERE types.typtype IN ('e','c')
 	    AND types.typrelid IN (0, types.oid)
-	    AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')`
+	    AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')
+	    AND types.typname != 'crdb_internal_region'`
 	}
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},

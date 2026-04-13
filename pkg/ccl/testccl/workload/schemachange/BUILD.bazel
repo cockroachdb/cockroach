@@ -11,6 +11,7 @@ go_test(
         "//c-deps:libgeos",
     ],
     exec_properties = {"test.Pool": "heavy"},
+    shard_count = 2,
     deps = [
         "//pkg/base",
         "//pkg/ccl",

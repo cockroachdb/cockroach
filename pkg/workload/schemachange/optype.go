@@ -294,8 +294,8 @@ var opWeights = []int{
 	alterDatabaseAddRegion:            1,
 	alterDatabaseAddSuperRegion:       0, // Disabled and tracked with #111299
 	alterDatabaseDropSuperRegion:      0, // Disabled and tracked with #111299
-	alterDatabasePrimaryRegion:        0, // Disabled and tracked with #83831
-	alterDatabaseSurvivalGoal:         0, // Disabled and tracked with #83831
+	alterDatabasePrimaryRegion:        1,
+	alterDatabaseSurvivalGoal:         1,
 	alterFunctionRename:               1,
 	alterFunctionSetSchema:            1,
 	alterPolicy:                       1,
@@ -347,6 +347,23 @@ var opWeights = []int{
 	truncateTable:                     1,
 }
 
+// DisableMultiRegionOps sets the weight of alterDatabasePrimaryRegion and
+// alterDatabaseSurvivalGoal to 0, disabling them. It returns a cleanup
+// function that restores the original weights.
+func DisableMultiRegionOps() func() {
+	ops := []opType{alterDatabasePrimaryRegion, alterDatabaseSurvivalGoal}
+	saved := make(map[opType]int, len(ops))
+	for _, op := range ops {
+		saved[op] = opWeights[op]
+		opWeights[op] = 0
+	}
+	return func() {
+		for op, w := range saved {
+			opWeights[op] = w
+		}
+	}
+}
+
 // This workload will maintain its own list of minimal supported versions for
 // the declarative schema changer, since the cluster we are running against can
 // be downlevel. The declarative schema changer builder does have a supported
@@ -367,6 +384,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableSetColumnNotNull:        clusterversion.MinSupported,
 	alterTableSetStorageParams:        clusterversion.V26_1,
 	alterTableResetStorageParams:      clusterversion.V26_1,
+	alterTableLocality:                clusterversion.V26_2,
 	alterTableDropNotNull:             clusterversion.MinSupported,
 	alterTableRLS:                     clusterversion.MinSupported,
 	alterTypeDropValue:                clusterversion.MinSupported,
