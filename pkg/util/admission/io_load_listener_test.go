@@ -119,6 +119,14 @@ func TestIOLoadListener(t *testing.T) {
 				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, minSize)
 				return ""
 
+			case "set-disk-bw-tokens-enabled":
+				enabled := true
+				if d.HasArg("enabled") {
+					d.ScanArgs(t, "enabled", &enabled)
+				}
+				DiskBandwidthTokensForElasticEnabled.Override(ctx, &st.SV, enabled)
+				return ""
+
 			// TODO(sumeer): the output printed by set-state is hard to follow. It
 			// prints the internal fields which are hard to interpret, and it prints
 			// a properly formatted ioLoadListenerState. The latter is supposed to
@@ -209,6 +217,11 @@ func TestIOLoadListener(t *testing.T) {
 					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{}
 					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{}
 				}
+				if d.HasArg("remaining-disk-write-tokens") {
+					d.ScanArgs(t, "remaining-disk-write-tokens", &kvGranter.remainingDiskWriteTokens)
+				} else {
+					kvGranter.remainingDiskWriteTokens = 0
+				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
@@ -234,8 +247,7 @@ func TestIOLoadListener(t *testing.T) {
 				var buf strings.Builder
 				// Do the ticks until just before next adjustment.
 				res := ioll.adjustTokensResult
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(ioll.diskBandwidthLimiter))
+				fmt.Fprintln(&buf, strings.TrimSpace(string(ioll.formatLog())))
 				res.ioThreshold = nil // avoid nondeterminism
 				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(res))
 				if req.buf.Len() > 0 {
@@ -432,9 +444,10 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 }
 
 type testGranterWithIOTokens struct {
-	buf                     strings.Builder
-	allTokensUsed           bool
-	diskBandwidthTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
+	buf                      strings.Builder
+	allTokensUsed            bool
+	diskBandwidthTokensUsed  [admissionpb.NumStoreWorkTypes]diskTokens
+	remainingDiskWriteTokens int64
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -472,7 +485,7 @@ func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
 	_ diskErrorStats,
 	remainingDiskWriteTokens int64,
 ) {
-	return g.diskBandwidthTokensUsed, diskErrorStats{}, 0
+	return g.diskBandwidthTokensUsed, diskErrorStats{}, g.remainingDiskWriteTokens
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
