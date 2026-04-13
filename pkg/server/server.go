@@ -313,7 +313,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionOptions.Override(opts)
 	}
 
-	engines, err := cfg.CreateEngines(ctx)
+	engines, err := cfg.CreateEngines(ctx, stopper)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create engines")
 	}

@@ -206,6 +206,15 @@ func RemoteStorageFactory(accessor *cloud.EarlyBootExternalStorageAccessor) Conf
 	}
 }
 
+// CompactionScheduler sets a pebble.CompactionScheduler for the engine, used to
+// coordinate compaction scheduling across multiple engines.
+func CompactionScheduler(cs pebble.CompactionScheduler) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.compactionScheduler = cs
+		return nil
+	}
+}
+
 // MaxConcurrentCompactions configures the maximum number of concurrent
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {

@@ -49,7 +49,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 		InMemory: true,
 		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
 	}}}
-	engines, err := cfg.CreateEngines(context.Background())
+	engines, err := cfg.CreateEngines(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
@@ -80,7 +80,7 @@ func TestCreateEnginesWithMultipleStores(t *testing.T) {
 		{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir2},
 		{InMemory: true, Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100)},
 	}}
-	engines, err := cfg.CreateEngines(context.Background())
+	engines, err := cfg.CreateEngines(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
@@ -108,7 +108,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 		InMemory: true,
 		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
 	}}}
-	engines, err := cfg.CreateEngines(context.Background())
+	engines, err := cfg.CreateEngines(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
@@ -425,7 +425,7 @@ func TestCreateEngines(t *testing.T) {
 			}
 			d.MaybeScanArgs(t, "CacheSize", &cfg.CacheSize)
 
-			engines, err := cfg.CreateEngines(context.Background())
+			engines, err := cfg.CreateEngines(context.Background(), nil)
 			require.NoError(t, err, "failed to create engines")
 			defer engines.Close()
 

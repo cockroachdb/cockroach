@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -705,8 +706,11 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
+// CreateEngines creates Engines based on the specs in cfg.Stores. The stopper
+// is used to manage the lifecycle of background goroutines that may be started
+// during engine initialization (e.g. for compaction scheduling across separated
+// engines).
+func (cfg *Config) CreateEngines(ctx context.Context, stopper *stop.Stopper) (Engines, error) {
 	var engines Engines
 	defer engines.Close()
 
@@ -910,6 +914,28 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		enabled := logEngPath != ""
 		if enabled {
 			addStateOpt(storage.DisableWAL())
+
+			const logEngDepriEnvVar = "COCKROACH_LOG_ENGINE_COMPACTION_DEPRI_RATIO"
+			logEngDepri := envutil.EnvOrDefaultFloat64(logEngDepriEnvVar, 0.5)
+
+			// Create a compaction scheduler that coordinates compaction concurrency
+			// across both engines.
+			scheduler, err := storage.NewMultiEngineCompactionScheduler(
+				storage.SchedulerOptions{
+					GetMaxConcurrency: func() int {
+						// TODO(sep-raft-log): expose as cluster settings.
+						return storage.DefaultMaxConcurrentCompactions
+					},
+					LogEngineDeprioritizationRatio: func() float64 {
+						return logEngDepri
+					},
+				}, stopper,
+			)
+			if err != nil {
+				return Engines{}, err
+			}
+			addStateOpt(storage.CompactionScheduler(scheduler.OpeningEngine(storage.EngineTypeState)))
+			addLogOpt(storage.CompactionScheduler(scheduler.OpeningEngine(storage.EngineTypeLog)))
 		}
 
 		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)

@@ -878,6 +878,10 @@ type engineConfig struct {
 	//
 	// A value of 0 disables the limit.
 	blockConcurrencyLimitDivisor int
+
+	// compactionScheduler, if set, coordinates compactions across multiple
+	// engines. Passed to Pebble via Options.Experimental.CompactionScheduler.
+	compactionScheduler pebble.CompactionScheduler
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1084,7 +1088,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
 			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
 			upper = determineMaxConcurrentCompactions(
-				defaultMaxConcurrentCompactions,
+				DefaultMaxConcurrentCompactions,
 				envMaxConcurrentCompactions,
 				int(compactionConcurrencyUpper.Get(sv)),
 			)
@@ -1109,6 +1113,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	if cfg.opts.Experimental.SpanPolicyFunc == nil {
 		cfg.opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
+	}
+
+	if cs := cfg.compactionScheduler; cs != nil {
+		cfg.opts.Experimental.CompactionScheduler = func() pebble.CompactionScheduler {
+			return cs
+		}
 	}
 
 	cfg.opts.EnsureDefaults()
