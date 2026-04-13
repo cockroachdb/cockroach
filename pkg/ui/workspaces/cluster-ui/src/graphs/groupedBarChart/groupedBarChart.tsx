@@ -73,6 +73,10 @@ export interface GroupedBarChartProps {
   title: string;
   tooltip?: React.ReactNode;
   xScale?: XScale;
+  // The aggregation interval in milliseconds, as set by the cluster
+  // setting. When provided, bars are rendered at exactly this width
+  // instead of inferring the interval from data gaps.
+  aggregationIntervalMillis?: number;
 }
 
 export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
@@ -83,19 +87,19 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   title,
   tooltip,
   xScale: xScaleProp,
+  aggregationIntervalMillis: aggIntervalProp,
 }) => {
   const timezone = useContext(TimezoneContext);
-  const wrapperRef = useRef<HTMLDivElement>(null);
   const chartAreaRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
   // Tracks which layer labels are hidden via legend click-to-isolate.
   const [hiddenLayers, setHiddenLayers] = useState<Set<string>>(new Set());
 
-  // Measure the container width so the SVG adapts to the actual
-  // column size instead of using a fixed maxWidth.
+  // Measure the chart area directly so the SVG adapts to the actual
+  // available space inside the Visualization wrapper.
   const [measuredWidth, setMeasuredWidth] = useState(0);
   useEffect(() => {
-    const el = wrapperRef.current;
+    const el = chartAreaRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(entries => {
       const entry = entries[0];
@@ -118,12 +122,11 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
-  // Compute the aggregation bucket width from the data timestamps.
-  // Use the minimum gap between any two adjacent timestamps — this
-  // gives the true aggregation interval even when some buckets are
-  // missing (e.g., canary was inactive for a period).
-  // Fallback to 1s when there's only one data point.
+  // Use the aggregation interval from the cluster setting when provided.
+  // Otherwise fall back to inferring it from the minimum gap between
+  // adjacent data timestamps.
   const samplingIntervalMillis = useMemo(() => {
+    if (aggIntervalProp > 0) return aggIntervalProp;
     if (data.length < 2) return 1e3;
     let minInterval = Infinity;
     for (let i = 1; i < data.length; i++) {
@@ -131,7 +134,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
       if (gap > 0 && gap < minInterval) minInterval = gap;
     }
     return minInterval === Infinity ? 1e3 : minInterval;
-  }, [data]);
+  }, [data, aggIntervalProp]);
 
   // Time extent: use xScale prop if provided, else derive from data.
   const timeExtent = useMemo(() => {
@@ -189,10 +192,9 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     [yAxisDomain, innerHeight],
   );
 
-  // Bar width per group. The existing uPlot charts render one bar per
-  // timestamp with width = clamp(intervalPx * 0.9, 10, 80). We render
-  // numGroups bars side-by-side in that same space, so each bar is
-  // roughly 1/numGroups of the uPlot bar width.
+  // Bar width per group: bars fill the full aggregation interval so
+  // that, e.g., 1-hour buckets visually span one hour on the axis.
+  // For multi-group charts the interval is split evenly with small gaps.
   const numGroups = data.length > 0 ? data[0].groups.length : 2;
   const groupGapPx = 2;
 
@@ -200,11 +202,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     const intervalPx = Math.abs(
       xTimeScale(samplingIntervalMillis) - xTimeScale(0),
     );
-    const fullBarWidth = Math.min(Math.max(intervalPx * 0.9, 10), 80);
-    return Math.max(
-      (fullBarWidth - groupGapPx * (numGroups - 1)) / numGroups,
-      1,
-    );
+    return Math.max((intervalPx - groupGapPx * (numGroups - 1)) / numGroups, 1);
   }, [xTimeScale, samplingIntervalMillis, numGroups]);
 
   // Y-axis ticks from domain.
@@ -326,7 +324,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     ) : null;
 
   return (
-    <div className={cx("chart-wrapper")} ref={wrapperRef} style={{ maxWidth }}>
+    <div className={cx("chart-wrapper")} style={{ maxWidth }}>
       <Visualization title={title} tooltip={tooltip} preCalcGraphSize>
         <div className={cx("chart-container")} ref={chartAreaRef}>
           <svg width={width} height={height}>

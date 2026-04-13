@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -140,6 +141,17 @@ func getStatementDetails(
 		statementTotal.Metadata.FullScanCount += planStats.Metadata.FullScanCount
 		statementTotal.Metadata.VecCount += planStats.Metadata.VecCount
 		statementTotal.Metadata.TotalCount += planStats.Metadata.TotalCount
+	}
+
+	// Populate the aggregation interval from the cluster setting so the
+	// UI can size bar chart buckets to match.
+	aggInterval := persistedsqlstats.SQLStatsAggregationInterval.Get(&settings.SV)
+	statementTotal.AggregationInterval = aggInterval
+	for i := range statementStatisticsPerAggregatedTs {
+		statementStatisticsPerAggregatedTs[i].AggregationInterval = aggInterval
+	}
+	for i := range statementStatisticsPerPlanHash {
+		statementStatisticsPerPlanHash[i].AggregationInterval = aggInterval
 	}
 
 	response := &serverpb.StatementDetailsResponse{
