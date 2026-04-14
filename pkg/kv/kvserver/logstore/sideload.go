@@ -46,6 +46,8 @@ type SideloadStorage interface {
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index <= the given index.
 	TruncateTo(_ context.Context, index kvpb.RaftIndex) error
+	// TruncateFrom removes all files belonging to an index > the given index.
+	TruncateFrom(_ context.Context, index kvpb.RaftIndex) error
 	// Stats returns the number and the total size of the sideloaded entries in
 	// the given log span.
 	Stats(_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)

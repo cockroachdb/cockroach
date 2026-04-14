@@ -351,6 +351,7 @@ go_test(
         "replica_closedts_test.go",
         "replica_command_test.go",
         "replica_consistency_test.go",
+        "replica_destroy_test.go",
         "replica_evaluate_test.go",
         "replica_follower_read_test.go",
         "replica_gc_queue_test.go",

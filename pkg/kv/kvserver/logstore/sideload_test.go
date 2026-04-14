@@ -360,6 +360,85 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	}
 }
 
+// TestSideloadStorageTruncateFromTo tests TruncateFrom and TruncateTo on a
+// storage with sideloaded files at indexes 5, 10, 15.
+func TestSideloadStorageTruncateFromTo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const term = kvpb.RaftTerm(1)
+	allIndexes := []kvpb.RaftIndex{5, 10, 15}
+
+	tests := []struct {
+		op             string // "from" or "to"
+		index          kvpb.RaftIndex
+		wantFiles      []kvpb.RaftIndex
+		wantDirDeleted bool
+	}{
+		// TruncateTo: removes indexes <= threshold.
+		{op: "to", index: 3, wantFiles: []kvpb.RaftIndex{5, 10, 15}},
+		{op: "to", index: 5, wantFiles: []kvpb.RaftIndex{10, 15}},
+		{op: "to", index: 7, wantFiles: []kvpb.RaftIndex{10, 15}},
+		{op: "to", index: 10, wantFiles: []kvpb.RaftIndex{15}},
+		{op: "to", index: 15, wantDirDeleted: true},
+		{op: "to", index: 100, wantDirDeleted: true},
+
+		// TruncateFrom: removes indexes > threshold.
+		{op: "from", index: 2, wantDirDeleted: true},
+		{op: "from", index: 4, wantDirDeleted: true},
+		{op: "from", index: 6, wantFiles: []kvpb.RaftIndex{5}},
+		{op: "from", index: 9, wantFiles: []kvpb.RaftIndex{5}},
+		{op: "from", index: 14, wantFiles: []kvpb.RaftIndex{5, 10}},
+		{op: "from", index: 100, wantFiles: []kvpb.RaftIndex{5, 10, 15}},
+	}
+
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			ctx := context.Background()
+			eng := storage.NewDefaultInMemForTesting()
+			defer eng.Close()
+			ss := newTestingSideloadStorage(eng)
+			// Populate files at indexes 5, 10, 15.
+			for _, i := range allIndexes {
+				require.NoError(t, ss.Put(ctx, i, term, []byte("data")))
+			}
+
+			// Run the truncation.
+			switch tc.op {
+			case "to":
+				require.NoError(t, ss.TruncateTo(ctx, tc.index))
+			case "from":
+				require.NoError(t, ss.TruncateFrom(ctx, tc.index))
+			default:
+				t.Fatalf("unknown op: %s", tc.op)
+			}
+
+			// Check which files remain.
+			wantRemaining := make(map[kvpb.RaftIndex]struct{})
+			for _, i := range tc.wantFiles {
+				wantRemaining[i] = struct{}{}
+			}
+			for _, i := range allIndexes {
+				_, err := ss.Get(ctx, i, term)
+				if _, ok := wantRemaining[i]; ok {
+					require.NoErrorf(t, err, "index %d should be present", i)
+				} else {
+					require.ErrorIs(t, err, errSideloadedFileNotFound,
+						"index %d should be deleted", i)
+				}
+			}
+
+			// Check directory existence.
+			_, err := ss.fs.Stat(ss.dir)
+			if tc.wantDirDeleted {
+				require.True(t, oserror.IsNotExist(err), "dir should be removed")
+			} else {
+				require.NoError(t, err, "dir should still exist")
+			}
+		})
+	}
+}
+
 func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

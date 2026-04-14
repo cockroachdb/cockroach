@@ -72,9 +72,7 @@ func (r *Replica) setDestroyStatusRemovedRaftMuLocked() {
 	)
 }
 
-// postDestroyRaftMuLocked is called after the replica destruction is durably
-// written to Pebble.
-func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
+func (r *Replica) postDestroyClearSideloadedRaftMuLocked(ctx context.Context) error {
 	// Clearing sideloaded storage may fail (e.g. due to I/O errors), but we log
 	// and continue. We've already committed the replica removal, and any future
 	// replica instantiation will go through a snapshot path which clears the
@@ -86,7 +84,19 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
 	// belonging to replicas which aren't present. A crash before a call to
 	// postDestroyRaftMuLocked or hitting an error below will currently leave the
 	// files around forever.
-	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
+	if r.store.EnginesSeparated() {
+		// On separated engines, only delete sideloaded files belonging to the
+		// unapplied suffix of the raft log (entries after RaftAppliedIndex). The
+		// applied prefix's sideloaded files are cleaned up later by WAGTruncator.
+		return r.logStorage.ls.Sideload.TruncateFrom(ctx, r.shMu.state.RaftAppliedIndex)
+	}
+	return r.logStorage.ls.Sideload.Clear(ctx)
+}
+
+// postDestroyRaftMuLocked is called after the replica destruction is durably
+// written to Pebble.
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
+	if err := r.postDestroyClearSideloadedRaftMuLocked(ctx); err != nil {
 		log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
 		err = nil // ignore intentionally
 	}
