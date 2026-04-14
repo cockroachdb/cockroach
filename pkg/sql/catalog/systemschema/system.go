@@ -1371,6 +1371,22 @@ CREATE TABLE system.table_statistics_locks (
     FAMILY "primary" (table_id, kind, job_ids)
 );`
 
+	// AdvisoryLocksTableSchema defines the schema for the system.advisory_locks
+	// table used for keeping KV intents against advisory lock keys. An advisory
+	// lock key is a tuple of (database_id, lock_type, lock_key).
+	//
+	// * database_id: the ID of the database where the advisory lock is held.
+	// * lock_type: the type of the advisory lock. (single 64-bit integer or two 32-bit integers)
+	// * lock_key: the key of the advisory lock.
+	AdvisoryLocksTableSchema = `
+CREATE TABLE system.advisory_locks (
+    database_id INT4 NOT NULL,
+    lock_type   INT4 NOT NULL,
+    lock_key    INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (database_id ASC, lock_type ASC, lock_key ASC),
+    FAMILY "primary" (database_id, lock_type, lock_key)
+);`
+
 	// StatementsTableSchema defines the schema for the system.statements table
 	// which stores information about executed statements.
 	//
@@ -1441,7 +1457,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_StmtDiagnosticsMaxLatency.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddAdvisoryLocksTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1643,6 +1659,7 @@ func MakeSystemTables() []SystemTable {
 		StatementHintsTable,
 		ClusterMetricsTable,
 		TableStatisticsLocksTable,
+		AdvisoryLocksTable,
 		StatementsTable,
 	}
 }
@@ -5464,6 +5481,36 @@ var (
 				KeyColumnNames:      []string{"table_id", "kind"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		),
+	)
+
+	AdvisoryLocksTable = makeSystemTable(
+		AdvisoryLocksTableSchema,
+		systemTable(
+			catconstants.AdvisoryLocksTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "database_id", ID: 1, Type: types.Int4},
+				{Name: "lock_type", ID: 2, Type: types.Int4},
+				{Name: "lock_key", ID: 3, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"database_id", "lock_type", "lock_key"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 0,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"database_id", "lock_type", "lock_key"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			},
 		),
 	)

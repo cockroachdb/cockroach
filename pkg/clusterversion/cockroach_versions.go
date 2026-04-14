@@ -277,6 +277,10 @@ const (
 	// system.statement_diagnostics_requests for bounded latency range filtering.
 	V26_3_StmtDiagnosticsMaxLatency
 
+	// V26_3_AddAdvisoryLocksTable adds the system.advisory_locks table for
+	// storing advisory lock state.
+	V26_3_AddAdvisoryLocksTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -362,6 +366,7 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
 
+	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

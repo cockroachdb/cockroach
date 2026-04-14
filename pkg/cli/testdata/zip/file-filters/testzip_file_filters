@@ -85,6 +85,7 @@ debug/pprof-summary.sh
 debug/rangelog.json
 debug/reports/problemranges.json
 debug/settings.json
+debug/system.advisory_locks.txt
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
@@ -228,6 +229,7 @@ debug/nodes/1/lsm.txt
 debug/nodes/1/stacks.txt
 debug/nodes/1/stacks_with_labels.txt
 debug/pprof-summary.sh
+debug/system.advisory_locks.txt
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
@@ -402,6 +404,7 @@ debug/pprof-summary.sh
 debug/rangelog.json
 debug/reports/problemranges.json
 debug/settings.json
+debug/system.advisory_locks.txt
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
@@ -551,6 +554,7 @@ debug/nodes/1/stacks.pprof
 debug/nodes/1/stacks.txt
 debug/nodes/1/stacks_with_labels.txt
 debug/pprof-summary.sh
+debug/system.advisory_locks.txt
 debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt

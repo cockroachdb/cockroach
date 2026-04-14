@@ -1295,6 +1295,13 @@ var disabledSystemTables = map[string]struct{}{
 }
 
 var zipSystemTables = DebugZipTableRegistry{
+	"system.advisory_locks": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"lock_type",
+			"lock_key",
+		},
+	},
 	"system.database_role_settings": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_id",
