@@ -81,19 +81,17 @@ func IsDescriptor(e scpb.Element) bool {
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
-	// All type descriptor child elements are subject.
+	// Unvalidated constraints don't have intermediate states and can be
+	// added without a backfill.
+	if isUnvalidatedConstraint(e) {
+		return false
+	}
+
 	if isTypeDescriptorChildElement(e) {
 		return true
 	}
 
-	// All table descriptor child elements are subject except unvalidated
-	// constraints.
 	if isTableDescriptorChildElement(e) {
-		if isUnvalidatedConstraint(e) {
-			// Unvalidated constraints don't have intermediate states and can be
-			// added without a backfill.
-			return false
-		}
 		return true
 	}
 
@@ -119,6 +117,10 @@ func isTypeDescriptorChildElement(e scpb.Element) bool {
 	// isSubjectTo2VersionInvariant.
 	switch e.(type) {
 	case *scpb.EnumTypeValue:
+		return true
+	case *scpb.DomainCheckConstraint, *scpb.DomainCheckConstraintUnvalidated:
+		return true
+	case *scpb.DomainNotNull, *scpb.DomainDefault:
 		return true
 	}
 	return false
@@ -240,6 +242,21 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return e.Predicate, nil
+	case *scpb.DomainDefault:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
+	case *scpb.DomainCheckConstraint:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
+	case *scpb.DomainCheckConstraintUnvalidated:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
 	}
 	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.Expression", element)
 }
@@ -333,7 +350,7 @@ func isNonIndexBackedConstraint(e scpb.Element) bool {
 func isValidatedNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
-		*scpb.ColumnNotNull:
+		*scpb.ColumnNotNull, *scpb.DomainCheckConstraint:
 		return true
 	}
 	return false
@@ -342,7 +359,7 @@ func isValidatedNonIndexBackedConstraint(e scpb.Element) bool {
 func isUnvalidatedConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
-		*scpb.ForeignKeyConstraintUnvalidated:
+		*scpb.ForeignKeyConstraintUnvalidated, *scpb.DomainCheckConstraintUnvalidated:
 		return true
 	}
 	return false
@@ -378,6 +395,8 @@ func isConstraintDependent(e scpb.Element) bool {
 	case *scpb.ConstraintComment:
 		return true
 	case *scpb.TableLocalityRegionalByRowUsingConstraint:
+		return true
+	case *scpb.DomainConstraintName:
 		return true
 	}
 	return false

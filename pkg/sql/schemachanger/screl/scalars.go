@@ -143,7 +143,9 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return version.IsActive(clusterversion.V26_1)
 	case *scpb.FunctionParams:
 		return version.IsActive(clusterversion.V26_2)
-	case *scpb.DomainType, *scpb.EnumTypeValue:
+	case *scpb.DomainType, *scpb.EnumTypeValue, *scpb.DomainDefault, *scpb.DomainNotNull,
+		*scpb.DomainCheckConstraint, *scpb.DomainCheckConstraintUnvalidated,
+		*scpb.DomainConstraintName:
 		return version.IsActive(clusterversion.V26_3)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
