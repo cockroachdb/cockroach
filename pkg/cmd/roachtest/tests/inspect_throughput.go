@@ -93,7 +93,7 @@ func makeInspectThroughputTest(
 
 	return registry.TestSpec{
 		Name:                name,
-		Owner:               registry.OwnerSQLFoundations,
+		Owner:               registry.OwnerSQLQueries,
 		Benchmark:           true,
 		Cluster:             r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
 		CompatibleClouds:    registry.OnlyGCE,

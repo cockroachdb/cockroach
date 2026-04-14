@@ -267,25 +267,25 @@ owners:
   jobs_claimed_jobs: cockroachdb/jobs
   jobs_expired_pts_records: cockroachdb/jobs
   jobs_fail_or_cancel: cockroachdb/jobs
-  jobs_inspect_issues_found: cockroachdb/sql-foundations
-  jobs_inspect_num_active_spans: cockroachdb/sql-foundations
-  jobs_inspect_runs: cockroachdb/sql-foundations
-  jobs_inspect_runs_with_issues: cockroachdb/sql-foundations
-  jobs_inspect_spans_processed: cockroachdb/sql-foundations
+  jobs_inspect_issues_found: cockroachdb/sql-queries
+  jobs_inspect_num_active_spans: cockroachdb/sql-queries
+  jobs_inspect_runs: cockroachdb/sql-queries
+  jobs_inspect_runs_with_issues: cockroachdb/sql-queries
+  jobs_inspect_spans_processed: cockroachdb/sql-queries
   jobs_metrics_task_failed: cockroachdb/jobs
   jobs_protected_age_sec: cockroachdb/jobs
   jobs_protected_record_count: cockroachdb/jobs
   jobs_resume: cockroachdb/jobs
   jobs_resumed_claimed_jobs: cockroachdb/jobs
-  jobs_row_level_ttl_delete_duration: cockroachdb/sql-foundations
-  jobs_row_level_ttl_num_active_spans: cockroachdb/sql-foundations
-  jobs_row_level_ttl_num_delete_batch_retries: cockroachdb/sql-foundations
-  jobs_row_level_ttl_rows_deleted: cockroachdb/sql-foundations
-  jobs_row_level_ttl_rows_selected: cockroachdb/sql-foundations
-  jobs_row_level_ttl_select_duration: cockroachdb/sql-foundations
-  jobs_row_level_ttl_span_total_duration: cockroachdb/sql-foundations
-  jobs_row_level_ttl_total_expired_rows: cockroachdb/sql-foundations
-  jobs_row_level_ttl_total_rows: cockroachdb/sql-foundations
+  jobs_row_level_ttl_delete_duration: cockroachdb/sql-queries
+  jobs_row_level_ttl_num_active_spans: cockroachdb/sql-queries
+  jobs_row_level_ttl_num_delete_batch_retries: cockroachdb/sql-queries
+  jobs_row_level_ttl_rows_deleted: cockroachdb/sql-queries
+  jobs_row_level_ttl_rows_selected: cockroachdb/sql-queries
+  jobs_row_level_ttl_select_duration: cockroachdb/sql-queries
+  jobs_row_level_ttl_span_total_duration: cockroachdb/sql-queries
+  jobs_row_level_ttl_total_expired_rows: cockroachdb/sql-queries
+  jobs_row_level_ttl_total_rows: cockroachdb/sql-queries
   jobs_running_non_idle: cockroachdb/jobs
   keybytes: cockroachdb/kv
   keycount: cockroachdb/kv
