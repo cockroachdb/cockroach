@@ -7,3 +7,9 @@ ALTER TYPE defaultdb.climes ADD VALUE 'desert'
 ----
 - [[EnumTypeValue:{DescID: 104, Name: desert}, PUBLIC], ABSENT]
   {logicalRepresentation: desert, physicalRepresentation: 4A==, typeId: 104}
+
+build
+ALTER TYPE defaultdb.climes DROP VALUE 'arctic'
+----
+- [[EnumTypeValue:{DescID: 104, Name: arctic}, ABSENT], PUBLIC]
+  {logicalRepresentation: arctic, physicalRepresentation: gA==, typeId: 104}

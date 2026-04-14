@@ -191,6 +191,17 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 	return !doesDescriptorHaveData
 }
 
+// isEnumTypeBeingDropped checks if the EnumType element for the given
+// type ID has a target status of ABSENT.
+func isEnumTypeBeingDropped(typeID descpb.ID, md *opGenContext) bool {
+	for _, t := range md.Targets {
+		if et, ok := t.Element().(*scpb.EnumType); ok && et.TypeID == typeID {
+			return t.TargetStatus == scpb.Status_ABSENT
+		}
+	}
+	return false
+}
+
 // checkIfZoneConfigHasGCDependents will determine if a table/database
 // descriptor has data dependencies it still needs to GC. This allows us to
 // determine when we need to skip certain operations like deleting a zone

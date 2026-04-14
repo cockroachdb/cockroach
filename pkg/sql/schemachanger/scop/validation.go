@@ -54,5 +54,18 @@ func (ValidateColumnNotNull) Description() redact.RedactableString {
 	return "Validating NOT NULL constraint"
 }
 
+// ValidateEnumTypeValueRemoval validates that an enum value is unused before
+// it's removed.
+type ValidateEnumTypeValueRemoval struct {
+	validationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+func (ValidateEnumTypeValueRemoval) Description() redact.RedactableString {
+	return "Validating removal of enum type value"
+}
+
 // Make sure baseOp is used for linter.
 var _ = validationOp{baseOp: baseOp{}}

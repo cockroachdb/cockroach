@@ -348,6 +348,9 @@ CREATE TYPE alphabets AS ENUM('a', 'b', 'c', 'd', 'e', 'f');
 CREATE TABLE uses_alphabets (k INT PRIMARY KEY, v1 alphabets, v2 alphabets);
 INSERT INTO uses_alphabets VALUES (1, 'a', 'a'), (2, 'b', 'c')
 
+statement error pq: enum value "nonexistent" does not exist
+ALTER TYPE alphabets DROP VALUE 'nonexistent'
+
 statement error pq: could not remove enum value "a" as it is being used by "uses_alphabets"
 ALTER TYPE alphabets DROP VALUE 'a'
 
@@ -504,13 +507,18 @@ ALTER TYPE ab_58710 ADD VALUE 'c';
 statement ok
 ALTER TYPE ab_58710 DROP VALUE 'a';
 
-# 'c' was added to the enum above and 'a' was dropped, so the array type alias
-# should reflect this.
-statement ok
-SELECT ARRAY['c']::_ab_58710;
+# 'c' was added to the enum above and 'a' was dropped, so the enum should
+# reflect this. The declarative schema changer processes ADD/DROP VALUE
+# asynchronously, so retry until the changes are visible.
+retry
+query T
+SELECT 'c'::ab_58710
+----
+c
 
+retry
 statement error invalid input value for enum ab_58710: "a"
-SELECT ARRAY['a']::_ab_58710
+SELECT 'a'::ab_58710
 
 subtest regression_60004_basic
 
