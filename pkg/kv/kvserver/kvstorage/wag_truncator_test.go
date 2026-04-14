@@ -8,7 +8,6 @@ package kvstorage
 import (
 	"context"
 	"math"
-	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,11 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -105,28 +102,6 @@ func (e *testEngines) listWAGNodes(t *testing.T) []uint64 {
 	}
 	require.NoError(t, iter.Error())
 	return indices
-}
-
-func eventuallyExpectWAGNodesIndices(t *testing.T, e *testEngines, expected []uint64) {
-	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
-		actual := e.listWAGNodes(t)
-		if slices.Equal(expected, actual) {
-			return nil
-		}
-		return errors.Newf("expected WAG nodes %v, got %v", expected, actual)
-	})
-}
-
-func eventuallyExpectLastTruncatedWAGIndex(t *testing.T, truncator *WAGTruncator, expected uint64) {
-	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
-		actual := truncator.lastTruncatedWAGIndex.Load()
-		if actual == expected {
-			return nil
-		}
-		return errors.Newf("expected lastTruncatedWAGIndex %d, got %d", expected, actual)
-	})
 }
 
 func TestTruncateApplied(t *testing.T) {
@@ -266,7 +241,7 @@ func TestTruncateApplied(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
 			tc.setup(t, &e)
 			require.NoError(t, e.stateEngine.Flush())
 			_, err := truncator.truncateAppliedNodes(ctx, 0, /* startIndex */
@@ -296,7 +271,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		t.Run(eventType.String(), func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
 			e.writeWAGNode(t, wagpb.Event{
@@ -428,7 +403,7 @@ func TestTruncateGapHandling(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
 
 			// Write WAG nodes at indices 2, 4, 6.
 			e.seq.Next()
@@ -551,7 +526,7 @@ func TestTruncateAppliedNodes(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
 
 			// Write WAG nodes at indices 2, 4, 5.
 			e.seq.Next()
@@ -613,8 +588,17 @@ func TestWAGTruncatorBackground(t *testing.T) {
 		Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
 	})
 
-	// Start the periodic WAG truncation background task.
-	truncator := NewWAGTruncator(st, e.Engines, &e.seq, e.seq.Load() /* lastIndexAfterStartup */)
+	// Start the periodic WAG truncation background task with a knob that
+	// signals when truncation completes, so the test can synchronize
+	// deterministically instead of polling.
+	truncationDone := make(chan struct{}, 1)
+	truncator := NewWAGTruncator(st, e.Engines, &e.seq,
+		e.seq.Load(), /* lastIndexAfterStartup */
+		WAGTruncatorTestingKnobs{
+			AfterTruncationCallback: func() {
+				truncationDone <- struct{}{}
+			},
+		})
 	require.NoError(t, truncator.Start(ctx, stopper))
 	// Create a WAG node after startup.
 	e.writeWAGNode(t, wagpb.Event{
@@ -622,14 +606,15 @@ func TestWAGTruncatorBackground(t *testing.T) {
 	})
 	require.Equal(t, []uint64{1, 3, 4}, e.listWAGNodes(t))
 
-	flushStateEngineAndSignal := func() {
+	flushAndWaitForTruncation := func() {
 		require.NoError(t, e.StateEngine().Flush())
 		truncator.DurabilityAdvancedCallback()
+		<-truncationDone
 	}
 	// We expect all WAG nodes to be truncated when the state engine is flushed.
-	flushStateEngineAndSignal()
-	eventuallyExpectWAGNodesIndices(t, &e, nil)
-	eventuallyExpectLastTruncatedWAGIndex(t, truncator, 4)
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(4), truncator.lastTruncatedWAGIndex.Load())
 
 	// Write two WAG nodes whose events are applied (index <= 100).
 	e.writeWAGNode(t, wagpb.Event{
@@ -642,24 +627,24 @@ func TestWAGTruncatorBackground(t *testing.T) {
 
 	// Now flush the state engine and signal again. Both nodes should be
 	// truncated since their events are applied.
-	flushStateEngineAndSignal()
-	eventuallyExpectWAGNodesIndices(t, &e, nil)
-	eventuallyExpectLastTruncatedWAGIndex(t, truncator, 6)
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(6), truncator.lastTruncatedWAGIndex.Load())
 
 	// Write another WAG node but it is NOT applied yet.
 	e.writeWAGNode(t, wagpb.Event{
 		Addr: wagpb.MakeAddr(r1, 200), Type: wagpb.EventApply,
 	})
-	flushStateEngineAndSignal()
+	flushAndWaitForTruncation()
 	// Node 7 should remain because its event isn't applied yet.
-	eventuallyExpectWAGNodesIndices(t, &e, []uint64{7})
-	require.Equal(t, truncator.lastTruncatedWAGIndex.Load(), uint64(6))
+	require.Equal(t, []uint64{7}, e.listWAGNodes(t))
+	require.Equal(t, uint64(6), truncator.lastTruncatedWAGIndex.Load())
 
 	// Advance the applied index past 200 and flush. Now node 7 should be
 	// truncated.
 	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
 		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 200}))
-	flushStateEngineAndSignal()
-	eventuallyExpectWAGNodesIndices(t, &e, nil)
-	eventuallyExpectLastTruncatedWAGIndex(t, truncator, 7)
+	flushAndWaitForTruncation()
+	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
+	require.Equal(t, uint64(7), truncator.lastTruncatedWAGIndex.Load())
 }

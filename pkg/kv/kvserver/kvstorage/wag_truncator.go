@@ -24,6 +24,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
+type WAGTruncatorTestingKnobs struct {
+	// AfterTruncationCallback, if set, is called after each invocation of
+	// truncateAppliedNodesLive completes. Can be used to synchronize tests
+	// with the background truncation goroutine.
+	AfterTruncationCallback func()
+}
+
 // WAGTruncator truncates applied WAG nodes and clears their associated raft
 // state (log entries and sideloaded files).
 type WAGTruncator struct {
@@ -40,11 +48,16 @@ type WAGTruncator struct {
 	lastTruncatedWAGIndex atomic.Uint64
 	// wakeCh is signaled when there are potential WAG nodes to truncate.
 	wakeCh chan struct{}
+	knobs  WAGTruncatorTestingKnobs
 }
 
 // NewWAGTruncator creates a WAGTruncator.
 func NewWAGTruncator(
-	st *cluster.Settings, eng Engines, seq *wag.Seq, lastIndexAfterStartup uint64,
+	st *cluster.Settings,
+	eng Engines,
+	seq *wag.Seq,
+	lastIndexAfterStartup uint64,
+	knobs WAGTruncatorTestingKnobs,
 ) *WAGTruncator {
 	return &WAGTruncator{
 		st:                        st,
@@ -52,6 +65,7 @@ func NewWAGTruncator(
 		seq:                       seq,
 		lastWAGIndexBeforeStartup: lastIndexAfterStartup,
 		wakeCh:                    make(chan struct{}, 1),
+		knobs:                     knobs,
 	}
 }
 
@@ -105,6 +119,11 @@ func (t *WAGTruncator) DurabilityAdvancedCallback() {
 // truncateAppliedNodesLive is called by the background goroutine to truncate
 // applied WAG nodes.
 func (t *WAGTruncator) truncateAppliedNodesLive(ctx context.Context) {
+	defer func() {
+		if t.knobs.AfterTruncationCallback != nil {
+			t.knobs.AfterTruncationCallback()
+		}
+	}()
 	startIndex := t.lastTruncatedWAGIndex.Load() + 1
 	if startIndex <= t.lastWAGIndexBeforeStartup {
 		// There are WAG nodes that we can potentially truncate with
