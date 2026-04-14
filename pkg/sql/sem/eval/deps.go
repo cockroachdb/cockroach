@@ -545,6 +545,22 @@ type Planner interface {
 	// structured logs. This is exposed on the Planner interface to allow builtins
 	// to log events.
 	LogEvent(ctx context.Context, event interface{}) error
+
+	// AdvisoryXactLock acquires a transaction-scoped advisory lock on a single
+	// 64-bit key in the current database (PostgreSQL pg_advisory_xact_lock(bigint)).
+	// shared selects pg_advisory_xact_lock_shared behavior when true.
+	AdvisoryXactLock(ctx context.Context, key int64, shared bool) error
+
+	// AdvisoryXactLockInt4 acquires a transaction-scoped advisory lock from two
+	// 32-bit keys (PostgreSQL's two-integer advisory lock form).
+	AdvisoryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) error
+
+	// AdvisoryTryXactLock attempts to acquire an exclusive or shared transaction-level
+	// advisory lock without waiting (pg_try_advisory_xact_lock).
+	AdvisoryTryXactLock(ctx context.Context, key int64, shared bool) (bool, error)
+
+	// AdvisoryTryXactLockInt4 is the two-int32-key variant of AdvisoryTryXactLock.
+	AdvisoryTryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) (bool, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
