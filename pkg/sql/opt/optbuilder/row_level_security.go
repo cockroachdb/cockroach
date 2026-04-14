@@ -67,7 +67,7 @@ func (b *Builder) isExemptFromRLSPolicies(
 	}
 
 	// Check for cases where users are exempt from policies.
-	isAdmin, err := b.catalog.UserHasAdminRole(b.ctx, b.checkPrivilegeUser)
+	isAdmin, err := b.catalog.UserHasAdminRole(b.ctx, b.checkPrivilegeUser())
 	if err != nil {
 		panic(err)
 	}
@@ -75,11 +75,11 @@ func (b *Builder) isExemptFromRLSPolicies(
 	if err != nil {
 		panic(err)
 	}
-	bypassRLS, err := b.catalog.UserHasGlobalPrivilegeOrRoleOption(b.ctx, privilege.BYPASSRLS, b.checkPrivilegeUser)
+	bypassRLS, err := b.catalog.UserHasGlobalPrivilegeOrRoleOption(b.ctx, privilege.BYPASSRLS, b.checkPrivilegeUser())
 	if err != nil {
 		panic(err)
 	}
-	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID,
+	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser(), isAdmin, tabMeta.MetaID,
 		isOwnerAndNotForced, bypassRLS)
 	// Check if RLS filtering is exempt.
 	if isAdmin || isOwnerAndNotForced || bypassRLS {
@@ -99,7 +99,7 @@ func (b *Builder) genPolicyUsingExpr(
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(policy cat.Policy, restrictive bool) {
-		if !policy.AppliesToRole(b.ctx, b.catalog, b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
+		if !policy.AppliesToRole(b.ctx, b.catalog, b.checkPrivilegeUser()) || !policyAppliesToCommandScope(policy, cmdScope) {
 			return
 		}
 		strExpr := policy.UsingExpr
@@ -174,7 +174,7 @@ func (b *Builder) isTableOwnerAndRLSNotForced(tabMeta *opt.TableMeta) (bool, err
 	if tabMeta.Table.IsRowLevelSecurityForced() {
 		return false, nil
 	}
-	return b.catalog.IsOwner(b.ctx, tabMeta.Table, b.checkPrivilegeUser)
+	return b.catalog.IsOwner(b.ctx, tabMeta.Table, b.checkPrivilegeUser())
 }
 
 // getColIDsFromPoliciesUsed returns the column ordinals referenced by all
