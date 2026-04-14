@@ -1887,7 +1887,7 @@ func (t *T) PGName() string {
 //
 //	SELECT format_type(pg_typeof(1::int)::regtype, NULL)
 func (t *T) SQLStandardName() string {
-	return t.SQLStandardNameWithTypmod(false, 0)
+	return t.SQLStandardNameWithTypmod(false, 0, true /* useFQName */)
 }
 
 var telemetryNameReplaceRegex = regexp.MustCompile("[^a-zA-Z0-9]")
@@ -1908,16 +1908,25 @@ func (t *T) TelemetryName() string {
 // varchar(20) would appear as character varying(20) when provided the typmod
 // value for varchar(20), which happens to be 24.
 //
+// useFQName indicates if the fully qualified name should be specified, which for
+// format_type will be used when the name exists and is not visible or aliased in the
+// search_path.
 // This function is full of special cases. See backend/utils/adt/format_type.c
 // in Postgres.
-func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
+func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int, useFQName bool) string {
+	maybeFQName := func() string {
+		if useFQName {
+			return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+		}
+		return t.TypeMeta.Name.Basename()
+	}
 	// Domain types share their base type's Family, so check for them before
 	// the Family switch to avoid returning the base type name.
 	if t.UserDefined() && t.TypeMeta.DomainData != nil {
 		if t.TypeMeta.Name == nil {
 			return fmt.Sprintf("@%d", t.Oid())
 		}
-		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+		return maybeFQName()
 	}
 	var buf strings.Builder
 	switch t.Family() {
@@ -1935,10 +1944,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		// If we have a typemod specified then pass it down when
 		// formatting the array type.
 		if !haveTypmod {
-			return t.ArrayContents().SQLStandardName() + "[]"
+			return t.ArrayContents().SQLStandardNameWithTypmod(false, 0, useFQName) + "[]"
 		} else {
 			ac := t.ArrayContents()
-			return ac.SQLStandardNameWithTypmod(haveTypmod, typmod) + "[]"
+			return ac.SQLStandardNameWithTypmod(haveTypmod, typmod, useFQName) + "[]"
 		}
 	case BitFamily:
 		if t.Oid() == oid.T_varbit {
@@ -2107,7 +2116,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			}
 			// If we have a user-defined tuple type, use its user-defined name
 			// with schema qualification but without catalog.
-			return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+			return maybeFQName()
 		}
 		return "record"
 	case UnknownFamily:
@@ -2123,7 +2132,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		if t.TypeMeta.Name == nil {
 			return fmt.Sprintf("@%d", t.Oid())
 		}
-		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+		return maybeFQName()
 	case LTreeFamily:
 		return t.Name()
 	default:
