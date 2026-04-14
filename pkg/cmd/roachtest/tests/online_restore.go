@@ -157,6 +157,24 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
 		},
+		{
+			// 350 GB tpcc Online Restore on Azure with 48 incrementals
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+				backup: backupSpecs{
+					cloud:   spec.Azure,
+					fixture: SmallFixture,
+				},
+				timeout: 1 * time.Hour,
+				suites:  registry.Suites(registry.Nightly),
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
+			},
+			linkPhaseTimeout: 2 * time.Minute,
+			// Download phase takes 15 minutes.
+			downloadPhaseTimeout: 30 * time.Minute,
+		},
 		// OR Benchmarking tests
 		// See benchmark plan here: https://docs.google.com/spreadsheets/d/1uPcQ1YPohXKxwFxWWDUMJrYLKQOuqSZKVrI8SJam5n8
 		{
