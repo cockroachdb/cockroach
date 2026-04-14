@@ -1,6 +1,23 @@
 echo
 ----
+----
 zero:
-compaction score 0.000 (0 ssts, 0 sub-levels), L0 growth 0 B (write 0 B (ignored 0 B) ingest 0 B (ignored 0 B)): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + 0 B adjusted-LSM-writes + 0 B adjusted-disk-writes + write-model 0.00x+0 B (smoothed 0.00x+0 B) + l0-ingest-model 0.00x+0 B (smoothed 0.00x+0 B) + ingest-model 0.00x+0 B (smoothed 0.00x+0 B) + write-amp-model 0.00x+0 B (smoothed 0.00x+0 B) + at-admission-tokens 0 B, compacted 0 B [≈0 B], flushed 0 B [≈0 B] (mult 1.00); admitting all (used total: 0 B elastic 0 B); write stalls 12
+
+  [status] admitting all, 12 write-stalls
+  [util] L0: 0%, flush: 0%
+  [L0] compaction score 0.000, 0 ssts, 0 sub-levels, in 0 B (writes 0 B, ingests 0 B), out 0 B [≈0 B] (net 0 B)
+  [io-tokens] total used 0 B (elastic 0 B)
+  [flush] flushed 0 B [≈0 B] (mult 1.000)
+  [accounting] 0 requests (0 bypassed), write 0 B (0 B bypassed), ingest 0 B (0 B bypassed), adjusted-lsm-writes 0 B, adjusted-disk-writes 0 B, ignored-write 0 B, ignored-ingest 0 B
+  [models] write 0.00x+0 B [≈0.00x+0 B], l0-ingest 0.00x+0 B [≈0.00x+0 B], ingest 0.00x+0 B [≈0.00x+0 B], write-amp 0.00x+0 B [≈0.00x+0 B], at-admission 0 B
 real-numbers:
-compaction score 2.700[L0-overload] (195 ssts, 27 sub-levels), L0 growth 577 MiB (write 0 B (ignored 0 B) ingest 0 B (ignored 0 B)): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + 0 B adjusted-LSM-writes + 0 B adjusted-disk-writes + write-model 0.00x+0 B (smoothed 0.00x+0 B) + l0-ingest-model 0.00x+0 B (smoothed 0.00x+0 B) + ingest-model 0.00x+0 B (smoothed 0.00x+0 B) + write-amp-model 0.00x+0 B (smoothed 0.00x+0 B) + at-admission-tokens 0 B, compacted 77 MiB [≈62 MiB], flushed 0 B [≈0 B] (mult 1.00); admitting 116 MiB (rate 7.7 MiB/s) (elastic 1 B rate 0 B/s) due to L0 growth (used total: 0 B elastic 0 B); write stalls 2
+
+  [status] throttling all at 7.7 MiB/s (elastic 0 B/s) due to L0 growth, 2 write-stalls
+  [util] L0: 270%, flush: 0%
+  [L0] compaction score 2.700[L0-overload], 195 ssts, 27 sub-levels, in 577 MiB (writes 0 B, ingests 0 B), out 77 MiB [≈62 MiB] (net 500 MiB)
+  [io-tokens] total used 0 B (elastic 0 B)
+  [flush] flushed 0 B [≈0 B] (mult 1.000)
+  [accounting] 0 requests (0 bypassed), write 0 B (0 B bypassed), ingest 0 B (0 B bypassed), adjusted-lsm-writes 0 B, adjusted-disk-writes 0 B, ignored-write 0 B, ignored-ingest 0 B
+  [models] write 0.00x+0 B [≈0.00x+0 B], l0-ingest 0.00x+0 B [≈0.00x+0 B], ingest 0.00x+0 B [≈0.00x+0 B], write-amp 0.00x+0 B [≈0.00x+0 B], at-admission 0 B
+----
+----
