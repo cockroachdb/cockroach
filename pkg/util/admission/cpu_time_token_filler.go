@@ -46,7 +46,8 @@ var KVCPUTimeSystemUtilGoal = settings.RegisterFloatSetting(
 var KVCPUTimeUtilTarget = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util",
-	"the non-burstable CPU utilization target in resource manager mode, "+
+	"the non-burstable CPU utilization target in resource manager mode "+
+		"(not yet active; reserved for future use), "+
 		"value is in the interval [0,1] where 1 means all cores",
 	0.75,
 	settings.FloatInRange(minTargetUtilFrac, 1.0))
@@ -63,9 +64,11 @@ var KVCPUTimeUtilBurstDeltaRM = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.cpu_time_tokens.target_util.burst_delta_rm",
 	"the delta added to admission.cpu_time_tokens.target_util to compute "+
-		"the burstable utilization ceiling in resource manager mode, "+
+		"the burstable utilization ceiling in resource manager mode "+
+		"(not yet active; reserved for future use), "+
 		"value is in the interval (0,1]",
 	0.25,
+	settings.FloatInRange(0, 1.0),
 	settings.PositiveFloat)
 
 // Burstable work is given this much CPU headroom above non-burstable. See
