@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1349,6 +1350,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
 		ctx, descs.WithDescriptorSessionDataProvider(dsdp), descs.WithMonitor(ex.sessionMon),
 	)
+	ex.extraTxnState.advisoryLockManager = advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec)
 	ex.extraTxnState.jobs = newTxnJobsCollection()
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
@@ -1638,6 +1640,9 @@ type connExecutor struct {
 
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
+
+		// advisoryLockManager is the manager for advisory locks.
+		advisoryLockManager *advisorylock.Manager
 
 		jobs *txnJobsCollection
 
@@ -2214,6 +2219,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		}
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+		ex.extraTxnState.advisoryLockManager = advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec)
 		ex.extraTxnState.jobs.reset()
 		ex.extraTxnState.validateDbZoneConfig = false
 		ex.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
@@ -3954,6 +3960,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		localSQLStats:        ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
+		advisoryLockManager:  ex.extraTxnState.advisoryLockManager,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
