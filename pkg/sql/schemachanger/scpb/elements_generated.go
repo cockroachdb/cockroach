@@ -935,6 +935,191 @@ func (c *ElementCollection[E]) FilterDatabaseZoneConfig() *ElementCollection[*Da
 	return (*ElementCollection[*DatabaseZoneConfig])(ret)
 }
 
+func (e DomainCheckConstraint) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainCheckConstraint) Element() Element {
+	return e.DomainCheckConstraint
+}
+
+// ForEachDomainCheckConstraint iterates over elements of type DomainCheckConstraint.
+// Deprecated
+func ForEachDomainCheckConstraint(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainCheckConstraint),
+) {
+  c.FilterDomainCheckConstraint().ForEach(fn)
+}
+
+// FindDomainCheckConstraint finds the first element of type DomainCheckConstraint.
+// Deprecated
+func FindDomainCheckConstraint(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainCheckConstraint) {
+	if tc := c.FilterDomainCheckConstraint(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainCheckConstraint)
+	}
+	return current, target, element
+}
+
+// DomainCheckConstraintElements filters elements of type DomainCheckConstraint.
+func (c *ElementCollection[E]) FilterDomainCheckConstraint() *ElementCollection[*DomainCheckConstraint] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainCheckConstraint)
+		return ok
+	})
+	return (*ElementCollection[*DomainCheckConstraint])(ret)
+}
+
+func (e DomainCheckConstraintUnvalidated) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainCheckConstraintUnvalidated) Element() Element {
+	return e.DomainCheckConstraintUnvalidated
+}
+
+// ForEachDomainCheckConstraintUnvalidated iterates over elements of type DomainCheckConstraintUnvalidated.
+// Deprecated
+func ForEachDomainCheckConstraintUnvalidated(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainCheckConstraintUnvalidated),
+) {
+  c.FilterDomainCheckConstraintUnvalidated().ForEach(fn)
+}
+
+// FindDomainCheckConstraintUnvalidated finds the first element of type DomainCheckConstraintUnvalidated.
+// Deprecated
+func FindDomainCheckConstraintUnvalidated(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainCheckConstraintUnvalidated) {
+	if tc := c.FilterDomainCheckConstraintUnvalidated(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainCheckConstraintUnvalidated)
+	}
+	return current, target, element
+}
+
+// DomainCheckConstraintUnvalidatedElements filters elements of type DomainCheckConstraintUnvalidated.
+func (c *ElementCollection[E]) FilterDomainCheckConstraintUnvalidated() *ElementCollection[*DomainCheckConstraintUnvalidated] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainCheckConstraintUnvalidated)
+		return ok
+	})
+	return (*ElementCollection[*DomainCheckConstraintUnvalidated])(ret)
+}
+
+func (e DomainConstraintName) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainConstraintName) Element() Element {
+	return e.DomainConstraintName
+}
+
+// ForEachDomainConstraintName iterates over elements of type DomainConstraintName.
+// Deprecated
+func ForEachDomainConstraintName(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainConstraintName),
+) {
+  c.FilterDomainConstraintName().ForEach(fn)
+}
+
+// FindDomainConstraintName finds the first element of type DomainConstraintName.
+// Deprecated
+func FindDomainConstraintName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainConstraintName) {
+	if tc := c.FilterDomainConstraintName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainConstraintName)
+	}
+	return current, target, element
+}
+
+// DomainConstraintNameElements filters elements of type DomainConstraintName.
+func (c *ElementCollection[E]) FilterDomainConstraintName() *ElementCollection[*DomainConstraintName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainConstraintName)
+		return ok
+	})
+	return (*ElementCollection[*DomainConstraintName])(ret)
+}
+
+func (e DomainDefault) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainDefault) Element() Element {
+	return e.DomainDefault
+}
+
+// ForEachDomainDefault iterates over elements of type DomainDefault.
+// Deprecated
+func ForEachDomainDefault(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainDefault),
+) {
+  c.FilterDomainDefault().ForEach(fn)
+}
+
+// FindDomainDefault finds the first element of type DomainDefault.
+// Deprecated
+func FindDomainDefault(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainDefault) {
+	if tc := c.FilterDomainDefault(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainDefault)
+	}
+	return current, target, element
+}
+
+// DomainDefaultElements filters elements of type DomainDefault.
+func (c *ElementCollection[E]) FilterDomainDefault() *ElementCollection[*DomainDefault] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainDefault)
+		return ok
+	})
+	return (*ElementCollection[*DomainDefault])(ret)
+}
+
+func (e DomainNotNull) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainNotNull) Element() Element {
+	return e.DomainNotNull
+}
+
+// ForEachDomainNotNull iterates over elements of type DomainNotNull.
+// Deprecated
+func ForEachDomainNotNull(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainNotNull),
+) {
+  c.FilterDomainNotNull().ForEach(fn)
+}
+
+// FindDomainNotNull finds the first element of type DomainNotNull.
+// Deprecated
+func FindDomainNotNull(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainNotNull) {
+	if tc := c.FilterDomainNotNull(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainNotNull)
+	}
+	return current, target, element
+}
+
+// DomainNotNullElements filters elements of type DomainNotNull.
+func (c *ElementCollection[E]) FilterDomainNotNull() *ElementCollection[*DomainNotNull] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainNotNull)
+		return ok
+	})
+	return (*ElementCollection[*DomainNotNull])(ret)
+}
+
 func (e DomainType) element() {}
 
 // Element implements ElementGetter.
@@ -3580,6 +3765,16 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_DatabaseRoleSetting{ DatabaseRoleSetting: t}
 		case *DatabaseZoneConfig:
 			e.ElementOneOf = &ElementProto_DatabaseZoneConfig{ DatabaseZoneConfig: t}
+		case *DomainCheckConstraint:
+			e.ElementOneOf = &ElementProto_DomainCheckConstraint{ DomainCheckConstraint: t}
+		case *DomainCheckConstraintUnvalidated:
+			e.ElementOneOf = &ElementProto_DomainCheckConstraintUnvalidated{ DomainCheckConstraintUnvalidated: t}
+		case *DomainConstraintName:
+			e.ElementOneOf = &ElementProto_DomainConstraintName{ DomainConstraintName: t}
+		case *DomainDefault:
+			e.ElementOneOf = &ElementProto_DomainDefault{ DomainDefault: t}
+		case *DomainNotNull:
+			e.ElementOneOf = &ElementProto_DomainNotNull{ DomainNotNull: t}
 		case *DomainType:
 			e.ElementOneOf = &ElementProto_DomainType{ DomainType: t}
 		case *EnumType:
@@ -3751,6 +3946,11 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_DatabaseRegionConfig)(nil)),
 	((*ElementProto_DatabaseRoleSetting)(nil)),
 	((*ElementProto_DatabaseZoneConfig)(nil)),
+	((*ElementProto_DomainCheckConstraint)(nil)),
+	((*ElementProto_DomainCheckConstraintUnvalidated)(nil)),
+	((*ElementProto_DomainConstraintName)(nil)),
+	((*ElementProto_DomainDefault)(nil)),
+	((*ElementProto_DomainNotNull)(nil)),
 	((*ElementProto_DomainType)(nil)),
 	((*ElementProto_EnumType)(nil)),
 	((*ElementProto_EnumTypeValue)(nil)),
@@ -3853,6 +4053,11 @@ func GetElementTypes() []interface{} {
 	((*DatabaseRegionConfig)(nil)),
 	((*DatabaseRoleSetting)(nil)),
 	((*DatabaseZoneConfig)(nil)),
+	((*DomainCheckConstraint)(nil)),
+	((*DomainCheckConstraintUnvalidated)(nil)),
+	((*DomainConstraintName)(nil)),
+	((*DomainDefault)(nil)),
+	((*DomainNotNull)(nil)),
 	((*DomainType)(nil)),
 	((*EnumType)(nil)),
 	((*EnumTypeValue)(nil)),

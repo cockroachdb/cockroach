@@ -1781,6 +1781,12 @@ message TypeDescriptor {
       optional string name = 1 [(gogoproto.nullable) = false];
       // Expr is the CHECK expression, serialized as a string.
       optional string expr = 2 [(gogoproto.nullable) = false];
+      // Validity indicates whether the constraint has been validated for all
+      // existing data. Defaults to Validated for backward compatibility.
+      optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+      // Used to uniquely identify individual constraints within the domain.
+      optional uint32 constraint_id = 4 [(gogoproto.customname) = "ConstraintID",
+        (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
     }
     // CheckConstraints is the list of CHECK constraints on this domain.
     repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];

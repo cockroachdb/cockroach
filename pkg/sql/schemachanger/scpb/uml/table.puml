@@ -153,6 +153,33 @@ DatabaseZoneConfig :  DatabaseID
 DatabaseZoneConfig :  ZoneConfig
 DatabaseZoneConfig :  SeqNum
 
+object DomainCheckConstraint
+
+DomainCheckConstraint :  TypeID
+DomainCheckConstraint :  ConstraintID
+DomainCheckConstraint :  Expression
+
+object DomainCheckConstraintUnvalidated
+
+DomainCheckConstraintUnvalidated :  TypeID
+DomainCheckConstraintUnvalidated :  ConstraintID
+DomainCheckConstraintUnvalidated :  Expression
+
+object DomainConstraintName
+
+DomainConstraintName :  TypeID
+DomainConstraintName :  ConstraintID
+DomainConstraintName :  Name
+
+object DomainDefault
+
+DomainDefault :  TypeID
+DomainDefault :  Expression
+
+object DomainNotNull
+
+DomainNotNull :  TypeID
+
 object DomainType
 
 DomainType :  TypeID
@@ -622,6 +649,7 @@ SecondaryIndex <|-- ConstraintComment
 UniqueWithoutIndexConstraint <|-- ConstraintComment
 CheckConstraint <|-- ConstraintComment
 ForeignKeyConstraint <|-- ConstraintComment
+DomainCheckConstraint <|-- ConstraintComment
 UniqueWithoutIndexConstraint <|-- ConstraintWithoutIndexName
 CheckConstraint <|-- ConstraintWithoutIndexName
 ForeignKeyConstraint <|-- ConstraintWithoutIndexName
@@ -630,6 +658,12 @@ Database <|-- DatabaseData
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseZoneConfig
+DomainType <|-- DomainCheckConstraint
+DomainType <|-- DomainCheckConstraintUnvalidated
+DomainCheckConstraint <|-- DomainConstraintName
+DomainCheckConstraintUnvalidated <|-- DomainConstraintName
+DomainType <|-- DomainDefault
+DomainType <|-- DomainNotNull
 EnumType <|-- EnumTypeValue
 Table <|-- ForeignKeyConstraint
 Table <|-- ForeignKeyConstraintUnvalidated

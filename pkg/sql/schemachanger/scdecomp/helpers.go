@@ -110,8 +110,11 @@ func (w *walkCtx) newExpression(expr catpb.Expression) (*scpb.Expression, error)
 		// newExpression is called only for DEFAULT expressions of function
 		// parameters which cannot have column references. Column references
 		// from the function body are handled in WrapFunctionBody.
+	case catalog.TypeDescriptor:
+		// newExpression is called for DEFAULT and CHECK expressions in domain
+		// types, which cannot have column references.
 	default:
-		return nil, errors.AssertionFailedf("expected either TableDescriptor of FunctionDescriptor, found %T", t)
+		return nil, errors.AssertionFailedf("expected either TableDescriptor, FunctionDescriptor, or TypeDescriptor, found %T", t)
 	}
 	referencedFnIDs, err := schemaexpr.GetUDFIDs(e)
 	if err != nil {
