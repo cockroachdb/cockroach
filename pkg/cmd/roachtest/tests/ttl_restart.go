@@ -30,7 +30,7 @@ func registerTTLRestart(r registry.Registry) {
 	for numRestartNodes := 1; numRestartNodes <= 2; numRestartNodes++ {
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("ttl-restart/num-restart-nodes=%d", numRestartNodes),
-			Owner:            registry.OwnerSQLFoundations,
+			Owner:            registry.OwnerSQLQueries,
 			Cluster:          r.MakeClusterSpec(3),
 			Leases:           registry.MetamorphicLeases,
 			CompatibleClouds: registry.AllClouds,
@@ -42,7 +42,7 @@ func registerTTLRestart(r registry.Registry) {
 	}
 	r.Add(registry.TestSpec{
 		Name:             "ttl-restart/checkpoint",
-		Owner:            registry.OwnerSQLFoundations,
+		Owner:            registry.OwnerSQLQueries,
 		Cluster:          r.MakeClusterSpec(3),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllClouds,
