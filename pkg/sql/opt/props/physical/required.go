@@ -116,6 +116,9 @@ func (p *Required) String() string {
 	if p.RemoteBranch {
 		output("remote branch", func(buf *bytes.Buffer) { buf.WriteString("true") })
 	}
+	if !p.PlanGram.Any() {
+		output("plangram", p.PlanGram.Format)
+	}
 
 	// Handle empty properties case.
 	if buf.Len() == 0 {

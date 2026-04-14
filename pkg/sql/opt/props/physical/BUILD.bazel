@@ -28,6 +28,7 @@ go_test(
     size = "small",
     srcs = [
         "distribution_test.go",
+        "plangram_test.go",
         "required_test.go",
     ],
     embed = [":physical"],
@@ -39,6 +40,7 @@ go_test(
         "//pkg/sql/opt/props",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
