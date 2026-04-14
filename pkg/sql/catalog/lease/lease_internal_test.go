@@ -1753,6 +1753,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	// up.
 	WaitForInitialVersion.Override(ctx, &st.SV, false)
 	var tableID atomic.Int64
+	var expectedVersion atomic.Int64
 	srv, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{
 			// Avoid using tenants since async tenant migration steps can acquire
@@ -1766,8 +1767,13 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 						if !blockUpdates.Load() || descriptor == nil {
 							return nil
 						}
-						id, _, _, _, _ := descpb.GetDescriptorMetadata(descriptor)
+						id, version, _, _, _ := descpb.GetDescriptorMetadata(descriptor)
 						if id != descpb.ID(tableID.Load()) {
+							return nil
+						}
+						// Skip events for versions we've already seen. The rangefeed
+						// may deliver older versions after blockUpdates is set.
+						if int64(version) < expectedVersion.Load() {
 							return nil
 						}
 						ts, err := descpb.GetDescriptorModificationTime(descriptor)
@@ -1797,13 +1803,6 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	var id int
 	r.QueryRow(t, "SELECT 't1'::REGCLASS::OID;").Scan(&id)
 	tableID.Store(int64(id))
-	blockUpdates.Store(true)
-
-	grp := ctxgroup.WithContext(context.Background())
-	grp.GoCtx(func(ctx context.Context) error {
-		_, err := db.Exec("ALTER TABLE t1 ADD COLUMN n2 int")
-		return err
-	})
 
 	lm := s.LeaseManager().(*Manager)
 	getDescriptorVersion := func(ts ReadTimestamp) descpb.DescriptorVersion {
@@ -1846,6 +1845,17 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	}
 	defer releaseTS()
 	initialVersion := getDescriptorVersion(ts)
+	// Set expectedVersion so the hook only fires for the ALTER TABLE's new
+	// version, not for stale rangefeed deliveries of the current version.
+	expectedVersion.Store(int64(initialVersion + 1))
+	blockUpdates.Store(true)
+
+	grp := ctxgroup.WithContext(context.Background())
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := db.Exec("ALTER TABLE t1 ADD COLUMN n2 int")
+		return err
+	})
+
 	// The old version will still be cached as long as this timestamp is in use.
 	// Even if we released the leases already.
 	afterTS := <-updateCh
