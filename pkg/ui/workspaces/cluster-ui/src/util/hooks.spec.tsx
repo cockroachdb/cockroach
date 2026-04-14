@@ -320,7 +320,7 @@ describe("useSwrWithClusterId", () => {
     expect(spyUseSWR).toHaveBeenCalledWith(
       expectedKey,
       expect.anything(),
-      undefined,
+      expect.objectContaining({ errorRetryCount: 3 }),
     );
 
     renderHook(() => useSwrImmutableWithClusterId(key, (): void => null), {
@@ -329,7 +329,7 @@ describe("useSwrWithClusterId", () => {
     expect(spyUseSWRImmutable).toHaveBeenCalledWith(
       expectedKey,
       expect.anything(),
-      undefined,
+      expect.objectContaining({ errorRetryCount: 3 }),
     );
   });
 });

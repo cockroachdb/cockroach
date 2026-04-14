@@ -13,6 +13,11 @@ import useSWRMutation, { SWRMutationConfiguration } from "swr/mutation";
 import { ClusterDetailsContext } from "../contexts";
 import { ISortedTablePagination } from "../sortedtable";
 
+// Cap error retries. SWR defaults to infinite exponential backoff,
+// which hammers a down server, especially with polling hooks.
+// See also: db-console/src/app.tsx SWRConfig provider.
+const DEFAULT_ERROR_RETRY_COUNT = 3;
+
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
   useEffect(() => {
@@ -144,7 +149,10 @@ export const useSwrWithClusterId = <
   config?: SWROptions,
 ): SWRResponse<Data, Error, SWROptions> => {
   const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
-  return useSWR(keyWithClusterId, fetcher, config);
+  return useSWR(keyWithClusterId, fetcher, {
+    errorRetryCount: DEFAULT_ERROR_RETRY_COUNT,
+    ...config,
+  } as SWROptions);
 };
 
 /**
@@ -169,7 +177,10 @@ export const useSwrImmutableWithClusterId = <
   config?: SWROptions,
 ): SWRResponse<Data, Error, SWROptions> => {
   const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
-  return useSWRImmutable(keyWithClusterId, fetcher, config);
+  return useSWRImmutable(keyWithClusterId, fetcher, {
+    errorRetryCount: DEFAULT_ERROR_RETRY_COUNT,
+    ...config,
+  } as SWROptions);
 };
 
 /**
