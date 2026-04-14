@@ -222,6 +222,58 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 			ArrayTypeID: domain.GetArrayTypeID(),
 			BaseTypeT:   *baseType,
 		})
+		if domain.IsNotNull() {
+			constraintID := domain.GetNotNullConstraintID()
+			w.ev(descriptorStatus(typ), &scpb.DomainNotNull{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+			})
+			w.ev(descriptorStatus(typ), &scpb.DomainConstraintName{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+				Name:         domain.GetNotNullConstraintName(),
+			})
+		}
+		if defaultExpr := domain.GetDefaultExpr(); defaultExpr != "" {
+			expr, err := w.newExpression(catpb.Expression(defaultExpr))
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "domain %q (%d) default expr",
+					typ.GetName(), typ.GetID()))
+			}
+			w.ev(descriptorStatus(typ), &scpb.DomainDefault{
+				TypeID:     domain.GetID(),
+				Expression: *expr,
+			})
+		}
+		for i := 0; i < domain.NumCheckConstraints(); i++ {
+			expr, err := w.newExpression(catpb.Expression(domain.GetCheckConstraintExpr(i)))
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "domain %q (%d) check constraint %q",
+					typ.GetName(), typ.GetID(), domain.GetCheckConstraintName(i)))
+			}
+			constraintID := domain.GetCheckConstraintID(i)
+			validity := domain.GetCheckConstraintValidity(i)
+
+			if validity == descpb.ConstraintValidity_Validated {
+				w.ev(descriptorStatus(typ), &scpb.DomainCheckConstraint{
+					TypeID:       domain.GetID(),
+					ConstraintID: constraintID,
+					Expression:   *expr,
+				})
+			} else {
+				w.ev(descriptorStatus(typ), &scpb.DomainCheckConstraintUnvalidated{
+					TypeID:       domain.GetID(),
+					ConstraintID: constraintID,
+					Expression:   *expr,
+				})
+			}
+
+			w.ev(descriptorStatus(typ), &scpb.DomainConstraintName{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+				Name:         domain.GetCheckConstraintName(i),
+			})
+		}
 	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}

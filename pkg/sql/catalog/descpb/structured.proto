@@ -1773,6 +1773,13 @@ message TypeDescriptor {
     // DefaultExpr is the default expression for the domain, serialized as a
     // string. Empty if no default is specified.
     optional string default_expr = 3 [(gogoproto.nullable) = false];
+    // NotNullConstraintName is the name of the NOT NULL constraint. Empty if
+    // there is no NOT NULL constraint.
+    optional string not_null_constraint_name = 5 [(gogoproto.nullable) = false];
+    // NotNullConstraintID uniquely identifies the NOT NULL constraint within
+    // the domain. Zero if there is no NOT NULL constraint.
+    optional uint32 not_null_constraint_id = 6 [(gogoproto.customname) = "NotNullConstraintID",
+      (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
     // CheckConstraint represents a single CHECK constraint on the domain.
     message CheckConstraint {
@@ -1784,6 +1791,9 @@ message TypeDescriptor {
       // Used to uniquely identify individual constraints within the domain.
       optional uint32 constraint_id = 3 [(gogoproto.customname) = "ConstraintID",
         (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+      // Validity indicates whether the constraint has been validated for all
+      // existing data.
+      optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
     }
     // CheckConstraints is the list of CHECK constraints on this domain.
     repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];

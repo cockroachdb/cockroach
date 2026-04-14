@@ -1087,6 +1087,9 @@ type DomainTypeDescriptor interface {
 	// GetCheckConstraintID returns the ID of the CHECK constraint at the given
 	// ordinal.
 	GetCheckConstraintID(idx int) descpb.ConstraintID
+	// GetCheckConstraintValidity returns the validity of the CHECK constraint
+	// at the given ordinal.
+	GetCheckConstraintValidity(idx int) descpb.ConstraintValidity
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

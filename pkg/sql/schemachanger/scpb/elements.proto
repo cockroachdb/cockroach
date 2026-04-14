@@ -130,7 +130,7 @@ message ElementProto {
 
     // Constraint elements.
     ConstraintWithoutIndexName constraint_without_index_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
-    ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
+    ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint, DomainCheckConstraint\""];
 
     // Common elements.
     Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
@@ -167,6 +167,13 @@ message ElementProto {
     FunctionSecurity function_security = 165 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionParams function_params = 166 [(gogoproto.moretags) = "parent:\"Function\""];
 
+    // Domain type elements.
+    DomainDefault domain_default = 250 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainNotNull domain_not_null = 251 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainCheckConstraint domain_check_constraint = 252 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainCheckConstraintUnvalidated domain_check_constraint_unvalidated = 253 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainConstraintName domain_constraint_name = 254 [(gogoproto.moretags) = "parent:\"DomainCheckConstraint, DomainCheckConstraintUnvalidated, DomainNotNull\""];
+
     // Type elements.
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType,DomainType\""];
 
@@ -187,7 +194,7 @@ message ElementProto {
     PolicyWithCheckExpr policy_with_check_expr = 243 [(gogoproto.moretags) = "parent:\"Policy\""];
     PolicyDeps policy_deps = 244 [(gogoproto.moretags) = "parent:\"Policy\""];
 
-    // Next element group start id: 250
+    // Next element group start id: 260
   }
 
   // Reserved for the now-removed SecondaryIndexPartial element.
@@ -703,6 +710,34 @@ message DomainType {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   TypeT base_type_t = 3 [(gogoproto.nullable) = false];
+}
+
+message DomainDefault {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  Expression embedded_expr = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainNotNull {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+}
+
+message DomainCheckConstraint {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainCheckConstraintUnvalidated {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainConstraintName {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  string name = 3;
 }
 
 message Schema {
