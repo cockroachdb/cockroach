@@ -1067,6 +1067,12 @@ type DomainTypeDescriptor interface {
 	GetBaseType() *types.T
 	// IsNotNull returns true if the domain has a NOT NULL constraint.
 	IsNotNull() bool
+	// GetNotNullConstraintName returns the name of the NOT NULL constraint, or
+	// an empty string if there is no NOT NULL constraint.
+	GetNotNullConstraintName() string
+	// GetNotNullConstraintID returns the ID of the NOT NULL constraint, or zero
+	// if there is no NOT NULL constraint.
+	GetNotNullConstraintID() descpb.ConstraintID
 	// GetDefaultExpr returns the default expression for the domain, or an
 	// empty string if no default is specified.
 	GetDefaultExpr() string
@@ -1078,6 +1084,12 @@ type DomainTypeDescriptor interface {
 	// GetCheckConstraintExpr returns the expression of the CHECK constraint at
 	// the given ordinal.
 	GetCheckConstraintExpr(idx int) string
+	// GetCheckConstraintValidity returns the validity of the CHECK constraint
+	// at the given ordinal.
+	GetCheckConstraintValidity(idx int) descpb.ConstraintValidity
+	// GetCheckConstraintID returns the ID of the CHECK constraint at the given
+	// ordinal.
+	GetCheckConstraintID(idx int) descpb.ConstraintID
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

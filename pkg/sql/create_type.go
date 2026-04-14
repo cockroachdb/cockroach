@@ -575,6 +575,8 @@ func (p *planner) createDomainWithID(
 	// VALUE with a typed null of the base type and type-checking as boolean.
 	// This catches invalid expressions (e.g., referencing nonexistent
 	// functions) at CREATE DOMAIN time rather than at INSERT/UPDATE time.
+	var nextConstraintID descpb.ConstraintID = 1
+	var usedNames []string
 	checks := make(
 		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
 	)
@@ -597,15 +599,27 @@ func (p *planner) createDomainWithID(
 
 		name := string(c.Name)
 		if name == "" {
-			name = fmt.Sprintf("%s_check", typeName.Type())
-			if i > 0 {
-				name = fmt.Sprintf("%s_check%d", typeName.Type(), i+1)
-			}
+			name = chooseDomainConstraintName(
+				typeName.Type(), "check", usedNames,
+			)
 		}
+		usedNames = append(usedNames, name)
 		checks[i] = descpb.TypeDescriptor_Domain_CheckConstraint{
-			Name: name,
-			Expr: tree.Serialize(c.Expr),
+			Name:         name,
+			Expr:         tree.Serialize(c.Expr),
+			ConstraintID: nextConstraintID,
 		}
+		nextConstraintID++
+	}
+
+	// Assign a constraint ID and auto-generated name for the NOT NULL constraint.
+	var notNullConstraintName string
+	var notNullConstraintID descpb.ConstraintID
+	if n.DomainNotNull {
+		notNullConstraintName = chooseDomainConstraintName(
+			typeName.Type(), "not_null", usedNames,
+		)
+		notNullConstraintID = nextConstraintID
 	}
 
 	// Serialize default expression if present.
@@ -632,10 +646,12 @@ func (p *planner) createDomainWithID(
 		ParentSchemaID: schema.GetID(),
 		Kind:           descpb.TypeDescriptor_DOMAIN,
 		Domain: &descpb.TypeDescriptor_Domain{
-			BaseType:         baseType,
-			NotNull:          n.DomainNotNull,
-			DefaultExpr:      defaultExpr,
-			CheckConstraints: checks,
+			BaseType:              baseType,
+			NotNull:               n.DomainNotNull,
+			NotNullConstraintName: notNullConstraintName,
+			NotNullConstraintID:   notNullConstraintID,
+			DefaultExpr:           defaultExpr,
+			CheckConstraints:      checks,
 		},
 		Version:    1,
 		Privileges: privs,
@@ -647,6 +663,27 @@ func (p *planner) createDomainWithID(
 	// Install back references to types used by this domain (e.g., if the base
 	// type is a user-defined type like an enum).
 	return p.addBackRefsFromAllTypesInType(params.ctx, typeDesc)
+}
+
+// chooseDomainConstraintName generates a unique constraint name for a domain
+// constraint.
+func chooseDomainConstraintName(domainName string, label string, usedNames []string) string {
+	candidate := fmt.Sprintf("%s_%s", domainName, label)
+	for pass := 0; ; pass++ {
+		if pass > 0 {
+			candidate = fmt.Sprintf("%s_%s%d", domainName, label, pass)
+		}
+		collision := false
+		for _, used := range usedNames {
+			if used == candidate {
+				collision = true
+				break
+			}
+		}
+		if !collision {
+			return candidate
+		}
+	}
 }
 
 func (p *planner) finishCreateType(

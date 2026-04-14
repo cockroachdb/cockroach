@@ -1077,6 +1077,16 @@ func (desc *immutable) IsNotNull() bool {
 	return desc.Domain.NotNull
 }
 
+// GetNotNullConstraintName implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintName() string {
+	return desc.Domain.NotNullConstraintName
+}
+
+// GetNotNullConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintID() descpb.ConstraintID {
+	return desc.Domain.NotNullConstraintID
+}
+
 // GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetDefaultExpr() string {
 	return desc.Domain.DefaultExpr
@@ -1095,6 +1105,16 @@ func (desc *immutable) GetCheckConstraintName(idx int) string {
 // GetCheckConstraintExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetCheckConstraintExpr(idx int) string {
 	return desc.Domain.CheckConstraints[idx].Expr
+}
+
+// GetCheckConstraintValidity implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintValidity(idx int) descpb.ConstraintValidity {
+	return desc.Domain.CheckConstraints[idx].Validity
+}
+
+// GetCheckConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintID(idx int) descpb.ConstraintID {
+	return desc.Domain.CheckConstraints[idx].ConstraintID
 }
 
 // Aliased implements the catalog.AliasTypeDescriptor interface.
