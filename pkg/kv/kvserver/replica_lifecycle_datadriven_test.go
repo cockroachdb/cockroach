@@ -461,7 +461,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
 						State: kvstorage.WrapState(b.State()),
 						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
-					}, kvstorage.DestroyReplicaInfo{
+					}, b.WagWriter(), kvstorage.DestroyReplicaInfo{
 						FullReplicaID: rhsRS.replica.FullReplicaID,
 						// TODO(pav-kv): support the applied index properly.
 						RaftAppliedIndex: kvpb.RaftIndex(rhsRS.replica.hs.Commit),

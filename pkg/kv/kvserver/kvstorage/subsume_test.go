@@ -40,8 +40,8 @@ func TestSubsumeReplica(t *testing.T) {
 			r.createRaftState(ctx, t, w)
 		}) + testMutate(t, "state", e.StateEngine(), func(w storage.Writer) {
 			r.createStateMachine(ctx, t, w)
-		}) + testMutateSep(t, "subsume", e, func(rw ReadWriter, _ *wag.Writer) {
-			require.NoError(t, SubsumeReplica(ctx, rw, DestroyReplicaInfo{
+		}) + testMutateSep(t, "subsume", e, func(rw ReadWriter, w *wag.Writer) {
+			require.NoError(t, SubsumeReplica(ctx, rw, w, DestroyReplicaInfo{
 				FullReplicaID:    r.id,
 				RaftAppliedIndex: r.applied,
 				Keys:             r.keys,
