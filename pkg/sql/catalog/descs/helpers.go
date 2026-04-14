@@ -7,6 +7,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -70,11 +71,27 @@ func CheckObjectNameCollision(
 	if err != nil || d == nil {
 		return err
 	}
-	maybeQualifiedName := name.Object()
+
+	// If necessary, look up the parts to get a fully-qualified name.
+	var qualifiedName string
 	if name.Catalog() != "" && name.Schema() != "" {
-		maybeQualifiedName = name.FQString()
+		qualifiedName = name.FQString()
+	} else {
+		g := tc.ByIDWithLeased(txn).Get()
+
+		dbDesc, err := g.Database(ctx, parentID)
+		if err != nil {
+			return err
+		}
+		schemaDesc, err := g.Schema(ctx, parentSchemaID)
+		if err != nil {
+			return err
+		}
+
+		qualifiedName = fmt.Sprintf("%s.%s.%s", dbDesc.GetName(), schemaDesc.GetName(), name.Object())
 	}
-	return sqlerrors.MakeObjectAlreadyExistsError(d.DescriptorProto(), maybeQualifiedName)
+
+	return sqlerrors.MakeObjectAlreadyExistsError(d.DescriptorProto(), qualifiedName)
 }
 
 func getObjectPrefix(
