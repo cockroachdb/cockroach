@@ -15,8 +15,20 @@ if [[ "$GITHUB_ACTIONS_BRANCH" == "staging" || "$GITHUB_ACTIONS_BRANCH" == trunk
   EXTRA_PARAMS=" --flaky_test_attempts=2"
 fi
 
+# Determine test targets: use affected targets if a base SHA is provided,
+# otherwise fall back to the full test suite.
+TEST_TARGETS="//pkg:all_tests"
+if [ -n "${BASE_SHA:-}" ]; then
+  AFFECTED=$(./build/github/affected-targets.sh "$BASE_SHA")
+  if [ -z "$AFFECTED" ]; then
+    echo "No test-relevant files changed, skipping unit tests."
+    exit 0
+  elif [ "$AFFECTED" != "FULL" ]; then
+    TEST_TARGETS="$AFFECTED"
+  fi
+fi
 
-bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test \
+bazel test $TEST_TARGETS //pkg/ui:lint //pkg/ui:test \
     --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
     --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) \
