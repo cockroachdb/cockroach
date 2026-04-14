@@ -7,6 +7,7 @@ package kvstorage
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -252,11 +253,10 @@ func TestTruncateApplied(t *testing.T) {
 	}
 }
 
-// TestTruncateAndClearRaftState verifies that
-// truncateAppliedWAGNodeAndClearRaftState only clears raft log entries and
-// sideloaded files up to the destroyed/subsumed replica's last index. Entries
-// and files beyond that index may belong to a newer replica and must be
-// preserved.
+// TestTruncateAndClearRaftState verifies that WAG truncation only clears raft
+// log entries and sideloaded files up to the destroyed/subsumed replica's last
+// index. Entries and files beyond that index may belong to a newer replica and
+// must be preserved.
 func TestTruncateAndClearRaftState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -333,8 +333,8 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 	}
 }
 
-// TestTruncateGapHandling verifies that truncateAppliedWAGNodeAndClearRaftState
-// handles gaps in WAG node indices correctly.
+// TestTruncateGapHandling verifies that WAG truncation handles gaps in WAG node
+// indices correctly.
 //
 // The test sets up three WAG nodes with gaps between them:
 // [Index: 2] -> [Index: 4] -> [Index: 6]
@@ -351,7 +351,6 @@ func TestTruncateGapHandling(t *testing.T) {
 		index                  uint64
 		lastIndex              uint64
 		ignoreGaps             bool
-		wantTruncated          bool
 		wantLastTruncatedIndex uint64
 		wantWAGIndices         []uint64
 	}{
@@ -359,45 +358,45 @@ func TestTruncateGapHandling(t *testing.T) {
 			// Using index=0, lastIndex=math.MaxUint64 removes
 			// the first WAG node regardless of its index.
 			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+				wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
 			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+				wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
 			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
+				wantLastTruncatedIndex: 6, wantWAGIndices: nil},
 			// Attempting to truncate when there are no WAG nodes should not cause
 			// an error.
 			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
-				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: nil},
+				wantLastTruncatedIndex: 0, wantWAGIndices: nil},
 		},
 		{
 			// Exact same case as above, but with tighter bounds to verify that index
 			// and lastIndex are inclusive.
 			{index: 0, lastIndex: 6, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+				wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
 			{index: 2, lastIndex: 6, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+				wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
 			{index: 4, lastIndex: 6, ignoreGaps: true,
-				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
+				wantLastTruncatedIndex: 6, wantWAGIndices: nil},
 		},
 		{
 			// When ignoreGaps=false, we can only truncate the WAG node with the exact
 			// index.
 			{index: 0, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{2, 4, 6}},
+				wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{2, 4, 6}},
 			{index: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: true, wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
+				wantLastTruncatedIndex: 2, wantWAGIndices: []uint64{4, 6}},
 			{index: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{4, 6}},
+				wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{4, 6}},
 			{index: 4, lastIndex: 4, ignoreGaps: false,
-				wantTruncated: true, wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
+				wantLastTruncatedIndex: 4, wantWAGIndices: []uint64{6}},
 			{index: 5, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{6}},
+				wantLastTruncatedIndex: 0, wantWAGIndices: []uint64{6}},
 			{index: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: true, wantLastTruncatedIndex: 6, wantWAGIndices: nil},
+				wantLastTruncatedIndex: 6, wantWAGIndices: nil},
 			// Attempting to truncate when there are no WAG nodes should not cause an
 			// error.
 			{index: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
-				wantTruncated: false, wantLastTruncatedIndex: 0, wantWAGIndices: nil},
+				wantLastTruncatedIndex: 0, wantWAGIndices: nil},
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -428,19 +427,121 @@ func TestTruncateGapHandling(t *testing.T) {
 			for _, c := range calls {
 				stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
 				b := e.LogEngine().NewWriteBatch()
-				truncated, lastTruncatedIndex, err := truncator.truncateAppliedWAGNodeAndClearRaftState(
-					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index, c.lastIndex, c.ignoreGaps,
+				lastTruncatedIndex, err := truncator.truncateBatch(
+					ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader, c.index, c.lastIndex, 1 /* batchSize */, c.ignoreGaps,
 				)
 				require.NoError(t, err)
-				require.Equal(t, c.wantTruncated, truncated)
 				require.Equal(t, c.wantLastTruncatedIndex, lastTruncatedIndex)
-				if truncated {
+				if lastTruncatedIndex > 0 {
 					require.NoError(t, b.Commit(false /* sync */))
 				}
 				b.Close()
 				stateReader.Close()
 				require.Equal(t, c.wantWAGIndices, e.listWAGNodes(t))
 			}
+		})
+	}
+}
+
+// TestBatchTruncation verifies that truncateBatch deletes up to batchSize WAG
+// nodes per call, correctly handling gaps and unapplied nodes. The test sets up
+// WAG nodes at indices [1, 3, 4, 5] (with a gap at index 2) and varies batch
+// size, applied index, and gap handling.
+func TestBatchTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+
+	for _, tc := range []struct {
+		batchSize         int
+		startIndex        uint64
+		lastIndex         uint64
+		appliedIndex      kvpb.RaftIndex
+		ignoreGaps        bool
+		wantLastTruncated uint64
+		wantRemaining     []uint64
+	}{
+		{
+			batchSize: 1, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: true,
+			wantLastTruncated: 1, wantRemaining: []uint64{3, 4, 5},
+		},
+		{
+			batchSize: 2, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: true,
+			wantLastTruncated: 3, wantRemaining: []uint64{4, 5},
+		},
+		{
+			batchSize: 4, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: true,
+			wantLastTruncated: 5, wantRemaining: nil,
+		},
+		{
+			batchSize: 8, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: true,
+			wantLastTruncated: 5, wantRemaining: nil,
+		},
+		{
+			batchSize: 4, startIndex: 1, lastIndex: 4, appliedIndex: 50, ignoreGaps: true,
+			// Since lastIndex=4, we shouldn't truncate WAG index 5.
+			wantLastTruncated: 4, wantRemaining: []uint64{5},
+		},
+		{
+			batchSize: 4, startIndex: 1, lastIndex: 10, appliedIndex: 35, ignoreGaps: true,
+			// Since nodes 4 and 5 aren't applied, we shouldn't truncate them.
+			wantLastTruncated: 3, wantRemaining: []uint64{4, 5},
+		},
+		{
+			batchSize: 1, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: false,
+			wantLastTruncated: 1, wantRemaining: []uint64{3, 4, 5},
+		},
+		{
+			batchSize: 8, startIndex: 1, lastIndex: 10, appliedIndex: 50, ignoreGaps: false,
+			// Since ignoreGaps=false, we won't truncate past the gap at index 2.
+			wantLastTruncated: 1, wantRemaining: []uint64{3, 4, 5},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			st := cluster.MakeTestingClusterSettings()
+			truncator := NewWAGTruncator(
+				st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{},
+			)
+
+			// Write WAG nodes at indices 1, 3, 4, 5 (gap at index 2), with apply
+			// indices of 10, 30, 40, 50 respectively.
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 10), Type: wagpb.EventApply,
+			})
+			e.seq.Next() // skip index 2
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 30), Type: wagpb.EventApply,
+			})
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 40), Type: wagpb.EventApply,
+			})
+			e.writeWAGNode(t, wagpb.Event{
+				Addr: wagpb.MakeAddr(r1, 50), Type: wagpb.EventApply,
+			})
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: tc.appliedIndex}))
+			require.NoError(t, e.stateEngine.Flush())
+
+			stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
+			defer stateReader.Close()
+			b := e.LogEngine().NewWriteBatch()
+			lastTruncated, err := truncator.truncateBatch(
+				ctx, Raft{RO: e.LogEngine(), WO: b}, stateReader,
+				tc.startIndex, tc.lastIndex, tc.batchSize, tc.ignoreGaps,
+			)
+			require.NoError(t, err)
+			if lastTruncated > 0 {
+				require.NoError(t, b.Commit(false /* sync */))
+			}
+			b.Close()
+			require.Equal(t, tc.wantLastTruncated, lastTruncated)
+			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
 		})
 	}
 }
@@ -457,102 +558,108 @@ func TestTruncateAppliedNodes(t *testing.T) {
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	sl := MakeStateLoader(r1.RangeID)
 
-	for _, tc := range []struct {
-		startIndex        uint64
-		lastIndex         uint64
-		ignoreGaps        bool
-		wantLastTruncated uint64
-		wantRemaining     []uint64
-	}{
-		// --- ignoreGaps=true: skips over gaps in WAG indices ---
-		{
-			startIndex: 0, lastIndex: 1, ignoreGaps: true,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-		{
-			startIndex: 0, lastIndex: 2, ignoreGaps: true,
-			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
-		},
-		{
-			startIndex: 0, lastIndex: 6, ignoreGaps: true,
-			wantLastTruncated: 5, wantRemaining: []uint64{6},
-		},
-		{
-			startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
-			wantLastTruncated: 5, wantRemaining: []uint64{6},
-		},
-		{
-			startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: true,
-			wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
-		},
-		{
-			startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: true,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-		// --- ignoreGaps=false: stops at first gap in WAG indices ---
-		{
-			startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-		{
-			startIndex: 2, lastIndex: 2, ignoreGaps: false,
-			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
-		},
-		{
-			startIndex: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
-		},
-		{
-			startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-		{
-			startIndex: 4, lastIndex: 4, ignoreGaps: false,
-			wantLastTruncated: 4, wantRemaining: []uint64{2, 5, 6},
-		},
-		{
-			startIndex: 4, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
-		},
-		{
-			startIndex: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-		{
-			startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: false,
-			wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			e := makeTestEngines()
-			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
+	for _, batchSize := range []int64{1, 2, 8} {
+		// truncateAppliedNodes() must be oblivious to batchSize.
+		t.Run(fmt.Sprintf("batchSize=%d", batchSize), func(t *testing.T) {
+			wagTruncationBatchSize.Override(ctx, &st.SV, batchSize)
+			for _, tc := range []struct {
+				startIndex        uint64
+				lastIndex         uint64
+				ignoreGaps        bool
+				wantLastTruncated uint64
+				wantRemaining     []uint64
+			}{
+				// --- ignoreGaps=true: skips over gaps in WAG indices ---
+				{
+					startIndex: 0, lastIndex: 1, ignoreGaps: true,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+				{
+					startIndex: 0, lastIndex: 2, ignoreGaps: true,
+					wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+				},
+				{
+					startIndex: 0, lastIndex: 6, ignoreGaps: true,
+					wantLastTruncated: 5, wantRemaining: []uint64{6},
+				},
+				{
+					startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: true,
+					wantLastTruncated: 5, wantRemaining: []uint64{6},
+				},
+				{
+					startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: true,
+					wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
+				},
+				{
+					startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: true,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+				// --- ignoreGaps=false: stops at first gap in WAG indices ---
+				{
+					startIndex: 0, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+				{
+					startIndex: 2, lastIndex: 2, ignoreGaps: false,
+					wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+				},
+				{
+					startIndex: 2, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 2, wantRemaining: []uint64{4, 5, 6},
+				},
+				{
+					startIndex: 3, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+				{
+					startIndex: 4, lastIndex: 4, ignoreGaps: false,
+					wantLastTruncated: 4, wantRemaining: []uint64{2, 5, 6},
+				},
+				{
+					startIndex: 4, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 5, wantRemaining: []uint64{2, 6},
+				},
+				{
+					startIndex: 6, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+				{
+					startIndex: 7, lastIndex: math.MaxUint64, ignoreGaps: false,
+					wantLastTruncated: 0, wantRemaining: []uint64{2, 4, 5, 6},
+				},
+			} {
+				t.Run("", func(t *testing.T) {
+					e := makeTestEngines()
+					defer e.Close()
+					truncator := NewWAGTruncator(st, e.Engines, &e.seq, 0, WAGTruncatorTestingKnobs{})
 
-			// Write WAG nodes at indices 2, 4, 5.
-			e.seq.Next()
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
-			})
-			e.seq.Next()
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
-			})
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
-			})
-			e.writeWAGNode(t, wagpb.Event{
-				Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply,
-			})
+					// Write WAG nodes at indices 2, 4, 5.
+					e.seq.Next()
+					e.writeWAGNode(t, wagpb.Event{
+						Addr: wagpb.MakeAddr(r1, 0), Type: wagpb.EventCreate,
+					})
+					e.seq.Next()
+					e.writeWAGNode(t, wagpb.Event{
+						Addr: wagpb.MakeAddr(r1, 15), Type: wagpb.EventInit,
+					})
+					e.writeWAGNode(t, wagpb.Event{
+						Addr: wagpb.MakeAddr(r1, 20), Type: wagpb.EventApply,
+					})
+					e.writeWAGNode(t, wagpb.Event{
+						Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply,
+					})
 
-			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
-			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
-				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 20}))
-			require.NoError(t, e.stateEngine.Flush())
+					require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+					require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+						&kvserverpb.RangeAppliedState{RaftAppliedIndex: 20}))
+					require.NoError(t, e.stateEngine.Flush())
 
-			lastTruncated, err := truncator.truncateAppliedNodes(ctx, tc.startIndex, tc.lastIndex, tc.ignoreGaps)
-			require.NoError(t, err)
-			require.Equal(t, tc.wantLastTruncated, lastTruncated)
-			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
+					lastTruncated, err := truncator.truncateAppliedNodes(ctx, tc.startIndex, tc.lastIndex, tc.ignoreGaps)
+					require.NoError(t, err)
+					require.Equal(t, tc.wantLastTruncated, lastTruncated)
+					require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
+				})
+			}
 		})
 	}
 }
@@ -647,4 +754,63 @@ func TestWAGTruncatorBackground(t *testing.T) {
 	flushAndWaitForTruncation()
 	require.Equal(t, ([]uint64)(nil), e.listWAGNodes(t))
 	require.Equal(t, uint64(7), truncator.lastTruncatedWAGIndex.Load())
+}
+
+// BenchmarkWAGTruncation measures the cost of truncating WAG nodes at different
+// batch sizes. It uses an in-memory engine so it doesn't really test the real
+// thing, but it should give an idea of the improvement of different batch
+// sizes.
+func BenchmarkWAGTruncation(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+	for _, batchSize := range []int64{1, 4, 8, 16, 32, 64} {
+		b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {
+			b.StopTimer()
+			st := cluster.MakeTestingClusterSettings()
+			wagTruncationBatchSize.Override(ctx, &st.SV, batchSize)
+			eng := storage.NewDefaultInMemForTesting()
+			defer eng.Close()
+			engines := MakeEngines(eng)
+			var seq wag.Seq
+			truncator := NewWAGTruncator(
+				st, engines, &seq, 0, WAGTruncatorTestingKnobs{},
+			)
+
+			// Write numNodes WAG nodes that are all eligible for
+			// truncation.
+			for j := 0; j < b.N; j++ {
+				index := seq.Next()
+				if err := wag.Write(eng, index, wagpb.Node{
+					Events: []wagpb.Event{{
+						Addr: wagpb.MakeAddr(r1, kvpb.RaftIndex(j+1)),
+						Type: wagpb.EventApply,
+					}},
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+			if err := sl.SetRaftReplicaID(ctx, eng, r1.ReplicaID); err != nil {
+				b.Fatal(err)
+			}
+			if err := sl.SetRangeAppliedState(ctx, eng,
+				&kvserverpb.RangeAppliedState{
+					RaftAppliedIndex: kvpb.RaftIndex(b.N + 1),
+				}); err != nil {
+				b.Fatal(err)
+			}
+			if err := eng.Flush(); err != nil {
+				b.Fatal(err)
+			}
+
+			b.StartTimer()
+			lastTruncated, err := truncator.truncateAppliedNodes(
+				ctx, 1, math.MaxUint64, false, /* ignoreGaps */
+			)
+			b.StopTimer()
+			require.NoError(b, err)
+			require.Equal(b, lastTruncated, uint64(b.N))
+		})
+	}
 }
