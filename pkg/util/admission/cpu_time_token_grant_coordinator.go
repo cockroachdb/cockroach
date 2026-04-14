@@ -57,6 +57,11 @@ const (
 // mode. Can be changed at runtime without a restart. When set to off,
 // the legacy admission.cpu_time_tokens.enabled bool is checked as a
 // fallback for backward compatibility.
+//
+// This is ApplicationLevel (not SystemOnly) to match the legacy
+// cpuTimeTokenACEnabled bool, which is also ApplicationLevel. The
+// associated utilization target settings (KVCPUTimeUtilTarget, etc.)
+// are SystemOnly because they are low-level tuning knobs.
 var cpuTimeTokenACMode = settings.RegisterEnumSetting[cpuTimeTokenMode](
 	settings.ApplicationLevel,
 	"admission.cpu_time_tokens.mode",
@@ -122,12 +127,14 @@ type CPUGrantCoordinators struct {
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If CPU time
 // token AC is enabled (via admission.cpu_time_tokens.mode or the legacy
 // enabled bool), it returns a WorkQueue that implements CPU time token
-// AC. Else it returns a WorkQueue that does slots-based AC. If CPU time
-// token AC, there is one WorkQueue for system tenant work and another
-// for app tenant work. The system tenant WorkQueue is backed by a
-// granter that allows greater resource usage than the app tenant
-// WorkQueue. This is a prioritization scheme. For details regarding the
-// granters, see cpu_time_token_granter.go.
+// AC. Else it returns a WorkQueue that does slots-based AC.
+//
+// In serverless mode, there is one WorkQueue for system tenant work
+// and another for app tenant work. The system tenant WorkQueue is
+// backed by a granter that allows greater resource usage than the app
+// tenant WorkQueue. This is a prioritization scheme. In resource
+// manager mode, only queue[0] will be used (not yet implemented). For
+// details regarding the granters, see cpu_time_token_granter.go.
 func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
