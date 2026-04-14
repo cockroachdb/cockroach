@@ -266,7 +266,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
-	case desc.IsTemporary() && scDesc == nil:
+	case desc.IsTemporary():
 		// We've lost track of the session which owned this schema, but we
 		// can come up with a name that is also going to be unique and
 		// informative and looks like a pg_temp_<session_id> name.

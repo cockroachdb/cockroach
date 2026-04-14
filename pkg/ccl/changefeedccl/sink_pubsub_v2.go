@@ -403,7 +403,7 @@ func getGCPCredentials(
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding credentials json")
 		}
-		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope)
+		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope) //lint:ignore SA1019 grandfathered
 		if err != nil {
 			return nil, errors.Wrap(err, "creating credentials from json")
 		}
