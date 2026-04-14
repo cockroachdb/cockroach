@@ -1,4 +1,3 @@
-
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -721,3 +720,58 @@ query I
 SELECT DISTINCT _int FROM t88110 WHERE NOT _bool;
 ----
 NULL
+
+subtest optimizer_span_limit
+
+# Correctness tests for the optimizer_span_limit session setting.
+
+statement ok
+CREATE TABLE t167620 (a INT, b INT, c INT, INDEX (a, b, c))
+
+statement ok
+INSERT INTO t167620 VALUES
+  (1, 2, 7), (1, 4, 9), (3, 6, 11),
+  (5, 2, 9), (3, 4, 7), (1, 6, 11),
+  (1, 2, 99), (1, 3, 7), (2, 2, 7)
+
+# Verify that results are the same regardless of span limit.
+query III rowsort
+SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+1  2  7
+1  4  9
+1  6  11
+3  4  7
+3  6  11
+5  2  9
+
+statement ok
+SET optimizer_span_limit = 10
+
+query III rowsort
+SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+1  2  7
+1  4  9
+1  6  11
+3  4  7
+3  6  11
+5  2  9
+
+statement ok
+SET optimizer_span_limit = 8
+
+query III rowsort
+SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+1  2  7
+1  4  9
+1  6  11
+3  4  7
+3  6  11
+5  2  9
+
+statement ok
+RESET optimizer_span_limit
+
+subtest end
