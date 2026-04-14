@@ -57,7 +57,7 @@ ALTER TYPE new__name RENAME TO newname
 statement ok
 CREATE TABLE conflict (x INT)
 
-statement error pq: relation \"conflict\" already exists
+statement error pq: relation "test\.public\.conflict" already exists
 ALTER TYPE newname RENAME TO conflict
 
 # Renames should try and move around the array type to find a valid name.
