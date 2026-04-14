@@ -834,7 +834,8 @@ func TestListRestorableBackups(t *testing.T) {
 			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
 
 			backups, _, err := ListRestorableBackups(
-				ctx, externalStorage, afterTS, beforeTS, 0, true, /* withRevStartTime */
+				ctx, externalStorage, afterTS, beforeTS, 0,
+				true, /* openIndex */
 			)
 			require.NoError(t, err)
 
@@ -878,7 +879,8 @@ func TestListRestorableBackups(t *testing.T) {
 			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
 
 			backups, exceeded, err := ListRestorableBackups(
-				ctx, externalStorage, afterTS, beforeTS, tc.maxCount, true, /* withRevStartTime */
+				ctx, externalStorage, afterTS, beforeTS, tc.maxCount,
+				true, /* openIndex */
 			)
 			require.NoError(t, err)
 			require.LessOrEqual(t, len(backups), int(tc.maxCount))
@@ -891,7 +893,8 @@ func TestListRestorableBackups(t *testing.T) {
 		beforeTS := hlc.Timestamp{WallTime: 66 * 1e9}.GoTime()
 
 		backups, _, err := ListRestorableBackups(
-			ctx, externalStorage, afterTS, beforeTS, 0, false, /* withRevStartTime */
+			ctx, externalStorage, afterTS, beforeTS, 0,
+			false, /* openIndex */
 		)
 		require.NoError(t, err)
 		require.Len(t, backups, 4)
