@@ -825,9 +825,27 @@ export function StatementDetails(
         statementStatisticsPerAggregatedTsAndPlanHash || [],
       );
 
-    const canaryPlanDistData = generateCanaryVsStablePlanDistribution(
-      statementStatisticsPerAggregatedTsAndPlanHash || [],
-    );
+    // Compute weighted-average execution latency per plan gist so
+    // that the canary vs stable chart can color-code by latency.
+    const latencyByGist = new Map<string, number>();
+    const countByGist = new Map<string, number>();
+    (statementStatisticsPerPlanHash || []).forEach(plan => {
+      const gist = plan.stats?.plan_gists?.[0] || "unknown";
+      const count = longToInt(plan.stats?.count);
+      if (!count || count <= 0) return;
+      const lat = plan.stats?.run_lat?.mean ?? 0;
+      latencyByGist.set(gist, (latencyByGist.get(gist) || 0) + count * lat);
+      countByGist.set(gist, (countByGist.get(gist) || 0) + count);
+    });
+    latencyByGist.forEach((totalLat, gist) => {
+      latencyByGist.set(gist, totalLat / (countByGist.get(gist) || 1));
+    });
+
+    const { data: canaryPlanDistData, latencyRange: canaryLatencyRange } =
+      generateCanaryVsStablePlanDistribution(
+        statementStatisticsPerAggregatedTsAndPlanHash || [],
+        latencyByGist,
+      );
     const hasCanaryPlanData = canaryPlanDistData.length > 0;
 
     return (
@@ -885,19 +903,37 @@ export function StatementDetails(
           {hasCanaryPlanData && (
             <Row gutter={24}>
               <Col className="gutter-row" span={24}>
-                <GroupedBarChart
-                  data={canaryPlanDistData}
-                  yAxisUnits={AxisUnits.Count}
-                  title="Canary vs Stable Plan Distribution"
-                  tooltip={
-                    <>
-                      Shows plan distribution broken down by canary (newest) vs
-                      stable table statistics.
-                    </>
-                  }
-                  xScale={xScale}
-                  aggregationIntervalMillis={aggregationIntervalMillis}
-                />
+                <div style={{ display: "inline-flex", alignItems: "stretch" }}>
+                  <div>
+                    <GroupedBarChart
+                      data={canaryPlanDistData}
+                      yAxisUnits={AxisUnits.Count}
+                      title="Canary vs Stable Plan Distribution"
+                      tooltip={
+                        <>
+                          Compares plan distribution between canary (newest
+                          table statistics) and stable (second-newest)
+                          executions. Left bars show canary execution counts,
+                          right bars show stable. Color intensity indicates
+                          average execution latency: darker purple = higher
+                          latency, lighter purple = lower latency.
+                        </>
+                      }
+                      xScale={xScale}
+                      aggregationIntervalMillis={aggregationIntervalMillis}
+                    />
+                  </div>
+                  {canaryLatencyRange && (
+                    <div className={cx("latency-legend")}>
+                      <span>{Duration(canaryLatencyRange.max * 1e9)}</span>
+                      <div className={cx("latency-legend__bar")} />
+                      <span>{Duration(canaryLatencyRange.min * 1e9)}</span>
+                      <span className={cx("latency-legend__label")}>
+                        Avg Latency
+                      </span>
+                    </div>
+                  )}
+                </div>
               </Col>
             </Row>
           )}

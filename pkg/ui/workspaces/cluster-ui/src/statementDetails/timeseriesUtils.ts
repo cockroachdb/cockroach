@@ -292,23 +292,76 @@ export function generateCanaryVsStableTimeseries(
     }));
 }
 
+// HSL parameters for the latency heat-map palette. These should stay in
+// sync with the gradient in .latency-legend__bar (statementDetails.module.scss).
+const LATENCY_HUE = 261;
+const LATENCY_SATURATION = 97;
+const LATENCY_LIGHTNESS_MIN = 35; // darkest (highest latency)
+const LATENCY_LIGHTNESS_MAX = 85; // lightest (lowest latency)
+
+// latencyToColor maps a latency value to a purple-tone HSL color.
+// Lower latency → lighter (higher lightness), higher → darker.
+function latencyToColor(lat: number, min: number, max: number): string {
+  const t = max === min ? 0.5 : (lat - min) / (max - min);
+  const lightness =
+    LATENCY_LIGHTNESS_MAX - t * (LATENCY_LIGHTNESS_MAX - LATENCY_LIGHTNESS_MIN);
+  return `hsl(${LATENCY_HUE}, ${LATENCY_SATURATION}%, ${lightness}%)`;
+}
+
 // generateCanaryVsStablePlanDistribution builds a grouped bar chart
 // with two bars per timestamp: canary (left) and stable (right).
 // Each bar is stacked by plan gist, showing execution counts.
+//
+// When latencyByGist is provided, plan gists are sorted by latency
+// ascending (lowest latency at the bottom of the stack) and each gist
+// is assigned a heat-map color (light purple = low latency, dark
+// purple = high latency). The latency range is returned so the caller
+// can render a legend.
 export function generateCanaryVsStablePlanDistribution(
   stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
-): GroupedBarData {
-  // Collect unique plan gists and assign colors.
+  latencyByGist?: Map<string, number>,
+): { data: GroupedBarData; latencyRange?: { min: number; max: number } } {
+  // Collect unique plan gists.
   const planGistSet = new Set<string>();
   stats.forEach(stat => {
     const gist = stat.plan_gist || "unknown";
     planGistSet.add(gist);
   });
-  const planGists = Array.from(planGistSet).sort();
+
+  // Sort and color plan gists. When latency data is available, sort
+  // by latency ascending and use a purple heat-map. Otherwise fall
+  // back to evenly-spaced purple shades.
+  const planGistArray = Array.from(planGistSet);
+  let planGists: string[];
+  let latencyRange: { min: number; max: number } | undefined;
   const gistColors = new Map<string, string>();
-  planGists.forEach((gist, i) => {
-    gistColors.set(gist, SERIES_PALETTE[i % SERIES_PALETTE.length]);
-  });
+
+  const hasLatencyData =
+    latencyByGist &&
+    latencyByGist.size > 0 &&
+    planGistArray.some(g => latencyByGist.has(g));
+
+  if (hasLatencyData) {
+    planGists = planGistArray.sort(
+      (a, b) => (latencyByGist.get(a) || 0) - (latencyByGist.get(b) || 0),
+    );
+    const lats = planGists.map(g => latencyByGist.get(g) || 0);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    planGists.forEach((g, i) => {
+      gistColors.set(g, latencyToColor(lats[i], minLat, maxLat));
+    });
+    latencyRange = { min: minLat, max: maxLat };
+  } else {
+    planGists = planGistArray.sort();
+    const n = planGists.length;
+    planGists.forEach((gist, i) => {
+      // Use index as a synthetic "latency" so latencyToColor spreads
+      // colors evenly across the palette. When n<=1, min===max so
+      // latencyToColor uses its midpoint fallback (t=0.5).
+      gistColors.set(gist, latencyToColor(i, 0, n - 1));
+    });
+  }
 
   // Group stats by timestamp.
   type GistCounts = {
@@ -349,7 +402,7 @@ export function generateCanaryVsStablePlanDistribution(
     })
     .sort((a, b) => a - b);
 
-  return timestamps.map(ts => {
+  const data: GroupedBarData = timestamps.map(ts => {
     const entry = timeMap.get(ts);
     return {
       timestamp: ts,
@@ -373,4 +426,6 @@ export function generateCanaryVsStablePlanDistribution(
       ],
     };
   });
+
+  return { data, latencyRange };
 }
