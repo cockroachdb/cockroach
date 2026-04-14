@@ -2512,6 +2512,13 @@ func TestReadCommittedLogic_views(
 	runLogicTest(t, "views")
 }
 
+func TestReadCommittedLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
+}
+
 func TestReadCommittedLogic_virtual_columns(
 	t *testing.T,
 ) {

@@ -97,3 +97,19 @@ func RequireSystemTenantOrClusterSetting(
 		"Feature was disabled by the system operator."),
 		"Feature flag: %s", setting.Name())
 }
+
+// SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
+// tables are skipped when selecting from a view. When set to false, the view
+// owner's privileges are checked on the underlying tables. When enabled, all privilege
+// checks on the underlying tables are skipped.
+// This means that any user with SELECT privileges on the view can query it
+// regardless of the underlying table privileges. This restores the pre-v26.2 behavior.
+var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_underlying_view_privilege_checks.enabled",
+	"determines whether to skip privilege checks on tables underlying views. "+
+		"When enabled, users with SELECT privileges on a view can query it regardless of "+
+		"their privileges on the underlying tables. "+
+		"This restores pre-v26.2 behavior.",
+	true,
+	settings.WithPublic)
