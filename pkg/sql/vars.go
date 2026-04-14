@@ -2992,6 +2992,35 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_span_limit`: {
+		Description:  sessionVarDescriptions["optimizer_span_limit"],
+		GetStringVal: makeIntGetStringValFn(`optimizer_span_limit`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_span_limit to a negative value: %d", b)
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set optimizer_span_limit to a value greater than %d", math.MaxInt32)
+			}
+
+			m.SetOptimizerSpanLimit(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().OptimizerSpanLimit), 10), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return "0"
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_super_regions`: makeBackwardsCompatBoolVar("enable_super_regions", true),
 
 	// CockroachDB extension.

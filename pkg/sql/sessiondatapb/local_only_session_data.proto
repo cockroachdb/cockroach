@@ -813,6 +813,9 @@ message LocalOnlySessionData {
   // CRDB-specific syntax for pg_dump compatibility), and "cockroachdb"
   // (show CRDB syntax explicitly).
   string pg_dump_compatibility = 206;
+  // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
+  // a scan during query optimization. 0 means no limit.
+  int32 optimizer_span_limit = 207;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
