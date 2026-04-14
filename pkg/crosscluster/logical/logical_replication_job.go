@@ -126,10 +126,10 @@ func (r *logicalReplicationResumer) handleResumeError(
 		return nil
 	}
 	if jobs.IsPermanentJobError(err) {
-		r.updateStatusMessage(ctx, redact.Sprintf("permanent error: %s", err.Error()))
+		r.updateStatusMessage(ctx, redact.Sprintf("permanent error: %v", err))
 		return err
 	}
-	r.updateStatusMessage(ctx, redact.Sprintf("pausing after error: %s", err.Error()))
+	r.updateStatusMessage(ctx, redact.Sprintf("pausing after error: %v", err))
 	return jobs.MarkPauseRequestError(err)
 }
 
