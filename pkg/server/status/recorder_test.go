@@ -1540,9 +1540,9 @@ func TestScrapeMetrics(t *testing.T) {
 }
 
 // TestCountFamilyMetrics verifies that countFamilyMetrics correctly
-// counts the number of individual metrics a MetricFamily produces as
-// ingested by downstream systems (histograms expand to computed
-// metrics, no HELP/TYPE overhead).
+// counts the number of individual time series a MetricFamily produces
+// in the Prometheus scrape output (histograms expand to buckets plus
+// _count and _sum, no HELP/TYPE overhead).
 func TestCountFamilyMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1585,7 +1585,7 @@ func TestCountFamilyMetrics(t *testing.T) {
 			expected: 3,
 		},
 		{
-			name: "histogram expands to computed metrics",
+			name: "histogram expands to buckets plus count and sum",
 			family: &prometheusgo.MetricFamily{
 				Name: str("test_histo"),
 				Type: mtype(prometheusgo.MetricType_HISTOGRAM),
@@ -1601,7 +1601,8 @@ func TestCountFamilyMetrics(t *testing.T) {
 					}},
 				},
 			},
-			expected: int64(len(metric.HistogramMetricComputers)),
+			// 3 buckets + _count + _sum = 5
+			expected: 5,
 		},
 		{
 			name: "empty family",
