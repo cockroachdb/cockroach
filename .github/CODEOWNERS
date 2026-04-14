@@ -62,8 +62,8 @@
 /pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
 /pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
 /pkg/sql/execinfrapb/processors_export.proto      @cockroachdb/cdc-prs
-/pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-foundations
-/pkg/sql/execinfrapb/processors_inspect.proto     @cockroachdb/sql-foundations
+/pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-queries-prs
+/pkg/sql/execinfrapb/processors_inspect.proto     @cockroachdb/sql-queries-prs
 /pkg/sql/exec_factory_util.go          @cockroachdb/sql-queries-prs
 #!/pkg/sql/exec_log*.go                @cockroachdb/sql-queries-noreview
 #!/pkg/sql/exec_util*.go               @cockroachdb/sql-queries-noreview
@@ -80,6 +80,8 @@
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/sql/vecindex/           @cockroachdb/sql-queries-prs
+/pkg/sql/partition*.go       @cockroachdb/sql-queries-prs
+/pkg/sql/temporary_schema*   @cockroachdb/sql-queries-prs
 #!/pkg/sql/BUILD.bazel       @cockroachdb/sql-queries-noreview
 
 /pkg/sql/importer/           @cockroachdb/sql-foundations
@@ -99,16 +101,24 @@
 /pkg/sql/pg_catalog.go       @cockroachdb/sql-foundations
 /pkg/sql/show_create*.go     @cockroachdb/sql-foundations
 /pkg/sql/lex/                @cockroachdb/sql-foundations
+/pkg/sql/partitioning/       @cockroachdb/sql-queries-prs
 /pkg/sql/pgwire/             @cockroachdb/sql-foundations @cockroachdb/product-security
 /pkg/sql/pgwire/auth.go      @cockroachdb/sql-foundations @cockroachdb/security-engineering
 /pkg/sql/sem/builtins/       @cockroachdb/sql-foundations
+/pkg/sql/sem/plpgsqltree/    @cockroachdb/sql-foundations
 /pkg/sql/vtable/             @cockroachdb/sql-foundations
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-foundations
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-foundations
-/pkg/sql/ttl                 @cockroachdb/sql-foundations
+/pkg/sql/ttl                 @cockroachdb/sql-queries-prs
 /pkg/sql/spanutils/          @cockroachdb/sql-foundations
-/pkg/sql/inspect/            @cockroachdb/sql-foundations
+/pkg/sql/inspect/            @cockroachdb/sql-queries-prs
+/pkg/sql/copy/               @cockroachdb/sql-foundations
+/pkg/sql/copy_*.go           @cockroachdb/sql-foundations
+/pkg/sql/plpgsql/            @cockroachdb/sql-foundations
+/pkg/sql/routine.go          @cockroachdb/sql-foundations
+/pkg/sql/function_references.go @cockroachdb/sql-foundations
+/pkg/sql/show_trigger.go     @cockroachdb/sql-foundations
 
 /pkg/sql/syntheticprivilege/      @cockroachdb/sql-foundations
 /pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations
@@ -118,7 +128,7 @@
 /pkg/sql/bulksst/            @cockroachdb/sql-foundations
 /pkg/sql/bulkutil/           @cockroachdb/sql-foundations
 /pkg/sql/catalog/            @cockroachdb/sql-foundations
-/pkg/sql/catalog/multiregion @cockroachdb/sql-foundations
+/pkg/sql/catalog/multiregion @cockroachdb/sql-queries-prs
 /pkg/sql/doctor/             @cockroachdb/sql-foundations
 /pkg/sql/gcjob/              @cockroachdb/sql-foundations
 /pkg/sql/gcjob_test/         @cockroachdb/sql-foundations
@@ -418,7 +428,7 @@
 #!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
-/pkg/ccl/multiregionccl/     @cockroachdb/sql-foundations
+/pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 /pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
@@ -530,6 +540,13 @@
 /pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/copy.go                         @cockroachdb/sql-foundations
+/pkg/cmd/roachtest/tests/copyfrom.go                     @cockroachdb/sql-foundations
+/pkg/cmd/roachtest/tests/inspect_throughput.go           @cockroachdb/sql-queries-prs
+/pkg/cmd/roachtest/tests/ttl_restart.go                  @cockroachdb/sql-queries-prs
+/pkg/cmd/roachtest/tests/multi_region_system_database.go @cockroachdb/sql-queries-prs
+/pkg/cmd/roachtest/tests/mixed_version_multi_region.go   @cockroachdb/sql-queries-prs
+/pkg/cmd/roachtest/tests/super_region_failover.go        @cockroachdb/sql-queries-prs
 /pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
 /pkg/cmd/roachvet/           @cockroachdb/dev-inf
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
