@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -120,6 +121,9 @@ type extendedEvalContext struct {
 
 	// validateDbZoneConfig should the DB zone config on commit.
 	validateDbZoneConfig *bool
+
+	// advisoryLockManager is the manager for advisory locks.
+	advisoryLockManager *advisorylock.Manager
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -1278,6 +1282,105 @@ func (p *planner) UsingHintInjection() bool {
 // LogEvent is part of the eval.Planner interface.
 func (p *planner) LogEvent(ctx context.Context, event interface{}) error {
 	return p.logEvent(ctx, 0 /* descID */, event.(logpb.EventPayload))
+}
+
+// AdvisoryXactLock is part of the eval.Planner interface.
+func (p *planner) AdvisoryXactLock(ctx context.Context, key int64, shared bool) error {
+	return p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt64(dbID, key)
+	})
+}
+
+// AdvisoryXactLockInt4 is part of the eval.Planner interface.
+func (p *planner) AdvisoryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) error {
+	return p.advisoryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt32(dbID, key1, key2)
+	})
+}
+
+// AdvisoryTryXactLock is part of the eval.Planner interface.
+func (p *planner) AdvisoryTryXactLock(ctx context.Context, key int64, shared bool) (bool, error) {
+	return p.advisoryTryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt64(dbID, key)
+	})
+}
+
+// AdvisoryTryXactLockInt4 is part of the eval.Planner interface.
+func (p *planner) AdvisoryTryXactLockInt4(
+	ctx context.Context, key1, key2 int32, shared bool,
+) (bool, error) {
+	return p.advisoryTryXactLockImpl(ctx, shared, func(dbID descpb.ID) advisorylock.LockKey {
+		return advisorylock.MakeLockKeyInt32(dbID, key1, key2)
+	})
+}
+
+func (p *planner) advisoryXactLockImpl(
+	ctx context.Context, shared bool, mk func(descpb.ID) advisorylock.LockKey,
+) error {
+	if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3_AddAdvisoryLocksTable) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"advisory locks are not available until the cluster upgrade to v26.3 is finalized")
+	}
+	if p.txn == nil || !p.txn.IsOpen() {
+		return pgerror.New(pgcode.NoActiveSQLTransaction,
+			"advisory locks are only available in a transaction")
+	}
+	mgr := p.extendedEvalCtx.advisoryLockManager
+	if mgr == nil {
+		return errors.AssertionFailedf("advisory lock manager not initialized")
+	}
+	dbName := p.CurrentDatabase()
+	if dbName == "" {
+		return pgerror.New(pgcode.InvalidName, "no database is set")
+	}
+	db, err := p.Descriptors().ByName(p.txn).Get().Database(ctx, dbName)
+	if err != nil {
+		return err
+	}
+	mode := advisorylock.LockModeExclusive
+	if shared {
+		mode = advisorylock.LockModeShare
+	}
+	lockKey := mk(db.GetID())
+	return mgr.AcquireInTxn(ctx, p.txn, lockKey, mode, true /* wait */)
+}
+
+func (p *planner) advisoryTryXactLockImpl(
+	ctx context.Context, shared bool, mk func(descpb.ID) advisorylock.LockKey,
+) (bool, error) {
+	if !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3_AddAdvisoryLocksTable) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"advisory locks are not available until the cluster upgrade to v26.3 is finalized")
+	}
+	if p.txn == nil || !p.txn.IsOpen() {
+		return false, pgerror.New(pgcode.NoActiveSQLTransaction,
+			"advisory locks are only available in a transaction")
+	}
+	mgr := p.extendedEvalCtx.advisoryLockManager
+	if mgr == nil {
+		return false, errors.AssertionFailedf("advisory lock manager not initialized")
+	}
+	dbName := p.CurrentDatabase()
+	if dbName == "" {
+		return false, pgerror.New(pgcode.InvalidName, "no database is set")
+	}
+	db, err := p.Descriptors().ByName(p.txn).Get().Database(ctx, dbName)
+	if err != nil {
+		return false, err
+	}
+	mode := advisorylock.LockModeExclusive
+	if shared {
+		mode = advisorylock.LockModeShare
+	}
+	lockKey := mk(db.GetID())
+	err = mgr.AcquireInTxn(ctx, p.txn, lockKey, mode, false /* wait */)
+	if err != nil {
+		if errors.Is(err, advisorylock.LockIsNotAvailable) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // GetHintIDs is part of the eval.Planner interface.
