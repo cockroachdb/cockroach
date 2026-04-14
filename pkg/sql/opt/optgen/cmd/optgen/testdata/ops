@@ -54,6 +54,10 @@ const opNames = "unknowncol-privateprojectprojectionsprojections-itemsort"
 
 var opNameIndexes = [...]uint32{0, 7, 18, 25, 36, 52, 56}
 
+const opCamelCaseNames = "UnknownColPrivateProjectProjectionsProjectionsItemSort"
+
+var opCamelCaseNameIndexes = [...]uint32{0, 7, 17, 24, 35, 50, 54}
+
 const opSyntaxTags = "UNKNOWNCOL PRIVATEPROJECTPROJECTIONSPROJECTIONS ITEMSORT"
 
 var opSyntaxTagIndexes = [...]uint32{0, 7, 18, 25, 36, 52, 56}

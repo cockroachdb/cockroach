@@ -31,6 +31,7 @@ func (g *opsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.genOperatorEnum()
 	g.genOperatorNames()
+	g.genOperatorCamelCaseNames()
 	g.genOperatorSyntaxTags()
 	g.genOperatorsByTag()
 }
@@ -63,6 +64,25 @@ func (g *opsGen) genOperatorNames() {
 	fmt.Fprintf(g.w, "const opNames = \"%s\"\n\n", names.String())
 
 	fmt.Fprintf(g.w, "var opNameIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
+}
+
+func (g *opsGen) genOperatorCamelCaseNames() {
+	var names bytes.Buffer
+	var indexes bytes.Buffer
+
+	fmt.Fprint(&names, "Unknown")
+	fmt.Fprint(&indexes, "0, ")
+
+	for _, define := range g.sorted {
+		fmt.Fprintf(&indexes, "%d, ", names.Len())
+		fmt.Fprint(&names, define.Name)
+	}
+
+	fmt.Fprintf(g.w, "const opCamelCaseNames = \"%s\"\n\n", names.String())
+
+	fmt.Fprintf(
+		g.w, "var opCamelCaseNameIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len(),
+	)
 }
 
 func (g *opsGen) genOperatorSyntaxTags() {
