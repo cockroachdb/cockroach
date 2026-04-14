@@ -1,0 +1,434 @@
+subtest pg_advisory_xact_lock_single_key
+
+statement ok
+SELECT pg_advisory_xact_lock(1234567890123456789)
+
+# Same key twice in one transaction is allowed (re-entrant for same txn).
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(100)
+
+statement ok
+SELECT pg_advisory_xact_lock(100)
+
+statement ok
+COMMIT
+
+subtest pg_advisory_xact_lock_two_int4
+
+statement ok
+SELECT pg_advisory_xact_lock(1::INT4, 2::INT4)
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(7::INT4, 8::INT4)
+
+statement ok
+COMMIT
+
+subtest pg_advisory_xact_lock_shared
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(999)
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(1::INT4, 2::INT4)
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(1::INT4, 2::INT4)
+
+statement ok
+COMMIT
+
+subtest pg_try_advisory_xact_lock
+
+query B
+SELECT pg_try_advisory_xact_lock(5555555555555555)
+----
+true
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(556)
+----
+true
+
+statement ok
+COMMIT
+
+query B
+SELECT pg_try_advisory_xact_lock(1::INT4, 2::INT4)
+----
+true
+
+subtest pg_try_advisory_xact_lock_shared
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(888)
+----
+true
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(3::INT4, 4::INT4)
+----
+true
+
+subtest pg_try_advisory_xact_lock_conflict
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(4242424242)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(4242424242)
+----
+false
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+query B
+SELECT pg_try_advisory_xact_lock(4242424242)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_int4_pair_distinct_from_packed_bigint
+
+# Two-argument int4 transaction locks and single-argument bigint locks use
+# different key kinds in the backing table, so they never alias: the bigint
+# whose numeric value equals (key1<<32)|uint32(key2) for int4 key1/key2 is an
+# independent lock from pg_advisory_xact_lock(key1::INT4, key2::INT4).
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(1::INT4, 2::INT4)
+
+user testuser
+
+statement ok
+BEGIN
+
+# 4294967298 == (int64(1)<<32) | uint32(2); must not conflict with (1::INT4, 2::INT4).
+query B
+SELECT pg_try_advisory_xact_lock(4294967298)
+----
+true
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(4294967298)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(1::INT4, 2::INT4)
+----
+true
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+# Same int4 pair still conflicts across sessions.
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(3::INT4, 4::INT4)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(3::INT4, 4::INT4)
+----
+false
+
+user testuser
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+# Same bigint still conflicts across sessions (8589934597 == (2<<32)|5).
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(8589934597)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(8589934597)
+----
+false
+
+user testuser
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_int4_negative_second
+
+# PostgreSQL packs (0, -1) as uint64(0x00000000FFFFFFFF) == 4294967295; the
+# two-int4 lock must not alias the single-argument bigint -1, and two sessions
+# must conflict on the same int4 pair.
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(0::INT4, -1::INT4)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(0::INT4, -1::INT4)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(-1)
+----
+true
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_shared_two_sessions
+
+# Multiple transactions can hold the same transaction-level advisory lock in
+# shared mode concurrently (unlike exclusive).
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(701234567)
+
+user testuser
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(701234567)
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_try_exclusive_vs_shared_holder
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(702345678)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(702345678)
+----
+false
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+query B
+SELECT pg_try_advisory_xact_lock(702345678)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_try_shared_vs_exclusive_holder
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(703456789)
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(703456789)
+----
+false
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(703456789)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_rollback_releases
+
+user root
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(705678901)
+
+statement ok
+ROLLBACK
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(705678901)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest current_database_required
+
+statement ok
+SET database = ''
+
+statement error pgcode 42602 no database is set
+SELECT pg_advisory_xact_lock(1)
+
+statement error pgcode 42602 no database is set
+SELECT pg_advisory_xact_lock_shared(2::INT4, 3::INT4)
+
+statement error pgcode 42602 no database is set
+SELECT pg_try_advisory_xact_lock(1)
+
+statement error pgcode 42602 no database is set
+SELECT pg_try_advisory_xact_lock_shared(2::INT4, 3::INT4)
+
+statement ok
+SET database = test

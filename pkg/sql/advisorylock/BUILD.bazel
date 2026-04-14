@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "advisorylock",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/advisorylock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "advisorylock_test",
+    size = "medium",
+    srcs = [
+        "advisory_lock_test.go",
+        "main_test.go",
+    ],
+    exec_properties = {"test.Pool": "large"},
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/concurrency",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

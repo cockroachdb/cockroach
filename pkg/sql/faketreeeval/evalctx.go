@@ -661,6 +661,30 @@ func (ep *DummyEvalPlanner) LogEvent(ctx context.Context, event interface{}) err
 	return nil
 }
 
+// AdvisoryXactLock is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AdvisoryXactLock(ctx context.Context, _ int64, _ bool) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// AdvisoryXactLockInt4 is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AdvisoryXactLockInt4(ctx context.Context, _, _ int32, _ bool) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// AdvisoryTryXactLock is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AdvisoryTryXactLock(
+	ctx context.Context, _ int64, _ bool,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
+}
+
+// AdvisoryTryXactLockInt4 is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AdvisoryTryXactLockInt4(
+	ctx context.Context, _, _ int32, _ bool,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

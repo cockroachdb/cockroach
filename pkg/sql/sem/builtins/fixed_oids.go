@@ -2905,6 +2905,14 @@ var builtinOidsArray = []string{
 	2950: `pg_get_statisticsobjdef(statobj_oid: oid) -> string`,
 	2951: `crdb_internal.zone_config_for_key(key: bytes) -> jsonb`,
 	2952: `crdb_internal.zone_config_span_end(key: bytes) -> bytes`,
+	2953: `pg_advisory_xact_lock(key: int) -> void`,
+	2954: `pg_advisory_xact_lock(key1: int4, key2: int4) -> void`,
+	2955: `pg_advisory_xact_lock_shared(key: int) -> void`,
+	2956: `pg_advisory_xact_lock_shared(key1: int4, key2: int4) -> void`,
+	2957: `pg_try_advisory_xact_lock(key: int) -> bool`,
+	2958: `pg_try_advisory_xact_lock(key1: int4, key2: int4) -> bool`,
+	2959: `pg_try_advisory_xact_lock_shared(key: int) -> bool`,
+	2960: `pg_try_advisory_xact_lock_shared(key1: int4, key2: int4) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
