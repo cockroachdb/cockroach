@@ -321,7 +321,9 @@ func (b *Builder) buildWhereForStatistics(
 	ic.Init(
 		b.ctx, fe, nil /* optionalFilters */, indexCols, notNullCols,
 		computedCols, colsInComputedColsExpressions, true, /* consolidate */
-		b.evalCtx, b.factory, ps, nil, /* checkCancellation */
+		b.evalCtx, b.factory, ps,
+		0,   /* spanLimit */
+		nil, /* checkCancellation */
 	)
 	var cons constraint.Constraint
 	ic.Constraint(&cons)

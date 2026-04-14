@@ -14386,3 +14386,132 @@ project
                      ├── [???, "a"/"b")
                      ├── ["a"/"b"/PrefixEnd, "a"/"b"/Arr)
                      └── ["a"/"b"/Arr/PrefixEnd, "a"/Arr/)
+
+# --------------------------------------------------
+# optimizer_span_limit
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE span_limit (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT,
+    INDEX ab (a, b),
+    INDEX abc (a, b, c)
+)
+----
+
+# With optimizer_span_limit=0 (the default, meaning no limit),
+# GenerateConstrainedScans should fire normally for IN lists.
+# Using non-contiguous values on both columns generates 3 * 3 = 9 individual
+# spans since they cannot be consolidated into ranges.
+opt expect=GenerateConstrainedScans
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/1/6 - /1/6]
+      │    ├── [/3/2 - /3/2]
+      │    ├── [/3/4 - /3/4]
+      │    ├── [/3/6 - /3/6]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    └── [/5/6 - /5/6]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Setting optimizer_span_limit=10 still allows 9 spans.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=10)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/1/6 - /1/6]
+      │    ├── [/3/2 - /3/2]
+      │    ├── [/3/4 - /3/4]
+      │    ├── [/3/6 - /3/6]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    └── [/5/6 - /5/6]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Setting optimizer_span_limit=8 would produce 3*3=9 spans without the limit.
+# The cross-product is skipped during span building, so we get a partial
+# constraint on just column a (3 spans). Column b is applied as a remaining
+# filter after the scan.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=8)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan span_limit@ab
+      │    ├── columns: k:1!null a:2!null b:3
+      │    ├── constraint: /2/3/1
+      │    │    ├── [/1 - /1]
+      │    │    ├── [/3 - /3]
+      │    │    └── [/5 - /5]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── b:3 IN (2, 4, 6) [outer=(3), constraints=(/3: [/2 - /2] [/4 - /4] [/6 - /6]; tight)]
+
+# 4 non-contiguous values on each column would produce 4*4=16 spans.
+# With optimizer_span_limit=10, the cross-product is skipped, and we get a
+# partial constraint on just column a (4 spans).
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=10)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5, 7) AND b IN (2, 4, 6, 8)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan span_limit@ab
+      │    ├── columns: k:1!null a:2!null b:3
+      │    ├── constraint: /2/3/1
+      │    │    ├── [/1 - /1]
+      │    │    ├── [/3 - /3]
+      │    │    ├── [/5 - /5]
+      │    │    └── [/7 - /7]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── b:3 IN (2, 4, 6, 8) [outer=(3), constraints=(/3: [/2 - /2] [/4 - /4] [/6 - /6] [/8 - /8]; tight)]
+
+# A filter on just one column produces fewer spans (3 spans for 3 values).
+# With optimizer_span_limit=5, the constrained scan is within the limit.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=5)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1
+      │    ├── [/1 - /1]
+      │    ├── [/3 - /3]
+      │    └── [/5 - /5]
+      ├── key: (1)
+      └── fd: (1)-->(2)
