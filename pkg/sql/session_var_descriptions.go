@@ -135,6 +135,7 @@ var sessionVarDescriptions = map[string]string{
 	"null_ordered_last":                                               "Controls whether NULL values are ordered last. When true, NULL values appear after non-NULL values in ordered results.",
 	"on_update_rehome_row_enabled":                                    "Controls whether the ON UPDATE rehome_row() will actually trigger on row updates.",
 	"opt_split_scan_limit":                                            "Sets the maximum number of UNION ALL statements a Scan may be split into during query optimization to avoid a sort.",
+	"optimizer_span_limit":                                            "Sets the maximum number of constraint spans allowed in a scan during query optimization. 0 means no limit.",
 	"optimizer":                                                       "Controls whether the cost-based optimizer is enabled.",
 	"optimizer_always_use_histograms":                                 "Ensures that the optimizer always uses histograms to calculate statistics if available.",
 	"optimizer_check_input_min_row_count":                             "Sets a lower bound on row count estimates for the buffer scan of foreign key and uniqueness checks.",

@@ -145,6 +145,7 @@ SHOW application_name;
 <tr><td><code>null_ordered_last</code></td><td>Controls whether NULL values are ordered last. When true, NULL values appear after non-NULL values in ordered results.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>on_update_rehome_row_enabled</code></td><td>Controls whether the ON UPDATE rehome_row() will actually trigger on row updates.</td><td><code>on</code></td><td>No</td><td><code>sql.defaults.on_update_rehome_row.enabled</code></td></tr>
 <tr><td><code>opt_split_scan_limit</code></td><td>Sets the maximum number of UNION ALL statements a Scan may be split into during query optimization to avoid a sort.</td><td><code>2048</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>optimizer_span_limit</code></td><td>Sets the maximum number of constraint spans allowed in a scan during query optimization. 0 means no limit.</td><td><code>131072</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer</code></td><td>Controls whether the cost-based optimizer is enabled.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_always_use_histograms</code></td><td>Ensures that the optimizer always uses histograms to calculate statistics if available.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>optimizer_check_input_min_row_count</code></td><td>Sets a lower bound on row count estimates for the buffer scan of foreign key and uniqueness checks.</td><td><code>1</code></td><td>No</td><td>-</td></tr>
