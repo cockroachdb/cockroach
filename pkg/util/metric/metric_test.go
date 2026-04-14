@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -18,7 +17,6 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -273,24 +271,22 @@ func TestHistogram(t *testing.T) {
 		expSum += float64(m)
 	}
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
-		SampleCount: u(len(measurements)),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(3), UpperBound: f(5)},
-			{CumulativeCount: u(4), UpperBound: f(10)},
-			{CumulativeCount: u(6), UpperBound: f(25)},
-			{CumulativeCount: u(9), UpperBound: f(100)},
-			// NB: 200 is greater than the largest defined bucket so prometheus
-			// puts it in an implicit bucket with +Inf as the upper bound.
-		},
-	}
+	act := h.ToPrometheusMetric().Histogram
+	require.Equal(t, u(len(measurements)), act.SampleCount)
+	require.Equal(t, &expSum, act.SampleSum)
+	require.Equal(t, []*prometheusgo.Bucket{
+		{CumulativeCount: u(1), UpperBound: f(1)},
+		{CumulativeCount: u(3), UpperBound: f(5)},
+		{CumulativeCount: u(4), UpperBound: f(10)},
+		{CumulativeCount: u(6), UpperBound: f(25)},
+		{CumulativeCount: u(9), UpperBound: f(100)},
+		// NB: 200 is greater than the largest defined bucket so prometheus
+		// puts it in an implicit bucket with +Inf as the upper bound.
+	}, act.Bucket)
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	// Assert that native histogram schema is defined (native histograms are on
+	// by default).
+	require.NotNil(t, act.Schema)
 
 	histWindow := h.WindowedSnapshot()
 	require.Equal(t, 0.0, histWindow.ValueAtQuantile(0))
@@ -298,27 +294,42 @@ func TestHistogram(t *testing.T) {
 	require.Equal(t, 17.5, histWindow.ValueAtQuantile(50))
 	require.Equal(t, 75.0, histWindow.ValueAtQuantile(80))
 	require.Equal(t, 100.0, histWindow.ValueAtQuantile(99.99))
-
-	// Assert that native histogram schema is not defined
-	require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
 }
 
 func TestNativeHistogram(t *testing.T) {
-	defer func(enabled bool) {
-		nativeHistogramsEnabled = enabled
-	}(nativeHistogramsEnabled)
-	nativeHistogramsEnabled = true
-	h := NewHistogram(HistogramOptions{
-		Mode:     HistogramModePrometheus,
-		Metadata: Metadata{},
-		Duration: time.Hour,
-		BucketConfig: staticBucketConfig{
-			distribution: Exponential,
-		},
+	t.Run("enabled by default", func(t *testing.T) {
+		h := NewHistogram(HistogramOptions{
+			Mode:         HistogramModePrometheus,
+			Metadata:     Metadata{},
+			Duration:     time.Hour,
+			BucketConfig: IOLatencyBuckets,
+		})
+		require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
 	})
 
-	// Assert that native histogram schema is defined
-	require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
+	t.Run("disabled via env var", func(t *testing.T) {
+		defer func(enabled bool) {
+			nativeHistogramsEnabled = enabled
+		}(nativeHistogramsEnabled)
+		nativeHistogramsEnabled = false
+
+		h := NewHistogram(HistogramOptions{
+			Mode:         HistogramModePrometheus,
+			Metadata:     Metadata{},
+			Duration:     time.Hour,
+			BucketConfig: IOLatencyBuckets,
+		})
+		require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
+	})
+
+	t.Run("manual window histogram", func(t *testing.T) {
+		h := NewManualWindowHistogram(
+			Metadata{},
+			IOLatencyBuckets.GetBucketsFromBucketConfig(),
+			true, /* withRotate */
+		)
+		require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
+	})
 }
 
 func TestManualWindowHistogram(t *testing.T) {
@@ -362,24 +373,18 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.NoError(t, histogram.Write(pMetric))
 	h.Update(histogram, pMetric.Histogram)
 
-	act := *h.ToPrometheusMetric().Histogram
-	exp := prometheusgo.Histogram{
-		SampleCount: u(len(measurements)),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(3), UpperBound: f(5)},
-			{CumulativeCount: u(4), UpperBound: f(10)},
-			{CumulativeCount: u(6), UpperBound: f(25)},
-			{CumulativeCount: u(9), UpperBound: f(100)},
-			// NB: 200 is greater than the largest defined bucket so prometheus
-			// puts it in an implicit bucket with +Inf as the upper bound.
-		},
-	}
-
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	act := h.ToPrometheusMetric().Histogram
+	require.Equal(t, u(len(measurements)), act.SampleCount)
+	require.Equal(t, &expSum, act.SampleSum)
+	require.Equal(t, []*prometheusgo.Bucket{
+		{CumulativeCount: u(1), UpperBound: f(1)},
+		{CumulativeCount: u(3), UpperBound: f(5)},
+		{CumulativeCount: u(4), UpperBound: f(10)},
+		{CumulativeCount: u(6), UpperBound: f(25)},
+		{CumulativeCount: u(9), UpperBound: f(100)},
+		// NB: 200 is greater than the largest defined bucket so prometheus
+		// puts it in an implicit bucket with +Inf as the upper bound.
+	}, act.Bucket)
 
 	// Rotate and RecordValue are not supported when using Update. See comment on
 	// NewManualWindowHistogram.
@@ -411,22 +416,16 @@ func TestManualWindowHistogram(t *testing.T) {
 	histogram.Observe(5)
 	histogram.Observe(5)
 
-	act = *h.WindowedSnapshot().h
-	exp = prometheusgo.Histogram{
-		SampleCount: u(len(measurements) + len(measurements2)),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(4), UpperBound: f(5)},
-			{CumulativeCount: u(5), UpperBound: f(10)},
-			{CumulativeCount: u(8), UpperBound: f(25)},
-			{CumulativeCount: u(12), UpperBound: f(100)},
-		},
-	}
-
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
+	actW := h.WindowedSnapshot().h
+	require.Equal(t, u(len(measurements)+len(measurements2)), actW.SampleCount)
+	require.Equal(t, &expSum, actW.SampleSum)
+	require.Equal(t, []*prometheusgo.Bucket{
+		{CumulativeCount: u(1), UpperBound: f(1)},
+		{CumulativeCount: u(4), UpperBound: f(5)},
+		{CumulativeCount: u(5), UpperBound: f(10)},
+		{CumulativeCount: u(8), UpperBound: f(25)},
+		{CumulativeCount: u(12), UpperBound: f(100)},
+	}, actW.Bucket)
 }
 
 // TestValueAtQuantileWithEmptyBuckets verifies that ValueAtQuantile does not

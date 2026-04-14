@@ -40,5 +40,27 @@ echo
       "cumulative_count": 4,
       "upper_bound": 30
     }
+  ],
+  "schema": 3,
+  "zero_threshold": 2.938735877055719e-39,
+  "zero_count": 0,
+  "positive_span": [
+    {
+      "offset": 0,
+      "length": 1
+    },
+    {
+      "offset": 18,
+      "length": 1
+    },
+    {
+      "offset": 7,
+      "length": 1
+    }
+  ],
+  "positive_delta": [
+    1,
+    1,
+    -1
   ]
 }

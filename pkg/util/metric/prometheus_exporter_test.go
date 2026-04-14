@@ -185,10 +185,6 @@ func TestPrometheusExporter(t *testing.T) {
 }
 
 func TestPrometheusExporterNativeHistogram(t *testing.T) {
-	defer func(enabled bool) {
-		nativeHistogramsEnabled = enabled
-	}(nativeHistogramsEnabled)
-	nativeHistogramsEnabled = true
 	r := NewRegistry()
 
 	histogram := NewHistogram(HistogramOptions{

@@ -326,7 +326,7 @@ func HdrEnabled() bool {
 // conventional and native histograms are exported.
 const useNativeHistogramsEnvVar = "COCKROACH_ENABLE_PROMETHEUS_NATIVE_HISTOGRAMS"
 
-var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, false)
+var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, true)
 
 // nativeHistogramsBucketFactorEnvVar can be used to override the default
 // bucket size exponential factor for Prometheus native histograms, if enabled.
@@ -342,6 +342,19 @@ var nativeHistogramsBucketFactor = envutil.EnvOrDefaultFloat64(nativeHistogramsB
 const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_COUNT_MULTIPLIER"
 
 var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
+
+// applyNativeHistogramOpts configures native histogram options on the given
+// prometheus.HistogramOpts if native histograms are enabled. Native histograms
+// use their own internal exponential bucketing scheme, so this works regardless
+// of the classic bucket distribution.
+func applyNativeHistogramOpts(opts *prometheus.HistogramOpts, numBuckets int) {
+	if nativeHistogramsEnabled {
+		opts.NativeHistogramBucketFactor = nativeHistogramsBucketFactor
+		opts.NativeHistogramMaxBucketNumber = uint32(
+			float64(numBuckets) * nativeHistogramsBucketCountMultiplier,
+		)
+	}
+}
 
 // maxLabelValuesEnvVar can be used to configure the maximum number of distinct
 // label value combinations for high cardinality metrics before eviction starts.
@@ -443,10 +456,7 @@ func newHistogram(
 	opts := prometheus.HistogramOpts{
 		Buckets: buckets,
 	}
-	if bucketConfig.distribution == Exponential && nativeHistogramsEnabled {
-		opts.NativeHistogramBucketFactor = nativeHistogramsBucketFactor
-		opts.NativeHistogramMaxBucketNumber = uint32(float64(len(buckets)) * nativeHistogramsBucketCountMultiplier)
-	}
+	applyNativeHistogramOpts(&opts, len(buckets))
 	cum := prometheus.NewHistogram(opts)
 	h := &Histogram{
 		Metadata: meta,
@@ -625,6 +635,7 @@ func NewManualWindowHistogram(
 	opts := prometheus.HistogramOpts{
 		Buckets: buckets,
 	}
+	applyNativeHistogramOpts(&opts, len(buckets))
 	cum := prometheus.NewHistogram(opts)
 	// We initialize the histogram with the same bucket bounds as the cumulative
 	// histogram.
@@ -1703,6 +1714,7 @@ func NewExportedHistogramVec(
 		Name:    metadata.Name,
 		Help:    metadata.Help,
 	}
+	applyNativeHistogramOpts(&opts, len(opts.Buckets))
 	promVec := prometheus.NewHistogramVec(opts, vec.orderedLabelNames)
 	return &HistogramVec{
 		Metadata: metadata,
