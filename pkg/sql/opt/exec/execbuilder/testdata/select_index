@@ -1944,3 +1944,100 @@ vectorized: true
   missing stats
   table: t5@t5_a_idx
   spans: [/'A.B.C' - /'A.B.C-')
+
+subtest optimizer_span_limit
+
+# Tests for the optimizer_span_limit session setting, which limits the number of
+# index constraint spans generated during optimization. When the cross-product
+# of spans across index columns would exceed the limit, the optimizer stops
+# extending spans and adds remaining filters instead.
+
+statement ok
+CREATE TABLE t167620 (a INT, b INT, c INT, INDEX (a, b, c));
+INSERT INTO t167620 VALUES
+  (1, 2, 7), (1, 4, 9), (3, 6, 11),
+  (5, 2, 9), (3, 4, 7), (1, 6, 11),
+  (1, 2, 99), (1, 3, 7), (2, 2, 7)
+
+# No limit (default): 27 spans for the full 3x3x3 cross-product.
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+scan t167620@t167620_a_b_c_idx
+ ├── constraint: /1/2/3/4
+ │    ├── [/1/2/7 - /1/2/7]
+ │    ├── [/1/2/9 - /1/2/9]
+ │    ├── [/1/2/11 - /1/2/11]
+ │    ├── [/1/4/7 - /1/4/7]
+ │    ├── [/1/4/9 - /1/4/9]
+ │    ├── [/1/4/11 - /1/4/11]
+ │    ├── [/1/6/7 - /1/6/7]
+ │    ├── [/1/6/9 - /1/6/9]
+ │    ├── [/1/6/11 - /1/6/11]
+ │    ├── [/3/2/7 - /3/2/7]
+ │    ├── [/3/2/9 - /3/2/9]
+ │    ├── [/3/2/11 - /3/2/11]
+ │    ├── [/3/4/7 - /3/4/7]
+ │    ├── [/3/4/9 - /3/4/9]
+ │    ├── [/3/4/11 - /3/4/11]
+ │    ├── [/3/6/7 - /3/6/7]
+ │    ├── [/3/6/9 - /3/6/9]
+ │    ├── [/3/6/11 - /3/6/11]
+ │    ├── [/5/2/7 - /5/2/7]
+ │    ├── [/5/2/9 - /5/2/9]
+ │    ├── [/5/2/11 - /5/2/11]
+ │    ├── [/5/4/7 - /5/4/7]
+ │    ├── [/5/4/9 - /5/4/9]
+ │    ├── [/5/4/11 - /5/4/11]
+ │    ├── [/5/6/7 - /5/6/7]
+ │    ├── [/5/6/9 - /5/6/9]
+ │    └── [/5/6/11 - /5/6/11]
+ └── flags: force-index=t167620_a_b_c_idx
+
+# With limit=10, the final 9*3 cross-product is blocked. We get 9 (a, b) spans
+# with a remaining filter on c.
+statement ok
+SET optimizer_span_limit = 10
+
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+select
+ ├── scan t167620@t167620_a_b_c_idx
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/1/2 - /1/2]
+ │    │    ├── [/1/4 - /1/4]
+ │    │    ├── [/1/6 - /1/6]
+ │    │    ├── [/3/2 - /3/2]
+ │    │    ├── [/3/4 - /3/4]
+ │    │    ├── [/3/6 - /3/6]
+ │    │    ├── [/5/2 - /5/2]
+ │    │    ├── [/5/4 - /5/4]
+ │    │    └── [/5/6 - /5/6]
+ │    └── flags: force-index=t167620_a_b_c_idx
+ └── filters
+      └── c IN (7, 9, 11)
+
+# With limit=8, the 3*3 cross-product for b is also blocked. We get 3 (a) spans
+# with remaining filters on b and c.
+statement ok
+SET optimizer_span_limit = 8
+
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+select
+ ├── scan t167620@t167620_a_b_c_idx
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/1 - /1]
+ │    │    ├── [/3 - /3]
+ │    │    └── [/5 - /5]
+ │    └── flags: force-index=t167620_a_b_c_idx
+ └── filters
+      ├── b IN (2, 4, 6)
+      └── c IN (7, 9, 11)
+
+statement ok
+RESET optimizer_span_limit
+
+subtest end
