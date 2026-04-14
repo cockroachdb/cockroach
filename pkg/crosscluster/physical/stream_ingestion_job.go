@@ -235,11 +235,10 @@ func ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
-	var (
-		err                    error
-		previousPersistedSpans jobspb.ResolvedSpanEntries
-		currentPersistedSpans  jobspb.ResolvedSpanEntries
-	)
+
+	var err error
+	var previousPersistedSpans jobspb.ResolvedSpanEntries = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
+	currentPersistedSpans := previousPersistedSpans
 
 	for r := retry.Start(ro); r.Next(); {
 		err = ingest(ctx, execCtx, resumer)
@@ -255,6 +254,19 @@ func ingestWithRetries(
 		}
 		log.Dev.Infof(ctx, "hit retryable error %s", err)
 
+		// Reload the job's in-memory progress from the database so that we see accurate progress.
+		reloadErr := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+			job, err := execCtx.ExecCfg().JobRegistry.LoadClaimedJobWithTxn(ctx, resumer.job.ID(), t)
+			if err != nil {
+				return err
+			}
+			resumer.job = job
+			return nil
+		})
+		if reloadErr != nil {
+			log.Dev.Warningf(ctx, "error loading job progress: %v", reloadErr)
+		}
+
 		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
 		if !currentPersistedSpans.Equal(previousPersistedSpans) {
 			// If the previous persisted spans are different than the current, it
@@ -262,6 +274,8 @@ func ingestWithRetries(
 			r.Reset()
 			log.Dev.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
 		}
+		previousPersistedSpans = currentPersistedSpans
+
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
 		}
