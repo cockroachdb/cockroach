@@ -1591,6 +1591,15 @@ func init() {
 	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
 	f.Lookup("dry-run").Hidden = true
 
+	f.StringVar(&debugZipUploadOpts.destination, "destination", "datadog",
+		"upload destination: datadog or upload-server")
+	f.StringVar(&debugZipUploadOpts.uploadServerAPIKey, "upload-server-api-key",
+		getEnvOrDefault(uploadServerAPIKeyEnvVar, ""),
+		"API key for the CRL upload server (used with --destination=upload-server)")
+	f.StringVar(&debugZipUploadOpts.uploadServerURL, "upload-server-url",
+		"",
+		"base URL of the CRL upload server (required with --destination=upload-server)")
+
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
 	f.BoolVar(&decodeKeyOptions.userKey, "user-key", false, "key type")
