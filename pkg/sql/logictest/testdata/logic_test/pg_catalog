@@ -3320,7 +3320,7 @@ optimizer_prefer_bounded_cardinality                             on             
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL      NULL        NULL        string
 optimizer_push_limit_into_project_filtered_scan                  on                  NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                            on                  NULL      NULL        NULL        string
-optimizer_span_limit                                             0                   NULL      NULL        NULL        string
+optimizer_span_limit                                             131072              NULL      NULL        NULL        string
 optimizer_use_conditional_hoist_fix                              on                  NULL      NULL        NULL        string
 optimizer_use_delete_range_fast_path                             on                  NULL      NULL        NULL        string
 optimizer_use_exists_filter_hoist_rule                           on                  NULL      NULL        NULL        string
@@ -3580,7 +3580,7 @@ optimizer_prefer_bounded_cardinality                             on             
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL  user     NULL      on                  on
 optimizer_push_limit_into_project_filtered_scan                  on                  NULL  user     NULL      on                  on
 optimizer_push_offset_into_index_join                            on                  NULL  user     NULL      on                  on
-optimizer_span_limit                                             0                   NULL  user     NULL      0                   0
+optimizer_span_limit                                             131072              NULL  user     NULL      131072              131072
 optimizer_use_conditional_hoist_fix                              on                  NULL  user     NULL      on                  on
 optimizer_use_delete_range_fast_path                             on                  NULL  user     NULL      on                  on
 optimizer_use_exists_filter_hoist_rule                           on                  NULL  user     NULL      on                  on

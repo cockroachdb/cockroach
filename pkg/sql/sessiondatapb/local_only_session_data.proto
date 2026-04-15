@@ -814,7 +814,7 @@ message LocalOnlySessionData {
   // (show CRDB syntax explicitly).
   string pg_dump_compatibility = 206;
   // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
-  // a scan during query optimization. 0 means no limit.
+  // a scan during query optimization. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
 
   ///////////////////////////////////////////////////////////////////////////
