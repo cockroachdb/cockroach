@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
@@ -28,6 +29,8 @@ import (
 	"storj.io/drpc/drpcserver"
 	"storj.io/drpc/drpcwire"
 )
+
+var envExperimentalDRPCMuxEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_MUX_ENABLED", true)
 
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
@@ -45,6 +48,12 @@ func DialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
+		if envExperimentalDRPCMuxEnabled {
+			log.Dev.Infof(ctx, "dialing DRPC mux connection to %s", target)
+			return dialDRPCMux(ctx, rpcCtx, target, class)
+		}
+
+		log.Dev.Infof(ctx, "dialing DRPC non-mux connection to %s", target)
 		transport := tcpTransport
 		if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 			transport = loopbackTransport
@@ -76,6 +85,27 @@ func DialDRPC(
 			pool: pool,
 		}, nil
 	}
+}
+
+// dialDRPCMux establishes a multiplexed DRPC connection over a single
+// transport. Multiple concurrent streams are handled by the drpc Manager
+// natively, without requiring an external mux layer like yamux.
+func dialDRPCMux(
+	ctx context.Context, rpcCtx *Context, target string, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	drpcDialOptions, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := drpcclient.DialContext(ctx, target, drpcDialOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return drpcclient.NewClientConnWithOptions(ctx, conn, drpcDialOptions...)
 }
 
 // drpcDialOptionsInternal is similar to grpcDialOptionsInternal but for
@@ -389,9 +419,6 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	mux := drpcmux.NewWithInterceptors(unaryInterceptors, streamInterceptors)
 
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
-		Log: func(err error) {
-			log.Dev.Warningf(context.Background(), "drpc server error %v", err)
-		},
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.
 		Manager: drpcmanager.Options{
