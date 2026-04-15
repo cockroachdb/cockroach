@@ -78,10 +78,13 @@ const (
 	resolvedTarget = 5 * time.Second
 
 	// catchUpToleranceMultiplier controls how much we can miss the best-case
-	// catch-up duration by. We set a 10% tolerance to allow for both momentary
-	// cluster hiccups that slow us down and re-transmissions that occur because
-	// of range events.
-	catchUpToleranceMultiplier = 1.1
+	// catch-up duration by. In practice the changefeed achieves ~96% of the
+	// configured sink rate (see comment on the adequately-provisioned test
+	// config), reducing the effective catch-up rate and extending catch-up time
+	// by ~15% beyond the theoretical optimum. We use a 20% tolerance to
+	// accommodate this plus momentary cluster hiccups and re-transmissions from
+	// range events.
+	catchUpToleranceMultiplier = 1.2
 
 	// latencyImpactToleranceMultiplier controls how much an impact we allow the
 	// changefeed to have on the p75 of the p99 of sql latencies measured over
@@ -275,11 +278,9 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 			t.Fatalf("changefeed never caught up")
 		}
 		actualCatchUpDuration := caughtUpAt - opts.changefeedDelay
-		// We allow the changefeed to miss the expected runtime by 10% to hopefully
-		// cut down on infra-flakes.
 		allowedCatchUpDuration := time.Duration(int64(float64(catchUpDur) * catchUpToleranceMultiplier))
 		if actualCatchUpDuration > allowedCatchUpDuration {
-			t.Fatalf("changefeed caught up too slowly: %s > %s (%s+10%%)", actualCatchUpDuration, allowedCatchUpDuration, catchUpDur)
+			t.Fatalf("changefeed caught up too slowly: %s > %s (%s+20%%)", actualCatchUpDuration, allowedCatchUpDuration, catchUpDur)
 		}
 		t.L().Printf("changefeed caught up quickly enough %s < %s", actualCatchUpDuration, allowedCatchUpDuration)
 	} else {
