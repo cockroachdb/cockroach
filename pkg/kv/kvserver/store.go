@@ -2054,6 +2054,12 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 				if verbose || log.V(1) {
 					log.KvDistribution.Errorf(ctx, "error running draining task: %+v", err)
 				}
+				// The async task never ran (typically because the stopper is
+				// quiescing), so this replica's +1 on numTransfersAttempted
+				// doesn't reflect real work. Undo it so the retry loop can
+				// exit once in-flight work finishes rather than spinning on
+				// ghost counts until the outer transfer timeout fires.
+				atomic.AddInt32(&numTransfersAttempted, -1)
 				wg.Done()
 				return false
 			}
