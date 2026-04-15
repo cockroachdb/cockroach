@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -113,6 +115,7 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 					},
 				},
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
 
@@ -171,7 +174,10 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 		var downloadJobID jobspb.JobID
 		runner.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
-		runner.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+		testutils.SucceedsSoon(t, func() error {
+			_, err := sqlDB.Exec(fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+			return err
+		})
 		jobutils.WaitForJobToCancel(t, runner, downloadJobID)
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	}
