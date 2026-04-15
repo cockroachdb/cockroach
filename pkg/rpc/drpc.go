@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
@@ -29,6 +30,8 @@ import (
 	"storj.io/drpc/drpcserver"
 	"storj.io/drpc/drpcwire"
 )
+
+var envExperimentalDRPCMuxEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_MUX_ENABLED", false)
 
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
@@ -60,9 +63,16 @@ func DialDRPC(
 			return ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
 		}
 
-		drpcDialOptions = append(drpcDialOptions, drpcclient.WithMetrics(cm))
 		drpcDialOptions = append(drpcDialOptions,
-			drpcclient.WithShouldRecordFunc(shouldRecordFunc))
+			drpcclient.WithMetrics(cm),
+			drpcclient.WithShouldRecordFunc(shouldRecordFunc),
+		)
+
+		if envExperimentalDRPCMuxEnabled {
+			log.Dev.Infof(ctx, "dialing DRPC mux connection to %s", target)
+			return dialDRPCMux(ctx, target, drpcDialOptions)
+		}
+		log.Dev.Infof(ctx, "dialing DRPC non-mux connection to %s", target)
 
 		drpcPoolMetrics := rpcCtx.DRPCPoolMetrics()
 		// TODO(server): could use connection class instead of empty key here.
@@ -91,6 +101,18 @@ func DialDRPC(
 			pool: pool,
 		}, nil
 	}
+}
+
+// dialDRPCMux establishes a single DRPC transport connection that carries
+// all streams for the peer multiplexed over it.
+func dialDRPCMux(
+	ctx context.Context, target string, drpcDialOptions []drpcclient.DialOption,
+) (drpc.Conn, error) {
+	conn, err := drpcclient.DialContext(ctx, target, drpcDialOptions...)
+	if err != nil {
+		return nil, err
+	}
+	return drpcclient.NewClientConnWithOptions(ctx, conn, drpcDialOptions...)
 }
 
 // drpcDialOptionsInternal is similar to grpcDialOptionsInternal but for
