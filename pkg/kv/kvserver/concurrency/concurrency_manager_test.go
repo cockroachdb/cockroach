@@ -572,6 +572,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
+			case "on-replica-removal":
+				mon.runSync("remove replica", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnReplicaRemoval()
+				})
+				return c.waitAndCollect(t, mon)
+
 			case "debug-latch-manager":
 				metrics := m.LatchMetrics()
 				output := []string{

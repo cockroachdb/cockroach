@@ -151,6 +151,13 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// log the replica to be removed.
 	log.KvDistribution.Infof(ctx, "removing replica r%d/%d (%s)", rep.RangeID, rep.replicaID, reason)
 
+	// Clear the lock table and txn wait-queue to release any waiters. In the
+	// normal merge path, OnRangeMerge handles this before we get here. But when
+	// a replica is removed without applying the merge trigger (e.g. dangling
+	// subsume via replica GC, subsumed by snapshot), OnRangeMerge is never
+	// called and waiters would be stuck forever. See #167995.
+	rep.concMgr.OnReplicaRemoval()
+
 	s.mu.Lock()
 	if it := s.getOverlappingKeyRangeLocked(desc); it.repl != rep {
 		// This is a fatal error because uninitialized replicas shouldn't make it
