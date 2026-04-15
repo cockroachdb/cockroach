@@ -423,3 +423,166 @@ SELECT st_asmvtgeom(
           1::INT4
         )::GEOMETRY
         FROM t106884;
+
+subtest st_3ddistance
+
+# Basic 3D point-to-point distance.
+query R
+SELECT ST_3DDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+1.7320508075688772
+
+# Z-only difference.
+query R
+SELECT ST_3DDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+5
+
+# Same point returns 0.
+query R
+SELECT ST_3DDistance('POINT Z(1 2 3)'::geometry, 'POINT Z(1 2 3)'::geometry)
+----
+0
+
+# 2D geometry fallback (no Z means Z=0).
+query R
+SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+# 3D point to 3D linestring.
+query R
+SELECT ST_3DDistance('POINT Z(5 3 4)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry)
+----
+5
+
+# 3D point above 3D polygon (perpendicular plane distance).
+query R
+SELECT ST_3DDistance('POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))'::geometry, 'POINT Z(5 5 3)'::geometry)
+----
+3
+
+# Tilted polygon: the point's XY shadow (0.5, 0.5) lies inside the
+# polygon's XY footprint, but the point's perpendicular foot on the
+# polygon's plane (10x - z = 0) lands at (1.985, 0.5, 19.85), which is
+# outside the polygon. Containment must be tested in the polygon's
+# plane, not the XY projection; otherwise the perpendicular plane
+# distance (~1.49) is wrongly returned. The closest point is on the
+# top edge at (1, 0.5, 10), giving sqrt(0.25 + 100) ~ 10.0125.
+query R
+SELECT ST_3DDistance(
+  'POINT Z (0.5 0.5 20)'::geometry,
+  'POLYGON Z ((0 0 0, 1 0 10, 1 1 10, 0 1 0, 0 0 0))'::geometry
+)
+----
+10.012492197250394
+
+query B
+SELECT ST_3DDWithin(
+  'POINT Z (0.5 0.5 20)'::geometry,
+  'POLYGON Z ((0 0 0, 1 0 10, 1 1 10, 0 1 0, 0 0 0))'::geometry,
+  5
+)
+----
+false
+
+query B
+SELECT ST_3DDWithin(
+  'POINT Z (0.5 0.5 20)'::geometry,
+  'POLYGON Z ((0 0 0, 1 0 10, 1 1 10, 0 1 0, 0 0 0))'::geometry,
+  11
+)
+----
+true
+
+# Tilted polygon, foot lies inside: the perpendicular plane distance is
+# the correct answer. Plane 3x + 4z = 12, normal dominant on Z. The
+# foot of (2, 2, 3) lands at (1.28, 2, 2.04), inside the XY footprint.
+query R
+SELECT ST_3DDistance(
+  'POINT Z (2 2 3)'::geometry,
+  'POLYGON Z ((0 0 3, 4 0 0, 4 4 0, 0 4 3, 0 0 3))'::geometry
+)
+----
+1.2
+
+# Same polygon, but the point's XY shadow is inside the XY footprint
+# while the foot lands outside the polygon. Naively trusting the XY
+# containment check would yield the perpendicular plane distance 6.8;
+# the correct answer is the edge distance ~7.28.
+query R
+SELECT ST_3DDistance(
+  'POINT Z (2 2 10)'::geometry,
+  'POLYGON Z ((0 0 3, 4 0 0, 4 4 0, 0 4 3, 0 0 3))'::geometry
+)
+----
+7.280109889280518
+
+# Empty geometry returns NULL.
+query R
+SELECT ST_3DDistance('POINT EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+NULL
+
+# SRID mismatch errors.
+query error operation on mixed SRIDs
+SELECT ST_3DDistance(
+  ST_SetSRID('POINT Z(0 0 0)'::geometry, 4326),
+  ST_SetSRID('POINT Z(1 1 1)'::geometry, 3857)
+)
+
+subtest end
+
+subtest st_3ddwithin
+
+# Point within 3D distance.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, 2)
+----
+true
+
+# Point not within 3D distance.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, 1)
+----
+false
+
+# Boundary inclusive: distance equals threshold returns true.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 0 0)'::geometry, 1)
+----
+true
+
+# 2D vs 3D difference: 2D says within, 3D says not within because Z differs.
+query BB
+SELECT
+  ST_DWithin(
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;POINT(-72.1235 42.3521 4)'),2163::int),
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;LINESTRING(-72.1260 42.45 15, -72.123 42.1546 20)'),2163::int),
+    126.8::float
+  ),
+  ST_3DDWithin(
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;POINT(-72.1235 42.3521 4)'),2163::int),
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;LINESTRING(-72.1260 42.45 15, -72.123 42.1546 20)'),2163::int),
+    126.8::float
+  )
+----
+true  false
+
+# Empty geometry returns false.
+query B
+SELECT ST_3DDWithin('GEOMETRYCOLLECTION EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry, 100)
+----
+false
+
+# Negative distance errors.
+query error dwithin distance cannot be less than zero
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, -1)
+
+# _st_3ddwithin alias works.
+query B
+SELECT _ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry, 1)
+----
+true
+
+subtest end

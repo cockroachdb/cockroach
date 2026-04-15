@@ -3146,6 +3146,83 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		lengthOverloadGeometry1,
 	),
+	"st_3ddistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinDistance3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the 3-dimensional minimum Cartesian distance between two geometries. " +
+					"If either geometry has no Z component, this is equivalent to ST_Distance.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3ddwithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"_st_3ddwithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance. This variant does not utilize any spatial index.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_3dlength": makeBuiltin(
 		defProps(),
 		length3DOverloadGeometry1,
