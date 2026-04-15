@@ -56,7 +56,7 @@ var KVCPUTimeUtilTarget = settings.RegisterFloatSetting(
 // to compute the burstable utilization ceiling in resource manager
 // mode. For example, with target_util=0.75 and burst_delta_rm=0.25,
 // the burstable ceiling is 1.0. Resource groups configured with
-// FULLY_UTILIZE are always allowed to burst up to this ceiling.
+// MAX_CPU are always allowed to burst up to this ceiling.
 //
 // If target + delta exceeds 1.0, the burstable token bucket refill
 // rate will exceed the machine's CPU capacity. In practice this means
