@@ -100,6 +100,8 @@ var (
 	schemaChangeDB = "schemachange"
 
 	v231CV = "23.1"
+
+	v262CV = "26.2"
 )
 
 type CommonTestUtils struct {
@@ -711,7 +713,7 @@ func (u *CommonTestUtils) enableJobAdoption(
 // that the latest backup in the collection passed is valid. This step
 // is skipped if the feature is not available.
 func (u *CommonTestUtils) checkFiles(
-	ctx context.Context, rng *rand.Rand, collection *backupCollection,
+	ctx context.Context, rng *rand.Rand, collection *backupCollection, mvHelper *mixedversion.Helper,
 ) error {
 	options := []string{"check_files"}
 	if opt := collection.encryptionOption(); opt != nil {
@@ -720,7 +722,13 @@ func (u *CommonTestUtils) checkFiles(
 	// TODO (kev-cao): Need to update this once we've decided how we want to
 	// handle CHECK FILES under the new SHOW BACKUPS.
 	_, conn := u.RandomDB(rng, u.roachNodes)
-	defer disableUseBackupsWithIDs(ctx, u.t, conn)()
+	if mvHelper != nil {
+		if hasUseBackupsWithIDs, err := mvHelper.ClusterVersionAtLeast(rng, v262CV); err != nil {
+			return err
+		} else if hasUseBackupsWithIDs {
+			defer disableUseBackupsWithIDs(ctx, u.t, conn)()
+		}
+	}
 	checkFilesStmt := fmt.Sprintf(
 		"SHOW BACKUP LATEST IN '%s' WITH %s",
 		collection.uri(), strings.Join(options, ", "),

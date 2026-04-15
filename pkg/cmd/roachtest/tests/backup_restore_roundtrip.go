@@ -361,7 +361,8 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Monitor().ExpectProcessDead(failureNodes)
 
 	restoreJob, err := d.Restore(
-		ctx, t.L(), testRNG, collection, false /* checkFiles */, true, /* internalSystemJobs */
+		ctx, t.L(), testRNG, collection,
+		false /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
 	)
 	require.NoError(t, err)
 	injectAndRecoverFailure(
