@@ -2717,7 +2717,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(evalCtx.SessionData().OptimizerSpanLimit), 10), nil
 		},
 		GlobalDefault: func(_ *settings.Values) string {
-			return "0"
+			return "131072"
 		},
 	},
 
