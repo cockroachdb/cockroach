@@ -1543,6 +1543,13 @@ func TestRepeatableReadLogic_procedure_cte(
 	runLogicTest(t, "procedure_cte")
 }
 
+func TestRepeatableReadLogic_procedure_ddl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_ddl")
+}
+
 func TestRepeatableReadLogic_procedure_deps(
 	t *testing.T,
 ) {
