@@ -215,7 +215,10 @@ func destroyReplicaImpl(
 // SubsumeReplica is like DestroyReplica, but it does not delete the user keys
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
-func SubsumeReplica(ctx context.Context, rw ReadWriter, info DestroyReplicaInfo) error {
+func SubsumeReplica(
+	ctx context.Context, rw ReadWriter, w *wag.Writer, info DestroyReplicaInfo,
+) error {
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventSubsume)
 	info.Keys = roachpb.RSpan{} // forget about the user keys
 	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }

@@ -347,10 +347,13 @@ func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyRe
 		if raftWO == nil {
 			raftWO = w
 		}
+		// TODO(sep-raft-log): plumb the WAG writer from the snapshot application
+		// path. Snapshot WAG population is not yet wired up (see the TODO in
+		// snapWriter.commit), so pass a nil writer for now.
 		return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
 			State: kvstorage.State{RO: s.eng.StateEngine(), WO: kvstorage.StateWO(w)},
 			Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: raftWO},
-		}, sub)
+		}, nil /* w */, sub)
 	})
 }
 
