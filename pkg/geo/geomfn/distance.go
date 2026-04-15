@@ -555,6 +555,261 @@ func (u *geomMaxDistanceUpdater) FlipGeometries() {
 	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 
+// MinDistance3D returns the 3D minimum distance between geometries A and B.
+// For 2D geometries, Z is treated as 0, so this degrades to 2D distance.
+// This returns a geo.EmptyGeometryError if either A or B is EMPTY.
+func MinDistance3D(a geo.Geometry, b geo.Geometry) (float64, error) {
+	if a.SRID() != b.SRID() {
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	return minDistance3DInternal(a, b, 0, geo.EmptyBehaviorOmit)
+}
+
+// DWithin3D determines if any part of geometry A is within D units of
+// geometry B using 3D Euclidean distance.
+// DWithin3D is equivalent to ST_3DDistance(a, b) <= d.
+func DWithin3D(a geo.Geometry, b geo.Geometry, d float64) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	if d < 0 {
+		return false, pgerror.Newf(
+			pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero",
+		)
+	}
+	// Use the 2D bounding box as a conservative fast-reject filter.
+	// If 2D bounding boxes don't overlap by d, the 3D distance is at
+	// least as large.
+	if !a.CartesianBoundingBox().Buffer(d, d).Intersects(b.CartesianBoundingBox()) {
+		return false, nil
+	}
+	dist, err := minDistance3DInternal(a, b, d, geo.EmptyBehaviorError)
+	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return dist <= d, nil
+}
+
+// minDistance3DInternal finds the 3D minimum distance between two geometries.
+func minDistance3DInternal(
+	a geo.Geometry, b geo.Geometry, stopAfter float64, emptyBehavior geo.EmptyBehavior,
+) (float64, error) {
+	u := newGeomMinDistance3DUpdater(stopAfter)
+	c := &geomDistance3DCalculator{
+		updater:               u,
+		boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()),
+	}
+	return distanceInternal(a, b, c, emptyBehavior)
+}
+
+// geomMinDistance3DUpdater finds the minimum distance using 3D geom
+// calculations. Methods return early if the minimum distance found is
+// <= stopAfter.
+type geomMinDistance3DUpdater struct {
+	currentValue float64
+	stopAfter    float64
+	coordA       geom.Coord
+	coordB       geom.Coord
+
+	geometricalObjOrder geometricalObjectsOrder
+
+	// planeDistance is set by the 3D calculator's PointIntersectsLinearRing
+	// when a point is inside a polygon's XY projection. It holds the
+	// perpendicular distance from the point to the polygon's plane.
+	// A negative value means no plane distance is pending.
+	planeDistance float64
+}
+
+var _ geodist.DistanceUpdater = (*geomMinDistance3DUpdater)(nil)
+
+func newGeomMinDistance3DUpdater(stopAfter float64) *geomMinDistance3DUpdater {
+	return &geomMinDistance3DUpdater{
+		currentValue:        math.MaxFloat64,
+		stopAfter:           stopAfter,
+		planeDistance:       -1,
+		geometricalObjOrder: geometricalObjectsNotFlipped,
+	}
+}
+
+// Distance implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistance3DUpdater) Distance() float64 {
+	return u.currentValue
+}
+
+// Update implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistance3DUpdater) Update(aPoint geodist.Point, bPoint geodist.Point) bool {
+	a := aPoint.GeomPoint
+	b := bPoint.GeomPoint
+
+	dist := coordNorm3D(coordSub3D(a, b))
+	if dist < u.currentValue || u.coordA == nil {
+		u.currentValue = dist
+		if u.geometricalObjOrder == geometricalObjectsFlipped {
+			u.coordA = b
+			u.coordB = a
+		} else {
+			u.coordA = a
+			u.coordB = b
+		}
+		return dist <= u.stopAfter
+	}
+	return false
+}
+
+// OnIntersects implements the geodist.DistanceUpdater interface.
+// For 3D, a point "intersecting" a polygon (inside its XY projection)
+// means the 3D distance is the perpendicular distance to the polygon
+// plane, which was already computed and stored by the 3D calculator's
+// PointIntersectsLinearRing. We use that pre-computed distance.
+func (u *geomMinDistance3DUpdater) OnIntersects(p geodist.Point) bool {
+	if u.planeDistance >= 0 {
+		// Use the perpendicular plane distance pre-computed by the
+		// 3D calculator.
+		dist := u.planeDistance
+		u.planeDistance = -1
+		if dist < u.currentValue || u.coordA == nil {
+			u.currentValue = dist
+			u.coordA = p.GeomPoint
+			u.coordB = p.GeomPoint
+			return dist <= u.stopAfter
+		}
+		return false
+	}
+	// Fallback for non-polygon intersections (e.g., edge crossings).
+	u.coordA = p.GeomPoint
+	u.coordB = p.GeomPoint
+	u.currentValue = 0
+	return true
+}
+
+// IsMaxDistance implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistance3DUpdater) IsMaxDistance() bool {
+	return false
+}
+
+// FlipGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMinDistance3DUpdater) FlipGeometries() {
+	u.geometricalObjOrder = -u.geometricalObjOrder
+}
+
+// geomDistance3DCalculator implements geodist.DistanceCalculator using
+// 3D coordinate math. Point-in-polygon and edge crossing tests remain
+// 2D (XY projection), matching PostGIS behavior for 3D geometries.
+type geomDistance3DCalculator struct {
+	updater               geodist.DistanceUpdater
+	boundingBoxIntersects bool
+}
+
+var _ geodist.DistanceCalculator = (*geomDistance3DCalculator)(nil)
+
+// DistanceUpdater implements geodist.DistanceCalculator.
+func (c *geomDistance3DCalculator) DistanceUpdater() geodist.DistanceUpdater {
+	return c.updater
+}
+
+// BoundingBoxIntersects implements geodist.DistanceCalculator.
+func (c *geomDistance3DCalculator) BoundingBoxIntersects() bool {
+	return c.boundingBoxIntersects
+}
+
+// NewEdgeCrosser implements geodist.DistanceCalculator.
+// Edge crossing is a 2D topological operation, so we reuse the 2D
+// edge crosser.
+func (c *geomDistance3DCalculator) NewEdgeCrosser(
+	edge geodist.Edge, startPoint geodist.Point,
+) geodist.EdgeCrosser {
+	return &geomGeodistEdgeCrosser{
+		strategy:   &lineintersector.NonRobustLineIntersector{},
+		edgeV0:     edge.V0.GeomPoint,
+		edgeV1:     edge.V1.GeomPoint,
+		nextEdgeV0: startPoint.GeomPoint,
+	}
+}
+
+// PointIntersectsLinearRing implements geodist.DistanceCalculator.
+// Point-in-polygon containment is a 2D topological operation (XY
+// projection). When the point is inside, we pre-compute the
+// perpendicular distance from the point to the polygon's plane and
+// store it in the updater so OnIntersects can use it instead of 0.
+func (c *geomDistance3DCalculator) PointIntersectsLinearRing(
+	point geodist.Point, linearRing geodist.LinearRing,
+) bool {
+	side := findPointSideOfLinearRing(point, linearRing)
+	switch side {
+	case insideLinearRing, onLinearRing:
+		if u, ok := c.updater.(*geomMinDistance3DUpdater); ok {
+			u.planeDistance = perpendicularDistanceToRingPlane(
+				point.GeomPoint, linearRing,
+			)
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// ClosestPointToEdge implements geodist.DistanceCalculator using 3D
+// projection. The formula r = dot(AC, AB) / norm2(AB) generalizes
+// naturally to 3D.
+func (c *geomDistance3DCalculator) ClosestPointToEdge(
+	e geodist.Edge, p geodist.Point,
+) (geodist.Point, bool) {
+	if coordEqual3D(e.V0.GeomPoint, e.V1.GeomPoint) {
+		return e.V0, coordEqual3D(e.V0.GeomPoint, p.GeomPoint)
+	}
+	if coordEqual3D(p.GeomPoint, e.V0.GeomPoint) {
+		return p, true
+	}
+	if coordEqual3D(p.GeomPoint, e.V1.GeomPoint) {
+		return p, true
+	}
+
+	ac := coordSub3D(p.GeomPoint, e.V0.GeomPoint)
+	ab := coordSub3D(e.V1.GeomPoint, e.V0.GeomPoint)
+	r := coordDot3D(ac, ab) / coordNorm2_3D(ab)
+	if r < 0 || r > 1 {
+		return p, false
+	}
+	return geodist.Point{
+		GeomPoint: coordAdd3D(e.V0.GeomPoint, coordMul3D(ab, r)),
+	}, true
+}
+
+// perpendicularDistanceToRingPlane computes the perpendicular distance
+// from a point to the plane defined by a linear ring. The plane is
+// determined from the first three non-collinear vertices of the ring.
+// If all vertices are collinear or the ring has fewer than 3 vertices,
+// this falls back to 0 (treating the ring as degenerate).
+func perpendicularDistanceToRingPlane(p geom.Coord, ring geodist.LinearRing) float64 {
+	n := ring.NumVertexes()
+	if n < 3 {
+		return 0
+	}
+	v0 := ring.Vertex(0).GeomPoint
+	// Find two edges that form a non-degenerate normal vector.
+	for i := 1; i < n-1; i++ {
+		v1 := ring.Vertex(i).GeomPoint
+		v2 := ring.Vertex(i + 1).GeomPoint
+		e1 := coordSub3D(v1, v0)
+		e2 := coordSub3D(v2, v0)
+		// Cross product e1 x e2 gives the plane normal.
+		nx := e1[1]*e2[2] - e1[2]*e2[1]
+		ny := e1[2]*e2[0] - e1[0]*e2[2]
+		nz := e1[0]*e2[1] - e1[1]*e2[0]
+		normN := math.Sqrt(nx*nx + ny*ny + nz*nz)
+		if normN == 0 {
+			continue
+		}
+		// Distance = |dot(p - v0, normal)| / |normal|.
+		d := coordSub3D(p, v0)
+		return math.Abs(d[0]*nx+d[1]*ny+d[2]*nz) / normN
+	}
+	return 0
+}
+
 // geomDistanceCalculator implements geodist.DistanceCalculator
 type geomDistanceCalculator struct {
 	updater               geodist.DistanceUpdater

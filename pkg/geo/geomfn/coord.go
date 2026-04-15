@@ -60,3 +60,46 @@ func coordEqual(a geom.Coord, b geom.Coord) bool {
 func coordMag2(c geom.Coord) float64 {
 	return coordDot(c, c)
 }
+
+// coordGetZ returns the Z value from a coordinate, or 0 if no Z is present.
+func coordGetZ(c geom.Coord) float64 {
+	if len(c) > 2 {
+		return c[2]
+	}
+	return 0
+}
+
+// coordAdd3D adds two coordinates in 3D and returns a new result.
+func coordAdd3D(a geom.Coord, b geom.Coord) geom.Coord {
+	return geom.Coord{a.X() + b.X(), a.Y() + b.Y(), coordGetZ(a) + coordGetZ(b)}
+}
+
+// coordSub3D subtracts two coordinates in 3D and returns a new result.
+func coordSub3D(a geom.Coord, b geom.Coord) geom.Coord {
+	return geom.Coord{a.X() - b.X(), a.Y() - b.Y(), coordGetZ(a) - coordGetZ(b)}
+}
+
+// coordMul3D multiplies a 3D coord by a scalar and returns the new result.
+func coordMul3D(a geom.Coord, s float64) geom.Coord {
+	return geom.Coord{a.X() * s, a.Y() * s, coordGetZ(a) * s}
+}
+
+// coordDot3D returns the dot product of two 3D coord vectors.
+func coordDot3D(a geom.Coord, b geom.Coord) float64 {
+	return a.X()*b.X() + a.Y()*b.Y() + coordGetZ(a)*coordGetZ(b)
+}
+
+// coordNorm2_3D returns the squared norm of a 3D coordinate vector.
+func coordNorm2_3D(c geom.Coord) float64 {
+	return coordDot3D(c, c)
+}
+
+// coordNorm3D returns the Euclidean norm of a 3D coordinate vector.
+func coordNorm3D(c geom.Coord) float64 {
+	return math.Sqrt(coordNorm2_3D(c))
+}
+
+// coordEqual3D returns whether two coordinates are equal in 3D.
+func coordEqual3D(a geom.Coord, b geom.Coord) bool {
+	return a.X() == b.X() && a.Y() == b.Y() && coordGetZ(a) == coordGetZ(b)
+}

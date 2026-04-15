@@ -2905,6 +2905,9 @@ var builtinOidsArray = []string{
 	2950: `pg_get_statisticsobjdef(statobj_oid: oid) -> string`,
 	2951: `crdb_internal.zone_config_for_key(key: bytes) -> jsonb`,
 	2952: `crdb_internal.zone_config_span_end(key: bytes) -> bytes`,
+	2953: `st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2954: `st_3ddistance(geometry_a: geometry, geometry_b: geometry) -> float`,
+	2955: `_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
