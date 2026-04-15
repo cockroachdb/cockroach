@@ -406,3 +406,61 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' 
 ----
 rebuilding cached memo
 reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Regression test for #168304: routines with parameter types that have different
+# OIDs from the argument types (e.g., VARCHAR param with STRING argument) should
+# cache.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t_vc (k INT PRIMARY KEY, s STRING)
+
+statement ok
+INSERT INTO t_vc VALUES (1, 'hello'), (2, 'world')
+
+statement ok
+CREATE FUNCTION f_vc(x VARCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT length(x)'
+
+statement ok
+PREPARE p_vc AS SELECT f_vc(s) FROM t_vc WHERE k = $1
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p_vc(1);
+EXECUTE p_vc(2);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+
+# TODO(drewk): Same as above, but with two overloads. This does not cache
+# because we rely on the single-overload special case to handle mismatched OIDs.
+statement ok
+CREATE FUNCTION f_vc2(x VARCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT length(x)';
+CREATE FUNCTION f_vc2(x INT) RETURNS INT LANGUAGE SQL AS 'SELECT x';
+
+statement ok
+PREPARE p_vc2 AS SELECT f_vc2(s) FROM t_vc WHERE k = $1
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p_vc2(1);
+EXECUTE p_vc2(2);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+rebuilding cached memo
+rebuilding cached memo

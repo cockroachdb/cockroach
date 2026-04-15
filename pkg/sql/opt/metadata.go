@@ -588,46 +588,14 @@ func (md *Metadata) CheckDependencies(
 				if err != nil {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
-				routineObj := tree.RoutineObj{
-					FuncName: name.ToRoutineName(),
-					Params:   make(tree.RoutineParams, len(dep.invocationTypes)),
-				}
-				for i := 0; i < len(routineObj.Params); i++ {
-					routineObj.Params[i] = tree.RoutineParam{
-						Type: dep.invocationTypes[i],
-						// Since we're not in the DROP context, it's sufficient
-						// to specify only the input parameters.
-						Class: tree.RoutineParamIn,
-						// Note that we don't need to specify the DefaultVal
-						// here because invocationTypes specifies the argument
-						// schema that was actually used. Instead, we will ask
-						// for matching overloads to use their DEFAULT
-						// expressions if necessary.
-					}
-				}
-				// NOTE: We match for all types of routines here, including
-				// procedures so that if a function has been dropped and a
-				// procedure is created with the same signature, we do not get a
-				// "<func> is not a function" error here. Instead, we'll return
-				// false and attempt to rebuild the statement.
-				routineType := tree.UDFRoutine | tree.BuiltinRoutine | tree.ProcedureRoutine
-				// Always allowing using DEFAULT expressions for input
-				// parameters since the signature of the routine might have
-				// changed even though the invocation remained the same.
-				const tryDefaultExprs = true
-				toCheck, err := definition.MatchOverload(
-					ctx,
-					optCatalog,
-					&routineObj,
-					&evalCtx.SessionData().SearchPath,
-					routineType,
-					false, /* inDropContext */
-					tryDefaultExprs,
+				toCheck, err := matchOverloadByTypes(
+					ctx, optCatalog, definition, name.ToRoutineName(),
+					dep.invocationTypes, &evalCtx.SessionData().SearchPath,
 				)
 				// We cannot check the version here, because we only resolve the
 				// function signature by name. We will check the version below when
 				// resolving by OID.
-				if err != nil || toCheck.Oid != overload.Oid {
+				if err != nil || toCheck == nil || toCheck.Oid != overload.Oid {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
 			}
@@ -697,6 +665,63 @@ func (md *Metadata) CheckDependencies(
 		md.digest.Unlock()
 	}
 	return true, nil
+}
+
+// matchOverloadByTypes constructs a tree.RoutineObj from the given routine name
+// and argument types, then calls MatchOverload to find the matching overload.
+// All routine types (UDF, builtin, procedure) are considered, and DEFAULT
+// expressions are tried when matching.
+func matchOverloadByTypes(
+	ctx context.Context,
+	typeRes tree.TypeReferenceResolver,
+	definition *tree.ResolvedFunctionDefinition,
+	routineName tree.RoutineName,
+	argTypes []*types.T,
+	searchPath tree.SearchPath,
+) (*tree.Overload, error) {
+	if len(definition.Overloads) == 0 {
+		return nil, nil
+	} else if len(definition.Overloads) == 1 {
+		// Fast path: if there's only one candidate, check if it's the same as the
+		// one resolved while building the plan.
+		return definition.Overloads[0].Overload, nil
+	}
+	routineObj := tree.RoutineObj{
+		FuncName: routineName,
+		Params:   make(tree.RoutineParams, len(argTypes)),
+	}
+	for i := 0; i < len(routineObj.Params); i++ {
+		routineObj.Params[i] = tree.RoutineParam{
+			Type: argTypes[i],
+			// Since we're not in the DROP context, it's sufficient
+			// to specify only the input parameters.
+			Class: tree.RoutineParamIn,
+			// Note that we don't need to specify the DefaultVal
+			// here because invocationTypes specifies the argument
+			// schema that was actually used. Instead, we will ask
+			// for matching overloads to use their DEFAULT
+			// expressions if necessary.
+		}
+	}
+	// NOTE: We match for all types of routines here, including
+	// procedures so that if a function has been dropped and a
+	// procedure is created with the same signature, we do not get a
+	// "<func> is not a function" error here. Instead, we'll return
+	// false and attempt to rebuild the statement.
+	routineType := tree.UDFRoutine | tree.BuiltinRoutine | tree.ProcedureRoutine
+	// Always allowing using DEFAULT expressions for input
+	// parameters since the signature of the routine might have
+	// changed even though the invocation remained the same.
+	const tryDefaultExprs = true
+	const inDropContext = false
+	ol, err := definition.MatchOverload(
+		ctx, typeRes, &routineObj, searchPath,
+		routineType, inDropContext, tryDefaultExprs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return ol.Overload, nil
 }
 
 // handleMetadataResolveErr swallows errors that are thrown when a database
