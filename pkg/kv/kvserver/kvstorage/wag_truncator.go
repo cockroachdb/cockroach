@@ -22,6 +22,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
+type WAGTruncatorTestingKnobs struct{}
+
 // WAGTruncator truncates applied WAG nodes and clears their associated raft
 // state (log entries and sideloaded files). It supports both offline and online
 // mode of operation:
@@ -44,11 +47,12 @@ type WAGTruncator struct {
 	// truncIndex is the index of the last WAG node that was successfully
 	// truncated.
 	truncIndex atomic.Uint64
+	knobs      WAGTruncatorTestingKnobs
 }
 
 // NewWAGTruncator creates a WAGTruncator.
 func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTruncator {
-	return &WAGTruncator{st: st, eng: eng, seq: seq, initIndex: seq.Load()}
+	return &WAGTruncator{st: st, eng: eng, seq: seq, initIndex: seq.Load(), knobs: WAGTruncatorTestingKnobs{}}
 }
 
 // truncateAppliedNodes deletes the longest fully applied prefix of the WAG.
