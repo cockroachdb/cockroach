@@ -1842,6 +1842,92 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
+// drainStuckRangesLogThreshold is the number of remaining replicas at or
+// below which the drain retry loop emits per-range diagnostics for failed
+// attempts. The same value caps how many entries addStuck collects per
+// iteration.
+const drainStuckRangesLogThreshold = 10
+
+// stuckRange records one failed lease transfer or reacquisition during a
+// drain iteration, for later per-range diagnostic logging.
+type stuckRange struct {
+	// desc is the range descriptor observed at the time of the failed
+	// attempt. A Replica's descriptor pointer is swapped on update rather
+	// than mutated in place (see (*Replica).setDescLockedRaftMuLocked),
+	// so retaining the snapshot pointer across goroutines is safe for
+	// read-only use.
+	desc *roachpb.RangeDescriptor
+	// lease is a snapshot of the lease observed at the start of the attempt.
+	lease roachpb.Lease
+	// reason is the pre-rendered cause of the failure (an error or a
+	// non-OK transfer outcome), so the consumer doesn't have to switch
+	// on the kind of failure.
+	reason redact.RedactableString
+	// blocked is the wall time spent in the single call that failed
+	// (transfer or reacquisition), not including queue wait.
+	blocked time.Duration
+}
+
+// drainIterResult is the outcome of a single drain iteration of
+// Store.SetDraining's transferAllAway closure. numRemaining is updated
+// concurrently by the per-replica goroutines spawned during the
+// iteration; stuck is appended to by the same goroutines under mu.
+// logStuckRanges is called from the single retry-loop goroutine after
+// wg.Wait() returns.
+//
+// Invariant: len(stuck) <= numRemaining. Every addStuck call corresponds
+// to a replica that was counted in numRemaining and will not decrement
+// it, so failures are a subset of remaining work. Combined with the cap
+// of drainStuckRangesLogThreshold on len(stuck), this means that when
+// logStuckRanges fires (numRemaining <= threshold), len(stuck) <=
+// threshold and the logged list is never silently truncated.
+type drainIterResult struct {
+	// numRemaining counts replicas whose drain attempt ran to completion
+	// (success or failure) during this iteration. The retry-loop caller
+	// uses it as an upper bound on ranges still blocking drain completion
+	// and reports it to the Drain RPC as progress.
+	numRemaining atomic.Int32
+	mu           struct {
+		syncutil.Mutex
+		// stuck holds one entry per failed attempt during this iteration,
+		// capped at drainStuckRangesLogThreshold.
+		stuck []stuckRange
+	}
+}
+
+// addStuck records a failed lease transfer or reacquisition, bounded by
+// drainStuckRangesLogThreshold to cap memory on a freshly draining node
+// where failures may be widespread. Entries past the cap are silently
+// dropped; this is safe because logStuckRanges suppresses output
+// entirely when numRemaining exceeds the threshold (see drainIterResult).
+func (res *drainIterResult) addStuck(sr stuckRange) {
+	res.mu.Lock()
+	defer res.mu.Unlock()
+	if len(res.mu.stuck) >= drainStuckRangesLogThreshold {
+		return
+	}
+	res.mu.stuck = append(res.mu.stuck, sr)
+}
+
+// logStuckRanges emits one info-level line per collected stuck entry,
+// but only when numRemaining is at or below drainStuckRangesLogThreshold.
+// Above the threshold, per-range logging is suppressed to avoid spam
+// while transient failures on a freshly draining node are expected; the
+// V(1) logging on the failure paths remains the only per-range output in
+// that regime.
+func (res *drainIterResult) logStuckRanges(ctx context.Context) {
+	if res.numRemaining.Load() > drainStuckRangesLogThreshold {
+		return
+	}
+	res.mu.Lock()
+	defer res.mu.Unlock()
+	for _, st := range res.mu.stuck {
+		log.KvDistribution.Infof(ctx,
+			"drain stuck on %s: lease %s, blocked %s: %s",
+			st.desc, st.lease, st.blocked, st.reason)
+	}
+}
+
 // SetDraining (when called with 'true') causes incoming lease transfers to be
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
@@ -1885,27 +1971,27 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 	var wg sync.WaitGroup
 
-	transferAllAway := func(transferCtx context.Context) int {
+	transferAllAway := func(transferCtx context.Context) *drainIterResult {
 		// Limit the number of concurrent lease transfers.
 		const leaseTransferConcurrency = 100
 		sem := quotapool.NewIntPool("Store.SetDraining", leaseTransferConcurrency)
 
-		// Incremented for every lease transfer attempted. We try to send the lease
-		// away, but this may not reliably work. Instead, we run the surrounding
-		// retry loop until there are no leases left (ignoring single-replica
-		// ranges).
-		var numTransfersAttempted int32
+		// res.numRemaining is incremented for every lease transfer attempted. We
+		// try to send the lease away, but this may not reliably work. Instead,
+		// we run the surrounding retry loop until there are no leases left
+		// (ignoring single-replica ranges).
+		res := &drainIterResult{}
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			//
 			// We need to be careful about the case where the ctx has been canceled
 			// prior to the call to (*Stopper).RunAsyncTaskEx(). In that case,
 			// the goroutine is not even spawned. However, we don't want to
 			// mis-count the missing goroutine as the lack of transfer attempted.
-			// So what we do here is immediately increase numTransfersAttempted
+			// So what we do here is immediately increase res.numRemaining
 			// to count this replica, and then decrease it when it is known
 			// below that there is nothing to transfer (not lease holder and
 			// not raft leader).
-			atomic.AddInt32(&numTransfersAttempted, 1)
+			res.numRemaining.Add(1)
 			wg.Add(1)
 			if err := s.stopper.RunAsyncTaskEx(
 				r.AnnotateCtx(ctx),
@@ -1973,7 +2059,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 					if !needsLeaseTransfer && !needsLeaseReacquisition {
 						// Skip this replica.
-						atomic.AddInt32(&numTransfersAttempted, -1)
+						res.numRemaining.Add(-1)
 						return
 					}
 
@@ -1987,7 +2073,9 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 								drainingLeaseStatus.Lease, desc)
 						}
 
+						reacquireStart := timeutil.Now()
 						_, pErr := r.redirectOnOrAcquireLease(ctx)
+						reacquireDuration := timeutil.Since(reacquireStart)
 						if pErr != nil {
 							const failFormat = "failed to acquire proscribed lease %s for range %s when draining: %v"
 							infoArgs := []interface{}{drainingLeaseStatus.Lease, desc, pErr}
@@ -1996,6 +2084,13 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 							} else {
 								log.VErrEventf(ctx, 1 /* level */, failFormat, infoArgs...)
 							}
+
+							res.addStuck(stuckRange{
+								desc:    desc,
+								lease:   drainingLeaseStatus.Lease,
+								reason:  redact.Sprintf("reacquiring proscribed lease: %v", pErr),
+								blocked: reacquireDuration,
+							})
 							// The lease reacquisition failed. Either we no longer hold the
 							// lease or we will need to attempt to reacquire it again. Either
 							// way, handle this on a future iteration.
@@ -2026,11 +2121,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						conf,
 						allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
 					)
-					duration := timeutil.Since(start).Microseconds()
+					duration := timeutil.Since(start)
 
 					if transferStatus != allocator.TransferOK {
 						const failFormat = "failed to transfer lease %s for range %s when draining: %v"
-						const durationFailFormat = "blocked for %d microseconds on transfer attempt"
+						const durationFailFormat = "blocked for %s on transfer attempt"
 
 						infoArgs := []interface{}{
 							drainingLeaseStatus.Lease,
@@ -2049,24 +2144,35 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 							log.VErrEventf(ctx, 1 /* level */, failFormat, infoArgs...)
 							log.VErrEventf(ctx, 1 /* level */, durationFailFormat, duration)
 						}
+
+						reason := redact.Sprintf("shedding lease: status=%s", transferStatus)
+						if err != nil {
+							reason = redact.Sprintf("%s: %v", reason, err)
+						}
+						res.addStuck(stuckRange{
+							desc:    desc,
+							lease:   drainingLeaseStatus.Lease,
+							reason:  reason,
+							blocked: duration,
+						})
 					}
 				}); err != nil {
 				if verbose || log.V(1) {
 					log.KvDistribution.Errorf(ctx, "error running draining task: %+v", err)
 				}
 				// The async task never ran (typically because the stopper is
-				// quiescing), so this replica's +1 on numTransfersAttempted
-				// doesn't reflect real work. Undo it so the retry loop can
-				// exit once in-flight work finishes rather than spinning on
-				// ghost counts until the outer transfer timeout fires.
-				atomic.AddInt32(&numTransfersAttempted, -1)
+				// quiescing), so this replica's +1 on res.numRemaining doesn't
+				// reflect real work. Undo it so the retry loop can exit once
+				// in-flight work finishes rather than spinning on ghost counts
+				// until the outer transfer timeout fires.
+				res.numRemaining.Add(-1)
 				wg.Done()
 				return false
 			}
 			return true
 		})
 		wg.Wait()
-		return int(numTransfersAttempted)
+		return res
 	}
 
 	// Give all replicas at least one chance to transfer.
@@ -2074,7 +2180,12 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 	// value for raftLeadershipTransferWait is too low to iterate
 	// through all the replicas at least once, and the drain
 	// condition on the remaining value will never be reached.
-	if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+	//
+	// The stuck list from this first call is intentionally discarded: on a
+	// freshly draining node it may be large and dominated by transient
+	// failures. Per-range diagnostics are only logged from the retry loop
+	// below, once the drain is nearly complete.
+	if numRemaining := int(transferAllAway(ctx).numRemaining.Load()); numRemaining > 0 {
 		// Report progress to the Drain RPC.
 		if reporter != nil {
 			reporter(numRemaining, "range lease iterations")
@@ -2101,7 +2212,8 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// Avoid retry.ForDuration because of https://github.com/cockroachdb/cockroach/issues/25091.
 			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 				err = nil
-				if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+				res := transferAllAway(ctx)
+				if numRemaining := int(res.numRemaining.Load()); numRemaining > 0 {
 					// Report progress to the Drain RPC.
 					if reporter != nil {
 						reporter(numRemaining, "range lease iterations")
@@ -2109,6 +2221,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
 						log.KvDistribution.Infof(ctx, "%v", err)
+						res.logStuckRanges(ctx)
 					}
 				}
 				if err == nil {
