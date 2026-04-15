@@ -48,7 +48,7 @@ type elasticCPUInternalWorkQueue interface {
 	requester
 	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
 	SetTenantWeights(tenantWeights map[uint64]uint32)
-	adjustGroupUsed(tenantID roachpb.TenantID, additionalUsed int64)
+	adjustGroupUsed(groupID roachpb.TenantID, additionalUsed int64)
 }
 
 func makeElasticCPUWorkQueue(
