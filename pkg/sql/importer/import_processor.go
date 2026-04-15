@@ -522,7 +522,25 @@ func ingestKvs(
 		return nil, err
 	}
 
-	finalSummary := progressTracker.fetchSummary()
+	// For non-distributed-merge imports, return the actual deduplicated counts
+	// from the BulkAdders instead of the accumulated counts. This corrects
+	// for any duplicates that were counted during processing but skipped during
+	// KV ingestion (e.g., from checkpoint-and-resume overlap or reprocessed rows).
+	//
+	// The distributed merge path handles this via CorrectEntryCounts at
+	// import_processor_planning.go:527-528, which replaces map-phase counts
+	// with the merge processor's IngestSummary. We need the same correction
+	// for the legacy non-distributed-merge path.
+	//
+	// Note: We do this AFTER pushProgress() so that the resume positions are
+	// correctly reported, but we return the corrected summary so it doesn't
+	// get accumulated again by the checkpoint tracker.
+	var finalSummary kvpb.BulkOpSummary
+	if !spec.UseDistributedMerge {
+		finalSummary = progressTracker.fetchActualIngestedSummary()
+	} else {
+		finalSummary = progressTracker.fetchSummary()
+	}
 
 	return &finalSummary, nil
 }
@@ -698,6 +716,44 @@ func (ipt *importProgressTracker) fetchSummary() kvpb.BulkOpSummary {
 	defer ipt.Unlock()
 
 	return ipt.totalSummary.DeepCopy()
+}
+
+// fetchActualIngestedSummary returns the actual deduplicated counts from
+// BulkAdder.GetSummary() instead of the accumulated counts tracked by OnFlush
+// callbacks. This corrects for duplicates that were counted during processing
+// but skipped during KV-level ingestion due to SkipDuplicates.
+//
+// This is critical when rows are reprocessed (e.g., if resumePos tracking fails
+// or checkpoint-and-resume overlap occurs), as the OnFlush callbacks accumulate
+// counts via Add(), but the actual KV storage deduplicates identical writes.
+//
+// This method brings the non-distributed-merge import path to parity with the
+// distributed merge path, which performs the same correction via
+// CorrectEntryCounts at import_processor_planning.go:527-528 using the merge
+// processor's IngestSummary.
+func (ipt *importProgressTracker) fetchActualIngestedSummary() kvpb.BulkOpSummary {
+	ipt.Lock()
+	defer ipt.Unlock()
+
+	// Collect actual deduplicated counts from all registered BulkAdders.
+	// BulkAdderSink wraps a SSTBatcher, which tracks the true KV-ingested
+	// counts in its totalBulkOpSummary field (updated after AddSSTable
+	// completes, including any deduplication).
+	var actualIngested kvpb.BulkOpSummary
+	for _, sink := range ipt.sinks {
+		if adderSink, ok := sink.(*bulksst.BulkAdderSink); ok {
+			// GetSummary() returns the SSTBatcher's totalBulkOpSummary, which
+			// reflects the actual deduplicated KV writes. See pkg/kv/bulk/sst_batcher.go:961
+			actualIngested.Add(adderSink.GetSummary())
+		}
+	}
+
+	// Preserve DataSize and SSTDataSize from the accumulated summary since those
+	// track bytes written, not row counts, and are unaffected by key-level deduplication.
+	actualIngested.DataSize = ipt.totalSummary.DataSize
+	actualIngested.SSTDataSize = ipt.totalSummary.SSTDataSize
+
+	return actualIngested
 }
 
 func init() {

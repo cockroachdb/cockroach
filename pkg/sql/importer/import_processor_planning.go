@@ -359,6 +359,19 @@ func distImport(
 			return err
 		}
 		if !useDistributedMerge {
+			// For non-distributed-merge imports, correct the checkpoint's
+			// accumulated EntryCounts with the actual deduplicated counts
+			// from the processors. This prevents double-counting when rows
+			// are reprocessed (e.g., if resumePos tracking fails).
+			//
+			// The processors return actual KV-ingested counts (via
+			// fetchActualIngestedSummary) which are accumulated in `res`.
+			// We replace the checkpoint's inflated counts with these actual
+			// counts, analogous to how distributed merge corrects counts at
+			// import_processor_planning.go:527-528.
+			if len(res.EntryCounts) > 0 {
+				checkpoint.CorrectEntryCounts(res.EntryCounts)
+			}
 			return nil
 		}
 
