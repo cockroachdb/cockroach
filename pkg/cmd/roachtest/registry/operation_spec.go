@@ -90,6 +90,13 @@ type OperationSpec struct {
 	// --wait-before-cleanup.
 	WaitBeforeCleanup time.Duration
 
+	// DeferCleanup, when true, causes the worker to enqueue cleanup for
+	// later execution and immediately become available for the next
+	// operation. The cleanup executes after WaitBeforeCleanup elapses.
+	// Only set this for non-destructive operations whose Run phase does
+	// not degrade cluster state during the wait.
+	DeferCleanup bool
+
 	// Run is the operation function. It returns an OperationCleanup if this
 	// operation requires additional cleanup steps afterwards (eg. dropping an
 	// extra column that was created). A nil return value indicates no cleanup
