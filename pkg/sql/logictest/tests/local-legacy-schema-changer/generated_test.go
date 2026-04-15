@@ -1532,6 +1532,13 @@ func TestLogic_procedure_cte(
 	runLogicTest(t, "procedure_cte")
 }
 
+func TestLogic_procedure_ddl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_ddl")
+}
+
 func TestLogic_procedure_deps(
 	t *testing.T,
 ) {

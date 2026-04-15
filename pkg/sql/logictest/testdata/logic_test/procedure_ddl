@@ -1,0 +1,993 @@
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+# knob-opt: allow-unsafe
+
+subtest ddl_blocked_in_functions
+
+# DDL should remain blocked in functions.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+CREATE FUNCTION f_create() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_func (a INT);
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition
+CREATE FUNCTION f_drop() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_func;
+END
+$$;
+
+subtest end
+
+
+subtest ddl_blocked_in_do_blocks
+
+# DDL should remain blocked in DO blocks.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+DO $$
+BEGIN
+  CREATE TABLE t_do (a INT);
+END
+$$;
+
+subtest end
+
+
+subtest other_ddl_still_blocked
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE PROCEDURE p_alter() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER TABLE t ADD COLUMN b BOOL;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE INDEX usage inside a function definition
+CREATE PROCEDURE p_create_idx() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE INDEX idx ON t (a);
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE VIEW usage inside a function definition
+CREATE PROCEDURE p_create_view() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE VIEW v AS SELECT 1;
+END
+$$;
+
+subtest end
+
+
+subtest create_and_drop_table_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_table() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_proc_created (a INT PRIMARY KEY, b TEXT);
+END
+$$;
+
+statement ok
+CALL p_create_table();
+
+# CREATE TABLE in a procedure uses the legacy schema changer (direct
+# descriptor write). No NEW SCHEMA CHANGE job is created.
+query I
+SELECT count(*) FROM [SHOW JOBS]
+WHERE job_type = 'NEW SCHEMA CHANGE'
+AND description LIKE '%t_proc_created%';
+----
+0
+
+statement ok
+INSERT INTO t_proc_created VALUES (1, 'hello');
+
+query IT
+SELECT * FROM t_proc_created;
+----
+1  hello
+
+statement ok
+CREATE PROCEDURE p_drop_table() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_table();
+
+statement error pgcode 42P01 relation "t_proc_created" does not exist
+SELECT * FROM t_proc_created;
+
+statement ok
+DROP PROCEDURE p_create_table;
+
+statement ok
+DROP PROCEDURE p_drop_table;
+
+subtest end
+
+
+subtest if_not_exists_and_if_exists
+
+statement ok
+CREATE PROCEDURE p_create_idempotent() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE IF NOT EXISTS t_idempotent (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+CALL p_create_idempotent();
+
+# Second call should not error thanks to IF NOT EXISTS.
+statement ok
+CALL p_create_idempotent();
+
+query I
+SELECT count(*) FROM t_idempotent;
+----
+0
+
+statement ok
+CREATE PROCEDURE p_drop_idempotent() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS t_idempotent;
+END
+$$;
+
+statement ok
+CALL p_drop_idempotent();
+
+statement error pgcode 42P01 relation "t_idempotent" does not exist
+SELECT * FROM t_idempotent;
+
+# Second call should not error thanks to IF EXISTS.
+statement ok
+CALL p_drop_idempotent();
+
+statement ok
+DROP PROCEDURE p_create_idempotent;
+
+statement ok
+DROP PROCEDURE p_drop_idempotent;
+
+subtest end
+
+
+subtest multiple_ddl_in_procedure
+
+statement ok
+CREATE PROCEDURE p_multi_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_multi_1 (a INT PRIMARY KEY);
+  CREATE TABLE t_multi_2 (b TEXT);
+END
+$$;
+
+statement ok
+CALL p_multi_ddl();
+
+query I
+SELECT count(*) FROM t_multi_1;
+----
+0
+
+query I
+SELECT count(*) FROM t_multi_2;
+----
+0
+
+statement ok
+DROP PROCEDURE p_multi_ddl;
+
+statement ok
+DROP TABLE t_multi_1, t_multi_2;
+
+subtest end
+
+
+subtest ddl_with_commit
+
+# COMMIT in the procedure triggers synchronous schema change completion
+# via waitForTxnJobs.
+statement ok
+CREATE PROCEDURE p_ddl_commit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_committed (a INT PRIMARY KEY);
+  COMMIT;
+END
+$$;
+
+statement ok
+CALL p_ddl_commit();
+
+statement ok
+INSERT INTO t_committed VALUES (1);
+
+query I
+SELECT * FROM t_committed;
+----
+1
+
+statement ok
+DROP PROCEDURE p_ddl_commit;
+
+statement ok
+DROP TABLE t_committed;
+
+subtest end
+
+
+subtest ddl_with_commit_and_dml
+
+statement ok
+CREATE TABLE t_pre_commit (x INT PRIMARY KEY);
+
+statement ok
+CREATE PROCEDURE p_dml_then_ddl_commit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_pre_commit VALUES (1);
+  CREATE TABLE t_post_ddl (a INT);
+  COMMIT;
+END
+$$;
+
+statement ok
+CALL p_dml_then_ddl_commit();
+
+query I
+SELECT * FROM t_pre_commit;
+----
+1
+
+query I
+SELECT count(*) FROM t_post_ddl;
+----
+0
+
+statement ok
+DROP PROCEDURE p_dml_then_ddl_commit;
+
+statement ok
+DROP TABLE t_pre_commit, t_post_ddl;
+
+subtest end
+
+
+subtest create_and_drop_separate_procedures
+
+statement ok
+CREATE PROCEDURE p_create_ephemeral() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_ephemeral (a INT);
+END
+$$;
+
+statement ok
+CALL p_create_ephemeral();
+
+query I
+SELECT count(*) FROM t_ephemeral;
+----
+0
+
+# The table must exist before creating a procedure that references it.
+statement ok
+CREATE PROCEDURE p_drop_ephemeral() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_ephemeral;
+END
+$$;
+
+statement ok
+CALL p_drop_ephemeral();
+
+statement error pgcode 42P01 relation "t_ephemeral" does not exist
+SELECT * FROM t_ephemeral;
+
+statement ok
+DROP PROCEDURE p_create_ephemeral;
+
+statement ok
+DROP PROCEDURE p_drop_ephemeral;
+
+subtest end
+
+
+subtest autocommit_before_ddl
+
+# autocommit_before_ddl controls which schema changer is used for DDL inside
+# procedures, even though the autocommit NOTICE does not fire (routine body
+# DDL goes through runPlanInsidePlan, not execStmtInOpenState).
+#
+# With autocommit_before_ddl = true: DDL uses the declarative schema changer
+# (the transaction is treated as fresh for schema change purposes).
+# With autocommit_before_ddl = false: DDL runs inside the existing multi-
+# statement transaction and falls back to the legacy schema changer.
+#
+# TODO(spilchen): we don't want this long term. This test exists to show the current behaviour.
+#
+# For CREATE TABLE this doesn't matter — both paths work.
+
+# First verify the NOTICE does NOT fire — autocommit doesn't visibly commit.
+statement ok
+SET autocommit_before_ddl = true;
+
+statement ok
+CREATE TABLE t_autocommit_test (x INT PRIMARY KEY);
+INSERT INTO t_autocommit_test VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_autocommit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_autocommit_test VALUES (2);
+  CREATE TABLE t_autocommit_created (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_autocommit();
+----
+
+query I rowsort
+SELECT * FROM t_autocommit_test;
+----
+1
+2
+
+query I
+SELECT count(*) FROM t_autocommit_created;
+----
+0
+
+statement ok
+DROP PROCEDURE p_autocommit;
+
+statement ok
+DROP TABLE t_autocommit_test, t_autocommit_created;
+
+# Verify ROLLBACK undoes both DML and DDL even with autocommit_before_ddl on,
+# proving the autocommit does not actually commit mid-procedure.
+statement ok
+CREATE TABLE t_autocommit_rb (x INT PRIMARY KEY);
+INSERT INTO t_autocommit_rb VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_autocommit_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_autocommit_rb VALUES (2);
+  CREATE TABLE t_autocommit_rb_tbl (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_autocommit_rollback();
+
+# If autocommit_before_ddl had actually committed, the INSERT would survive
+# the ROLLBACK. Only the original row should be present.
+query I
+SELECT * FROM t_autocommit_rb;
+----
+1
+
+# The DDL should also be rolled back.
+statement error pgcode 42P01 relation "t_autocommit_rb_tbl" does not exist
+SELECT * FROM t_autocommit_rb_tbl;
+
+statement ok
+DROP PROCEDURE p_autocommit_rollback;
+
+statement ok
+DROP TABLE t_autocommit_rb;
+
+statement ok
+SET autocommit_before_ddl = false;
+
+subtest end
+
+
+subtest sql_language_procedure
+
+statement ok
+CREATE PROCEDURE p_sql_create() LANGUAGE SQL AS $$
+  CREATE TABLE t_sql_proc (a INT PRIMARY KEY);
+$$;
+
+statement ok
+CALL p_sql_create();
+
+query I
+SELECT count(*) FROM t_sql_proc;
+----
+0
+
+statement ok
+DROP PROCEDURE p_sql_create;
+
+statement ok
+DROP TABLE t_sql_proc;
+
+subtest end
+
+
+subtest ddl_then_dml_same_table
+
+# CockroachDB compiles routine body statements at CREATE PROCEDURE time,
+# resolving all table references against the current catalog. A table
+# created by DDL inside the procedure does not exist in the catalog when
+# subsequent statements in the same body are compiled, so referencing the
+# new table from a later statement in the same procedure fails at
+# definition time — not at execution time.
+#
+# This diverges from PostgreSQL, where PL/pgSQL uses late binding:
+# statements are planned at CALL time (or on first execution), so a
+# CREATE TABLE followed by INSERT INTO that table in the same body works
+# in PostgreSQL. PostgreSQL performs only PL/pgSQL structural parsing at
+# CREATE time (block syntax, control flow, variable resolution) but does
+# NOT plan or resolve SQL statements — those remain opaque strings until
+# execution. For example, INSERT INTO nonexistent_table succeeds at
+# CREATE PROCEDURE time in PostgreSQL and only errors at CALL time.
+#
+# TODO(spilchen): we will need to add late-binding support for procedure body
+# DDL to work like PostgreSQL.
+#
+# Workaround: split DDL and DML into separate procedures.
+
+statement error pgcode 42P01 relation "t_immediate" does not exist
+CREATE PROCEDURE p_create_and_insert() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_immediate (a INT PRIMARY KEY, b TEXT);
+  INSERT INTO t_immediate VALUES (1, 'created_inline');
+END
+$$;
+
+# Test whether a COMMIT boundary between CREATE TABLE and INSERT allows
+# the INSERT to succeed. Since compilation happens at CREATE PROCEDURE
+# time, the COMMIT should not help — the INSERT is still resolved against
+# a catalog that does not yet contain the table.
+statement error pgcode 42P01 relation "t_commit_then_use" does not exist
+CREATE PROCEDURE p_create_commit_insert() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_commit_then_use (a INT);
+  COMMIT;
+  INSERT INTO t_commit_then_use VALUES (1);
+END
+$$;
+
+subtest end
+
+
+subtest rollback_in_procedure
+
+# ROLLBACK inside a procedure should undo DDL performed in the current
+# transaction and start a new implicit transaction.
+statement ok
+CREATE PROCEDURE p_ddl_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rollback_test (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_ddl_rollback();
+
+statement error pgcode 42P01 relation "t_rollback_test" does not exist
+SELECT * FROM t_rollback_test;
+
+statement ok
+DROP PROCEDURE p_ddl_rollback;
+
+subtest end
+
+
+subtest explicit_txn_rollback_around_call
+
+# DDL inside a procedure should participate in the caller's transaction.
+# If the caller rolls back, the DDL should be undone.
+statement ok
+CREATE PROCEDURE p_create_in_txn() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_txn_rollback (a INT);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement ok
+CALL p_create_in_txn();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_txn_rollback" does not exist
+SELECT * FROM t_txn_rollback;
+
+statement ok
+DROP PROCEDURE p_create_in_txn;
+
+subtest end
+
+
+subtest ddl_then_error_in_procedure
+
+# When a procedure errors after performing DDL, the entire transaction
+# (including the DDL) should be aborted.
+statement ok
+CREATE PROCEDURE p_ddl_then_error() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_error_test (a INT);
+  SELECT 1 // 0;
+END
+$$;
+
+statement error division by zero
+CALL p_ddl_then_error();
+
+statement error pgcode 42P01 relation "t_error_test" does not exist
+SELECT * FROM t_error_test;
+
+statement ok
+DROP PROCEDURE p_ddl_then_error;
+
+subtest end
+
+
+subtest ddl_in_exception_block
+
+# Test DDL interaction with PL/pgSQL exception handlers, which use savepoints
+# internally via BeginInternalSubTransaction.
+
+# DDL before an exception block should survive; DDL inside the block where
+# the exception occurs should be rolled back by the savepoint.
+statement ok
+CREATE PROCEDURE p_ddl_exception() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_before_exc (a INT);
+  BEGIN
+    CREATE TABLE t_in_exc_block (a INT);
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught division by zero';
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_exception();
+
+# t_before_exc was created before the exception block and should exist.
+query I
+SELECT count(*) FROM t_before_exc;
+----
+0
+
+# t_in_exc_block was created inside the block that raised an exception;
+# the savepoint rollback should have undone it.
+statement error pgcode 42P01 relation "t_in_exc_block" does not exist
+SELECT * FROM t_in_exc_block;
+
+statement ok
+DROP PROCEDURE p_ddl_exception;
+
+statement ok
+DROP TABLE t_before_exc;
+
+# Test DDL inside the exception handler itself.
+statement ok
+CREATE PROCEDURE p_ddl_in_handler() LANGUAGE PLpgSQL AS $$
+BEGIN
+  BEGIN
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    CREATE TABLE t_from_handler (a INT);
+  END;
+END
+$$;
+
+statement ok
+CALL p_ddl_in_handler();
+
+query I
+SELECT count(*) FROM t_from_handler;
+----
+0
+
+statement ok
+DROP PROCEDURE p_ddl_in_handler;
+
+statement ok
+DROP TABLE t_from_handler;
+
+subtest end
+
+
+subtest ddl_with_rollback_and_dml
+
+# Both DML and DDL should be rolled back together when ROLLBACK is called.
+statement ok
+CREATE TABLE t_dml_rollback_check (x INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t_dml_rollback_check VALUES (1);
+
+statement ok
+CREATE PROCEDURE p_dml_ddl_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_dml_rollback_check VALUES (2);
+  CREATE TABLE t_dml_ddl_new (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_dml_ddl_rollback();
+
+query I
+SELECT * FROM t_dml_rollback_check;
+----
+1
+
+statement error pgcode 42P01 relation "t_dml_ddl_new" does not exist
+SELECT * FROM t_dml_ddl_new;
+
+statement ok
+DROP PROCEDURE p_dml_ddl_rollback;
+
+statement ok
+DROP TABLE t_dml_rollback_check;
+
+subtest end
+
+
+subtest ddl_commit_then_rollback
+
+# COMMIT mid-procedure finalizes DDL in the first transaction; a subsequent
+# ROLLBACK should only undo work in the new implicit transaction.
+statement ok
+CREATE PROCEDURE p_commit_then_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_committed_ddl (a INT);
+  COMMIT;
+  -- Now in a new implicit transaction.
+  CREATE TABLE t_uncommitted_ddl (a INT);
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_commit_then_rollback();
+
+# t_committed_ddl was committed before the rollback.
+query I
+SELECT count(*) FROM t_committed_ddl;
+----
+0
+
+# t_uncommitted_ddl was created after the COMMIT and then rolled back.
+statement error pgcode 42P01 relation "t_uncommitted_ddl" does not exist
+SELECT * FROM t_uncommitted_ddl;
+
+statement ok
+DROP PROCEDURE p_commit_then_rollback;
+
+statement ok
+DROP TABLE t_committed_ddl;
+
+subtest end
+
+
+subtest nested_procedure_with_ddl
+
+# DDL in nested procedure calls should work correctly.
+statement ok
+CREATE PROCEDURE p_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested_inner (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested_outer (a INT);
+  CALL p_inner_ddl();
+END
+$$;
+
+statement ok
+CALL p_outer_ddl();
+
+query I
+SELECT count(*) FROM t_nested_outer;
+----
+0
+
+query I
+SELECT count(*) FROM t_nested_inner;
+----
+0
+
+statement ok
+DROP PROCEDURE p_outer_ddl;
+
+statement ok
+DROP TABLE t_nested_outer, t_nested_inner;
+
+# Test that ROLLBACK in outer procedure undoes inner procedure's DDL.
+statement ok
+CREATE PROCEDURE p_outer_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_ddl();
+  ROLLBACK;
+END
+$$;
+
+statement ok
+CALL p_outer_rollback();
+
+statement error pgcode 42P01 relation "t_nested_inner" does not exist
+SELECT * FROM t_nested_inner;
+
+statement ok
+DROP PROCEDURE p_outer_rollback;
+
+statement ok
+DROP PROCEDURE p_inner_ddl;
+
+subtest end
+
+
+subtest ddl_after_rollback
+
+# After ROLLBACK in a procedure, execution continues in a new implicit
+# transaction. DDL in the new transaction should succeed.
+statement ok
+CREATE PROCEDURE p_rollback_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_pre_rollback (a INT);
+  ROLLBACK;
+  -- Now in a new implicit transaction.
+  CREATE TABLE t_post_rollback (a INT);
+END
+$$;
+
+statement ok
+CALL p_rollback_then_ddl();
+
+statement error pgcode 42P01 relation "t_pre_rollback" does not exist
+SELECT * FROM t_pre_rollback;
+
+# t_post_rollback was created in the new implicit transaction.
+query I
+SELECT count(*) FROM t_post_rollback;
+----
+0
+
+statement ok
+DROP PROCEDURE p_rollback_then_ddl;
+
+statement ok
+DROP TABLE t_post_rollback;
+
+subtest end
+
+
+subtest ddl_under_read_committed
+
+# DDL in procedure bodies bypasses maybeAdjustTxnForDDL because the DDL
+# executes through runPlanInsidePlan, not execStmtInOpenState. This means
+# the automatic isolation upgrade to SERIALIZABLE does NOT happen for DDL
+# inside procedures — the DDL runs at whatever isolation level the caller's
+# transaction uses.
+#
+# For bare DDL statements under READ COMMITTED, we automatically upgrades to
+# SERIALIZABLE and sends a NOTICE. Inside a procedure body, neither the
+# upgrade nor the NOTICE occurs.
+#
+# TODO(spilchen): this will be something we need to address. We must upgrade to
+# SERIALIZABLE for DDL in procedures to ensure safety.
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;
+
+statement ok
+SET default_transaction_isolation = 'read committed';
+
+# Basic DDL in procedure under READ COMMITTED implicit txn.
+statement ok
+CREATE PROCEDURE p_rc_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_test (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+CALL p_rc_create();
+
+query I
+SELECT count(*) FROM t_rc_test;
+----
+0
+
+statement ok
+DROP TABLE t_rc_test;
+
+statement ok
+DROP PROCEDURE p_rc_create;
+
+# DDL in procedure under READ COMMITTED explicit txn with COMMIT.
+statement ok
+CREATE PROCEDURE p_rc_explicit() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_explicit (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+statement ok
+CALL p_rc_explicit();
+
+statement ok
+COMMIT;
+
+query I
+SELECT count(*) FROM t_rc_explicit;
+----
+0
+
+statement ok
+DROP TABLE t_rc_explicit;
+
+# DDL + ROLLBACK under READ COMMITTED.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+statement ok
+CALL p_rc_explicit();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_rc_explicit" does not exist
+SELECT * FROM t_rc_explicit;
+
+statement ok
+DROP PROCEDURE p_rc_explicit;
+
+# Bare DDL under READ COMMITTED fires the isolation upgrade NOTICE.
+# Skip under local-prepared: the prepare+execute phases each fire the NOTICE.
+skipif config local-prepared
+statement ok
+CREATE TABLE t_notice_check (a INT);
+
+skipif config local-prepared
+query T noticetrace
+DROP TABLE t_notice_check;
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+# CALL with DDL inside the procedure does NOT fire the NOTICE because
+# maybeAdjustTxnForDDL is not called from the runPlanInsidePlan path.
+statement ok
+CREATE PROCEDURE p_rc_no_notice() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rc_no_notice (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rc_no_notice();
+----
+
+query I
+SELECT count(*) FROM t_rc_no_notice;
+----
+0
+
+statement ok
+DROP PROCEDURE p_rc_no_notice;
+
+statement ok
+DROP TABLE t_rc_no_notice;
+
+statement ok
+SET default_transaction_isolation = 'serializable';
+
+subtest end
+
+
+subtest ddl_under_repeatable_read
+
+# DDL in procedures also works under REPEATABLE READ (SNAPSHOT) isolation
+# without the automatic upgrade to SERIALIZABLE.
+
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;
+
+statement ok
+SET default_transaction_isolation = 'repeatable read';
+
+# Basic DDL in procedure under REPEATABLE READ.
+statement ok
+CREATE PROCEDURE p_rr_create() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rr_test (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+CALL p_rr_create();
+
+query I
+SELECT count(*) FROM t_rr_test;
+----
+0
+
+statement ok
+DROP TABLE t_rr_test;
+
+statement ok
+DROP PROCEDURE p_rr_create;
+
+# DDL + ROLLBACK under REPEATABLE READ explicit txn.
+statement ok
+CREATE PROCEDURE p_rr_rollback() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rr_rb (a INT);
+END
+$$;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+statement ok
+CALL p_rr_rollback();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_rr_rb" does not exist
+SELECT * FROM t_rr_rb;
+
+statement ok
+DROP PROCEDURE p_rr_rollback;
+
+# No isolation upgrade NOTICE for CALL under REPEATABLE READ.
+statement ok
+CREATE PROCEDURE p_rr_no_notice() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_rr_no_notice (a INT);
+END
+$$;
+
+query T noticetrace
+CALL p_rr_no_notice();
+----
+
+query I
+SELECT count(*) FROM t_rr_no_notice;
+----
+0
+
+statement ok
+DROP PROCEDURE p_rr_no_notice;
+
+statement ok
+DROP TABLE t_rr_no_notice;
+
+statement ok
+SET default_transaction_isolation = 'serializable';
+
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false;
+
+subtest end

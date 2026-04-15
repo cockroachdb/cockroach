@@ -1579,6 +1579,13 @@ func TestTenantLogic_procedure_cte(
 	runLogicTest(t, "procedure_cte")
 }
 
+func TestTenantLogic_procedure_ddl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_ddl")
+}
+
 func TestTenantLogic_procedure_deps(
 	t *testing.T,
 ) {
