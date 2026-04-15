@@ -1,0 +1,55 @@
+# Fresh witness grants vote.
+vote from=1 term=a lm=a0
+----
+ok
+vote:  (a, 1)
+acked: none
+
+# Idempotent: same vote accepted again.
+vote from=1 term=a lm=a0
+----
+ok
+vote:  (a, 1)
+acked: none
+
+# Same term, different candidate: rejected (already voted).
+vote from=2 term=a lm=a0
+----
+rejected
+vote:  (a, 1)
+acked: none
+
+# Stale term: rejected.
+vote from=2 term=a lm=a5
+----
+rejected
+vote:  (a, 1)
+acked: none
+
+# Higher term with up-to-date log: granted.
+vote from=2 term=b lm=a0
+----
+ok
+vote:  (b, 2)
+acked: none
+
+# Higher term but log behind our acked hi: rejected.
+# First set up some acked state.
+set
+term=c voted-for=1 hi=c10 engaged=false
+----
+vote:  (c, 1)
+acked: (c10, released)
+
+vote from=2 term=d lm=c9
+----
+rejected
+vote:  (c, 1)
+acked: (c10, released)
+
+# Same scenario but candidate log is at the hi mark: granted.
+vote from=2 term=d lm=c10
+----
+ok
+vote:  (d, 2)
+acked: none

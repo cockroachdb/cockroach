@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "witness",
+    srcs = ["witness.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/raft/witness",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+    ],
+)
+
+go_test(
+    name = "witness_test",
+    srcs = ["datadriven_witness_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":witness"],
+    deps = [
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
