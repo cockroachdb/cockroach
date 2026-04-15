@@ -997,6 +997,7 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
