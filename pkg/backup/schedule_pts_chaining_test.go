@@ -429,12 +429,10 @@ func TestScheduleChainingWithDatabaseExpansion(t *testing.T) {
 		skip.IgnoreLint(t, "test flakes when the machine clock is too close to midnight")
 	}
 
-	th.sqlDB.Exec(t, `
-CREATE DATABASE db;
-USE db;
-CREATE TABLE t(a INT, b INT);
-INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(1, 100) as g2(y);
-`)
+	th.sqlDB.Exec(t, `CREATE DATABASE db`)
+	th.sqlDB.Exec(t, `USE db`)
+	th.sqlDB.Exec(t, `CREATE TABLE t(a INT, b INT)`)
+	th.sqlDB.Exec(t, `INSERT INTO t SELECT x, y FROM generate_series(1, 10) AS g(x), generate_series(1, 10) AS g2(y)`)
 
 	backupAsOfTimes := make([]time.Time, 0)
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, statementTime time.Time) {
@@ -496,9 +494,7 @@ INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(
 	checkProtectionPolicy(fullBackupAsOf, "db", "t")
 
 	// Insert some more data.
-	th.sqlDB.Exec(t, `
-INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(1, 100) as g2(y);
-`)
+	th.sqlDB.Exec(t, `INSERT INTO t SELECT x, y FROM generate_series(1, 10) AS g(x), generate_series(1, 10) AS g2(y)`)
 
 	// Now, let's run the incremental schedule.
 	incSchedule := th.loadSchedule(t, incID)
@@ -513,9 +509,7 @@ INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(
 	// covered by the protection policy that the incremental schedule is holding
 	// on to.
 	th.sqlDB.Exec(t, `CREATE TABLE s (a INT, b INT)`)
-	th.sqlDB.Exec(t, `
-INSERT INTO s select x, y from generate_series(1, 100) as g(x), generate_series(1, 100) as g2(y);
-`)
+	th.sqlDB.Exec(t, `INSERT INTO s SELECT x, y FROM generate_series(1, 10) AS g(x), generate_series(1, 10) AS g2(y)`)
 
 	// The protection policy should exist on the newly created table.
 	checkProtectionPolicy(incBackupAsOf, "db", "s")
