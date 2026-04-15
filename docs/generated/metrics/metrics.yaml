@@ -2121,7 +2121,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.num_active_spans
       exported_name: jobs_row_level_ttl_num_active_spans
       description: Number of active spans the TTL job is deleting from.
@@ -2132,7 +2132,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.resume_completed
       exported_name: jobs_row_level_ttl_resume_completed
       labeled_name: 'jobs.resume{name: row_level_ttl, status: completed}'
@@ -2167,7 +2167,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Correlate this metric with the metric jobs.row_level_ttl.rows_selected to ensure all the rows that should be deleted are actually getting deleted.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.rows_selected
       exported_name: jobs_row_level_ttl_rows_selected
       description: Number of rows selected for deletion by the row level TTL job.
@@ -2178,7 +2178,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Correlate this metric with the metric jobs.row_level_ttl.rows_deleted to ensure all the rows that should be deleted are actually getting deleted.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.select_duration
       exported_name: jobs_row_level_ttl_select_duration
       description: Duration for select requests during row level TTL.
@@ -2189,7 +2189,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.span_total_duration
       exported_name: jobs_row_level_ttl_span_total_duration
       description: Duration for processing a span during row level TTL.
@@ -2200,7 +2200,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.total_expired_rows
       exported_name: jobs_row_level_ttl_total_expired_rows
       description: Approximate number of rows that have expired the TTL on the TTL table.
@@ -2211,7 +2211,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.total_rows
       exported_name: jobs_row_level_ttl_total_rows
       description: Approximate number of rows on the TTL table.
@@ -2222,7 +2222,7 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: schedules.scheduled-row-level-ttl-executor.failed
       exported_name: schedules_scheduled_row_level_ttl_executor_failed
       labeled_name: 'schedules{name: scheduled-row-level-ttl-executor, status: failed}'
@@ -5549,7 +5549,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.inspect.num_active_spans
       exported_name: jobs_inspect_num_active_spans
       description: Number of spans currently being processed by INSPECT jobs
@@ -5558,7 +5558,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.inspect.protected_age_sec
       exported_name: jobs_inspect_protected_age_sec
       labeled_name: 'jobs.protected_age_sec{type: inspect}'
@@ -5617,7 +5617,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.inspect.runs_with_issues
       exported_name: jobs_inspect_runs_with_issues
       description: Number of INSPECT jobs that found at least one issue
@@ -5626,7 +5626,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.inspect.spans_processed
       exported_name: jobs_inspect_spans_processed
       description: Number of spans processed by INSPECT jobs
@@ -5635,7 +5635,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.key_visualizer.currently_idle
       exported_name: jobs_key_visualizer_currently_idle
       labeled_name: 'jobs{type: key_visualizer, status: currently_idle}'
@@ -6692,7 +6692,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/sql-foundations
+      owner: cockroachdb/sql-queries
     - name: jobs.row_level_ttl.protected_age_sec
       exported_name: jobs_row_level_ttl_protected_age_sec
       labeled_name: 'jobs.protected_age_sec{type: row_level_ttl}'

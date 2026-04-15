@@ -105,7 +105,7 @@ func makeInspectThroughputTest(
 
 	return registry.TestSpec{
 		Name:                name,
-		Owner:               registry.OwnerSQLFoundations,
+		Owner:               registry.OwnerSQLQueries,
 		Benchmark:           true,
 		Cluster:             r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
 		CompatibleClouds:    registry.OnlyGCE,
@@ -309,7 +309,7 @@ func makeInspectMultiRegionThroughputTest(
 
 	return registry.TestSpec{
 		Name:      name,
-		Owner:     registry.OwnerSQLFoundations,
+		Owner:     registry.OwnerSQLQueries,
 		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
 			numCRDBNodes+1, // +1 for workload node
