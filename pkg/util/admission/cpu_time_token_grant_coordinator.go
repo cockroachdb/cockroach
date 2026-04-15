@@ -176,7 +176,7 @@ func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue
 // CPUGrantCoordinators manages.
 func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 	coord.slotsCoord.GetWorkQueue(KVWork).SetTenantWeights(weights)
-	coord.cpuTimeCoord.setTenantWeights(weights)
+	coord.cpuTimeCoord.setGroupWeights(weights)
 }
 
 // GetRunnableCountCallback returns a callback of type
@@ -237,7 +237,7 @@ func makeCPUTimeTokenGrantCoordinator(
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		opts := makeWorkQueueOptions(KVWork)
 		opts.mode = usesCPUTimeTokens
-		opts.perTenantAggMetrics = &tenantAggMetrics{
+		opts.perGroupAggMetrics = &groupAggMetrics{
 			admittedCount:  metrics.AdmittedCountPerTenant[tier],
 			waitTimeNanos:  metrics.WaitTimeNanosPerTenant[tier],
 			tokensUsed:     metrics.TokensUsedPerTenant[tier],
@@ -288,7 +288,7 @@ func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *Work
 	return coord.queues[tier].(*WorkQueue)
 }
 
-func (coord *cpuTimeTokenGrantCoordinator) setTenantWeights(weights map[uint64]uint32) {
+func (coord *cpuTimeTokenGrantCoordinator) setGroupWeights(weights map[uint64]uint32) {
 	for tier := range coord.queues {
 		coord.queues[tier].(*WorkQueue).SetTenantWeights(weights)
 	}
