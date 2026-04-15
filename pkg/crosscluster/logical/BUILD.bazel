@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "create_logical_replication_stmt.go",
         "dead_letter_queue.go",
+        "distsql_planner.go",
         "logical_replication_dist.go",
         "logical_replication_job.go",
         "logical_replication_writer_processor.go",

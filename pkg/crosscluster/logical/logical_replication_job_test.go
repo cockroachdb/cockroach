@@ -2189,13 +2189,13 @@ func TestLogicalReplicationPlanner(t *testing.T) {
 		case <-time.After(testutils.SucceedsSoonDuration()):
 		}
 	}
-	planner := logicalReplicationPlanner{
-		job:        sj.Job,
-		jobExecCtx: jobExecCtx,
-		client:     client,
+	planner := LogicalReplicationPlanner{
+		Job:        sj.Job,
+		JobExecCtx: jobExecCtx,
+		Client:     client,
 	}
 	t.Run("generatePlan uses the replicationStartTime for planning if replication is unset", func(t *testing.T) {
-		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
+		_, _, _ = planner.GeneratePlan(ctx, jobExecCtx.DistSQLPlanner())
 		requireAsOf(replicationStartTime)
 	})
 	t.Run("generatePlan uses the latest replicated time for planning", func(t *testing.T) {
@@ -2206,7 +2206,7 @@ func TestLogicalReplicationPlanner(t *testing.T) {
 			ju.UpdateProgress(md.Progress)
 			return nil
 		}))
-		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
+		_, _, _ = planner.GeneratePlan(ctx, jobExecCtx.DistSQLPlanner())
 		requireAsOf(replicatedTime)
 	})
 }

@@ -18,11 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -276,75 +274,6 @@ func loadOnlineReplicatedTime(
 		return hlc.Timestamp{}
 	}
 	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
-}
-
-// logicalReplicationPlanner generates a physical plan for logical replication.
-// An initial plan is generated during job startup and the replanner will
-// periodically call generatePlan to recalculate the best plan. If the newly
-// generated plan differs significantly from the initial plan, the entire
-// distSQL flow is shut down and a new initial plan will be created.
-type logicalReplicationPlanner struct {
-	job        *jobs.Job
-	jobExecCtx sql.JobExecContext
-	client     streamclient.Client
-}
-
-type logicalReplicationPlanInfo struct {
-	sourceSpans      []roachpb.Span
-	partitionPgUrls  []string
-	destTableBySrcID map[descpb.ID]dstTableMetadata
-	// Number of processors writing data on the destination cluster (offline or
-	// otherwise).
-	writeProcessorCount int
-}
-
-func makeLogicalReplicationPlanner(
-	jobExecCtx sql.JobExecContext, job *jobs.Job, client streamclient.Client,
-) logicalReplicationPlanner {
-	return logicalReplicationPlanner{
-		job:        job,
-		jobExecCtx: jobExecCtx,
-		client:     client,
-	}
-}
-
-// getSourcePlan fetches the logical replication plan from the source cluster.
-// It is the shared setup used by both planRowReplication and
-// planOfflineInitialScan.
-func (p *logicalReplicationPlanner) getSourcePlan(
-	ctx context.Context,
-) (streamclient.LogicalReplicationPlan, error) {
-	progress := p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-	payload := p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
-
-	asOf := progress.ReplicatedTime
-	if asOf.IsEmpty() {
-		asOf = payload.ReplicationStartTime
-	}
-
-	req := streampb.LogicalReplicationPlanRequest{
-		PlanAsOf: asOf,
-		// During an offline initial scan, we need to replicate the whole table, not
-		// just the primary keys.
-		UseTableSpan: payload.CreateTable && progress.ReplicatedTime.IsEmpty(),
-		StreamID:     streampb.StreamID(payload.StreamID),
-	}
-	for _, pair := range payload.ReplicationPairs {
-		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
-	}
-
-	return p.client.PlanLogicalReplication(ctx, req)
-}
-
-func (p *logicalReplicationPlanner) generatePlan(
-	ctx context.Context, dsp *sql.DistSQLPlanner,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	sourcePlan, err := p.getSourcePlan(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	plan, planCtx, _, err := p.planRowReplication(ctx, dsp, sourcePlan)
-	return plan, planCtx, err
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical
