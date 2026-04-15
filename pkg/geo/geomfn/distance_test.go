@@ -632,6 +632,261 @@ func TestDFullyWithin(t *testing.T) {
 	})
 }
 
+var distance3DTestCases = []struct {
+	desc                string
+	a                   string
+	b                   string
+	expectedMinDistance float64
+}{
+	{
+		"Same 3D POINTs",
+		"POINT Z(1 2 3)",
+		"POINT Z(1 2 3)",
+		0,
+	},
+	{
+		"Different 3D POINTs",
+		"POINT Z(0 0 0)",
+		"POINT Z(1 1 1)",
+		1.7320508075688772,
+	},
+	{
+		"3D POINTs differ only in Z",
+		"POINT Z(0 0 0)",
+		"POINT Z(0 0 5)",
+		5,
+	},
+	{
+		"2D POINTs (no Z)",
+		"POINT(0 0)",
+		"POINT(3 4)",
+		5,
+	},
+	{
+		"2D POINTs (no Z) different",
+		"POINT(1 1)",
+		"POINT(2 1)",
+		1,
+	},
+	{
+		"3D POINT to 3D LINESTRING",
+		"POINT Z(5 3 4)",
+		"LINESTRING Z(0 0 0, 10 0 0)",
+		5,
+	},
+	{
+		"3D POINT above 3D LINESTRING",
+		"POINT Z(0 0 10)",
+		"LINESTRING Z(0 0 0, 10 0 0)",
+		10,
+	},
+	{
+		"3D parallel LINESTRINGs",
+		"LINESTRING Z(0 0 0, 10 0 0)",
+		"LINESTRING Z(0 5 0, 10 5 0)",
+		5,
+	},
+	{
+		"3D skew LINESTRINGs",
+		"LINESTRING Z(0 0 0, 10 0 0)",
+		"LINESTRING Z(5 5 5, 5 5 10)",
+		7.0710678118654755,
+	},
+	{
+		"3D POINT to 3D POLYGON",
+		"POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))",
+		"POINT Z(5 5 3)",
+		3,
+	},
+	{
+		"3D MULTIPOINTs",
+		"MULTIPOINT Z((0 0 0), (10 10 10))",
+		"MULTIPOINT Z((1 0 0), (0 1 0))",
+		1,
+	},
+	{
+		// 2D-projected lines cross at (5,5) but are 10 apart in Z.
+		"3D LINESTRINGs crossing in XY but offset in Z",
+		"LINESTRING Z(0 0 0, 10 10 0)",
+		"LINESTRING Z(10 0 10, 0 10 10)",
+		10,
+	},
+	{
+		// 3D segments truly cross at (5,5,5).
+		"3D LINESTRINGs truly crossing in 3D",
+		"LINESTRING Z(0 0 0, 10 10 10)",
+		"LINESTRING Z(10 0 0, 0 10 10)",
+		0,
+	},
+	{
+		// XYM coordinates: M is not Z; PostGIS treats both as 2D.
+		"XYM POINTs degrade to 2D",
+		"POINT M(0 0 100)",
+		"POINT M(0 0 0)",
+		0,
+	},
+	{
+		// XYZM: Z is index 2, M is index 3.
+		"XYZM POINTs use Z and ignore M",
+		"POINT ZM(0 0 5 100)",
+		"POINT ZM(0 0 0 0)",
+		5,
+	},
+	{
+		// Mixed XYM and XY degrades to 2D distance.
+		"XYM POINT vs XY POINT degrades to 2D",
+		"POINT M(0 0 5)",
+		"POINT(3 4)",
+		5,
+	},
+	{
+		// Polygon at z=0 with a hole; line above the hole at z=100.
+		// The line endpoints' XY projections fall inside the polygon,
+		// so 3D distance is the perpendicular drop to the polygon plane.
+		"LINESTRING above POLYGON with hole",
+		"POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0), (3 3 0, 7 3 0, 7 7 0, 3 7 0, 3 3 0))",
+		"LINESTRING Z(2 5 100, 8 5 100)",
+		100,
+	},
+	{
+		// Two disjoint LINESTRINGs in the XY plane.
+		"disjoint LINESTRINGs in XY",
+		"LINESTRING Z(0 0 0, 10 0 0)",
+		"LINESTRING Z(20 0 0, 30 0 0)",
+		10,
+	},
+	{
+		// Parallel vertical LINESTRINGs offset in X.
+		"parallel vertical LINESTRINGs",
+		"LINESTRING Z(0 0 0, 0 0 10)",
+		"LINESTRING Z(5 0 0, 5 0 10)",
+		5,
+	},
+}
+
+func TestMinDistance3D(t *testing.T) {
+	for _, tc := range distance3DTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			ret, err := MinDistance3D(a, b)
+			require.NoError(t, err)
+			require.InDelta(t, tc.expectedMinDistance, ret, 1e-10)
+
+			// Verify symmetry.
+			ret, err = MinDistance3D(b, a)
+			require.NoError(t, err)
+			require.InDelta(t, tc.expectedMinDistance, ret, 1e-10)
+		})
+	}
+
+	t.Run("zero distance", func(t *testing.T) {
+		a := geo.MustParseGeometry("POINT Z(1 2 3)")
+		b := geo.MustParseGeometry("POINT Z(1 2 3)")
+		ret, err := MinDistance3D(a, b)
+		require.NoError(t, err)
+		require.Equal(t, 0.0, ret)
+	})
+
+	t.Run("errors for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range emptyDistanceTestCases {
+			t.Run(fmt.Sprintf("%s to %s", tc.a, tc.b), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+				_, err = MinDistance3D(a, b)
+				require.Error(t, err)
+				require.True(t, geo.IsEmptyGeometryError(err))
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := MinDistance3D(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestDWithin3D(t *testing.T) {
+	for _, tc := range distance3DTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a, err := geo.ParseGeometry(tc.a)
+			require.NoError(t, err)
+			b, err := geo.ParseGeometry(tc.b)
+			require.NoError(t, err)
+
+			// At exact distance and above, should be within.
+			for _, val := range []float64{
+				tc.expectedMinDistance,
+				tc.expectedMinDistance + 0.1,
+				tc.expectedMinDistance + 1,
+				tc.expectedMinDistance * 2,
+			} {
+				t.Run(fmt.Sprintf("within:%f", val), func(t *testing.T) {
+					dwithin, err := DWithin3D(a, b, val)
+					require.NoError(t, err)
+					require.True(t, dwithin)
+
+					dwithin, err = DWithin3D(b, a, val)
+					require.NoError(t, err)
+					require.True(t, dwithin)
+				})
+			}
+
+			// Below the distance, should not be within.
+			for _, val := range []float64{
+				tc.expectedMinDistance - 0.1,
+				tc.expectedMinDistance - 1,
+				tc.expectedMinDistance / 2,
+			} {
+				if val > 0 {
+					t.Run(fmt.Sprintf("not_within:%f", val), func(t *testing.T) {
+						dwithin, err := DWithin3D(a, b, val)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+
+						dwithin, err = DWithin3D(b, a, val)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+					})
+				}
+			}
+		})
+	}
+
+	t.Run("returns false for EMPTY geometries", func(t *testing.T) {
+		for _, tc := range emptyDistanceTestCases {
+			t.Run(fmt.Sprintf("%s to %s", tc.a, tc.b), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+				dwithin, err := DWithin3D(a, b, 0)
+				require.NoError(t, err)
+				require.False(t, dwithin)
+			})
+		}
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := DWithin3D(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 1)
+		requireMismatchingSRIDError(t, err)
+	})
+
+	t.Run("errors if distance < 0", func(t *testing.T) {
+		_, err := DWithin3D(
+			geo.MustParseGeometry("POINT Z(1 2 3)"),
+			geo.MustParseGeometry("POINT Z(4 5 6)"),
+			-0.01,
+		)
+		require.Error(t, err)
+	})
+}
+
 func TestLongestLineString(t *testing.T) {
 	for _, tc := range distanceTestCases {
 		t.Run(tc.desc, func(t *testing.T) {
