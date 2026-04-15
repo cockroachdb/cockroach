@@ -69,7 +69,7 @@ func GetGCECredentials(
 	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
 		// In case a GOOGLE_EPHEMERAL_CREDENTIALS environment variable exist,
 		// it takes precedence over other sources, and we use it as our identity.
-		creds, err = google.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
+		creds, err = google.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope) //lint:ignore SA1019 grandfathered
 		if err != nil {
 			return nil, Env, errors.Wrap(err, "failed to get credentials from environment variable")
 		}

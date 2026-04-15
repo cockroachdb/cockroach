@@ -242,14 +242,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "fc60d74d62b549fe1227a68b693bbadd88fe3abfa6ce3dfb7abc299ffe80bb44"),
-        "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "b635db599f5616cc1b9272fdf008181f3bdf80c08e6df29e8a7f08d98de4b8b6"),
-        "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "eab18ca07cc5c9d2b55e8f9bca98e0dba2bf64e84ed57e1d3ddfdd9963359785"),
-        "linux_s390x": ("go1.25.5.linux-s390x.tar.gz", "f1343a45d821c7c3fa2ba7bf34390918ac11263907bec8534234ed880230b7c3"),
-        "windows_amd64": ("go1.25.5.windows-amd64.tar.gz", "b7f917c27d6298a8830984dc12a4a3fad663faf86bc828c84073f7a4ea2c6186"),
+        "darwin_arm64": ("go1.26.2.darwin-arm64.tar.gz", "bb3d80463ad10ea8376a38723a4b3ed2c4ee40a45718f5deb00392def418d3a3"),
+        "linux_amd64": ("go1.26.2.linux-amd64.tar.gz", "67c9282c68bdfced031f4c522ba435fb9bcaeb59a267aa8cb6a457596934e84c"),
+        "linux_arm64": ("go1.26.2.linux-arm64.tar.gz", "0715a51a6213839ea8e9e353e8e483ca3d420ed381d04e0d6a7dbcb83f7f8022"),
+        "linux_s390x": ("go1.26.2.linux-s390x.tar.gz", "b1b1f2ce755e262e39ba6fc99da5f38692ad8f8037c485fe44d084adee2d7906"),
+        "windows_amd64": ("go1.26.2.windows-amd64.tar.gz", "7323b6b7b3a2f480eb3acd17b38001058c5a3bbe637bcc0d9e822d02ab7b791d"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20260312-132644/{}"],
-    version = "1.25.5",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20260414-195718/{}"],
+    version = "1.26.2",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
