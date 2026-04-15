@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -871,4 +872,84 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	tdb.Exec(t, createStmts)
 	tdb.Exec(t, "CREATE INDEX ON t.test (v)")
 	require.True(t, called)
+}
+
+// TestPartialIndexBackfillWithConcurrentFamilyUpdate validates that concurrent updates
+// with multiple column families still propagate to secondary indexes being constructed.
+func TestPartialIndexBackfillWithConcurrentFamilyUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		s     serverutils.TestServerInterface
+		sqlDB *gosql.DB
+	)
+
+	var mergeReady chan struct{}
+	var waitForMerge chan struct{}
+
+	params := base.TestServerArgs{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: 100,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(startKey roachpb.Key) error {
+					mergeReady <- struct{}{}
+					<-waitForMerge
+					return nil
+				},
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	mergeReady = make(chan struct{})
+	waitForMerge = make(chan struct{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    id INT PRIMARY KEY,
+    val STRING,
+    other_val STRING,
+    FAMILY f1(id, val),
+    FAMILY f2(other_val)
+);
+`)
+	// Insert two rows that match predicate for the index we are creating below.
+	runner.Exec(t, `
+INSERT INTO t.test VALUES 
+(1, 'BLAH', 'MEH'), 
+(2, 'BLAH', 'BLEH'),
+(3, 'MEH', 'GLEE'),
+(4, 'BLEH', 'GLAH');`)
+
+	// Run index creation in the background.
+	grp := ctxgroup.WithContext(context.Background())
+	grp.GoCtx(func(ctx context.Context) error {
+		// Create a partial index on values that match some predicate.
+		_, err := sqlDB.Exec("CREATE INDEX idx_test on t.test(val) WHERE val LIKE '%BLAH%'")
+		return err
+	})
+	// Wait for the merge step to start.
+	<-mergeReady
+	// Updates on an unrelated column should still inject updates the new partial index,
+	// while its mutating.
+	runner.Exec(t, `UPDATE t.test SET other_val = 'B' WHERE id IN (1, 2);`)
+	// Also, validate deletions behave correctly.
+	runner.Exec(t, `DELETE FROM t.test WHERE other_val='GLAH';`)
+	// Allow the merge to continue
+	close(waitForMerge)
+	// Wait for schema change to finish
+	require.NoError(t, grp.Wait())
+	// Confirm with a scan of the partial index that everything looks sound.
+	runner.CheckQueryResults(t, `SELECT id, val FROM t.test@idx_test WHERE val LIKE '%BLAH%' ORDER BY id`, [][]string{
+		{"1", "BLAH"},
+		{"2", "BLAH"},
+	})
 }
