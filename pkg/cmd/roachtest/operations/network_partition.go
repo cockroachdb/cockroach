@@ -8,106 +8,123 @@ package operations
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 type cleanupNetworkPartition struct {
-	nodeID int
+	failer *failures.Failer
 }
 
 // Cleanup removes the network partition created by the operation.
 func (np *cleanupNetworkPartition) Cleanup(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) {
-	o.Status(fmt.Sprintf("remove the partition on node n%d", np.nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(np.nodeID)), `sudo iptables -F`)
+	o.Status("removing network partition")
+	if err := np.failer.Recover(ctx, o.L()); err != nil {
+		o.L().Printf("failed to recover from network partition: %v", err)
+	}
+	if err := np.failer.WaitForFailureToRecover(ctx, o.L()); err != nil {
+		o.L().Printf("network partition: node failed to stabilize: %v", err)
+	}
+	if err := np.failer.Cleanup(ctx, o.L()); err != nil {
+		o.Fatalf("failed to cleanup network partition: %v", err)
+	}
 }
 
-// createNetworkPartition creates a network partition between two random nodes.
+// createNetworkPartialPartition creates a bidirectional network partition
+// between two random nodes.
 func createNetworkPartialPartition(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) (cleanup registry.OperationCleanup) {
-	defer func() {
-		if r := recover(); r != nil {
-			o.Errorf("error during network partition: %v", r)
-		}
-	}()
 	nodeCount := c.Spec().NodeCount
 	if nodeCount <= 1 {
 		o.Fatal("not enough nodes to create a partition")
 	}
-	nodeID := rand.Intn(nodeCount) + 1
 
-	// Create a partial partition between two random nodes.
+	rng, _ := randutil.NewPseudoRand()
+	nodes := c.All()
+	nodeID := nodes[rng.Intn(len(nodes))]
+
+	// Choose a different node to partition from.
 	var otherNodeID int
-	// Choose a different nodeID to partition from.
 	for {
-		otherNodeID = rand.Intn(nodeCount) + 1
+		otherNodeID = nodes[rng.Intn(len(nodes))]
 		if otherNodeID != nodeID {
 			break
 		}
 	}
 
-	// Get the internal IPs of the remote node.
-	ips, err := c.InternalIP(ctx, o.L(), c.Node(otherNodeID))
+	o.Status(fmt.Sprintf(
+		"creating a partition between nodes n%d and n%d", nodeID, otherNodeID,
+	))
+
+	failer, args, err := roachtestutil.MakeBidirectionalPartitionFailer(
+		o.L(), c, c.Node(nodeID), c.Node(otherNodeID),
+	)
 	if err != nil {
 		o.Fatal(err)
 	}
-	otherNodeIP := ips[0]
-	o.Status(fmt.Sprintf("creating a partition between nodes n%d and n%d", nodeID, otherNodeID))
 
-	// Assign cleanup handler early, before adding iptables rules.
-	cleanup = &cleanupNetworkPartition{nodeID: nodeID}
+	// Assign cleanup handler before Setup so partial failures are cleaned up.
+	cleanup = &cleanupNetworkPartition{failer: failer}
 
-	// Block all input and output traffic between the two nodes.
-	if err = c.RunE(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP)); err != nil {
+	if err := failer.Setup(ctx, o.L(), args); err != nil {
 		o.Fatal(err)
 	}
-	if err = c.RunE(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP)); err != nil {
+	if err := failer.Inject(ctx, o.L(), args); err != nil {
 		o.Fatal(err)
 	}
 
 	return cleanup
 }
 
-// createNetworkFullPartition creates a network partition between a random node
-// and all other nodes.
+// createNetworkFullPartition creates a bidirectional network partition between
+// a random node and all other nodes in the cluster.
 func createNetworkFullPartition(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) (cleanup registry.OperationCleanup) {
-	defer func() {
-		if r := recover(); r != nil {
-			o.Errorf("error during network partition: %v", r)
-		}
-	}()
 	nodeCount := c.Spec().NodeCount
 	if nodeCount <= 1 {
 		o.Fatal("not enough nodes to create a partition")
 	}
-	nodeID := rand.Intn(nodeCount) + 1
 
-	// Drop bi-directional traffic between the node and all other nodes on the
-	// pgport.
+	rng, _ := randutil.NewPseudoRand()
+	nodes := c.All()
+	nodeID := nodes[rng.Intn(len(nodes))]
+
+	// Build the list of all other nodes.
+	var otherNodes option.NodeListOption
+	for _, n := range nodes {
+		if n != nodeID {
+			otherNodes = append(otherNodes, n)
+		}
+	}
+
 	o.Status(fmt.Sprintf("partition node n%d from the cluster", nodeID))
 
-	// Assign cleanup handler early, before adding iptables rules.
-	cleanup = &cleanupNetworkPartition{nodeID: nodeID}
+	failer, args, err := roachtestutil.MakeBidirectionalPartitionFailer(
+		o.L(), c, c.Node(nodeID), otherNodes,
+	)
+	if err != nil {
+		o.Fatal(err)
+	}
 
-	for _, rule := range []string{
-		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID),
-		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID),
-		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID),
-		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID),
-	} {
-		if err := c.RunE(ctx, option.WithNodes(c.Node(nodeID)), rule); err != nil {
-			o.Fatal(err)
-		}
+	// Assign cleanup handler before Setup so partial failures are cleaned up.
+	cleanup = &cleanupNetworkPartition{failer: failer}
+
+	if err := failer.Setup(ctx, o.L(), args); err != nil {
+		o.Fatal(err)
+	}
+	if err := failer.Inject(ctx, o.L(), args); err != nil {
+		o.Fatal(err)
 	}
 
 	return cleanup
@@ -122,8 +139,10 @@ func registerNetworkPartition(r registry.Registry) {
 		Timeout:            1 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                createNetworkFullPartition,
+		Dependencies: []registry.OperationDependency{
+			registry.OperationRequiresZeroUnderreplicatedRanges,
+		},
+		Run: createNetworkFullPartition,
 	})
 	r.AddOperation(registry.OperationSpec{
 		Name:               "network-partition/partial",
@@ -131,7 +150,9 @@ func registerNetworkPartition(r registry.Registry) {
 		Timeout:            1 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCannotRunConcurrently,
-		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:                createNetworkPartialPartition,
+		Dependencies: []registry.OperationDependency{
+			registry.OperationRequiresZeroUnderreplicatedRanges,
+		},
+		Run: createNetworkPartialPartition,
 	})
 }
