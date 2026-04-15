@@ -167,11 +167,11 @@ func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uin
 	panic("unimplemented")
 }
 
-func (t *testElasticCPUInternalWorkQueue) adjustTenantUsed(
+func (t *testElasticCPUInternalWorkQueue) adjustGroupUsed(
 	tenantID roachpb.TenantID, additionalUsed int64,
 ) {
 	if !t.disabled {
-		fmt.Fprintf(&t.buf, "adjust-tenant-used: tenant=%s additional-used=%s",
+		fmt.Fprintf(&t.buf, "adjust-group-used: tenant=%s additional-used=%s",
 			tenantID.String(), time.Duration(additionalUsed).String())
 	}
 }
