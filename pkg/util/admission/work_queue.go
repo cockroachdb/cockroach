@@ -307,7 +307,9 @@ type WorkQueue struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Groups with waiting work.
+		// Groups with waiting work. In serverless mode each group is a
+		// SQL tenant keyed by tenant ID; in resource manager mode each
+		// group is a resource group keyed by resource group ID.
 		groupHeap groupHeap
 		// All groups, including those without waiting work. Periodically cleaned.
 		groups       map[uint64]*groupInfo
@@ -1658,7 +1660,10 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 	return priority
 }
 
-// groupInfo is the per-group information in the groupHeap.
+// groupInfo is the per-group information in the groupHeap. A group
+// represents a SQL tenant in serverless mode or a resource group in
+// resource manager mode; id is the tenant ID or resource group ID
+// respectively.
 type groupInfo struct {
 	id uint64
 	// The weight assigned to the group. Must be > 0.
@@ -1731,9 +1736,10 @@ type groupMetrics struct {
 	tokensReturned *aggmetric.Counter
 }
 
-// groupHeap is a heap of groups with waiting work, ordered in increasing
-// order of groupInfo.used/groupInfo.weight (weights are an optional
-// feature, and default to 1). That is, we prefer groups that are using less.
+// groupHeap is a heap of groups with waiting work, ordered by burst
+// qualification (canBurst before noBurst) then by used/weight ratio
+// in increasing order (weights are an optional feature, and default
+// to 1). That is, we prefer groups that are using less.
 type groupHeap []*groupInfo
 
 var _ heap.Interface = (*groupHeap)(nil)
