@@ -395,13 +395,25 @@ func (w *Watcher) removeEntryForTenantIDLocked(ctx context.Context, tid roachpb.
 	if log.V(2) {
 		log.Dev.Infof(ctx, "removing tenant entry %d from cache", tid)
 	}
+
 	// Not finding the ID in the store is expected if we see a
-	// duplicate delete.
-	if entry, ok := w.mu.store[tid]; ok {
+	// duplicate delete. A duplicate delete interleaved with a
+	// getInternal call can also result is us finding an entry
+	// with a nil value for the embedded Entry struct.
+	if entry, ok := w.mu.store[tid]; ok && entry.Entry != nil {
 		delete(w.mu.byName, entry.Name)
 	}
 	delete(w.mu.lastUpdate, tid)
 	delete(w.mu.store, tid)
+}
+
+// TestingRemoveEntry removes the entry for the given tenant ID from
+// the cache. This is used to test that removal handles placeholder
+// entries (with nil embedded Entry) created by getInternal.
+func (w *Watcher) TestingRemoveEntry(ctx context.Context, tid roachpb.TenantID) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.removeEntryForTenantIDLocked(ctx, tid)
 }
 
 func (w *Watcher) TestingRestart() {
