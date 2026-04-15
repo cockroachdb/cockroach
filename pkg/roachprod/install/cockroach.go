@@ -147,6 +147,11 @@ type StartOpts struct {
 	// N.B. may be nil if the version cannot be fetched.
 	Version *version.Version
 
+	// UseDRPC, if true, adds --use-new-rpc to the start arguments to
+	// enable the DRPC framework instead of gRPC. Only applied if the
+	// binary version supports it (v26.2+).
+	UseDRPC bool
+
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
 	VirtualClusterName     string
 	VirtualClusterID       int
@@ -1162,6 +1167,21 @@ func execLoggingTemplate(data loggingTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+// shouldEnableDRPC reports whether --use-new-rpc should be added to the
+// start arguments for the given binary version. DRPC requires v26.2+.
+// Returns (true, "") when DRPC should be enabled, or (false, reason)
+// explaining why it was skipped.
+func shouldEnableDRPC(v *version.Version) (ok bool, reason string) {
+	if v == nil {
+		return false, "binary version unknown, skipping --use-new-rpc"
+	}
+	if v.Major().Year < 26 ||
+		(v.Major().Year == 26 && v.Major().Ordinal < 2) {
+		return false, fmt.Sprintf("--use-new-rpc not supported in %s, skipping", v)
+	}
+	return true, ""
+}
+
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
@@ -1300,6 +1320,18 @@ func (c *SyncedCluster) generateStartArgs(
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartServiceForVirtualCluster {
 		args = append(args, c.generateStartFlagsSQL(node, startOpts)...)
+	}
+
+	// DRPC (--use-new-rpc) is only supported in v26.2+. If the version is
+	// unknown (nil), we skip DRPC to avoid breaking binaries that don't
+	// support the flag.
+	if startOpts.UseDRPC {
+		if ok, reason := shouldEnableDRPC(startOpts.Version); ok {
+			l.Printf("DRPC: enabling --use-new-rpc for node %d (version %s)", node, startOpts.Version)
+			args = append(args, "--use-new-rpc")
+		} else {
+			l.Printf("WARN: %s", reason)
+		}
 	}
 
 	args = append(args, startOpts.ExtraArgs...)

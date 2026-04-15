@@ -548,6 +548,15 @@ var (
 			startup but before the test body runs, so tests may override them.
 			Example: --start-setting=kv.range_split.by_load_enabled=false`,
 	})
+
+	ForceDRPC bool = false
+	_              = registerRunFlag(&ForceDRPC, FlagInfo{
+		Name: "force-drpc",
+		Usage: `
+			Force DRPC (--use-new-rpc) to be enabled for all tests.
+			Older binaries that don't support "--use-new-rpc" will
+			skip it automatically.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no

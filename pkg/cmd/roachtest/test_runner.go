@@ -1123,6 +1123,30 @@ func (r *testRunner) runWorker(
 					}
 				}
 
+				// Enable DRPC either deterministically via --force-drpc
+				// or metamorphically with 50% probability. Metamorphic
+				// randomization is skipped for benchmarks and mixed-version
+				// suites. --force-drpc is always honored; for mixed-version
+				// suites a warning is logged since version gating happens
+				// per start call.
+				//
+				// N.B. metamorphicDRPC=true means DRPC was *requested* for
+				// this test. Roachprod may still skip --use-new-rpc at start
+				// time if the binary version is too old or unknown.
+				isMixedVersion := t.spec.Suites.Contains(registry.MixedVersion)
+				if roachtestflags.ForceDRPC || (!testSpec.Benchmark && !isMixedVersion && prng.Intn(2) == 0) {
+					if roachtestflags.ForceDRPC && isMixedVersion {
+						t.L().Printf("WARN: --force-drpc is set for mixed-version suite %s; "+
+							"version gating is per-start-batch, not per-node — "+
+							"ensure same-version nodes are started together", t.Name())
+					}
+					c.useDRPC = true
+					c.status("Enabling DRPC")
+					t.AddParam("metamorphicDRPC", "true")
+				} else {
+					c.useDRPC = false
+				}
+
 				c.goCoverDir = t.GoCoverArtifactsDir()
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
