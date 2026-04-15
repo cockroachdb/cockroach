@@ -457,18 +457,18 @@ func (f *RangeFeed) processEvent(
 			ts.Logical = 0
 			ts.WallTime -= ts.WallTime % int64(f.frontierQuantize)
 		}
-		advanced, err := frontier.Forward(ev.Checkpoint.Span, ts)
+		result, err := frontier.Forward(ev.Checkpoint.Span, ts)
 		if err != nil {
 			return err
 		}
 		if f.onCheckpoint != nil {
 			f.onCheckpoint(ctx, ev.Checkpoint)
 		}
-		if advanced && f.onFrontierAdvance != nil {
+		if result.FrontierForwarded() && f.onFrontierAdvance != nil {
 			f.onFrontierAdvance(ctx, frontier.Frontier())
 		}
 		if f.frontierVisitor != nil {
-			f.frontierVisitor(ctx, advanced, frontier)
+			f.frontierVisitor(ctx, result.FrontierForwarded(), frontier)
 		}
 	case ev.SST != nil:
 		if f.onSSTable == nil {

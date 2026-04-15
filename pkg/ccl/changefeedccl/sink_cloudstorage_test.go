@@ -228,9 +228,9 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	forwardFrontier := func(f span.Frontier, s roachpb.Span, wall int64) bool {
-		forwarded, err := f.Forward(s, ts(wall))
+		result, err := f.Forward(s, ts(wall))
 		require.NoError(t, err)
-		return forwarded
+		return result.FrontierForwarded()
 	}
 
 	stringOrDefault := func(s, ifEmpty string) string {

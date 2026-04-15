@@ -58,6 +58,15 @@ var (
 			return vals[rng.Intn(len(vals))], true
 		},
 	}
+	PeriodicAggregatorFlushing = MetamorphicSetting{
+		Name: "changefeed.aggregator.periodic_flushing.enabled",
+		Resolve: func(rng *rand.Rand) (string, bool) {
+			if rng.Float64() < 0.1 {
+				return "false", true
+			}
+			return "true", true
+		},
+	}
 )
 
 // resolvedSetting represents a metamorphic setting that has been

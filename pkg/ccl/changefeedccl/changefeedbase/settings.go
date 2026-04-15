@@ -482,6 +482,19 @@ var TrackPerTableProgress = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
 )
 
+// PeriodicAggregatorFlush controls whether aggregators periodically flush
+// their frontier to the coordinator, even when the frontier has not advanced.
+// This is disabled for cloud storage sinks due to #155174.
+var PeriodicAggregatorFlush = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.aggregator.periodic_flushing.enabled",
+	"if true, aggregators periodically flush their frontier to the "+
+		"coordinator even when the frontier has not advanced; this "+
+		"improves checkpoint freshness. Ignored and disabled for cloud "+
+		"storage sinks which are incompatible.",
+	true,
+)
+
 // FrontierPersistenceInterval configures the minimum amount of time that must
 // elapse before a changefeed will persist its entire span frontier again.
 var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUnit(
