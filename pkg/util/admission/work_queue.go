@@ -666,7 +666,7 @@ type AdmitResponse struct {
 	// If true, admission control is enabled.
 	Enabled bool
 
-	tenantID roachpb.TenantID
+	groupID roachpb.TenantID
 	// requestedCount is the number of slots or tokens taken at Admit time.
 	// It is useful to return, so that in AdmittedWorkDone, we can adjust
 	// the deduction, in cases where we have more information, such as in
@@ -754,7 +754,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		info.RequestedCount = group.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
-		tenantID:       info.TenantID,
+		groupID:        info.TenantID,
 		requestedCount: info.RequestedCount,
 	}
 
@@ -1082,7 +1082,7 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// NB: additionalUsed can be negative here (in case the initial estimate was
 		// too pessimistic).
 		if additionalUsed != 0 {
-			group, ok := q.mu.groups[resp.tenantID.ToUint64()]
+			group, ok := q.mu.groups[resp.groupID.ToUint64()]
 			if ok {
 				q.adjustGroupUsedLocked(group, additionalUsed)
 			}
@@ -1097,7 +1097,7 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// in this code path, that is, at admission time.
 		if q.mode == usesCPUTimeTokens {
 			q.mu.defaultCPUTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
-			group, ok := q.mu.groups[resp.tenantID.ToUint64()]
+			group, ok := q.mu.groups[resp.groupID.ToUint64()]
 			// If the group struct doesn't exist, it has been GCed due to a lack of
 			// activity. In this case, we do not leverage the grunning measurement
 			// for future estimates.
@@ -1251,10 +1251,10 @@ func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
 // in AdmittedWorkDone. The additionalUsed count can be negative, in which
 // case it is returning unused resources. This is only for WorkQueue's own
 // accounting -- it should not call into granter.
-func (q *WorkQueue) adjustGroupUsed(tenantID roachpb.TenantID, delta int64) {
+func (q *WorkQueue) adjustGroupUsed(groupID roachpb.TenantID, delta int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	tid := tenantID.ToUint64()
+	tid := groupID.ToUint64()
 	group, ok := q.mu.groups[tid]
 	if !ok {
 		return
