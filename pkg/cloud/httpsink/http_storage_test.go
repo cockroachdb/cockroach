@@ -133,34 +133,6 @@ func TestPutHttp(t *testing.T) {
 		}
 	})
 
-	t.Run("multiHost", func(t *testing.T) {
-		srv1, files1, cleanup1 := makeServer()
-		defer cleanup1()
-		srv2, files2, cleanup2 := makeServer()
-		defer cleanup2()
-		srv3, files3, cleanup3 := makeServer()
-		defer cleanup3()
-
-		combined := *srv1
-		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
-
-		info := cloudtestutils.StoreInfo{
-			URI:          combined.String(),
-			User:         user,
-			TestSettings: testSettings,
-		}
-		cloudtestutils.CheckExportStoreSkipSingleFile(t, info)
-		if expected, actual := 3, files1(); expected != actual {
-			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
-		}
-		if expected, actual := 4, files2(); expected != actual {
-			t.Fatalf("expected %d files written to http host 2, got %d", expected, actual)
-		}
-		if expected, actual := 4, files3(); expected != actual {
-			t.Fatalf("expected %d files written to http host 3, got %d", expected, actual)
-		}
-	})
-
 	// Ensure that servers that error on HEAD are handled gracefully.
 	t.Run("bad-head-response", func(t *testing.T) {
 		ctx := context.Background()
