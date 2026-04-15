@@ -675,6 +675,7 @@ type clusterImpl struct {
 	localCertsDir string
 	expiration    time.Time
 	encAtRest     bool // use encryption at rest
+	useDRPC       bool // metamorphically enable DRPC (--use-new-rpc)
 
 	// clusterSettings are additional cluster settings set on the storage cluster startup.
 	clusterSettings map[string]string
@@ -2203,6 +2204,9 @@ func (c *clusterImpl) StartE(
 		settings.ClusterSettings[name] = value
 	}
 
+	// Propagate the metamorphic DRPC decision to roachprod.
+	startOpts.RoachprodOpts.UseDRPC = c.useDRPC
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
 	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartHooks...)
@@ -2272,6 +2276,10 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	settings install.ClusterSettings,
 ) error {
 	l.Printf("starting virtual cluster")
+
+	// Propagate the metamorphic DRPC decision to roachprod.
+	startOpts.RoachprodOpts.UseDRPC = c.useDRPC
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
 
 	// By default, we assume every node in the cluster is part of the

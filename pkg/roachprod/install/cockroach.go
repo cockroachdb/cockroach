@@ -147,6 +147,11 @@ type StartOpts struct {
 	// N.B. may be nil if the version cannot be fetched.
 	Version *version.Version
 
+	// UseDRPC, if true, adds --use-new-rpc to the start arguments to
+	// enable the DRPC framework instead of gRPC. Only applied if the
+	// binary version supports it (v26.2+).
+	UseDRPC bool
+
 	// -- Options that apply only to the StartServiceForVirtualCluster target --
 	VirtualClusterName     string
 	VirtualClusterID       int
@@ -625,6 +630,14 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			startOpts.Version = parsedVersion
 		} else {
 			l.Printf("WARN: unable to fetch cockroach version: %s", err)
+		}
+
+		if startOpts.UseDRPC {
+			if ok, reason := shouldEnableDRPC(startOpts.Version); ok {
+				l.Printf("DRPC: enabling --use-new-rpc (version %s)", startOpts.Version)
+			} else {
+				l.Printf("WARN: DRPC requested but skipped: %s", reason)
+			}
 		}
 
 		l.Printf("%s (%s): starting cockroach processes", c.Name, startOpts.VirtualClusterName)
@@ -1162,6 +1175,21 @@ func execLoggingTemplate(data loggingTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+// shouldEnableDRPC reports whether --use-new-rpc should be added to the
+// start arguments for the given binary version. DRPC requires v26.2+.
+// Returns (true, "") when DRPC should be enabled, or (false, reason)
+// explaining why it was skipped.
+func shouldEnableDRPC(v *version.Version) (ok bool, reason string) {
+	if v == nil {
+		return false, "binary version unknown, skipping --use-new-rpc"
+	}
+	if v.Major().Year < 26 ||
+		(v.Major().Year == 26 && v.Major().Ordinal < 2) {
+		return false, fmt.Sprintf("--use-new-rpc not supported in %s, skipping", v)
+	}
+	return true, ""
+}
+
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
@@ -1300,6 +1328,14 @@ func (c *SyncedCluster) generateStartArgs(
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartServiceForVirtualCluster {
 		args = append(args, c.generateStartFlagsSQL(node, startOpts)...)
+	}
+
+	// DRPC (--use-new-rpc) is only supported in v26.2+. The decision is
+	// logged once per Start() call; here we just append the flag silently.
+	if startOpts.UseDRPC {
+		if ok, _ := shouldEnableDRPC(startOpts.Version); ok {
+			args = append(args, "--use-new-rpc")
+		}
 	}
 
 	args = append(args, startOpts.ExtraArgs...)
