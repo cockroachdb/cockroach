@@ -1721,6 +1721,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="_st_3ddwithin"></a><code>_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b, using 3D Euclidean distance. This variant does not utilize any spatial index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="_st_contains"></a><code>_st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant does not utilize any spatial index.</p>
@@ -1866,6 +1868,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="postgis_version"></a><code>postgis_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_3ddistance"></a><code>st_3ddistance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the 3-dimensional minimum Cartesian distance between two geometries. If either geometry has no Z component, this is equivalent to ST_Distance.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_3ddwithin"></a><code>st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b, using 3D Euclidean distance.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_3dlength"></a><code>st_3dlength(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the 3-dimensional or 2-dimensional length of the geometry.</p>
 <p>Note ST_3DLength is only valid for LineString or MultiLineString.
