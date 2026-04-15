@@ -1,8 +1,21 @@
 # Investigate Test Failure
 #
-# Triggers when a collaborator comments `/investigate` on a test failure
-# issue. Invokes Claude to autonomously analyze the failure and post
-# findings as a comment.
+# Triggers in two ways:
+#   1. A collaborator comments `/investigate` on a test failure issue.
+#   2. An issue is opened or labeled with both "C-test-failure" and
+#      an opted-in team label (see AUTO_INVESTIGATE_TEAMS below).
+#
+# Invokes Claude to autonomously analyze the failure and post findings
+# as a comment.
+#
+# Opting in a team:
+#
+#   Add the team's T-label to the `if` condition on the investigate
+#   job below. The workflow triggers for any issue carrying
+#   "C-test-failure" plus one of those team labels. Example:
+#
+#     contains(github.event.issue.labels.*.name, 'T-sql-queries') ||
+#     contains(github.event.issue.labels.*.name, 'T-kv')) ||
 #
 # Manual testing via workflow_dispatch:
 #
@@ -51,6 +64,8 @@
 name: Investigate Test Failure
 
 on:
+  issues:
+    types: [opened, labeled]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -74,12 +89,20 @@ jobs:
   investigate:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.issue.pull_request == null &&
+      (github.event_name == 'issues' &&
+       github.event.issue.pull_request == null &&
+       contains(github.event.issue.labels.*.name, 'C-test-failure') &&
+       contains(github.event.issue.labels.*.name, 'T-sql-queries')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request == null &&
        (github.event.comment.body == '/investigate' ||
         startsWith(github.event.comment.body, '/investigate ')) &&
        (github.event.comment.author_association == 'COLLABORATOR' ||
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'OWNER'))
+    concurrency:
+      group: investigate-${{ github.event.issue.number || inputs.issue_number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -88,9 +111,25 @@ jobs:
       id-token: write
     env:
       ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
-      COMMENT_BODY: ${{ inputs.comment_body || github.event.comment.body }}
+      COMMENT_BODY: ${{ inputs.comment_body || github.event.comment.body || '/investigate' }}
       HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
+      # Guard against infra incidents that file hundreds of test
+      # failures at once. Skip if too many investigations are already
+      # running. Only applies to auto-triggered runs; /investigate
+      # comments and workflow_dispatch are always allowed through.
+      - name: Rate limit auto-triggered runs
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IN_PROGRESS=$(gh run list --workflow=investigate.yml --status=in_progress \
+            --repo ${{ github.repository }} --json databaseId --jq 'length')
+          if [ "$IN_PROGRESS" -gt 5 ]; then
+            echo "::warning::$IN_PROGRESS investigations already in progress — skipping to avoid flooding during infra incidents"
+            exit 1
+          fi
+
       - name: Acknowledge trigger
         if: github.event_name == 'issue_comment'
         env:
@@ -187,7 +226,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Post findings
-        if: always() && github.event_name == 'issue_comment'
+        if: always() && github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
