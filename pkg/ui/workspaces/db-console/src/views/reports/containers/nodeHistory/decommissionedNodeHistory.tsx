@@ -6,7 +6,7 @@
 import {
   ColumnsConfig,
   Table,
-  SortSetting,
+  useNodesSummary,
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
@@ -14,18 +14,12 @@ import flow from "lodash/flow";
 import map from "lodash/map";
 import orderBy from "lodash/orderBy";
 import { Moment } from "moment-timezone";
-import React, { useEffect } from "react";
+import React, { useMemo } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { Text } from "src/components";
 import { cockroach } from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { nodesSummarySelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 import "./decommissionedNodeHistory.scss";
@@ -33,21 +27,10 @@ import "./decommissionedNodeHistory.scss";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 
-const decommissionedNodesSortSetting = new LocalSetting<
-  AdminUIState,
-  SortSetting
->("nodes/decommissioned_sort_setting", s => s.localSettings);
-
 interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
   decommissionedDate: Moment;
-}
-
-export interface DecommissionedNodeHistoryProps {
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  dataSource: DecommissionedNodeStatusRow[];
 }
 
 const sortByNodeId = (
@@ -100,16 +83,40 @@ const decommissionedColumns: ColumnsConfig<DecommissionedNodeStatusRow> = [
   },
 ];
 
-export function DecommissionedNodeHistory({
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
-  dataSource,
+function DecommissionedNodeHistory({
   history,
-}: DecommissionedNodeHistoryProps & RouteComponentProps): React.ReactElement {
-  useEffect(() => {
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
+}: RouteComponentProps): React.ReactElement {
+  const { livenessByNodeID } = useNodesSummary();
+
+  const dataSource = useMemo((): DecommissionedNodeStatusRow[] => {
+    const getDecommissionedTime = (nodeId: number) => {
+      const liveness = livenessByNodeID[nodeId];
+      if (!liveness) {
+        return undefined;
+      }
+      const deadTime = liveness.expiration.wall_time;
+      return util.LongToMoment(deadTime);
+    };
+
+    const decommissionedNodes = Object.values(livenessByNodeID).filter(
+      liveness => {
+        return liveness?.membership === MembershipStatus.DECOMMISSIONED;
+      },
+    );
+
+    const data = flow(
+      (liveness: ILiveness[]) =>
+        orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
+      (liveness: ILiveness[]) =>
+        map(liveness, (l, idx: number) => ({
+          key: `${idx}`,
+          nodeId: l.node_id,
+          decommissionedDate: getDecommissionedTime(l.node_id),
+        })),
+    )(decommissionedNodes);
+
+    return data;
+  }, [livenessByNodeID]);
 
   return (
     <section className="section">
@@ -127,49 +134,4 @@ export function DecommissionedNodeHistory({
   );
 }
 
-const decommissionedNodesTableData = createSelector(
-  nodesSummarySelector,
-  (nodesSummary): DecommissionedNodeStatusRow[] => {
-    const getDecommissionedTime = (nodeId: number) => {
-      const liveness = nodesSummary.livenessByNodeID[nodeId];
-      if (!liveness) {
-        return undefined;
-      }
-      const deadTime = liveness.expiration.wall_time;
-      return util.LongToMoment(deadTime);
-    };
-
-    const decommissionedNodes = Object.values(
-      nodesSummary.livenessByNodeID,
-    ).filter(liveness => {
-      return liveness?.membership === MembershipStatus.DECOMMISSIONED;
-    });
-
-    const data = flow(
-      (liveness: ILiveness[]) =>
-        orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
-      (liveness: ILiveness[]) =>
-        map(liveness, (l, idx: number) => ({
-          key: `${idx}`,
-          nodeId: l.node_id,
-          decommissionedDate: getDecommissionedTime(l.node_id),
-        })),
-    )(decommissionedNodes);
-
-    return data;
-  },
-);
-
-const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
-  dataSource: decommissionedNodesTableData(state),
-});
-
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-  setSort: decommissionedNodesSortSetting.set,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory),
-);
+export default withRouter(DecommissionedNodeHistory);

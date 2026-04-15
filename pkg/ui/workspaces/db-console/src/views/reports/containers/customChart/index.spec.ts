@@ -5,7 +5,7 @@
 
 import * as protos from "src/js/protos";
 import { MetricsMetadata } from "src/redux/metricMetadata";
-import { NodesSummary } from "src/redux/nodes";
+import { NodesSummary } from "@cockroachlabs/cluster-ui";
 import { INodeStatus } from "src/util/proto";
 import { CustomMetricState } from "src/views/reports/containers/customChart/customMetric";
 import { getSources } from "src/views/reports/containers/customChart/index";
@@ -184,7 +184,6 @@ class testNodesSummaryBuilder {
       livenessStatusByNodeID: {},
       livenessByNodeID: {},
       storeIDsByNodeID: this.storeIDsByNodeID,
-      nodeLastError: undefined,
     };
   }
 }

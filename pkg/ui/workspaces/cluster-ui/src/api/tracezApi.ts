@@ -7,6 +7,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 
 import { fetchData } from "src/api";
+import { useSwrWithClusterId } from "src/util";
 
 export type ListTracingSnapshotsRequest =
   cockroach.server.serverpb.ListTracingSnapshotsRequest;
@@ -113,3 +114,50 @@ export function setTraceRecordingType(
     req,
   );
 }
+
+// ---------------------------------------------------------------------------
+// SWR Hooks
+// ---------------------------------------------------------------------------
+
+export const useTracingSnapshots = (nodeID: string) => {
+  const key = nodeID ? ["tracingSnapshots", nodeID] : null;
+  const { data, error, isLoading, mutate } = useSwrWithClusterId(
+    key,
+    () => listTracingSnapshots(nodeID),
+    { revalidateOnFocus: false },
+  );
+  return { data, isLoading, error, refresh: mutate };
+};
+
+export const useTracingSnapshot = (
+  nodeID: string,
+  snapshotID: number | null,
+) => {
+  const key =
+    nodeID && snapshotID != null
+      ? ["tracingSnapshot", nodeID, snapshotID]
+      : null;
+  const { data, error, isLoading, mutate } = useSwrWithClusterId(
+    key,
+    () => getTracingSnapshot({ nodeID, snapshotID: snapshotID! }),
+    { revalidateOnFocus: false },
+  );
+  return { data, isLoading, error, refresh: mutate };
+};
+
+export const useRawTrace = (
+  nodeID: string,
+  snapshotID: number | null,
+  traceID: Long | null,
+) => {
+  const key =
+    nodeID && snapshotID != null && traceID
+      ? ["rawTrace", nodeID, snapshotID, traceID.toString()]
+      : null;
+  const { data, error, isLoading, mutate } = useSwrWithClusterId(
+    key,
+    () => getRawTrace({ nodeID, snapshotID: snapshotID!, traceID: traceID! }),
+    { revalidateOnFocus: false },
+  );
+  return { data, isLoading, error, refresh: mutate };
+};

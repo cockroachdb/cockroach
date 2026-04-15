@@ -21,7 +21,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import isUndefined from "lodash/isUndefined";
 import moment from "moment-timezone";
 import React, { useRef, useState, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { Link } from "react-router-dom";
 import useSWR from "swr";
 
@@ -30,9 +30,8 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
-import { AdminUIState } from "src/redux/state";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
@@ -290,17 +289,13 @@ const StatementDiagnosticsHistoryContainer: React.FC = () => {
     refresh,
   } = useStatementDiagnosticsReports();
 
-  const statements = useSelector(
-    (state: AdminUIState) => state.cachedData.statements.data?.statements,
-  );
-
+  // Statement data was previously loaded via Redux cachedData.statements but
+  // that reducer was never populated. Always returns undefined.
   const getStatementByFingerprint = useCallback(
-    (fingerprint: string): Stmt | undefined => {
-      return (statements || []).find(
-        statement => statement.key.key_data.query === fingerprint,
-      );
+    (_fingerprint: string): Stmt | undefined => {
+      return undefined;
     },
-    [statements],
+    [],
   );
 
   const handleCancelRequest = useCallback(
@@ -310,9 +305,7 @@ const StatementDiagnosticsHistoryContainer: React.FC = () => {
           requestId: report.id,
         });
 
-        dispatch(
-          trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
-        );
+        trackCancelDiagnosticsBundle(report.statement_fingerprint);
 
         dispatch(
           createStatementDiagnosticsAlertLocalSetting.set({

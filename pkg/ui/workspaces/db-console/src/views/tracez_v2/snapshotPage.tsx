@@ -8,21 +8,18 @@ import {
   SnapshotPageStateProps,
   SortSetting,
   api as clusterUiApi,
+  useNodes,
+  useTracingSnapshots,
+  useTracingSnapshot,
+  useRawTrace,
 } from "@cockroachlabs/cluster-ui";
 import Long from "long";
-import { connect } from "react-redux";
+import React, { useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import {
-  rawTraceKey,
-  refreshNodes,
-  refreshRawTrace,
-  refreshSnapshot,
-  refreshSnapshots,
-  snapshotKey,
-} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -31,65 +28,83 @@ export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   { columnTitle: "creationTime", ascending: false },
 );
 
-const mapStateToProps = (
-  state: AdminUIState,
-  props: RouteComponentProps,
-): SnapshotPageStateProps => {
-  const nodesState = state.cachedData.nodes;
-  const nodeID = getMatchParamByName(props.match, "nodeID");
+function SnapshotPageConnector(props: RouteComponentProps) {
+  const dispatch: AppDispatch = useDispatch();
+  const { match } = props;
 
-  const snapshotsState = state.cachedData.snapshots[nodeID];
+  const nodeID = getMatchParamByName(match, "nodeID");
+  const snapshotID = parseInt(getMatchParamByName(match, "snapshotID"));
+  const spanID = getMatchParamByName(match, "spanID");
 
-  const snapshotID = parseInt(getMatchParamByName(props.match, "snapshotID"));
-  const snapshotState =
-    state.cachedData.snapshot[
-      snapshotKey({
-        nodeID,
-        snapshotID,
-      })
-    ];
+  const sort = useSelector((state: AdminUIState) =>
+    sortSetting.selector(state),
+  );
 
-  const spanID = getMatchParamByName(props.match, "spanID");
-  let traceID: Long | null = null;
-  if (spanID) {
-    const span = snapshotState?.data?.snapshot.spans.find(s =>
+  const { nodeStatuses } = useNodes();
+
+  const {
+    data: snapshotsData,
+    isLoading: snapshotsLoading,
+    error: snapshotsError,
+    refresh: refreshSnapshots,
+  } = useTracingSnapshots(nodeID);
+
+  const {
+    data: snapshotData,
+    isLoading: snapshotLoading,
+    error: snapshotError,
+    refresh: refreshSnapshot,
+  } = useTracingSnapshot(nodeID, isNaN(snapshotID) ? null : snapshotID);
+
+  const traceID = useMemo(() => {
+    if (!spanID) return null;
+    const span = snapshotData?.snapshot.spans.find(s =>
       s.span_id.equals(spanID),
     );
-    traceID = span?.trace_id;
-  }
-  const rawTraceState =
-    state.cachedData.rawTrace[rawTraceKey({ nodeID, snapshotID, traceID })];
+    return span?.trace_id ?? null;
+  }, [spanID, snapshotData]);
 
-  return {
-    sort: sortSetting.selector(state),
+  const {
+    data: rawTraceData,
+    isLoading: rawTraceLoading,
+    error: rawTraceError,
+    refresh: refreshRawTrace,
+  } = useRawTrace(
+    nodeID,
+    isNaN(snapshotID) ? null : snapshotID,
+    traceID,
+  );
 
-    nodes: nodesState ? nodesState.data : null,
-
-    snapshots: snapshotsState ? snapshotsState.data : null,
-    snapshotsLoading: snapshotsState ? snapshotsState.inFlight : false,
-    snapshotsError: snapshotsState ? snapshotsState.lastError : null,
-
-    snapshot: snapshotState ? snapshotState.data : null,
-    snapshotLoading: snapshotState ? snapshotState.inFlight : false,
-    snapshotError: snapshotState ? snapshotState.lastError : null,
-
-    rawTrace: rawTraceState ? rawTraceState.data : null,
-    rawTraceLoading: rawTraceState ? rawTraceState.inFlight : false,
-    rawTraceError: rawTraceState ? rawTraceState.lastError : null,
-
+  const stateProps: SnapshotPageStateProps = {
+    sort,
+    nodes: nodeStatuses ?? null,
+    snapshots: snapshotsData ?? null,
+    snapshotsLoading,
+    snapshotsError: snapshotsError ?? null,
+    snapshot: snapshotData ?? null,
+    snapshotLoading,
+    snapshotError: snapshotError ?? null,
+    rawTrace: rawTraceData ?? null,
+    rawTraceLoading,
+    rawTraceError: rawTraceError ?? null,
     takeSnapshot: clusterUiApi.takeTracingSnapshot,
     setTraceRecordingType: clusterUiApi.setTraceRecordingType,
   };
-};
 
-const mapDispatchToProps = {
-  setSort: sortSetting.set,
-  refreshNodes,
-  refreshSnapshots,
-  refreshSnapshot,
-  refreshRawTrace,
-};
+  const dispatchProps = useMemo(
+    () => ({
+      setSort: (value: SortSetting) => dispatch(sortSetting.set(value)),
+      refreshNodes: () => {
+        /* SWR handles refetching automatically */
+      },
+      refreshSnapshots: () => refreshSnapshots(),
+      refreshSnapshot: () => refreshSnapshot(),
+      refreshRawTrace: () => refreshRawTrace(),
+    }),
+    [dispatch, refreshSnapshots, refreshSnapshot, refreshRawTrace],
+  );
 
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(SnapshotPage),
-);
+  return <SnapshotPage {...props} {...stateProps} {...dispatchProps} />;
+}
+
+export default withRouter(SnapshotPageConnector);

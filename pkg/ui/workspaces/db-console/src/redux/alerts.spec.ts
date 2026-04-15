@@ -4,48 +4,22 @@
 // included in the /LICENSE file.
 
 import { createHashHistory } from "history";
-import Long from "long";
 import moment from "moment-timezone";
 import { Store } from "redux";
 
-import * as protos from "src/js/protos";
-import { cockroach } from "src/js/protos";
-import { versionsSelector } from "src/redux/nodes";
-import { API_PREFIX } from "src/util/api";
-import fetchMock from "src/util/fetch-mock";
-
 import {
   AlertLevel,
-  alertDataSync,
-  staggeredVersionWarningSelector,
-  staggeredVersionDismissedSetting,
-  newVersionNotificationSelector,
-  newVersionDismissedLocalSetting,
   disconnectedAlertSelector,
   disconnectedDismissedLocalSetting,
   emailSubscriptionAlertLocalSetting,
   emailSubscriptionAlertSelector,
   clusterPreserveDowngradeOptionDismissedSetting,
-  clusterPreserveDowngradeOptionOvertimeSelector,
+  getClusterPreserveDowngradeOptionOvertime,
+  getStaggeredVersionWarning,
+  getNewVersionNotification,
 } from "./alerts";
-import {
-  livenessReducerObj,
-  versionReducerObj,
-  nodesReducerObj,
-  clusterReducerObj,
-  settingsReducerObj,
-} from "./apiReducers";
 import { setHealthError } from "./health";
-import { loginSuccess } from "./login";
-import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
-import {
-  VERSION_DISMISSED_KEY,
-  INSTRUCTIONS_BOX_COLLAPSED_KEY,
-  setUIDataKey,
-  isInFlight,
-} from "./uiData";
-
-import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import { AdminUIState, createAdminUIStore } from "./state";
 
 describe("alerts", function () {
   let store: Store<AdminUIState>;
@@ -59,347 +33,108 @@ describe("alerts", function () {
   });
 
   afterEach(function () {
-    fetchMock.restore();
     sessionStorage.clear();
   });
 
-  describe("selectors", function () {
-    describe("versions", function () {
-      it("tolerates missing liveness data", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const versions = versionsSelector(state());
-        expect(versions).toEqual(["0.1", "0.2"]);
+  describe("pure helper functions", function () {
+    describe("getStaggeredVersionWarning", function () {
+      it("returns undefined when versions map is empty", function () {
+        const alert = getStaggeredVersionWarning(new Map(), false);
+        expect(alert).toBeUndefined();
       });
 
-      it("ignores decommissioning/decommissioned nodes", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              desc: {
-                node_id: 1,
-              },
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              desc: {
-                node_id: 2,
-              },
-              build_info: {
-                tag: "0.2",
-              },
-            },
-            {
-              desc: {
-                node_id: 3,
-              },
-              build_info: {
-                tag: "0.3",
-              },
-            },
+      it("returns undefined when only one version", function () {
+        const alert = getStaggeredVersionWarning(
+          new Map([["v22.1", 3]]),
+          false,
+        );
+        expect(alert).toBeUndefined();
+      });
+
+      it("returns warning when multiple versions detected", function () {
+        const alert = getStaggeredVersionWarning(
+          new Map([
+            ["v22.1", 2],
+            ["v21.1.7", 1],
           ]),
+          false,
         );
+        expect(alert).toBeDefined();
+        expect(alert.level).toEqual(AlertLevel.WARNING);
+      });
 
-        dispatch(
-          livenessReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.LivenessResponse({
-              livenesses: [
-                {
-                  node_id: 1,
-                  membership: MembershipStatus.ACTIVE,
-                },
-                {
-                  node_id: 2,
-                  membership: MembershipStatus.DECOMMISSIONING,
-                },
-                {
-                  node_id: 3,
-                  membership: MembershipStatus.DECOMMISSIONED,
-                },
-              ],
-            }),
-          ),
+      it("returns undefined when dismissed", function () {
+        const alert = getStaggeredVersionWarning(
+          new Map([
+            ["v22.1", 2],
+            ["v21.1.7", 1],
+          ]),
+          true,
         );
-
-        const versions = versionsSelector(state());
-        expect(versions).toEqual(["0.1"]);
+        expect(alert).toBeUndefined();
       });
     });
 
-    describe("version mismatch warning", function () {
-      it("requires versions to be loaded before displaying", function () {
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
-      });
-
-      it("does not display when versions match", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-          ]),
+    describe("getNewVersionNotification", function () {
+      it("returns undefined when no newer versions", function () {
+        const alert = getNewVersionNotification(
+          null,
+          true,
+          moment(0),
+          moment(0),
         );
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
-      });
-
-      it("displays when mismatch detected and not dismissed", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              // `desc` intentionally omitted (must not affect outcome).
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              desc: {
-                node_id: 1,
-              },
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(typeof numAlert).toBe("object");
-        expect(numAlert.level).toEqual(AlertLevel.WARNING);
-        expect(numAlert.title).toEqual(
-          "Multiple versions of CockroachDB are running on this cluster.",
-        );
-      });
-
-      it("does not display if dismissed locally", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        dispatch(staggeredVersionDismissedSetting.set(true));
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
-      });
-
-      it("dismisses by setting local dismissal", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        numAlert.dismiss(dispatch, state);
-        expect(staggeredVersionDismissedSetting.selector(state())).toBe(true);
-      });
-
-      it("num alert dismisses by setting local dismissal", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        numAlert.dismiss(dispatch, state);
-        expect(staggeredVersionDismissedSetting.selector(state())).toBe(true);
-      });
-    });
-
-    describe("new version available notification", function () {
-      it("displays nothing when versions have not yet been loaded", function () {
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
-        const alert = newVersionNotificationSelector(state());
         expect(alert).toBeUndefined();
       });
 
-      it("displays nothing when persistent dismissal has not been checked", function () {
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [
-              {
-                version: "0.1",
-                detail: "alpha",
-              },
-            ],
-          }),
+      it("returns notification when newer version available", function () {
+        const alert = getNewVersionNotification(
+          { details: [{ version: "0.1", detail: "alpha" }] },
+          true,
+          moment(0),
+          moment(0),
         );
-        const alert = newVersionNotificationSelector(state());
-        expect(alert).toBeUndefined();
-      });
-
-      it("displays nothing when no new version is available", function () {
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [],
-          }),
-        );
-        const alert = newVersionNotificationSelector(state());
-        expect(alert).toBeUndefined();
-      });
-
-      it("displays when new version available and not dismissed", function () {
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [
-              {
-                version: "0.1",
-                detail: "alpha",
-              },
-            ],
-          }),
-        );
-        const alert = newVersionNotificationSelector(state());
-        expect(typeof alert).toBe("object");
+        expect(alert).toBeDefined();
         expect(alert.level).toEqual(AlertLevel.NOTIFICATION);
         expect(alert.title).toEqual("New Version Available");
       });
 
-      it("respects local dismissal setting", function () {
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [
-              {
-                version: "0.1",
-                detail: "alpha",
-              },
-            ],
-          }),
+      it("respects local dismissal", function () {
+        const alert = getNewVersionNotification(
+          { details: [{ version: "0.1", detail: "alpha" }] },
+          true,
+          moment(0),
+          moment(), // dismissed just now
         );
-        dispatch(newVersionDismissedLocalSetting.set(moment()));
-        let alert = newVersionNotificationSelector(state());
         expect(alert).toBeUndefined();
-
-        // Local dismissal only lasts one day.
-        dispatch(
-          newVersionDismissedLocalSetting.set(moment().subtract(2, "days")),
-        );
-        alert = newVersionNotificationSelector(state());
-        expect(alert).toBeDefined();
-      });
-
-      it("respects persistent dismissal setting", function () {
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, moment().valueOf()));
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [
-              {
-                version: "0.1",
-                detail: "alpha",
-              },
-            ],
-          }),
-        );
-        let alert = newVersionNotificationSelector(state());
-        expect(alert).toBeUndefined();
-
-        // Dismissal only lasts one day.
-        dispatch(
-          setUIDataKey(
-            VERSION_DISMISSED_KEY,
-            moment().subtract(2, "days").valueOf(),
-          ),
-        );
-        alert = newVersionNotificationSelector(state());
-        expect(alert).toBeDefined();
-      });
-
-      it("dismisses by setting local and persistent dismissal", function (done) {
-        fetchMock.mock({
-          matcher: `${API_PREFIX}/uidata`,
-          method: "POST",
-          response: (_url: string) => {
-            const encodedResponse =
-              protos.cockroach.server.serverpb.SetUIDataResponse.encode(
-                {},
-              ).finish();
-            return {
-              body: encodedResponse,
-            };
-          },
-        });
-
-        dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
-        dispatch(
-          versionReducerObj.receiveData({
-            details: [
-              {
-                version: "0.1",
-                detail: "alpha",
-              },
-            ],
-          }),
-        );
-        const alert = newVersionNotificationSelector(state());
-        const beforeDismiss = moment();
-
-        alert.dismiss(dispatch, state).then(() => {
-          expect(
-            newVersionDismissedLocalSetting
-              .selector(state())
-              .isSameOrAfter(beforeDismiss),
-          ).toBe(true);
-          expect(state().uiData[VERSION_DISMISSED_KEY]).not.toBeNull();
-          expect(state().uiData[VERSION_DISMISSED_KEY].data).not.toBeNull();
-          const dismissedMoment = moment(
-            state().uiData[VERSION_DISMISSED_KEY].data as number,
-          );
-          expect(dismissedMoment.isSameOrAfter(beforeDismiss)).toBe(true);
-          done();
-        });
       });
     });
 
+    describe("getClusterPreserveDowngradeOptionOvertime", function () {
+      it("returns undefined when dismissed", function () {
+        const alert = getClusterPreserveDowngradeOptionOvertime(
+          {
+            "cluster.preserve_downgrade_option": {
+              name: "cluster.preserve_downgrade_option",
+              value: "22.1",
+              type: "s" as any,
+              description: "",
+              lastUpdated: moment().subtract(3, "days"),
+              public: true,
+            },
+          },
+          true,
+        );
+        expect(alert).toBeUndefined();
+      });
+
+      it("returns undefined when setting not present", function () {
+        const alert = getClusterPreserveDowngradeOptionOvertime({}, false);
+        expect(alert).toBeUndefined();
+      });
+    });
+  });
+
+  describe("selectors", function () {
     describe("disconnected alert", function () {
       it("does not display when no health error is set", function () {
         const alert = disconnectedAlertSelector(state());
@@ -454,12 +189,10 @@ describe("alerts", function () {
       });
 
       it("dismissed by alert#dismiss", async () => {
-        // set alert to open state
         dispatch(emailSubscriptionAlertLocalSetting.set(true));
         let openState = emailSubscriptionAlertLocalSetting.selector(state());
         expect(openState).toBe(true);
 
-        // dismiss alert
         const alert = emailSubscriptionAlertSelector(state());
         await alert.dismiss(dispatch, state);
         openState = emailSubscriptionAlertLocalSetting.selector(state());
@@ -467,162 +200,12 @@ describe("alerts", function () {
       });
     });
 
-    describe("cluster.preserve_downgrade_option overtime alert", () => {
+    describe("cluster.preserve_downgrade_option dismissed setting", () => {
       it("initialized with default false state", () => {
         const settingState =
           clusterPreserveDowngradeOptionDismissedSetting.selector(state());
         expect(settingState).toBe(false);
       });
-      it("returns an alert if cluster.preserve_downgrad_option is lastUpdated >48 hours ago", () => {
-        dispatch(
-          settingsReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.SettingsResponse({
-              key_values: {
-                "cluster.preserve_downgrade_option": {
-                  last_updated: {
-                    seconds: Long.fromInt(165000000),
-                    nanos: 165000000,
-                  },
-                  value: "22.1",
-                },
-              },
-            }),
-          ),
-        );
-        const alert = clusterPreserveDowngradeOptionOvertimeSelector(state());
-        expect(alert).toBeDefined();
-      });
-      it("does not display alert once dismissed", async () => {
-        dispatch(
-          settingsReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.SettingsResponse({
-              key_values: {
-                "cluster.preserve_downgrade_option": {
-                  last_updated: {
-                    seconds: Long.fromInt(165000000),
-                    nanos: 165000000,
-                  },
-                  value: "22.1",
-                },
-              },
-            }),
-          ),
-        );
-
-        // dismiss alert
-        const alert = clusterPreserveDowngradeOptionOvertimeSelector(state());
-        await alert.dismiss(dispatch, state);
-        const openState =
-          clusterPreserveDowngradeOptionDismissedSetting.selector(state());
-        expect(openState).toBe(true);
-      });
-    });
-  });
-
-  describe("data sync listener", function () {
-    let sync: () => void;
-    beforeEach(function () {
-      // We don't care about the responses, we only care that the sync listener
-      // is making requests, which can be verified using "inFlight" settings.
-      fetchMock.mock({
-        matcher: "*",
-        method: "GET",
-        response: () => 500,
-      });
-      const loginDispatch = dispatch as AppDispatch;
-      loginDispatch(loginSuccess("test"));
-      sync = alertDataSync(store);
-    });
-
-    it("dispatches requests for expected data on empty store", function () {
-      sync();
-      expect(isInFlight(state(), VERSION_DISMISSED_KEY)).toBe(true);
-      expect(state().cachedData.cluster.inFlight).toBe(true);
-      expect(state().cachedData.nodes.inFlight).toBe(true);
-      expect(state().cachedData.version.inFlight).toBe(false);
-    });
-
-    it("dispatches request for version data when cluster ID and nodes are available", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
-      dispatch(
-        clusterReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({
-            cluster_id: "my-cluster",
-          }),
-        ),
-      );
-
-      sync();
-      expect(state().cachedData.version.inFlight).toBe(true);
-    });
-
-    it("does not request version data when version is staggered", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-          {
-            build_info: {
-              tag: "0.2",
-            },
-          },
-        ]),
-      );
-      dispatch(
-        clusterReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({
-            cluster_id: "my-cluster",
-          }),
-        ),
-      );
-
-      sync();
-      expect(state().cachedData.version.inFlight).toBe(false);
-    });
-
-    it("does not do anything when all data is available.", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
-      dispatch(
-        clusterReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({
-            cluster_id: "my-cluster",
-          }),
-        ),
-      );
-      dispatch(setUIDataKey(VERSION_DISMISSED_KEY, "blank"));
-      dispatch(setUIDataKey(INSTRUCTIONS_BOX_COLLAPSED_KEY, false));
-      dispatch(
-        versionReducerObj.receiveData({
-          details: [],
-        }),
-      );
-      dispatch(
-        settingsReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.SettingsResponse({}),
-        ),
-      );
-      const expectedState = state();
-      sync();
-      expect(state()).toEqual(expectedState);
     });
   });
 });

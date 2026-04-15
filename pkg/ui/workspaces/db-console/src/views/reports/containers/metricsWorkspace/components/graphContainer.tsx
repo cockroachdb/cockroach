@@ -4,31 +4,20 @@
 // included in the /LICENSE file.
 
 import { UpOutlined, DownOutlined } from "@ant-design/icons";
-import { TimeScale } from "@cockroachlabs/cluster-ui/dist/types/timeScaleDropdown";
-import { PayloadAction } from "@reduxjs/toolkit";
-import React, { useState } from "react";
-import { connect } from "react-redux";
+import {
+  useNodesSummary,
+  useMetricMetadata,
+  useTenants,
+} from "@cockroachlabs/cluster-ui";
+import isEmpty from "lodash/isEmpty";
+import keys from "lodash/keys";
+import React, { useMemo, useState } from "react";
+import { useDispatch } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
-import {
-  setMetricsFixedWindow,
-  setTimeScale,
-  TimeWindow,
-} from "oss/src/redux/timeScale";
+import { setMetricsFixedWindow, setTimeScale } from "oss/src/redux/timeScale";
 import { MetricsDataProvider } from "oss/src/views/shared/containers/metricDataProvider";
 import { getCookieValue } from "src/redux/cookies";
-import {
-  metricOptionsSelector,
-  MetricsMetadata,
-  metricsMetadataSelector,
-} from "src/redux/metricMetadata";
-import {
-  NodesSummary,
-  nodeOptionsSelector,
-  nodesSummarySelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import { tenantDropdownOptions } from "src/redux/tenants";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { Axis } from "src/views/shared/components/metricQuery";
@@ -49,32 +38,61 @@ export type GraphContainerOwnProps = {
   onDelete: (index: number) => void;
 } & RouteComponentProps;
 
-export type GraphContainerProps = GraphContainerOwnProps & {
-  nodesSummary: NodesSummary;
-  tenantOptions: DropdownOption[];
-  metricOptions: DropdownOption[];
-  nodeOptions: DropdownOption[];
-  currentTenant: string | null;
-  metricsMetadata: MetricsMetadata;
-  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
-};
-
-const GraphContainer: React.FC<GraphContainerProps> = ({
+const GraphContainer: React.FC<GraphContainerOwnProps> = ({
   graphConfig,
   index,
-  nodesSummary,
-  tenantOptions,
-  metricOptions,
-  nodeOptions,
-  currentTenant,
   history,
-  metricsMetadata,
   onConfigChange,
   onDelete,
-  setMetricsFixedWindow,
-  setTimeScale,
 }) => {
+  const dispatch = useDispatch();
+  const nodesSummary = useNodesSummary();
+  const { data: metricsMetadata } = useMetricMetadata();
+  const { tenants: tenantsList } = useTenants();
+  const currentTenant = getCookieValue("tenant");
+
+  const ALL_TENANTS_OPTION: DropdownOption = { label: "All", value: "" };
+  const tenantOptions: DropdownOption[] = useMemo(() => {
+    const options: DropdownOption[] = [ALL_TENANTS_OPTION];
+    tenantsList?.forEach(tenant =>
+      options.push({
+        label: tenant.tenant_name,
+        value: tenant.tenant_id?.id?.toString(),
+      }),
+    );
+    return options;
+  }, [tenantsList]);
+
+  const metricOptions: DropdownOption[] = useMemo(() => {
+    if (isEmpty(metricsMetadata?.metadata)) {
+      return [];
+    }
+    return keys(metricsMetadata.recordedNames).map(k => {
+      const fullMetricName = metricsMetadata.recordedNames[k];
+      return {
+        value: fullMetricName,
+        label: k,
+        description: metricsMetadata.metadata[k]?.help,
+      };
+    });
+  }, [metricsMetadata]);
+
+  const nodeOptions: DropdownOption[] = useMemo(() => {
+    const base: DropdownOption[] = [{ value: "", label: "Cluster" }];
+    const options: DropdownOption[] = nodesSummary.nodeStatuses
+      .map(ns => ({
+        value: ns.desc.node_id.toString(),
+        label: nodesSummary.nodeDisplayNameByID[ns.desc.node_id] as string,
+      }))
+      .sort((a: DropdownOption, b: DropdownOption) => {
+        const aDecommissioned = a.label.startsWith("[decommissioned]");
+        const bDecommissioned = b.label.startsWith("[decommissioned]");
+        if (aDecommissioned && !bDecommissioned) return 1;
+        if (!aDecommissioned && bDecommissioned) return -1;
+        return 0;
+      });
+    return base.concat(options);
+  }, [nodesSummary.nodeStatuses, nodesSummary.nodeDisplayNameByID]);
   const tenants = tenantOptions.slice(1).map(tenant => tenant.value);
   const [isTableCollapsed, setIsTableCollapsed] = useState(false);
 
@@ -123,8 +141,8 @@ const GraphContainer: React.FC<GraphContainerProps> = ({
         <MetricsDataProvider
           id={`custom-dashboard-graph-${index}`}
           key={`custom-dashboard-graph-${index}-${graphConfig.axis.units}`}
-          setMetricsFixedWindow={setMetricsFixedWindow}
-          setTimeScale={setTimeScale}
+          setMetricsFixedWindow={tw => dispatch(setMetricsFixedWindow(tw))}
+          setTimeScale={ts => dispatch(setTimeScale(ts))}
           history={history}
         >
           <LineGraph title="">
@@ -212,26 +230,7 @@ const GraphContainer: React.FC<GraphContainerProps> = ({
   );
 };
 
-const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
-  tenantOptions: tenantDropdownOptions(state),
-  metricOptions: metricOptionsSelector(state),
-  nodeOptions: nodeOptionsSelector(state),
-  metricsMetadata: metricsMetadataSelector(state),
-  currentTenant: getCookieValue("tenant"),
-});
-
-const mapDispatchToProps = {
-  setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setTimeScale,
-};
-
 export default withRouter<
   GraphContainerOwnProps,
   React.ComponentType<GraphContainerOwnProps>
->(
-  connect<{}, {}, GraphContainerOwnProps, AdminUIState>(
-    mapStateToProps,
-    mapDispatchToProps,
-  )(GraphContainer),
-);
+>(GraphContainer);

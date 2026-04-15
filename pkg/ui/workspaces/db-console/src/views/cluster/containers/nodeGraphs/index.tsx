@@ -7,23 +7,18 @@ import {
   Anchor,
   TimeScale,
   useClusterSettings,
+  useNodesSummary,
+  useTenants,
   util,
 } from "@cockroachlabs/cluster-ui";
 import has from "lodash/has";
 import map from "lodash/map";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { InlineAlert } from "src/components";
-import { PayloadAction } from "src/interfaces/action";
-import {
-  refreshNodes,
-  refreshLiveness,
-  refreshTenantsList,
-} from "src/redux/apiReducers";
 import { getCookieValue } from "src/redux/cookies";
 import {
   hoverStateSelector,
@@ -31,20 +26,11 @@ import {
   hoverOn,
   hoverOff,
 } from "src/redux/hover";
-import {
-  LivenessStatus,
-  nodeDisplayNameByIDSelector,
-  livenessStatusByNodeIDSelector,
-  nodeIDsSelector,
-  nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID,
-  nodeDisplayNameByIDSelectorWithoutAddress,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { LivenessStatus, getDisplayName } from "src/redux/nodes";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
   containsApplicationTenants,
   isSystemTenant,
-  tenantDropdownOptions,
 } from "src/redux/tenants";
 import {
   setMetricsFixedWindow,
@@ -174,34 +160,7 @@ const dashboardDropdownOptions = map(dashboards, (dashboard, key) => {
   };
 });
 
-type MapStateToProps = {
-  hoverState: HoverState;
-  timeScale: TimeScale;
-  nodeDropdownOptions: ReturnType<
-    typeof nodeDropdownOptionsSelector.resultFunc
-  >;
-  nodeIds: string[];
-  storeIDsByNodeID: ReturnType<typeof selectStoreIDsByNodeID.resultFunc>;
-  nodeDisplayNameByID: ReturnType<
-    typeof nodeDisplayNameByIDSelector.resultFunc
-  >;
-  tenantOptions: DropdownOption[];
-  currentTenant: string | null;
-};
-
-type MapDispatchToProps = {
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  refreshTenantsList: typeof refreshTenantsList;
-  hoverOn: typeof hoverOn;
-  hoverOff: typeof hoverOff;
-  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
-};
-
-type NodeGraphsProps = RouteComponentProps &
-  MapStateToProps &
-  MapDispatchToProps;
+type NodeGraphsProps = RouteComponentProps;
 
 /**
  * NodeGraphs renders the main content of the cluster graphs page.
@@ -209,22 +168,70 @@ type NodeGraphsProps = RouteComponentProps &
 export function NodeGraphs({
   match,
   history,
-  hoverState,
-  hoverOn: hoverOnAction,
-  hoverOff: hoverOffAction,
-  timeScale,
-  nodeDropdownOptions,
-  nodeIds,
-  storeIDsByNodeID,
-  nodeDisplayNameByID,
-  tenantOptions,
-  currentTenant,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
-  refreshTenantsList: refreshTenantsListAction,
-  setMetricsFixedWindow: setMetricsFixedWindowAction,
-  setTimeScale: setTimeScaleAction,
 }: NodeGraphsProps): React.ReactElement {
+  const dispatch: AppDispatch = useDispatch();
+  const {
+    nodeIDs: nodeIdNumbers,
+    nodeStatuses,
+    nodeDisplayNameByID: nodeDisplayNameByIDWithAddress,
+    livenessStatusByNodeID,
+    storeIDsByNodeID,
+  } = useNodesSummary();
+  const hoverState = useSelector((state: AdminUIState) =>
+    hoverStateSelector(state),
+  );
+  const timeScale = useSelector((state: AdminUIState) =>
+    selectTimeScale(state),
+  );
+  const nodeIds = nodeIdNumbers;
+
+  // Compute display names without address, matching
+  // nodeDisplayNameByIDSelectorWithoutAddress behavior.
+  const nodeDisplayNameByID = useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const ns of nodeStatuses) {
+      const id = ns.desc?.node_id;
+      if (id != null) {
+        result[id] = getDisplayName(ns, livenessStatusByNodeID[id], false);
+      }
+    }
+    return result;
+  }, [nodeStatuses, livenessStatusByNodeID]);
+
+  const nodeDropdownOptions: DropdownOption[] = useMemo(() => {
+    const base = [{ value: "", label: "Cluster" }];
+    return base.concat(
+      nodeIdNumbers
+        .filter(
+          id =>
+            livenessStatusByNodeID[id] !==
+            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        )
+        .map(id => ({
+          value: id.toString(),
+          label: nodeDisplayNameByIDWithAddress[id],
+        })),
+    );
+  }, [nodeIdNumbers, nodeDisplayNameByIDWithAddress, livenessStatusByNodeID]);
+
+  const { tenants } = useTenants();
+  const tenantOptions: DropdownOption[] = useMemo(() => {
+    const options: DropdownOption[] = [{ label: "All", value: "" }];
+    tenants?.forEach(tenant =>
+      options.push({
+        label: tenant.tenant_name,
+        value: tenant.tenant_id?.id?.toString(),
+      }),
+    );
+    return options;
+  }, [tenants]);
+  const currentTenant = getCookieValue("tenant");
+
+  const hoverOnAction = (hp: HoverState) => dispatch(hoverOn(hp));
+  const hoverOffAction = () => dispatch(hoverOff());
+  const setMetricsFixedWindowAction = (tw: TimeWindow) =>
+    dispatch(setMetricsFixedWindow(tw));
+  const setTimeScaleAction = (ts: TimeScale) => dispatch(setTimeScale(ts));
   const [showLowResolutionAlert, setShowLowResolutionAlert] = useState(false);
   const [showDeletedDataAlert, setShowDeletedDataAlert] = useState(false);
 
@@ -244,21 +251,6 @@ export function NodeGraphs({
   const resolution30mStorageTTL = mTTLValue
     ? util.durationFromISO8601String(mTTLValue)
     : undefined;
-
-  // Refresh nodes and liveness data on every render so stale data triggers
-  // a re-fetch (these calls short-circuit internally when data is fresh).
-  useEffect(() => {
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
-
-  // Tenants list only needs to be fetched once on mount —
-  // it doesn't change frequently.
-  useEffect(() => {
-    if (isSystemTenant(currentTenant)) {
-      refreshTenantsListAction();
-    }
-  }, [refreshTenantsListAction, currentTenant]);
 
   const setClusterPath = useCallback(
     (key: string, selected: DropdownOption) => {
@@ -507,52 +499,4 @@ export function NodeGraphs({
   );
 }
 
-/**
- * Selector to compute node dropdown options from the current node summary
- * collection.
- */
-const nodeDropdownOptionsSelector = createSelector(
-  nodeIDsSelector,
-  state => nodeDisplayNameByIDSelector(state),
-  livenessStatusByNodeIDSelector,
-  (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
-    const base = [{ value: "", label: "Cluster" }];
-    return base.concat(
-      nodeIds
-        .filter(
-          id =>
-            livenessStatusByNodeID[id] !==
-            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-        )
-        .map(id => ({
-          value: id.toString(),
-          label: nodeDisplayNameByID[id],
-        })),
-    );
-  },
-);
-
-const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
-  hoverState: hoverStateSelector(state),
-  timeScale: selectTimeScale(state),
-  nodeIds: nodeIDsStringifiedSelector(state),
-  storeIDsByNodeID: selectStoreIDsByNodeID(state),
-  nodeDropdownOptions: nodeDropdownOptionsSelector(state),
-  nodeDisplayNameByID: nodeDisplayNameByIDSelectorWithoutAddress(state),
-  tenantOptions: tenantDropdownOptions(state),
-  currentTenant: getCookieValue("tenant"),
-});
-
-const mapDispatchToProps: MapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-  refreshTenantsList,
-  hoverOn,
-  hoverOff,
-  setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setTimeScale,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(NodeGraphs),
-);
+export default withRouter(NodeGraphs);

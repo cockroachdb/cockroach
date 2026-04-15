@@ -9,30 +9,17 @@ import isNaN from "lodash/isNaN";
 import join from "lodash/join";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React, { Fragment, useEffect } from "react";
+import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import {
-  certificatesRequestKey,
-  refreshCertificates,
-} from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { getCertificates } from "src/util/api";
 import { nodeIDAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
-interface CertificatesOwnProps {
-  certificates: protos.cockroach.server.serverpb.CertificatesResponse;
-  lastError: Error;
-  refreshCertificates: typeof refreshCertificates;
-}
-
 const dateFormat = "Y-MM-DD HH:mm:ss";
-
-type CertificatesProps = CertificatesOwnProps & RouteComponentProps;
 
 const emptyRow = (
   <tr className="certs-table__row">
@@ -40,12 +27,6 @@ const emptyRow = (
     <td className="certs-table__cell" />
   </tr>
 );
-
-function certificatesRequestFromProps(props: CertificatesProps) {
-  return new protos.cockroach.server.serverpb.CertificatesRequest({
-    node_id: getMatchParamByName(props.match, nodeIDAttr),
-  });
-}
 
 function renderSimpleRow(header: string, value: string, title = "") {
   let realTitle = title;
@@ -152,21 +133,25 @@ function renderCert(
  * Renders the Certificate Report page.
  */
 export function Certificates({
-  certificates,
-  lastError,
-  refreshCertificates: refreshCertificatesAction,
   match,
   history,
-}: CertificatesProps): React.ReactElement {
+}: RouteComponentProps): React.ReactElement {
   const nodeId = getMatchParamByName(match, nodeIDAttr);
 
-  useEffect(() => {
-    refreshCertificatesAction(
-      new protos.cockroach.server.serverpb.CertificatesRequest({
-        node_id: nodeId,
-      }),
-    );
-  }, [refreshCertificatesAction, nodeId]);
+  const {
+    data: certificates,
+    error,
+    isLoading,
+  } = util.useSwrWithClusterId(
+    ["certificates", nodeId],
+    () =>
+      getCertificates(
+        new protos.cockroach.server.serverpb.CertificatesRequest({
+          node_id: nodeId,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
 
   const renderContent = () => {
     if (isEmpty(certificates.certificates)) {
@@ -200,9 +185,9 @@ export function Certificates({
 
       <section className="section">
         <Loading
-          loading={!certificates}
+          loading={isLoading}
           page={"certificates"}
-          error={lastError}
+          error={error}
           render={renderContent}
         />
       </section>
@@ -210,22 +195,4 @@ export function Certificates({
   );
 }
 
-const mapStateToProps = (state: AdminUIState, props: CertificatesProps) => {
-  const nodeIDKey = certificatesRequestKey(certificatesRequestFromProps(props));
-  return {
-    certificates:
-      state.cachedData.certificates[nodeIDKey] &&
-      state.cachedData.certificates[nodeIDKey].data,
-    lastError:
-      state.cachedData.certificates[nodeIDKey] &&
-      state.cachedData.certificates[nodeIDKey].lastError,
-  };
-};
-
-const mapDispatchToProps = {
-  refreshCertificates,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(Certificates),
-);
+export default withRouter(Certificates);

@@ -12,17 +12,11 @@ import { defaultTimeScaleOptions, TimeScale } from "@cockroachlabs/cluster-ui";
 import cloneDeep from "lodash/cloneDeep";
 import moment from "moment-timezone";
 import { Action } from "redux";
-import { put, takeEvery } from "redux-saga/effects";
 import { createSelector } from "reselect";
 
 import { PayloadAction } from "src/interfaces/action";
-import {
-  getValueFromSessionStorage,
-  setLocalSetting,
-} from "src/redux/localsettings";
+import { getValueFromSessionStorage } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-
-import { invalidateStatements } from "./apiReducers";
 
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
 export const SET_METRICS_MOVING_WINDOW =
@@ -109,6 +103,15 @@ export function timeScaleReducer(
       state.metricsTime.isFixedWindow = scale.key === "Custom";
       state.scale = scale;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
+      // Persist to sessionStorage. Previously done by timeScaleSaga.
+      try {
+        sessionStorage.setItem(
+          `cockroachui/${TIME_SCALE_SESSION_STORAGE_KEY}`,
+          JSON.stringify(scale),
+        );
+      } catch (e) {
+        // Ignore sessionStorage errors (e.g. full storage).
+      }
       return state;
     }
     case SET_METRICS_MOVING_WINDOW: {
@@ -227,10 +230,3 @@ export const adjustTimeScale = (
   }
   return result;
 };
-
-export function* timeScaleSaga() {
-  yield takeEvery(SET_SCALE, function* ({ payload }: PayloadAction<TimeScale>) {
-    yield put(setLocalSetting(TIME_SCALE_SESSION_STORAGE_KEY, payload));
-    yield put(invalidateStatements());
-  });
-}
