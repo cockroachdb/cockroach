@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1117,4 +1118,62 @@ func TestWebhookSinkClientTimeoutDefault(t *testing.T) {
 	require.NotNil(t, webhookOptsWithTimeout.ClientTimeout)
 	require.Equal(t, customTimeout, *webhookOptsWithTimeout.ClientTimeout,
 		"ClientTimeout should match the explicitly set value")
+}
+
+// TestWebhookSinkRetryLogging verifies that internal retries are logged.
+func TestWebhookSinkRetryLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spy := &changefeedLogSpy{}
+	cleanup := log.InterceptWith(context.Background(), spy)
+	defer cleanup()
+
+	ctx := context.Background()
+	opts := getGenericWebhookSinkOptions(struct {
+		key   string
+		value string
+	}{
+		key: changefeedbase.OptWebhookSinkConfig,
+		value: `{"Retry":{"Backoff": "5ms", "Max": "2"}}`,
+	})
+	cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
+	require.NoError(t, err)
+
+	sinkDest, err := cdctest.StartMockWebhookSink(cert)
+	require.NoError(t, err)
+	defer sinkDest.Close()
+	sinkDest.SetStatusCodes([]int{http.StatusTooManyRequests, http.StatusOK})
+
+	sinkDestHost, err := url.Parse(sinkDest.URL())
+	require.NoError(t, err)
+
+	params := sinkDestHost.Query()
+	params.Set(changefeedbase.SinkParamCACert, certEncoded)
+	sinkDestHost.RawQuery = params.Encode()
+
+	details := jobspb.ChangefeedDetails{
+		SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
+		Opts:    opts.AsMap(),
+	}
+
+	sinkSrc, err := setupWebhookSinkWithDetails(ctx, details, 1 /* parallelism */, timeutil.DefaultTimeSource{})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, sinkSrc.Close()) }()
+
+	require.NoError(t, sinkSrc.EmitRow(ctx, noTopic{}, []byte("[1001]"), []byte(`{"after":{"col1":"val1","rowid":1000},"key":[1001],"topic:":"foo"}`), zeroTS, zeroTS, zeroAlloc, nil))
+	require.NoError(t, sinkSrc.Flush(ctx))
+
+	require.Equal(t, `{"payload":[{"after":{"col1":"val1","rowid":1000},"key":[1001],"topic:":"foo"}],"length":1}`, sinkDest.Pop())
+
+	testutils.SucceedsSoon(t, func() error {
+		spy.Lock()
+		defer spy.Unlock()
+		for _, logMsg := range spy.logs {
+			if strings.Contains(logMsg, "internal retry") &&
+				strings.Contains(logMsg, "429 Too Many Requests") {
+				return nil
+			}
+		}
+		return errors.Newf("expected retry log not found, got: %v", spy.logs)
+	})
 }
