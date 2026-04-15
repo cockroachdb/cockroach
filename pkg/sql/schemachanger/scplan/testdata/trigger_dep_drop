@@ -1,0 +1,1235 @@
+setup
+CREATE SCHEMA s;
+CREATE TABLE s.t1 (id INT PRIMARY KEY);
+CREATE TABLE s.t2 (id INT PRIMARY KEY);
+CREATE FUNCTION s.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO s.t2 VALUES (1);
+    RETURN NEW;
+  END
+$$;
+CREATE FUNCTION s.f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO s.t1 VALUES (1);
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER tg1 AFTER INSERT ON s.t1 FOR EACH ROW EXECUTE FUNCTION s.f1();
+CREATE TRIGGER tg2 AFTER INSERT ON s.t2 FOR EACH ROW EXECUTE FUNCTION s.f2();
+----
+
+deps
+DROP SCHEMA s CASCADE;
+----
+- from: [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 106, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967292}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 106, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967293}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnHidden:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: column constraint removed right before column reaches write only
+- from: [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: column constraint removed right before column reaches write only
+- from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: column type removed before column family
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionBody:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionLeakProof:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionName:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionNullInputBehavior:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionParams:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionSecurity:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [FunctionVolatility:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [Owner:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionBody:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionLeakProof:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionName:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionNullInputBehavior:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionParams:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionSecurity:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [FunctionVolatility:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [Owner:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Name: public}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Function:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [FunctionBody:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionBody:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionLeakProof:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionLeakProof:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionName:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionName:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionNullInputBehavior:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionNullInputBehavior:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionParams:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionParams:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionSecurity:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionSecurity:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionVolatility:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [FunctionVolatility:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexName:{DescID: 105, Name: t1_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexName:{DescID: 105, Name: t1_pkey, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [IndexName:{DescID: 106, Name: t2_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexName:{DescID: 106, Name: t2_pkey, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 104, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 105, Name: t1, ReferencedDescID: 100, IntValue: 104}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 106, Name: t2, ReferencedDescID: 100, IntValue: 104}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 104}, ABSENT]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 105}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 106}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 107}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 105, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 105, Name: t1_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents, excluding columns
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 106, Name: t2_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index no longer public before dependents, excluding columns
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [Namespace:{DescID: 104, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [Owner:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Schema:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [SchemaChild:{DescID: 105, ReferencedDescID: 104}, ABSENT]
+  to:   [Schema:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 105, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT]
+  to:   [Schema:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT]
+  to:   [Schema:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT]
+  to:   [Schema:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: back-reference in parent descriptor is removed before parent descriptor is dropped
+- from: [SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Table:{DescID: 105}, ABSENT]
+  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967292}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967293}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnHidden:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent constraint
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [IndexName:{DescID: 105, Name: t1_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 105, Name: t1, ReferencedDescID: 100, IntValue: 104}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Owner:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent index
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 104}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, ABSENT]
+  to:   [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Column:{DescID: 106, ColumnID: 4294967292}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Column:{DescID: 106, ColumnID: 4294967293}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnHidden:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent constraint
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295, TypeName: DECIMAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [IndexName:{DescID: 106, Name: t2_pkey, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 106, Name: t2, ReferencedDescID: 100, IntValue: 104}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Owner:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: Precedence
+  rule: relation dropped before dependent index
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT]
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: descriptor dropped in transaction before removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 105, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerDeps:{DescID: 105, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerEnabled:{DescID: 105, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerEvents:{DescID: 105, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerFunctionCall:{DescID: 105, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerName:{DescID: 105, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [TriggerTiming:{DescID: 105, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [108]}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerEnabled:{DescID: 106, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerEvents:{DescID: 106, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerFunctionCall:{DescID: 106, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerName:{DescID: 106, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [TriggerTiming:{DescID: 106, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [TriggerDeps:{DescID: 105, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT]
+  to:   [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: trigger references cleaned before columns
+- from: [TriggerDeps:{DescID: 105, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT]
+  to:   [Function:{DescID: 107}, DROPPED]
+  kind: SameStagePrecedence
+  rule: trigger references cleaned before referenced functions
+- from: [TriggerDeps:{DescID: 105, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerDeps:{DescID: 105, TriggerID: 1, ReferencedFunctionIDs: [107]}, ABSENT]
+  to:   [Table:{DescID: 106}, DROPPED]
+  kind: Precedence
+  rule: trigger references cleaned before referenced relations
+- from: [TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [108]}, ABSENT]
+  to:   [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: trigger references cleaned before columns
+- from: [TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [108]}, ABSENT]
+  to:   [Function:{DescID: 108}, DROPPED]
+  kind: SameStagePrecedence
+  rule: trigger references cleaned before referenced functions
+- from: [TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [108]}, ABSENT]
+  to:   [Table:{DescID: 105}, DROPPED]
+  kind: Precedence
+  rule: trigger references cleaned before referenced relations
+- from: [TriggerDeps:{DescID: 106, TriggerID: 1, ReferencedFunctionIDs: [108]}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerEnabled:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerEnabled:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerEvents:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerEvents:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerFunctionCall:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerFunctionCall:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerName:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerName:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerTiming:{DescID: 105, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [TriggerTiming:{DescID: 106, TriggerID: 1}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  to:   [Schema:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  to:   [Table:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
+  to:   [Table:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
+  to:   [Function:{DescID: 107}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: public}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  to:   [Function:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor

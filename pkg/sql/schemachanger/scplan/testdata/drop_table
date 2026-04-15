@@ -185,6 +185,46 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
       ConstraintID: 4
       Name: crdb_internal_constraint_4_name_placeholder
       TableID: 109
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 109
+        TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerName
+      TriggerID: 1
+    *scop.SetTriggerEnabled
+      TableID: 109
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerTiming
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerEvents
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerFunctionCall
+      TriggerID: 1
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 109
+        columnids: []
+        indexid: 0
+      TableID: 109
+      TriggerID: 1
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 109
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 113
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveObjectParent
@@ -457,46 +497,6 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 106
-    *scop.RemoveTrigger
-      Trigger:
-        TableID: 109
-        TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerName
-      TriggerID: 1
-    *scop.SetTriggerEnabled
-      TableID: 109
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerTiming
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerEvents
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTriggerBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
-    *scop.RemoveTriggerBackReferencesInRoutines
-      BackReferencedTableID: 109
-      BackReferencedTriggerID: 1
-      RoutineIDs:
-      - 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -940,6 +940,46 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
       ConstraintID: 4
       Name: crdb_internal_constraint_4_name_placeholder
       TableID: 109
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 109
+        TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerName
+      TriggerID: 1
+    *scop.SetTriggerEnabled
+      TableID: 109
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerTiming
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerEvents
+      TriggerID: 1
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.TriggerFunctionCall
+      TriggerID: 1
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 109
+        columnids: []
+        indexid: 0
+      TableID: 109
+      TriggerID: 1
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 109
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 113
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveObjectParent
@@ -1212,46 +1252,6 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 106
-    *scop.RemoveTrigger
-      Trigger:
-        TableID: 109
-        TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerName
-      TriggerID: 1
-    *scop.SetTriggerEnabled
-      TableID: 109
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerTiming
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerEvents
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTriggerBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
-    *scop.RemoveTriggerBackReferencesInRoutines
-      BackReferencedTableID: 109
-      BackReferencedTriggerID: 1
-      RoutineIDs:
-      - 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -2884,34 +2884,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -2935,54 +2907,54 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
+- from: [Trigger:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule:  dependents remove trigger
 - from: [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerEnabled:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerName:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT]
-  to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
-  kind: Precedence
-  rule: trigger removed before dependents
 - from: [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
