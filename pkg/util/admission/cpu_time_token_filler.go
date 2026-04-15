@@ -249,7 +249,7 @@ var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 type cpuTimeTokenAllocator struct {
 	granter *cpuTimeTokenGranter
 	// queues holds references to WorkQueues for each resource tier. Used to
-	// refill per-tenant burst buckets that determine queue priority ordering.
+	// refill per-group burst buckets that determine queue priority ordering.
 	// See cpu_time_token_burst.go for more.
 	queues   [numResourceTiers]workQueueIForAllocator
 	settings *cluster.Settings
@@ -351,7 +351,7 @@ func computeMinimums(r rates) minimums {
 // capacities. allocateTokens adds tokens evenly among the expected remaining
 // ticks in the interval.
 // INVARIANT: remainingTicks >= 1.
-// TODO(josh): Expand to cover tenant-specific token buckets too.
+// TODO(josh): Expand to cover group-specific token buckets too.
 func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
 	allocateFunc := func(total int64, allocated int64, remainingTicks int64) (toAllocate int64) {
 		remainingTokens := total - allocated
@@ -392,9 +392,9 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// in CC, we scrape metrics once every 10s.
 	a.refill(allocations, bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
-	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
+	// Refill per-group burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
-	// and capacity (for the corresponding resource tier). If a tenant's
+	// and capacity (for the corresponding resource tier). If a group's
 	// bucket is mostly full, we allow it to get priority in the queue (see
 	// cpu_time_token_burst.go for more). With cluster settings at their
 	// default values, this implies that an application tenant can burst,
@@ -455,7 +455,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	a.refill(deltaRefillRates, bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
-	// Apply the delta to the per-tenant burst buckets also.
+	// Apply the delta to the per-group burst buckets also.
 	for resourceTier := range numResourceTiers {
 		toAdd := deltaRefillRates[resourceTier][noBurst] / 4
 		burstCapacity := bucketCapacities[resourceTier][noBurst] / 4
