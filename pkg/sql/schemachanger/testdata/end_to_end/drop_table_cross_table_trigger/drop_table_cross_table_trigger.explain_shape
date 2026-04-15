@@ -1,0 +1,23 @@
+/* setup */
+CREATE TABLE t1 (id INT PRIMARY KEY);
+CREATE TABLE t2 (id INT PRIMARY KEY);
+CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t2 VALUES (1);
+    RETURN NEW;
+  END
+$$;
+CREATE FUNCTION f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t1 VALUES (1);
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER tg1 AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f1();
+CREATE TRIGGER tg2 AFTER INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f2();
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP TABLE t1, t2;
+----
+Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›;
+ └── execute 2 system table mutations transactions
