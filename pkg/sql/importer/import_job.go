@@ -156,11 +156,12 @@ const (
 
 // importRowCountValidationMetamorphicValue determines the default value for
 // importRowCountValidation in metamorphic test builds. It randomly selects
-// between "async" and "sync" modes to increase test coverage.
+// between "off", "async" and "sync" modes to increase test coverage.
 var importRowCountValidationMetamorphicValue = metamorphic.ConstantWithTestChoice(
 	"import-row-count-validation",
-	"async", // background validation (default)
-	"sync",  // blocking validation for tests
+	"off",   // no validation (default)
+	"async", // background validation
+	"sync",  // blocking validation
 )
 
 // Note: the internal key retains "unsafe" for backward compatibility, but the
