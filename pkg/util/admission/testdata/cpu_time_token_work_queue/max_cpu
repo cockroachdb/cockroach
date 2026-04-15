@@ -1,0 +1,118 @@
+###
+# This test exercises the maxCPU burst qualification flag and its
+# interaction with the tenant heap. When maxCPU is true, a tenant
+# always qualifies for burst, regardless of bucket fullness. This
+# is used in resource manager mode for MAX_CPU resource groups.
+#
+# The test uses a mock granter (testGranter) whose tryGet return value
+# is controlled via set-try-get-return-value. refill-burst-buckets
+# only refills the per-tenant burst buckets in the WorkQueue (for
+# burst qualification), not the granter-level token buckets.
+#
+# TODO(wenyihu6): refillBurstBuckets currently applies the same
+# uniform rate to all tenants. Add per-group scaling of refill rates.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+# Create both tenants (maxCPU defaults to false), then flip tenant 10.
+admit id=1 tenant=10 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 1: admit succeeded
+
+admit id=2 tenant=20 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 2: admit succeeded
+
+set-tenant-max-cpu tenant=10 v=true
+----
+
+# Confirm the flip: tenant 10 is now can_burst (via maxCPU), tenant 20
+# remains no_burst. Both buckets are at -1 tokens (no refill yet).
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 10 used: 1, w: 1, fifo: -128
+ tenant-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+
+# Refill 25 tokens with capacity=100. Both buckets: -1+25=24 tokens,
+# 24% full. Tenant 10 (maxCPU=true) is can_burst despite being well
+# below 90%. Tenant 20 (maxCPU=false) is no_burst since 24 < 90.
+refill-burst-buckets to-add=25 capacity=100
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 10 used: 1, w: 1, fifo: -128
+ tenant-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst t20=fullness=24.0% tokens=24 capacity=100 qual=no_burst
+
+# Queue work for both tenants. Tenant 10's work should be granted
+# first since it has can_burst via maxCPU, even though both have
+# identical bucket fullness.
+set-try-get-return-value v=false
+----
+
+admit id=3 tenant=20 requested-count=1
+----
+tryGet: input no_burst, returning false
+
+admit id=4 tenant=10 requested-count=1
+----
+tryGet: input can_burst, returning false
+
+# Reset used to 0 for both tenants so the heap ordering below is
+# determined solely by burst qualification, not by used/weight.
+gc-tenants-and-reset-used
+----
+
+# Tenant 10 (can_burst via maxCPU) is granted before tenant 20
+# (no_burst).
+granted chain-id=1
+----
+continueGrantChain 1
+id 4: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 3: admit succeeded
+granted: returned 1
+
+###
+# Verify that maxCPU=true tenants remain can_burst even when their
+# bucket is driven deeply negative. This is the key invariant:
+# MAX_CPU groups always qualify for burst regardless of token debt.
+###
+
+set-try-get-return-value v=true
+----
+
+# Admit heavy work to drive tenant 10's bucket deeply negative.
+# Bucket was at 24 tokens; admitting 100000 drives it to 24-100000.
+admit id=5 tenant=10 requested-count=100000
+----
+tryGet: input can_burst, returning true
+id 5: admit succeeded
+
+# Refill with capacity=100. Floor is -capacity/4 = -25.
+# Tenant 10 tokens: max(-99976+25, -25) = -25. Still can_burst
+# because maxCPU=true bypasses the fullness check.
+# Tenant 20 tokens: min(23+25, 100) = 48. Still no_burst (48 < 90).
+refill-burst-buckets to-add=25 capacity=100
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 10 used: 100001, w: 1, fifo: -128
+ tenant-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t20=fullness=48.0% tokens=48 capacity=100 qual=no_burst

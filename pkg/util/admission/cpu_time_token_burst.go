@@ -25,7 +25,11 @@ import "github.com/cockroachdb/redact"
 //   - Tokens are added periodically via refill(), called by
 //     cpuTimeTokenAllocator.
 //   - Tokens are deducted when work is admitted, etc. via adjust().
-//   - A tenant qualifies for burst (canBurst) when bucket is > 90% full.
+//     1. In serverless, a tenant qualifies for burst (canBurst) when its bucket
+//     is > 90% full.
+//     2. In resource manager, a resource group qualifies for burst (canBurst)
+//     when it has MAX_CPU = true or when its bucket is > 90% full.
+//   - The bucket is capped at capacity.
 //   - The bucket can go negative (down to -capacity/4) to allow recovery.
 //
 // The bucket capacity is derived from the noBurst refill rate in
@@ -33,6 +37,9 @@ import "github.com/cockroachdb/redact"
 // With cluster settings at their default values, this implies that
 // an application tenant can burst, if they are using roughly less
 // than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
+//
+// TODO(wenyihu6): refillBurstBuckets currently applies the same uniform
+// toAdd/capacity to all tenants. Add per-group scaling of refill rates.
 type cpuTimeBurstBucket struct {
 	tokens   int64
 	capacity int64
@@ -40,21 +47,33 @@ type cpuTimeBurstBucket struct {
 	// burstQualification to always return noBurst. This effectively
 	// disables the burstQualification functionality.
 	disabled bool
+	// maxCPU is true for MAX_CPU resource groups in RM mode.
+	// See cpuTimeBurstBucket comment for burst qualification rules.
+	maxCPU bool
 }
 
-func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool) {
+func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
 	// The bucket of a new tenant is inited full. This implies that
 	// a tenant can burst when its work first appears on a KV node.
 	// After <= 1s, the bucket state should track the usage of the
 	// tenant accurately.
-	*m = cpuTimeBurstBucket{tokens: capacity, capacity: capacity, disabled: disabled}
+	*m = cpuTimeBurstBucket{
+		tokens:   capacity,
+		capacity: capacity,
+		maxCPU:   maxCPU,
+		disabled: disabled,
+	}
 }
 
 // burstQualification returns whether this tenant qualifies for burst
-// priority. See the comments above cpuTimeBurstBucket for more.
+// priority. See the cpuTimeBurstBucket comment for qualification rules.
 func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
 	if m.disabled {
 		return noBurst
+	}
+	// MAX_CPU resource groups always qualify for burst.
+	if m.maxCPU {
+		return canBurst
 	}
 	// Note that at CRDB startup time, the capacity that is passed into
 	// cpuTimeBurstBucket.init will be zero, until 1ms passes, and the
@@ -101,6 +120,11 @@ func (m *cpuTimeBurstBucket) SafeFormat(s redact.SafePrinter, _ rune) {
 	if m.capacity > 0 {
 		fullness = float64(m.tokens) / float64(m.capacity) * 100
 	}
-	s.Printf("fullness=%.1f%% tokens=%d capacity=%d qual=%s",
-		fullness, m.tokens, m.capacity, m.burstQualification())
+	if m.maxCPU {
+		s.Printf("fullness=%.1f%% tokens=%d capacity=%d maxCPU=true qual=%s",
+			fullness, m.tokens, m.capacity, m.burstQualification())
+	} else {
+		s.Printf("fullness=%.1f%% tokens=%d capacity=%d qual=%s",
+			fullness, m.tokens, m.capacity, m.burstQualification())
+	}
 }
