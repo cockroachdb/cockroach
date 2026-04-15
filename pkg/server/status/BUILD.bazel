@@ -148,6 +148,10 @@ go_test(
         "runtime_stats_test.go",
         "runtime_test.go",
     ],
+    data = [
+        "//:TEAMS.yaml",
+        "//.github:CODEOWNERS",
+    ],
     embed = [":status"],
     deps = [
         "//pkg/base",
