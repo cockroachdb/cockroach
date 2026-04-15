@@ -268,14 +268,14 @@ func (r LogPosition) Less(o LogPosition) bool {
 }
 
 // WorkQueue maintains a queue of work waiting to be admitted. Ordering of
-// work is achieved via 2 heaps: a tenant heap orders the tenants with waiting
+// work is achieved via 2 heaps: a group heap orders the groups with waiting
 // work in increasing order of used slots or tokens, optionally adjusted by
-// tenant weights. Within each tenant, the waiting work is ordered based on
-// priority and create time. Tenants with non-zero values of used slots or
+// group weights. Within each group, the waiting work is ordered based on
+// priority and create time. Groups with non-zero values of used slots or
 // tokens are tracked even if they have no more waiting work. Token usage is
 // reset to zero every second. The choice of 1 second of memory for token
 // distribution fairness is somewhat arbitrary. The same 1 second interval is
-// also used to garbage collect tenants who have no waiting requests and no
+// also used to garbage collect groups who have no waiting requests and no
 // used slots or tokens.
 //
 // Usage example:
@@ -307,18 +307,18 @@ type WorkQueue struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Tenants with waiting work.
-		tenantHeap tenantHeap
-		// All tenants, including those without waiting work. Periodically cleaned.
-		tenants       map[uint64]*tenantInfo
-		tenantWeights struct {
+		// Groups with waiting work.
+		groupHeap groupHeap
+		// All groups, including those without waiting work. Periodically cleaned.
+		groups       map[uint64]*groupInfo
+		groupWeights struct {
 			mu syncutil.Mutex
 			// active refers to the currently active weights. mu is held for updates
 			// to the inactive weights, to prevent concurrent updates. After
 			// updating the inactive weights, it is made active by swapping with
 			// active, while also holding WorkQueue.mu. Therefore, reading
-			// tenantWeights.active does not require tenantWeights.mu. For lock
-			// ordering, tenantWeights.mu precedes WorkQueue.mu.
+			// groupWeights.active does not require groupWeights.mu. For lock
+			// ordering, groupWeights.mu precedes WorkQueue.mu.
 			//
 			// The maps are lazily allocated.
 			active, inactive map[uint64]uint32
@@ -331,7 +331,7 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
-		// burstBucketCapacity is the capacity for newly created tenant burst
+		// burstBucketCapacity is the capacity for newly created group burst
 		// buckets. Note that buckets init full, so burstBucketCapacity is also
 		// the starting token count. Updated by refillBurstBuckets. Only used
 		// if mode == usesCPUTimeTokens.
@@ -344,17 +344,17 @@ type WorkQueue struct {
 	metrics      *WorkQueueMetrics
 	stopCh       chan struct{}
 
-	// perTenantAggMetrics holds the parent AggCounters for per-tenant
+	// perGroupAggMetrics holds the parent AggCounters for per-group
 	// metrics. Only set when mode == usesCPUTimeTokens.
-	perTenantAggMetrics *tenantAggMetrics
+	perGroupAggMetrics *groupAggMetrics
 
 	timeSource timeutil.TimeSource
 	knobs      *TestingKnobs
 }
 
-// tenantAggMetrics groups the parent AggCounters from which per-tenant
+// groupAggMetrics groups the parent AggCounters from which per-group
 // child counters are created via AddChild.
-type tenantAggMetrics struct {
+type groupAggMetrics struct {
 	admittedCount  *aggmetric.AggCounter
 	waitTimeNanos  *aggmetric.AggCounter
 	tokensUsed     *aggmetric.AggCounter
@@ -367,19 +367,19 @@ type workQueueOptions struct {
 	mode           workQueueMode
 	tiedToRange    bool
 	usesAsyncAdmit bool
-	// perTenantAggMetrics holds the parent AggCounters for per-tenant
+	// perGroupAggMetrics holds the parent AggCounters for per-group
 	// metrics. Only set when mode == usesCPUTimeTokens. See
 	// cpuTimeTokenMetrics for details.
-	perTenantAggMetrics *tenantAggMetrics
+	perGroupAggMetrics *groupAggMetrics
 
 	// timeSource can be set to non-nil for tests. If nil,
 	// the timeutil.DefaultTimeSource will be used.
 	timeSource timeutil.TimeSource
 	// The epoch closing goroutine can be disabled for tests.
 	disableEpochClosingGoroutine bool
-	// The background resetting of used and GC'ing of tenants can be disabled
+	// The background resetting of used and GC'ing of groups can be disabled
 	// for tests.
-	disableGCTenantsAndResetUsed bool
+	disableGCGroupsAndResetUsed bool
 	// knobs, if set, provides testing knobs to the work queue.
 	knobs *TestingKnobs
 }
@@ -451,7 +451,7 @@ func initWorkQueue(
 	q.logThreshold = log.Every(5 * time.Minute)
 	q.metrics = metrics
 	q.stopCh = stopCh
-	q.perTenantAggMetrics = opts.perTenantAggMetrics
+	q.perGroupAggMetrics = opts.perGroupAggMetrics
 	q.timeSource = timeSource
 	q.knobs = knobs
 	q.mu.defaultCPUTimeTokenEstimator = cpuTimeTokenEstimator{}
@@ -459,16 +459,16 @@ func initWorkQueue(
 	func() {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		q.mu.tenants = make(map[uint64]*tenantInfo)
+		q.mu.groups = make(map[uint64]*groupInfo)
 		q.sampleEpochLIFOSettingsLocked()
 	}()
-	if !opts.disableGCTenantsAndResetUsed {
+	if !opts.disableGCGroupsAndResetUsed {
 		go func() {
 			ticker := time.NewTicker(time.Second)
 			for {
 				select {
 				case <-ticker.C:
-					q.gcTenantsResetUsedAndUpdateEstimators()
+					q.gcGroupsResetUsedAndUpdateEstimators()
 				case <-stopCh:
 					// Channel closed.
 					return
@@ -515,9 +515,9 @@ const (
 	usesCPUTimeTokens
 )
 
-func isInTenantHeap(tenant *tenantInfo) bool {
-	// If there is some waiting work, this tenant is in tenantHeap.
-	return len(tenant.waitingWorkHeap) > 0 || len(tenant.openEpochsHeap) > 0
+func isInGroupHeap(group *groupInfo) bool {
+	// If there is some waiting work, this group is in groupHeap.
+	return len(group.waitingWorkHeap) > 0 || len(group.openEpochsHeap) > 0
 }
 
 func (q *WorkQueue) timeNow() time.Time {
@@ -621,26 +621,26 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 		doLog = epochLIFOEnabled && q.logThreshold.ShouldLog()
 		return doLog
 	}
-	for _, tenant := range q.mu.tenants {
-		prevThreshold := tenant.fifoPriorityThreshold
-		tenant.fifoPriorityThreshold =
-			tenant.priorityStates.getFIFOPriorityThresholdAndReset(
-				tenant.fifoPriorityThreshold, q.mu.epochLengthNanos, q.mu.maxQueueDelayToSwitchToLifo)
+	for _, group := range q.mu.groups {
+		prevThreshold := group.fifoPriorityThreshold
+		group.fifoPriorityThreshold =
+			group.priorityStates.getFIFOPriorityThresholdAndReset(
+				group.fifoPriorityThreshold, q.mu.epochLengthNanos, q.mu.maxQueueDelayToSwitchToLifo)
 		if !epochLIFOEnabled {
-			tenant.fifoPriorityThreshold = int(admissionpb.LowPri)
+			group.fifoPriorityThreshold = int(admissionpb.LowPri)
 		}
-		if tenant.fifoPriorityThreshold != prevThreshold && doLogFunc() {
+		if group.fifoPriorityThreshold != prevThreshold && doLogFunc() {
 			logVerb := redact.SafeString("is")
-			if tenant.fifoPriorityThreshold != prevThreshold {
+			if group.fifoPriorityThreshold != prevThreshold {
 				logVerb = "changed to"
 			}
-			// TODO(sumeer): export this as a per-tenant metric somehow. We could
+			// TODO(sumeer): export this as a per-group metric somehow. We could
 			// start with this being a per-WorkQueue metric for only the system
-			// tenant. However, currently we share metrics across WorkQueues --
+			// group. However, currently we share metrics across WorkQueues --
 			// specifically all the store WorkQueues share the same metric. We
 			// should eliminate that sharing and make those per store metrics.
-			log.Dev.Infof(q.ambientCtx, "%s: FIFO threshold for tenant %d %s %d",
-				q.workKind, tenant.id, logVerb, tenant.fifoPriorityThreshold)
+			log.Dev.Infof(q.ambientCtx, "%s: FIFO threshold for group %d %s %d",
+				q.workKind, group.id, logVerb, group.fifoPriorityThreshold)
 		}
 		// Note that we are ignoring the new priority threshold and only
 		// dequeueing the ones that are in the closed epoch. It is possible to
@@ -648,13 +648,13 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 		// makes them no longer subject to LIFO, but they will need to wait here
 		// until their epochs close. This is considered acceptable since the
 		// priority threshold should not fluctuate rapidly.
-		for len(tenant.openEpochsHeap) > 0 {
-			work := tenant.openEpochsHeap[0]
+		for len(group.openEpochsHeap) > 0 {
+			work := group.openEpochsHeap[0]
 			if work.epoch > epoch {
 				break
 			}
-			heap.Pop(&tenant.openEpochsHeap)
-			heap.Push(&tenant.waitingWorkHeap, work)
+			heap.Pop(&group.openEpochsHeap)
+			heap.Push(&group.waitingWorkHeap, work)
 		}
 	}
 }
@@ -721,37 +721,37 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	q.metrics.incRequested(info.Priority)
 
-	tenantID := info.TenantID.ToUint64()
+	groupID := info.TenantID.ToUint64()
 	// The code in this method does not use defer to unlock the mutex because it
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
 	// unlocked on all code paths.
 	q.mu.Lock()
-	tenant, ok := q.mu.tenants[tenantID]
+	group, ok := q.mu.groups[groupID]
 	if !ok {
-		// See comment below about CPU time token estimation. If no tenantInfo
-		// struct exists for a tenant, then there is no cpuTimeTokenEstimator
-		// dedicated to that tenant yet. When we create the tenantInfo struct
+		// See comment below about CPU time token estimation. If no groupInfo
+		// struct exists for a group, then there is no cpuTimeTokenEstimator
+		// dedicated to that group yet. When we create the groupInfo struct
 		// here, we also create the estimator. We init the estimator using a
-		// global estimator that sees workload across all tenants.
+		// global estimator that sees workload across all groups.
 		// TODO(wenyihu6): look up maxCPU from per-resource-group config here
-		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+		group = newGroupInfo(groupID, q.getGroupWeightLocked(groupID),
 			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-			false /* maxCPU */, q.perTenantAggMetrics)
-		q.mu.tenants[tenantID] = tenant
+			false /* maxCPU */, q.perGroupAggMetrics)
+		q.mu.groups[groupID] = group
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
 	// When Admit is called, the request hasn't yet executed, so we do not
 	// know how much CPU time will be used by goroutines used to service it.
 	// When AdmittedWorkDone is called, the request is done executing, so we have
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
-	// tenant.estimator uses past measurements from grunning to make estimates
+	// group.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
 	//
 	// Skip the estimator when callerSetRequestedCount is true (see above).
 	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
 		!callerSetRequestedCount {
-		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
+		info.RequestedCount = group.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
 		tenantID:       info.TenantID,
@@ -777,9 +777,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		info.BypassAdmission = true
 	}
 	if info.BypassAdmission {
-		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
-		if tenant.perTenantMetrics.admittedCount != nil {
-			tenant.perTenantMetrics.admittedCount.Inc(1)
+		q.adjustGroupUsedLocked(group, info.RequestedCount)
+		if group.perGroupMetrics.admittedCount != nil {
+			group.perGroupMetrics.admittedCount.Inc(1)
 		}
 		q.mu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
@@ -793,24 +793,24 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// Tell priorityStates about this received work. We don't tell it about work
 	// that has bypassed admission control, since priorityStates is deciding the
 	// threshold for LIFO queueing based on observed admission latency.
-	tenant.priorityStates.requestAtPriority(info.Priority)
+	group.priorityStates.requestAtPriority(info.Priority)
 
-	burstQual := tenant.cpuTimeBurstBucket.burstQualification()
-	if (len(q.mu.tenantHeap) == 0 ||
-		// tenant not in heap, so doesn't have waiting requests, and is canBurst, while
+	burstQual := group.cpuTimeBurstBucket.burstQualification()
+	if (len(q.mu.groupHeap) == 0 ||
+		// group not in heap, so doesn't have waiting requests, and is canBurst, while
 		// the top of the heap was noBurst.
-		(tenant.heapIndex < 0 &&
+		(group.heapIndex < 0 &&
 			burstQual == canBurst &&
-			q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
+			q.mu.groupHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
 		!q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
-		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
+		q.adjustGroupUsedLocked(group, info.RequestedCount)
 		// Save the admittedCount counter before releasing the mutex,
-		// since tenant may be GC'd and its counters Unlink'd after
+		// since group may be GC'd and its counters Unlink'd after
 		// unlock. Inc after Unlink is safe: the aggregate parent counter
 		// still gets the increment (see aggmetric.Counter.Unlink docs).
-		admittedCount := tenant.perTenantMetrics.admittedCount
+		admittedCount := group.perGroupMetrics.admittedCount
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
@@ -832,14 +832,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 				// the waiting heap (and fixing the heap).
 				if log.V(1) {
 					log.Dev.Infof(ctx, "fast-path: admitting t%d pri=%s r%s log-position=%s ingested=%t",
-						tenantID, info.Priority,
+						groupID, info.Priority,
 						info.ReplicatedWorkInfo.RangeID,
 						info.ReplicatedWorkInfo.LogPosition.String(),
 						info.ReplicatedWorkInfo.Ingested,
 					)
 				}
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
-					roachpb.MustMakeTenantID(tenantID),
+					roachpb.MustMakeTenantID(groupID),
 					info.Priority,
 					info.ReplicatedWorkInfo,
 					info.RequestedCount,
@@ -868,17 +868,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// the state of the requesters to see if there is any queued work that
 		// can be granted admission.
 		q.mu.Lock()
-		// The tenant could have been removed. See the comment where the
-		// tenantInfo struct is declared.
-		tenant, ok = q.mu.tenants[tenantID]
+		// The group could have been removed. See the comment where the
+		// groupInfo struct is declared.
+		group, ok = q.mu.groups[groupID]
 		if !ok {
 			// TODO(wenyihu6): look up maxCPU from per-resource-group config here
-			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+			group = newGroupInfo(groupID, q.getGroupWeightLocked(groupID),
 				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-				false /* maxCPU */, q.perTenantAggMetrics)
-			q.mu.tenants[tenantID] = tenant
+				false /* maxCPU */, q.perGroupAggMetrics)
+			q.mu.groups[groupID] = group
 		}
-		q.adjustTenantUsedLocked(tenant, -info.RequestedCount)
+		q.adjustGroupUsedLocked(group, -info.RequestedCount)
 	}
 
 	// Check for cancellation.
@@ -900,22 +900,22 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
-	if int(info.Priority) < tenant.fifoPriorityThreshold {
+	if int(info.Priority) < group.fifoPriorityThreshold {
 		ordering = lifoWorkOrdering
 	}
 	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
 	work.replicated = info.ReplicatedWorkInfo
 
-	inTenantHeap := isInTenantHeap(tenant)
+	inGroupHeap := isInGroupHeap(group)
 	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
-		heap.Push(&tenant.waitingWorkHeap, work)
+		heap.Push(&group.waitingWorkHeap, work)
 	} else {
-		heap.Push(&tenant.openEpochsHeap, work)
+		heap.Push(&group.openEpochsHeap, work)
 	}
-	if !inTenantHeap {
-		heap.Push(&q.mu.tenantHeap, tenant)
+	if !inGroupHeap {
+		heap.Push(&q.mu.groupHeap, group)
 	}
-	// Else already in tenantHeap.
+	// Else already in groupHeap.
 
 	// Release the lock.
 	q.mu.Unlock()
@@ -924,11 +924,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
 			q.mu.Lock()
-			queueLen := tenant.waitingWorkHeap.Len()
+			queueLen := group.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
 			log.Dev.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s log-position=%s ingested=%t",
-				queueLen, tenantID, info.Priority,
+				queueLen, groupID, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.LogPosition,
 				info.ReplicatedWorkInfo.Ingested,
@@ -962,13 +962,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// since it is possible that all work at this priority is exceeding the
 		// deadline and being cancelled. The risk here is that if the deadlines
 		// are too short, we could underestimate the actual wait time.
-		tenant.priorityStates.updateDelayLocked(work.priority, waitDur, true /* canceled */)
+		group.priorityStates.updateDelayLocked(work.priority, waitDur, true /* canceled */)
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant. Don't bother
-			// decrementing tenant.used since we don't want to race with the gc
-			// goroutine that sets used=0 and could have GC'd tenant and returned it
+			// decrementing group.used since we don't want to race with the gc
+			// goroutine that sets used=0 and could have GC'd group and returned it
 			// to the sync.Pool. We can fix this if needed by calling
-			// adjustTenantUsedLocked.
+			// adjustGroupUsedLocked.
 			q.mu.Unlock()
 			q.granter.returnGrant(info.RequestedCount)
 			// The channel is sent to after releasing mu, so we don't need to hold
@@ -979,12 +979,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			q.granter.continueGrantChain(chainID)
 		} else {
 			if work.inWaitingWorkHeap {
-				tenant.waitingWorkHeap.remove(work)
+				group.waitingWorkHeap.remove(work)
 			} else {
-				tenant.openEpochsHeap.remove(work)
+				group.openEpochsHeap.remove(work)
 			}
-			if !isInTenantHeap(tenant) {
-				q.mu.tenantHeap.remove(tenant)
+			if !isInGroupHeap(group) {
+				q.mu.groupHeap.remove(group)
 			}
 			q.mu.Unlock()
 		}
@@ -1065,16 +1065,16 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		q.mu.Lock()
 		defer q.mu.Unlock()
 
-		// adjustTenantUsed adjusts `tenant.used`. This tracks usage of resources
-		// over a time interval. `tenant.used` is how the WorkQueue implements
+		// adjustGroupUsed adjusts `group.used`. This tracks usage of resources
+		// over a time interval. `group.used` is how the WorkQueue implements
 		// fair-sharing of resources.
 		//
 		// At admission time (as part of the call to Admit),
-		// q.adjustTenantUsed(tenantID, resp.requestedCount) is called. Now that the
+		// q.adjustGroupUsed(groupID, resp.requestedCount) is called. Now that the
 		// request is done executing, we have a measurement of CPU usage incurred by
-		// the request from grunning. So we adjust tenant.used again, correcting our
+		// the request from grunning. So we adjust group.used again, correcting our
 		// earlier estimate. (In the case of slot-based AC, resp.requestedCount
-		// equals 1 nanosecond, so the change to tenant.used made here is the only
+		// equals 1 nanosecond, so the change to group.used made here is the only
 		// significant one. With CPU time token AC, a more plausible estimate of CPU
 		// time incurred by a request is available at admission time (see
 		// cpu_time_token_estimation.go for more).
@@ -1082,9 +1082,9 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// NB: additionalUsed can be negative here (in case the initial estimate was
 		// too pessimistic).
 		if additionalUsed != 0 {
-			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
+			group, ok := q.mu.groups[resp.tenantID.ToUint64()]
 			if ok {
-				q.adjustTenantUsedLocked(tenant, additionalUsed)
+				q.adjustGroupUsedLocked(group, additionalUsed)
 			}
 		}
 
@@ -1093,16 +1093,16 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// know how much CPU time will be used by goroutines used to service it.
 		// When AdmittedWorkDone is called, the request is done executing, so we have
 		// a measurement of CPU time used servicing the request, courtesy of grunning.
-		// tenant.estimator uses past measurements from grunning to make estimates
+		// group.estimator uses past measurements from grunning to make estimates
 		// in this code path, that is, at admission time.
 		if q.mode == usesCPUTimeTokens {
 			q.mu.defaultCPUTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
-			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
-			// If the tenant struct doesn't exist, it has been GCed due to a lack of
+			group, ok := q.mu.groups[resp.tenantID.ToUint64()]
+			// If the group struct doesn't exist, it has been GCed due to a lack of
 			// activity. In this case, we do not leverage the grunning measurement
 			// for future estimates.
 			if ok {
-				tenant.cpuTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
+				group.cpuTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
 			}
 		}
 	}()
@@ -1136,17 +1136,17 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.groupHeap) == 0 {
 		return false, noBurst /*arbitrary*/
 	}
-	return true, q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification()
+	return true, q.mu.groupHeap[0].cpuTimeBurstBucket.burstQualification()
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// Reduce critical section by getting time before mutex acquisition.
 	now := q.timeNow()
 	q.mu.Lock()
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.groupHeap) == 0 {
 		q.mu.Unlock()
 		return 0
 	}
@@ -1154,30 +1154,30 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		q.mu.Unlock()
 		return 0
 	}
-	tenant := q.mu.tenantHeap[0]
+	group := q.mu.groupHeap[0]
 	var item *waitingWork
-	if len(tenant.waitingWorkHeap) > 0 {
-		item = heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
+	if len(group.waitingWorkHeap) > 0 {
+		item = heap.Pop(&group.waitingWorkHeap).(*waitingWork)
 	} else {
-		item = heap.Pop(&tenant.openEpochsHeap).(*waitingWork)
+		item = heap.Pop(&group.openEpochsHeap).(*waitingWork)
 	}
 	waitDur := now.Sub(item.enqueueingTime)
-	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
-	q.adjustTenantUsedLocked(tenant, item.requestedCount)
-	if tenant.perTenantMetrics.admittedCount != nil {
-		tenant.perTenantMetrics.admittedCount.Inc(1)
-		tenant.perTenantMetrics.waitTimeNanos.Inc(waitDur.Nanoseconds())
+	group.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
+	q.adjustGroupUsedLocked(group, item.requestedCount)
+	if group.perGroupMetrics.admittedCount != nil {
+		group.perGroupMetrics.admittedCount.Inc(1)
+		group.perGroupMetrics.waitTimeNanos.Inc(waitDur.Nanoseconds())
 	}
-	if !isInTenantHeap(tenant) {
-		q.mu.tenantHeap.remove(tenant)
+	if !isInGroupHeap(group) {
+		q.mu.groupHeap.remove(group)
 	}
 	// Get the value of requestedCount before releasing the mutex, since after
 	// releasing Admit can notice that item is no longer in the heap and call
 	// releaseWaitingWork to return item to the waitingWorkPool.
 	requestedCount := item.requestedCount
-	// Cannot read tenant after release q.mu, since tenant may get GC'd and
+	// Cannot read group after release q.mu, since group may get GC'd and
 	// reused.
-	tenantID := tenant.id
+	groupID := group.id
 	q.mu.Unlock()
 
 	if !item.replicated.Enabled {
@@ -1188,11 +1188,11 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		// to replicated writes.
 		if log.V(1) {
 			q.mu.Lock()
-			queueLen := tenant.waitingWorkHeap.Len()
+			queueLen := group.waitingWorkHeap.Len()
 			q.mu.Unlock()
 
 			log.Dev.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s log-position=%s ingested=%t",
-				queueLen, tenantID, item.priority,
+				queueLen, groupID, item.priority,
 				item.replicated.RangeID,
 				item.replicated.LogPosition,
 				item.replicated.Ingested,
@@ -1200,7 +1200,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		}
 		defer releaseWaitingWork(item)
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
-			roachpb.MustMakeTenantID(tenantID),
+			roachpb.MustMakeTenantID(groupID),
 			item.priority,
 			item.replicated,
 			item.requestedCount,
@@ -1218,26 +1218,26 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	return requestedCount
 }
 
-// gcTenantsResetUsedAndUpdateEstimators does three things:
-//  1. It resets tenant.used, which is the resource count over which the
+// gcGroupsResetUsedAndUpdateEstimators does three things:
+//  1. It resets group.used, which is the resource count over which the
 //     WorkQueue does fair-sharing. That is, fair-sharing is done over
 //     intervals that are sized at the frequency with which this
 //     function is called (as of 1/9/26, every 1s).
-//  2. It GCs tenantInfo entries, if a tenant has seen no workload over
+//  2. It GCs groupInfo entries, if a group has seen no workload over
 //     the interval.
 //  3. It updates CPU time token estimators. The estimators are only used
 //     if mode == usesCPUTimeTokens.
-func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
+func (q *WorkQueue) gcGroupsResetUsedAndUpdateEstimators() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.defaultCPUTimeTokenEstimator.update()
-	// With large numbers of active tenants, this iteration could hold the lock
+	// With large numbers of active groups, this iteration could hold the lock
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
-	for id, info := range q.mu.tenants {
-		if info.used == 0 && !isInTenantHeap(info) {
-			delete(q.mu.tenants, id)
-			releaseTenantInfo(info)
+	for id, info := range q.mu.groups {
+		if info.used == 0 && !isInGroupHeap(info) {
+			delete(q.mu.groups, id)
+			releaseGroupInfo(info)
 		} else {
 			info.cpuTimeTokenEstimator.update()
 			info.used = 0
@@ -1247,46 +1247,46 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 	}
 }
 
-// adjustTenantUsed is used internally by StoreWorkQueue, and by the KV queue
+// adjustGroupUsed is used internally by StoreWorkQueue, and by the KV queue
 // in AdmittedWorkDone. The additionalUsed count can be negative, in which
 // case it is returning unused resources. This is only for WorkQueue's own
 // accounting -- it should not call into granter.
-func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, delta int64) {
+func (q *WorkQueue) adjustGroupUsed(tenantID roachpb.TenantID, delta int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	tid := tenantID.ToUint64()
-	tenant, ok := q.mu.tenants[tid]
+	group, ok := q.mu.groups[tid]
 	if !ok {
 		return
 	}
-	q.adjustTenantUsedLocked(tenant, delta)
+	q.adjustGroupUsedLocked(group, delta)
 }
 
-func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
+func (q *WorkQueue) adjustGroupUsedLocked(group *groupInfo, delta int64) {
 	if delta < 0 {
 		toReturn := uint64(-delta)
-		if tenant.used < toReturn {
-			tenant.used = 0
+		if group.used < toReturn {
+			group.used = 0
 		} else {
-			tenant.used -= toReturn
+			group.used -= toReturn
 		}
 	} else {
-		tenant.used += uint64(delta)
+		group.used += uint64(delta)
 	}
-	if tenant.perTenantMetrics.tokensUsed != nil {
+	if group.perGroupMetrics.tokensUsed != nil {
 		if delta > 0 {
-			tenant.perTenantMetrics.tokensUsed.Inc(delta)
+			group.perGroupMetrics.tokensUsed.Inc(delta)
 		} else if delta < 0 {
-			tenant.perTenantMetrics.tokensReturned.Inc(-delta)
+			group.perGroupMetrics.tokensReturned.Inc(-delta)
 		}
 	}
 	if q.mode == usesCPUTimeTokens {
 		// Burst bucket tracks available budget, so we negate delta: consuming
 		// resources (positive delta to used) depletes the burst bucket.
-		tenant.cpuTimeBurstBucket.adjust(-delta)
+		group.cpuTimeBurstBucket.adjust(-delta)
 	}
-	if isInTenantHeap(tenant) {
-		q.mu.tenantHeap.fix(tenant)
+	if isInGroupHeap(group) {
+		q.mu.groupHeap.fix(group)
 	}
 }
 
@@ -1301,7 +1301,7 @@ func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int
 	if remaining < 0 && buildutil.CrdbTestBuild {
 		log.Dev.Fatalf(q.ambientCtx, "AdmittedSQLWorkDone: remaining %d is negative", remaining)
 	}
-	q.adjustTenantUsed(tenantID, -remaining)
+	q.adjustGroupUsed(tenantID, -remaining)
 	if remaining < 0 {
 		// Should never happen, but account for it defensively.
 		q.granter.tookWithoutPermission(-remaining)
@@ -1310,21 +1310,21 @@ func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int
 	}
 }
 
-// refillBurstBuckets adds tokens to all tenant burst buckets and updates
+// refillBurstBuckets adds tokens to all group burst buckets and updates
 // their capacity. This is called by cpuTimeTokenAllocator periodically (every
-// 1ms). If a tenant's burst qualification changes as a result of the refill,
-// the tenant's position in the tenantHeap is updated to maintain correct
+// 1ms). If a group's burst qualification changes as a result of the refill,
+// the group's position in the groupHeap is updated to maintain correct
 // priority ordering.
 func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.burstBucketCapacity = capacity
-	for _, tenant := range q.mu.tenants {
-		prevBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
-		tenant.cpuTimeBurstBucket.refill(toAdd, capacity)
-		curBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
-		if prevBurstQual != curBurstQual && isInTenantHeap(tenant) {
-			q.mu.tenantHeap.fix(tenant)
+	for _, group := range q.mu.groups {
+		prevBurstQual := group.cpuTimeBurstBucket.burstQualification()
+		group.cpuTimeBurstBucket.refill(toAdd, capacity)
+		curBurstQual := group.cpuTimeBurstBucket.burstQualification()
+		if prevBurstQual != curBurstQual && isInGroupHeap(group) {
+			q.mu.groupHeap.fix(group)
 		}
 	}
 }
@@ -1338,22 +1338,22 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	s.Printf("closed epoch: %d ", q.mu.closedEpochThreshold)
-	s.Printf("tenantHeap len: %d", len(q.mu.tenantHeap))
-	if len(q.mu.tenantHeap) > 0 {
-		s.Printf(" top tenant: %d", q.mu.tenantHeap[0].id)
+	s.Printf("groupHeap len: %d", len(q.mu.groupHeap))
+	if len(q.mu.groupHeap) > 0 {
+		s.Printf(" top group: %d", q.mu.groupHeap[0].id)
 	}
 	var ids []uint64
-	for id := range q.mu.tenants {
+	for id := range q.mu.groups {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
-		tenant := q.mu.tenants[id]
-		s.Printf("\n tenant-id: %d used: %d, w: %d, fifo: %d", tenant.id, tenant.used,
-			tenant.weight, tenant.fifoPriorityThreshold)
-		if len(tenant.waitingWorkHeap) > 0 {
+		group := q.mu.groups[id]
+		s.Printf("\n group-id: %d used: %d, w: %d, fifo: %d", group.id, group.used,
+			group.weight, group.fifoPriorityThreshold)
+		if len(group.waitingWorkHeap) > 0 {
 			// Sort items within waitingWorkHeap
-			sortedWaitingWorkHeap := slices.Clone(tenant.waitingWorkHeap)
+			sortedWaitingWorkHeap := slices.Clone(group.waitingWorkHeap)
 			sort.Sort(&sortedWaitingWorkHeap)
 			s.Printf(" waiting work heap:")
 			for i := range sortedWaitingWorkHeap {
@@ -1368,9 +1368,9 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 					sortedWaitingWorkHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond), workOrdering)
 			}
 		}
-		if len(tenant.openEpochsHeap) > 0 {
+		if len(group.openEpochsHeap) > 0 {
 			// Sort items within openEpochsHeap
-			sortedOpenEpochsHeap := slices.Clone(tenant.openEpochsHeap)
+			sortedOpenEpochsHeap := slices.Clone(group.openEpochsHeap)
 			sort.Sort(&sortedOpenEpochsHeap)
 			s.Printf(" open epochs heap:")
 			for i := range sortedOpenEpochsHeap {
@@ -1388,30 +1388,30 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 			if i > 0 {
 				s.Printf(" ")
 			}
-			tenant := q.mu.tenants[id]
-			s.Printf("t%d=%s", id, &tenant.cpuTimeBurstBucket)
+			group := q.mu.groups[id]
+			s.Printf("t%d=%s", id, &group.cpuTimeBurstBucket)
 		}
 	}
 }
 
-// Weight for tenants that are not assigned a weight. This typically applies
-// to tenants which weren't on this node in the prior call to
-// SetTenantWeights. Additionally, it is also the minimum tenant weight.
-const defaultTenantWeight = 1
+// Weight for groups that are not assigned a weight. This typically applies
+// to groups which weren't on this node in the prior call to
+// SetTenantWeights. Additionally, it is also the minimum group weight.
+const defaultGroupWeight = 1
 
-// The current cap on the weight of a tenant. We don't allow a single tenant
-// to use more than cap times the number of resources of the smallest tenant.
+// The current cap on the weight of a group. We don't allow a single group
+// to use more than cap times the number of resources of the smallest group.
 // For KV slots, we have seen a range of slot counts from 50-200 for 16 cpu
 // nodes, for a KV50 workload, depending on how we set
 // admission.kv_slot_adjuster.overload_threshold. We don't want to starve
-// small tenants, so the cap is currently set to 20. A more sophisticated fair
+// small groups, so the cap is currently set to 20. A more sophisticated fair
 // sharing scheme would not need such a cap.
-const tenantWeightCap = 20
+const groupWeightCap = 20
 
-func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
-	weight, ok := q.mu.tenantWeights.active[tenantID]
+func (q *WorkQueue) getGroupWeightLocked(groupID uint64) uint32 {
+	weight, ok := q.mu.groupWeights.active[groupID]
 	if !ok {
-		weight = defaultTenantWeight
+		weight = defaultGroupWeight
 	}
 	return weight
 }
@@ -1426,64 +1426,66 @@ func (q *WorkQueue) SetOverrideAllToBypassAdmission(override bool) {
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
 // => weight map. A nil map will result in all tenants having the same weight.
-func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
-	q.mu.tenantWeights.mu.Lock()
-	defer q.mu.tenantWeights.mu.Unlock()
-	if q.mu.tenantWeights.inactive == nil {
-		q.mu.tenantWeights.inactive = make(map[uint64]uint32)
+//
+// TODO(wenyihu): rename to SetGroupWeights.
+func (q *WorkQueue) SetTenantWeights(groupWeights map[uint64]uint32) {
+	q.mu.groupWeights.mu.Lock()
+	defer q.mu.groupWeights.mu.Unlock()
+	if q.mu.groupWeights.inactive == nil {
+		q.mu.groupWeights.inactive = make(map[uint64]uint32)
 	}
 	// Remove all elements from the inactive map.
-	for k := range q.mu.tenantWeights.inactive {
-		delete(q.mu.tenantWeights.inactive, k)
+	for k := range q.mu.groupWeights.inactive {
+		delete(q.mu.groupWeights.inactive, k)
 	}
-	// Compute the max weight in the new map, for enforcing the tenantWeightCap.
+	// Compute the max weight in the new map, for enforcing the groupWeightCap.
 	maxWeight := uint32(1)
-	for _, v := range tenantWeights {
+	for _, v := range groupWeights {
 		if v > maxWeight {
 			maxWeight = v
 		}
 	}
 	scaling := float64(1)
-	if maxWeight > tenantWeightCap {
-		scaling = tenantWeightCap / float64(maxWeight)
+	if maxWeight > groupWeightCap {
+		scaling = groupWeightCap / float64(maxWeight)
 	}
 	// Populate the weights in the inactive map.
-	for k, v := range tenantWeights {
+	for k, v := range groupWeights {
 		w := uint32(math.Ceil(float64(v) * scaling))
-		if w < defaultTenantWeight {
-			w = defaultTenantWeight
+		if w < defaultGroupWeight {
+			w = defaultGroupWeight
 		}
-		q.mu.tenantWeights.inactive[k] = w
+		q.mu.groupWeights.inactive[k] = w
 	}
 	// Establish the new active map.
 	func() {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		q.mu.tenantWeights.active, q.mu.tenantWeights.inactive =
-			q.mu.tenantWeights.inactive, q.mu.tenantWeights.active
+		q.mu.groupWeights.active, q.mu.groupWeights.inactive =
+			q.mu.groupWeights.inactive, q.mu.groupWeights.active
 	}()
-	// Create a slice for storing all the tenantIDs. We use this to split the
+	// Create a slice for storing all the groupIDs. We use this to split the
 	// update to the data-structures that require holding q.mu, in case there
-	// are 1000s of tenants (we don't want to hold q.mu for long durations).
-	tenantIDs := func() []uint64 {
+	// are 1000s of groups (we don't want to hold q.mu for long durations).
+	groupIDs := func() []uint64 {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		tIDs := make([]uint64, len(q.mu.tenants))
+		gIDs := make([]uint64, len(q.mu.groups))
 		i := 0
-		for k := range q.mu.tenants {
-			tIDs[i] = k
+		for k := range q.mu.groups {
+			gIDs[i] = k
 			i++
 		}
-		return tIDs
+		return gIDs
 	}()
-	// Any tenants not in tenantIDs will see the latest weight when their
-	// tenantInfo is created. The existing ones need their weights to be
+	// Any groups not in groupIDs will see the latest weight when their
+	// groupInfo is created. The existing ones need their weights to be
 	// updated.
 
-	// tenantIDs[index] represents the next tenantID that needs to be updated.
+	// groupIDs[index] represents the next groupID that needs to be updated.
 	var index int
-	n := len(tenantIDs)
-	// updateNextBatch acquires q.mu and updates a batch of tenants.
+	n := len(groupIDs)
+	// updateNextBatch acquires q.mu and updates a batch of groups.
 	updateNextBatch := func() (repeat bool) {
 		q.mu.Lock()
 		defer q.mu.Unlock()
@@ -1493,13 +1495,13 @@ func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 			if index >= n {
 				return false
 			}
-			tenantID := tenantIDs[index]
-			tenantInfo := q.mu.tenants[tenantID]
-			weight := q.getTenantWeightLocked(tenantID)
-			if tenantInfo != nil && tenantInfo.weight != weight {
-				tenantInfo.weight = weight
-				if isInTenantHeap(tenantInfo) {
-					q.mu.tenantHeap.fix(tenantInfo)
+			groupID := groupIDs[index]
+			gi := q.mu.groups[groupID]
+			weight := q.getGroupWeightLocked(groupID)
+			if gi != nil && gi.weight != weight {
+				gi.weight = weight
+				if isInGroupHeap(gi) {
+					q.mu.groupHeap.fix(gi)
 				}
 			}
 			index++
@@ -1546,8 +1548,8 @@ type priorityState struct {
 
 // priorityStates tracks information about admission requests and admission
 // grants at various priorities. It is used to set a priority threshold for
-// LIFO queuing. There is one priorityStates per tenant, since it is embedded
-// in a tenantInfo.
+// LIFO queuing. There is one priorityStates per group, since it is embedded
+// in a groupInfo.
 type priorityStates struct {
 	// In increasing order of priority. Expected to not have more than 10
 	// elements, so a linear search is fast. The slice is emptied after each
@@ -1656,15 +1658,15 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 	return priority
 }
 
-// tenantInfo is the per-tenant information in the tenantHeap.
-type tenantInfo struct {
+// groupInfo is the per-group information in the groupHeap.
+type groupInfo struct {
 	id uint64
-	// The weight assigned to the tenant. Must be > 0.
+	// The weight assigned to the group. Must be > 0.
 	weight uint32
 	// used is computed over an interval and periodically reset. Ordering
-	// between tenants, for fair sharing, utilizes this value.
+	// between groups, for fair sharing, utilizes this value.
 	//
-	// - For slots, used represents cpu time duration consumed by the tenant. It
+	// - For slots, used represents cpu time duration consumed by the group. It
 	//   is incremented by 1 (for non-elastic work) or some prediction of cpu
 	//   time (for elastic work) when the work is admitted. A correction is
 	//   applied when the work is done based on the actual cpu time consumed.
@@ -1672,17 +1674,17 @@ type tenantInfo struct {
 	//   that will be consumed is deducted at admission time, and a correction
 	//   is applied later.
 	//
-	// tenantInfo will not be GC'd until both used==0 and
+	// groupInfo will not be GC'd until both used==0 and
 	// len(waitingWorkHeap)==0.
 	//
 	// The used value is reset to 0 periodically. This creates a risk since
-	// callers of Admit hold references to tenantInfo. We do not want a race
-	// condition where the tenantInfo held in Admit is returned to the
+	// callers of Admit hold references to groupInfo. We do not want a race
+	// condition where the groupInfo held in Admit is returned to the
 	// sync.Pool. Note that this race is almost impossible to reproduce in
 	// practice since GC loop runs at 1s intervals and needs two iterations to
-	// GC a tenantInfo -- first to reset used=0 and then the next time to GC it.
+	// GC a groupInfo -- first to reset used=0 and then the next time to GC it.
 	// We fix this by being careful in the code of Admit by not reusing a
-	// reference to tenantInfo, and instead grab a new reference from the map.
+	// reference to groupInfo, and instead grab a new reference from the map.
 	//
 	// The above fix for the GC race condition is insufficient to prevent
 	// overflow of the used field if the reset to used=0 happens between used++
@@ -1709,50 +1711,50 @@ type tenantInfo struct {
 	// See the code in Admit that calls estimateTokensToBeUsed for more on this.
 	cpuTimeTokenEstimator cpuTimeTokenEstimator
 
-	// cpuTimeBurstBucket tracks whether this tenant qualifies for burst
+	// cpuTimeBurstBucket tracks whether this group qualifies for burst
 	// priority. Only used if mode == usesCPUTimeTokens. See
 	// cpu_time_token_burst.go for more.
 	cpuTimeBurstBucket cpuTimeBurstBucket
 
-	// perTenantMetrics holds per-tenant admission metric children. Only
+	// perGroupMetrics holds per-group admission metric children. Only
 	// set when mode == usesCPUTimeTokens. See cpuTimeTokenMetrics for
 	// details.
-	perTenantMetrics tenantMetrics
+	perGroupMetrics groupMetrics
 }
 
-// tenantMetrics groups the per-tenant metric children that are created
-// via AggCounter.AddChild for each tenant.
-type tenantMetrics struct {
+// groupMetrics groups the per-group metric children that are created
+// via AggCounter.AddChild for each group.
+type groupMetrics struct {
 	admittedCount  *aggmetric.Counter
 	waitTimeNanos  *aggmetric.Counter
 	tokensUsed     *aggmetric.Counter
 	tokensReturned *aggmetric.Counter
 }
 
-// tenantHeap is a heap of tenants with waiting work, ordered in increasing
-// order of tenantInfo.used/tenantInfo.weight (weights are an optional
-// feature, and default to 1). That is, we prefer tenants that are using less.
-type tenantHeap []*tenantInfo
+// groupHeap is a heap of groups with waiting work, ordered in increasing
+// order of groupInfo.used/groupInfo.weight (weights are an optional
+// feature, and default to 1). That is, we prefer groups that are using less.
+type groupHeap []*groupInfo
 
-var _ heap.Interface = (*tenantHeap)(nil)
+var _ heap.Interface = (*groupHeap)(nil)
 
-var tenantInfoPool = sync.Pool{
+var groupInfoPool = sync.Pool{
 	New: func() interface{} {
-		return &tenantInfo{}
+		return &groupInfo{}
 	},
 }
 
-func newTenantInfo(
+func newGroupInfo(
 	id uint64,
 	weight uint32,
 	mode workQueueMode,
 	cpuTimeTokenEstimate int64,
 	burstBucketCapacity int64,
 	maxCPU bool,
-	aggMetrics *tenantAggMetrics,
-) *tenantInfo {
-	ti := tenantInfoPool.Get().(*tenantInfo)
-	*ti = tenantInfo{
+	aggMetrics *groupAggMetrics,
+) *groupInfo {
+	ti := groupInfoPool.Get().(*groupInfo)
+	*ti = groupInfo{
 		id:                    id,
 		weight:                weight,
 		waitingWorkHeap:       ti.waitingWorkHeap,
@@ -1770,23 +1772,23 @@ func newTenantInfo(
 		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, maxCPU)
 	if aggMetrics != nil {
 		tid := strconv.FormatUint(id, 10)
-		ti.perTenantMetrics.admittedCount = aggMetrics.admittedCount.AddChild(tid)
-		ti.perTenantMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(tid)
-		ti.perTenantMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(tid)
-		ti.perTenantMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(tid)
+		ti.perGroupMetrics.admittedCount = aggMetrics.admittedCount.AddChild(tid)
+		ti.perGroupMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(tid)
+		ti.perGroupMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(tid)
+		ti.perGroupMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(tid)
 	}
 	return ti
 }
 
-func releaseTenantInfo(ti *tenantInfo) {
-	if isInTenantHeap(ti) {
-		panic("tenantInfo has non-empty heap")
+func releaseGroupInfo(ti *groupInfo) {
+	if isInGroupHeap(ti) {
+		panic("groupInfo has non-empty heap")
 	}
-	if ti.perTenantMetrics.admittedCount != nil {
-		ti.perTenantMetrics.admittedCount.Unlink()
-		ti.perTenantMetrics.waitTimeNanos.Unlink()
-		ti.perTenantMetrics.tokensUsed.Unlink()
-		ti.perTenantMetrics.tokensReturned.Unlink()
+	if ti.perGroupMetrics.admittedCount != nil {
+		ti.perGroupMetrics.admittedCount.Unlink()
+		ti.perGroupMetrics.waitTimeNanos.Unlink()
+		ti.perGroupMetrics.tokensUsed.Unlink()
+		ti.perGroupMetrics.tokensReturned.Unlink()
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
@@ -1797,32 +1799,32 @@ func releaseTenantInfo(ti *tenantInfo) {
 		ti.openEpochsHeap = nil
 	}
 
-	*ti = tenantInfo{
+	*ti = groupInfo{
 		waitingWorkHeap: ti.waitingWorkHeap,
 		openEpochsHeap:  ti.openEpochsHeap,
 		priorityStates:  makePriorityStates(ti.priorityStates.ps),
 	}
-	tenantInfoPool.Put(ti)
+	groupInfoPool.Put(ti)
 }
 
-func (th *tenantHeap) fix(item *tenantInfo) {
+func (th *groupHeap) fix(item *groupInfo) {
 	heap.Fix(th, item.heapIndex)
 }
 
-func (th *tenantHeap) remove(item *tenantInfo) {
+func (th *groupHeap) remove(item *groupInfo) {
 	heap.Remove(th, item.heapIndex)
 }
 
-func (th *tenantHeap) Len() int {
+func (th *groupHeap) Len() int {
 	return len(*th)
 }
 
-func (th *tenantHeap) Less(i, j int) bool {
-	// First, order by burstQualification: canBurst tenants come before
-	// noBurst tenants. canBurst tenants have access to more CPU time
+func (th *groupHeap) Less(i, j int) bool {
+	// First, order by burstQualification: canBurst groups come before
+	// noBurst groups. canBurst groups have access to more CPU time
 	// than noBurst -- see cpu_time_token_granter.go for details -- so
-	// it is important that work from a canBurst tenant always sorts
-	// before work from a noBurst tenant -- else available capacity is
+	// it is important that work from a canBurst group always sorts
+	// before work from a noBurst group -- else available capacity is
 	// left on the table.
 	iBurstQual := (*th)[i].cpuTimeBurstBucket.burstQualification()
 	jBurstQual := (*th)[j].cpuTimeBurstBucket.burstQualification()
@@ -1830,16 +1832,16 @@ func (th *tenantHeap) Less(i, j int) bool {
 		return iBurstQual < jBurstQual
 	}
 	// Beyond burstQualification (which is only enabled on CPU time token
-	// AC today), for tenant fairness, we use used_i/weight_i <
+	// AC today), for group fairness, we use used_i/weight_i <
 	// used_j/weight_j to determine order. In case of a tie, prioritize
-	// items with higher weight, and then items with lower tenant id.
+	// items with higher weight, and then items with lower group id.
 	//
 	// A reader may wonder if sorting on just used has the same effect
 	// as sorting on burstQualification first and used second. It is indeed
 	// similar, but it is not the same -- for example, used is reset every
 	// 1s, thus right after a reset it can fall out of sync with
 	// cpuTimeBurstBucket's burstQualification method. The source of truth
-	// for whether a tenant can burst is cpuTimeBurstBucket's
+	// for whether a group can burst is cpuTimeBurstBucket's
 	// burstQualification method, so we must call it here.
 	if (*th)[i].used*uint64((*th)[j].weight) == (*th)[j].used*uint64((*th)[i].weight) {
 		if (*th)[i].weight == (*th)[j].weight {
@@ -1850,20 +1852,20 @@ func (th *tenantHeap) Less(i, j int) bool {
 	return (*th)[i].used*uint64((*th)[j].weight) < (*th)[j].used*uint64((*th)[i].weight)
 }
 
-func (th *tenantHeap) Swap(i, j int) {
+func (th *groupHeap) Swap(i, j int) {
 	(*th)[i], (*th)[j] = (*th)[j], (*th)[i]
 	(*th)[i].heapIndex = i
 	(*th)[j].heapIndex = j
 }
 
-func (th *tenantHeap) Push(x interface{}) {
+func (th *groupHeap) Push(x interface{}) {
 	n := len(*th)
-	item := x.(*tenantInfo)
+	item := x.(*groupInfo)
 	item.heapIndex = n
 	*th = append(*th, item)
 }
 
-func (th *tenantHeap) Pop() interface{} {
+func (th *groupHeap) Pop() interface{} {
 	old := *th
 	n := len(old)
 	item := old[n-1]
@@ -1932,8 +1934,8 @@ var waitingWorkPool = sync.Pool{
 // transactions that get admitted to have finished all their work.
 //
 // Note that LIFO queueing will only happen at bottleneck nodes, and decided
-// on a (tenant, priority) basis. So if there is even a single bottleneck node
-// for a (tenant, priority), the above delay will occur. When the epoch closes
+// on a (group, priority) basis. So if there is even a single bottleneck node
+// for a (group, priority), the above delay will occur. When the epoch closes
 // at the bottleneck node, the creation time for this transaction will be
 // sufficiently in the past, so the non-bottleneck nodes (using FIFO) will
 // prioritize it over recent transactions. Note that there is an inversion in
@@ -2002,7 +2004,7 @@ func releaseWaitingWork(ww *waitingWork) {
 	waitingWorkPool.Put(ww)
 }
 
-// waitingWorkHeap is a heap of waiting work within a tenant. It is ordered in
+// waitingWorkHeap is a heap of waiting work within a group. It is ordered in
 // decreasing order of priority, and within the same priority in increasing
 // order of createTime (to prefer older work) for FIFO, and in decreasing
 // order of createTime for LIFO. In the LIFO case the heap only contains
@@ -2074,7 +2076,7 @@ func (wwh *waitingWorkHeap) Pop() interface{} {
 	return item
 }
 
-// openEpochsHeap is a heap of waiting work within a tenant that will be
+// openEpochsHeap is a heap of waiting work within a group that will be
 // subject to LIFO ordering (when transferred to the waitingWorkHeap) and
 // whose epoch is not yet closed. See the Less method for the ordering applied
 // here.
@@ -2273,7 +2275,7 @@ func (m *WorkQueueMetrics) recordBypassedAdmission(priority admissionpb.WorkPrio
 
 func (m *WorkQueueMetrics) recordFastPathAdmission(priority admissionpb.WorkPriority) {
 	// Explicitly record a zero wait queue duration when we're able to acquire
-	// tokens/slots without needing to add ourselves to tenant heaps. Explicitly
+	// tokens/slots without needing to add ourselves to group heaps. Explicitly
 	// recording zeros ensure that our histograms are accurate with respect to
 	// all work going through admission control.
 	m.total.WaitDurations.RecordValue(0)
@@ -2526,7 +2528,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	if !coordMuLocked {
 		q.coordMu.Unlock()
 	}
-	q.q[wc].adjustTenantUsed(tenantID, additionalTokensNeeded)
+	q.q[wc].adjustGroupUsed(tenantID, additionalTokensNeeded)
 
 	// Inform callers of the entry we just admitted.
 	//
@@ -2591,7 +2593,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	}
 	q.updateStoreStatsAfterWorkDone(1, doneInfo, false, true)
 	additionalTokens := q.granters[h.workClass].storeWriteDone(h.writeTokens, doneInfo)
-	q.q[h.workClass].adjustTenantUsed(h.tenantID, additionalTokens)
+	q.q[h.workClass].adjustGroupUsed(h.tenantID, additionalTokens)
 	return nil
 }
 
@@ -2637,9 +2639,9 @@ func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
-func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
+func (q *StoreWorkQueue) SetTenantWeights(groupWeights map[uint64]uint32) {
 	for i := range q.q {
-		q.q[i].SetTenantWeights(tenantWeights)
+		q.q[i].SetTenantWeights(groupWeights)
 	}
 }
 

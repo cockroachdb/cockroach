@@ -215,7 +215,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
-				opts.disableGCTenantsAndResetUsed = true
+				opts.disableGCGroupsAndResetUsed = true
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
 				if d.HasArg("override-all-to-bypass") {
@@ -356,8 +356,8 @@ func TestWorkQueueBasic(t *testing.T) {
 				q.tryCloseEpoch(timeSource.Now())
 				return q.String()
 
-			case "gc-tenants-and-reset-used":
-				q.gcTenantsResetUsedAndUpdateEstimators()
+			case "gc-groups-and-reset-used":
+				q.gcGroupsResetUsedAndUpdateEstimators()
 				return q.String()
 
 			default:
@@ -436,10 +436,10 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
-				opts.disableGCTenantsAndResetUsed = true
+				opts.disableGCGroupsAndResetUsed = true
 				opts.mode = usesCPUTimeTokens
 				cpuMetrics := makeCPUTimeTokenMetrics()
-				opts.perTenantAggMetrics = &tenantAggMetrics{
+				opts.perGroupAggMetrics = &groupAggMetrics{
 					admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
 					waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
 					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
@@ -555,18 +555,18 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				q.refillBurstBuckets(toAdd, capacity)
 				return ""
 
-			case "gc-tenants-and-reset-used":
-				q.gcTenantsResetUsedAndUpdateEstimators()
+			case "gc-groups-and-reset-used":
+				q.gcGroupsResetUsedAndUpdateEstimators()
 				return ""
 
-			case "set-tenant-max-cpu":
-				var tenantID uint64
+			case "set-max-cpu-groups":
+				var group int
 				var v bool
-				d.ScanArgs(t, "tenant", &tenantID)
+				d.ScanArgs(t, "group", &group)
 				d.ScanArgs(t, "v", &v)
 				q.mu.Lock()
-				if ti, ok := q.mu.tenants[tenantID]; ok {
-					ti.cpuTimeBurstBucket.maxCPU = v
+				if gi, ok := q.mu.groups[uint64(group)]; ok {
+					gi.cpuTimeBurstBucket.maxCPU = v
 				}
 				q.mu.Unlock()
 				return ""
@@ -609,7 +609,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	opts := makeWorkQueueOptions(KVWork)
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
-	opts.perTenantAggMetrics = &tenantAggMetrics{
+	opts.perGroupAggMetrics = &groupAggMetrics{
 		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
 		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
 		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
@@ -618,7 +618,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	timeSource = timeutil.NewManualTime(initialTime)
 	opts.timeSource = timeSource
 	opts.disableEpochClosingGoroutine = true
-	opts.disableGCTenantsAndResetUsed = true
+	opts.disableGCGroupsAndResetUsed = true
 	st = cluster.MakeTestingClusterSettings()
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -659,7 +659,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
 
 		if i%10 == 0 {
-			q.gcTenantsResetUsedAndUpdateEstimators()
+			q.gcGroupsResetUsedAndUpdateEstimators()
 		}
 	}
 
@@ -691,7 +691,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 		q.AdmittedWorkDone(resp2, 350*time.Millisecond)
 
 		if i%10 == 0 {
-			q.gcTenantsResetUsedAndUpdateEstimators()
+			q.gcGroupsResetUsedAndUpdateEstimators()
 		}
 	}
 
@@ -716,12 +716,12 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 
 	// This is a test of GC. If a call to update happens without any
 	// work happening during that interval, the tenant's estimator should be
-	// GCed. The first call to gcTenantsResetUsedAndUpdateEstimators resets
+	// GCed. The first call to gcGroupsResetUsedAndUpdateEstimators resets
 	// the interval over which activity is checked. The second call GCes the
 	// per-tenant estimators. So tenant 1 & tenant 2 should use the global
 	// estimator, just like tenant 3.
-	q.gcTenantsResetUsedAndUpdateEstimators()
-	q.gcTenantsResetUsedAndUpdateEstimators()
+	q.gcGroupsResetUsedAndUpdateEstimators()
+	q.gcGroupsResetUsedAndUpdateEstimators()
 	resp1, err = q.Admit(ctx, info1)
 	require.NoError(t, err)
 	checkEstimation(resp1, 250*time.Millisecond)
@@ -749,7 +749,7 @@ func makeCPUTimeTokenWorkQueue(t *testing.T) (q *WorkQueue, tg *testGranter, cle
 	opts := makeWorkQueueOptions(KVWork)
 	opts.mode = usesCPUTimeTokens
 	cpuMetrics := makeCPUTimeTokenMetrics()
-	opts.perTenantAggMetrics = &tenantAggMetrics{
+	opts.perGroupAggMetrics = &groupAggMetrics{
 		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
 		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
 		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
@@ -757,7 +757,7 @@ func makeCPUTimeTokenWorkQueue(t *testing.T) (q *WorkQueue, tg *testGranter, cle
 	}
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
-	opts.disableGCTenantsAndResetUsed = true
+	opts.disableGCGroupsAndResetUsed = true
 
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -787,7 +787,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			q.AdmittedWorkDone(resp, 50*time.Millisecond)
 			if i%10 == 0 {
-				q.gcTenantsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators()
 			}
 		}
 
@@ -869,10 +869,10 @@ func TestSQLCPUAdmission(t *testing.T) {
 	})
 }
 
-// TestWorkQueueTokenResetRace induces racing between tenantInfo.used
-// decrements and tenantInfo.used resets that used to fail until we eliminated
-// the code that decrements tenantInfo.used for tokens. It would also trigger
-// a used-after-free bug where the tenantInfo being used in Admit had been
+// TestWorkQueueTokenResetRace induces racing between groupInfo.used
+// decrements and groupInfo.used resets that used to fail until we eliminated
+// the code that decrements groupInfo.used for tokens. It would also trigger
+// a used-after-free bug where the groupInfo being used in Admit had been
 // returned to the sync.Pool because the used value was reset.
 func TestWorkQueueTokenResetRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -955,7 +955,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsResetUsedAndUpdateEstimators()
+				q.gcGroupsResetUsedAndUpdateEstimators()
 			}
 		}
 	}()
@@ -1081,7 +1081,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
-				opts.disableGCTenantsAndResetUsed = true
+				opts.disableGCGroupsAndResetUsed = true
 				st = cluster.MakeTestingClusterSettings()
 				var mockCoordMu syncutil.Mutex
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), roachpb.StoreID(1),

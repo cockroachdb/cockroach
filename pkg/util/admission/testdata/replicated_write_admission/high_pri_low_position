@@ -21,11 +21,11 @@ admit tenant=t1 pri=high-pri create-time=1.002us size=1B range=r1 log-position=4
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=1 top-tenant=t1
- tenant=t1 weight=1 fifo-threshold=low-pri used=0B
+[regular work queue]: len(group-heap)=1 top-group=t1
+ group=t1 weight=1 fifo-threshold=low-pri used=0B
   [0: pri=high-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
   [1: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(group-heap)=0
 
 # Produce 1B worth of regular tokens.
 granter class=regular adjust-tokens=+1B
@@ -43,9 +43,9 @@ admitted [tenant=t1 pri=high-pri create-time=1.002µs size=1B range=r1 log-posit
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=1 top-tenant=t1
- tenant=t1 weight=1 fifo-threshold=low-pri used=1B
+[regular work queue]: len(group-heap)=1 top-group=t1
+ group=t1 weight=1 fifo-threshold=low-pri used=1B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(group-heap)=0
 
 # vim:ft=sh
