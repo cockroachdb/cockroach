@@ -80,7 +80,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/worker",
-		Owner:   registry.OwnerSQLQueries,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
@@ -98,7 +98,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/coordinator",
-		Owner:   registry.OwnerSQLQueries,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
@@ -158,7 +158,7 @@ func registerImportTPCC(r registry.Registry) {
 		timeout := 5 * time.Hour
 		r.Add(registry.TestSpec{
 			Name:              testName,
-			Owner:             registry.OwnerSQLQueries,
+			Owner:             registry.OwnerSQLFoundations,
 			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(numNodes),
 			CompatibleClouds:  registry.AllExceptAWS,
@@ -194,7 +194,7 @@ func registerImportTPCC(r registry.Registry) {
 	testName := fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses)
 	r.Add(registry.TestSpec{
 		Name:              testName,
-		Owner:             registry.OwnerSQLQueries,
+		Owner:             registry.OwnerSQLFoundations,
 		Cluster:           r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.GCEZones(geoZones)),
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
@@ -228,7 +228,7 @@ func registerImportTPCH(r registry.Registry) {
 		item := item
 		r.Add(registry.TestSpec{
 			Name:      fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:     registry.OwnerSQLQueries,
+			Owner:     registry.OwnerSQLFoundations,
 			Benchmark: true,
 			Cluster:   r.MakeClusterSpec(item.nodes),
 			// Uses gs://cockroach-fixtures-us-east1. See:
@@ -357,7 +357,7 @@ func registerImportDecommissioned(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "import/decommissioned",
-		Owner:            registry.OwnerSQLQueries,
+		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
