@@ -243,7 +243,7 @@ func TestTruncateAppliedOnly(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
 			tc.setup(t, &e)
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+			truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{}, e.Engines, &e.seq)
 			require.NoError(t, e.stateEngine.Flush())
 			_, err := truncator.truncateAppliedNodes(ctx, 0 /* startIndex */)
 			require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 		t.Run(eventType.String(), func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+			truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{}, e.Engines, &e.seq)
 
 			// Write WAG nodes: init then destroy/subsume at index 20.
 			e.writeWAGNode(t, wagpb.Event{
@@ -387,7 +387,7 @@ func TestTruncateAppliedNodes(t *testing.T) {
 			e.writeWAGNode(t, wagpb.Event{
 				Addr: wagpb.MakeAddr(r1, 25), Type: wagpb.EventApply,
 			})
-			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+			truncator := NewWAGTruncator(st, WAGTruncatorTestingKnobs{}, e.Engines, &e.seq)
 			truncator.lastWAGIndexBeforeStartup = tc.lastIndexBeforeStartup
 			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
 			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
