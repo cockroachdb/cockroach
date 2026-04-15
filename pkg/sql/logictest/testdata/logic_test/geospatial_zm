@@ -423,3 +423,110 @@ SELECT st_asmvtgeom(
           1::INT4
         )::GEOMETRY
         FROM t106884;
+
+subtest st_3ddistance
+
+# Basic 3D point-to-point distance.
+query R
+SELECT ST_3DDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+1.7320508075688772
+
+# Z-only difference.
+query R
+SELECT ST_3DDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+5
+
+# Same point returns 0.
+query R
+SELECT ST_3DDistance('POINT Z(1 2 3)'::geometry, 'POINT Z(1 2 3)'::geometry)
+----
+0
+
+# 2D geometry fallback (no Z means Z=0).
+query R
+SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+# 3D point to 3D linestring.
+query R
+SELECT ST_3DDistance('POINT Z(5 3 4)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry)
+----
+5
+
+# 3D point above 3D polygon (perpendicular plane distance).
+query R
+SELECT ST_3DDistance('POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))'::geometry, 'POINT Z(5 5 3)'::geometry)
+----
+3
+
+# Empty geometry returns NULL.
+query R
+SELECT ST_3DDistance('POINT EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+NULL
+
+# SRID mismatch errors.
+query error operation on mixed SRIDs
+SELECT ST_3DDistance(
+  ST_SetSRID('POINT Z(0 0 0)'::geometry, 4326),
+  ST_SetSRID('POINT Z(1 1 1)'::geometry, 3857)
+)
+
+subtest end
+
+subtest st_3ddwithin
+
+# Point within 3D distance.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, 2)
+----
+true
+
+# Point not within 3D distance.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, 1)
+----
+false
+
+# Boundary inclusive: distance equals threshold returns true.
+query B
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 0 0)'::geometry, 1)
+----
+true
+
+# 2D vs 3D difference: 2D says within, 3D says not within because Z differs.
+query BB
+SELECT
+  ST_DWithin(
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;POINT(-72.1235 42.3521 4)'),2163::int),
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;LINESTRING(-72.1260 42.45 15, -72.123 42.1546 20)'),2163::int),
+    126.8::float
+  ),
+  ST_3DDWithin(
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;POINT(-72.1235 42.3521 4)'),2163::int),
+    ST_Transform(ST_GeomFromEWKT('SRID=4326;LINESTRING(-72.1260 42.45 15, -72.123 42.1546 20)'),2163::int),
+    126.8::float
+  )
+----
+true  false
+
+# Empty geometry returns false.
+query B
+SELECT ST_3DDWithin('GEOMETRYCOLLECTION EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry, 100)
+----
+false
+
+# Negative distance errors.
+query error dwithin distance cannot be less than zero
+SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, -1)
+
+# _st_3ddwithin alias works.
+query B
+SELECT _ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry, 1)
+----
+true
+
+subtest end

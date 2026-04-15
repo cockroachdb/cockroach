@@ -2913,6 +2913,9 @@ var builtinOidsArray = []string{
 	2958: `pg_try_advisory_xact_lock(key1: int4, key2: int4) -> bool`,
 	2959: `pg_try_advisory_xact_lock_shared(key: int) -> bool`,
 	2960: `pg_try_advisory_xact_lock_shared(key1: int4, key2: int4) -> bool`,
+	2961: `st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2962: `st_3ddistance(geometry_a: geometry, geometry_b: geometry) -> float`,
+	2963: `_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
