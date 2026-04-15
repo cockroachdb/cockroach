@@ -74,8 +74,8 @@
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 
-/pkg/sql/importer/           @cockroachdb/sql-queries-prs
-/pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
+/pkg/sql/importer/           @cockroachdb/sql-foundations
+/pkg/ccl/importerccl/        @cockroachdb/sql-foundations
 
 /pkg/sql/appstatspb           @cockroachdb/obs-prs
 /pkg/sql/execstats/           @cockroachdb/obs-prs
@@ -105,11 +105,15 @@
 /pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations
 
 /pkg/ccl/schemachangerccl/   @cockroachdb/sql-foundations
+/pkg/sql/bulkmerge/          @cockroachdb/sql-foundations
+/pkg/sql/bulksst/            @cockroachdb/sql-foundations
+/pkg/sql/bulkutil/           @cockroachdb/sql-foundations
 /pkg/sql/catalog/            @cockroachdb/sql-foundations
 /pkg/sql/catalog/multiregion @cockroachdb/sql-foundations
 /pkg/sql/doctor/             @cockroachdb/sql-foundations
 /pkg/sql/gcjob/              @cockroachdb/sql-foundations
 /pkg/sql/gcjob_test/         @cockroachdb/sql-foundations
+/pkg/sql/importer/           @cockroachdb/sql-foundations
 /pkg/sql/privilege/          @cockroachdb/sql-foundations
 /pkg/sql/schemachange/       @cockroachdb/sql-foundations
 /pkg/sql/schemachanger/      @cockroachdb/sql-foundations
