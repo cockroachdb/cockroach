@@ -482,6 +482,26 @@ var TrackPerTableProgress = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
 )
 
+// CloudStorageSinkInitialLowerBoundOnMaxSpanTS controls whether the cloud storage
+// sink bounds its initial file timestamp lower bound on the max span timestamp
+// from a restored checkpoint. This prevents file ordering violations after
+// restart with a partial checkpoint. See #155015.
+//
+// When enabled, file timestamps may be higher than the timestamps of
+// the rows they contain. This setting exists as a precaution in case any
+// existing users depend on that ordering.
+//
+// TODO(darrylwong): Remove this setting once we are confident no users
+// depend on file timestamps being lower than row timestamps.
+var CloudStorageSinkInitialLowerBoundOnMaxSpanTS = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.cloud_storage.initial_lower_bound_on_max_span_timestamp.enabled",
+	"if true, the cloud storage sink bounds its initial file timestamp lower "+
+		"bound on the max span timestamp from a restored checkpoint, preventing "+
+		"file ordering violations after restart with a partial checkpoint",
+	true,
+)
+
 // FrontierPersistenceInterval configures the minimum amount of time that must
 // elapse before a changefeed will persist its entire span frontier again.
 var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUnit(

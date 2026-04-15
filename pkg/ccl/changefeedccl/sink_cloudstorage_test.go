@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -1009,4 +1010,145 @@ func (n *mockSinkStorage) Delete(_ context.Context, _ string) error {
 
 func (n *mockSinkStorage) Size(_ context.Context, _ string) (int64, error) {
 	return 0, nil
+}
+
+// TestCloudStorageSinkOrderingWithPartialCheckpoint is a regression test for
+// #155015. Partial (frontier) checkpoints violate the cloud storage sink's
+// ordering guarantee because the catch-up scan after restart skips rows
+// covered by the checkpoint, breaking invariant 1 in the sink's proof of
+// correctness.
+//
+// Consider the following timeline:
+//  1. Frontier advances to t=10.
+//  2. Emit foo@t=20.
+//  3. Checkpoint records foo@t=20.
+//  4. Job restarts; low watermark is t=0. Catch-up scan skips foo@t=20.
+//  5. Emit foo@t=30.
+//  6. Client reads files in order.
+//
+// In the behavior before the fix for #155015, (2) and (5) write to files at t=10 and t=0, respectively.
+// This gives us the invalid ordering: file_t=0:[foo@t=30], file_t=10:[foo@t=20]
+func TestCloudStorageSinkOrderingWithPartialCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "boundOnMaxSpanTSAtStart", func(t *testing.T, boundOnMaxSpanTSAtStart bool) {
+		ctx := context.Background()
+
+		externalIODir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+
+		settings := cluster.MakeTestingClusterSettings()
+		enableAsyncFlush.Override(ctx, &settings.SV, false)
+		opts := changefeedbase.EncodingOptions{
+			Format:     changefeedbase.OptFormatJSON,
+			Envelope:   changefeedbase.OptEnvelopeWrapped,
+			KeyInValue: true,
+		}
+		ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
+		var noKey []byte
+
+		clientFactory := blobs.TestBlobServiceClient(externalIODir)
+		externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+			return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
+				clientFactory, user, nil, nil, cloud.NilMetrics, opts...)
+		}
+		user := username.RootUserName()
+
+		sinkURL := sinkURI(t, unlimitedFileSize)
+		topic := makeTopic(`foo`)
+
+		// Use non-contiguous spans so the frontier doesn't merge them into one entry.
+		// span3 simulates a span from a different aggregator that hasn't advanced.
+		span1 := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		span2 := roachpb.Span{Key: []byte("c"), EndKey: []byte("d")}
+		span3 := roachpb.Span{Key: []byte("e"), EndKey: []byte("f")}
+
+		sf, err := resolvedspan.NewAggregatorFrontier(
+			hlc.Timestamp{}, hlc.Timestamp{}, nil /* codec */, false /* perTableTracking */, span1, span2,
+		)
+		require.NoError(t, err)
+		oracle := newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.LatestTS(), boundOnMaxSpanTSAtStart)
+		sink, err := makeCloudStorageSink(
+			ctx, sinkURL, 1, settings, opts, oracle, externalStorageFromURI, user, nil, nil,
+		)
+		require.NoError(t, err)
+		sink.(*cloudStorageSink).sinkID = 0
+		sink.(*cloudStorageSink).jobSessionID = "session-a"
+
+		// (1) Local frontier advances to t=10.
+		_, err = sf.Forward(span1, ts(10))
+		require.NoError(t, err)
+		_, err = sf.Forward(span2, ts(10))
+		require.NoError(t, err)
+		require.NoError(t, sink.Flush(ctx))
+
+		// (2) Emit foo@t=20 in a file named at t=10.
+		require.NoError(t, sink.EmitRow(ctx, topic, noKey, []byte(`{"k":"foo","v":"bar_t20"}`), ts(20), ts(20), zeroAlloc, nil))
+
+		// (3) Checkpoint records foo@t=20.
+		require.NoError(t, sink.Flush(ctx))
+
+		// (4) Job restarts; low watermark is t=0. Catch-up scan skips foo@t=20.
+		// We mimic restarting by creating a new frontier and sink based off of
+		// the checkpointed frontier state. span3 is at t=0 to simulate a span
+		// from another aggregator that hasn't advanced.
+		var checkpoint []jobspb.ResolvedSpan
+		for sp, spTS := range sf.Entries() {
+			checkpoint = append(checkpoint, jobspb.ResolvedSpan{
+				Span:      sp,
+				Timestamp: spTS,
+			})
+		}
+		checkpoint = append(checkpoint, jobspb.ResolvedSpan{Span: span3})
+
+		require.NoError(t, sink.Close())
+		sf, err = resolvedspan.NewAggregatorFrontier(
+			hlc.Timestamp{}, hlc.Timestamp{}, nil /* codec */, false /* perTableTracking */, span1, span2, span3,
+		)
+		require.NoError(t, err)
+		require.NoError(t, sf.RestoreCheckpoint(checkpoint))
+		// sf.Frontier() = min(span1@t=10, span2@t=10, span3@t=0) = t=0.
+		oracle = newChangeAggregatorLowerBoundOracle(sf, hlc.Timestamp{}, sf.LatestTS(), boundOnMaxSpanTSAtStart)
+		sink, err = makeCloudStorageSink(
+			ctx, sinkURL, 1, settings, opts, oracle, externalStorageFromURI, user, nil, nil,
+		)
+		require.NoError(t, err)
+		sink.(*cloudStorageSink).sinkID = 0
+		sink.(*cloudStorageSink).jobSessionID = "session-b"
+
+		// (5) Emit foo@t=30. Without the fix, this file would be named at t=0,
+		// violating ordering. With the fix, the oracle floors the timestamp.
+		require.NoError(t, sink.EmitRow(ctx, topic, noKey, []byte(`{"k":"foo","v":"bar_t30"}`), ts(30), ts(30), zeroAlloc, nil))
+		require.NoError(t, sink.Flush(ctx))
+		require.NoError(t, sink.Close())
+
+		// (6) Check that our sink emitted files in order.
+		var files []string
+		absRoot := filepath.Join(externalIODir, testDir(t))
+		require.NoError(t, filepath.WalkDir(absRoot, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() || strings.HasSuffix(d.Name(), ".RESOLVED") {
+				return walkErr
+			}
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			t.Logf("%s, rows: %s", d.Name(), content)
+			files = append(files, string(content))
+			return nil
+		}))
+		require.Len(t, files, 2)
+		if boundOnMaxSpanTSAtStart {
+			// With the fix, files are ordered correctly.
+			require.Contains(t, files[0], "bar_t20",
+				"first file (lexically) should contain the t=20 row")
+			require.Contains(t, files[1], "bar_t30",
+				"second file (lexically) should contain the t=30 row")
+		} else {
+			// Without the fix, files are out of order.
+			require.Contains(t, files[0], "bar_t30",
+				"first file (lexically) should contain the t=30 row (buggy ordering)")
+			require.Contains(t, files[1], "bar_t20",
+				"second file (lexically) should contain the t=20 row (buggy ordering)")
+		}
+	})
 }
