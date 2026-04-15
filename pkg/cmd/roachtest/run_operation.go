@@ -230,9 +230,14 @@ func (r *opsRunner) selectOperationToRun(
 	}
 
 	// If the time since the last run of the operation has not exceeded its
-	// cadence, choose another operation.
+	// cadence, choose another operation. Per-operation WaitBeforeNextExecution
+	// overrides the global default when set.
 	if lastRun, ok := r.status.lastRun[opSpec.NamePrefix()]; ok {
-		nextRunTime := lastRun.Add(r.waitBeforeNextExecution)
+		interval := r.waitBeforeNextExecution
+		if opSpec.WaitBeforeNextExecution != 0 {
+			interval = opSpec.WaitBeforeNextExecution
+		}
+		nextRunTime := lastRun.Add(interval)
 		if timeutil.Now().Before(nextRunTime) {
 			return nil
 		}
@@ -240,12 +245,24 @@ func (r *opsRunner) selectOperationToRun(
 
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.status.lockOperationSelection = true
-		// selected operation cannot run concurrently with other operations —
-		// wait for other running operation completion.
+		// Selected operation cannot run concurrently with other operations.
+		// Wait for other running operations to complete, with a timeout to
+		// prevent indefinite blocking when long-running operations (e.g.,
+		// multi-day backup-restore) are in flight.
 		workerLabel := strconv.Itoa(workerID)
-		for {
-			if len(r.status.running) == 0 {
-				break
+		drainDeadline := timeutil.Now().Add(30 * time.Minute)
+		for len(r.status.running) > 0 {
+			if ctx.Err() != nil {
+				r.status.lockOperationSelection = false
+				return nil
+			}
+			if timeutil.Now().After(drainDeadline) {
+				r.logger.Printf(
+					"[%d] drain timed out waiting for %d operation(s) to complete, skipping exclusive op %s",
+					workerID, len(r.status.running), opSpec.Name,
+				)
+				r.status.lockOperationSelection = false
+				return nil
 			}
 			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateWaitingLock)
 			r.logger.Printf("[%d] operation: %s waiting for other operation to complete", workerID, opSpec.Name)
