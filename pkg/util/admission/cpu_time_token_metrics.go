@@ -136,7 +136,7 @@ type cpuTimeTokenMetrics struct {
 	WaitTimeNanosPerTenant [numResourceTiers]*aggmetric.AggCounter
 
 	// TokensUsedPerTenant and TokensReturnedPerTenant track per-tenant
-	// token consumption and returns via adjustTenantUsedLocked. Together
+	// token consumption and returns via adjustGroupUsedLocked. Together
 	// they give per-tenant visibility into token flow.
 	TokensUsedPerTenant     [numResourceTiers]*aggmetric.AggCounter
 	TokensReturnedPerTenant [numResourceTiers]*aggmetric.AggCounter
