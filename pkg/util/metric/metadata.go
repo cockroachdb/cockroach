@@ -74,11 +74,14 @@ func callerSourceFile(skip int) string {
 	}
 
 	// Extract the package path from the fully-qualified function name.
-	// e.g., "github.com/cockroachdb/cockroach/pkg/kv/kvserver.init"
-	// becomes "pkg/kv/kvserver".
+	// The function name has the form "path/to/pkg.FuncName" or
+	// "path/to/pkg.(*Type).Method". We find the last '/' to isolate
+	// the final segment, then take the first '.' after it — that
+	// always separates the package name from the symbol.
 	pkg := frame.Function
-	if idx := strings.LastIndex(pkg, "."); idx >= 0 {
-		pkg = pkg[:idx]
+	lastSlash := strings.LastIndex(pkg, "/")
+	if dotIdx := strings.Index(pkg[lastSlash+1:], "."); dotIdx >= 0 {
+		pkg = pkg[:lastSlash+1+dotIdx]
 	}
 	pkg = strings.TrimPrefix(pkg, modulePrefix)
 

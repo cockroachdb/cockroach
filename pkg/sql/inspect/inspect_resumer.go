@@ -276,7 +276,7 @@ func (c *inspectResumer) runInspectPlan(
 ) error {
 	execCfg := jobExecCtx.ExecCfg()
 
-	metadataCallbackWriter := sql.InitMetadataOnlyMetadataCallbackWriter(
+	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
 		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 			if meta.BulkProcessorProgress != nil {
 				return progressTracker.handleProgressUpdate(ctx, meta)

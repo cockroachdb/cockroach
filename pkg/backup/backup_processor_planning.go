@@ -210,7 +210,7 @@ func distBackup(
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
-		sql.InitMetadataCallbackWriter(rowResultWriter, metaFn),
+		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil,   /* rangeCache */
 		noTxn, /* txn - the flow does not read or write the database */

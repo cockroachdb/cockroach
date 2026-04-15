@@ -305,7 +305,7 @@ func (rh *rowHandler) runPlan(
 	rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 	distSQLReceiver := sql.MakeDistSQLReceiver(
 		ctx,
-		sql.InitMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
+		sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 		tree.Rows,
 		execCfg.RangeDescriptorCache,
 		nil, /* txn */

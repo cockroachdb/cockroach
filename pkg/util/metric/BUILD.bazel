@@ -54,6 +54,7 @@ go_test(
     srcs = [
         "histogram_buckets_test.go",
         "label_slice_cache_test.go",
+        "metadata_test.go",
         "metric_ext_test.go",
         "metric_test.go",
         "prometheus_exporter_test.go",

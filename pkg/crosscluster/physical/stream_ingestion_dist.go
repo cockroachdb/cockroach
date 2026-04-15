@@ -233,7 +233,7 @@ func startDistIngestion(
 		var noTxn *kv.Txn
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.InitMetadataCallbackWriter(rw, metaFn),
+			sql.NewMetadataCallbackWriter(rw, metaFn),
 			tree.Rows,
 			nil, /* rangeCache */
 			noTxn,
