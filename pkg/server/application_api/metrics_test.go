@@ -113,7 +113,7 @@ func TestGetRecordedMetricNames_histogram(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	metricName := "my.metric"
-	metricsMetadata := map[string]metric.InitMetadata(metric.Metadata{
+	metricsMetadata := map[string]metric.Metadata{
 		metricName: {
 			Name:        metricName,
 			Help:        "help text",
@@ -121,7 +121,7 @@ func TestGetRecordedMetricNames_histogram(t *testing.T) {
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheusgo.MetricType_HISTOGRAM,
 		},
-	})
+	}
 
 	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
 	require.Equal(t, len(metric.HistogramMetricComputers), len(recordedNames))
