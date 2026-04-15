@@ -38,43 +38,6 @@ func TestDestroyReplica(t *testing.T) {
 
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
 
-	printBatch := func(name string, b storage.WriteBatch) string {
-		str, err := print.DecodeWriteBatch(b.Repr())
-		require.NoError(t, err)
-		return fmt.Sprintf(">> %s:\n%s", name, str)
-	}
-	mutate := func(name string, eng storage.Engine, write func(storage.Writer)) string {
-		b := eng.NewWriteBatch()
-		defer b.Close()
-		write(b)
-		str := printBatch(name, b)
-		require.NoError(t, b.Commit(false))
-		return str
-	}
-	mutateSep := func(name string, eng Engines, write func(ReadWriter, *wag.Writer)) string {
-		b := makeTestBatch(eng)
-		defer b.close()
-		w := wag.MakeWriter(&wag.Seq{})
-		write(b.readWriter(), &w)
-
-		var str string
-		if eng.Separated() {
-			stateRepr := b.batch.Repr()
-			require.NoError(t, w.Flush(b.raftBatch, stateRepr))
-			// The WAG writer should always be non-empty in this test — the
-			// caller wants a cross-engine write that goes through WAG. Verify
-			// the raft batch's WAG node embeds the state engine batch, and
-			// elide the redundant state output.
-			require.True(t, wag.AssertMutationBatch(t, b.raftBatch.Repr(), stateRepr))
-			str = fmt.Sprintf(">> %s/state:\n(matches WAG node)\n", name)
-			str += printBatch(name+"/raft", b.raftBatch)
-		} else {
-			str = printBatch(name, b.batch)
-		}
-		require.NoError(t, b.commit())
-		return str
-	}
-
 	r := replicaInfo{
 		id:      roachpb.FullReplicaID{RangeID: 123, ReplicaID: 3},
 		hs:      raftpb.HardState{Term: 5, Commit: 14},
@@ -84,13 +47,13 @@ func TestDestroyReplica(t *testing.T) {
 		applied: 12,
 	}
 
-	runTest := func(t *testing.T, e Engines) {
+	runWithEngines(t, func(t *testing.T, e Engines) {
 		ctx := context.Background()
-		out := mutate("raft", e.LogEngine(), func(w storage.Writer) {
+		out := testMutate(t, "raft", e.LogEngine(), func(w storage.Writer) {
 			r.createRaftState(ctx, t, w)
-		}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
+		}) + testMutate(t, "state", e.StateEngine(), func(w storage.Writer) {
 			r.createStateMachine(ctx, t, w)
-		}) + mutateSep("destroy", e, func(rw ReadWriter, w *wag.Writer) {
+		}) + testMutateSep(t, "destroy", e, func(rw ReadWriter, w *wag.Writer) {
 			require.NoError(t, DestroyReplica(
 				ctx, rw, w,
 				DestroyReplicaInfo{
@@ -101,29 +64,12 @@ func TestDestroyReplica(t *testing.T) {
 				}, r.id.ReplicaID+1,
 			))
 		})
-
-		out = strings.ReplaceAll(out, "\n\n", "\n")
-		name := strings.ReplaceAll(t.Name(), "/", "-") + ".txt"
-		echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), name))
-	}
-
-	t.Run("one-eng", func(t *testing.T) {
-		eng := storage.NewDefaultInMemForTesting()
-		defer eng.Close()
-		runTest(t, MakeEngines(eng))
+		echotestRequire(t, out)
 	})
-	t.Run("sep-eng", func(t *testing.T) {
-		eng := storage.NewDefaultInMemForTesting()
-		defer eng.Close()
-		runTest(t, MakeSeparatedEnginesForTesting(eng, eng))
-	})
-
 }
 
 // replicaInfo contains the basic info about the replica, used for generating
 // its storage counterpart.
-//
-// TODO(pav-kv): make it reusable for other tests.
 type replicaInfo struct {
 	id      roachpb.FullReplicaID
 	hs      raftpb.HardState
@@ -182,6 +128,79 @@ func createRangeData(t *testing.T, w storage.Writer, span roachpb.RSpan) {
 		}.ToEngineKey(nil)
 		require.NoError(t, w.PutEngineKey(ek, nil))
 	}
+}
+
+// testMutate writes a batch to a single engine and returns a printable
+// representation of the batch contents.
+func testMutate(t *testing.T, name string, eng storage.Engine, write func(storage.Writer)) string {
+	t.Helper()
+	b := eng.NewWriteBatch()
+	defer b.Close()
+	write(b)
+	str := testPrintBatch(t, name, b)
+	require.NoError(t, b.Commit(false))
+	return str
+}
+
+// testMutateSep writes a batch using the separated engine ReadWriter and WAG
+// writer, and returns a printable representation of the batch contents.
+func testMutateSep(
+	t *testing.T, name string, eng Engines, write func(ReadWriter, *wag.Writer),
+) string {
+	t.Helper()
+	b := makeTestBatch(eng)
+	defer b.close()
+	w := wag.MakeWriter(&wag.Seq{})
+	write(b.readWriter(), &w)
+
+	var str string
+
+	if eng.Separated() {
+		stateRepr := b.batch.Repr()
+		require.NoError(t, w.Flush(b.raftBatch, stateRepr))
+		// The WAG writer should always be non-empty in this test — the
+		// caller wants a cross-engine write that goes through WAG. Verify
+		// the raft batch's WAG node embeds the state engine batch, and
+		// elide the redundant state output.
+		require.True(t, wag.AssertMutationBatch(t, b.raftBatch.Repr(), stateRepr))
+		str = fmt.Sprintf(">> %s/state:\n(matches WAG node)\n", name)
+		str += testPrintBatch(t, name+"/raft", b.raftBatch)
+	} else {
+		str = testPrintBatch(t, name, b.batch)
+	}
+	require.NoError(t, b.commit())
+	return str
+}
+
+func testPrintBatch(t *testing.T, name string, b storage.WriteBatch) string {
+	t.Helper()
+	str, err := print.DecodeWriteBatch(b.Repr())
+	require.NoError(t, err)
+	return fmt.Sprintf(">> %s:\n%s", name, str)
+}
+
+// echotestRequire strips double newlines from the output and asserts it matches
+// the testdata file for the current test.
+func echotestRequire(t *testing.T, out string) {
+	t.Helper()
+	out = strings.ReplaceAll(out, "\n\n", "\n")
+	name := strings.ReplaceAll(t.Name(), "/", "-") + ".txt"
+	echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), name))
+}
+
+// runWithEngines runs a test function under both single-engine and
+// separated-engine configurations.
+func runWithEngines(t *testing.T, fn func(t *testing.T, e Engines)) {
+	t.Run("one-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		fn(t, MakeEngines(eng))
+	})
+	t.Run("sep-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		fn(t, MakeSeparatedEnginesForTesting(eng, eng))
+	})
 }
 
 type testBatch struct {
