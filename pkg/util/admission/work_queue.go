@@ -734,9 +734,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that tenant yet. When we create the tenantInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all tenants.
+		// TODO(wenyihu6): look up maxCPU from per-resource-group config here
 		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
 			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-			q.perTenantAggMetrics)
+			false /* maxCPU */, q.perTenantAggMetrics)
 		q.mu.tenants[tenantID] = tenant
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -871,9 +872,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
+			// TODO(wenyihu6): look up maxCPU from per-resource-group config here
 			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
 				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-				q.perTenantAggMetrics)
+				false /* maxCPU */, q.perTenantAggMetrics)
 			q.mu.tenants[tenantID] = tenant
 		}
 		q.adjustTenantUsedLocked(tenant, -info.RequestedCount)
@@ -1746,6 +1748,7 @@ func newTenantInfo(
 	mode workQueueMode,
 	cpuTimeTokenEstimate int64,
 	burstBucketCapacity int64,
+	maxCPU bool,
 	aggMetrics *tenantAggMetrics,
 ) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
@@ -1764,7 +1767,7 @@ func newTenantInfo(
 	// always returns noBurst. This effectively disables the
 	// burstQualification functionality.
 	ti.cpuTimeBurstBucket.init(
-		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */)
+		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, maxCPU)
 	if aggMetrics != nil {
 		tid := strconv.FormatUint(id, 10)
 		ti.perTenantMetrics.admittedCount = aggMetrics.admittedCount.AddChild(tid)
