@@ -422,7 +422,16 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	// Now we know either a point of the exterior ring A is definitely inside polygon B
 	// or vice versa. This is an intersection.
 	if c.PointIntersectsLinearRing(aFirstPoint, b.LinearRing(0)) {
-		return c.DistanceUpdater().OnIntersects(aFirstPoint)
+		// aFirstPoint is from original A, but FlipGeometries is active so the
+		// updater thinks "a" is original B. Un-flip so OnIntersects correctly
+		// maps p=aFirstPoint to coordA (the original A side), then re-flip so
+		// the deferred FlipGeometries restores the caller's state.
+		c.DistanceUpdater().FlipGeometries()
+		result := c.DistanceUpdater().OnIntersects(aFirstPoint)
+		c.DistanceUpdater().FlipGeometries()
+		return result
 	}
+	// bFirstPoint is from original B, which after the flip is geodist "a",
+	// matching OnIntersects' assumption that p is on the "a" side.
 	return c.DistanceUpdater().OnIntersects(bFirstPoint)
 }

@@ -2945,6 +2945,9 @@ var builtinOidsArray = []string{
 	2990: `_st_3ddfullywithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 	2991: `st_3dintersects(geometry_a: geometry, geometry_b: geometry) -> bool`,
 	2992: `st_3dmaxdistance(geometry_a: geometry, geometry_b: geometry) -> float`,
+	2993: `st_3dclosestpoint(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2994: `st_3dlongestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2995: `st_3dshortestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
