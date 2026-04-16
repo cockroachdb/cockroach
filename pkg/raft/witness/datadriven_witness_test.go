@@ -8,6 +8,7 @@ package witness
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,11 +21,12 @@ import (
 
 // testVoter is a minimal model of a raft voter: an ID, a log, and hard state.
 type testVoter struct {
-	id       raftpb.PeerID
-	log      []raft.LogMark // consecutive entries starting at index 1
-	term     raftpb.Term
-	votedFor raftpb.PeerID
-	leader   bool
+	id        raftpb.PeerID
+	log       []raft.LogMark // consecutive entries starting at index 1
+	term      raftpb.Term
+	votedFor  raftpb.PeerID
+	leader    bool
+	committed uint64
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -39,6 +41,9 @@ func (v testVoter) lastLogMark() raft.LogMark {
 type testEnv struct {
 	w      State
 	voters []testVoter
+	// matchIndex tracks what the current leader believes each peer's
+	// match index to be. Reset when a new leader is elected.
+	matchIndex map[raftpb.PeerID]uint64
 }
 
 func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
@@ -49,6 +54,43 @@ func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
 	}
 	t.Fatalf("unknown voter v%d", id)
 	return nil
+}
+
+func (e *testEnv) leader() *testVoter {
+	for i := range e.voters {
+		if e.voters[i].leader {
+			return &e.voters[i]
+		}
+	}
+	return nil
+}
+
+// updateLeaderCommitted recomputes the leader's committed index based on
+// match indices and witness engagement.
+func (e *testEnv) updateLeaderCommitted() {
+	ldr := e.leader()
+	if ldr == nil {
+		return
+	}
+	var matches []uint64
+	for _, v := range e.voters {
+		matches = append(matches, e.matchIndex[v.id])
+	}
+	// Witness: if engaged, effectively matches the leader's entire log.
+	if e.w.Acked.Engaged {
+		matches = append(matches, uint64(len(ldr.log)))
+	} else {
+		matches = append(matches, 0)
+	}
+	slices.Sort(matches)
+	quorum := len(matches)/2 + 1
+	quorumMatch := matches[len(matches)-quorum]
+	// Only commit entries from the current term (raft safety).
+	if quorumMatch > 0 &&
+		ldr.log[quorumMatch-1].Term == uint64(ldr.term) &&
+		quorumMatch > ldr.committed {
+		ldr.committed = quorumMatch
+	}
 }
 
 func (e *testEnv) fmtConfig() string {
@@ -76,7 +118,11 @@ func fmtVoterLine(v testVoter, cfg string) string {
 	}
 	suffix := ""
 	if v.leader {
-		suffix = " leader"
+		if v.committed > 0 {
+			suffix = fmt.Sprintf(" committed=%d leader", v.committed)
+		} else {
+			suffix = " leader"
+		}
 	}
 	return fmt.Sprintf(
 		"v%d: [%s] term=%s cfg=%s%s",
@@ -95,6 +141,8 @@ func TestDataDrivenWitness(t *testing.T) {
 				return handleAddVoters(t, d, &env)
 			case "campaign":
 				return handleCampaign(t, d, &env, ctx)
+			case "propose":
+				return handlePropose(t, d, &env)
 			case "append":
 				return handleAppend(t, d, &env, ctx)
 			case "vote":
@@ -104,7 +152,11 @@ func TestDataDrivenWitness(t *testing.T) {
 			case "engage":
 				term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
-				return fmtResult(&env.w, next, ok)
+				result := fmtResult(&env.w, next, ok)
+				if ok {
+					env.updateLeaderCommitted()
+				}
+				return result
 			case "release":
 				term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
@@ -242,6 +294,7 @@ func handleCampaign(
 	if yesCount >= quorum {
 		// Winner becomes leader and appends a noop entry at the campaign term.
 		candidate.leader = true
+		candidate.committed = 0
 		nextIdx := uint64(len(candidate.log) + 1)
 		candidate.log = append(
 			candidate.log,
@@ -253,6 +306,10 @@ func handleCampaign(
 				env.voters[i].leader = false
 			}
 		}
+		// Initialize match indices. Leader matches itself; others unknown.
+		env.matchIndex = map[raftpb.PeerID]uint64{
+			candidateID: uint64(len(candidate.log)),
+		}
 		buf.WriteString("outcome: won")
 	} else {
 		buf.WriteString("outcome: lost")
@@ -260,10 +317,26 @@ func handleCampaign(
 	return buf.String()
 }
 
-// handleAppend simulates a leader replicating its log to followers and
-// optionally engaging the witness. Followers accept the append if their log is
-// a prefix of the leader's (simplified log matching). Responses from peers in
-// the drop set are not counted.
+// handlePropose adds a new entry to the leader's log at the current term.
+func handlePropose(t *testing.T, d *datadriven.TestData, env *testEnv) string {
+	if len(d.CmdArgs) < 1 {
+		t.Fatal("usage: propose <vN>")
+	}
+	id := mustParsePeerID(t, d.CmdArgs[0].Key)
+	v := env.voter(t, id)
+	if !v.leader {
+		t.Fatalf("v%d is not the leader", id)
+	}
+	nextIdx := uint64(len(v.log) + 1)
+	v.log = append(v.log, raft.LogMark{Term: uint64(v.term), Index: nextIdx})
+	env.matchIndex[id] = uint64(len(v.log))
+	env.updateLeaderCommitted()
+	return env.fmtVoters()
+}
+
+// handleAppend simulates a leader replicating its log to followers. Followers
+// accept the append if their log is a prefix of the leader's (simplified log
+// matching). Responses from peers in the drop set are not counted.
 func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.Context) string {
 	if len(d.CmdArgs) < 1 {
 		t.Fatal("usage: append <vN> [drop=(<ids>)]")
@@ -301,6 +374,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 				}
 				v.leader = false
 				v.log = append([]raft.LogMark{}, leader.log...)
+				env.matchIndex[v.id] = uint64(len(leader.log))
 				fmt.Fprintf(&buf, "%s: ok\n", label)
 			}
 		} else {
@@ -312,6 +386,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 		}
 	}
 
+	env.updateLeaderCommitted()
 	buf.WriteString(env.fmtVoters())
 	return buf.String()
 }
