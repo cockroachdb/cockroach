@@ -174,7 +174,10 @@ func (s State) HandleMsgVote(
 	// of the previous leader's log that was ultimately committed. We can thus
 	// disregard the engagement while deciding whether to respond to this vote.
 
-	if s.Acked.Engaged && lm.Term <= uint64(s.Vote.Term) {
+	// Exception: if the candidate is the leader we're engaged for, their log is
+	// by definition at least as up-to-date as what we helped commit. The normal
+	// log-up-to-date check below is sufficient.
+	if s.Acked.Engaged && s.Vote.VotedFor != from && lm.Term <= uint64(s.Vote.Term) {
 		return State{}, false
 	}
 
@@ -196,29 +199,32 @@ func (s State) HandleMsgVote(
 }
 
 // maybeBumpTerm reacts to a message from a leader at a higher term by resetting
-// state to that leader's term. Returns identical state if term not
-// incremented.
-func (s State) maybeBumpTerm(ctx context.Context, term raftpb.Term) State {
-	if term <= s.Vote.Term {
-		// No-op.
+// state to that leader's term. Only called for leader-sourced messages
+// (engage/release), so the leader's identity is recorded. If the term doesn't
+// advance but VotedFor is unset, we record the leader — accepting an
+// engage/release is effectively acknowledging the leader.
+func (s State) maybeBumpTerm(ctx context.Context, term raftpb.Term, lead raftpb.PeerID) State {
+	if term < s.Vote.Term {
 		return s
 	}
-
-	// Term changed, save leader term.
-	// Note that the
+	if term == s.Vote.Term {
+		if s.Vote.VotedFor == 0 {
+			s.Vote.VotedFor = lead
+		}
+		return s
+	}
+	// Term advanced. The leader was elected without our help, so its log
+	// is up to date with a traditional quorum of voters.
 	return State{
-		Vote: Vote{Term: term, VotedFor: 0 /* did not vote in this term */},
-		// The current leader was elected without our help. This means its log is
-		// up to date with a traditional quorum of voters, so it has all the log
-		// entries we may have helped commit.
+		Vote:  Vote{Term: term, VotedFor: lead},
 		Acked: Acked{},
 	}
 }
 
 func (s State) HandleMsgEngage(
-	ctx context.Context, term raftpb.Term, lm raft.LogMark,
+	ctx context.Context, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
-	s = s.maybeBumpTerm(ctx, term)
+	s = s.maybeBumpTerm(ctx, term, from)
 
 	if term != s.Vote.Term {
 		// Stale message.
@@ -252,9 +258,9 @@ func (s State) HandleMsgEngage(
 }
 
 func (s State) HandleMsgRelease(
-	ctx context.Context, term raftpb.Term, lm raft.LogMark,
+	ctx context.Context, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
-	s = s.maybeBumpTerm(ctx, term)
+	s = s.maybeBumpTerm(ctx, term, from)
 
 	if term != s.Vote.Term {
 		// Stale message from old leader.

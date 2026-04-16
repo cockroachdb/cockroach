@@ -5,59 +5,59 @@ ok
 w:  vote=(a, v1) acked=none
 
 # Engage at a5.
-engage term=a lm=a5
+engage from=v1 term=a lm=a5
 ----
 ok
 w:  vote=(a, v1) acked=(a5, engaged)
 
 # Idempotent engage.
-engage term=a lm=a5
+engage from=v1 term=a lm=a5
 ----
 ok
 w:  vote=(a, v1) acked=(a5, engaged)
 
 # Release at a10.
-release term=a lm=a10
+release from=v1 term=a lm=a10
 ----
 ok
 w:  vote=(a, v1) acked=(a10, released)
 
 # Idempotent release.
-release term=a lm=a10
+release from=v1 term=a lm=a10
 ----
 ok
 w:  vote=(a, v1) acked=(a10, released)
 
 # Re-engage must be at strictly greater log mark (replay protection).
-engage term=a lm=a10
+engage from=v1 term=a lm=a10
 ----
 rejected
 
 # Re-engage at a15: succeeds.
-engage term=a lm=a15
+engage from=v1 term=a lm=a15
 ----
 ok
 w:  vote=(a, v1) acked=(a15, engaged)
 
 # Stale release at a10: rejected.
-release term=a lm=a10
+release from=v1 term=a lm=a10
 ----
 rejected
 
 # Release at a15 (same as current hi): succeeds.
-release term=a lm=a15
+release from=v1 term=a lm=a15
 ----
 ok
 w:  vote=(a, v1) acked=(a15, released)
 
 # Re-engage at a20 in same term: succeeds (a20 > a15).
-engage term=a lm=a20
+engage from=v1 term=a lm=a20
 ----
 ok
 w:  vote=(a, v1) acked=(a20, engaged)
 
 # Release again.
-release term=a lm=a20
+release from=v1 term=a lm=a20
 ----
 ok
 w:  vote=(a, v1) acked=(a20, released)
@@ -69,7 +69,7 @@ term=b voted-for=v1
 ----
 w:  vote=(b, v1) acked=none
 
-engage term=a lm=a25
+engage from=v1 term=a lm=a25
 ----
 rejected
 
@@ -79,7 +79,7 @@ term=b voted-for=v1 hi=b5 engaged=true
 ----
 w:  vote=(b, v1) acked=(b5, engaged)
 
-release term=a lm=a20
+release from=v1 term=a lm=a20
 ----
 rejected
 
@@ -89,10 +89,10 @@ term=a voted-for=v1
 ----
 w:  vote=(a, v1) acked=none
 
-engage term=b lm=b1
+engage from=v1 term=b lm=b1
 ----
 ok
-w:  vote=(b, -) acked=(b1, engaged)
+w:  vote=(b, v1) acked=(b1, engaged)
 
 # Release from higher term also bumps term.
 set
@@ -100,10 +100,10 @@ term=a voted-for=v1
 ----
 w:  vote=(a, v1) acked=none
 
-release term=b lm=b1
+release from=v1 term=b lm=b1
 ----
 ok
-w:  vote=(b, -) acked=(b1, released)
+w:  vote=(b, v1) acked=(b1, released)
 
 # Refuse to engage for old log terms (Hi must be in current term).
 set
@@ -111,6 +111,6 @@ term=b voted-for=v1
 ----
 w:  vote=(b, v1) acked=none
 
-engage term=b lm=a5
+engage from=v1 term=b lm=a5
 ----
 rejected

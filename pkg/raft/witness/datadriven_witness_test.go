@@ -278,14 +278,16 @@ func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
 		}
 
 	case msgEngage:
-		next, ok := e.w.State.HandleMsgEngage(ctx, req.term, req.hi)
+		from := parsePeerID(m.from)
+		next, ok := e.w.State.HandleMsgEngage(ctx, from, req.term, req.hi)
 		if ok {
 			e.w.State = next
 		}
 		return testMsg{from: "w", to: m.from, msg: msgWitnessResp{ok: ok}}
 
 	case msgRelease:
-		next, ok := e.w.State.HandleMsgRelease(ctx, req.term, req.hi)
+		from := parsePeerID(m.from)
+		next, ok := e.w.State.HandleMsgRelease(ctx, from, req.term, req.hi)
 		if ok {
 			e.w.State = next
 		}
@@ -728,7 +730,7 @@ func handleRelease(t *testing.T, d *datadriven.TestData, env *testEnv, ctx conte
 }
 
 // scanWitnessReqArgs accepts either `v<N>` (derive term and lm from the
-// leader's state) or explicit `term=<letter> lm=<logmark>` arguments.
+// leader's state) or explicit `from=<vN> term=<letter> lm=<logmark>` arguments.
 func scanWitnessReqArgs(
 	t *testing.T, d *datadriven.TestData, env *testEnv,
 ) (ldr *testVoter, fromLabel string, term raftpb.Term, hi raft.LogMark) {
@@ -740,10 +742,11 @@ func scanWitnessReqArgs(
 		}
 		return v, fmt.Sprintf("v%d", id), v.term, v.lastLogMark()
 	}
-	var termStr, lmStr string
+	var fromStr, termStr, lmStr string
+	d.ScanArgs(t, "from", &fromStr)
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)
-	return nil, "", mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
+	return nil, fromStr, mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
 }
 
 func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
@@ -787,16 +790,22 @@ func fmtWitness(s State) string {
 	return fmt.Sprintf("w:  vote=%s acked=%s", vote, acked)
 }
 
-// mustParsePeerID converts "v<N>" to a raftpb.PeerID.
-func mustParsePeerID(t *testing.T, s string) raftpb.PeerID {
+// parsePeerID converts "v<N>" to a raftpb.PeerID. Panics on invalid input.
+func parsePeerID(s string) raftpb.PeerID {
 	if len(s) < 2 || s[0] != 'v' {
-		t.Fatalf("invalid peer ID %q: expected v<N>", s)
+		panic(fmt.Sprintf("invalid peer ID %q: expected v<N>", s))
 	}
 	id, err := strconv.ParseUint(s[1:], 10, 64)
 	if err != nil {
-		t.Fatalf("invalid peer ID %q: %v", s, err)
+		panic(fmt.Sprintf("invalid peer ID %q: %v", s, err))
 	}
 	return raftpb.PeerID(id)
+}
+
+// mustParsePeerID converts "v<N>" to a raftpb.PeerID.
+func mustParsePeerID(t *testing.T, s string) raftpb.PeerID {
+	t.Helper()
+	return parsePeerID(s)
 }
 
 // mustParseTerm converts a single letter (a-z) to a raftpb.Term (1-26).
