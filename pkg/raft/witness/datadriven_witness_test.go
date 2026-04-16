@@ -24,6 +24,7 @@ type testVoter struct {
 	log      []raft.LogMark // consecutive entries starting at index 1
 	term     raftpb.Term
 	votedFor raftpb.PeerID
+	leader   bool
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -73,7 +74,14 @@ func fmtVoterLine(v testVoter, cfg string) string {
 	for _, lm := range v.log {
 		logParts = append(logParts, fmtLogMark(lm))
 	}
-	return fmt.Sprintf("v%d: [%s] cfg=%s", v.id, strings.Join(logParts, " "), cfg)
+	suffix := ""
+	if v.leader {
+		suffix = " leader"
+	}
+	return fmt.Sprintf(
+		"v%d: [%s] term=%s cfg=%s%s",
+		v.id, strings.Join(logParts, " "), fmtTerm(v.term), cfg, suffix,
+	)
 }
 
 func TestDataDrivenWitness(t *testing.T) {
@@ -87,16 +95,18 @@ func TestDataDrivenWitness(t *testing.T) {
 				return handleAddVoters(t, d, &env)
 			case "campaign":
 				return handleCampaign(t, d, &env, ctx)
+			case "append":
+				return handleAppend(t, d, &env, ctx)
 			case "vote":
 				from, term, lm := scanVoteArgs(t, d)
 				next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
 				return fmtResult(&env.w, next, ok)
 			case "engage":
-				term, lm := scanReleaseArgs(t, d)
+				term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
 				return fmtResult(&env.w, next, ok)
 			case "release":
-				term, lm := scanReleaseArgs(t, d)
+				term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
 				return fmtResult(&env.w, next, ok)
 			case "state":
@@ -164,14 +174,7 @@ func handleCampaign(
 	candidate := env.voter(t, candidateID)
 
 	// Parse drop set.
-	dropped := map[string]bool{}
-	for _, arg := range d.CmdArgs[1:] {
-		if arg.Key == "drop" {
-			for _, v := range arg.Vals {
-				dropped[v] = true
-			}
-		}
-	}
+	dropped := parseDrop(d)
 
 	// Campaign: increment term, vote for self.
 	candidate.term++
@@ -237,11 +240,100 @@ func handleCampaign(
 	}
 
 	if yesCount >= quorum {
+		// Winner becomes leader and appends a noop entry at the campaign term.
+		candidate.leader = true
+		nextIdx := uint64(len(candidate.log) + 1)
+		candidate.log = append(
+			candidate.log,
+			raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
+		)
+		// Other voters lose leader status.
+		for i := range env.voters {
+			if env.voters[i].id != candidateID {
+				env.voters[i].leader = false
+			}
+		}
 		buf.WriteString("outcome: won")
 	} else {
 		buf.WriteString("outcome: lost")
 	}
 	return buf.String()
+}
+
+// handleAppend simulates a leader replicating its log to followers and
+// optionally engaging the witness. Followers accept the append if their log is
+// a prefix of the leader's (simplified log matching). Responses from peers in
+// the drop set are not counted.
+func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.Context) string {
+	if len(d.CmdArgs) < 1 {
+		t.Fatal("usage: append <vN> [drop=(<ids>)]")
+	}
+	leaderID := mustParsePeerID(t, d.CmdArgs[0].Key)
+	leader := env.voter(t, leaderID)
+	if !leader.leader {
+		t.Fatalf("v%d is not the leader", leaderID)
+	}
+
+	// Parse drop set.
+	dropped := parseDrop(d)
+
+	leaderLastLM := leader.lastLogMark()
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "v%d appends through %s\n", leaderID, fmtLogMark(leaderLastLM))
+
+	// Replicate to other voters.
+	for i := range env.voters {
+		v := &env.voters[i]
+		if v.id == leaderID {
+			continue
+		}
+		label := fmt.Sprintf("v%d", v.id)
+
+		ok, reason := followerAcceptsAppend(v, leader)
+		if ok {
+			if dropped[label] {
+				fmt.Fprintf(&buf, "%s: ok (dropped)\n", label)
+			} else {
+				// Recognize sender as leader: bump term, step down.
+				if leader.term > v.term {
+					v.term = leader.term
+					v.votedFor = 0
+				}
+				v.leader = false
+				v.log = append([]raft.LogMark{}, leader.log...)
+				fmt.Fprintf(&buf, "%s: ok\n", label)
+			}
+		} else {
+			if dropped[label] {
+				fmt.Fprintf(&buf, "%s: rejected, %s (dropped)\n", label, reason)
+			} else {
+				fmt.Fprintf(&buf, "%s: rejected, %s\n", label, reason)
+			}
+		}
+	}
+
+	buf.WriteString(env.fmtVoters())
+	return buf.String()
+}
+
+// followerAcceptsAppend checks whether a follower's log is compatible with the
+// leader's for a simplified append. The follower's log must be a prefix of the
+// leader's log (matching terms at each index).
+func followerAcceptsAppend(follower *testVoter, leader *testVoter) (ok bool, reason string) {
+	for i, lm := range follower.log {
+		if i >= len(leader.log) {
+			return false, fmt.Sprintf(
+				"follower log longer (%d > %d)", len(follower.log), len(leader.log),
+			)
+		}
+		if lm.Term != leader.log[i].Term {
+			return false, fmt.Sprintf(
+				"log diverges at index %d (%s vs %s)",
+				i+1, fmtLogMark(lm), fmtLogMark(leader.log[i]),
+			)
+		}
+	}
+	return true, ""
 }
 
 // voterGrantsVote decides whether a voter grants a vote to the candidate.
@@ -275,6 +367,19 @@ func voterGrantsVote(
 	return true, ""
 }
 
+// parseDrop extracts the drop=(<ids>) argument from a datadriven command.
+func parseDrop(d *datadriven.TestData) map[string]bool {
+	dropped := map[string]bool{}
+	for _, arg := range d.CmdArgs[1:] {
+		if arg.Key == "drop" {
+			for _, v := range arg.Vals {
+				dropped[v] = true
+			}
+		}
+	}
+	return dropped
+}
+
 // scanVoteArgs parses from=<id> term=<letter> lm=<logmark> arguments.
 func scanVoteArgs(t *testing.T, d *datadriven.TestData) (raftpb.PeerID, raftpb.Term, raft.LogMark) {
 	var fromStr, termStr, lmStr string
@@ -284,8 +389,19 @@ func scanVoteArgs(t *testing.T, d *datadriven.TestData) (raftpb.PeerID, raftpb.T
 	return mustParsePeerID(t, fromStr), mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
 }
 
-// scanReleaseArgs parses term=<letter> lm=<logmark> arguments.
-func scanReleaseArgs(t *testing.T, d *datadriven.TestData) (raftpb.Term, raft.LogMark) {
+// scanEngageReleaseArgs accepts either `v<N>` (derive term and lm from the
+// leader's state) or explicit `term=<letter> lm=<logmark>` arguments.
+func scanEngageReleaseArgs(
+	t *testing.T, d *datadriven.TestData, env *testEnv,
+) (raftpb.Term, raft.LogMark) {
+	if len(d.CmdArgs) > 0 && strings.HasPrefix(d.CmdArgs[0].Key, "v") {
+		id := mustParsePeerID(t, d.CmdArgs[0].Key)
+		v := env.voter(t, id)
+		if !v.leader {
+			t.Fatalf("v%d is not the leader", id)
+		}
+		return v.term, v.lastLogMark()
+	}
 	var termStr, lmStr string
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)

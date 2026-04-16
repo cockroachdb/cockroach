@@ -1,0 +1,81 @@
+# Test the append command: leader replicates log to followers.
+# Witness engagement is a separate explicit step.
+
+# Set up two voters; v2 has a longer log.
+add-voters
+v1: [a1]
+v2: [a1 b2]
+----
+v1: [a1] term=a cfg=(v1 v2 w)
+v2: [a1 b2] term=b cfg=(v1 v2 w)
+
+# v2 wins the election, gets a noop entry at term c.
+campaign v2
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: yes
+w:  yes
+outcome: won
+
+# v2 appends to v1. v1's log is a prefix of v2's, so it succeeds.
+append v2
+----
+v2 appends through c3
+v1: ok
+v1: [a1 b2 c3] term=c cfg=(v1 v2 w)
+v2: [a1 b2 c3] term=c cfg=(v1 v2 w) leader
+
+# v2 appends with v1's response dropped.
+append v2 drop=(v1)
+----
+v2 appends through c3
+v1: ok (dropped)
+v1: [a1 b2 c3] term=c cfg=(v1 v2 w)
+v2: [a1 b2 c3] term=c cfg=(v1 v2 w) leader
+
+# v2 engages the witness (derives term and lm from v2's state).
+engage v2
+----
+ok
+vote:  (c, v2)
+acked: (c3, engaged)
+
+# v2 appends again, this time v1 is dropped. The witness is already
+# engaged, so the leader can count on it for quorum.
+append v2 drop=(v1)
+----
+v2 appends through c3
+v1: ok (dropped)
+v1: [a1 b2 c3] term=c cfg=(v1 v2 w)
+v2: [a1 b2 c3] term=c cfg=(v1 v2 w) leader
+
+# Release the witness (derives term and lm from v2's state).
+release v2
+----
+ok
+vote:  (c, v2)
+acked: (c3, released)
+
+# New election: v1 campaigns and wins (its log is now up to date).
+campaign v1
+----
+v1 campaigns at term d
+v1: yes (self)
+v2: yes
+w:  yes
+outcome: won
+
+# v1 appends to v2, then engages the witness.
+append v1
+----
+v1 appends through d4
+v2: ok
+v1: [a1 b2 c3 d4] term=d cfg=(v1 v2 w) leader
+v2: [a1 b2 c3 d4] term=d cfg=(v1 v2 w)
+
+engage v1
+----
+ok
+vote:  (d, v1)
+acked: (d4, engaged)
