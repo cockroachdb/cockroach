@@ -77,7 +77,7 @@ v2 appends through c3
 v1: (dropped)
 v3: ok
 v4: ok
-v1: [a1 b2 b3 b4] term=b committed=b3 leader
+v1: [a1 b2 b3 b4] term=b leader
 v2: [a1 c2 c3] term=c leader
 v3: [a1 c2 c3] term=c
 v4: [a1 c2 c3] term=c

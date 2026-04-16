@@ -29,6 +29,9 @@ type testVoter struct {
 	committed      uint64
 	witnessEngaged bool   // leader's view of witness engagement
 	cfg            string // e.g. "(v1 v2 w)"
+	// matchIndex is only meaningful when leader==true. It tracks what this
+	// leader believes each peer's match index to be. Reset on election.
+	matchIndex map[raftpb.PeerID]uint64
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -44,9 +47,6 @@ type testEnv struct {
 	w          State
 	hasWitness bool
 	voters     []testVoter
-	// matchIndex tracks what the current leader believes each peer's
-	// match index to be. Reset when a new leader is elected.
-	matchIndex map[raftpb.PeerID]uint64
 }
 
 func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
@@ -77,7 +77,7 @@ func (e *testEnv) updateLeaderCommitted() {
 	}
 	var matches []uint64
 	for _, v := range e.voters {
-		matches = append(matches, e.matchIndex[v.id])
+		matches = append(matches, ldr.matchIndex[v.id])
 	}
 	// Witness: if the leader believes it's engaged, it matches everything.
 	if e.hasWitness {
@@ -158,50 +158,55 @@ func TestDataDrivenWitness(t *testing.T) {
 		env := testEnv{}
 		ctx := context.Background()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "setup":
-				return handleSetup(t, d, &env)
-			case "campaign":
-				return handleCampaign(t, d, &env, ctx, false /* prevote */)
-			case "prevote":
-				return handleCampaign(t, d, &env, ctx, true /* prevote */)
-			case "propose":
-				return handlePropose(t, d, &env)
-			case "append":
-				return handleAppend(t, d, &env, ctx)
-			case "vote":
-				from, term, lm := scanVoteArgs(t, d)
-				next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
-				return fmtWitnessResult(&env.w, next, ok)
-			case "engage":
-				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
-				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
-				result := fmtWitnessResult(&env.w, next, ok)
-				if ok && ldr != nil {
-					ldr.witnessEngaged = true
-					env.updateLeaderCommitted()
-					result += "\n" + fmtVoterLine(*ldr, "")
-				}
-				return result
-			case "release":
-				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
-				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
-				result := fmtWitnessResult(&env.w, next, ok)
-				if ok && ldr != nil {
-					ldr.witnessEngaged = false
-				}
-				return result
-			case "state":
-				return fmtWitness(env.w)
-			case "set":
-				handleSet(t, d, &env.w)
-				return fmtWitness(env.w)
-			default:
-				t.Fatalf("unknown command: %s", d.Cmd)
-				return ""
-			}
+			return runCommand(t, d, &env, ctx)
 		})
 	})
+}
+
+// runCommand dispatches a single datadriven command and returns the text output.
+func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
+	switch d.Cmd {
+	case "setup":
+		return handleSetup(t, d, env)
+	case "campaign":
+		return handleCampaign(t, d, env, ctx, false /* prevote */)
+	case "prevote":
+		return handleCampaign(t, d, env, ctx, true /* prevote */)
+	case "propose":
+		return handlePropose(t, d, env)
+	case "append":
+		return handleAppend(t, d, env, ctx)
+	case "vote":
+		from, term, lm := scanVoteArgs(t, d)
+		next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
+		return fmtWitnessResult(&env.w, next, ok)
+	case "engage":
+		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
+		next, ok := env.w.HandleMsgEngage(ctx, term, lm)
+		result := fmtWitnessResult(&env.w, next, ok)
+		if ok && ldr != nil {
+			ldr.witnessEngaged = true
+			env.updateLeaderCommitted()
+			result += "\n" + fmtVoterLine(*ldr, "")
+		}
+		return result
+	case "release":
+		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
+		next, ok := env.w.HandleMsgRelease(ctx, term, lm)
+		result := fmtWitnessResult(&env.w, next, ok)
+		if ok && ldr != nil {
+			ldr.witnessEngaged = false
+		}
+		return result
+	case "state":
+		return fmtWitness(env.w)
+	case "set":
+		handleSet(t, d, &env.w)
+		return fmtWitness(env.w)
+	default:
+		t.Fatalf("unknown command: %s", d.Cmd)
+		return ""
+	}
 }
 
 func handleSetup(t *testing.T, d *datadriven.TestData, env *testEnv) string {
@@ -365,7 +370,7 @@ func handleCampaign(
 				raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
 			)
 			// Initialize match indices. Leader matches itself; others unknown.
-			env.matchIndex = map[raftpb.PeerID]uint64{
+			candidate.matchIndex = map[raftpb.PeerID]uint64{
 				candidateID: uint64(len(candidate.log)),
 			}
 		}
@@ -388,7 +393,7 @@ func handlePropose(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	}
 	nextIdx := uint64(len(v.log) + 1)
 	v.log = append(v.log, raft.LogMark{Term: uint64(v.term), Index: nextIdx})
-	env.matchIndex[id] = uint64(len(v.log))
+	v.matchIndex[id] = uint64(len(v.log))
 	env.updateLeaderCommitted()
 	return env.fmtVoters()
 }
@@ -429,7 +434,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 		*v = next
 		fmt.Fprintf(&buf, "%s: %s\n", label, detail)
 		if ok {
-			env.matchIndex[v.id] = uint64(len(leader.log))
+			leader.matchIndex[v.id] = uint64(len(leader.log))
 		}
 	}
 
