@@ -1256,6 +1256,11 @@ func (ti *Index) SetPartitions(partitions []Partition) {
 	ti.partitions = partitions
 }
 
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
+func (ti *Index) IsTemporaryIndexForBackfill() bool {
+	return false
+}
+
 // Partition implements the cat.Partition interface for testing purposes.
 type Partition struct {
 	name   string
