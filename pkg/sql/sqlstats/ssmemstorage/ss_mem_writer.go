@@ -46,10 +46,16 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 		return nil
 	}
 
+	aggTs, aggInterval := value.AggregatedTs, value.AggInterval
+	if aggTs.IsZero() {
+		aggTs, aggInterval = s.computeAggregatedTs()
+	}
 	statementKey := stmtKey{
 		fingerprintID:            value.FingerprintID,
 		planHash:                 value.PlanHash,
 		transactionFingerprintID: value.TransactionFingerprintID,
+		aggregatedTs:             aggTs,
+		aggInterval:              aggInterval,
 	}
 
 	// Get the statistics object.
@@ -209,7 +215,16 @@ func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.Recor
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
 	// Get the statistics object.
-	stats, created, throttled := s.tryCreateStatsForTxnWithKey(value.FingerprintID, value.StatementFingerprintIDs)
+	aggTs, aggInterval := value.AggregatedTs, value.AggInterval
+	if aggTs.IsZero() {
+		aggTs, aggInterval = s.computeAggregatedTs()
+	}
+	key := txnKey{
+		transactionFingerprintID: value.FingerprintID,
+		aggregatedTs:             aggTs,
+		aggInterval:              aggInterval,
+	}
+	stats, created, throttled := s.tryCreateStatsForTxnWithKey(key, value.StatementFingerprintIDs)
 
 	if throttled {
 		return ErrFingerprintLimitReached
@@ -226,14 +241,14 @@ func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.Recor
 	// fingerprints for this app. We also abort the operation and return an error.
 	if created {
 		estimatedMemAllocBytes :=
-			stats.sizeUnsafeLocked() + value.FingerprintID.Size() + 8 /* hash of transaction key */
+			stats.sizeUnsafeLocked() + key.size() + 8 /* hash of transaction key */
 		if err := func() error {
 			// If the monitor is nil, we do not track memory usage.
 			if s.acc != nil {
 				if err := s.acc.Grow(ctx, estimatedMemAllocBytes); err != nil {
 					s.mu.Lock()
 					defer s.mu.Unlock()
-					delete(s.mu.txns, value.FingerprintID)
+					delete(s.mu.txns, key)
 					return ErrMemoryPressure
 				}
 			}
