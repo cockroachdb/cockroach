@@ -3324,9 +3324,69 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 	),
+	"st_3dclosestpoint": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ClosestPoint3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional point on geometry_a that is closest to geometry_b.",
+			},
+			volatility.Immutable,
+		),
+	),
 	"st_3dlength": makeBuiltin(
 		defProps(),
 		length3DOverloadGeometry1,
+	),
+	"st_3dlongestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.LongestLineString3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional longest line between two geometries.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3dshortestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ShortestLineString3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional shortest line between two geometries.",
+			},
+			volatility.Immutable,
+		),
 	),
 	"st_perimeter": makeBuiltin(
 		defProps(),
