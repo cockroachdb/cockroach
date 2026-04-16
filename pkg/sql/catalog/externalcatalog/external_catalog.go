@@ -108,11 +108,8 @@ func getUDTsForTable(
 	return typeDescriptors, foundTypeDescriptors, nil
 }
 
-// IngestExternalCatalog ingests the tables in the external catalog into into
-// the database and schema.
-//
-// TODO: provide a more general list of rewrite rules other than the ingesting
-// table names and the ingesting parent schema and db id.
+// IngestExternalCatalog ingests the tables in the external catalog into the
+// database and schema.
 func IngestExternalCatalog(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -134,33 +131,24 @@ func IngestExternalCatalog(
 	if err != nil {
 		return ingestedCatalog, err
 	}
-	tablesToWrite := make([]catalog.TableDescriptor, 0, len(externalCatalog.Tables))
-	var originalParentID descpb.ID
-	for i, table := range externalCatalog.Tables {
-		if originalParentID == 0 {
-			originalParentID = table.ParentID
-		} else if originalParentID != table.ParentID {
-			return ingestedCatalog, errors.New("all tables must belong to the same parent")
-		}
-		newID, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
+
+	mutTables, err := prepareTablesForIngest(
+		externalCatalog.Tables, ingestingUnqualifiedTableNames, setOffline, skipForeignKeys,
+	)
+	if err != nil {
+		return ingestedCatalog, err
+	}
+
+	idRewrites, err := remapDescIDs(ctx, execCfg, externalCatalog.Tables, dbDesc.GetID(), schemaID)
+	if err != nil {
+		return ingestedCatalog, err
+	}
+
+	rewriter := ldrDescriptorRewriter(idRewrites)
+	tablesToWrite := make([]catalog.TableDescriptor, 0, len(mutTables))
+	for _, mutTable := range mutTables {
+		if err := mutTable.Rewrite(rewriter); err != nil {
 			return ingestedCatalog, err
-		}
-		// TODO: rewrite the tables to fresh ids.
-		mutTable := tabledesc.NewBuilder(&table).BuildCreatedMutableTable()
-		if setOffline {
-			// TODO: Add some functional ops so client can set offline msg, among
-			// other things.
-			mutTable.SetOffline("")
-		}
-		mutTable.Name = ingestingUnqualifiedTableNames[i]
-		mutTable.UnexposedParentSchemaID = schemaID
-		mutTable.ParentID = dbDesc.GetID()
-		mutTable.Version = 1
-		mutTable.ID = newID
-		if skipForeignKeys {
-			mutTable.OutboundFKs = nil
-			mutTable.InboundFKs = nil
 		}
 		tablesToWrite = append(tablesToWrite, mutTable)
 		ingestedCatalog.Tables = append(ingestedCatalog.Tables, mutTable.TableDescriptor)
@@ -170,6 +158,115 @@ func IngestExternalCatalog(
 		tree.RequestedDescriptors, nil /* extra */, "", true,
 		false, /*allowCrossDatabaseRefs*/
 	)
+}
+
+// prepareTablesForIngest creates mutable tables from an external catalog
+// and does some validation work. It may add/drop descriptor fields in
+// accordance with the specified options.
+func prepareTablesForIngest(
+	sourceTables []descpb.TableDescriptor,
+	ingestingUnqualifiedTableNames []string,
+	setOffline bool,
+	skipForeignKeys bool,
+) ([]*tabledesc.Mutable, error) {
+	if len(sourceTables) == 0 {
+		return nil, errors.AssertionFailedf("no tables to ingest")
+	}
+	if len(sourceTables) != len(ingestingUnqualifiedTableNames) {
+		return nil, errors.AssertionFailedf(
+			"source tables length (%d) does not match table names length (%d)",
+			len(sourceTables), len(ingestingUnqualifiedTableNames))
+	}
+	// First pass to build the mutable tables and create any mappings needed for validation.
+	tables := make([]*tabledesc.Mutable, 0, len(sourceTables))
+	tableIDs := make(map[descpb.ID]struct{}, len(sourceTables))
+	var parentID descpb.ID
+	for _, t := range sourceTables {
+		mutTable := tabledesc.NewBuilder(&t).BuildCreatedMutableTable()
+		if parentID == 0 {
+			parentID = t.ParentID
+		}
+		tableIDs[t.ID] = struct{}{}
+		tables = append(tables, mutTable)
+	}
+
+	// Second pass to add/drop any descriptor fields as well as validation.
+	for i, t := range tables {
+		t.Name = ingestingUnqualifiedTableNames[i]
+
+		if setOffline {
+			// TODO: Add some functional ops so client can set offline msg, among
+			// other things.
+			t.SetOffline("")
+		}
+
+		if t.ParentID != parentID {
+			return nil, errors.New("all tables must belong to the same parent")
+		}
+
+		if skipForeignKeys {
+			t.OutboundFKs = nil
+			t.InboundFKs = nil
+		} else {
+			for _, fk := range t.OutboundFKs {
+				if _, ok := tableIDs[fk.ReferencedTableID]; !ok {
+					return nil, errors.Newf(
+						"table %q has a foreign key referencing table %d which is not "+
+							"in the replication set",
+						t.Name, fk.ReferencedTableID)
+				}
+			}
+			for _, fk := range t.InboundFKs {
+				if _, ok := tableIDs[fk.OriginTableID]; !ok {
+					return nil, errors.Newf(
+						"table %q has an inbound foreign key from table %d which is not "+
+							"in the replication set",
+						t.Name, fk.OriginTableID)
+				}
+			}
+		}
+	}
+	return tables, nil
+}
+
+// remapDescIDs builds a mapping of old descriptor IDs copied
+// from the source table to the new IDs. This should be passed
+// to Rewrite().
+func remapDescIDs(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	tables []descpb.TableDescriptor,
+	destDBID descpb.ID,
+	destSchemaID descpb.ID,
+) (map[descpb.ID]descpb.ID, error) {
+	idRewrites := make(map[descpb.ID]descpb.ID)
+	for _, table := range tables {
+		// Generate new table IDs.
+		newID, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		idRewrites[table.ID] = newID
+	}
+	// Remap the database ID and the schema ID.
+	// N.B. we already validated in prepareTablesForIngest that
+	// all tables are in the same DB/schema.
+	idRewrites[tables[0].ParentID] = destDBID
+	idRewrites[tables[0].GetUnexposedParentSchemaID()] = destSchemaID
+	return idRewrites, nil
+}
+
+// ldrDescriptorRewriter builds a DescriptorRewriteFn for LDR ingestion.
+// IDs in the rewrite map are remapped; everything else is kept as-is.
+func ldrDescriptorRewriter(idRewrites map[descpb.ID]descpb.ID) catalog.DescriptorRewriteFn {
+	return func(id descpb.ID) (descpb.ID, error) {
+		if newID, ok := idRewrites[id]; ok {
+			return newID, nil
+		}
+		// For now, we skip rewriting unknown IDs, i.e. keep them as is. Eventually
+		// we should handle every ID explicitly and can return an error here.
+		return id, nil
+	}
 }
 
 func DropIngestedExternalCatalog(
