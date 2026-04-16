@@ -153,6 +153,24 @@ DistSQL flow, running in a different goroutine. So there's no risk of `addRow`
 blocking and preventing `Flush` from being called — they're never in the same
 goroutine.
 
+## Flush.Frequency Validation
+
+Webhook sink validation (`getSinkConfigFromJson` and downstream checks)
+requires `Flush.Frequency` to be set, erroring with "Flush.Frequency is
+not set, messages may never be sent" if omitted. This validation predates
+the no-linger sink and exists because the old `batchingSink` genuinely
+needs a frequency — without it, events linger in the buffer indefinitely.
+
+With the no-linger sink, frequency is meaningless (workers pull
+immediately), but the validation runs before the `NoLingerBatchingSinkEnabled`
+check in `makeWebhookSink`. Users currently have to specify a dummy
+frequency value to use no-linger batching, which defeats the purpose.
+
+Fix: check `NoLingerBatchingSinkEnabled` before validating frequency, or
+move the validation into `makeBatchingSink` where it actually matters.
+The `batchCfg.Frequency` field can remain in the config struct — it's
+just silently unused by `noLingerSink`.
+
 ## Memory Accounting (kvevent.Alloc)
 
 The current `EmitRow` takes an `alloc` parameter for memory accounting.

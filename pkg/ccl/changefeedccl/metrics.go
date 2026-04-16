@@ -77,6 +77,9 @@ type AggMetrics struct {
 	ParallelIOWorkers           *aggmetric.AggGauge
 	SinkIOInflight              *aggmetric.AggGauge
 	SinkBackpressureNanos       *aggmetric.AggHistogram
+	NoLingerGetBatchNanos       *aggmetric.AggHistogram
+	NoLingerPendingRows         *aggmetric.AggGauge
+	NoLingerBatchFillPct        *aggmetric.AggHistogram
 	CommitLatency               *aggmetric.AggHistogram
 	BackfillCount               *aggmetric.AggGauge
 	BackfillPendingRanges       *aggmetric.AggGauge
@@ -133,6 +136,7 @@ type metricsRecorder interface {
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
+	newNoLingerMetricsRecorder() noLingerMetricsRecorder
 	recordSinkIOInflightChange(int64)
 	recordParallelIOWorkers(int64)
 	recordSinkBackpressure(time.Duration)
@@ -168,6 +172,9 @@ type sliMetrics struct {
 	ParallelIOWorkers           *aggmetric.Gauge
 	SinkIOInflight              *aggmetric.Gauge
 	SinkBackpressureNanos       *aggmetric.Histogram
+	NoLingerGetBatchNanos       *aggmetric.Histogram
+	NoLingerPendingRows         *aggmetric.Gauge
+	NoLingerBatchFillPct        *aggmetric.Histogram
 	CommitLatency               *aggmetric.Histogram
 	ErrorRetries                *aggmetric.Counter
 	AdmitLatency                *aggmetric.Histogram
@@ -616,6 +623,51 @@ func (m *sliMetrics) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	}
 }
 
+// noLingerMetricsRecorder records metrics specific to the noLingerSink.
+type noLingerMetricsRecorder interface {
+	recordGetBatchWait(latency time.Duration)
+	recordPendingRows(delta int64)
+	recordBatchFillPct(pct int64)
+}
+
+type noLingerMetricsRecorderImpl struct {
+	getBatchNanos *aggmetric.Histogram
+	pendingRows   *aggmetric.Gauge
+	batchFillPct  *aggmetric.Histogram
+}
+
+func (n *noLingerMetricsRecorderImpl) recordGetBatchWait(latency time.Duration) {
+	if n == nil {
+		return
+	}
+	n.getBatchNanos.RecordValue(latency.Nanoseconds())
+}
+
+func (n *noLingerMetricsRecorderImpl) recordPendingRows(delta int64) {
+	if n == nil {
+		return
+	}
+	n.pendingRows.Inc(delta)
+}
+
+func (n *noLingerMetricsRecorderImpl) recordBatchFillPct(pct int64) {
+	if n == nil {
+		return
+	}
+	n.batchFillPct.RecordValue(pct)
+}
+
+func (m *sliMetrics) newNoLingerMetricsRecorder() noLingerMetricsRecorder {
+	if m == nil {
+		return (*noLingerMetricsRecorderImpl)(nil)
+	}
+	return &noLingerMetricsRecorderImpl{
+		getBatchNanos: m.NoLingerGetBatchNanos,
+		pendingRows:   m.NoLingerPendingRows,
+		batchFillPct:  m.NoLingerBatchFillPct,
+	}
+}
+
 func (m *sliMetrics) getKafkaThrottlingMetrics(settings *cluster.Settings) metrics.Histogram {
 	if m == nil {
 		return (*kafkaHistogramAdapter)(nil)
@@ -738,6 +790,10 @@ func (w *wrappingCostController) recordSinkBackpressure(duration time.Duration) 
 
 func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	return w.inner.newParallelIOMetricsRecorder()
+}
+
+func (w *wrappingCostController) newNoLingerMetricsRecorder() noLingerMetricsRecorder {
+	return w.inner.newNoLingerMetricsRecorder()
 }
 
 func (w *wrappingCostController) getKafkaThrottlingMetrics(
@@ -1104,6 +1160,27 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Unit:        metric.Unit_NANOSECONDS,
 		Category:    metric.Metadata_CHANGEFEEDS,
 	}
+	metaNoLingerGetBatchNanos := metric.Metadata{
+		Name:        "changefeed.no_linger_get_batch_nanos",
+		Help:        "Time workers spend waiting for a batch in the no-linger sink.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaNoLingerPendingRows := metric.Metadata{
+		Name:        "changefeed.no_linger_pending_rows",
+		Help:        "Number of rows pending in the no-linger sink buffer.",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaNoLingerBatchFillPct := metric.Metadata{
+		Name:        "changefeed.no_linger_batch_fill_pct",
+		Help:        "Batch fill percentage (0-100) in the no-linger sink.",
+		Measurement: "Percent",
+		Unit:        metric.Unit_PERCENT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
 	metaAggregatorProgress := metric.Metadata{
 		Name:        "changefeed.aggregator_progress",
 		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
@@ -1248,6 +1325,21 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOWorkers: b.Gauge(metaChangefeedParallelIOWorkers),
+		NoLingerGetBatchNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaNoLingerGetBatchNanos,
+			Duration:     histogramWindow,
+			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
+			SigFigs:      1,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
+		}),
+		NoLingerPendingRows: b.Gauge(metaNoLingerPendingRows),
+		NoLingerBatchFillPct: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaNoLingerBatchFillPct,
+			Duration:     histogramWindow,
+			MaxVal:       100,
+			SigFigs:      1,
+			BucketConfig: metric.Count1KBuckets,
+		}),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
@@ -1358,6 +1450,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ParallelIOWorkers:           a.ParallelIOWorkers.AddChild(scope),
 		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
 		SinkBackpressureNanos:       a.SinkBackpressureNanos.AddChild(scope),
+		NoLingerGetBatchNanos:       a.NoLingerGetBatchNanos.AddChild(scope),
+		NoLingerPendingRows:         a.NoLingerPendingRows.AddChild(scope),
+		NoLingerBatchFillPct:        a.NoLingerBatchFillPct.AddChild(scope),
 		CommitLatency:               a.CommitLatency.AddChild(scope),
 		ErrorRetries:                a.ErrorRetries.AddChild(scope),
 		AdmitLatency:                a.AdmitLatency.AddChild(scope),

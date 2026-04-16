@@ -30,25 +30,23 @@ predictable memory usage.
 `pendingBuffer`. In `addRow`, block while the limit is hit. In
 `getBatch`, broadcast after draining to wake blocked producers.
 
-## 3. No New Metrics
-
-The design proposes three new metrics:
-- **`getBatch` wait time**: How long workers block waiting for work.
-- **Batch fill ratio**: `actualMessages / maxMessages`.
-- **Pending buffer depth**: Gauge of total events in the buffer.
-
-The prototype uses the existing `metricsRecorder` interface but does not
-record any of these new metrics.
-
-**To do**: Add these metrics. `getBatch` wait time requires timing
-the `cond.Wait` loop. Batch fill ratio is computed after `getBatch`
-returns. Buffer depth is `totalEvents`.
-
-## 4. Cluster Setting Defaults to False
+## 3. Cluster Setting Defaults to False
 
 The design says the setting should be "on by default" for rollout. The
 prototype defaults to `false` since it hasn't been validated in
 production yet. Flip to `true` once confidence is established.
+
+## 4. Flush.Frequency Still Required by Sink Validation
+
+Webhook (and potentially other sinks) validates that `Flush.Frequency` is
+set in the sink config, even when the no-linger sink is active and ignores
+the frequency entirely. This forces users to specify a meaningless
+parameter to use no-linger batching, which is bad UX — the whole point
+is removing the frequency knob.
+
+**To do**: Skip the `Flush.Frequency` validation when
+`changefeed.no_linger_batching.enabled` is true. The frequency field
+should be ignored silently if present and not required if absent.
 
 ## 5. No Benchmarks
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // pendingEvent holds a single changefeed event waiting to be batched.
@@ -226,8 +227,9 @@ type noLingerSink struct {
 	ioWorkers   int
 	retryOpts   retry.Options
 
-	metrics  metricsRecorder
-	settings *cluster.Settings
+	metrics        metricsRecorder
+	noLingerMetric noLingerMetricsRecorder
+	settings       *cluster.Settings
 
 	termErr error // guarded by buf.mu
 
@@ -306,6 +308,7 @@ func (s *noLingerSink) EmitRow(
 		mvcc:  mvcc,
 	}
 	s.buf.addRow(topicName, e)
+	s.noLingerMetric.recordPendingRows(1)
 	return nil
 }
 
@@ -367,9 +370,17 @@ var _ SinkWithTopics = (*noLingerSink)(nil)
 // runWorker is the main loop for each IO worker goroutine.
 func (s *noLingerSink) runWorker(ctx context.Context) error {
 	for {
+		waitStart := timeutil.Now()
 		batch := s.buf.getBatch(s.maxMessages, s.maxBytes)
 		if batch == nil {
 			return nil // closed
+		}
+		s.noLingerMetric.recordGetBatchWait(timeutil.Since(waitStart))
+		s.noLingerMetric.recordPendingRows(-int64(len(batch.events)))
+
+		if s.maxMessages > 0 {
+			pct := int64(len(batch.events)) * 100 / int64(s.maxMessages)
+			s.noLingerMetric.recordBatchFillPct(pct)
 		}
 
 		err := s.processBatch(ctx, batch)
@@ -430,17 +441,18 @@ func makeNoLingerSink(
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &noLingerSink{
-		client:       client,
-		topicNamer:   topicNamer,
-		concreteType: concreteType,
-		buf:          newPendingBuffer(),
-		maxMessages:  maxMessages,
-		maxBytes:     maxBytes,
-		ioWorkers:    numWorkers,
-		retryOpts:    retryOpts,
-		metrics:      metrics,
-		settings:     settings,
-		cancel:       cancel,
+		client:         client,
+		topicNamer:     topicNamer,
+		concreteType:   concreteType,
+		buf:            newPendingBuffer(),
+		maxMessages:    maxMessages,
+		maxBytes:       maxBytes,
+		ioWorkers:      numWorkers,
+		retryOpts:      retryOpts,
+		metrics:        metrics,
+		noLingerMetric: metrics.newNoLingerMetricsRecorder(),
+		settings:       settings,
+		cancel:         cancel,
 	}
 
 	sink.wg = ctxgroup.WithContext(ctx)

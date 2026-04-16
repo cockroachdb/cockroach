@@ -11892,6 +11892,50 @@ func TestParallelIOMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
 
+// TestNoLingerSinkIntegration tests the no-linger batching sink end-to-end
+// with a real changefeed, verifying that events flow through and the
+// no-linger-specific metrics are recorded.
+func TestNoLingerSinkIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.no_linger_batching.enabled = true`)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		db.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 50)`)
+
+		// Set a message limit so batch fill pct is recorded. Frequency is
+		// required by webhook validation even though noLingerSink ignores it.
+		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH" +
+			" webhook_sink_config='{\"Flush\": {\"Messages\": 10, \"Frequency\": \"100ms\"}}'")
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.NoLingerGetBatchNanos.WindowedSnapshot().Total()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for getBatch nanos: %d %f",
+					numSamples, sum)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.NoLingerBatchFillPct.WindowedSnapshot().Total()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for batch fill pct: %d %f",
+					numSamples, sum)
+			}
+			return nil
+		})
+
+		require.NoError(t, foo.Close())
+	}
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
 // TestSinkBackpressureMetric tests that the sink backpressure metric is recorded
 // when quota limits are hit.
 func TestSinkBackpressureMetric(t *testing.T) {

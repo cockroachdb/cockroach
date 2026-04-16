@@ -521,6 +521,47 @@ func TestPendingBuffer_RequeueByMVCC(t *testing.T) {
 	pb.completeBatch(batch3)
 }
 
+// testNoLingerMetrics is a test implementation of noLingerMetricsRecorder
+// that tracks values for assertions.
+type testNoLingerMetrics struct {
+	mu           sync.Mutex
+	pendingRows  int64
+	batchFillPct []int64
+	waits        int
+}
+
+func (m *testNoLingerMetrics) recordGetBatchWait(_ time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.waits++
+}
+
+func (m *testNoLingerMetrics) recordPendingRows(delta int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pendingRows += delta
+}
+
+func (m *testNoLingerMetrics) recordBatchFillPct(pct int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.batchFillPct = append(m.batchFillPct, pct)
+}
+
+func (m *testNoLingerMetrics) getPendingRows() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pendingRows
+}
+
+func (m *testNoLingerMetrics) getBatchFillPcts() []int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]int64, len(m.batchFillPct))
+	copy(result, m.batchFillPct)
+	return result
+}
+
 // --- NoLingerSink Tests ---
 
 func TestNoLingerSink_EmitAndFlush(t *testing.T) {
@@ -710,6 +751,50 @@ func TestNoLingerSink_AllocRelease(t *testing.T) {
 
 	require.NoError(t, sink.Flush(ctx))
 	require.EqualValues(t, 0, pool.used())
+}
+
+func TestNoLingerSink_Metrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	client := &mockSinkClient{}
+	td := topic("t")
+	// maxMessages=4 so we can verify fill pct.
+	sink := makeTestNoLingerSink(t, client, 1, 4, td)
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	m := &testNoLingerMetrics{}
+	sink.noLingerMetric = m
+
+	ctx := context.Background()
+
+	// Emit 3 events. pendingRows should go up by 1 for each.
+	for i := 0; i < 3; i++ {
+		require.NoError(t, sink.EmitRow(
+			ctx, td, []byte("k"), []byte("v"), zeroTS, zeroTS, zeroAlloc, nil,
+		))
+	}
+	require.Equal(t, int64(3), m.getPendingRows())
+
+	// Flush drains everything.
+	require.NoError(t, sink.Flush(ctx))
+	require.Equal(t, int64(0), m.getPendingRows())
+
+	// With maxMessages=4 and 3 events in the batch, fill pct = 75%.
+	pcts := m.getBatchFillPcts()
+	require.Len(t, pcts, 1)
+	require.Equal(t, int64(75), pcts[0])
+
+	// Emit 4 events — should produce 100% fill.
+	for i := 0; i < 4; i++ {
+		require.NoError(t, sink.EmitRow(
+			ctx, td, []byte("k"), []byte("v"), zeroTS, zeroTS, zeroAlloc, nil,
+		))
+	}
+	require.NoError(t, sink.Flush(ctx))
+	pcts = m.getBatchFillPcts()
+	require.Len(t, pcts, 2)
+	require.Equal(t, int64(100), pcts[1])
 }
 
 func TestNoLingerSink_MultiTopic(t *testing.T) {
