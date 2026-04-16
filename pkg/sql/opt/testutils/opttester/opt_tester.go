@@ -2235,7 +2235,7 @@ func (ot *OptTester) IndexCandidates() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	indexCandidates := indexrec.FindIndexCandidateSet(expr, ot.f.Memo().Metadata())
+	indexCandidates, _ := indexrec.FindIndexCandidateSet(expr, ot.f.Memo().Metadata())
 
 	// Build a formatted string to output from the map of indexCandidates.
 	tablesOutput := make([]string, 0, len(indexCandidates))
@@ -2278,8 +2278,8 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 		return "", err
 	}
 	md := ot.f.Memo().Metadata()
-	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
-	_, hypTables := indexrec.BuildOptAndHypTableMaps(ot.catalog, indexCandidates)
+	indexCandidates, candidateAttrs := indexrec.FindIndexCandidateSet(normExpr, md)
+	_, hypTables := indexrec.BuildOptAndHypTableMaps(ot.catalog, indexCandidates, candidateAttrs)
 
 	optExpr, err := ot.OptimizeWithTables(hypTables)
 	if err != nil {

@@ -4404,9 +4404,9 @@ top-k
       └── projections
            └── vec1:9 <-> vec2:10 [as=column15:15, outer=(9,10), immutable]
 
-# Currently, the vector column must be the left argument.
-# TODO(drewk, mw5h): add a normalization rule to flip the args.
-opt expect-not=GenerateVectorSearch
+# The CommuteVar normalization rule flips the args so that the variable is on
+# the left, enabling GenerateVectorSearch to match.
+opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY '[3,1,2]' <-> vec1 LIMIT 5;
 ----
 top-k
@@ -4423,19 +4423,20 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── scan index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
+      │    ├── fd: (1)-->(2-11)
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
-           └── '[3,1,2]' <-> vec1:9 [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
 # Currently, there can be no extra filters beyond those used to constrain index
 # prefix columns, if any.

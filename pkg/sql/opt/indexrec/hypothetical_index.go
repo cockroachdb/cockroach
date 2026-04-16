@@ -45,6 +45,10 @@ type hypotheticalIndex struct {
 
 	// typ indicates the type of the index - forward, inverted, or vector.
 	typ idxtype.T
+
+	// vectorConfig stores the vector index configuration, including the distance
+	// metric. Only set for vector indexes.
+	vectorConfig *vecpb.Config
 }
 
 var _ cat.Index = &hypotheticalIndex{}
@@ -56,6 +60,7 @@ func (hi *hypotheticalIndex) init(
 	indexOrd int,
 	typ idxtype.T,
 	zone cat.Zone,
+	attrs IndexCandidateAttrs,
 ) {
 	hi.tab = tab
 	hi.name = name
@@ -63,6 +68,10 @@ func (hi *hypotheticalIndex) init(
 	hi.indexOrdinal = indexOrd
 	hi.typ = typ
 	hi.zone = zone
+
+	if typ == idxtype.VECTOR {
+		hi.vectorConfig = &vecpb.Config{DistanceMetric: attrs.VectorDistMetrics[cols[len(cols)-1].ColID()]}
+	}
 
 	// Build an index column ordinal set.
 	var colsOrdSet intsets.Fast
@@ -178,7 +187,10 @@ func (hi *hypotheticalIndex) InvertedColumn() cat.IndexColumn {
 
 // VectorColumn is part of the cat.Index interface.
 func (hi *hypotheticalIndex) VectorColumn() cat.IndexColumn {
-	panic(errors.AssertionFailedf("hypothetical indexes do not have vector columns"))
+	if hi.Type() != idxtype.VECTOR {
+		panic(errors.AssertionFailedf("non-vector indexes do not have vector columns"))
+	}
+	return hi.cols[len(hi.cols)-1]
 }
 
 // Predicate is part of the cat.Index interface.
@@ -232,7 +244,10 @@ func (hi *hypotheticalIndex) GeoConfig() geopb.Config {
 
 // VecConfig is part of the cat.Index interface.
 func (hi *hypotheticalIndex) VecConfig() *vecpb.Config {
-	return nil
+	if hi.Type() != idxtype.VECTOR {
+		return nil
+	}
+	return hi.vectorConfig
 }
 
 // Version is part of the cat.Index interface.

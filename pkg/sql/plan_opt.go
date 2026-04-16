@@ -1197,8 +1197,8 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 
 	// Walk through the fully normalized memo to determine index candidates and
 	// create hypothetical tables.
-	indexCandidates := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
-	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(opc.catalog, indexCandidates)
+	indexCandidates, candidateAttrs := indexrec.FindIndexCandidateSet(f.Memo().RootExpr(), f.Metadata())
+	optTables, hypTables := indexrec.BuildOptAndHypTableMaps(opc.catalog, indexCandidates, candidateAttrs)
 
 	// Optimize with the saved memo and hypothetical tables. Walk through the
 	// optimal plan to determine index recommendations.
