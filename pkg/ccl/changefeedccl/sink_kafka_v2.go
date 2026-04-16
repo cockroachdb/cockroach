@@ -418,6 +418,13 @@ func makeKafkaSinkV2(
 		return nil, err
 	}
 
+	if NoLingerBatchingSinkEnabled.Get(&settings.SV) {
+		return makeNoLingerSink(
+			ctx, sinkTypeKafka, client, retryOpts, parallelism,
+			batchCfg.Messages, batchCfg.Bytes, topicNamer, mb(true), settings,
+		), nil
+	}
+
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }

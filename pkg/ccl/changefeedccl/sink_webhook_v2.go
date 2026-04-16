@@ -456,6 +456,21 @@ func makeWebhookSink(
 		return nil, err
 	}
 
+	if NoLingerBatchingSinkEnabled.Get(&settings.SV) {
+		return makeNoLingerSink(
+			ctx,
+			sinkTypeWebhook,
+			sinkClient,
+			retryOpts,
+			parallelism,
+			batchCfg.Messages,
+			batchCfg.Bytes,
+			nil, // topicNamer
+			m,
+			settings,
+		), nil
+	}
+
 	return makeBatchingSink(
 		ctx,
 		sinkTypeWebhook,

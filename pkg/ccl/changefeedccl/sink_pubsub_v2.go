@@ -480,6 +480,13 @@ func makePubsubSink(
 		return nil, err
 	}
 
+	if NoLingerBatchingSinkEnabled.Get(&settings.SV) {
+		return makeNoLingerSink(
+			ctx, sinkTypePubsub, sinkClient, retryOpts, parallelism,
+			batchCfg.Messages, batchCfg.Bytes, topicNamer, m, settings,
+		), nil
+	}
+
 	return makeBatchingSink(
 		ctx,
 		sinkTypePubsub,
