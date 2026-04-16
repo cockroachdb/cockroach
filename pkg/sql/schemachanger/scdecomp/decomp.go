@@ -391,7 +391,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		if ttl := tbl.GetRowLevelTTL(); ttl != nil {
 			// We pull out the TTL expression so that we can build proper column
 			// dependencies with whatever column is used.
-			ttlExpr, err := w.newExpression(string(ttl.GetTTLExpr()))
+			ttlExpr, err := w.newExpression(ttl.GetTTLExpr())
 			if err != nil {
 				panic(err)
 			}
@@ -934,14 +934,14 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		w.ev(scpb.Status_PUBLIC, &scpb.TriggerWhen{
 			TableID:   tbl.GetID(),
 			TriggerID: t.ID,
-			WhenExpr:  t.WhenExpr,
+			WhenExpr:  string(t.WhenExpr),
 		})
 	}
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerFunctionCall{
 		TableID:   tbl.GetID(),
 		TriggerID: t.ID,
 		FuncID:    t.FuncID,
-		FuncBody:  t.FuncBody,
+		FuncBody:  string(t.FuncBody),
 		FuncArgs:  t.FuncArgs,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
@@ -1105,7 +1105,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			Type:  *typeT,
 		}
 		if param.DefaultExpr != nil {
-			expr, err := w.newExpression(*param.DefaultExpr)
+			expr, err := w.newExpression(catpb.Expression(*param.DefaultExpr))
 			if err != nil {
 				panic(err)
 			}
@@ -1147,7 +1147,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 
 	fnBody := &scpb.FunctionBody{
 		FunctionID:  fnDesc.GetID(),
-		Body:        fnDesc.GetFunctionBody(),
+		Body:        string(fnDesc.GetFunctionBody()),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
 	}

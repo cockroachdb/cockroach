@@ -817,8 +817,8 @@ func TestKeysPerRow(t *testing.T) {
 
 func TestColumnNeedsBackfill(t *testing.T) {
 	// Define variable strings here such that we can pass their address below.
-	null := "NULL"
-	four := "4:::INT8"
+	null := catpb.Expression("NULL")
+	four := catpb.Expression("4:::INT8")
 
 	// Create Column Descriptors that reflect the definition of a column with a
 	// default value of NULL that was set implicitly, one that was set explicitly,

@@ -214,7 +214,7 @@ func HasValidColumnReferences(desc catalog.TableDescriptor, rootExpr tree.Expr) 
 func FormatExprForDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -239,7 +239,7 @@ func FormatExprForDisplay(
 func FormatExprForExpressionIndexDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -273,7 +273,7 @@ func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn
 func ParseTriggerWhenExprForDisplay(
 	ctx context.Context,
 	tableTyp *types.T,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
@@ -300,7 +300,7 @@ func ParseTriggerWhenExprForDisplay(
 func formatExprForDisplayImpl(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -330,7 +330,7 @@ func formatExprForDisplayImpl(
 func parseExprForDisplayImpl(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
@@ -346,12 +346,12 @@ func parseExprForDisplayImpl(
 func deserializeExprForFormatting(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
-	expr, err := parserutils.ParseExpr(exprStr)
+	expr, err := parserutils.ParseExpr(string(exprStr))
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +549,7 @@ func ValidateTTLExpression(
 		return nil
 	}
 	expirationExpr := rowLevelTTL.ExpirationExpr
-	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, string(expirationExpr), col.GetID()); err != nil {
+	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, expirationExpr, col.GetID()); err != nil {
 		return err
 	} else if hasRef {
 		return sqlerrors.NewAlterDependsOnExpirationExprError(op, "column", string(col.ColName()), tn.Object(), string(expirationExpr))
@@ -584,7 +584,7 @@ func ValidatePolicyExpressionsDoNotDependOnColumn(
 	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
 ) error {
 	for _, p := range tableDesc.GetPolicies() {
-		checkExpr := func(expr string) error {
+		checkExpr := func(expr catpb.Expression) error {
 			if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, expr, dependentCol.GetID()); err != nil {
 				return err
 			} else if hasRef {
@@ -614,7 +614,7 @@ func ValidatePartialIndex(
 ) error {
 	for _, idx := range tableDesc.AllIndexes() {
 		if idx.IsPartial() {
-			expr, err := parserutils.ParseExpr(idx.GetPredicate())
+			expr, err := parserutils.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return err
 			}
@@ -749,8 +749,8 @@ func GetUDFIDs(e tree.Expr) (catalog.DescriptorIDSet, error) {
 // GetUDFIDsFromExprStr extracts all UDF descriptor ids from the given
 // expression string, assuming that the UDF names has been replaced with OID
 // references. It's a convenient wrapper of GetUDFIDs.
-func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
-	expr, err := parserutils.ParseExpr(exprStr)
+func GetUDFIDsFromExprStr(exprStr catpb.Expression) (catalog.DescriptorIDSet, error) {
+	expr, err := parserutils.ParseExpr(string(exprStr))
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
 	}
@@ -758,9 +758,11 @@ func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
 }
 
 func validateExpressionDoesNotDependOnColumn(
-	tableDesc catalog.TableDescriptor, expirationExpr string, dependentColID descpb.ColumnID,
+	tableDesc catalog.TableDescriptor,
+	expirationExpr catpb.Expression,
+	dependentColID descpb.ColumnID,
 ) (bool, error) {
-	expr, err := parserutils.ParseExpr(expirationExpr)
+	expr, err := parserutils.ParseExpr(string(expirationExpr))
 	if err != nil {
 		// At this point, we should be able to parse the expression.
 		return false, errors.WithAssertionFailure(err)

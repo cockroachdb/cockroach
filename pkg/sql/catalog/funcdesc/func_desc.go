@@ -629,7 +629,7 @@ func (desc *Mutable) SetLang(v catpb.Function_Language) {
 }
 
 // SetFuncBody sets the function body.
-func (desc *Mutable) SetFuncBody(v string) {
+func (desc *Mutable) SetFuncBody(v descpb.RoutineBody) {
 	desc.FunctionBody = v
 }
 
@@ -1029,7 +1029,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	}
 	ret = &tree.Overload{
 		Oid:           catid.FuncIDToOID(desc.ID),
-		Body:          desc.FunctionBody,
+		Body:          string(desc.FunctionBody),
 		Type:          routineType,
 		Version:       uint64(desc.Version),
 		Language:      desc.getCreateExprLang(),
@@ -1139,7 +1139,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 	ret.Options = append(ret.Options, desc.getCreateExprVolatility())
 	ret.Options = append(ret.Options, tree.RoutineLeakproof(desc.LeakProof))
 	ret.Options = append(ret.Options, desc.getCreateExprNullInputBehavior())
-	ret.Options = append(ret.Options, tree.RoutineBodyStr(desc.FunctionBody))
+	ret.Options = append(ret.Options, tree.RoutineBodyStr(string(desc.FunctionBody)))
 	ret.Options = append(ret.Options, desc.getCreateExprLang())
 	ret.Options = append(ret.Options, desc.getCreateExprSecurity())
 	return ret, nil

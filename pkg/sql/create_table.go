@@ -843,7 +843,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		Name:         constraintName,
 		TableID:      tbl.ID,
 		ColumnIDs:    columnIDs,
-		Predicate:    predicate,
+		Predicate:    descpb.Expression(predicate),
 		Validity:     validity,
 		ConstraintID: tbl.NextConstraintID,
 	}
@@ -1313,7 +1313,7 @@ func newTableDescIfAs(
 	if err != nil {
 		return nil, err
 	}
-	desc.CreateQuery = createQuery
+	desc.CreateQuery = descpb.Statement(createQuery)
 	return desc, nil
 }
 
@@ -1774,7 +1774,7 @@ func NewTableDesc(
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
 		if col.IsComputed() {
-			expr, err := parser.ParseExpr(*col.ComputeExpr)
+			expr, err := parser.ParseExpr(string(*col.ComputeExpr))
 			if err != nil {
 				return nil, err
 			}
@@ -1783,7 +1783,8 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
-			col.ComputeExpr = &deqExpr
+			expr := descpb.Expression(deqExpr)
+			col.ComputeExpr = &expr
 		}
 	}
 
@@ -1875,7 +1876,8 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col.ColumnDesc().ComputeExpr = &serializedExpr
+				expr := descpb.Expression(serializedExpr)
+				col.ColumnDesc().ComputeExpr = &expr
 			}
 		}
 	}
@@ -1999,7 +2001,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				idx.Predicate = expr
+				idx.Predicate = descpb.Expression(expr)
 			}
 			if err := addSecondaryIdx(idx, d.StorageParams); err != nil {
 				return nil, err
@@ -2115,7 +2117,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				idx.Predicate = expr
+				idx.Predicate = descpb.Expression(expr)
 			}
 			if d.PrimaryKey {
 				if err := addPrimaryIdx(idx, d.StorageParams); err != nil {
@@ -2686,7 +2688,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			if c.DefaultExpr != nil {
 				_, shouldCopyColumnDefault := shouldCopyColumnDefaultSet[c.Name]
 				if opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault {
-					def.DefaultExpr.Expr, err = parser.ParseExpr(*c.DefaultExpr)
+					def.DefaultExpr.Expr, err = parser.ParseExpr(string(*c.DefaultExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2696,7 +2698,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				if opts.Has(tree.LikeTableOptGenerated) {
 					def.Computed.Computed = true
 					def.Computed.Virtual = c.Virtual
-					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
+					def.Computed.Expr, err = parser.ParseExpr(string(*c.ComputeExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2704,7 +2706,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 			if c.OnUpdateExpr != nil {
 				if opts.Has(tree.LikeTableOptDefaults) {
-					def.OnUpdateExpr.Expr, err = parser.ParseExpr(*c.OnUpdateExpr)
+					def.OnUpdateExpr.Expr, err = parser.ParseExpr(string(*c.OnUpdateExpr))
 					if err != nil {
 						return nil, err
 					}
@@ -2718,7 +2720,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					Name:                  tree.Name(c.Name),
 					FromHashShardedColumn: c.FromHashShardedColumn,
 				}
-				def.Expr, err = parser.ParseExpr(c.Expr)
+				def.Expr, err = parser.ParseExpr(string(c.Expr))
 				if err != nil {
 					return nil, err
 				}
@@ -2741,7 +2743,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				defs = append(defs, &def)
 				if c.IsPartial() {
-					def.Predicate, err = parser.ParseExpr(c.Predicate)
+					def.Predicate, err = parser.ParseExpr(string(c.Predicate))
 					if err != nil {
 						return nil, err
 					}
@@ -2787,7 +2789,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					if col.IsExpressionIndexColumn() {
 						elem.Column = ""
-						elem.Expr, err = parser.ParseExpr(col.GetComputeExpr())
+						elem.Expr, err = parser.ParseExpr(string(col.GetComputeExpr()))
 						if err != nil {
 							return nil, err
 						}
@@ -2813,7 +2815,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 				}
 				if idx.IsPartial() {
-					indexDef.Predicate, err = parser.ParseExpr(idx.GetPredicate())
+					indexDef.Predicate, err = parser.ParseExpr(string(idx.GetPredicate()))
 					if err != nil {
 						return nil, err
 					}

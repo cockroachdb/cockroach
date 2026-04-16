@@ -74,7 +74,7 @@ SELECT b FROM defaultdb.public.t@t_idx_b;
 SELECT c FROM defaultdb.public.t@t_idx_c;
 SELECT a FROM defaultdb.public.v;
 SELECT nextval(105:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
@@ -220,7 +220,7 @@ $$;
 			`SELECT b FROM defaultdb.public.t1@t1_idx_b;
 SELECT a FROM defaultdb.public.v1;
 SELECT nextval(106:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
@@ -264,7 +264,7 @@ $$;
 			`SELECT b FROM defaultdb.public.t2@t2_idx_b;
 SELECT a FROM defaultdb.public.v2;
 SELECT nextval(107:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]

@@ -2513,8 +2513,8 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 // without database-qualified table names (e.g. "db.public.t" becomes
 // "public.t"). PostgreSQL does not have cross-database references, so
 // view definitions should only use schema-qualified names.
-func viewQueryWithoutDatabasePrefix(viewQuery string) (string, error) {
-	stmt, err := parser.ParseOne(viewQuery)
+func viewQueryWithoutDatabasePrefix(viewQuery catpb.Statement) (catpb.Statement, error) {
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return "", err
 	}
@@ -2533,7 +2533,7 @@ func viewQueryWithoutDatabasePrefix(viewQuery string) (string, error) {
 		}),
 	)
 	fmtCtx.FormatNode(stmt.AST)
-	return fmtCtx.CloseAndGetString(), nil
+	return catpb.Statement(fmtCtx.CloseAndGetString()), nil
 }
 
 // indexDefFromDescriptor creates an index definition (`CREATE INDEX ... ON (...)`) from
@@ -2667,8 +2667,8 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
-					tree.DBoolTrue,                 // ispopulated
-					tree.NewDString(viewQuery+";"), // definition
+					tree.DBoolTrue,                         // ispopulated
+					tree.NewDString(string(viewQuery+";")), // definition
 				)
 			})
 	},
@@ -3259,11 +3259,11 @@ func addPgProcUDFRow(
 		argNames,                                        // proargnames
 		argDefaults,                                     // proargdefaults
 		tree.DNull,                                      // protrftypes
-		tree.NewDString(fnDesc.GetFunctionBody()),       // prosrc
-		tree.DNull,                                      // probin
-		tree.DNull,                                      // prosqlbody
-		tree.DNull,                                      // proconfig
-		proacl,                                          // proacl
+		tree.NewDString(string(fnDesc.GetFunctionBody())), // prosrc
+		tree.DNull, // probin
+		tree.DNull, // prosqlbody
+		tree.DNull, // proconfig
+		proacl,     // proacl
 	)
 }
 
@@ -3889,7 +3889,7 @@ https://www.postgresql.org/docs/16/catalog-pg-trigger.html`,
 					// tgqual: WHEN condition expression (internal format).
 					var tgqual tree.Datum = tree.DNull
 					if trigger.WhenExpr != "" {
-						tgqual = tree.NewDString(trigger.WhenExpr)
+						tgqual = tree.NewDString(string(trigger.WhenExpr))
 					}
 
 					if err := addRow(
@@ -5705,10 +5705,10 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 					}
 				}
 				return addRow(
-					tree.NewDName(sc.GetName()),    // schemaname
-					tree.NewDName(desc.GetName()),  // viewname
-					owner,                          // viewowner
-					tree.NewDString(viewQuery+";"), // definition
+					tree.NewDName(sc.GetName()),            // schemaname
+					tree.NewDName(desc.GetName()),          // viewname
+					owner,                                  // viewowner
+					tree.NewDString(string(viewQuery+";")), // definition
 				)
 			})
 	},
@@ -5920,7 +5920,7 @@ func (h oidHasher) writeUniqueConstraint(uc catalog.UniqueWithoutIndexConstraint
 
 func (h oidHasher) writeCheckConstraint(check catalog.CheckConstraint) {
 	h.writeStr(check.GetName())
-	h.writeStr(check.GetExpr())
+	h.writeStr(string(check.GetExpr()))
 }
 
 func (h oidHasher) writeForeignKeyConstraint(fk catalog.ForeignKeyConstraint) {

@@ -8,6 +8,7 @@ package backfill
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -220,8 +221,8 @@ func indexColumns(idx catalog.Index) (s catalog.TableColSet) {
 func addIndexColumnsFromExpressions(
 	s catalog.TableColSet, table catalog.TableDescriptor, addIndexes []catalog.Index,
 ) (catalog.TableColSet, error) {
-	addReferencesFromExpression := func(expression string) error {
-		expr, err := parser.ParseExpr(expression)
+	addReferencesFromExpression := func(expression catpb.Expression) error {
+		expr, err := parser.ParseExpr(string(expression))
 		if err != nil {
 			return err
 		}

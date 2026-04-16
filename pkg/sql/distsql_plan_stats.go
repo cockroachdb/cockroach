@@ -539,7 +539,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if len(virtComputedCols) != 0 {
 		exprStrings := make([]string, 0, len(virtComputedCols))
 		for _, col := range virtComputedCols {
-			exprStrings = append(exprStrings, col.GetComputeExpr())
+			exprStrings = append(exprStrings, string(col.GetComputeExpr()))
 		}
 
 		virtComputedExprs, err := parser.ParseExprs(exprStrings)

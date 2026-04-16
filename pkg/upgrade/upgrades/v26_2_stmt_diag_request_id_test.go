@@ -91,7 +91,6 @@ func TestStmtDiagnosticsRequestIDMigration(t *testing.T) {
 // getOldStatementDiagnosticsDescriptor returns the system.statement_diagnostics
 // table descriptor that was being used before adding the request_id column.
 func getOldStatementDiagnosticsDescriptor() *descpb.TableDescriptor {
-	uniqueRowIDString := "unique_rowid()"
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.StatementDiagnosticsTableName),
 		ID:                      keys.StatementDiagnosticsTableID,
@@ -99,7 +98,7 @@ func getOldStatementDiagnosticsDescriptor() *descpb.TableDescriptor {
 		UnexposedParentSchemaID: keys.PublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: new(descpb.Expression("unique_rowid()")), Nullable: false},
 			{Name: "statement_fingerprint", ID: 2, Type: types.String, Nullable: false},
 			{Name: "statement", ID: 3, Type: types.String, Nullable: false},
 			{Name: "collected_at", ID: 4, Type: types.TimestampTZ, Nullable: false},

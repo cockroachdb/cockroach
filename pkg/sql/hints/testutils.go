@@ -24,10 +24,6 @@ import (
 // The tableID parameter specifies the ID to use for the descriptor. Pass
 // descpb.InvalidID if the ID will be set later (e.g., by InjectLegacyTable).
 func GetOldStatementHintsDescriptor(tableID descpb.ID) *descpb.TableDescriptor {
-	uniqueRowIDString := "unique_rowid()"
-	nowTZString := "now():::TIMESTAMPTZ"
-	statementHintsComputeExpr := "fnv64(fingerprint)"
-
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.StatementHintsTableName),
 		ID:                      tableID,
@@ -35,11 +31,11 @@ func GetOldStatementHintsDescriptor(tableID descpb.ID) *descpb.TableDescriptor {
 		UnexposedParentSchemaID: keys.PublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
-			{Name: "row_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
-			{Name: "hash", ID: 2, Type: types.Int, Hidden: true, ComputeExpr: &statementHintsComputeExpr, Nullable: false},
+			{Name: "row_id", ID: 1, Type: types.Int, DefaultExpr: new(descpb.Expression("unique_rowid()")), Nullable: false},
+			{Name: "hash", ID: 2, Type: types.Int, Hidden: true, ComputeExpr: new(descpb.Expression("fnv64(fingerprint)")), Nullable: false},
 			{Name: "fingerprint", ID: 3, Type: types.String, Nullable: false},
 			{Name: "hint", ID: 4, Type: types.Bytes, Nullable: false},
-			{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
+			{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: new(descpb.Expression("now():::TIMESTAMPTZ")), Nullable: false},
 			// NOTE: hint_type, hint_name, enabled, and database columns
 			// (IDs 6, 7, 8, 9) are NOT included.
 		},

@@ -64,7 +64,6 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 // TestIndexBackfiller tests the MVCC-compatible index backfill with temporary indexes.
@@ -309,7 +308,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ID:             mut.NextColumnID,
 					Type:           types.Int,
 					Nullable:       false,
-					DefaultExpr:    proto.String("42"),
+					DefaultExpr:    new(descpb.Expression("42")),
 					Hidden:         false,
 					PGAttributeNum: descpb.PGAttributeNum(mut.NextColumnID),
 				}
@@ -322,7 +321,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ID:             mut.NextColumnID,
 					Type:           types.Int,
 					Nullable:       false,
-					ComputeExpr:    proto.String("i + def"),
+					ComputeExpr:    new(descpb.Expression("i + def")),
 					Hidden:         false,
 					PGAttributeNum: descpb.PGAttributeNum(mut.NextColumnID),
 				}

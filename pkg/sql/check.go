@@ -49,7 +49,7 @@ func validateCheckExpr(
 	semaCtx *tree.SemaContext,
 	txn isql.Txn,
 	sessionData *sessiondata.SessionData,
-	exprStr string,
+	exprStr catpb.Expression,
 	tableDesc *tabledesc.Mutable,
 	indexIDForValidation descpb.IndexID,
 ) (violatingRow tree.Datums, formattedCkExpr string, err error) {
@@ -494,7 +494,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					tableDesc,
 					index.GetName(),
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
-					index.GetPredicate(),
+					string(index.GetPredicate()),
 					0, /* indexIDForValidation */
 					p.InternalSQLTxn(),
 					p.User(),
@@ -514,7 +514,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				tableDesc,
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
-				uc.GetPredicate(),
+				string(uc.GetPredicate()),
 				0, /* indexIDForValidation */
 				p.InternalSQLTxn(),
 				p.User(),
@@ -574,7 +574,7 @@ func RevalidateUniqueConstraintsInTable(
 				tableDesc,
 				index.GetName(),
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
-				index.GetPredicate(),
+				string(index.GetPredicate()),
 				0, /* indexIDForValidation */
 				txn,
 				user,
@@ -594,7 +594,7 @@ func RevalidateUniqueConstraintsInTable(
 				tableDesc,
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
-				uc.GetPredicate(),
+				string(uc.GetPredicate()),
 				0, /* indexIDForValidation */
 				txn,
 				user,

@@ -388,7 +388,7 @@ type TableDescriptor interface {
 
 	// GetCreateQuery returns the full CREATE TABLE AS query that was used for
 	// table's creation. Only valid if IsAs is true.
-	GetCreateQuery() string
+	GetCreateQuery() catpb.Statement
 	// GetCreateAsOfTime returns the transaction timestamp that this table was
 	// created at, for materialized views and CREATE TABLE AS. Only valid if
 	// IsAs or MaterializedView returns true.
@@ -396,7 +396,7 @@ type TableDescriptor interface {
 
 	// GetViewQuery returns this view's CREATE VIEW declaration. Only valid if
 	// IsView is true.
-	GetViewQuery() string
+	GetViewQuery() catpb.Statement
 
 	// GetDropTime returns the timestamp at which the table is truncated or
 	// dropped. It's represented as the current time in nanoseconds since the
@@ -1118,7 +1118,7 @@ type FunctionDescriptor interface {
 	GetNullInputBehavior() catpb.Function_NullInputBehavior
 
 	// GetFunctionBody returns the function body string.
-	GetFunctionBody() string
+	GetFunctionBody() catpb.RoutineBody
 
 	// GetParams returns a list of all parameters of the function.
 	GetParams() []descpb.FunctionDescriptor_Parameter

@@ -238,15 +238,15 @@ func TestTransactionStatisticsComputedColumnsMigration(t *testing.T) {
 // table descriptor that was being used before adding the new computed columns,
 // covering index, and dropping old metric indexes.
 func getOldStatementStatisticsDescriptor() *descpb.TableDescriptor {
-	defaultIndexRec := "ARRAY[]:::STRING[]"
-	sqlStmtHashComputeExpr := "mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)"
-	indexUsageComputeExpr := "(statistics->'statistics':::STRING)->'indexes':::STRING"
-	executionCountComputeExpr := "((statistics->'statistics':::STRING)->'cnt':::STRING)::INT8"
-	serviceLatencyComputeExpr := "(((statistics->'statistics':::STRING)->'svcLat':::STRING)->'mean':::STRING)::FLOAT8"
-	cpuSqlNanosComputeExpr := "(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'mean':::STRING)::FLOAT8"
-	contentionTimeComputeExpr := "(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8"
-	totalEstimatedExecutionTimeExpr := "((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8"
-	p99LatencyComputeExpr := "(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8"
+	defaultIndexRec := catpb.Expression("ARRAY[]:::STRING[]")
+	sqlStmtHashComputeExpr := catpb.Expression("mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)")
+	indexUsageComputeExpr := catpb.Expression("(statistics->'statistics':::STRING)->'indexes':::STRING")
+	executionCountComputeExpr := catpb.Expression("((statistics->'statistics':::STRING)->'cnt':::STRING)::INT8")
+	serviceLatencyComputeExpr := catpb.Expression("(((statistics->'statistics':::STRING)->'svcLat':::STRING)->'mean':::STRING)::FLOAT8")
+	cpuSqlNanosComputeExpr := catpb.Expression("(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'mean':::STRING)::FLOAT8")
+	contentionTimeComputeExpr := catpb.Expression("(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8")
+	totalEstimatedExecutionTimeExpr := catpb.Expression("((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8")
+	p99LatencyComputeExpr := catpb.Expression("(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8")
 
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.StatementStatisticsTableName),
@@ -507,13 +507,13 @@ func getOldStatementStatisticsDescriptor() *descpb.TableDescriptor {
 // table descriptor that was being used before adding the new computed columns,
 // covering index, and dropping old metric indexes.
 func getOldTransactionStatisticsDescriptor() *descpb.TableDescriptor {
-	sqlTxnHashComputeExpr := `mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
-	executionCountComputeExpr := "((statistics->'statistics':::STRING)->'cnt':::STRING)::INT8"
-	serviceLatencyComputeExpr := "(((statistics->'statistics':::STRING)->'svcLat':::STRING)->'mean':::STRING)::FLOAT8"
-	cpuSqlNanosComputeExpr := "(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'mean':::STRING)::FLOAT8"
-	contentionTimeComputeExpr := "(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8"
-	totalEstimatedExecutionTimeExpr := "((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8"
-	p99LatencyComputeExpr := "(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8"
+	sqlTxnHashComputeExpr := catpb.Expression(`mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`)
+	executionCountComputeExpr := catpb.Expression("((statistics->'statistics':::STRING)->'cnt':::STRING)::INT8")
+	serviceLatencyComputeExpr := catpb.Expression("(((statistics->'statistics':::STRING)->'svcLat':::STRING)->'mean':::STRING)::FLOAT8")
+	cpuSqlNanosComputeExpr := catpb.Expression("(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'mean':::STRING)::FLOAT8")
+	contentionTimeComputeExpr := catpb.Expression("(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8")
+	totalEstimatedExecutionTimeExpr := catpb.Expression("((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8")
+	p99LatencyComputeExpr := catpb.Expression("(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8")
 
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.TransactionStatisticsTableName),
