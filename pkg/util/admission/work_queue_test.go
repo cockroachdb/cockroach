@@ -401,6 +401,13 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	dir := datapathutils.TestDataPath(t, "cpu_time_token_work_queue")
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		runCPUTimeTokenWorkQueueTest(t, path)
+	})
+}
+
+func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 	var q *WorkQueue
 	closeFn := func() {
 		if q != nil {
@@ -417,7 +424,7 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	var st *cluster.Settings
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_work_queue"),
+	datadriven.RunTest(t, path,
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -550,6 +557,18 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 
 			case "gc-tenants-and-reset-used":
 				q.gcTenantsResetUsedAndUpdateEstimators()
+				return ""
+
+			case "set-tenant-max-cpu":
+				var tenantID uint64
+				var v bool
+				d.ScanArgs(t, "tenant", &tenantID)
+				d.ScanArgs(t, "v", &v)
+				q.mu.Lock()
+				if ti, ok := q.mu.tenants[tenantID]; ok {
+					ti.cpuTimeBurstBucket.maxCPU = v
+				}
+				q.mu.Unlock()
 				return ""
 
 			default:
