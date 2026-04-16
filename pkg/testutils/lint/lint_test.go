@@ -1192,6 +1192,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!cmd/dev/**",
+			":!cmd/docgen/**",
 			":!cmd/mirror/**",
 		)
 		if err != nil {
