@@ -1,0 +1,143 @@
+###
+# This test exercises priority-based resource groups. When
+# set-priority-based-groups is enabled, work is routed to resource
+# groups based on WorkInfo.Priority rather than WorkInfo.TenantID:
+#   - priority >= 0 (NormalPri) -> group 1 (high)
+#   - priority < 0              -> group 2 (low)
+#
+# This means work from different tenants but the same priority band
+# shares the same group, and work from the same tenant but different
+# priority bands goes to different groups.
+#
+# Note: admit id= is a test-local handle for tracking admit results,
+# unrelated to tenant or group IDs.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+set-priority-based-groups v=true
+----
+
+# Admit high-priority work (priority=0, NormalPri). Should route to
+# group 1 regardless of tenant ID.
+admit id=1 tenant=10 priority=0 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 1: admit succeeded
+
+admit id=2 tenant=20 priority=0 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 2: admit succeeded
+
+# Both high-pri admits (different tenants) should land in group 1.
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 1 used: 2, w: 1, fifo: -128
+burst-buckets: t1=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
+
+# Admit low-priority work (priority=-30, BulkNormalPri). Should route
+# to group 2 regardless of tenant ID.
+admit id=3 tenant=10 priority=-30 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 3: admit succeeded
+
+admit id=4 tenant=20 priority=-30 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 4: admit succeeded
+
+# Print: should show two groups (1 and 2), not four tenant-based groups.
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 1 used: 2, w: 1, fifo: -128
+ group-id: 2 used: 2, w: 1, fifo: -128
+burst-buckets: t1=fullness=0.0% tokens=-2 capacity=0 qual=no_burst t2=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
+
+###
+# Verify AdmittedWorkDone uses the correct group. Complete work from
+# different tenants and check that used is adjusted on the right group.
+###
+
+work-done id=1 cpu-time=100
+----
+tookWithoutPermission 99
+
+work-done id=3 cpu-time=200
+----
+tookWithoutPermission 199
+
+# Group 1 (high) should have used adjusted for id=1's cpu-time.
+# Group 2 (low) should have used adjusted for id=3's cpu-time.
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 1 used: 101, w: 1, fifo: -128
+ group-id: 2 used: 201, w: 1, fifo: -128
+burst-buckets: t1=fullness=0.0% tokens=-101 capacity=0 qual=no_burst t2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
+
+###
+# Verify burst qualification works correctly with priority-based groups.
+# Set group 1 (high) to maxCPU and queue work.
+###
+
+set-max-cpu-groups group=1 v=true
+----
+
+set-try-get-return-value v=false
+----
+
+# Queue high-pri and low-pri work.
+admit id=5 tenant=10 priority=0 requested-count=1
+----
+tryGet: input can_burst, returning false
+
+admit id=6 tenant=10 priority=-30 requested-count=1
+----
+
+gc-groups-and-reset-used
+----
+
+# Group 1 (high, can_burst via maxCPU) should be granted before
+# group 2 (low, no_burst).
+granted chain-id=1
+----
+continueGrantChain 1
+id 5: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 6: admit succeeded
+granted: returned 1
+
+###
+# Disable priority-based groups. Work should now route by tenant ID.
+###
+
+set-try-get-return-value v=true
+----
+
+set-priority-based-groups v=false
+----
+
+admit id=7 tenant=50 priority=0 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 7: admit succeeded
+
+# Should show group 50 (tenant-based), not group 1.
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 50 used: 1, w: 1, fifo: -128
+burst-buckets: t1=fullness=0.0% tokens=-102 capacity=0 maxCPU=true qual=can_burst t2=fullness=0.0% tokens=-202 capacity=0 qual=no_burst t50=fullness=0.0% tokens=-1 capacity=0 qual=no_burst

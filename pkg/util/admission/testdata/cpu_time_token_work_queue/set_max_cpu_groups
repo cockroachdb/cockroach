@@ -1,0 +1,174 @@
+###
+# This test exercises SetMaxCPUGroups, which dynamically updates the
+# maxCPU flag on existing groups. When maxCPU transitions from false
+# to true, the group should immediately qualify for burst (can_burst).
+# When it transitions back, the group reverts to the 90%-fullness
+# check. The heap position is updated on each transition.
+#
+# Note: admit id= is a test-local handle for tracking admit results,
+# unrelated to tenant or group IDs.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+# Create two groups.
+admit id=1 tenant=10 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 1: admit succeeded
+
+admit id=2 tenant=20 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 2: admit succeeded
+
+# Refill to 50% fullness. Neither group qualifies for burst.
+refill-burst-buckets to-add=51 capacity=100
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 10 used: 1, w: 1, fifo: -128
+ group-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=50.0% tokens=50 capacity=100 qual=no_burst t20=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+
+# Set group 10 to maxCPU=true via SetMaxCPUGroups. Group 10 should
+# now be can_burst despite being at only 50% fullness.
+set-max-cpu-groups group=10 v=true
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 10 used: 1, w: 1, fifo: -128
+ group-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst t20=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+
+# Queue work for both groups.
+set-try-get-return-value v=false
+----
+
+admit id=3 tenant=20 requested-count=1
+----
+tryGet: input no_burst, returning false
+
+admit id=4 tenant=10 requested-count=1
+----
+tryGet: input can_burst, returning false
+
+gc-groups-and-reset-used
+----
+
+# Group 10 (can_burst via maxCPU) should be granted first.
+granted chain-id=1
+----
+continueGrantChain 1
+id 4: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 3: admit succeeded
+granted: returned 1
+
+###
+# Now revoke maxCPU from group 10. It should revert to no_burst
+# since its bucket is below 90%.
+###
+
+set-try-get-return-value v=true
+----
+
+set-max-cpu-groups group=10 v=false
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 10 used: 1, w: 1, fifo: -128
+ group-id: 20 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=49.0% tokens=49 capacity=100 qual=no_burst t20=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+
+# Both groups are now no_burst. New work should report no_burst.
+admit id=5 tenant=10 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 5: admit succeeded
+
+###
+# Verify that SetMaxCPUGroups correctly updates the heap when burst
+# qualification changes while work is already queued. This exercises
+# the heap fix path: SetMaxCPUGroups calls groupHeap.fix() when it
+# transitions a group's burst qualification.
+###
+
+set-try-get-return-value v=false
+----
+
+admit id=6 tenant=10 requested-count=1
+----
+tryGet: input no_burst, returning false
+
+admit id=7 tenant=20 requested-count=1
+----
+
+gc-groups-and-reset-used
+----
+
+# Set maxCPU on group 10 while both groups have queued work. Group 10
+# should transition to can_burst and the heap should reorder.
+set-max-cpu-groups group=10 v=true
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 2 top group: 10
+ group-id: 10 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 20 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+burst-buckets: t10=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst t20=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+
+# Group 10 (can_burst via maxCPU) should be granted before group 20.
+granted chain-id=1
+----
+continueGrantChain 1
+id 6: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 7: admit succeeded
+granted: returned 1
+
+set-try-get-return-value v=true
+----
+
+# Revoke maxCPU to restore state for subsequent tests.
+set-max-cpu-groups group=10 v=false
+----
+
+###
+# Set maxCPU on a group that doesn't exist yet. The flag should be
+# picked up when the group is first created via Admit.
+###
+
+set-max-cpu-groups group=30 v=true
+----
+
+admit id=8 tenant=30 requested-count=1
+----
+tryGet: input can_burst, returning true
+id 8: admit succeeded
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: 10 used: 1, w: 1, fifo: -128
+ group-id: 20 used: 1, w: 1, fifo: -128
+ group-id: 30 used: 1, w: 1, fifo: -128
+burst-buckets: t10=fullness=47.0% tokens=47 capacity=100 qual=no_burst t20=fullness=48.0% tokens=48 capacity=100 qual=no_burst t30=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst
