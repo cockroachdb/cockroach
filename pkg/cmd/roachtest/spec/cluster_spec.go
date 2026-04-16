@@ -681,16 +681,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			availableVolumeTypes = append(availableVolumeTypes, "local-ssd")
 		}
 
-		switch cloud {
-		case AWS:
-			availableVolumeTypes = append(availableVolumeTypes, "gp3", "io2")
-		case GCE:
-			availableVolumeTypes = append(availableVolumeTypes, "pd-ssd")
-		case Azure:
-			availableVolumeTypes = append(availableVolumeTypes, "premium-ssd", "premium-ssd-v2", "ultra-disk")
-		case IBM:
-			availableVolumeTypes = append(availableVolumeTypes, "10iops-tier")
-		}
+		availableVolumeTypes = append(availableVolumeTypes, CloudVolumeTypes(cloud)...)
 
 		if len(availableVolumeTypes) > 0 {
 			rng, _ := randutil.NewPseudoRand()
