@@ -208,7 +208,7 @@ var NoLingerBatchingSinkEnabled = settings.RegisterBoolSetting(
 	"if enabled, sinks use a pull-based batching model where idle workers "+
 		"pull batches immediately instead of waiting for a flush timer, "+
 		"eliminating the need to tune min_flush_frequency",
-	false,
+	true,
 )
 
 func getSink(

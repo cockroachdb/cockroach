@@ -14,27 +14,11 @@ fix this by returning the pacer error from `addRow` to `EmitRow`.
 **To do**: Add `pacerFactory` parameter to `makeNoLingerSink`, call
 `pacer.Pace(ctx)` at the top of `addRow`, return error to `EmitRow`.
 
-## 2. No Buffer Bound / Backpressure
+## 2. Cluster Setting Defaults to True (Prototype Only)
 
-The design specifies a bounded pending buffer (event count or byte
-limit) where `addRow` blocks via `cond.Wait` when the buffer is full.
-The prototype's buffer is unbounded — `addRow` only blocks during flush.
-
-Without a bound, a slow sink with fast ingestion could accumulate
-unbounded memory in the pending buffer before backpressure kicks in.
-In practice, the changefeed's KV feed and memory quota provide an
-upstream bound, but the sink-level bound is still important for
-predictable memory usage.
-
-**To do**: Add `maxBufferedEvents` or `maxBufferedBytes` to
-`pendingBuffer`. In `addRow`, block while the limit is hit. In
-`getBatch`, broadcast after draining to wake blocked producers.
-
-## 3. Cluster Setting Defaults to False
-
-The design says the setting should be "on by default" for rollout. The
-prototype defaults to `false` since it hasn't been validated in
-production yet. Flip to `true` once confidence is established.
+The cluster setting is currently defaulted to `true` for roachtest
+validation on this branch. Before merging, flip back to `false` until
+production confidence is established.
 
 ## 4. Flush.Frequency Still Required by Sink Validation
 

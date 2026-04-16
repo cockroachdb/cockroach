@@ -182,7 +182,7 @@ func TestPendingBuffer_AddAndGetSingle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	e := pendingEvent{key: []byte("k1"), val: []byte("v1")}
 	pb.addRow("t", e)
 
@@ -201,7 +201,7 @@ func TestPendingBuffer_FIFO(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	for i, v := range []string{"v1", "v2", "v3"} {
 		_ = i
 		pb.addRow("t", pendingEvent{key: []byte("k"), val: []byte(v)})
@@ -221,7 +221,7 @@ func TestPendingBuffer_ConflictAvoidance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A1")})
 	pb.addRow("t", pendingEvent{key: []byte("B"), val: []byte("B1")})
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A2")})
@@ -266,7 +266,7 @@ func TestPendingBuffer_MultipleKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A1")})
 	pb.addRow("t", pendingEvent{key: []byte("B"), val: []byte("B1")})
 	pb.addRow("t", pendingEvent{key: []byte("C"), val: []byte("C1")})
@@ -303,7 +303,7 @@ func TestPendingBuffer_GetBatchBlocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 
 	done := make(chan *pendingBatch, 1)
 	go func() {
@@ -334,7 +334,7 @@ func TestPendingBuffer_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 
 	done := make(chan *pendingBatch, 1)
 	go func() {
@@ -362,7 +362,7 @@ func TestPendingBuffer_MaxMessages(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	for i := 0; i < 10; i++ {
 		pb.addRow("t", pendingEvent{
 			key: []byte("k"),
@@ -387,7 +387,7 @@ func TestPendingBuffer_MaxBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	// Each event: key(2) + val(10) = 12 bytes.
 	for i := 0; i < 5; i++ {
 		pb.addRow("t", pendingEvent{
@@ -407,7 +407,7 @@ func TestPendingBuffer_KeyGrouping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	// Add events: A x3, B x2, C x1 — interleaved.
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A1")})
 	pb.addRow("t", pendingEvent{key: []byte("B"), val: []byte("B1")})
@@ -437,7 +437,7 @@ func TestPendingBuffer_CompleteBatchRequeues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A1")})
 
 	batch1 := pb.getBatch(0, 0)
@@ -462,7 +462,7 @@ func TestPendingBuffer_DrainWithInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 	pb.addRow("t", pendingEvent{key: []byte("A"), val: []byte("A1")})
 
 	// Take a batch to create inflight work.
@@ -476,11 +476,49 @@ func TestPendingBuffer_DrainWithInflight(t *testing.T) {
 	require.Equal(t, 0, pb.totalEvents)
 }
 
+func TestPendingBuffer_Backpressure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pb := newPendingBuffer(3) // max 3 events
+
+	// Fill the buffer.
+	for i := 0; i < 3; i++ {
+		pb.addRow("t", pendingEvent{key: []byte("k"), val: []byte("v")})
+	}
+	require.Equal(t, 3, pb.totalEvents)
+
+	// Fourth addRow should block.
+	done := make(chan struct{})
+	go func() {
+		pb.addRow("t", pendingEvent{key: []byte("k"), val: []byte("v4")})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("addRow should block when buffer is full")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Drain one batch to make room.
+	batch := pb.getBatch(1, 0)
+	require.NotNil(t, batch)
+	pb.completeBatch(batch)
+
+	// The blocked addRow should now complete.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("addRow should unblock after drain")
+	}
+}
+
 func TestPendingBuffer_RequeueByMVCC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pb := newPendingBuffer()
+	pb := newPendingBuffer(0)
 
 	// Key A: 6 events with mvcc timestamps 1-6.
 	for i := 1; i <= 6; i++ {

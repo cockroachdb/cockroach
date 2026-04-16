@@ -73,15 +73,19 @@ type pendingBuffer struct {
 	totalEvents int
 	// totalInflight counts events currently being processed by workers.
 	totalInflight int
+	// maxBuffered is the maximum number of events allowed in the buffer.
+	// addRow blocks when the limit is hit. 0 means unbounded.
+	maxBuffered int
 	// flushing blocks new addRow calls while a Flush is draining.
 	flushing bool
 	closed   bool
 	hasher   hash.Hash32
 }
 
-func newPendingBuffer() *pendingBuffer {
+func newPendingBuffer(maxBuffered int) *pendingBuffer {
 	pb := &pendingBuffer{
 		keyMessages: make(map[int][]pendingEvent),
+		maxBuffered: maxBuffered,
 		hasher:      crc32.New(crc32.MakeTable(crc32.IEEE)),
 	}
 	pb.cond = sync.NewCond(&pb.mu)
@@ -96,12 +100,12 @@ func (pb *pendingBuffer) computeKeyHash(topicName string, key []byte) int {
 }
 
 // addRow adds an event to the buffer and signals waiting workers.
-// Blocks while a Flush is draining the buffer.
+// Blocks while a Flush is draining or the buffer is full.
 func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
-	for pb.flushing && !pb.closed {
+	for (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
 		pb.cond.Wait()
 	}
 
@@ -383,7 +387,9 @@ func (s *noLingerSink) runWorker(ctx context.Context) error {
 			s.noLingerMetric.recordBatchFillPct(pct)
 		}
 
+		s.metrics.recordSinkIOInflightChange(int64(len(batch.events)))
 		err := s.processBatch(ctx, batch)
+		s.metrics.recordSinkIOInflightChange(-int64(len(batch.events)))
 
 		// Release allocs regardless of success.
 		for i := range batch.events {
@@ -444,7 +450,7 @@ func makeNoLingerSink(
 		client:         client,
 		topicNamer:     topicNamer,
 		concreteType:   concreteType,
-		buf:            newPendingBuffer(),
+		buf:            newPendingBuffer(256 * numWorkers),
 		maxMessages:    maxMessages,
 		maxBytes:       maxBytes,
 		ioWorkers:      numWorkers,
