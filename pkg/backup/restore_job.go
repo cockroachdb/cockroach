@@ -2489,7 +2489,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
 		// and is instead passed an execCfg and the download spans and anything else
-		// it needs. If that occured, we would not need to update details above.
+		// it needs. If that occurred, we would not need to update details above.
 		if err := r.doDownloadFilesWithRetry(ctx, p); err != nil {
 			return err
 		}
