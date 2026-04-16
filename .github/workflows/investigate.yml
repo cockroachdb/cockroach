@@ -92,7 +92,8 @@ jobs:
       (github.event_name == 'issues' &&
        github.event.issue.pull_request == null &&
        contains(github.event.issue.labels.*.name, 'C-test-failure') &&
-       contains(github.event.issue.labels.*.name, 'T-sql-queries')) ||
+       (contains(github.event.issue.labels.*.name, 'T-sql-queries') ||
+        contains(github.event.issue.labels.*.name, 'T-kv'))) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request == null &&
        (github.event.comment.body == '/investigate' ||
