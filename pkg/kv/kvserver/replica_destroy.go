@@ -86,9 +86,19 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
 	// belonging to replicas which aren't present. A crash before a call to
 	// postDestroyRaftMuLocked or hitting an error below will currently leave the
 	// files around forever.
-	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
-		log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
-		err = nil // ignore intentionally
+	if r.store.EnginesSeparated() {
+		// On separated engines, only delete sideloaded files belonging to the
+		// unapplied suffix of the raft log (entries after RaftAppliedIndex). The
+		// applied prefix's sideloaded files are cleaned up later by WAGTruncator.
+		if err := r.logStorage.ls.Sideload.TruncateFrom(ctx, r.shMu.state.RaftAppliedIndex); err != nil {
+			log.KvDistribution.Warningf(ctx, "failed to truncate sideloaded storage suffix: %v", err)
+			err = nil // ignore intentionally
+		}
+	} else {
+		if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
+			log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
+			err = nil // ignore intentionally
+		}
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
