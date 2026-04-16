@@ -14,9 +14,10 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .step-info { color: #aaa; }
 .command { color: #82aaff; font-weight: bold; }
 .comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
-.cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.card { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 12px; min-width: 200px; flex: 1; }
-.card.down { opacity: 0.35; }
+.arena { position: relative; width: 100%; margin-bottom: 16px; }
+.card { background: #16213e; border: 1px solid #333; border-radius: 10px; padding: 12px; width: 180px; position: absolute; }
+.card.down { opacity: 0.4; }
+.card.down::after { content: '\00D7'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; color: rgba(220,50,50,0.35); pointer-events: none; line-height: 1; }
 .card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
 .card .field { display: flex; justify-content: space-between; padding: 2px 0; }
 .card .field .key { color: #888; }
@@ -36,6 +37,9 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 const TRACE = {"testFile":"testdata/basic/witness_unit_vote_while_engaged.txt","steps":[{"index":0,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=true","comment":"The tricky case: voting while engaged. The witness must not grant a vote\nthat could allow a candidate to become leader without the entries the\nwitness helped commit.\nSet up: engaged in term a at a5.","output":"w:  vote=(a, v1) acked=(a5, engaged)"},{"index":1,"command":"vote from=(v2) term=(b) lm=(a5)","comment":"Candidate at term b with log ending at a5: rejected.\nThe candidate's last log term (a) is not ahead of our vote term (a), so\nwe can't prove a proper election happened without us. The old leader may\nhave relied on us to commit entries beyond a5.","output":"rejected"},{"index":2,"command":"vote from=(v2) term=(b) lm=(a100)","comment":"Candidate at term b with log ending at a100: still rejected.\nEven though the candidate has more entries, they're all from term a.\nThe old leader could have committed with our help up to any index.","output":"rejected"},{"index":3,"command":"vote from=(v2) term=(b) lm=(b1)","comment":"Candidate at term b with log ending at b1: accepted!\nThe candidate has an entry from term b \u003e our vote term a. This proves\na proper leader election happened for some term \u003e a without the witness,\nmeaning a traditional quorum elected that leader, and the candidate's\nlog is up to date with anything committed.","output":"ok\nw:  vote=(b, v2) acked=none"},{"index":4,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=true","comment":"Same scenario but candidate is from a much higher term.","output":"w:  vote=(a, v1) acked=(a5, engaged)"},{"index":5,"command":"vote from=(v3) term=(e) lm=(c3)","comment":"Candidate from term e with log at c3: accepted.\nLog term c \u003e vote term a proves disengagement is safe.","output":"ok\nw:  vote=(e, v3) acked=none"},{"index":6,"command":"set","input":"term=a voted-for=v1 hi=a5 engaged=false","comment":"Engagement was released (not engaged), candidate log behind hi: rejected\non log-up-to-date check, not engagement.","output":"w:  vote=(a, v1) acked=(a5, released)"},{"index":7,"command":"vote from=(v2) term=(b) lm=(a4)","output":"rejected"},{"index":8,"command":"vote from=(v2) term=(b) lm=(a5)","comment":"Same but candidate log at a5: accepted (log is up to date with hi).","output":"ok\nw:  vote=(b, v2) acked=none"},{"index":9,"command":"set","input":"term=a voted-for=v1","comment":"Witness learns of term b through an engage, then the leader requests a\nvote in that same term. The witness hasn't voted for anyone in term b yet,\nso this should succeed.","output":"w:  vote=(a, v1) acked=none"},{"index":10,"command":"engage term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, engaged)"},{"index":11,"command":"vote from=(v1) term=(b) lm=(b1)","comment":"Leader now asks for our vote in term b. We haven't voted yet in this term,\nso this is granted, preserving the existing acked state.","output":"ok\nw:  vote=(b, v1) acked=(b1, engaged)"}]};
 
 let currentStep = 0;
+
+const CARD_W = 180;
+const CARD_H = 180;
 
 function computeState(upTo) {
   const state = { voters: {}, witness: null };
@@ -69,6 +73,62 @@ function computeState(upTo) {
   return state;
 }
 
+
+
+
+function semicircleLayout(voterIds, hasWitness) {
+  const n = voterIds.length + (hasWitness ? 1 : 0);
+  if (n === 0) return [];
+
+  
+  const arenaW = Math.max(n * (CARD_W + 20), 600);
+  const radius = (arenaW - CARD_W) / 2;
+  const cx = arenaW / 2;
+  const cy = radius + CARD_H / 2;
+
+  if (n === 1) {
+    
+    const id = hasWitness ? 'w' : voterIds[0];
+    return { positions: [{ id, x: cx - CARD_W / 2, y: 0 }], arenaW, arenaH: CARD_H + 20 };
+  }
+
+  
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    slots.push(Math.PI * (1 - i / (n - 1)));
+  }
+
+  
+  const ids = [...voterIds];
+  if (hasWitness) {
+    
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i <= ids.length; i++) {
+      const angle = slots[i];
+      const dist = Math.abs(angle - Math.PI / 2);
+      if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    }
+    ids.splice(bestIdx, 0, 'w');
+  }
+
+  const positions = [];
+  let minY = Infinity;
+  for (let i = 0; i < n; i++) {
+    const angle = slots[i];
+    const x = cx + radius * Math.cos(angle) - CARD_W / 2;
+    const y = cy - radius * Math.sin(angle) - CARD_H / 2;
+    if (y < minY) minY = y;
+    positions.push({ id: ids[i], x, y });
+  }
+
+  
+  for (const p of positions) p.y -= minY;
+  const arenaH = cy - minY + CARD_H / 2 + 10;
+
+  return { positions, arenaW, arenaH };
+}
+
 function isChanged(step, replicaId, field) {
   if (replicaId === 'w') {
     if (!step.witness) return false;
@@ -90,14 +150,15 @@ function fmtLogMark(lm) {
   return lm.term + lm.index;
 }
 
-function renderVoterCard(id, voter, step) {
+function renderVoterCard(id, voter, step, x, y) {
   const f = (key, val) => {
     const cls = isChanged(step, id, key) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
   };
   const logCls = isChanged(step, id, 'log') ? ' changed' : '';
   const downCls = voter.down ? ' down' : '';
-  let html = '<div class="card' + downCls + '"><h2>' + id + '</h2>';
+  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
+  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>' + id + '</h2>';
   html += '<div class="field"><span class="key">log</span><span class="log-entries' + logCls + '">' + fmtLog(voter.log) + '</span></div>';
   html += f('term', voter.term || '-');
   html += f('votedFor', voter.votedFor || '-');
@@ -108,14 +169,15 @@ function renderVoterCard(id, voter, step) {
   return html;
 }
 
-function renderWitnessCard(witness, step) {
+function renderWitnessCard(witness, step, x, y) {
   if (!witness) return '';
   const f = (field, val) => {
     const cls = isChanged(step, 'w', field) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + field.split('.')[1] + '</span><span class="val">' + val + '</span></div>';
   };
   const downCls = witness.down ? ' down' : '';
-  let html = '<div class="card' + downCls + '"><h2>w (witness)</h2>';
+  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
+  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>w (witness)</h2>';
   html += '<div style="color:#666;font-size:11px;margin-bottom:4px">vote</div>';
   html += f('vote.term', witness.vote.term || '-');
   html += f('vote.votedFor', witness.vote.votedFor || '-');
@@ -141,13 +203,17 @@ function render() {
   html += '</div>';
 
   
-  html += '<div class="cards">';
   const voterIds = Object.keys(state.voters).sort();
-  for (const id of voterIds) {
-    html += renderVoterCard(id, state.voters[id], step);
-  }
-  if (state.witness) {
-    html += renderWitnessCard(state.witness, step);
+  const hasWitness = state.witness !== null;
+  const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
+
+  html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
+  for (const p of positions) {
+    if (p.id === 'w') {
+      html += renderWitnessCard(state.witness, step, p.x, p.y);
+    } else {
+      html += renderVoterCard(p.id, state.voters[p.id], step, p.x, p.y);
+    }
   }
   html += '</div>';
 

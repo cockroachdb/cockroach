@@ -14,9 +14,10 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .step-info { color: #aaa; }
 .command { color: #82aaff; font-weight: bold; }
 .comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
-.cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.card { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 12px; min-width: 200px; flex: 1; }
-.card.down { opacity: 0.35; }
+.arena { position: relative; width: 100%; margin-bottom: 16px; }
+.card { background: #16213e; border: 1px solid #333; border-radius: 10px; padding: 12px; width: 180px; position: absolute; }
+.card.down { opacity: 0.4; }
+.card.down::after { content: '\00D7'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; color: rgba(220,50,50,0.35); pointer-events: none; line-height: 1; }
 .card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
 .card .field { display: flex; justify-content: space-between; padding: 2px 0; }
 .card .field .key { color: #888; }
@@ -36,6 +37,9 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 const TRACE = {"testFile":"testdata/basic/raft_elect_propose_append_commit.txt","steps":[{"index":0,"command":"setup","input":"v1: [a1]\nv2: [a1 b2]","comment":"Basic raft interactions: elections, proposals, replication, leader transitions.\nNo witness — witness interactions belong in scenario/.","output":"v1: [a1] term=a\nv2: [a1 b2] term=b","voters":{"v1":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2)","matchIndex":0,"down":false},"v2":{"log":[{"term":"a","index":1},{"term":"b","index":2}],"term":"b","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2)","matchIndex":0,"down":false}}},{"index":1,"command":"campaign v2","comment":"v2 campaigns. Its log is more up-to-date, everyone votes yes.","output":"v2 campaigns at term c\nv2: yes (self)\nv1: yes\noutcome: won","voters":{"v1":{"term":"c","votedFor":"v2"},"v2":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3}],"term":"c","votedFor":"v2","leader":true,"matchIndex":3}}},{"index":2,"command":"propose v2","comment":"Propose and replicate. Both voters have the entries, quorum reached.","output":"v1: [a1] term=c\nv2: [a1 b2 c3 c4] term=c leader","voters":{"v2":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3},{"term":"c","index":4}],"matchIndex":4}}},{"index":3,"command":"append v2","output":"v2 appends through c4\nv1: ok\nv1: [a1 b2 c3 c4] term=c\nv2: [a1 b2 c3 c4] term=c committed=c4 leader","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3},{"term":"c","index":4}]},"v2":{"committed":4}}},{"index":4,"command":"campaign v1","comment":"Leader transition: v1 campaigns. Logs match, all yes.","output":"v1 campaigns at term d\nv1: yes (self)\nv2: yes\noutcome: won","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3},{"term":"c","index":4},{"term":"d","index":5}],"term":"d","votedFor":"v1","leader":true,"matchIndex":5},"v2":{"term":"d","votedFor":"v1","leader":false}}},{"index":5,"command":"propose v1","output":"v1: [a1 b2 c3 c4 d5 d6] term=d leader\nv2: [a1 b2 c3 c4] term=d","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3},{"term":"c","index":4},{"term":"d","index":5},{"term":"d","index":6}],"matchIndex":6}}},{"index":6,"command":"append v1","output":"v1 appends through d6\nv2: ok\nv1: [a1 b2 c3 c4 d5 d6] term=d committed=d6 leader\nv2: [a1 b2 c3 c4 d5 d6] term=d","voters":{"v1":{"committed":6},"v2":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"c","index":3},{"term":"c","index":4},{"term":"d","index":5},{"term":"d","index":6}]}}}]};
 
 let currentStep = 0;
+
+const CARD_W = 180;
+const CARD_H = 180;
 
 function computeState(upTo) {
   const state = { voters: {}, witness: null };
@@ -69,6 +73,62 @@ function computeState(upTo) {
   return state;
 }
 
+
+
+
+function semicircleLayout(voterIds, hasWitness) {
+  const n = voterIds.length + (hasWitness ? 1 : 0);
+  if (n === 0) return [];
+
+  
+  const arenaW = Math.max(n * (CARD_W + 20), 600);
+  const radius = (arenaW - CARD_W) / 2;
+  const cx = arenaW / 2;
+  const cy = radius + CARD_H / 2;
+
+  if (n === 1) {
+    
+    const id = hasWitness ? 'w' : voterIds[0];
+    return { positions: [{ id, x: cx - CARD_W / 2, y: 0 }], arenaW, arenaH: CARD_H + 20 };
+  }
+
+  
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    slots.push(Math.PI * (1 - i / (n - 1)));
+  }
+
+  
+  const ids = [...voterIds];
+  if (hasWitness) {
+    
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i <= ids.length; i++) {
+      const angle = slots[i];
+      const dist = Math.abs(angle - Math.PI / 2);
+      if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+    }
+    ids.splice(bestIdx, 0, 'w');
+  }
+
+  const positions = [];
+  let minY = Infinity;
+  for (let i = 0; i < n; i++) {
+    const angle = slots[i];
+    const x = cx + radius * Math.cos(angle) - CARD_W / 2;
+    const y = cy - radius * Math.sin(angle) - CARD_H / 2;
+    if (y < minY) minY = y;
+    positions.push({ id: ids[i], x, y });
+  }
+
+  
+  for (const p of positions) p.y -= minY;
+  const arenaH = cy - minY + CARD_H / 2 + 10;
+
+  return { positions, arenaW, arenaH };
+}
+
 function isChanged(step, replicaId, field) {
   if (replicaId === 'w') {
     if (!step.witness) return false;
@@ -90,14 +150,15 @@ function fmtLogMark(lm) {
   return lm.term + lm.index;
 }
 
-function renderVoterCard(id, voter, step) {
+function renderVoterCard(id, voter, step, x, y) {
   const f = (key, val) => {
     const cls = isChanged(step, id, key) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
   };
   const logCls = isChanged(step, id, 'log') ? ' changed' : '';
   const downCls = voter.down ? ' down' : '';
-  let html = '<div class="card' + downCls + '"><h2>' + id + '</h2>';
+  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
+  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>' + id + '</h2>';
   html += '<div class="field"><span class="key">log</span><span class="log-entries' + logCls + '">' + fmtLog(voter.log) + '</span></div>';
   html += f('term', voter.term || '-');
   html += f('votedFor', voter.votedFor || '-');
@@ -108,14 +169,15 @@ function renderVoterCard(id, voter, step) {
   return html;
 }
 
-function renderWitnessCard(witness, step) {
+function renderWitnessCard(witness, step, x, y) {
   if (!witness) return '';
   const f = (field, val) => {
     const cls = isChanged(step, 'w', field) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + field.split('.')[1] + '</span><span class="val">' + val + '</span></div>';
   };
   const downCls = witness.down ? ' down' : '';
-  let html = '<div class="card' + downCls + '"><h2>w (witness)</h2>';
+  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
+  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>w (witness)</h2>';
   html += '<div style="color:#666;font-size:11px;margin-bottom:4px">vote</div>';
   html += f('vote.term', witness.vote.term || '-');
   html += f('vote.votedFor', witness.vote.votedFor || '-');
@@ -141,13 +203,17 @@ function render() {
   html += '</div>';
 
   
-  html += '<div class="cards">';
   const voterIds = Object.keys(state.voters).sort();
-  for (const id of voterIds) {
-    html += renderVoterCard(id, state.voters[id], step);
-  }
-  if (state.witness) {
-    html += renderWitnessCard(state.witness, step);
+  const hasWitness = state.witness !== null;
+  const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
+
+  html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
+  for (const p of positions) {
+    if (p.id === 'w') {
+      html += renderWitnessCard(state.witness, step, p.x, p.y);
+    } else {
+      html += renderVoterCard(p.id, state.voters[p.id], step, p.x, p.y);
+    }
   }
   html += '</div>';
 
