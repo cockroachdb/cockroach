@@ -60,6 +60,7 @@ type vizVoterDelta struct {
 	WitnessEngaged *bool         `json:"witnessEngaged,omitempty"`
 	Cfg            *string       `json:"cfg,omitempty"`
 	MatchIndex     *uint64       `json:"matchIndex,omitempty"`
+	Down           *bool         `json:"down,omitempty"`
 }
 
 type vizLogMark struct {
@@ -70,6 +71,7 @@ type vizLogMark struct {
 type vizWitnessDelta struct {
 	Vote  *vizVoteDelta  `json:"vote,omitempty"`
 	Acked *vizAckedDelta `json:"acked,omitempty"`
+	Down  *bool          `json:"down,omitempty"`
 }
 
 type vizVoteDelta struct {
@@ -140,6 +142,7 @@ func snapshotVoter(v testVoter) *vizVoterDelta {
 		WitnessEngaged: &v.witnessEngaged,
 		Cfg:            &v.cfg,
 		MatchIndex:     &mi,
+		Down:           &v.down,
 	}
 }
 
@@ -190,6 +193,10 @@ func diffVoter(prev, next testVoter) *vizVoterDelta {
 		d.MatchIndex = ptr(nextMI)
 		changed = true
 	}
+	if prev.down != next.down {
+		d.Down = ptr(next.down)
+		changed = true
+	}
 
 	if !changed {
 		return nil
@@ -197,22 +204,23 @@ func diffVoter(prev, next testVoter) *vizVoterDelta {
 	return d
 }
 
-func snapshotWitness(s State) *vizWitnessDelta {
-	term := fmtTerm(s.Vote.Term)
-	votedFor := fmtVotedFor(s.Vote.VotedFor)
+func snapshotWitness(w testWitness) *vizWitnessDelta {
+	term := fmtTerm(w.Vote.Term)
+	votedFor := fmtVotedFor(w.Vote.VotedFor)
 	return &vizWitnessDelta{
 		Vote: &vizVoteDelta{
 			Term:     &term,
 			VotedFor: &votedFor,
 		},
 		Acked: &vizAckedDelta{
-			Hi:      toVizLogMark(s.Acked.Hi),
-			Engaged: &s.Acked.Engaged,
+			Hi:      toVizLogMark(w.Acked.Hi),
+			Engaged: &w.Acked.Engaged,
 		},
+		Down: &w.down,
 	}
 }
 
-func diffWitness(prev, next State) *vizWitnessDelta {
+func diffWitness(prev, next testWitness) *vizWitnessDelta {
 	var vd *vizVoteDelta
 	if prev.Vote != next.Vote {
 		vd = &vizVoteDelta{}
@@ -233,10 +241,14 @@ func diffWitness(prev, next State) *vizWitnessDelta {
 			ad.Engaged = ptr(next.Acked.Engaged)
 		}
 	}
-	if vd == nil && ad == nil {
+	var dd *bool
+	if prev.down != next.down {
+		dd = ptr(next.down)
+	}
+	if vd == nil && ad == nil && dd == nil {
 		return nil
 	}
-	return &vizWitnessDelta{Vote: vd, Acked: ad}
+	return &vizWitnessDelta{Vote: vd, Acked: ad, Down: dd}
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +358,7 @@ func TestGenerateViz(t *testing.T) {
 		trace.TestFile = path
 
 		prevVoters := []testVoter{}
-		prevWitness := State{}
+		prevWitness := testWitness{}
 		stepIdx := 0
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

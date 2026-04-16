@@ -20,14 +20,19 @@ v2: yes
 w:  (dropped)
 outcome: won
 
-# v1 proposes an entry. v2 is down (partitioned from here on).
+# v2 goes down (partitioned from here on).
+down v2
+----
+ok
+
+# v1 proposes an entry.
 # Matches: [v1=3, v2=0, w=0]. Quorum match = 0, not committed.
 propose v1
 ----
 v1: [a1 b2 b3] term=b leader
 v2: [a1] term=b
 
-append v1 drop=(v2)
+append v1
 ----
 v1 appends through b3
 v2: (dropped)
@@ -46,13 +51,21 @@ v1: [a1 b2 b3] term=b committed=b3 leader
 # a1 is from term a, which is older than the term b leader that engaged the
 # witness. Without proof that a post-engagement leader was elected, granting a
 # vote could let v2 form a quorum that misses entries the witness helped commit.
-prevote v2 drop=(v1)
+down v1
+----
+ok
+
+prevote v2
 ----
 v2 prevotes at term c
 v2: yes (self)
 v1: (dropped)
 w:  no
 outcome: lost
+
+up v1
+----
+ok
 
 # Propose and replicate another entry while the witness is still engaged. This
 # one commits immediately (witness match advances with the leader's log).
@@ -61,7 +74,7 @@ propose v1
 v1: [a1 b2 b3 b4] term=b committed=b4 leader
 v2: [a1] term=b
 
-append v1 drop=(v2)
+append v1
 ----
 v1 appends through b4
 v2: (dropped)
@@ -79,7 +92,11 @@ w:  vote=(b, -) acked=(b4, released)
 # v2 prevotes again after the release. The witness is no longer engaged, but
 # its acked high-water mark b4 is still ahead of v2's last log entry a1. The
 # witness won't vote for a candidate whose log doesn't cover what it has acked.
-prevote v2 drop=(v1)
+down v1
+----
+ok
+
+prevote v2
 ----
 v2 prevotes at term c
 v2: yes (self)
@@ -87,8 +104,16 @@ v1: (dropped)
 w:  no
 outcome: lost
 
+up v1
+----
+ok
+
 # v2 comes back online. v1 proposes and replicates to v2, committing via the
 # traditional v1+v2 quorum — no witness engagement needed.
+up v2
+----
+ok
+
 propose v1
 ----
 v1: [a1 b2 b3 b4 b5] term=b committed=b4 leader

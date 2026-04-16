@@ -16,6 +16,7 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
 .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .card { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 12px; min-width: 200px; flex: 1; }
+.card.down { opacity: 0.35; }
 .card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
 .card .field { display: flex; justify-content: space-between; padding: 2px 0; }
 .card .field .key { color: #888; }
@@ -60,6 +61,9 @@ function computeState(upTo) {
           state.witness.acked[k] = v;
         }
       }
+      if (step.witness.down !== undefined) {
+        state.witness.down = step.witness.down;
+      }
     }
   }
   return state;
@@ -68,6 +72,7 @@ function computeState(upTo) {
 function isChanged(step, replicaId, field) {
   if (replicaId === 'w') {
     if (!step.witness) return false;
+    if (field === 'down') return step.witness.down !== undefined;
     if (field.startsWith('vote.')) return step.witness.vote && step.witness.vote[field.slice(5)] !== undefined;
     if (field.startsWith('acked.')) return step.witness.acked && step.witness.acked[field.slice(6)] !== undefined;
     return false;
@@ -91,7 +96,8 @@ function renderVoterCard(id, voter, step) {
     return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
   };
   const logCls = isChanged(step, id, 'log') ? ' changed' : '';
-  let html = '<div class="card"><h2>' + id + '</h2>';
+  const downCls = voter.down ? ' down' : '';
+  let html = '<div class="card' + downCls + '"><h2>' + id + '</h2>';
   html += '<div class="field"><span class="key">log</span><span class="log-entries' + logCls + '">' + fmtLog(voter.log) + '</span></div>';
   html += f('term', voter.term || '-');
   html += f('votedFor', voter.votedFor || '-');
@@ -108,7 +114,8 @@ function renderWitnessCard(witness, step) {
     const cls = isChanged(step, 'w', field) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + field.split('.')[1] + '</span><span class="val">' + val + '</span></div>';
   };
-  let html = '<div class="card"><h2>w (witness)</h2>';
+  const downCls = witness.down ? ' down' : '';
+  let html = '<div class="card' + downCls + '"><h2>w (witness)</h2>';
   html += '<div style="color:#666;font-size:11px;margin-bottom:4px">vote</div>';
   html += f('vote.term', witness.vote.term || '-');
   html += f('vote.votedFor', witness.vote.votedFor || '-');

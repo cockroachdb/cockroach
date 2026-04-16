@@ -29,9 +29,16 @@ type testVoter struct {
 	committed      uint64
 	witnessEngaged bool   // leader's view of witness engagement
 	cfg            string // e.g. "(v1 v2 w)"
+	down           bool   // true when the replica is unreachable
 	// matchIndex is only meaningful when leader==true. It tracks what this
 	// leader believes each peer's match index to be. Reset on election.
 	matchIndex map[raftpb.PeerID]uint64
+}
+
+// testWitness wraps the witness State with per-replica test metadata.
+type testWitness struct {
+	State
+	down bool
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -44,7 +51,7 @@ func (v testVoter) lastLogMark() raft.LogMark {
 
 // testEnv holds the witness state and any voters added for scenario modeling.
 type testEnv struct {
-	w          State
+	w          testWitness
 	hasWitness bool
 	voters     []testVoter
 }
@@ -178,12 +185,12 @@ func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.
 		return handleAppend(t, d, env, ctx)
 	case "vote":
 		from, term, lm := scanVoteArgs(t, d)
-		next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
-		return fmtWitnessResult(&env.w, next, ok)
+		next, ok := env.w.State.HandleMsgVote(ctx, from, term, lm)
+		return fmtWitnessResult(&env.w.State, next, ok)
 	case "engage":
 		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
-		next, ok := env.w.HandleMsgEngage(ctx, term, lm)
-		result := fmtWitnessResult(&env.w, next, ok)
+		next, ok := env.w.State.HandleMsgEngage(ctx, term, lm)
+		result := fmtWitnessResult(&env.w.State, next, ok)
 		if ok && ldr != nil {
 			ldr.witnessEngaged = true
 			env.updateLeaderCommitted()
@@ -192,17 +199,21 @@ func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.
 		return result
 	case "release":
 		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
-		next, ok := env.w.HandleMsgRelease(ctx, term, lm)
-		result := fmtWitnessResult(&env.w, next, ok)
+		next, ok := env.w.State.HandleMsgRelease(ctx, term, lm)
+		result := fmtWitnessResult(&env.w.State, next, ok)
 		if ok && ldr != nil {
 			ldr.witnessEngaged = false
 		}
 		return result
 	case "state":
-		return fmtWitness(env.w)
+		return fmtWitness(env.w.State)
 	case "set":
-		handleSet(t, d, &env.w)
-		return fmtWitness(env.w)
+		handleSet(t, d, &env.w.State)
+		return fmtWitness(env.w.State)
+	case "down":
+		return handleDown(t, d, env, true)
+	case "up":
+		return handleDown(t, d, env, false)
 	default:
 		t.Fatalf("unknown command: %s", d.Cmd)
 		return ""
@@ -313,7 +324,7 @@ func handleCampaign(
 			continue
 		}
 		label := fmt.Sprintf("v%d", v.id)
-		if dropped[label] {
+		if dropped[label] || v.down {
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 			continue
 		}
@@ -336,17 +347,17 @@ func handleCampaign(
 	// Witness votes (only if present). In prevote mode, check against a copy
 	// with VotedFor cleared and don't apply state.
 	if env.hasWitness {
-		if dropped["w"] {
+		if dropped["w"] || env.w.down {
 			fmt.Fprintf(&buf, "w:  (dropped)\n")
 		} else {
-			ws := env.w
+			ws := env.w.State
 			if prevote {
 				ws.Vote.VotedFor = 0
 			}
 			next, ok := ws.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
 			if ok {
 				if !prevote {
-					env.w = next
+					env.w.State = next
 				}
 				fmt.Fprintf(&buf, "w:  yes\n")
 				yesCount++
@@ -426,7 +437,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 			continue
 		}
 		label := fmt.Sprintf("v%d", v.id)
-		if dropped[label] {
+		if dropped[label] || v.down {
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 			continue
 		}
@@ -441,6 +452,23 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 	env.updateLeaderCommitted()
 	buf.WriteString(env.fmtVoters())
 	return buf.String()
+}
+
+// handleDown sets or clears the down flag on the specified replicas.
+func handleDown(t *testing.T, d *datadriven.TestData, env *testEnv, down bool) string {
+	for _, arg := range d.CmdArgs {
+		id := arg.Key
+		if id == "w" {
+			if !env.hasWitness {
+				t.Fatal("no witness configured")
+			}
+			env.w.down = down
+		} else {
+			v := env.voter(t, mustParsePeerID(t, id))
+			v.down = down
+		}
+	}
+	return "ok"
 }
 
 // handleVoteReq processes a vote request and returns the voter's updated state.
