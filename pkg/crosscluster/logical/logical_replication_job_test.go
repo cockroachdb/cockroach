@@ -1718,7 +1718,7 @@ func TestCreateTableSkipForeignKeys(t *testing.T) {
 		}
 
 		if !skipFKs {
-			destDB.ExpectErr(t, "invalid outbound foreign key", stmt, aURL.String())
+			destDB.ExpectErr(t, "not in the replication set", stmt, aURL.String())
 			return
 		}
 
