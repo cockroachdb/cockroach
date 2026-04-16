@@ -11893,24 +11893,62 @@ func TestParallelIOMetrics(t *testing.T) {
 }
 
 // TestNoLingerSinkIntegration tests the no-linger batching sink end-to-end
-// with a real changefeed, verifying that events flow through and the
-// no-linger-specific metrics are recorded.
+// with real changefeeds across all supported sink types, verifying that
+// payloads are correct and no-linger-specific metrics are recorded.
 func TestNoLingerSinkIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	// Payload correctness: insert, update, delete across all sink types.
+	payloadFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.no_linger_batching.enabled = true`)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		db.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		db.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		db.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+
+		db.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
+		})
+
+		db.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": null}`,
+		})
+	}
+
+	cdcTest(t, payloadFn, feedTestForceSink("kafka"))
+	cdcTest(t, payloadFn, feedTestForceSink("webhook"))
+	cdcTest(t, payloadFn, feedTestForceSink("pubsub"))
+
+	// Metrics: verify no-linger metrics fire with a webhook sink.
+	metricsFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
 
 		db := sqlutils.MakeSQLRunner(s.DB)
 		db.Exec(t, `SET CLUSTER SETTING changefeed.no_linger_batching.enabled = true`)
-		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		db.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 50)`)
+		db.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		db.Exec(t, `INSERT INTO bar (a) SELECT * FROM generate_series(1, 50)`)
 
 		// Set a message limit so batch fill pct is recorded. Frequency is
 		// required by webhook validation even though noLingerSink ignores it.
-		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH" +
+		bar, err := f.Feed("CREATE CHANGEFEED FOR TABLE bar WITH" +
 			" webhook_sink_config='{\"Flush\": {\"Messages\": 10, \"Frequency\": \"100ms\"}}'")
 		require.NoError(t, err)
 
@@ -11931,9 +11969,9 @@ func TestNoLingerSinkIntegration(t *testing.T) {
 			return nil
 		})
 
-		require.NoError(t, foo.Close())
+		require.NoError(t, bar.Close())
 	}
-	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	cdcTest(t, metricsFn, feedTestForceSink("webhook"))
 }
 
 // TestSinkBackpressureMetric tests that the sink backpressure metric is recorded
