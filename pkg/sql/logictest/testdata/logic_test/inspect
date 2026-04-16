@@ -26,9 +26,9 @@ statement ok
 CREATE VIEW last_inspect_errors AS
 SELECT
   ie.error_type,
-  COALESCE(t.database_name, '<unknown>') AS database_name,
-  COALESCE(t.schema_name, '<unknown>') AS schema_name,
-  COALESCE(t.object_name, '<unknown>') AS table_name,
+  COALESCE(t.database_name, '<id:' || ie.database_id::TEXT || '>', '<unknown>') AS database_name,
+  COALESCE(t.schema_name, '<id:' || ie.schema_id::TEXT || '>', '<unknown>') AS schema_name,
+  COALESCE(t.object_name, '<id:' || ie.id::TEXT || '>', '<unknown>') AS table_name,
   ie.primary_key,
   jsonb_pretty(ie.details) AS details
 FROM crdb_internal.cluster_inspect_errors ie
