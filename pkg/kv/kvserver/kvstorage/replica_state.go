@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,17 +105,6 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 	return nil
 }
 
-// CreateUninitReplicaTODO is the plan for splitting CreateUninitializedReplica
-// into cross-engine writes.
-//
-//  1. Log storage write (durable):
-//     1.1. Write WAG node with the state machine mutation (2).
-//  2. State machine mutation:
-//     2.1. Write the new RaftReplicaID.
-//
-// TODO(sep-raft-log): support the status quo in which only 2.1 is written.
-const CreateUninitReplicaTODO = 0
-
 // CreateUninitializedReplica creates an uninitialized replica in storage.
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
@@ -121,6 +112,7 @@ func CreateUninitializedReplica(
 	ctx context.Context,
 	stateRW State,
 	raftRO RaftRO,
+	w *wag.Writer,
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
@@ -148,7 +140,7 @@ func CreateUninitializedReplica(
 	// Before this point, raft and state machine state of this replica are
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
-	_ = CreateUninitReplicaTODO
+	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate)
 	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
