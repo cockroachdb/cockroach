@@ -7,6 +7,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
 h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; }
+h1 a { color: #7f8c8d; text-decoration: none; }
+h1 a:hover { text-decoration: underline; }
 .nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .nav button { background: #2d2d44; border: 1px solid #444; color: #ccc; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
 .nav button:hover { background: #3d3d54; }
@@ -39,7 +41,7 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 </style>
 </head>
 <body>
-<h1>testdata/basic/witness_unit_vote.txt</h1>
+<h1><a href=".././">testdata</a> / <a href="./">basic</a> / witness_unit_vote.txt</h1>
 <div id="app"></div>
 <script>
 const TRACE = {"testFile":"testdata/basic/witness_unit_vote.txt","steps":[{"index":0,"command":"vote from=(v1) term=(a) lm=(a0)","comment":"Fresh witness grants vote.","output":"ok\nw:  vote=(a, v1) acked=none","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=a, log=a0)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes"}]},{"index":1,"command":"vote from=(v1) term=(a) lm=(a0)","comment":"Idempotent: same vote accepted again.","output":"ok\nw:  vote=(a, v1) acked=none","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=a, log=a0)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes"}]},{"index":2,"command":"vote from=(v2) term=(a) lm=(a0)","comment":"Same term, different candidate: rejected (already voted).","output":"rejected","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=a, log=a0)"},{"from":"w","to":"v2","type":"VoteResp","label":"no"}]},{"index":3,"command":"vote from=(v2) term=(a) lm=(a5)","comment":"Stale term: rejected.","output":"rejected","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=a, log=a5)"},{"from":"w","to":"v2","type":"VoteResp","label":"no"}]},{"index":4,"command":"vote from=(v2) term=(b) lm=(a0)","comment":"Higher term with up-to-date log: granted.","output":"ok\nw:  vote=(b, v2) acked=none","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=b, log=a0)"},{"from":"w","to":"v2","type":"VoteResp","label":"yes"}]},{"index":5,"command":"set","input":"term=c voted-for=v1 hi=c10 engaged=false","comment":"Higher term but log behind our acked hi: rejected.\nFirst set up some acked state.","output":"w:  vote=(c, v1) acked=(c10, released)"},{"index":6,"command":"vote from=(v2) term=(d) lm=(c9)","output":"rejected","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=d, log=c9)"},{"from":"w","to":"v2","type":"VoteResp","label":"no"}]},{"index":7,"command":"vote from=(v2) term=(d) lm=(c10)","comment":"Same scenario but candidate log is at the hi mark: granted.","output":"ok\nw:  vote=(d, v2) acked=none","messages":[{"from":"v2","to":"w","type":"VoteReq","label":"VoteReq(term=d, log=c10)"},{"from":"w","to":"v2","type":"VoteResp","label":"yes"}]}]};

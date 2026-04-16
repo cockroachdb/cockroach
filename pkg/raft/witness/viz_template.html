@@ -7,6 +7,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
 h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; }
+h1 a { color: #7f8c8d; text-decoration: none; }
+h1 a:hover { text-decoration: underline; }
 .nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .nav button { background: #2d2d44; border: 1px solid #444; color: #ccc; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
 .nav button:hover { background: #3d3d54; }
@@ -39,7 +41,7 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 </style>
 </head>
 <body>
-<h1>{{.TestFile}}</h1>
+<h1>{{range .Breadcrumbs}}<a href="{{.Href}}">{{.Name}}</a> / {{end}}{{.FileName}}</h1>
 <div id="app"></div>
 <script>
 const TRACE = {{.JSONData}};

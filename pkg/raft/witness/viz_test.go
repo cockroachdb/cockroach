@@ -526,12 +526,34 @@ func writeVizHTML(t *testing.T, testPath string, trace *vizTrace) {
 	require.NoError(t, err)
 	defer f.Close()
 
+	// Build breadcrumb links from the test file path. The generated file
+	// is at generated/<subdir>/<file>.html, so "../" goes to the generated
+	// root and "./" stays in the current subdirectory.
+	type breadcrumb struct {
+		Name string
+		Href string
+	}
+	parts := strings.Split(filepath.Dir(trace.TestFile), string(filepath.Separator))
+	// parts is e.g. ["testdata", "basic"]. Link the first to "../", second to "./".
+	crumbs := make([]breadcrumb, len(parts))
+	for i, p := range parts {
+		href := "./"
+		for j := i; j < len(parts)-1; j++ {
+			href = "../" + href
+		}
+		crumbs[i] = breadcrumb{Name: p, Href: href}
+	}
+
 	err = tmpl.Execute(f, struct {
-		TestFile string
-		JSONData template.JS
+		TestFile    string
+		FileName    string
+		Breadcrumbs []breadcrumb
+		JSONData    template.JS
 	}{
-		TestFile: trace.TestFile,
-		JSONData: template.JS(jsonBytes),
+		TestFile:    trace.TestFile,
+		FileName:    filepath.Base(trace.TestFile),
+		Breadcrumbs: crumbs,
+		JSONData:    template.JS(jsonBytes),
 	})
 	require.NoError(t, err)
 	t.Logf("wrote %s", outPath)
