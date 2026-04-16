@@ -420,6 +420,7 @@ type uploadServerContext struct {
 	fromFile        string
 	reuploadSession string
 	nodeIDs         []int
+	async           bool
 }
 
 // setUploadServerContextDefaults sets the default values in
@@ -432,6 +433,7 @@ func setUploadServerContextDefaults() {
 	uploadServerCtx.fromFile = ""
 	uploadServerCtx.reuploadSession = ""
 	uploadServerCtx.nodeIDs = nil
+	uploadServerCtx.async = false
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

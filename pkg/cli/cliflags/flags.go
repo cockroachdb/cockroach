@@ -1956,6 +1956,16 @@ skipped. Useful with --reupload-session to retry only failed nodes.
 `,
 	}
 
+	UploadServerAsync = FlagInfo{
+		Name: "async",
+		Description: `
+Run the upload as an asynchronous background job using the jobs framework
+instead of blocking the CLI. The command prints the job ID and polls for
+progress, showing real-time status updates. The upload survives node
+restarts and can be monitored from the DB Console Jobs page.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

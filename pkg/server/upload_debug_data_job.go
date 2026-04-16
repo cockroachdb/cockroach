@@ -109,6 +109,7 @@ func (r *uploadDebugDataResumer) Resume(
 	var totalArtifacts int32
 	var nodesSucceeded, nodesFailed int32
 	var nodesCompleted []int32
+	var failedNodeIDs []int32
 	var uploadErrors []string
 	totalNodes := nodeCount
 	if len(details.NodeIds) > 0 {
@@ -121,6 +122,7 @@ func (r *uploadDebugDataResumer) Resume(
 		totalArtifacts += resp.ArtifactsUploaded
 		if len(resp.Errors) > 0 {
 			nodesFailed++
+			failedNodeIDs = append(failedNodeIDs, int32(nodeID))
 			for _, e := range resp.Errors {
 				uploadErrors = append(uploadErrors, fmt.Sprintf("node %d: %s", nodeID, e))
 			}
@@ -137,6 +139,7 @@ func (r *uploadDebugDataResumer) Resume(
 			p.NodesFailed = nodesFailed
 			p.ArtifactsUploaded = totalArtifacts
 			p.Errors = uploadErrors
+			p.FailedNodeIds = failedNodeIDs
 		})
 		r.setFraction(ctx, fraction)
 		r.setStatus(ctx, fmt.Sprintf(
@@ -149,6 +152,7 @@ func (r *uploadDebugDataResumer) Resume(
 		mu.Lock()
 		defer mu.Unlock()
 		nodesFailed++
+		failedNodeIDs = append(failedNodeIDs, int32(nodeID))
 		uploadErrors = append(uploadErrors,
 			fmt.Sprintf("node %d: %s", nodeID, err))
 		log.Dev.Warningf(ctx, "upload failed for node %d: %v", nodeID, err)
@@ -176,6 +180,7 @@ func (r *uploadDebugDataResumer) Resume(
 		p.NodesFailed = nodesFailed
 		p.ArtifactsUploaded = totalArtifacts
 		p.Errors = uploadErrors
+		p.FailedNodeIds = failedNodeIDs
 	}); err != nil {
 		return err
 	}
@@ -188,8 +193,10 @@ func (r *uploadDebugDataResumer) Resume(
 
 	if nodesFailed > 0 {
 		return errors.Newf(
-			"%d node(s) failed during upload (session %s); use --reupload-session to retry",
-			nodesFailed, client.sessionID,
+			"%d node(s) failed during upload (session %s, failed nodes: %v); "+
+				"retry from UI or CLI with --reupload-session=%s --node=%v",
+			nodesFailed, client.sessionID, failedNodeIDs,
+			client.sessionID, failedNodeIDs,
 		)
 	}
 	return nil

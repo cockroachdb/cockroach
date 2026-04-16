@@ -76,6 +76,55 @@ func (s *systemAdminServer) StartUploadDebugData(
 	}, nil
 }
 
+// GetUploadDebugDataStatus returns the decoded progress and details
+// for an upload debug data job, enabling the UI to display per-node
+// failure info and offer targeted retry.
+func (s *systemAdminServer) GetUploadDebugDataStatus(
+	ctx context.Context, req *serverpb.GetUploadDebugDataStatusRequest,
+) (*serverpb.GetUploadDebugDataStatusResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	job, err := s.sqlServer.jobRegistry.LoadJob(ctx, jobspb.JobID(req.JobId))
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "loading job %d: %v", req.JobId, err)
+	}
+
+	payload := job.Payload()
+	details, ok := payload.UnwrapDetails().(jobspb.UploadDebugDataDetails)
+	if !ok {
+		return nil, status.Errorf(codes.InvalidArgument,
+			"job %d is not an upload debug data job (type: %s)", req.JobId, payload.Type())
+	}
+
+	progress := job.Progress()
+	uploadProgress, ok := progress.UnwrapDetails().(*jobspb.UploadDebugDataProgress)
+	if !ok {
+		return nil, status.Errorf(codes.Internal,
+			"job %d has unexpected progress type", req.JobId)
+	}
+
+	return &serverpb.GetUploadDebugDataStatusResponse{
+		JobID:             req.JobId,
+		Status:            string(job.State()),
+		SessionId:         uploadProgress.SessionId,
+		TotalNodes:        uploadProgress.TotalNodes,
+		NodesCompleted:    uploadProgress.NodesCompleted,
+		NodesFailed:       uploadProgress.NodesFailed,
+		ArtifactsUploaded: uploadProgress.ArtifactsUploaded,
+		FailedNodeIds:     uploadProgress.FailedNodeIds,
+		Errors:            uploadProgress.Errors,
+		FractionCompleted: job.FractionCompleted(),
+		RunningStatus:     progress.StatusMessage,
+		Error:             payload.Error,
+		ServerUrl:         details.ServerUrl,
+		Redact:            details.Redact,
+	}, nil
+}
+
 // StartUploadDebugData on the base adminServer returns unimplemented
 // for non-system tenants.
 func (s *adminServer) StartUploadDebugData(
@@ -83,4 +132,13 @@ func (s *adminServer) StartUploadDebugData(
 ) (*serverpb.StartUploadDebugDataResponse, error) {
 	return nil, status.Error(codes.Unimplemented,
 		"upload debug data is not supported on secondary tenants")
+}
+
+// GetUploadDebugDataStatus on the base adminServer returns unimplemented
+// for non-system tenants.
+func (s *adminServer) GetUploadDebugDataStatus(
+	ctx context.Context, req *serverpb.GetUploadDebugDataStatusRequest,
+) (*serverpb.GetUploadDebugDataStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented,
+		"upload debug data status is not supported on secondary tenants")
 }

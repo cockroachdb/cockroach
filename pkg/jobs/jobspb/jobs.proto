@@ -1629,6 +1629,8 @@ message UploadDebugDataProgress {
   int32 nodes_failed = 4;
   int32 artifacts_uploaded = 5;
   repeated string errors = 6;
+  // Node IDs that failed during upload, enabling targeted retry.
+  repeated int32 failed_node_ids = 7;
 }
 
 message UpdateTableMetadataCacheDetails {}

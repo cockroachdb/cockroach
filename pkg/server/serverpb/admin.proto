@@ -1322,6 +1322,15 @@ service Admin {
       body: "*"
     };
   }
+
+  // GetUploadDebugDataStatus returns the decoded progress and status
+  // for an upload debug data job, including which nodes failed so the
+  // caller can trigger a targeted retry.
+  rpc GetUploadDebugDataStatus(GetUploadDebugDataStatusRequest) returns (GetUploadDebugDataStatusResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/upload_debug_data/status/{job_id}"
+    };
+  }
 }
 
 message ListTenantsRequest{}
@@ -1515,4 +1524,30 @@ message StartUploadDebugDataRequest {
 // StartUploadDebugDataResponse is the response for StartUploadDebugData.
 message StartUploadDebugDataResponse {
   int64 job_id = 1 [(gogoproto.customname) = "JobID"];
+}
+
+// GetUploadDebugDataStatusRequest is the request for GetUploadDebugDataStatus.
+message GetUploadDebugDataStatusRequest {
+  int64 job_id = 1;
+}
+
+// GetUploadDebugDataStatusResponse is the response for GetUploadDebugDataStatus.
+// It surfaces the decoded UploadDebugDataProgress and UploadDebugDataDetails
+// so the UI can display per-node failure info and offer targeted retry.
+message GetUploadDebugDataStatusResponse {
+  int64 job_id = 1 [(gogoproto.customname) = "JobID"];
+  string status = 2;
+  string session_id = 3;
+  int32 total_nodes = 4;
+  int32 nodes_completed = 5;
+  int32 nodes_failed = 6;
+  int32 artifacts_uploaded = 7;
+  repeated int32 failed_node_ids = 8;
+  repeated string errors = 9;
+  float fraction_completed = 10;
+  string running_status = 11;
+  string error = 12;
+  // Original request params for retry pre-fill.
+  string server_url = 13;
+  bool redact = 14;
 }

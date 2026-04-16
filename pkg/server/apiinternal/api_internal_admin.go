@@ -54,6 +54,7 @@ func (r *apiInternalServer) registerAdminRoutes() {
 
 		// Debug data upload.
 		{POST, "/_admin/v1/upload_debug_data", createHandler(r.admin.StartUploadDebugData)},
+		{GET, "/_admin/v1/upload_debug_data/status/{job_id}", createHandler(r.admin.GetUploadDebugDataStatus)},
 	}
 
 	for _, route := range routes {

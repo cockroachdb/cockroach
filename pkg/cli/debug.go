@@ -1605,6 +1605,8 @@ func init() {
 		cliflags.UploadServerReuploadSession.Usage())
 	f.IntSliceVar(&uploadServerCtx.nodeIDs, cliflags.UploadServerNodeIDs.Name, nil,
 		cliflags.UploadServerNodeIDs.Usage())
+	f.BoolVar(&uploadServerCtx.async, cliflags.UploadServerAsync.Name, false,
+		cliflags.UploadServerAsync.Usage())
 	cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
 	cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 	cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)

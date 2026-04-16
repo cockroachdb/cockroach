@@ -248,37 +248,95 @@ const StatementDiagnosticsConnected = connect(
   },
 )(StatementDiagnosticsSelector);
 
+interface UploadJobStatus {
+  job_id: string;
+  status: string;
+  session_id: string;
+  total_nodes: number;
+  nodes_completed: number;
+  nodes_failed: number;
+  artifacts_uploaded: number;
+  failed_node_ids: number[];
+  errors: string[];
+  fraction_completed: number;
+  running_status: string;
+  error: string;
+  server_url: string;
+  redact: boolean;
+}
+
+const inputStyle: React.CSSProperties = { padding: "4px 8px", fontSize: "13px" };
+const btnStyle: React.CSSProperties = { padding: "4px 12px", fontSize: "13px", alignSelf: "flex-start" };
+const errStyle: React.CSSProperties = { color: "red", fontSize: "12px" };
+const labelStyle: React.CSSProperties = { fontSize: "12px", fontWeight: 600, marginTop: "4px" };
+
 function UploadDebugDataPanel() {
   const [serverUrl, setServerUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [reuploadSessionId, setReuploadSessionId] = useState("");
+  const [nodeIds, setNodeIds] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [checkJobId, setCheckJobId] = useState("");
+  const [jobStatus, setJobStatus] = useState<UploadJobStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  const startUpload = async (
+    url: string,
+    key: string,
+    sessionId?: string,
+    nodes?: number[],
+  ) => {
+    const body: Record<string, unknown> = {
+      server_url: url,
+      api_key: key,
+      redact: false,
+      include_goroutine_stacks: true,
+    };
+    if (sessionId) {
+      body.reupload_session_id = sessionId;
+    }
+    if (nodes && nodes.length > 0) {
+      body.node_ids = nodes;
+    }
+    const resp = await fetch("/_admin/v1/upload_debug_data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${text}`);
+    }
+    const data = await resp.json();
+    return data.job_id || data.jobId || data.JobID;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const resp = await fetch("/_admin/v1/upload_debug_data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          server_url: serverUrl,
-          api_key: apiKey,
-          redact: false,
-          include_goroutine_stacks: true,
-        }),
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${text}`);
-      }
-      const data = await resp.json();
-      const jobId = data.job_id || data.jobId || data.JobID;
+      const parsedNodes = nodeIds
+        .split(",")
+        .map(s => s.trim())
+        .filter(s => s !== "")
+        .map(Number)
+        .filter(n => !isNaN(n));
+      const jobId = await startUpload(
+        serverUrl,
+        apiKey,
+        reuploadSessionId || undefined,
+        parsedNodes.length > 0 ? parsedNodes : undefined,
+      );
       if (jobId) {
         history.push(`/jobs/${jobId}`);
       } else {
-        setError("No job ID in response: " + JSON.stringify(data));
+        setError("No job ID returned");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -287,49 +345,233 @@ function UploadDebugDataPanel() {
     }
   };
 
+  const handleCheckStatus = async () => {
+    if (!checkJobId) return;
+    setStatusLoading(true);
+    setStatusError(null);
+    setJobStatus(null);
+    try {
+      const resp = await fetch(
+        `/_admin/v1/upload_debug_data/status/${checkJobId}`,
+      );
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${text}`);
+      }
+      const data = await resp.json();
+      setJobStatus(data);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    if (!jobStatus || !apiKey) return;
+    setRetrying(true);
+    setStatusError(null);
+    try {
+      const jobId = await startUpload(
+        jobStatus.server_url,
+        apiKey,
+        jobStatus.session_id,
+        jobStatus.failed_node_ids,
+      );
+      if (jobId) {
+        history.push(`/jobs/${jobId}`);
+      }
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
-    <PanelPair>
-      <Panel>
-        <a>Upload Debug Data to Support</a>
-        <p>
-          Stream debug data from all nodes directly to a CRL upload server.
-          Progress is tracked as a background job.
-        </p>
-      </Panel>
-      <Panel>
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-        >
-          <input
-            type="text"
-            placeholder="Upload server URL"
-            value={serverUrl}
-            onChange={e => setServerUrl(e.target.value)}
-            required
-            style={{ padding: "4px 8px", fontSize: "13px" }}
-          />
-          <input
-            type="password"
-            placeholder="API key"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            required
-            style={{ padding: "4px 8px", fontSize: "13px" }}
-          />
-          <button
-            type="submit"
-            disabled={submitting || !serverUrl || !apiKey}
-            style={{ padding: "4px 12px", fontSize: "13px", alignSelf: "flex-start" }}
+    <>
+      <PanelPair>
+        <Panel>
+          <a>Upload Debug Data to Support</a>
+          <p>
+            Stream debug data from all nodes directly to a CRL upload server.
+            Progress is tracked as a background job.
+          </p>
+        </Panel>
+        <Panel>
+          <form
+            onSubmit={handleSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: "6px" }}
           >
-            {submitting ? "Starting..." : "Start Upload"}
-          </button>
-          {error && (
-            <div style={{ color: "red", fontSize: "12px" }}>{error}</div>
-          )}
-        </form>
-      </Panel>
-    </PanelPair>
+            <input
+              type="text"
+              placeholder="Upload server URL"
+              value={serverUrl}
+              onChange={e => setServerUrl(e.target.value)}
+              required
+              style={inputStyle}
+            />
+            <input
+              type="password"
+              placeholder="API key"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              required
+              style={inputStyle}
+            />
+            <a
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{ fontSize: "12px", cursor: "pointer", color: "#0055ff" }}
+            >
+              {showAdvanced ? "▾ Hide advanced options" : "▸ Advanced options"}
+            </a>
+            {showAdvanced && (
+              <>
+                <label style={labelStyle}>Reupload Session ID (for retry)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. sess_abc123"
+                  value={reuploadSessionId}
+                  onChange={e => setReuploadSessionId(e.target.value)}
+                  style={inputStyle}
+                />
+                <label style={labelStyle}>Node IDs (comma-separated, blank = all)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 1,3,5"
+                  value={nodeIds}
+                  onChange={e => setNodeIds(e.target.value)}
+                  style={inputStyle}
+                />
+              </>
+            )}
+            <button
+              type="submit"
+              disabled={submitting || !serverUrl || !apiKey}
+              style={btnStyle}
+            >
+              {submitting ? "Starting..." : "Start Upload"}
+            </button>
+            {error && <div style={errStyle}>{error}</div>}
+          </form>
+        </Panel>
+      </PanelPair>
+
+      <PanelPair>
+        <Panel>
+          <a>Check Upload Status</a>
+          <p>
+            Enter a job ID to view upload progress, per-node errors, and retry
+            failed nodes.
+          </p>
+        </Panel>
+        <Panel>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <input
+                type="text"
+                placeholder="Job ID"
+                value={checkJobId}
+                onChange={e => setCheckJobId(e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={handleCheckStatus}
+                disabled={statusLoading || !checkJobId}
+                style={btnStyle}
+              >
+                {statusLoading ? "Loading..." : "Check Status"}
+              </button>
+            </div>
+            {statusError && <div style={errStyle}>{statusError}</div>}
+            {jobStatus && (
+              <div
+                style={{
+                  fontSize: "12px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  padding: "8px",
+                  marginTop: "4px",
+                }}
+              >
+                <div>
+                  <strong>Status:</strong> {jobStatus.status}
+                  {jobStatus.fraction_completed > 0 &&
+                    ` (${(jobStatus.fraction_completed * 100).toFixed(0)}%)`}
+                </div>
+                {jobStatus.session_id && (
+                  <div><strong>Session:</strong> {jobStatus.session_id}</div>
+                )}
+                {jobStatus.running_status && (
+                  <div><strong>Progress:</strong> {jobStatus.running_status}</div>
+                )}
+                <div>
+                  <strong>Nodes:</strong>{" "}
+                  {jobStatus.nodes_completed}/{jobStatus.total_nodes} completed
+                  {jobStatus.nodes_failed > 0 && (
+                    <span style={{ color: "red" }}>
+                      , {jobStatus.nodes_failed} failed
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <strong>Artifacts uploaded:</strong>{" "}
+                  {jobStatus.artifacts_uploaded}
+                </div>
+                {jobStatus.error && (
+                  <div style={{ color: "red", marginTop: "4px" }}>
+                    <strong>Error:</strong> {jobStatus.error}
+                  </div>
+                )}
+                {jobStatus.failed_node_ids &&
+                  jobStatus.failed_node_ids.length > 0 && (
+                    <div style={{ marginTop: "4px" }}>
+                      <strong>Failed nodes:</strong>{" "}
+                      {jobStatus.failed_node_ids.join(", ")}
+                    </div>
+                  )}
+                {jobStatus.errors && jobStatus.errors.length > 0 && (
+                  <div style={{ marginTop: "4px" }}>
+                    <strong>Per-node errors:</strong>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                      {jobStatus.errors.map((e, i) => (
+                        <li key={i} style={{ color: "#c00" }}>{e}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {jobStatus.failed_node_ids &&
+                  jobStatus.failed_node_ids.length > 0 && (
+                    <div style={{ marginTop: "8px" }}>
+                      {!apiKey && (
+                        <div style={{ fontSize: "11px", color: "#666", marginBottom: "4px" }}>
+                          Enter your API key above to enable retry.
+                        </div>
+                      )}
+                      <button
+                        onClick={handleRetryFailed}
+                        disabled={retrying || !apiKey}
+                        style={{
+                          ...btnStyle,
+                          backgroundColor: "#c00",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "3px",
+                          cursor: apiKey ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        {retrying
+                          ? "Retrying..."
+                          : `Retry Failed Nodes (${jobStatus.failed_node_ids.join(", ")})`}
+                      </button>
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </PanelPair>
+    </>
   );
 }
 
