@@ -473,7 +473,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 // join that silently degrades to a full scan.
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
+https://www.postgresql.org/docs/18/catalog-pg-attribute.html`,
 	vtable.PGCatalogAttribute,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,

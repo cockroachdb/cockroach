@@ -1858,6 +1858,31 @@ fk         {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
 t5_a_fkey  {1}      NULL       NULL       NULL       NULL       NULL    NULL
 fk         {2}      NULL       NULL       NULL       NULL       NULL    NULL
 
+# NOT VALID constraints are still enforced for new writes (they skip
+# validation of existing data). conenforced should be true. In PG 18,
+# conenforced is false only for NOT ENFORCED constraints, which CRDB
+# does not support.
+
+statement ok
+ALTER TABLE constraint_db.t3 ADD CONSTRAINT check_not_valid CHECK (a > 0) NOT VALID
+
+query TBB
+SELECT conname, convalidated, conenforced
+FROM pg_catalog.pg_constraint
+WHERE conrelid = 'constraint_db.t3'::regclass AND conname = 'check_not_valid'
+----
+check_not_valid  false  true
+
+statement ok
+ALTER TABLE constraint_db.t3 VALIDATE CONSTRAINT check_not_valid
+
+query TBB
+SELECT conname, convalidated, conenforced
+FROM pg_catalog.pg_constraint
+WHERE conrelid = 'constraint_db.t3'::regclass AND conname = 'check_not_valid'
+----
+check_not_valid  true  true
+
 ## pg_catalog.pg_depend
 
 query OOIOOIT colnames,strip-oids
@@ -4127,6 +4152,18 @@ select name, statement, parameter_types, result_types, from_sql from pg_prepared
 ----
 test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  {}                                              true
 test_select_statement  PREPARE test_select_statement AS SELECT * FROM types  {}  {"'timestamp with time zone'",bigint}  true
+
+# INSERT ... RETURNING populates result_types with the returned columns.
+statement ok
+PREPARE insert_returning (integer) AS INSERT INTO types VALUES (now(), $1) RETURNING b
+
+query TTT
+SELECT name, parameter_types, result_types FROM pg_prepared_statements WHERE name = 'insert_returning'
+----
+insert_returning  {bigint}  {bigint}
+
+statement ok
+DEALLOCATE insert_returning
 
 subtest pg_catalog.pg_prepare_statement,with_possible_mismatch_num_types
 

@@ -498,7 +498,7 @@ pg_catalog,pg_amproc,table,node,permanent,prefix,pg_amproc was created for compa
 pg_catalog,pg_attrdef,table,node,permanent,prefix,"column default values
 https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html"
 pg_catalog,pg_attribute,table,node,permanent,prefix,"table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
+https://www.postgresql.org/docs/18/catalog-pg-attribute.html"
 pg_catalog,pg_auth_members,table,node,permanent,prefix,"role membership
 https://www.postgresql.org/docs/18/catalog-pg-auth-members.html"
 pg_catalog,pg_authid,table,node,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
