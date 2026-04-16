@@ -40,7 +40,6 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		db,
 		s.AppStopper(),
@@ -341,7 +340,6 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
