@@ -1486,7 +1486,11 @@ func TestRestoreJobRetryReset(t *testing.T) {
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
-				MaxDuration:    time.Second,
+				// Instead of max duration, which can be flaky, we use the more
+				// deterministic max retries. As long as this is set to a value
+				// sufficiently higher than maxRestoreRestryFastFail, this test will be
+				// able to verify that retries were reset after progress was made.
+				MaxRetries: maxRestoreRetryFastFail * 2,
 			},
 			// Disable switching to the secondary retry policy for this test since it
 			// is not relevant to the test. Set to an unachievable value.
