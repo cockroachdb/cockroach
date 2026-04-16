@@ -400,6 +400,7 @@ sql.stats.response.max	integer	20000	the maximum number of statements and transa
 sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	application
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	application
 sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables	application
+sql.stats.table_statistics_cache.capacity	integer	256	the maximum number of table statistics entries stored in the LRU cache. Each cache entry corresponds to a single table.	application
 sql.stats.virtual_computed_columns.enabled	boolean	true	set to true to collect table statistics on virtual computed columns	application
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	application
 sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	application
