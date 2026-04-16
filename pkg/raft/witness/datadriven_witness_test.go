@@ -27,7 +27,8 @@ type testVoter struct {
 	votedFor       raftpb.PeerID
 	leader         bool
 	committed      uint64
-	witnessEngaged bool // leader's view of witness engagement
+	witnessEngaged bool   // leader's view of witness engagement
+	cfg            string // e.g. "(v1 v2 w)"
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -109,9 +110,20 @@ func (e *testEnv) fmtConfig() string {
 }
 
 func (e *testEnv) fmtVoters() string {
-	cfg := e.fmtConfig()
+	// Elide cfg= when all voters agree on the config.
+	showCfg := false
+	for _, v := range e.voters[1:] {
+		if v.cfg != e.voters[0].cfg {
+			showCfg = true
+			break
+		}
+	}
 	var lines []string
 	for _, v := range e.voters {
+		cfg := ""
+		if showCfg {
+			cfg = v.cfg
+		}
 		lines = append(lines, fmtVoterLine(v, cfg))
 	}
 	return strings.Join(lines, "\n")
@@ -130,9 +142,13 @@ func fmtVoterLine(v testVoter, cfg string) string {
 			suffix = " leader"
 		}
 	}
+	cfgStr := ""
+	if cfg != "" {
+		cfgStr = " cfg=" + cfg
+	}
 	return fmt.Sprintf(
-		"v%d: [%s] term=%s cfg=%s%s",
-		v.id, strings.Join(logParts, " "), fmtTerm(v.term), cfg, suffix,
+		"v%d: [%s] term=%s%s%s",
+		v.id, strings.Join(logParts, " "), fmtTerm(v.term), cfgStr, suffix,
 	)
 }
 
@@ -143,8 +159,8 @@ func TestDataDrivenWitness(t *testing.T) {
 		ctx := context.Background()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "add-voters":
-				return handleAddVoters(t, d, &env)
+			case "setup":
+				return handleSetup(t, d, &env)
 			case "campaign":
 				return handleCampaign(t, d, &env, ctx, false /* prevote */)
 			case "prevote":
@@ -164,7 +180,7 @@ func TestDataDrivenWitness(t *testing.T) {
 				if ok && ldr != nil {
 					ldr.witnessEngaged = true
 					env.updateLeaderCommitted()
-					result += "\n" + fmtVoterLine(*ldr, env.fmtConfig())
+					result += "\n" + fmtVoterLine(*ldr, "")
 				}
 				return result
 			case "release":
@@ -188,7 +204,7 @@ func TestDataDrivenWitness(t *testing.T) {
 	})
 }
 
-func handleAddVoters(t *testing.T, d *datadriven.TestData, env *testEnv) string {
+func handleSetup(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	for _, line := range strings.Split(d.Input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -228,6 +244,11 @@ func handleAddVoters(t *testing.T, d *datadriven.TestData, env *testEnv) string 
 			v.term = raftpb.Term(last.Term)
 		}
 		env.voters = append(env.voters, v)
+	}
+	// Set the config on all voters now that the full membership is known.
+	cfg := env.fmtConfig()
+	for i := range env.voters {
+		env.voters[i].cfg = cfg
 	}
 	return env.fmtVoters()
 }

@@ -3,13 +3,13 @@
 #
 # Two voters, one witness. Quorum = 2.
 
-add-voters
+setup
 v1: [a1]
 v2: [a1]
 w
 ----
-v1: [a1] term=a cfg=(v1 v2 w)
-v2: [a1] term=a cfg=(v1 v2 w)
+v1: [a1] term=a
+v2: [a1] term=a
 
 # v1 wins election. Witness vote is dropped to keep setup minimal.
 campaign v1 drop=(w)
@@ -24,15 +24,15 @@ outcome: won
 # Matches: [v1=3, v2=0, w=0]. Quorum match = 0, not committed.
 propose v1
 ----
-v1: [a1 b2 b3] term=b cfg=(v1 v2 w) leader
-v2: [a1] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
 
 append v1 drop=(v2)
 ----
 v1 appends through b3
 v2: (dropped)
-v1: [a1 b2 b3] term=b cfg=(v1 v2 w) leader
-v2: [a1] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
 
 # v1 engages the witness. Now it counts toward quorum.
 # Matches: [v1=3, v2=0, w=3]. Quorum match = 3, committed!
@@ -40,7 +40,7 @@ engage v1
 ----
 ok
 w:  vote=(b, -) acked=(b3, engaged)
-v1: [a1 b2 b3] term=b cfg=(v1 v2 w) committed=b3 leader
+v1: [a1 b2 b3] term=b committed=b3 leader
 
 # v2 prevotes (v1 partitioned away). The witness rejects: v2's last log entry
 # a1 is from term a, which is older than the term b leader that engaged the
@@ -58,15 +58,15 @@ outcome: lost
 # one commits immediately (witness match advances with the leader's log).
 propose v1
 ----
-v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 w) committed=b4 leader
-v2: [a1] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3 b4] term=b committed=b4 leader
+v2: [a1] term=b
 
 append v1 drop=(v2)
 ----
 v1 appends through b4
 v2: (dropped)
-v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 w) committed=b4 leader
-v2: [a1] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3 b4] term=b committed=b4 leader
+v2: [a1] term=b
 
 # v1 releases the witness, returning to voter-based commits. Note that the
 # witness reflects the updated high water mark, i.e. it knows the highest
@@ -91,12 +91,12 @@ outcome: lost
 # traditional v1+v2 quorum — no witness engagement needed.
 propose v1
 ----
-v1: [a1 b2 b3 b4 b5] term=b cfg=(v1 v2 w) committed=b4 leader
-v2: [a1] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3 b4 b5] term=b committed=b4 leader
+v2: [a1] term=b
 
 append v1
 ----
 v1 appends through b5
 v2: ok
-v1: [a1 b2 b3 b4 b5] term=b cfg=(v1 v2 w) committed=b5 leader
-v2: [a1 b2 b3 b4 b5] term=b cfg=(v1 v2 w)
+v1: [a1 b2 b3 b4 b5] term=b committed=b5 leader
+v2: [a1 b2 b3 b4 b5] term=b
