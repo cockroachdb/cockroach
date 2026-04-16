@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -84,6 +86,8 @@ func (rc recCollector) addIndexRec(md *opt.Metadata, expr opt.Expr) {
 	case *memo.ZigzagJoinExpr:
 		rc.addIndex(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
 		rc.addIndex(md, expr.RightIndex, expr.Cols, expr.RightTable)
+	case *memo.VectorSearchExpr:
+		rc.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		rc.addIndexRec(md, expr.Child(i))
@@ -188,6 +192,16 @@ func findBestExistingIndexToReplace(
 		// the same explicit columns. If hypIndex is inverted, it also makes sure
 		// that their inverted column comes from the same source column.
 		hasSameExplicitCols := hypIndex.hasSameExplicitCols(existingIndex)
+		// For vector indexes, also compare the distance metric. An existing
+		// L2 index is not interchangeable with a cosine index on the same
+		// column.
+		if hasSameExplicitCols && hypIndex.vectorConfig != nil {
+			existingVecConfig := existingIndex.VecConfig()
+			if existingVecConfig != nil &&
+				existingVecConfig.DistanceMetric != hypIndex.vectorConfig.DistanceMetric {
+				hasSameExplicitCols = false
+			}
+		}
 		if hasSameExplicitCols {
 			// If hasSameExplicitCols, this existing index is a candidate for
 			// potential index replacement.
@@ -465,7 +479,14 @@ func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 			direction = tree.Descending
 		}
 
-		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction}
+		// The operator class is only set on the last column of a vector index,
+		// which is the vector column itself. Preceding columns are prefix columns.
+		var opClass tree.Name
+		if ir.index.Type() == idxtype.VECTOR && i == len(ir.index.cols)-1 {
+			opClass = tree.Name(vecOpClassName(ir.index.vectorConfig.DistanceMetric))
+		}
+
+		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction, OpClass: opClass}
 	}
 
 	return indexCols
@@ -484,4 +505,19 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 		storingCols = append(storingCols, colName)
 	})
 	return storingCols
+}
+
+// vecOpClassName returns the operator class name for a given vector distance
+// metric, used in the CREATE VECTOR INDEX recommendation output.
+func vecOpClassName(metric vecpb.DistanceMetric) string {
+	switch metric {
+	case vecpb.L2SquaredDistance:
+		return "vector_l2_ops"
+	case vecpb.CosineDistance:
+		return "vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		return "vector_ip_ops"
+	default:
+		panic(errors.AssertionFailedf("unknown distance metric %d", metric))
+	}
 }

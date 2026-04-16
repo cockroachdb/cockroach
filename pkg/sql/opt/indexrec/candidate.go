@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -42,6 +43,10 @@ import (
 //  7. For JSON and array columns, we create single column inverted indexes. We
 //     also create the following multi-column combination candidates for each
 //     inverted column: eq + 'inverted column', EQ + 'inverted column'.
+//  8. For vector columns used in distance expressions (<->, <=>, <#>), we
+//     create single column vector indexes. We also create the following
+//     multi-column combination candidates for each vector column:
+//     eq + 'vector column', EQ + 'vector column'.
 //
 // TODO(nehageorge): Add a rule for columns that are referenced in the statement
 // but do not fall into one of these categories. In order to account for this,
@@ -50,12 +55,27 @@ import (
 // RFC for inspiration: https://github.com/cockroachdb/cockroach/pull/71784. We
 // may also consider matching more types of SQL expressions, including LIKE
 // expressions.
-func FindIndexCandidateSet(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
+func FindIndexCandidateSet(
+	rootExpr opt.Expr, md *opt.Metadata,
+) (map[cat.Table][][]cat.IndexColumn, IndexCandidateAttrs) {
 	var candidateSet indexCandidateSet
 	candidateSet.init(md)
 	candidateSet.categorizeIndexCandidates(rootExpr)
 	candidateSet.combineIndexCandidates()
-	return candidateSet.overallCandidates
+	return candidateSet.overallCandidates, candidateSet.candidateAttrs
+}
+
+// IndexCandidateAttrs stores additional attributes associated with index
+// candidates that cannot be expressed through index columns alone, such as
+// the distance metric for vector index candidates.
+type IndexCandidateAttrs struct {
+	// VectorDistMetrics maps vector column stable IDs to their distance metric.
+	VectorDistMetrics map[cat.StableID]vecpb.DistanceMetric
+}
+
+// init allocates memory for the maps in IndexCandidateAttrs.
+func (a *IndexCandidateAttrs) init() {
+	a.VectorDistMetrics = make(map[cat.StableID]vecpb.DistanceMetric)
 }
 
 // indexCandidateSet stores potential indexes that could be recommended for a
@@ -66,7 +86,9 @@ type indexCandidateSet struct {
 	rangeCandidates    map[cat.Table][][]cat.IndexColumn
 	joinCandidates     map[cat.Table][][]cat.IndexColumn
 	invertedCandidates map[cat.Table][][]cat.IndexColumn
+	vectorCandidates   map[cat.Table][][]cat.IndexColumn
 	overallCandidates  map[cat.Table][][]cat.IndexColumn
+	candidateAttrs     IndexCandidateAttrs
 }
 
 // init allocates memory for the maps in the set.
@@ -77,7 +99,9 @@ func (ics *indexCandidateSet) init(md *opt.Metadata) {
 	ics.rangeCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.joinCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.invertedCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
+	ics.vectorCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.overallCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
+	ics.candidateAttrs.init()
 }
 
 // combineIndexCandidates adds index candidates that are combinations of
@@ -89,13 +113,14 @@ func (ics *indexCandidateSet) combineIndexCandidates() {
 	copyIndexes(ics.rangeCandidates, ics.overallCandidates)
 	copyIndexes(ics.joinCandidates, ics.overallCandidates)
 	copyIndexes(ics.invertedCandidates, ics.overallCandidates)
+	copyIndexes(ics.vectorCandidates, ics.overallCandidates)
 
 	numTables := len(ics.overallCandidates)
 	equalJoinCandidates := make(map[cat.Table][][]cat.IndexColumn, numTables)
 	equalGroupedCandidates := make(map[cat.Table][][]cat.IndexColumn, numTables)
 
 	// Construct EQ, EQ + R, J + R, EQ + J, EQ + J + R, eq + (inverted),
-	// EQ + (inverted).
+	// EQ + (inverted), eq + V, EQ + V.
 	groupIndexesByTable(ics.equalCandidates, equalGroupedCandidates)
 	copyIndexes(equalGroupedCandidates, ics.overallCandidates)
 	constructIndexCombinations(equalGroupedCandidates, ics.rangeCandidates, ics.overallCandidates)
@@ -105,6 +130,8 @@ func (ics *indexCandidateSet) combineIndexCandidates() {
 	constructIndexCombinations(equalJoinCandidates, ics.rangeCandidates, ics.overallCandidates)
 	constructIndexCombinations(ics.equalCandidates, ics.invertedCandidates, ics.overallCandidates)
 	constructIndexCombinations(equalGroupedCandidates, ics.invertedCandidates, ics.overallCandidates)
+	constructIndexCombinations(ics.equalCandidates, ics.vectorCandidates, ics.overallCandidates)
+	constructIndexCombinations(equalGroupedCandidates, ics.vectorCandidates, ics.overallCandidates)
 }
 
 // categorizeIndexCandidates finds potential index candidates for a given
@@ -193,9 +220,38 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	case *memo.BBoxIntersectsExpr:
 		ics.addVariableExprIndex(expr.Left, ics.overallCandidates)
 		ics.addVariableExprIndex(expr.Right, ics.overallCandidates)
+	case *memo.VectorDistanceExpr:
+		ics.addVectorIndex(expr.Left, expr.Right, vecpb.L2SquaredDistance)
+	case *memo.VectorCosDistanceExpr:
+		ics.addVectorIndex(expr.Left, expr.Right, vecpb.CosineDistance)
+	case *memo.VectorNegInnerProductExpr:
+		ics.addVectorIndex(expr.Left, expr.Right, vecpb.InnerProductDistance)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		ics.categorizeIndexCandidates(expr.Child(i))
+	}
+}
+
+// addVectorIndex adds a single-column vector index candidate for any PGVector
+// column found in the left or right operands of a vector distance expression,
+// and records the associated distance metric.
+func (ics *indexCandidateSet) addVectorIndex(
+	left, right opt.Expr, distanceMetric vecpb.DistanceMetric,
+) {
+	for _, expr := range []opt.Expr{left, right} {
+		if v, ok := expr.(*memo.VariableExpr); ok {
+			col := v.Col
+			colMeta := ics.md.ColumnMeta(col)
+			if colMeta.Type.Family() == types.PGVectorFamily {
+				ics.addSingleColumnIndex(col, false /* desc */, ics.vectorCandidates)
+
+				table := ics.md.Table(colMeta.Table)
+				ordinal := colMeta.Table.ColumnOrdinal(col)
+				stableColID := table.Column(ordinal).ColID()
+
+				ics.candidateAttrs.VectorDistMetrics[stableColID] = distanceMetric
+			}
+		}
 	}
 }
 
