@@ -142,6 +142,17 @@ func setupDatabase(ctx context.Context, t test.Test, conn *gosql.DB) {
 	stmts := []string{
 		`SET CLUSTER SETTING sql.defaults.primary_region = ''`,
 		`SET CLUSTER SETTING server.time_until_store_dead = '30s'`,
+
+		// Pin at least one system-database replica to each region so that no
+		// single region holds a majority of the 5 replicas. Without this,
+		// the allocator may concentrate replicas in 2 regions, causing
+		// permanent quorum loss when one of those regions is killed.
+		`ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 5, constraints = '{` +
+			`"+region=europe-west2": 1, ` +
+			`"+region=us-east1": 1, ` +
+			`"+region=us-central1": 1, ` +
+			`"+region=us-west1": 1}'`,
+
 		`CREATE DATABASE test_sr PRIMARY REGION "europe-west2"
 			REGIONS "us-east1", "us-central1", "us-west1"`,
 		`ALTER DATABASE test_sr ADD SUPER REGION "americas"
