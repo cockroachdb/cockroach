@@ -217,6 +217,134 @@ func initTestData(
 	return expectedStats, nil
 }
 
+func TestCacheEntryEstimateSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Empty entry should have at least the struct overhead.
+	emptyEntry := &cacheEntry{}
+	emptySize := emptyEntry.estimateSize()
+	require.Greater(t, emptySize, int64(0))
+	require.GreaterOrEqual(t, emptySize, cacheEntryOverhead)
+
+	// Entry with stats but no histograms.
+	noHistEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					Name:          "test_stat",
+					ColumnIDs:     []descpb.ColumnID{1, 2, 3},
+					RowCount:      1000,
+					DistinctCount: 100,
+					NullCount:     10,
+				},
+			},
+		},
+	}
+	noHistSize := noHistEntry.estimateSize()
+	require.Greater(t, noHistSize, emptySize,
+		"entry with stats should be larger than empty entry")
+	// Verify the stat's variable-size fields are accounted for.
+	require.Greater(t, noHistSize,
+		cacheEntryOverhead+tableStatOverhead,
+		"should account for Name and ColumnIDs beyond fixed overhead")
+
+	// Entry with histogram buckets containing datums.
+	histEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+				Histogram: []cat.HistogramBucket{
+					{NumEq: 10, UpperBound: tree.NewDInt(1)},
+					{NumEq: 20, NumRange: 5, UpperBound: tree.NewDInt(100)},
+					{NumEq: 30, NumRange: 10, UpperBound: tree.NewDInt(1000)},
+				},
+			},
+		},
+	}
+	histSize := histEntry.estimateSize()
+	require.Greater(t, histSize, noHistSize,
+		"entry with histogram should be larger than entry without")
+	// 3 buckets * histogramBucketOverhead is a lower bound for the histogram
+	// contribution.
+	require.Greater(t, histSize,
+		cacheEntryOverhead+tableStatOverhead+3*histogramBucketOverhead,
+		"should account for histogram buckets")
+
+	// Entry with string-type histogram to test datum size variation.
+	stringHistEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+				Histogram: []cat.HistogramBucket{
+					{NumEq: 10, UpperBound: tree.NewDString("a")},
+					{NumEq: 20, UpperBound: tree.NewDString(strings.Repeat("x", 1000))},
+				},
+			},
+		},
+	}
+	stringHistSize := stringHistEntry.estimateSize()
+	// The long string datum should contribute at least 1000 bytes.
+	require.Greater(t, stringHistSize,
+		cacheEntryOverhead+tableStatOverhead+2*histogramBucketOverhead+1000,
+		"should account for string datum sizes")
+
+	// Entry with both stats and stableStats.
+	dualEntry := &cacheEntry{
+		stats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      1000,
+					DistinctCount: 100,
+				},
+			},
+		},
+		stableStats: []*TableStatistic{
+			{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       1,
+					StatisticID:   2,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      900,
+					DistinctCount: 90,
+				},
+			},
+		},
+	}
+	dualSize := dualEntry.estimateSize()
+	require.Greater(t, dualSize, noHistSize,
+		"entry with both stats and stableStats should be larger")
+
+	// Entry with user-defined types map.
+	udtEntry := &cacheEntry{
+		userDefinedTypes: map[descpb.ColumnID]*types.T{
+			1: types.Int,
+			2: types.String,
+			3: types.Bool,
+		},
+	}
+	udtSize := udtEntry.estimateSize()
+	require.Greater(t, udtSize, emptySize,
+		"entry with UDT map should be larger than empty entry")
+}
+
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -243,7 +371,7 @@ func TestCacheBasic(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 2)
-	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -346,7 +474,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 
 	// Make a stats cache.
 	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 1)
-	sc := NewTableStatisticsCache(s.ClusterSettings(), insqlDB, s.AppStopper())
+	sc := NewTableStatisticsCache(s.ClusterSettings(), insqlDB, s.AppStopper(), nil /* parentMon */)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -400,7 +528,7 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, int64(len(tableIDs)))
-	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -453,6 +581,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
+		nil, /* parentMon */
 	)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
@@ -1035,7 +1164,7 @@ func TestCanaryStatsDataDriven(t *testing.T) {
 
 	db := s.InternalDB().(descs.DB)
 	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
-	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper(), nil /* parentMon */)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
