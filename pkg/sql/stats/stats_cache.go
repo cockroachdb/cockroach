@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -42,6 +43,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+)
+
+// TableStatsCacheSize controls the maximum number of table statistics entries
+// in the cache.
+var TableStatsCacheSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.table_statistics_cache.capacity",
+	"the maximum number of table statistics entries stored in the LRU cache",
+	256,
+	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 // A TableStatistic object holds a statistic for a particular column or group
@@ -148,10 +160,11 @@ type cacheEntry struct {
 	err error
 }
 
-// NewTableStatisticsCache creates a new TableStatisticsCache that can hold
-// statistics for <cacheSize> tables.
+// NewTableStatisticsCache creates a new TableStatisticsCache. The maximum
+// number of entries is controlled by the
+// sql.stats.table_statistics_cache.capacity cluster setting.
 func NewTableStatisticsCache(
-	cacheSize int, settings *cluster.Settings, db descs.DB, stopper *stop.Stopper,
+	settings *cluster.Settings, db descs.DB, stopper *stop.Stopper,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		db:       db,
@@ -159,8 +172,10 @@ func NewTableStatisticsCache(
 		stopper:  stopper,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
-		Policy:      cache.CacheLRU,
-		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(s int, key, value interface{}) bool {
+			return s > int(TableStatsCacheSize.Get(&settings.SV))
+		},
 	})
 	return tableStatsCache
 }

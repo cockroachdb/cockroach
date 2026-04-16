@@ -242,7 +242,8 @@ func TestCacheBasic(t *testing.T) {
 	// Create a cache and iteratively query the cache for each tableID. This
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
-	sc := NewTableStatisticsCache(2 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 2)
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -344,7 +345,8 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	insqlDB := s.InternalDB().(descs.DB)
 
 	// Make a stats cache.
-	sc := NewTableStatisticsCache(1, s.ClusterSettings(), insqlDB, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 1)
+	sc := NewTableStatisticsCache(s.ClusterSettings(), insqlDB, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -397,7 +399,8 @@ func TestCacheWait(t *testing.T) {
 		tableIDs = append(tableIDs, tableID)
 	}
 	sort.Sort(tableIDs)
-	sc := NewTableStatisticsCache(len(tableIDs) /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, int64(len(tableIDs)))
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -445,8 +448,8 @@ func TestCacheAutoRefresh(t *testing.T) {
 	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
 	sc := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -1031,7 +1034,8 @@ func TestCanaryStatsDataDriven(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
 	db := s.InternalDB().(descs.DB)
-	sc := NewTableStatisticsCache(10 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
