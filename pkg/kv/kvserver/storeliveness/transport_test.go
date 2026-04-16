@@ -532,7 +532,7 @@ func TestTransportIdleSendQueue(t *testing.T) {
 	handler := tt.AddStore(receiver)
 
 	tt.transports[sender.NodeID].knobs.OverrideIdleTimeout = func() time.Duration {
-		return time.Millisecond
+		return 100 * time.Millisecond
 	}
 
 	// Send and receive a message.
