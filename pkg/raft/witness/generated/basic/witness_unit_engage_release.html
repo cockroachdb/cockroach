@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Witness Test: testdata/basic/witness_unit_engage_release.txt</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; }
+.nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.nav button { background: #2d2d44; border: 1px solid #444; color: #ccc; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
+.nav button:hover { background: #3d3d54; }
+.nav button:disabled { opacity: 0.3; cursor: default; }
+.step-info { color: #aaa; }
+.command { color: #82aaff; font-weight: bold; }
+.comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
+.cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.card { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 12px; min-width: 200px; flex: 1; }
+.card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+.card .field { display: flex; justify-content: space-between; padding: 2px 0; }
+.card .field .key { color: #888; }
+.card .field .val { color: #e0e0e0; }
+.card .field.changed .val { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 4px; border-radius: 2px; }
+.card .field.changed .key { color: #ffd700; }
+.log-entries { color: #e0e0e0; word-break: break-all; }
+.log-entries.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 4px; border-radius: 2px; }
+.output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
+.output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1>testdata/basic/witness_unit_engage_release.txt</h1>
+<div id="app"></div>
+<script>
+const TRACE = {"testFile":"testdata/basic/witness_unit_engage_release.txt","steps":[{"index":0,"command":"vote from=(v1) term=(a) lm=(a0)","comment":"Vote for peer 1 in term a, then engage and release.","output":"ok\nw:  vote=(a, v1) acked=none"},{"index":1,"command":"engage term=(a) lm=(a5)","comment":"Engage at a5.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)"},{"index":2,"command":"engage term=(a) lm=(a5)","comment":"Idempotent engage.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)"},{"index":3,"command":"release term=(a) lm=(a10)","comment":"Release at a10.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)"},{"index":4,"command":"release term=(a) lm=(a10)","comment":"Idempotent release.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)"},{"index":5,"command":"engage term=(a) lm=(a10)","comment":"Re-engage must be at strictly greater log mark (replay protection).","output":"rejected"},{"index":6,"command":"engage term=(a) lm=(a15)","comment":"Re-engage at a15: succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, engaged)"},{"index":7,"command":"release term=(a) lm=(a10)","comment":"Stale release at a10: rejected.","output":"rejected"},{"index":8,"command":"release term=(a) lm=(a15)","comment":"Release at a15 (same as current hi): succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, released)"},{"index":9,"command":"engage term=(a) lm=(a20)","comment":"Re-engage at a20 in same term: succeeds (a20 \u003e a15).","output":"ok\nw:  vote=(a, v1) acked=(a20, engaged)"},{"index":10,"command":"release term=(a) lm=(a20)","comment":"Release again.","output":"ok\nw:  vote=(a, v1) acked=(a20, released)"},{"index":11,"command":"set","input":"term=b voted-for=v1","comment":"Stale term engage (from an old term) is rejected.\nBump to term b first, then try engaging at term a.","output":"w:  vote=(b, v1) acked=none"},{"index":12,"command":"engage term=(a) lm=(a25)","output":"rejected"},{"index":13,"command":"set","input":"term=b voted-for=v1 hi=b5 engaged=true","comment":"Wrong term release: rejected.","output":"w:  vote=(b, v1) acked=(b5, engaged)"},{"index":14,"command":"release term=(a) lm=(a20)","output":"rejected"},{"index":15,"command":"set","input":"term=a voted-for=v1","comment":"Engage from higher term bumps term (maybeBumpTerm).","output":"w:  vote=(a, v1) acked=none"},{"index":16,"command":"engage term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, engaged)"},{"index":17,"command":"set","input":"term=a voted-for=v1","comment":"Release from higher term also bumps term.","output":"w:  vote=(a, v1) acked=none"},{"index":18,"command":"release term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, released)"},{"index":19,"command":"set","input":"term=b voted-for=v1","comment":"Refuse to engage for old log terms (Hi must be in current term).","output":"w:  vote=(b, v1) acked=none"},{"index":20,"command":"engage term=(b) lm=(a5)","output":"rejected"}]};
+
+let currentStep = 0;
+
+function computeState(upTo) {
+  const state = { voters: {}, witness: null };
+  for (let i = 0; i <= upTo; i++) {
+    const step = TRACE.steps[i];
+    if (step.voters) {
+      for (const [id, delta] of Object.entries(step.voters)) {
+        if (!state.voters[id]) state.voters[id] = {};
+        for (const [k, v] of Object.entries(delta)) {
+          state.voters[id][k] = v;
+        }
+      }
+    }
+    if (step.witness) {
+      if (!state.witness) state.witness = { vote: {}, acked: {} };
+      if (step.witness.vote) {
+        for (const [k, v] of Object.entries(step.witness.vote)) {
+          state.witness.vote[k] = v;
+        }
+      }
+      if (step.witness.acked) {
+        for (const [k, v] of Object.entries(step.witness.acked)) {
+          state.witness.acked[k] = v;
+        }
+      }
+    }
+  }
+  return state;
+}
+
+function isChanged(step, replicaId, field) {
+  if (replicaId === 'w') {
+    if (!step.witness) return false;
+    if (field.startsWith('vote.')) return step.witness.vote && step.witness.vote[field.slice(5)] !== undefined;
+    if (field.startsWith('acked.')) return step.witness.acked && step.witness.acked[field.slice(6)] !== undefined;
+    return false;
+  }
+  return step.voters && step.voters[replicaId] && step.voters[replicaId][field] !== undefined;
+}
+
+function fmtLog(log) {
+  if (!log || log.length === 0) return '(empty)';
+  return log.map(e => e.term + e.index).join(' ');
+}
+
+function fmtLogMark(lm) {
+  if (!lm) return '-';
+  return lm.term + lm.index;
+}
+
+function renderVoterCard(id, voter, step) {
+  const f = (key, val) => {
+    const cls = isChanged(step, id, key) ? ' changed' : '';
+    return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
+  };
+  const logCls = isChanged(step, id, 'log') ? ' changed' : '';
+  let html = '<div class="card"><h2>' + id + '</h2>';
+  html += '<div class="field"><span class="key">log</span><span class="log-entries' + logCls + '">' + fmtLog(voter.log) + '</span></div>';
+  html += f('term', voter.term || '-');
+  html += f('votedFor', voter.votedFor || '-');
+  html += f('leader', voter.leader ? 'yes' : 'no');
+  html += f('committed', voter.committed || 0);
+  if (voter.witnessEngaged) html += f('witnessEngaged', 'yes');
+  html += '</div>';
+  return html;
+}
+
+function renderWitnessCard(witness, step) {
+  if (!witness) return '';
+  const f = (field, val) => {
+    const cls = isChanged(step, 'w', field) ? ' changed' : '';
+    return '<div class="field' + cls + '"><span class="key">' + field.split('.')[1] + '</span><span class="val">' + val + '</span></div>';
+  };
+  let html = '<div class="card"><h2>w (witness)</h2>';
+  html += '<div style="color:#666;font-size:11px;margin-bottom:4px">vote</div>';
+  html += f('vote.term', witness.vote.term || '-');
+  html += f('vote.votedFor', witness.vote.votedFor || '-');
+  html += '<div style="color:#666;font-size:11px;margin-top:6px;margin-bottom:4px">acked</div>';
+  html += f('acked.hi', witness.acked.hi ? fmtLogMark(witness.acked.hi) : '-');
+  html += f('acked.engaged', witness.acked.engaged ? 'yes' : 'no');
+  html += '</div>';
+  return html;
+}
+
+function render() {
+  const step = TRACE.steps[currentStep];
+  const state = computeState(currentStep);
+
+  let html = '';
+
+  
+  html += '<div class="nav">';
+  html += '<button onclick="go(-1)" id="btn-prev">&larr;</button>';
+  html += '<span class="step-info">Step ' + (currentStep + 1) + '/' + TRACE.steps.length + '</span>';
+  html += '<button onclick="go(1)" id="btn-next">&rarr;</button>';
+  html += '<span class="command">' + escHtml(step.command) + '</span>';
+  html += '</div>';
+
+  
+  html += '<div class="cards">';
+  const voterIds = Object.keys(state.voters).sort();
+  for (const id of voterIds) {
+    html += renderVoterCard(id, state.voters[id], step);
+  }
+  if (state.witness) {
+    html += renderWitnessCard(state.witness, step);
+  }
+  html += '</div>';
+
+  
+  if (step.comment) {
+    html += '<div class="comment">' + escHtml(step.comment) + '</div>';
+  }
+
+  
+  html += '<div class="output-label">input</div>';
+  let inputText = step.command;
+  if (step.input) inputText += '\n' + step.input;
+  html += '<div class="output">' + escHtml(inputText) + '</div>';
+
+  
+  html += '<div class="output-label">output</div>';
+  html += '<div class="output">' + escHtml(step.output) + '</div>';
+
+  document.getElementById('app').innerHTML = html;
+  document.getElementById('btn-prev').disabled = currentStep === 0;
+  document.getElementById('btn-next').disabled = currentStep === TRACE.steps.length - 1;
+}
+
+function go(delta) {
+  const next = currentStep + delta;
+  if (next >= 0 && next < TRACE.steps.length) {
+    currentStep = next;
+    render();
+  }
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+
+render();
+</script>
+</body>
+</html>

@@ -13,13 +13,20 @@ go_library(
 
 go_test(
     name = "witness_test",
-    srcs = ["datadriven_witness_test.go"],
+    srcs = [
+        "datadriven_witness_test.go",
+        "viz_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":witness"],
+    embedsrcs = ["viz_template.html"],
     deps = [
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/sniffarg",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
