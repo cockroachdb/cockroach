@@ -612,6 +612,96 @@ true
 
 subtest end
 
+subtest st_3dshortestline
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (0 0 5, 0 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT Z(5 3 4)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 3 4, 5 0 0)
+
+# Both inputs lack Z: falls back to the 2D shortest line (returning a 2D
+# LineString), matching PostGIS's lw_dist3d_distanceline.
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+LINESTRING (5 0, 5 0)
+
+# Mixed 2D/3D: PostGIS treats the missing Z as "any value" via the
+# vertical-line trick. The 2D side's Z is chosen to optimize the metric
+# at the closest 2D XY pair.
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 0 0, 5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 5 0, 5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT(5 5)'::geometry))
+----
+LINESTRING Z (5 0 0, 5 5 0)
+
+subtest end
+
+subtest st_3dlongestline
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (0 0 5, 10 0 0)
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+LINESTRING (5 0, 0 0)
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT(0 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 100)'::geometry))
+----
+LINESTRING Z (0 0 0, 10 0 100)
+
+subtest end
+
+subtest st_3dclosestpoint
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 3 4)'::geometry))
+----
+POINT Z (5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+POINT Z (0 0 5)
+
+# Both 2D: returns a 2D point.
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+POINT (5 0)
+
+# Mixed 2D/3D: the vertical-line trick assigns the missing Z to match
+# the 3D side at the closest XY.
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT(5 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 100)'::geometry))
+----
+POINT Z (5 0 50)
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('LINESTRING Z(0 0 0, 10 0 100)'::geometry, 'POINT(5 0)'::geometry))
+----
+POINT Z (5 0 50)
+
+subtest end
+
 subtest st_3dmaxdistance
 
 query R

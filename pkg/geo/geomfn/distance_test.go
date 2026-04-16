@@ -1040,6 +1040,138 @@ func TestDFullyWithin3D(t *testing.T) {
 	})
 }
 
+func TestShortestLineString3D(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		a        string
+		b        string
+		expected string
+	}{
+		{
+			"3D POINT above LINESTRING",
+			"POINT Z(0 0 5)",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"LINESTRING Z(0 0 5, 0 0 0)",
+		},
+		{
+			"3D POINT offset from LINESTRING",
+			"POINT Z(5 3 4)",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"LINESTRING Z(5 3 4, 5 0 0)",
+		},
+		{
+			"Same 3D POINTs",
+			"POINT Z(1 2 3)",
+			"POINT Z(1 2 3)",
+			"LINESTRING Z(1 2 3, 1 2 3)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a := geo.MustParseGeometry(tc.a)
+			b := geo.MustParseGeometry(tc.b)
+			expected := geo.MustParseGeometry(tc.expected)
+
+			ret, err := ShortestLineString3D(a, b)
+			require.NoError(t, err)
+			require.Equal(t, expected, ret)
+		})
+	}
+
+	t.Run("errors for EMPTY geometries", func(t *testing.T) {
+		_, err := ShortestLineString3D(
+			geo.MustParseGeometry("POINT EMPTY"),
+			geo.MustParseGeometry("POINT Z(1 1 1)"),
+		)
+		require.Error(t, err)
+		require.True(t, geo.IsEmptyGeometryError(err))
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := ShortestLineString3D(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestLongestLineString3D(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		a        string
+		b        string
+		expected string
+	}{
+		{
+			"3D POINT above LINESTRING",
+			"POINT Z(0 0 5)",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"LINESTRING Z(0 0 5, 10 0 0)",
+		},
+		{
+			"3D POINT offset from LINESTRING",
+			"POINT Z(5 3 4)",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"LINESTRING Z(5 3 4, 0 0 0)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a := geo.MustParseGeometry(tc.a)
+			b := geo.MustParseGeometry(tc.b)
+			expected := geo.MustParseGeometry(tc.expected)
+
+			ret, err := LongestLineString3D(a, b)
+			require.NoError(t, err)
+			require.Equal(t, expected, ret)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := LongestLineString3D(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestClosestPoint3D(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		a        string
+		b        string
+		expected string
+	}{
+		{
+			"ClosestPoint3D on line to point",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"POINT Z(5 3 4)",
+			"POINT Z(5 0 0)",
+		},
+		{
+			"ClosestPoint3D from point to line",
+			"POINT Z(0 0 5)",
+			"LINESTRING Z(0 0 0, 10 0 0)",
+			"POINT Z(0 0 5)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			a := geo.MustParseGeometry(tc.a)
+			b := geo.MustParseGeometry(tc.b)
+			expected := geo.MustParseGeometry(tc.expected)
+
+			ret, err := ClosestPoint3D(a, b)
+			require.NoError(t, err)
+			require.Equal(t, expected, ret)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := ClosestPoint3D(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
 func TestLongestLineString(t *testing.T) {
 	for _, tc := range distanceTestCases {
 		t.Run(tc.desc, func(t *testing.T) {

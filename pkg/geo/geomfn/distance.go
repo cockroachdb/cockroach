@@ -555,6 +555,174 @@ func (u *geomMaxDistanceUpdater) FlipGeometries() {
 	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 
+// ShortestLineString3D returns a LineString between the closest points
+// of geometries A and B using 3D Euclidean distance. If either input
+// lacks a Z dimension, behavior matches PostGIS's
+// lw_dist3d_distanceline: both 2D falls back to the 2D shortest line
+// (returning a 2D LineString); mixed 2D/3D treats the missing Z as
+// "any value" via the vertical-line trick.
+func ShortestLineString3D(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	a, b, err := normalizeFor3D(a, b)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	aHasZ, bHasZ := hasZ(a), hasZ(b)
+	if !aHasZ && !bHasZ {
+		return ShortestLineString(a, b)
+	}
+	if !aHasZ || !bHasZ {
+		return distanceLineString3DMixedZ(a, b, aHasZ, bHasZ, false /* maxDistance */)
+	}
+	u := newGeomMinDistance3DUpdater(0)
+	return distanceLineString3DInternal(a, b, u, geo.EmptyBehaviorOmit)
+}
+
+// LongestLineString3D returns a LineString between the farthest points
+// of geometries A and B using 3D Euclidean distance. Mixed-Z behavior
+// matches ShortestLineString3D and PostGIS.
+func LongestLineString3D(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	a, b, err := normalizeFor3D(a, b)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	aHasZ, bHasZ := hasZ(a), hasZ(b)
+	if !aHasZ && !bHasZ {
+		return LongestLineString(a, b)
+	}
+	if !aHasZ || !bHasZ {
+		return distanceLineString3DMixedZ(a, b, aHasZ, bHasZ, true /* maxDistance */)
+	}
+	u := newGeomMaxDistance3DUpdater(math.MaxFloat64)
+	return distanceLineString3DInternal(a, b, u, geo.EmptyBehaviorOmit)
+}
+
+// ClosestPoint3D returns the point on geometry A that is closest to
+// geometry B using 3D Euclidean distance. The result has the same
+// dimensionality as the LineString returned by ShortestLineString3D
+// (2D when both inputs lack Z, 3D otherwise).
+func ClosestPoint3D(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
+	shortestLine, err := ShortestLineString3D(a, b)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	lineT, err := shortestLine.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	ls := lineT.(*geom.LineString)
+	coord := ls.Coord(0)
+	layout := ls.Layout()
+	pointCoords := []float64{coord.X(), coord.Y()}
+	if layout.ZIndex() != -1 {
+		pointCoords = append(pointCoords, coord[layout.ZIndex()])
+	}
+	point := geom.NewPointFlat(layout, pointCoords).SetSRID(int(a.SRID()))
+	return geo.MakeGeometryFromGeomT(point)
+}
+
+// distanceLineString3DMixedZ implements PostGIS's vertical-line trick
+// for the case where exactly one of the inputs has a Z dimension. A 2D
+// distance pass identifies the closest XY pair; the 2D side is then
+// substituted with a vertical line at that XY spanning the 3D side's Z
+// range, and a 3D distance pass picks the optimal Z. The result line
+// preserves (a, b) order.
+func distanceLineString3DMixedZ(
+	a, b geo.Geometry, aHasZ, bHasZ bool, maxDistance bool,
+) (geo.Geometry, error) {
+	var u2D geodist.DistanceUpdater
+	if maxDistance {
+		u2D = newGeomMaxDistanceUpdater(math.MaxFloat64, geo.FnInclusive)
+	} else {
+		u2D = newGeomMinDistanceUpdater(0, geo.FnInclusive)
+	}
+	line2D, err := distanceLineStringInternal(a, b, u2D, geo.EmptyBehaviorOmit)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	line2DT, err := line2D.AsGeomT()
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	coords := line2DT.(*geom.LineString).Coords()
+	coordA, coordB := coords[0], coords[1]
+
+	srid := int(a.SRID())
+	newA, newB := a, b
+	if !aHasZ {
+		zMin, zMax, err := geomZRange(b)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		vline := geom.NewLineStringFlat(geom.XYZ, []float64{
+			coordA.X(), coordA.Y(), zMin,
+			coordA.X(), coordA.Y(), zMax,
+		}).SetSRID(srid)
+		newA, err = geo.MakeGeometryFromGeomT(vline)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+	} else {
+		zMin, zMax, err := geomZRange(a)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		vline := geom.NewLineStringFlat(geom.XYZ, []float64{
+			coordB.X(), coordB.Y(), zMin,
+			coordB.X(), coordB.Y(), zMax,
+		}).SetSRID(srid)
+		newB, err = geo.MakeGeometryFromGeomT(vline)
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+	}
+
+	var u geodist.DistanceUpdater
+	if maxDistance {
+		u = newGeomMaxDistance3DUpdater(math.MaxFloat64)
+	} else {
+		u = newGeomMinDistance3DUpdater(0)
+	}
+	return distanceLineString3DInternal(newA, newB, u, geo.EmptyBehaviorOmit)
+}
+
+// distanceLineString3DInternal calculates the 3D LineString between two
+// geometries using the 3D distance calculator.
+func distanceLineString3DInternal(
+	a geo.Geometry, b geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
+) (geo.Geometry, error) {
+	c := &geomDistance3DCalculator{
+		updater:               u,
+		boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()),
+	}
+	_, err := distanceInternal(a, b, c, emptyBehavior)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	var coordA, coordB geom.Coord
+	switch u := u.(type) {
+	case *geomMinDistance3DUpdater:
+		coordA = u.coordA
+		coordB = u.coordB
+	case *geomMaxDistance3DUpdater:
+		coordA = u.coordA
+		coordB = u.coordB
+	default:
+		return geo.Geometry{}, errors.AssertionFailedf("unknown updater type")
+	}
+	lineCoords := []float64{
+		coordA.X(), coordA.Y(), coordGetZ(coordA),
+		coordB.X(), coordB.Y(), coordGetZ(coordB),
+	}
+	lineString := geom.NewLineStringFlat(geom.XYZ, lineCoords).SetSRID(int(a.SRID()))
+	return geo.MakeGeometryFromGeomT(lineString)
+}
+
 // MinDistance3D returns the 3D minimum distance between geometries A and B.
 // If either input lacks a Z dimension this falls back to 2D distance,
 // matching PostGIS's lwgeom_mindistance3d_tolerance.
@@ -647,6 +815,48 @@ func hasZ(g geo.Geometry) bool {
 		return false
 	}
 	return t.Layout().ZIndex() != -1
+}
+
+// geomZRange returns the [zMin, zMax] across all coordinates of g. The
+// caller must ensure g has a Z dimension. Empty geometries return
+// (0, 0).
+func geomZRange(g geo.Geometry) (zMin, zMax float64, _ error) {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return 0, 0, err
+	}
+	zIdx := t.Layout().ZIndex()
+	if zIdx < 0 {
+		return 0, 0, errors.AssertionFailedf("geomZRange called on geometry without Z")
+	}
+	found := false
+	var walk func(g geom.T)
+	walk = func(g geom.T) {
+		if gc, ok := g.(*geom.GeometryCollection); ok {
+			for _, sub := range gc.Geoms() {
+				walk(sub)
+			}
+			return
+		}
+		coords := g.FlatCoords()
+		stride := g.Stride()
+		for i := zIdx; i < len(coords); i += stride {
+			z := coords[i]
+			if !found {
+				zMin, zMax = z, z
+				found = true
+				continue
+			}
+			if z < zMin {
+				zMin = z
+			}
+			if z > zMax {
+				zMax = z
+			}
+		}
+	}
+	walk(t)
+	return zMin, zMax, nil
 }
 
 // MaxDistance3D returns the maximum 3D distance across every pair of points
