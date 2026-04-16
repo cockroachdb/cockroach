@@ -21,12 +21,13 @@ import (
 
 // testVoter is a minimal model of a raft voter: an ID, a log, and hard state.
 type testVoter struct {
-	id        raftpb.PeerID
-	log       []raft.LogMark // consecutive entries starting at index 1
-	term      raftpb.Term
-	votedFor  raftpb.PeerID
-	leader    bool
-	committed uint64
+	id             raftpb.PeerID
+	log            []raft.LogMark // consecutive entries starting at index 1
+	term           raftpb.Term
+	votedFor       raftpb.PeerID
+	leader         bool
+	committed      uint64
+	witnessEngaged bool // leader's view of witness engagement
 }
 
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
@@ -76,8 +77,8 @@ func (e *testEnv) updateLeaderCommitted() {
 	for _, v := range e.voters {
 		matches = append(matches, e.matchIndex[v.id])
 	}
-	// Witness: if engaged, effectively matches the leader's entire log.
-	if e.w.Acked.Engaged {
+	// Witness: if the leader believes it's engaged, it matches everything.
+	if ldr.witnessEngaged {
 		matches = append(matches, uint64(len(ldr.log)))
 	} else {
 		matches = append(matches, 0)
@@ -150,17 +151,22 @@ func TestDataDrivenWitness(t *testing.T) {
 				next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
 				return fmtResult(&env.w, next, ok)
 			case "engage":
-				term, lm := scanEngageReleaseArgs(t, d, &env)
+				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
 				result := fmtResult(&env.w, next, ok)
-				if ok {
+				if ok && ldr != nil {
+					ldr.witnessEngaged = true
 					env.updateLeaderCommitted()
 				}
 				return result
 			case "release":
-				term, lm := scanEngageReleaseArgs(t, d, &env)
+				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
-				return fmtResult(&env.w, next, ok)
+				result := fmtResult(&env.w, next, ok)
+				if ok && ldr != nil {
+					ldr.witnessEngaged = false
+				}
+				return result
 			case "state":
 				return fmtState(env.w)
 			case "set":
@@ -295,6 +301,7 @@ func handleCampaign(
 		// Winner becomes leader and appends a noop entry at the campaign term.
 		candidate.leader = true
 		candidate.committed = 0
+		candidate.witnessEngaged = false
 		nextIdx := uint64(len(candidate.log) + 1)
 		candidate.log = append(
 			candidate.log,
@@ -465,22 +472,23 @@ func scanVoteArgs(t *testing.T, d *datadriven.TestData) (raftpb.PeerID, raftpb.T
 }
 
 // scanEngageReleaseArgs accepts either `v<N>` (derive term and lm from the
-// leader's state) or explicit `term=<letter> lm=<logmark>` arguments.
+// leader's state) or explicit `term=<letter> lm=<logmark>` arguments. When the
+// v<N> form is used, returns a pointer to the leader; otherwise returns nil.
 func scanEngageReleaseArgs(
 	t *testing.T, d *datadriven.TestData, env *testEnv,
-) (raftpb.Term, raft.LogMark) {
+) (*testVoter, raftpb.Term, raft.LogMark) {
 	if len(d.CmdArgs) > 0 && strings.HasPrefix(d.CmdArgs[0].Key, "v") {
 		id := mustParsePeerID(t, d.CmdArgs[0].Key)
 		v := env.voter(t, id)
 		if !v.leader {
 			t.Fatalf("v%d is not the leader", id)
 		}
-		return v.term, v.lastLogMark()
+		return v, v.term, v.lastLogMark()
 	}
 	var termStr, lmStr string
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)
-	return mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
+	return nil, mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
 }
 
 func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
