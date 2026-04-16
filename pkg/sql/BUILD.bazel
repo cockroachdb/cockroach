@@ -358,6 +358,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/obs/ash",
         "//pkg/obs/clustermetrics/utils",
+        "//pkg/obs/statementstore",
         "//pkg/obs/workloadid",
         "//pkg/repstream",
         "//pkg/repstream/streampb",

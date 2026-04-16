@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/statementstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -116,6 +117,8 @@ type SQLStatsIngester struct {
 	testingKnobs *sqlstats.TestingKnobs
 
 	metrics Metrics
+
+	statementStore *statementstore.StatementStore
 }
 
 type eventBufChPayload struct {
@@ -369,6 +372,7 @@ func NewSQLStatsIngester(
 	knobs *sqlstats.TestingKnobs,
 	metrics Metrics,
 	parentMon *mon.BytesMonitor,
+	statementStore *statementstore.StatementStore,
 	sinks ...SQLStatsSink,
 ) *SQLStatsIngester {
 	i := &SQLStatsIngester{
@@ -386,6 +390,7 @@ func NewSQLStatsIngester(
 		settings:              st,
 		testingKnobs:          knobs,
 		metrics:               metrics,
+		statementStore:        statementStore,
 	}
 
 	if parentMon != nil {
@@ -463,6 +468,22 @@ func (i *SQLStatsIngester) processStatement(
 	*b = append(*b, statement)
 }
 
+func (i *SQLStatsIngester) storeStatementFingerprint(
+	ctx context.Context, s *sqlstats.RecordedStmtStats,
+) {
+	if i.statementStore == nil {
+		return
+	}
+
+	i.statementStore.PutStatement(ctx, statementstore.StatementInfo{
+		FingerprintID: s.FingerprintID,
+		Fingerprint:   s.Query,
+		Database:      s.Database,
+		Summary:       s.QuerySummary,
+		ImplicitTxn:   s.ImplicitTxn,
+	})
+}
+
 // flushBuffer sends the buffered statementsBySessionID and provided transaction
 // to the registered sinks. The transaction may be nil.
 func (i *SQLStatsIngester) flushBuffer(
@@ -500,13 +521,13 @@ func (i *SQLStatsIngester) flushBuffer(
 			if shouldAssociateWithTxn {
 				s.TransactionFingerprintID = transaction.FingerprintID
 			}
-			if s.ImplicitTxn == transaction.ImplicitTxn {
-				continue
+			if s.ImplicitTxn != transaction.ImplicitTxn {
+				// We need to recompute the fingerprint ID.
+				s.ImplicitTxn = transaction.ImplicitTxn
+				s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
+					s.Query, s.ImplicitTxn, s.Database)
 			}
-			// We need to recompute the fingerprint ID.
-			s.ImplicitTxn = transaction.ImplicitTxn
-			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-				s.Query, s.ImplicitTxn, s.Database)
+			i.storeStatementFingerprint(ctx, s)
 		}
 	}
 
@@ -539,6 +560,10 @@ func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID cl
 		for _, s := range statements {
 			s.TransactionFingerprintID = forceFlushTransactionFingerprintId
 		}
+	}
+
+	for _, s := range statements {
+		i.storeStatementFingerprint(ctx, s)
 	}
 
 	for _, sink := range i.sinks {
