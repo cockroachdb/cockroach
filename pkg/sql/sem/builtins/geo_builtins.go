@@ -3368,6 +3368,25 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 	),
+	"st_3dperimeter": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Perimeter3D(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the 3-dimensional perimeter of the geometry. " +
+					"Note ST_3DPerimeter is only valid for Polygon or MultiPolygon. " +
+					"For 2D geometries it returns the 2D perimeter.",
+			},
+			volatility.Immutable,
+		),
+	),
 	"st_3dshortestline": makeBuiltin(
 		defProps(),
 		geometryOverload2(
