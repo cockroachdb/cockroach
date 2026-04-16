@@ -1735,6 +1735,7 @@ func setupTestImportCSVStmt(
 	sqlDB = sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async'`)
 
 	testFiles = makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
@@ -2606,6 +2607,7 @@ func setupImportIntoCSVTest(t *testing.T) *importIntoCSVTestFixture {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async'`)
 	// 'import-into-no-glob-wildcard' hits an error that the file doesn't exist
 	// in external storage. When run with test tenants, that error also happens
 	// to be annotated with 'rpc error' marker, which we treat as a retryable
