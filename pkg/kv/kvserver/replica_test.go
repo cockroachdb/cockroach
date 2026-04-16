@@ -572,7 +572,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	}
 	ba.Add(leaseReq)
 	_, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := r.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+	ch, _, _, pErr := r.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1339,7 +1339,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&kvpb.RequestLeaseRequest{Lease: *lease, PrevLease: st.Lease})
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+	ch, _, _, pErr := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -7563,7 +7563,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				t.Fatal(err)
 			}
-			_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch, kvadmission.AdmissionInfo{})
+			_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch, nil /* stats */, kvadmission.AdmissionInfo{})
 			if cancelEarly {
 				if !testutils.IsPError(pErr, context.Canceled.Error()) {
 					t.Fatalf("expected canceled error; got %v", pErr)
@@ -7619,7 +7619,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	ba.Add(&kvpb.PutRequest{
 		RequestHeader: kvpb.RequestHeader{Key: []byte("acdfg")},
 	})
-	_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch, kvadmission.AdmissionInfo{})
+	_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, ba, (*Replica).executeWriteBatch, nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr == nil {
 		t.Fatal("expected failure, but found success")
 	}
@@ -7729,10 +7729,11 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(iArg)
 	{
-		_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(
+		_, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 			(*Replica).executeWriteBatch,
+			nil, /* stats */
 			kvadmission.AdmissionInfo{},
 		)
 		if pErr != nil {
@@ -7764,10 +7765,11 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 			Lease:     lease,
 			PrevLease: prevLease,
 		})
-		_, _, pErr := tc.repl.executeBatchWithConcurrencyRetries(
+		_, pErr := tc.repl.executeBatchWithConcurrencyRetries(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 			(*Replica).executeWriteBatch,
+			nil, /* stats */
 			kvadmission.AdmissionInfo{},
 		)
 		if pErr != nil {
@@ -7817,7 +7819,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		})
 		st := repl.CurrentLeaseStatus(ctx)
 		_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		ch, _, id, _, err := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+		ch, _, id, err := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7889,7 +7891,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		})
 		_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		ch, _, _, _, err := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+		ch, _, _, err := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -8006,7 +8008,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(id)}})
 		st := r.CurrentLeaseStatus(ctx)
-		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), ba, allSpansGuard(), &st, uncertainty.Interval{})
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), nil /* ss */, ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8775,7 +8777,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	_, batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, raftlog.MakeCmdIDKey(), ba, allSpansGuard(), nil, uncertainty.Interval{})
+	_, batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, raftlog.MakeCmdIDKey(), nil /* ss */, ba, allSpansGuard(), nil, uncertainty.Interval{})
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9590,7 +9592,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	exLease, _ := repl.GetLease()
 	st := kvserverpb.LeaseStatus{Lease: exLease, State: kvserverpb.LeaseState_VALID}
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+	ch, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9638,7 +9640,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	st := tc.repl.CurrentLeaseStatus(ctx)
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	ch, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+	ch, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9703,7 +9705,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
 	_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	_, _, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+	_, _, _, pErr := repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9722,7 +9724,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 		var pErr *kvpb.Error
 		_, tok := repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		ch, _, _, _, pErr = repl.evalAndPropose(ctx, ba2, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), kvadmission.AdmissionInfo{})
+		ch, _, _, pErr = repl.evalAndPropose(ctx, ba2, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx), nil /* stats */, kvadmission.AdmissionInfo{})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -13852,7 +13854,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
 		ba.Add(&req)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, ba, allSpansGuard(), &st, uncertainty.Interval{})
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, nil /* ss */, ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if err != nil {
 			t.Error(err)
 		}

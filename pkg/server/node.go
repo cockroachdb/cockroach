@@ -1720,10 +1720,13 @@ func (n *Node) batchInternal(
 	// for replication flow control.
 	admissionInfo := handle.AdmissionInfo()
 
-	var writeBytes *kvadmission.StoreWriteBytes
+	// NB: we allocate a single instance of StoreWorkStats across retries since
+	// we want to accumulate those statistics to better account for all the work
+	// done at this store.
+	stats := kvserver.NewStoreWorkStats()
 	defer func() {
-		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
-		writeBytes.Release()
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, stats.StoreWorkDoneInfo)
+		stats.Release()
 	}()
 
 	// If a proxy attempt is requested, we copy the request to prevent evaluation
@@ -1743,7 +1746,7 @@ func (n *Node) batchInternal(
 		originalRequest = args.ShallowCopy()
 	}
 	var pErr *kvpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo)
+	br, pErr = n.stores.SendWithWorkStats(ctx, args, stats, admissionInfo)
 	if pErr != nil {
 		if originalRequest != nil {
 			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {

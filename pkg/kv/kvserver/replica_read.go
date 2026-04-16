@@ -39,11 +39,14 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard, _ kvadmission.AdmissionInfo,
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	g concurrency.Guard,
+	_ *StoreWorkStats,
+	_ kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
 	_ concurrency.Guard,
-	_ *kvadmission.StoreWriteBytes,
 	pErr *kvpb.Error,
 ) {
 	r.readOnlyCmdMu.RLock()
@@ -52,7 +55,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	if fn := r.store.TestingKnobs().PreStorageSnapshotButChecksCompleteInterceptor; fn != nil {
@@ -167,7 +170,7 @@ func (r *Replica) executeReadOnlyBatch(
 			)
 			if err != nil {
 				r.store.metrics.VirtualResolveBatchErrors.Inc(1)
-				return nil, g, nil, kvpb.NewError(err)
+				return nil, g, kvpb.NewError(err)
 			}
 		}
 	}
@@ -185,15 +188,15 @@ func (r *Replica) executeReadOnlyBatch(
 		break
 	}
 	if err := rw.PinEngineStateForIterators(readCategory); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 	ok, stillNeedsInterleavedIntents, pErr := r.canDropLatchesBeforeEval(ctx, rw, ba, g, st)
 	if pErr != nil {
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 	evalPath := readOnlyDefault
 	if ok {
@@ -239,11 +242,11 @@ func (r *Replica) executeReadOnlyBatch(
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
 				log.Eventf(ctx, "optimistic evaluation failed with %s", pErr)
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+				return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 
 	if g != nil && g.EvalKind() == concurrency.OptimisticEval {
@@ -253,19 +256,19 @@ func (r *Replica) executeReadOnlyBatch(
 			// the response.
 			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 			if err != nil {
-				return nil, g, nil, kvpb.NewError(err)
+				return nil, g, kvpb.NewError(err)
 			}
 			defer latchSpansRead.Release()
 			defer lockSpansRead.Release()
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+				return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
 			// There was an error, that was not classified as a concurrency retry
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
-			return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+			return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
@@ -332,7 +335,7 @@ func (r *Replica) executeReadOnlyBatch(
 		r.loadStats.RecordReadBytes(bytesRead)
 		log.Event(ctx, "read completed")
 	}
-	return br, nil, nil, pErr
+	return br, nil, pErr
 }
 
 // updateTimestampCacheAndDropLatches updates the timestamp cache and releases
