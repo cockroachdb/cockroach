@@ -4,84 +4,78 @@
 
 # Set up: engaged in term a at a5.
 set
-term=a voted-for=1 hi=a5 engaged=true
+term=a voted-for=v1 hi=a5 engaged=true
 ----
-vote:  (a, 1)
+vote:  (a, v1)
 acked: (a5, engaged)
 
 # Candidate at term b with log ending at a5: rejected.
 # The candidate's last log term (a) is not ahead of our vote term (a), so
 # we can't prove a proper election happened without us. The old leader may
 # have relied on us to commit entries beyond a5.
-vote from=2 term=b lm=a5
+vote from=v2 term=b lm=a5
 ----
 rejected
-vote:  (a, 1)
-acked: (a5, engaged)
 
 # Candidate at term b with log ending at a100: still rejected.
 # Even though the candidate has more entries, they're all from term a.
 # The old leader could have committed with our help up to any index.
-vote from=2 term=b lm=a100
+vote from=v2 term=b lm=a100
 ----
 rejected
-vote:  (a, 1)
-acked: (a5, engaged)
 
 # Candidate at term b with log ending at b1: accepted!
 # The candidate has an entry from term b > our vote term a. This proves
 # a proper leader election happened for some term > a without the witness,
 # meaning a traditional quorum elected that leader, and the candidate's
 # log is up to date with anything committed.
-vote from=2 term=b lm=b1
+vote from=v2 term=b lm=b1
 ----
 ok
-vote:  (b, 2)
+vote:  (b, v2)
 acked: none
 
 # Same scenario but candidate is from a much higher term.
 set
-term=a voted-for=1 hi=a5 engaged=true
+term=a voted-for=v1 hi=a5 engaged=true
 ----
-vote:  (a, 1)
+vote:  (a, v1)
 acked: (a5, engaged)
 
 # Candidate from term e with log at c3: accepted.
 # Log term c > vote term a proves disengagement is safe.
-vote from=3 term=e lm=c3
+vote from=v3 term=e lm=c3
 ----
 ok
-vote:  (e, 3)
+vote:  (e, v3)
 acked: none
 
 # Engagement was released (not engaged), candidate log behind hi: rejected
 # on log-up-to-date check, not engagement.
 set
-term=a voted-for=1 hi=a5 engaged=false
+term=a voted-for=v1 hi=a5 engaged=false
 ----
-vote:  (a, 1)
+vote:  (a, v1)
 acked: (a5, released)
 
-vote from=2 term=b lm=a4
+vote from=v2 term=b lm=a4
 ----
 rejected
-vote:  (a, 1)
-acked: (a5, released)
 
 # Same but candidate log at a5: accepted (log is up to date with hi).
-vote from=2 term=b lm=a5
+vote from=v2 term=b lm=a5
 ----
 ok
-vote:  (b, 2)
+vote:  (b, v2)
 acked: none
 
 # Witness learns of term b through an engage, then the leader requests a
 # vote in that same term. The witness hasn't voted for anyone in term b yet,
 # so this should succeed.
 set
-term=a voted-for=1
+term=a voted-for=v1
 ----
-vote:  (a, 1)
+vote:  (a, v1)
 acked: none
 
 engage term=b lm=b1
@@ -92,8 +86,8 @@ acked: (b1, engaged)
 
 # Leader now asks for our vote in term b. We haven't voted yet in this term,
 # so this is granted, preserving the existing acked state.
-vote from=1 term=b lm=b1
+vote from=v1 term=b lm=b1
 ----
 ok
-vote:  (b, 1)
+vote:  (b, v1)
 acked: (b1, engaged)

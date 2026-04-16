@@ -18,30 +18,92 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
+// testVoter is a minimal model of a raft voter: an ID, a log, and hard state.
+type testVoter struct {
+	id       raftpb.PeerID
+	log      []raft.LogMark // consecutive entries starting at index 1
+	term     raftpb.Term
+	votedFor raftpb.PeerID
+}
+
+// lastLogMark returns the last entry in the voter's log, or the zero LogMark.
+func (v testVoter) lastLogMark() raft.LogMark {
+	if len(v.log) == 0 {
+		return raft.LogMark{}
+	}
+	return v.log[len(v.log)-1]
+}
+
+// testEnv holds the witness state and any voters added for scenario modeling.
+type testEnv struct {
+	w      State
+	voters []testVoter
+}
+
+func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
+	for i := range e.voters {
+		if e.voters[i].id == id {
+			return &e.voters[i]
+		}
+	}
+	t.Fatalf("unknown voter v%d", id)
+	return nil
+}
+
+func (e *testEnv) fmtConfig() string {
+	var parts []string
+	for _, v := range e.voters {
+		parts = append(parts, fmt.Sprintf("v%d", v.id))
+	}
+	parts = append(parts, "w")
+	return "(" + strings.Join(parts, " ") + ")"
+}
+
+func (e *testEnv) fmtVoters() string {
+	cfg := e.fmtConfig()
+	var lines []string
+	for _, v := range e.voters {
+		lines = append(lines, fmtVoterLine(v, cfg))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func fmtVoterLine(v testVoter, cfg string) string {
+	var logParts []string
+	for _, lm := range v.log {
+		logParts = append(logParts, fmtLogMark(lm))
+	}
+	return fmt.Sprintf("v%d: [%s] cfg=%s", v.id, strings.Join(logParts, " "), cfg)
+}
+
 func TestDataDrivenWitness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		var w State
+		env := testEnv{}
 		ctx := context.Background()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "add-voters":
+				return handleAddVoters(t, d, &env)
+			case "campaign":
+				return handleCampaign(t, d, &env, ctx)
 			case "vote":
 				from, term, lm := scanVoteArgs(t, d)
-				next, ok := w.HandleMsgVote(ctx, from, term, lm)
-				return fmtResult(&w, next, ok)
+				next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
+				return fmtResult(&env.w, next, ok)
 			case "engage":
 				term, lm := scanReleaseArgs(t, d)
-				next, ok := w.HandleMsgEngage(ctx, term, lm)
-				return fmtResult(&w, next, ok)
+				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
+				return fmtResult(&env.w, next, ok)
 			case "release":
 				term, lm := scanReleaseArgs(t, d)
-				next, ok := w.HandleMsgRelease(ctx, term, lm)
-				return fmtResult(&w, next, ok)
+				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
+				return fmtResult(&env.w, next, ok)
 			case "state":
-				return fmtState(w)
+				return fmtState(env.w)
 			case "set":
-				handleSet(t, d, &w)
-				return fmtState(w)
+				handleSet(t, d, &env.w)
+				return fmtState(env.w)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 				return ""
@@ -50,14 +112,176 @@ func TestDataDrivenWitness(t *testing.T) {
 	})
 }
 
+func handleAddVoters(t *testing.T, d *datadriven.TestData, env *testEnv) string {
+	for _, line := range strings.Split(d.Input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		colonIdx := strings.IndexByte(line, ':')
+		if colonIdx < 0 {
+			t.Fatalf("invalid voter line (expected 'vN: [...]'): %s", line)
+		}
+		id := mustParsePeerID(t, strings.TrimSpace(line[:colonIdx]))
+		logStr := strings.TrimSpace(line[colonIdx+1:])
+		logStr = strings.TrimPrefix(logStr, "[")
+		logStr = strings.TrimSuffix(logStr, "]")
+		var log []raft.LogMark
+		for _, tok := range strings.Fields(logStr) {
+			lm := mustParseLogMark(t, tok)
+			log = append(log, lm)
+		}
+		// Validate consecutive indexes starting at 1 with non-decreasing terms.
+		for i, lm := range log {
+			if lm.Index != uint64(i+1) {
+				t.Fatalf("v%d: expected index %d, got %d (entry %s)", id, i+1, lm.Index, fmtLogMark(lm))
+			}
+			if i > 0 && lm.Term < log[i-1].Term {
+				t.Fatalf("v%d: term decreased at index %d: %s after %s",
+					id, lm.Index, fmtLogMark(lm), fmtLogMark(log[i-1]))
+			}
+		}
+		v := testVoter{id: id, log: log}
+		// Initialize term from last log entry.
+		if last := v.lastLogMark(); last != (raft.LogMark{}) {
+			v.term = raftpb.Term(last.Term)
+		}
+		env.voters = append(env.voters, v)
+	}
+	return env.fmtVoters()
+}
+
+// handleCampaign simulates a voter campaigning for leadership. All peers
+// (voters + witness) process the vote request and update their state. Responses
+// from peers in the drop set are not counted toward quorum.
+func handleCampaign(
+	t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context,
+) string {
+	if len(d.CmdArgs) < 1 {
+		t.Fatal("usage: campaign <vN> [drop=(<ids>)]")
+	}
+	candidateID := mustParsePeerID(t, d.CmdArgs[0].Key)
+	candidate := env.voter(t, candidateID)
+
+	// Parse drop set.
+	dropped := map[string]bool{}
+	for _, arg := range d.CmdArgs[1:] {
+		if arg.Key == "drop" {
+			for _, v := range arg.Vals {
+				dropped[v] = true
+			}
+		}
+	}
+
+	// Campaign: increment term, vote for self.
+	candidate.term++
+	campaignTerm := candidate.term
+	candidate.votedFor = candidate.id
+	candidateLastLM := candidate.lastLogMark()
+
+	totalMembers := len(env.voters) + 1 // voters + witness
+	quorum := totalMembers/2 + 1
+	yesCount := 0
+
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "v%d campaigns at term %s\n", candidateID, fmtTerm(campaignTerm))
+
+	// Candidate's self-vote always counts.
+	fmt.Fprintf(&buf, "v%d: yes (self)\n", candidateID)
+	yesCount++
+
+	// Other voters vote.
+	for i := range env.voters {
+		v := &env.voters[i]
+		if v.id == candidateID {
+			continue
+		}
+		label := fmt.Sprintf("v%d", v.id)
+
+		granted, reason := voterGrantsVote(v, candidateID, campaignTerm, candidateLastLM)
+
+		if granted {
+			if dropped[label] {
+				fmt.Fprintf(&buf, "%s: yes (dropped)\n", label)
+			} else {
+				fmt.Fprintf(&buf, "%s: yes\n", label)
+				yesCount++
+			}
+		} else {
+			if dropped[label] {
+				fmt.Fprintf(&buf, "%s: no, %s (dropped)\n", label, reason)
+			} else {
+				fmt.Fprintf(&buf, "%s: no, %s\n", label, reason)
+			}
+		}
+	}
+
+	// Witness votes.
+	next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
+	if ok {
+		env.w = next
+	}
+	if ok {
+		if dropped["w"] {
+			fmt.Fprintf(&buf, "w:  yes (dropped)\n")
+		} else {
+			fmt.Fprintf(&buf, "w:  yes\n")
+			yesCount++
+		}
+	} else {
+		if dropped["w"] {
+			fmt.Fprintf(&buf, "w:  no (dropped)\n")
+		} else {
+			fmt.Fprintf(&buf, "w:  no\n")
+		}
+	}
+
+	if yesCount >= quorum {
+		buf.WriteString("outcome: won")
+	} else {
+		buf.WriteString("outcome: lost")
+	}
+	return buf.String()
+}
+
+// voterGrantsVote decides whether a voter grants a vote to the candidate.
+// It updates the voter's state (term, votedFor) as a side effect.
+func voterGrantsVote(
+	v *testVoter, candidateID raftpb.PeerID, campaignTerm raftpb.Term, candidateLastLM raft.LogMark,
+) (granted bool, reason string) {
+	// Bump term if needed.
+	if campaignTerm > v.term {
+		v.term = campaignTerm
+		v.votedFor = 0
+	}
+
+	if campaignTerm < v.term {
+		return false, fmt.Sprintf("stale term %s < %s", fmtTerm(campaignTerm), fmtTerm(v.term))
+	}
+
+	// Already voted for someone else this term.
+	if v.votedFor != 0 && v.votedFor != candidateID {
+		return false, fmt.Sprintf("already voted for v%d", v.votedFor)
+	}
+
+	// Log up-to-date check.
+	voterLastLM := v.lastLogMark()
+	if voterLastLM != (raft.LogMark{}) && voterLastLM.After(candidateLastLM) {
+		return false, fmt.Sprintf("log not up to date (%s > %s)",
+			fmtLogMark(voterLastLM), fmtLogMark(candidateLastLM))
+	}
+
+	v.votedFor = candidateID
+	return true, ""
+}
+
 // scanVoteArgs parses from=<id> term=<letter> lm=<logmark> arguments.
 func scanVoteArgs(t *testing.T, d *datadriven.TestData) (raftpb.PeerID, raftpb.Term, raft.LogMark) {
-	var fromID uint64
-	var termStr, lmStr string
-	d.ScanArgs(t, "from", &fromID)
+	var fromStr, termStr, lmStr string
+	d.ScanArgs(t, "from", &fromStr)
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)
-	return raftpb.PeerID(fromID), mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
+	return mustParsePeerID(t, fromStr), mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
 }
 
 // scanReleaseArgs parses term=<letter> lm=<logmark> arguments.
@@ -79,11 +303,7 @@ func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
 		case "term":
 			w.Vote.Term = mustParseTerm(t, v)
 		case "voted-for":
-			id, err := strconv.ParseUint(v, 10, 64)
-			if err != nil {
-				t.Fatalf("invalid voted-for %q: %v", v, err)
-			}
-			w.Vote.VotedFor = raftpb.PeerID(id)
+			w.Vote.VotedFor = mustParsePeerID(t, v)
 		case "hi":
 			w.Acked.Hi = mustParseLogMark(t, v)
 		case "engaged":
@@ -99,7 +319,7 @@ func fmtResult(w *State, next State, ok bool) string {
 		*w = next
 		return "ok\n" + fmtState(*w)
 	}
-	return "rejected\n" + fmtState(*w)
+	return "rejected"
 }
 
 func fmtState(s State) string {
@@ -109,7 +329,7 @@ func fmtState(s State) string {
 	} else if s.Vote.VotedFor == 0 {
 		fmt.Fprintf(&buf, "vote:  (%s, -)\n", fmtTerm(s.Vote.Term))
 	} else {
-		fmt.Fprintf(&buf, "vote:  (%s, %d)\n", fmtTerm(s.Vote.Term), s.Vote.VotedFor)
+		fmt.Fprintf(&buf, "vote:  (%s, v%d)\n", fmtTerm(s.Vote.Term), s.Vote.VotedFor)
 	}
 	if s.Acked == (Acked{}) {
 		buf.WriteString("acked: none")
@@ -119,6 +339,18 @@ func fmtState(s State) string {
 		fmt.Fprintf(&buf, "acked: (%s, released)", fmtLogMark(s.Acked.Hi))
 	}
 	return buf.String()
+}
+
+// mustParsePeerID converts "v<N>" to a raftpb.PeerID.
+func mustParsePeerID(t *testing.T, s string) raftpb.PeerID {
+	if len(s) < 2 || s[0] != 'v' {
+		t.Fatalf("invalid peer ID %q: expected v<N>", s)
+	}
+	id, err := strconv.ParseUint(s[1:], 10, 64)
+	if err != nil {
+		t.Fatalf("invalid peer ID %q: %v", s, err)
+	}
+	return raftpb.PeerID(id)
 }
 
 // mustParseTerm converts a single letter (a-z) to a raftpb.Term (1-26).
