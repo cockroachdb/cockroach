@@ -43,7 +43,7 @@ func New(histogramWindow time.Duration) *Timers {
 
 	histogramOptsFor := func(name, labeledName, labelName, desc string) metric.HistogramOptions {
 		return metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:         name,
 				Help:         desc,
 				Unit:         metric.Unit_NANOSECONDS,
@@ -51,7 +51,7 @@ func New(histogramWindow time.Duration) *Timers {
 				LabeledName:  labeledName,
 				StaticLabels: metric.MakeLabelPairs(metric.LabelName, labelName),
 				Category:     metric.Metadata_CHANGEFEEDS,
-			},
+			}),
 			Duration: histogramWindow,
 			Buckets:  prometheus.ExponentialBucketsRange(float64(1*time.Microsecond), float64(1*time.Hour), 60),
 			Mode:     metric.HistogramModePrometheus,

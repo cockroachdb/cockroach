@@ -27,40 +27,40 @@ func (BulkMergeMetrics) MetricStruct() {}
 var _ metric.Struct = BulkMergeMetrics{}
 
 var (
-	metaDistMergeIndexCount = metric.Metadata{
+	metaDistMergeIndexCount = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.dist_merge.index.count",
 		Help:         "Number of distributed merge operations for index backfill",
 		Measurement:  "Operations",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.dist_merge.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelType, "index"),
-	}
-	metaDistMergeImportCount = metric.Metadata{
+	})
+	metaDistMergeImportCount = metric.InitMetadata(metric.Metadata{
 		Name:         "sql.dist_merge.import.count",
 		Help:         "Number of distributed merge operations for import",
 		Measurement:  "Operations",
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.dist_merge.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelType, "import"),
-	}
-	metaDistMergeRPCMemory = metric.Metadata{
+	})
+	metaDistMergeRPCMemory = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.dist_merge.rpc_memory_reserved.bytes",
 		Help:        "Memory reserved for RPC transport buffers in the final merge iteration",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistMergeMapPhaseSSTs = metric.Metadata{
+	})
+	metaDistMergeMapPhaseSSTs = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.dist_merge.map_phase.sst_count",
 		Help:        "Number of SSTs from the map phase input to the first merge iteration",
 		Measurement: "SSTs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistMergeFirstIterOutputSSTs = metric.Metadata{
+	})
+	metaDistMergeFirstIterOutputSSTs = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.dist_merge.first_iter.output_sst_count",
 		Help:        "Number of SSTs produced by the first (local) merge iteration",
 		Measurement: "SSTs",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // mergeMetricsLog10Int64Times1000 duplicates log10int64times1000 from

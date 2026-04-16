@@ -166,7 +166,7 @@ func isErrRetryLiveness(ctx context.Context, err error) bool {
 
 // Node liveness metrics counter names.
 var (
-	metaLiveNodes = metric.Metadata{
+	metaLiveNodes = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.livenodes",
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
 		Measurement: "Nodes",
@@ -174,33 +174,33 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
-	}
-	metaHeartbeatsInFlight = metric.Metadata{
+	})
+	metaHeartbeatsInFlight = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.heartbeatsinflight",
 		Help:        "Number of in-flight liveness heartbeats from this node",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaHeartbeatSuccesses = metric.Metadata{
+	})
+	metaHeartbeatSuccesses = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.heartbeatsuccesses",
 		Help:        "Number of successful node liveness heartbeats from this node",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaHeartbeatFailures = metric.Metadata{
+	})
+	metaHeartbeatFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.heartbeatfailures",
 		Help:        "Number of failed node liveness heartbeats from this node",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
-	metaEpochIncrements = metric.Metadata{
+	})
+	metaEpochIncrements = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.epochincrements",
 		Help:        "Number of times this node has incremented its liveness epoch",
 		Measurement: "Epochs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaHeartbeatLatency = metric.Metadata{
+	})
+	metaHeartbeatLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "liveness.heartbeatlatency",
 		Help:        "Node liveness heartbeat latency",
 		Measurement: "Latency",
@@ -208,7 +208,7 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
-	}
+	})
 )
 
 // Metrics holds metrics for use with node liveness activity.

@@ -258,12 +258,12 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 )
 
 var (
-	p99SchedulerLatency = metric.Metadata{
+	p99SchedulerLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.scheduler_latency_listener.p99_nanos",
 		Help:        "The scheduling latency at p99 as observed by the scheduler latency listener",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // schedulerLatencyListenerMetrics are the metrics associated with an instance

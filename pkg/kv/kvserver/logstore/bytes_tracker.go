@@ -21,12 +21,12 @@ var raftEntriesMemoryLimit = envutil.EnvOrDefaultBytes(
 // NewRaftEntriesSoftLimit returns the SoftLimit configured with the default
 // memory limit.
 func NewRaftEntriesSoftLimit() *SoftLimit {
-	reservedBytesMetric := metric.NewGauge(metric.Metadata{
+	reservedBytesMetric := metric.NewGauge(metric.InitMetadata(metric.Metadata{
 		Name:        "raft.loaded_entries.reserved.bytes",
 		Help:        "Bytes allocated by raft Storage.Entries calls that are still kept in memory",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	})
+	}))
 	return &SoftLimit{Metric: reservedBytesMetric, Limit: raftEntriesMemoryLimit}
 }
 

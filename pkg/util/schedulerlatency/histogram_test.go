@@ -77,7 +77,7 @@ func TestRuntimeHistogram(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				buckets := parseBuckets(t, d.Input)
-				rh = newRuntimeHistogram(metric.Metadata{}, buckets)
+				rh = newRuntimeHistogram(metric.InitMetadata(metric.Metadata{}), buckets)
 				rh.mult = 1.0
 				return ""
 

@@ -97,7 +97,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 	b := aggmetric.MakeBuilder("relation")
 	ret := &RowLevelTTLAggMetrics{
 		SpanTotalDuration: b.Histogram(metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.span_total_duration",
 				Help:        "Duration for processing a span during row level TTL.",
 				Measurement: "nanoseconds",
@@ -106,14 +106,14 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 			MaxVal:       time.Hour.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 		SelectDuration: b.Histogram(metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.select_duration",
 				Help:        "Duration for select requests during row level TTL.",
 				Measurement: "nanoseconds",
@@ -122,14 +122,14 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 			MaxVal:       time.Minute.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		DeleteDuration: b.Histogram(metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.delete_duration",
 				Help:        "Duration for delete requests during row level TTL.",
 				Measurement: "nanoseconds",
@@ -138,14 +138,14 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 			MaxVal:       time.Minute.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		RowSelections: b.Counter(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.rows_selected",
 				Help:        "Number of rows selected for deletion by the row level TTL job.",
 				Measurement: "num_rows",
@@ -154,10 +154,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `Correlate this metric with the metric jobs.row_level_ttl.rows_deleted to ensure all the rows that should be deleted are actually getting deleted.`,
-			},
+			}),
 		),
 		RowDeletions: b.Counter(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.rows_deleted",
 				Help:        "Number of rows deleted by the row level TTL job.",
 				Measurement: "num_rows",
@@ -166,18 +166,18 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `Correlate this metric with the metric jobs.row_level_ttl.rows_selected to ensure all the rows that should be deleted are actually getting deleted.`,
-			},
+			}),
 		),
 		NumDeleteBatchRetries: b.Counter(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.num_delete_batch_retries",
 				Help:        "Number of times the row level TTL job had to reduce the delete batch size and retry.",
 				Measurement: "num_retries",
 				Unit:        metric.Unit_COUNT,
-			},
+			}),
 		),
 		NumActiveSpans: b.Gauge(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.num_active_spans",
 				Help:        "Number of active spans the TTL job is deleting from.",
 				Measurement: "num_active_spans",
@@ -185,10 +185,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 		),
 		TotalRows: b.Gauge(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.total_rows",
 				Help:        "Approximate number of rows on the TTL table.",
 				Measurement: "total_rows",
@@ -196,10 +196,10 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 		),
 		TotalExpiredRows: b.Gauge(
-			metric.Metadata{
+			metric.InitMetadata(metric.Metadata{
 				Name:        "jobs.row_level_ttl.total_expired_rows",
 				Help:        "Approximate number of rows that have expired the TTL on the TTL table.",
 				Measurement: "total_expired_rows",
@@ -207,7 +207,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				Visibility:  metric.Metadata_ESSENTIAL,
 				Category:    metric.Metadata_TTL,
 				HowToUse:    `See Description.`,
-			},
+			}),
 		),
 	}
 	ret.defaultRowLevelMetrics = ret.metricsWithChildren("default")

@@ -16,12 +16,12 @@ import (
 
 func BenchmarkTimerHandle(b *testing.B) {
 	histOpts := metric.HistogramOptions{
-		Metadata: metric.Metadata{
+		Metadata: metric.InitMetadata(metric.Metadata{
 			Name:        "test.timer",
 			Help:        "Test timer",
 			Unit:        metric.Unit_NANOSECONDS,
 			Measurement: "Latency",
-		},
+		}),
 		Duration: time.Hour,
 		Buckets:  prometheus.ExponentialBucketsRange(float64(1*time.Microsecond), float64(1*time.Hour), 60),
 		Mode:     metric.HistogramModePrometheus,

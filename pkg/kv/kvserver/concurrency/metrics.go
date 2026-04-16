@@ -129,72 +129,72 @@ func addToTopK(topK []LockMetrics, lm LockMetrics, cmp func(LockMetrics) int64) 
 	}
 }
 
-var MetaConcurrencyLocksShedDueToMemoryLimit = metric.Metadata{
+var MetaConcurrencyLocksShedDueToMemoryLimit = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.locks_shed_due_to_memory_limit",
 	Help:        "The number of locks that were shed because the lock table ran into memory limits",
 	Measurement: "Locks",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
-var MetaConcurrencyNumLockShedDueToMemoryLimitEvents = metric.Metadata{
+var MetaConcurrencyNumLockShedDueToMemoryLimitEvents = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.num_lock_shed_due_to_memory_limit_events",
 	Help:        "The number of times locks that were shed by the lock table because it ran into memory limits",
 	Measurement: "Lock Shed Events",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveCondense counts the number of times point intent
 // resolutions were condensed into range resolutions during VIR scanning.
-var MetaVirtualResolveCondense = metric.Metadata{
+var MetaVirtualResolveCondense = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.condense",
 	Help:        "Number of times point intent resolutions were condensed into range resolutions during virtual intent resolution",
 	Measurement: "Condense Events",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveDisabled counts the number of times VIR was disabled for
 // a request because too many distinct transactions accumulated range resolves.
-var MetaVirtualResolveDisabled = metric.Metadata{
+var MetaVirtualResolveDisabled = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.disabled",
 	Help:        "Number of times virtual intent resolution was disabled for a request due to excessive range resolve accumulation",
 	Measurement: "Disable Events",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveIntent counts point intents resolved virtually.
-var MetaVirtualResolveIntent = metric.Metadata{
+var MetaVirtualResolveIntent = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.intent",
 	Help:        "Number of point intents resolved virtually during read evaluation",
 	Measurement: "Intents",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveIntentRange counts range intent resolutions resolved
 // virtually.
-var MetaVirtualResolveIntentRange = metric.Metadata{
+var MetaVirtualResolveIntentRange = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.intent_range",
 	Help:        "Number of range intent resolutions resolved virtually during read evaluation",
 	Measurement: "Intent Ranges",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveBatches counts read batches that attempted virtual intent
 // resolution.
-var MetaVirtualResolveBatches = metric.Metadata{
+var MetaVirtualResolveBatches = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.batches",
 	Help:        "Number of read batches that attempted virtual intent resolution",
 	Measurement: "Batches",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // MetaVirtualResolveBatchErrors counts read batches where virtual intent
 // resolution failed.
-var MetaVirtualResolveBatchErrors = metric.Metadata{
+var MetaVirtualResolveBatchErrors = metric.InitMetadata(metric.Metadata{
 	Name:        "kv.concurrency.virtual_resolve.batch_errors",
 	Help:        "Number of read batches where virtual intent resolution failed during evaluation",
 	Measurement: "Batches",
 	Unit:        metric.Unit_COUNT,
-}
+})
 
 // TestingLockTableMetricsCfg is a subset of store metrics that are required to
 // construct a new lock table to be used for testing purposes.

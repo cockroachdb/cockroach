@@ -8,36 +8,36 @@ package cmwriter
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
-	metaFlushLatency = metric.Metadata{
+	metaFlushLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "obs.clustermetrics.flush.latency",
 		Help:        "Latency of cluster metrics flushes to storage",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaFlushCount = metric.Metadata{
+	})
+	metaFlushCount = metric.InitMetadata(metric.Metadata{
 		Name:        "obs.clustermetrics.flush.count",
 		Help:        "Number of cluster metrics flush operations",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFlushErrors = metric.Metadata{
+	})
+	metaFlushErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "obs.clustermetrics.flush.errors",
 		Help:        "Number of flush errors (write or delete failures)",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaMetricsWritten = metric.Metadata{
+	})
+	metaMetricsWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "obs.clustermetrics.flush.metrics_written",
 		Help:        "Number of individual metrics written per flush",
 		Measurement: "Metrics",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaMetricsDeleted = metric.Metadata{
+	})
+	metaMetricsDeleted = metric.InitMetadata(metric.Metadata{
 		Name:        "obs.clustermetrics.flush.metrics_deleted",
 		Help:        "Number of individual metrics deleted per flush",
 		Measurement: "Metrics",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // WriterMetrics holds operational metrics for the Writer.

@@ -70,60 +70,60 @@ type Opts struct {
 }
 
 var (
-	metaReadProbeAttempts = metric.Metadata{
+	metaReadProbeAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.prober.read.attempts",
 		Help:        "Number of attempts made to read probe KV, regardless of outcome",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadProbeFailures = metric.Metadata{
+	})
+	metaReadProbeFailures = metric.InitMetadata(metric.Metadata{
 		Name: "kv.prober.read.failures",
 		Help: "Number of attempts made to read probe KV that failed, " +
 			"whether due to error or timeout",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaReadProbeLatency = metric.Metadata{
+	})
+	metaReadProbeLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.prober.read.latency",
 		Help:        "Latency of successful KV read probes",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaWriteProbeAttempts = metric.Metadata{
+	})
+	metaWriteProbeAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.prober.write.attempts",
 		Help:        "Number of attempts made to write probe KV, regardless of outcome",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteProbeFailures = metric.Metadata{
+	})
+	metaWriteProbeFailures = metric.InitMetadata(metric.Metadata{
 		Name: "kv.prober.write.failures",
 		Help: "Number of attempts made to write probe KV that failed, " +
 			"whether due to error or timeout",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaWriteProbeLatency = metric.Metadata{
+	})
+	metaWriteProbeLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.prober.write.latency",
 		Help:        "Latency of successful KV write probes",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaWriteProbeQuarantineOldestDuration = metric.Metadata{
+	})
+	metaWriteProbeQuarantineOldestDuration = metric.InitMetadata(metric.Metadata{
 		Name: "kv.prober.write.quarantine.oldest_duration",
 		Help: "The duration that the oldest range in the " +
 			"write quarantine pool has remained",
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
-	}
+	})
 
-	metaProbePlanAttempts = metric.Metadata{
+	metaProbePlanAttempts = metric.InitMetadata(metric.Metadata{
 		Name: "kv.prober.planning_attempts",
 		Help: "Number of attempts at planning out probes made; " +
 			"in order to probe KV we need to plan out which ranges to probe;",
 		Measurement: "Runs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaProbePlanFailures = metric.Metadata{
+	})
+	metaProbePlanFailures = metric.InitMetadata(metric.Metadata{
 		Name: "kv.prober.planning_failures",
 		Help: "Number of attempts at planning out probes that failed; " +
 			"in order to probe KV we need to plan out which ranges to probe; " +
@@ -131,7 +131,7 @@ var (
 			"all ranges; consider alerting on this metric as a result",
 		Measurement: "Runs",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// TODO(josh): Add a histogram that captures where in the "rangespace" errors
 	// are occurring. This will allow operators to see at a glance what percentage
 	// of ranges are affected.

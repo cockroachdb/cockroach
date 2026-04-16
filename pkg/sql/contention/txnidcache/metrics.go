@@ -21,17 +21,17 @@ func (Metrics) MetricStruct() {}
 // NewMetrics returns a new instance of Metrics.
 func NewMetrics() Metrics {
 	return Metrics{
-		CacheMissCounter: metric.NewCounter(metric.Metadata{
+		CacheMissCounter: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.contention.txn_id_cache.miss",
 			Help:        "Number of cache misses",
 			Measurement: "Cache miss",
 			Unit:        metric.Unit_COUNT,
-		}),
-		CacheReadCounter: metric.NewCounter(metric.Metadata{
+		})),
+		CacheReadCounter: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.contention.txn_id_cache.read",
 			Help:        "Number of cache read",
 			Measurement: "Cache read",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 	}
 }

@@ -96,7 +96,7 @@ func makeRangeOperationMetrics() *rangeOperationMetrics {
 }
 
 var (
-	metaDroppedDueToStateInconsistency = metric.Metadata{
+	metaDroppedDueToStateInconsistency = metric.InitMetadata(metric.Metadata{
 		Name: "mma.dropped",
 		Help: "Number of pending replica or lease changes that MMA dropped because its internal " +
 			"state became inconsistent with the actual cluster state. This can happen when an " +
@@ -105,8 +105,8 @@ var (
 			"expected during normal operation when external changes occur.",
 		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalRegisterSuccess = metric.Metadata{
+	})
+	metaExternalRegisterSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.external.registration.success",
 		Help: "Number of external operations (replica/lease changes not initiated by MMA, e.g., " +
 			"from admin commands or other allocators) that were successfully registered with " +
@@ -114,8 +114,8 @@ var (
 			"synchronized with the cluster.",
 		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalRegisterFailure = metric.Metadata{
+	})
+	metaExternalRegisterFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.external.registration.failure",
 		Help: "Number of external operations (replica/lease changes not initiated by MMA) that " +
 			"failed to register with MMA due to pre-check failures (e.g., the change conflicts " +
@@ -123,8 +123,8 @@ var (
 			"not track it until the next state synchronization.",
 		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalReplicaChangeSuccess = metric.Metadata{
+	})
+	metaExternalReplicaChangeSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.external.replica.success",
 		Help: "Number of external replica changes (adding, removing, or moving replicas not " +
 			"initiated by MMA) that completed successfully. External changes come from other " +
@@ -134,8 +134,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "external", metric.LabelType, "replica", metric.LabelResult, "success"),
-	}
-	metaExternalReplicaChangeFailure = metric.Metadata{
+	})
+	metaExternalReplicaChangeFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.external.replica.failure",
 		Help: "Number of external replica changes (adding, removing, or moving replicas not " +
 			"initiated by MMA) that failed. External changes come from other components like " +
@@ -146,8 +146,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "external", metric.LabelType, "replica", metric.LabelResult, "failure"),
-	}
-	metaExternalLeaseChangeSuccess = metric.Metadata{
+	})
+	metaExternalLeaseChangeSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.external.lease.success",
 		Help: "Number of external lease transfers (moving the leaseholder to a different replica, " +
 			"not initiated by MMA) that completed successfully. External changes come from other " +
@@ -157,8 +157,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "external", metric.LabelType, "lease", metric.LabelResult, "success"),
-	}
-	metaExternalLeaseChangeFailure = metric.Metadata{
+	})
+	metaExternalLeaseChangeFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.external.lease.failure",
 		Help: "Number of external lease transfers (moving the leaseholder to a different replica, " +
 			"not initiated by MMA) that failed. External changes come from other components like " +
@@ -169,8 +169,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "external", metric.LabelType, "lease", metric.LabelResult, "failure"),
-	}
-	metaRebalanceReplicaChangeSuccess = metric.Metadata{
+	})
+	metaRebalanceReplicaChangeSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.rebalance.replica.success",
 		Help: "Number of MMA-initiated replica changes (adding, removing, or moving replicas to " +
 			"balance load) that completed successfully. MMA moves replicas away from overloaded " +
@@ -180,8 +180,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "replica", metric.LabelResult, "success"),
-	}
-	metaRebalanceReplicaChangeFailure = metric.Metadata{
+	})
+	metaRebalanceReplicaChangeFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.rebalance.replica.failure",
 		Help: "Number of MMA-initiated replica changes (adding, removing, or moving replicas to " +
 			"balance load) that failed. Failures may indicate constraint violations, unavailable " +
@@ -191,8 +191,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "replica", metric.LabelResult, "failure"),
-	}
-	metaRebalanceLeaseChangeSuccess = metric.Metadata{
+	})
+	metaRebalanceLeaseChangeSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.rebalance.lease.success",
 		Help: "Number of MMA-initiated lease transfers (moving the leaseholder to balance load) " +
 			"that completed successfully. MMA transfers leases away from CPU-overloaded stores " +
@@ -202,8 +202,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "success"),
-	}
-	metaRebalanceLeaseChangeFailure = metric.Metadata{
+	})
+	metaRebalanceLeaseChangeFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.change.rebalance.lease.failure",
 		Help: "Number of MMA-initiated lease transfers (moving the leaseholder to balance load) " +
 			"that failed. Failures may indicate the target replica is unavailable, doesn't meet " +
@@ -213,8 +213,8 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "failure"),
-	}
-	metaSpanConfigNormalizationError = metric.Metadata{
+	})
+	metaSpanConfigNormalizationError = metric.InitMetadata(metric.Metadata{
 		Name: "mma.span_config.normalization.error",
 		Help: "Number of ranges where the local store is leaseholder and MMA encountered errors " +
 			"while normalizing the span config (zone configuration). This includes both hard " +
@@ -226,8 +226,8 @@ var (
 		LabeledName: "mma.span_config.normalization",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelResult, "error"),
-	}
-	metaSpanConfigNormalizationSoftError = metric.Metadata{
+	})
+	metaSpanConfigNormalizationSoftError = metric.InitMetadata(metric.Metadata{
 		Name: "mma.span_config.normalization.soft_error",
 		Help: "Number of ranges where the local store is leaseholder and MMA's structural " +
 			"normalization of the span config failed, but MMA produced a best-effort usable " +
@@ -239,7 +239,7 @@ var (
 		LabeledName: "mma.span_config.normalization",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelResult, "soft_error"),
-	}
+	})
 
 	// Future: we will add additional origins for MMA-initiated operations that
 	// are other than rebalance. Eventually, the external label value will go
@@ -266,7 +266,7 @@ type loadAndCapacityMetrics struct {
 }
 
 var (
-	metaStoreCPULoad = metric.Metadata{
+	metaStoreCPULoad = metric.InitMetadata(metric.Metadata{
 		Name: "mma.store.cpu.load",
 		Help: crstrings.UnwrapText(`
 			CPU load that is attributed to the replicas on this store. This
@@ -277,8 +277,8 @@ var (
 		`),
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaStoreCPUCapacity = metric.Metadata{
+	})
+	metaStoreCPUCapacity = metric.InitMetadata(metric.Metadata{
 		Name: "mma.store.cpu.capacity",
 		Help: crstrings.UnwrapText(`
 			Logical CPU capacity estimated by MMA by extrapolating from the
@@ -288,20 +288,20 @@ var (
 		`),
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaStoreCPUUtilization = metric.Metadata{
+	})
+	metaStoreCPUUtilization = metric.InitMetadata(metric.Metadata{
 		Name:        "mma.store.cpu.utilization",
 		Help:        "Ratio of logical CPU load to capacity expressed as a percentage",
 		Measurement: "CPU Utilization",
 		Unit:        metric.Unit_PERCENT,
-	}
-	metaStoreWriteBandwidth = metric.Metadata{
+	})
+	metaStoreWriteBandwidth = metric.InitMetadata(metric.Metadata{
 		Name:        "mma.store.write.bandwidth",
 		Help:        "Disk write bandwidth as observed by MMA corresponding to the store",
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStoreDiskLoad = metric.Metadata{
+	})
+	metaStoreDiskLoad = metric.InitMetadata(metric.Metadata{
 		Name: "mma.store.disk.logical",
 		Help: crstrings.UnwrapText(`
 			Logical bytes consumed by the replicas on this store as reported by
@@ -310,8 +310,8 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStoreDiskCapacity = metric.Metadata{
+	})
+	metaStoreDiskCapacity = metric.InitMetadata(metric.Metadata{
 		Name: "mma.store.disk.capacity",
 		Help: crstrings.UnwrapText(`
 			Logical disk capacity estimated by MMA by extrapolating from the
@@ -320,13 +320,13 @@ var (
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaStoreDiskUtilization = metric.Metadata{
+	})
+	metaStoreDiskUtilization = metric.InitMetadata(metric.Metadata{
 		Name:        "mma.store.disk.utilization",
 		Help:        "Ratio of logical disk usage to capacity expressed as a percentage",
 		Measurement: "Disk Utilization",
 		Unit:        metric.Unit_PERCENT,
-	}
+	})
 )
 
 func makeLoadAndCapacityMetrics() *loadAndCapacityMetrics {
@@ -494,7 +494,7 @@ type reasonCount struct {
 }
 
 var (
-	metaOverloadedStoreLeaseGraceSuccess = metric.Metadata{
+	metaOverloadedStoreLeaseGraceSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.lease_grace.success",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) where at least one lease or replica was successfully moved away during " +
@@ -506,8 +506,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "lease_grace", metric.LabelResult, "success"),
-	}
-	metaOverloadedStoreLeaseGraceFailure = metric.Metadata{
+	})
+	metaOverloadedStoreLeaseGraceFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.lease_grace.failure",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) where the local store failed to shed any leases or replicas during " +
@@ -519,8 +519,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "lease_grace", metric.LabelResult, "failure"),
-	}
-	metaOverloadedStoreShortDurSuccess = metric.Metadata{
+	})
+	metaOverloadedStoreShortDurSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.short_dur.success",
 		Help: "Number of stores overloaded for a short duration (2-5 min) where at least one " +
 			"lease or replica was successfully moved away during this store's MMA rebalancing " +
@@ -531,8 +531,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "short_dur", metric.LabelResult, "success"),
-	}
-	metaOverloadedStoreShortDurFailure = metric.Metadata{
+	})
+	metaOverloadedStoreShortDurFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.short_dur.failure",
 		Help: "Number of stores overloaded for a short duration (2-5 min) where all shedding " +
 			"attempts failed during this store's MMA rebalancing pass. Failures occur when no " +
@@ -543,8 +543,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "short_dur", metric.LabelResult, "failure"),
-	}
-	metaOverloadedStoreMediumDurSuccess = metric.Metadata{
+	})
+	metaOverloadedStoreMediumDurSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.medium_dur.success",
 		Help: "Number of stores overloaded for a medium duration (5-8 min) where at least one " +
 			"lease or replica was successfully moved away during this store's MMA rebalancing " +
@@ -555,8 +555,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "medium_dur", metric.LabelResult, "success"),
-	}
-	metaOverloadedStoreMediumDurFailure = metric.Metadata{
+	})
+	metaOverloadedStoreMediumDurFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.medium_dur.failure",
 		Help: "Number of stores overloaded for a medium duration (5-8 min) where all shedding " +
 			"attempts failed during this store's MMA rebalancing pass. Despite considering " +
@@ -567,8 +567,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "medium_dur", metric.LabelResult, "failure"),
-	}
-	metaOverloadedStoreLongDurSuccess = metric.Metadata{
+	})
+	metaOverloadedStoreLongDurSuccess = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.long_dur.success",
 		Help: "Number of stores overloaded for a long duration (8+ min) where at least one " +
 			"lease or replica was successfully moved away during this store's MMA rebalancing " +
@@ -579,8 +579,8 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "long_dur", metric.LabelResult, "success"),
-	}
-	metaOverloadedStoreLongDurFailure = metric.Metadata{
+	})
+	metaOverloadedStoreLongDurFailure = metric.InitMetadata(metric.Metadata{
 		Name: "mma.overloaded_store.long_dur.failure",
 		Help: "Number of stores overloaded for a long duration (8+ min) where all shedding " +
 			"attempts failed during this store's MMA rebalancing pass. Even with the most " +
@@ -591,7 +591,7 @@ var (
 		LabeledName: "mma.overloaded_store",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "long_dur", metric.LabelResult, "failure"),
-	}
+	})
 )
 
 type gaugeMetrics struct {

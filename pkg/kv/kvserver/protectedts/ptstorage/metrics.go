@@ -41,60 +41,60 @@ func makeMetrics() Metrics {
 }
 
 var (
-	metaProtectSuccess = metric.Metadata{
+	metaProtectSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.protect.success",
 		Help:        "number of successful Protect operations creating protected timestamp records",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaProtectFailed = metric.Metadata{
+	})
+	metaProtectFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.protect.failed",
 		Help:        "number of failed Protect operations (ErrExists, validation errors, or execution errors)",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaReleaseSuccess = metric.Metadata{
+	})
+	metaReleaseSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.release.success",
 		Help:        "number of successful Release operations removing protected timestamp records",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaReleaseFailed = metric.Metadata{
+	})
+	metaReleaseFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.release.failed",
 		Help:        "number of failed Release operations (ErrNotExists or execution errors)",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaUpdateTimestampSuccess = metric.Metadata{
+	})
+	metaUpdateTimestampSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.update_timestamp.success",
 		Help:        "number of successful UpdateTimestamp operations",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaUpdateTimestampFailed = metric.Metadata{
+	})
+	metaUpdateTimestampFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.update_timestamp.failed",
 		Help:        "number of failed UpdateTimestamp operations (ErrNotExists or execution errors)",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaGetRecordSuccess = metric.Metadata{
+	})
+	metaGetRecordSuccess = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.get_record.success",
 		Help:        "number of successful GetRecord operations",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	metaGetRecordFailed = metric.Metadata{
+	})
+	metaGetRecordFailed = metric.InitMetadata(metric.Metadata{
 		Name:        "kv.protectedts.get_record.failed",
 		Help:        "number of failed GetRecord operations (ErrNotExists, parsing errors, or execution errors)",
 		Measurement: "Operations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )

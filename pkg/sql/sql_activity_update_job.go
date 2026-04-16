@@ -139,28 +139,28 @@ func (m ActivityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
 	return ActivityUpdaterMetrics{
-		NumFailedUpdates: metric.NewCounter(metric.Metadata{
+		NumFailedUpdates: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.stats.activity.updates.failed",
 			Help:        "Number of update attempts made by the SQL activity updater job that failed with errors",
 			Measurement: "failed updates",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
-		NumSuccessfulUpdates: metric.NewCounter(metric.Metadata{
+		})),
+		NumSuccessfulUpdates: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.stats.activity.updates.successful",
 			Help:        "Number of successful updates made by the SQL activity updater job",
 			Measurement: "successful updates",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
+		})),
 		UpdateLatency: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:        "sql.stats.activity.update.latency",
 				Help:        "The latency of updates made by the SQL activity updater job. Includes failed update attempts",
 				Measurement: "Nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
-			},
+			}),
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 			Mode:         metric.HistogramModePrometheus,

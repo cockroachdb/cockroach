@@ -575,26 +575,26 @@ func TestLoadMetricsFromGoFile(t *testing.T) {
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
-	metaReplicaCount = metric.Metadata{
+	metaReplicaCount = metric.InitMetadata(metric.Metadata{
 		Name:        "replicas",
 		Help:        "Number of replicas",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaLatency = metric.Metadata{
+	metaLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "request.latency",
 		Help:        "Request latency in nanoseconds",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	metaQueueSize = metric.Metadata{
+	metaQueueSize = metric.InitMetadata(metric.Metadata{
 		Name:        "queue.size",
 		Help:        "Current queue size",
 		Measurement: "Queue Size",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // Usage in struct

@@ -171,18 +171,18 @@ func TestRefresh(t *testing.T) {
 	})
 }
 
-var writeBytes = metric.Metadata{
+var writeBytes = metric.InitMetadata(metric.Metadata{
 	Name:        "write_bytes",
 	Help:        "Number of bytes written",
 	Measurement: "Bytes",
 	Unit:        metric.Unit_BYTES,
-}
-var readBytes = metric.Metadata{
+})
+var readBytes = metric.InitMetadata(metric.Metadata{
 	Name:        "read_bytes",
 	Help:        "Number of bytes read",
 	Measurement: "Bytes",
 	Unit:        metric.Unit_BYTES,
-}
+})
 
 // TestWrapHTTP validates the metrics for a HTTP connections.
 func TestWrapHTTP(t *testing.T) {

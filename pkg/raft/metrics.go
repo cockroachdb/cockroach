@@ -19,44 +19,44 @@ type Metrics struct {
 }
 
 var (
-	acceptedFortificationResponsesMeta = metric.Metadata{
+	acceptedFortificationResponsesMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.fortification_resp.accepted",
 		Help:        "The number of accepted fortification responses. Calculated on the raft leader",
 		Measurement: "Accepted Fortification Responses",
 		Unit:        metric.Unit_COUNT,
-	}
-	rejectedFortificationResponsesMeta = metric.Metadata{
+	})
+	rejectedFortificationResponsesMeta = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.fortification_resp.rejected",
 		Help:        "The number of rejected fortification responses. Calculated on the raft leader",
 		Measurement: "Rejected Fortification Responses",
 		Unit:        metric.Unit_COUNT,
-	}
-	skippedFortificationDueToLackOfSupportMeta = metric.Metadata{
+	})
+	skippedFortificationDueToLackOfSupportMeta = metric.InitMetadata(metric.Metadata{
 		Name: "raft.fortification.skipped_no_support",
 		Help: "The number of fortification requests that were skipped (not sent) due to lack of store" +
 			" liveness support",
 		Measurement: "Skipped Fortifications",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaRaftFlowsEnteredProbe = metric.Metadata{
+	metaRaftFlowsEnteredProbe = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.entered.state_probe",
 		Help:        "The number of leader->peer flows transitioned to StateProbe",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftFlowsEnteredReplicate = metric.Metadata{
+	})
+	metaRaftFlowsEnteredReplicate = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.entered.state_replicate",
 		Help:        "The number of leader->peer flows transitioned to StateReplicate",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRaftFlowsEnteredSnapshot = metric.Metadata{
+	})
+	metaRaftFlowsEnteredSnapshot = metric.InitMetadata(metric.Metadata{
 		Name:        "raft.flows.entered.state_snapshot",
 		Help:        "The number of of leader->peer flows transitioned to StateSnapshot",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // NewMetrics creates a new Metrics instance with all related metric fields.

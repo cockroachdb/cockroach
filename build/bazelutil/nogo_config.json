@@ -1654,5 +1654,16 @@
             "external/": "exclude all third-party code for all analyzers",
             "pkg/sql/colexec/colexechash/hash\\.go$": "re-implements runtime.noescape for efficient hashing"
         }
+    },
+    "metricmetadatainit": {
+        "exclude_files": {
+            "external/": "exclude all third-party code",
+            ".*\\.pb\\.go$": "generated code",
+            ".*\\.pb\\.gw\\.go$": "generated code",
+            "pkg/.*\\.eg\\.go$": "generated code",
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/util/metric/.*\\.go$": "metric package internal usage is allowed",
+            "pkg/testutils/": "test utilities may construct Metadata for testing"
+        }
     }
 }

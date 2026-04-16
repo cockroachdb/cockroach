@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	cpuTimeTokenMultiplierMeta = metric.Metadata{
+	cpuTimeTokenMultiplierMeta = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.multiplier",
 		Help: crstrings.UnwrapText(`
 			The token-to-CPU-time multiplier used by the CPU time token
@@ -22,18 +22,18 @@ var (
 			total CPU time to tracked CPU time`),
 		Measurement: "Multiplier",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	cpuTimeTokensConsumedMeta = metric.Metadata{
+	cpuTimeTokensConsumedMeta = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.usage.consumed",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens consumed (deducted from
 			buckets) by admitted work`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	cpuTimeTokensReturnedMeta = metric.Metadata{
+	cpuTimeTokensReturnedMeta = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.usage.returned",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens returned (credited back to
@@ -41,13 +41,13 @@ var (
 			initial estimate`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// NB: The per-tenant metric metadata templates below are used to create
 	// one AggCounter per resource tier (system_tenant / app_tenant). The tier
 	// suffix is appended in makeCPUTimeTokenMetrics. See the comment on
 	// cpuTimeTokenMetrics.AdmittedCountPerTenant for the rationale.
-	cpuTimeTokenAdmittedCountPerTenantMetaBase = metric.Metadata{
+	cpuTimeTokenAdmittedCountPerTenantMetaBase = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.admitted_count.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of requests admitted per tenant by CPU time
@@ -55,9 +55,9 @@ var (
 			mean wait time via rate(wait_time) / rate(admitted_count)`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	cpuTimeTokenWaitTimeNanosPerTenantMetaBase = metric.Metadata{
+	cpuTimeTokenWaitTimeNanosPerTenantMetaBase = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative nanoseconds of admission queue wait time per tenant
@@ -65,18 +65,18 @@ var (
 			compute mean wait time via rate(wait_time) / rate(admitted_count)`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 
-	cpuTimeTokensUsedPerTenantMetaBase = metric.Metadata{
+	cpuTimeTokensUsedPerTenantMetaBase = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.tokens_used.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens consumed per tenant by admitted
 			work; rate() gives the per-tenant token consumption rate`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	cpuTimeTokensReturnedPerTenantMetaBase = metric.Metadata{
+	cpuTimeTokensReturnedPerTenantMetaBase = metric.InitMetadata(metric.Metadata{
 		Name: "admission.cpu_time_tokens.per_tenant.tokens_returned.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens returned per tenant, for example
@@ -84,7 +84,7 @@ var (
 			rate() gives the per-tenant token return rate`),
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // cpuTimeTokenMetrics tracks metrics for the CPU time token admission
@@ -177,7 +177,7 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
 			idx := perBucketIdx(tier, qual)
-			m.ExhaustedDurationNanos[idx] = metric.NewCounter(metric.Metadata{
+			m.ExhaustedDurationNanos[idx] = metric.NewCounter(metric.InitMetadata(metric.Metadata{
 				Name: fmt.Sprintf(
 					"admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s",
 					tier, qual),
@@ -188,8 +188,8 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 					tier, qual),
 				Measurement: "Nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
-			})
-			m.RefillAdded[idx] = metric.NewCounter(metric.Metadata{
+			}))
+			m.RefillAdded[idx] = metric.NewCounter(metric.InitMetadata(metric.Metadata{
 				Name: fmt.Sprintf(
 					"admission.cpu_time_tokens.refill.added.%s.%s",
 					tier, qual),
@@ -199,8 +199,8 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 					tier, qual),
 				Measurement: "Tokens",
 				Unit:        metric.Unit_COUNT,
-			})
-			m.RefillRemoved[idx] = metric.NewCounter(metric.Metadata{
+			}))
+			m.RefillRemoved[idx] = metric.NewCounter(metric.InitMetadata(metric.Metadata{
 				Name: fmt.Sprintf(
 					"admission.cpu_time_tokens.refill.removed.%s.%s",
 					tier, qual),
@@ -210,7 +210,7 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 					tier, qual),
 				Measurement: "Tokens",
 				Unit:        metric.Unit_COUNT,
-			})
+			}))
 		}
 	}
 	return m
