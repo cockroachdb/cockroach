@@ -612,6 +612,27 @@ true
 
 subtest end
 
+subtest st_3dperimeter
+
+query R
+SELECT ST_3DPerimeter('POLYGON Z((0 0 0, 10 0 0, 10 10 5, 0 10 5, 0 0 0))'::geometry)
+----
+42.3606797749979
+
+# 2D polygon returns 2D perimeter.
+query R
+SELECT ST_3DPerimeter('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'::geometry)
+----
+40
+
+# Non-polygon types return 0.
+query R
+SELECT ST_3DPerimeter('LINESTRING Z(0 0 0, 10 0 0)'::geometry)
+----
+0
+
+subtest end
+
 subtest st_3dshortestline
 
 query T

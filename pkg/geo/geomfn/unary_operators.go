@@ -245,6 +245,75 @@ func CountVertices(t geom.T) int {
 	}
 }
 
+// Perimeter3D returns the 3D perimeter of a given Geometry.
+// For 2D geometries, this falls back to the 2D perimeter.
+// Note only (MULTI)POLYGON objects have a perimeter.
+func Perimeter3D(g geo.Geometry) (float64, error) {
+	geomRepr, err := g.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+	switch geomRepr.Layout() {
+	case geom.XYZ, geom.XYZM:
+		return perimeter3DFromGeomT(geomRepr)
+	}
+	return perimeterFromGeomT(geomRepr)
+}
+
+// perimeter3DFromGeomT returns the 3D perimeter from a geom.T.
+func perimeter3DFromGeomT(geomRepr geom.T) (float64, error) {
+	switch geomRepr := geomRepr.(type) {
+	case *geom.Point, *geom.MultiPoint, *geom.LineString, *geom.MultiLineString:
+		return 0, nil
+	case *geom.Polygon:
+		return perimeter3DPolygon(geomRepr)
+	case *geom.MultiPolygon:
+		total := float64(0)
+		for i := 0; i < geomRepr.NumPolygons(); i++ {
+			p, err := perimeter3DPolygon(geomRepr.Polygon(i))
+			if err != nil {
+				return 0, err
+			}
+			total += p
+		}
+		return total, nil
+	case *geom.GeometryCollection:
+		total := float64(0)
+		for _, subG := range geomRepr.Geoms() {
+			sub, err := perimeter3DFromGeomT(subG)
+			if err != nil {
+				return 0, err
+			}
+			total += sub
+		}
+		return total, nil
+	default:
+		return 0, errors.AssertionFailedf("unknown geometry type: %T", geomRepr)
+	}
+}
+
+// perimeter3DPolygon returns the 3D perimeter of a polygon by summing the
+// 3D lengths of all its rings (exterior + holes).
+func perimeter3DPolygon(p *geom.Polygon) (float64, error) {
+	zIndex := p.Layout().ZIndex()
+	if zIndex < 0 || zIndex >= p.Stride() {
+		return 0, errors.AssertionFailedf("Z-Index for Polygon is out-of-bounds")
+	}
+	total := float64(0)
+	for ringIdx := 0; ringIdx < p.NumLinearRings(); ringIdx++ {
+		ring := p.LinearRing(ringIdx)
+		coords := ring.Coords()
+		for i := 1; i < len(coords); i++ {
+			prev, cur := coords[i-1], coords[i]
+			dx := cur.X() - prev.X()
+			dy := cur.Y() - prev.Y()
+			dz := cur[zIndex] - prev[zIndex]
+			total += math.Sqrt(dx*dx + dy*dy + dz*dz)
+		}
+	}
+	return total, nil
+}
+
 // length3DLineString returns the length of a
 // given 3D LINESTRING. Returns an error if
 // lineString does not have a z-coordinate.

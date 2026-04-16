@@ -2943,6 +2943,7 @@ var builtinOidsArray = []string{
 	2988: `st_3dclosestpoint(geometry_a: geometry, geometry_b: geometry) -> geometry`,
 	2989: `st_3dlongestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
 	2990: `st_3dshortestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2991: `st_3dperimeter(geometry: geometry) -> float`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
