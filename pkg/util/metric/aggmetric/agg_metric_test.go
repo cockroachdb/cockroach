@@ -146,8 +146,6 @@ func TestAggMetric(t *testing.T) {
 			Name: "histo_gram",
 		},
 		Duration:     base.DefaultHistogramWindowInterval(),
-		MaxVal:       100,
-		SigFigs:      1,
 		BucketConfig: metric.Count1KBuckets,
 	}, "tenant_id")
 	r.AddMetric(h)
@@ -180,9 +178,6 @@ func TestAggMetric(t *testing.T) {
 		h2.RecordValue(10)
 		h3.RecordValue(90)
 		testFile := "basic.txt"
-		if metric.HdrEnabled() {
-			testFile = "basic_hdr.txt"
-		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
@@ -193,9 +188,6 @@ func TestAggMetric(t *testing.T) {
 		f3.Unlink()
 		h3.Unlink()
 		testFile := "destroy.txt"
-		if metric.HdrEnabled() {
-			testFile = "destroy_hdr.txt"
-		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
@@ -222,9 +214,6 @@ func TestAggMetric(t *testing.T) {
 		f3 = f.AddChild(tenant3.String())
 		h3 = h.AddChild(tenant3.String())
 		testFile := "add_after_destroy.txt"
-		if metric.HdrEnabled() {
-			testFile = "add_after_destroy_hdr.txt"
-		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
@@ -252,8 +241,6 @@ func TestAggMetricBuilder(t *testing.T) {
 	h := b.Histogram(metric.HistogramOptions{
 		Metadata:     metric.Metadata{Name: "histo_gram"},
 		Duration:     base.DefaultHistogramWindowInterval(),
-		MaxVal:       100,
-		SigFigs:      1,
 		BucketConfig: metric.Count1KBuckets,
 	})
 
@@ -286,7 +273,6 @@ func TestAggHistogramRotate(t *testing.T) {
 
 	b := MakeBuilder("test")
 	h := b.Histogram(metric.HistogramOptions{
-		Mode:     metric.HistogramModePrometheus,
 		Metadata: metric.Metadata{Name: "hist"},
 		Duration: 10 * time.Second,
 	})
@@ -407,7 +393,7 @@ func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 		scrape := func(ex *metric.PrometheusExporter) {
 			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
@@ -436,8 +422,6 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 			Name: "test.histogram",
 		},
 		Duration:     base.DefaultHistogramWindowInterval(),
-		MaxVal:       100,
-		SigFigs:      1,
 		BucketConfig: metric.Percent100Buckets,
 	})
 	r.AddMetric(histogram)
@@ -448,9 +432,6 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 		histogram.RecordValue(10, "test_db", "test_app")
 
 		testFile := "sql_metric_pre_reinitialise_child_metrics.txt"
-		if metric.HdrEnabled() {
-			testFile = "sql_metric_pre_reinitialise_child_metrics_hdr.txt"
-		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
@@ -462,9 +443,6 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 		histogram.RecordValue(10, "test_db", "test_app")
 
 		testFile := "sql_metric_post_reinitialise_child_metrics.txt"
-		if metric.HdrEnabled() {
-			testFile = "sql_metric_post_reinitialise_child_metrics_hdr.txt"
-		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 

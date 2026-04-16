@@ -200,7 +200,6 @@ func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndepende
 			Metadata:     MetaPreServeMaxBytes,
 			Duration:     histogramWindow,
 			BucketConfig: metric.MemoryUsage64MBBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 		PreServeCurBytes: metric.NewGauge(MetaPreServeCurBytes),
 	}

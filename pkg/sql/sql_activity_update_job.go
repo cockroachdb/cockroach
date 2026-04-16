@@ -163,7 +163,6 @@ func newActivityUpdaterMetrics() metric.Struct {
 			},
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 }

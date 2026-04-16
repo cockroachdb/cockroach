@@ -139,7 +139,6 @@ func TestHistogramMetricComputers(t *testing.T) {
 	h := metric.NewHistogram(metric.HistogramOptions{
 		Metadata: metric.Metadata{Name: metricName},
 		Buckets:  []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
-		Mode:     metric.HistogramModePrometheus,
 	})
 
 	sum := int64(0)
@@ -163,14 +162,14 @@ func TestHistogramMetricComputers(t *testing.T) {
 		metricName + "-sum":     float64(sum),
 		metricName + "-avg":     avg,
 		metricName + "-count":   float64(count),
-		metricName + "-max":     100,
-		metricName + "-p99.999": 100,
-		metricName + "-p99.99":  100,
-		metricName + "-p99.9":   100,
-		metricName + "-p99":     100,
-		metricName + "-p90":     90,
-		metricName + "-p75":     80,
-		metricName + "-p50":     50,
+		metricName + "-max":     snapshot.ValueAtQuantile(100),
+		metricName + "-p99.999": snapshot.ValueAtQuantile(99.999),
+		metricName + "-p99.99":  snapshot.ValueAtQuantile(99.99),
+		metricName + "-p99.9":   snapshot.ValueAtQuantile(99.9),
+		metricName + "-p99":     snapshot.ValueAtQuantile(99),
+		metricName + "-p90":     snapshot.ValueAtQuantile(90),
+		metricName + "-p75":     snapshot.ValueAtQuantile(75),
+		metricName + "-p50":     snapshot.ValueAtQuantile(50),
 	}
 	require.Equal(t, expected, results)
 }

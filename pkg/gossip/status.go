@@ -46,13 +46,11 @@ func makeMetrics() Metrics {
 		CallbacksProcessed: metric.NewCounter(MetaCallbacksProcessed),
 		CallbacksPending:   metric.NewGauge(MetaCallbacksPending),
 		CallbacksProcessingDuration: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     MetaCallbacksProcessingDuration,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		CallbacksPendingDuration: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     MetaCallbacksPendingDuration,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,

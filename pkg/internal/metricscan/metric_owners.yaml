@@ -688,7 +688,6 @@ owners:
   raft_process_logcommit_latency: cockroachdb/kv
   raft_process_tickingnanos: cockroachdb/kv
   raft_process_workingnanos: cockroachdb/kv
-  raft_quota_pool_percent_used: cockroachdb/kv
   raft_rcvd_app: cockroachdb/kv
   raft_rcvd_appresp: cockroachdb/kv
   raft_rcvd_bytes: cockroachdb/kv

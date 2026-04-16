@@ -594,55 +594,46 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaDistSQLExecLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLExecLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLExecLatencyConsistent: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLExecLatencyConsistent, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLExecLatencyHistorical: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLExecLatencyHistorical, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaDistSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLServiceLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLServiceLatencyConsistent: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatencyConsistent, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLServiceLatencyHistorical: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatencyHistorical, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLTxnLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLTxnLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
@@ -683,16 +674,12 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 				Metadata:     MetaSQLStatsMemMaxBytes,
 				Duration:     cfg.HistogramWindowInterval,
-				MaxVal:       log10int64times1000,
-				SigFigs:      3,
 				BucketConfig: metric.MemoryUsage64MBBuckets,
 			}),
 			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
 			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 				Metadata:     MetaReportedSQLStatsMemMaxBytes,
 				Duration:     cfg.HistogramWindowInterval,
-				MaxVal:       log10int64times1000,
-				SigFigs:      3,
 				BucketConfig: metric.MemoryUsage64MBBuckets,
 			}),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
@@ -703,14 +690,12 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 
 			SQLStatsFlushesFailed: metric.NewCounter(MetaSQLStatsFlushesFailed),
 			SQLStatsFlushLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     MetaSQLStatsFlushLatency,
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.BatchProcessLatencyBuckets,
 			}),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
 			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     MetaSQLTxnStatsCollectionOverhead,
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,

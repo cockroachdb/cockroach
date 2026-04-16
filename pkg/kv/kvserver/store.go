@@ -3446,7 +3446,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			kvflowSendQueueSizeBytes += sizeBytes
 		}
 		if metrics.Leaseholder {
-			s.metrics.RaftQuotaPoolPercentUsed.RecordValue(metrics.QuotaPoolPercentUsed)
 			closedTimestampPolicyCounts[metrics.ClosedTimestampPolicy] += 1
 			leaseHolderCount++
 			switch metrics.LeaseType {
@@ -3781,7 +3780,8 @@ func (s *Store) ComputeMetricsPeriodically(
 	wt := m.Flush.WriteThroughput
 
 	updateWindowedHistogram := func(
-		prevCum prometheusgo.Metric, curCum prometheus.Histogram, wh *metric.ManualWindowHistogram) error {
+		prevCum *prometheusgo.Metric, curCum prometheus.Histogram, wh *metric.ManualWindowHistogram,
+	) error {
 		// The current cumulative latency histogram is subtracted from the
 		// previous cumulative value producing a delta that represent the change
 		// between the two points in time. Since the prometheus.Histogram does not
@@ -3809,17 +3809,17 @@ func (s *Store) ComputeMetricsPeriodically(
 		wt.Subtract(prevMetrics.FlushWriteThroughput)
 
 		if err := updateWindowedHistogram(
-			prevMetrics.WALFsyncLatency, m.Metrics.WALMetrics.PrimaryFileOpLatency, s.metrics.FsyncLatency); err != nil {
+			&prevMetrics.WALFsyncLatency, m.Metrics.WALMetrics.PrimaryFileOpLatency, s.metrics.FsyncLatency); err != nil {
 			return m, err
 		}
 		if m.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
 			if err := updateWindowedHistogram(
-				prevMetrics.WALSecondaryFileOpLatency, m.Metrics.WALMetrics.SecondaryFileOpLatency, s.metrics.WALSecondaryFileOpLatency); err != nil {
+				&prevMetrics.WALSecondaryFileOpLatency, m.Metrics.WALMetrics.SecondaryFileOpLatency, s.metrics.WALSecondaryFileOpLatency); err != nil {
 				return m, err
 			}
 		}
 		if m.WAL.Failover.FailoverWriteAndSyncLatency != nil {
-			if err := updateWindowedHistogram(prevMetrics.WALFailoverWriteAndSyncLatency,
+			if err := updateWindowedHistogram(&prevMetrics.WALFailoverWriteAndSyncLatency,
 				m.WAL.Failover.FailoverWriteAndSyncLatency, s.metrics.WALFailoverWriteAndSyncLatency); err != nil {
 				return m, err
 			}

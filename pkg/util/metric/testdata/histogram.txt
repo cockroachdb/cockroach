@@ -1,44 +1,186 @@
 echo
 ----
-{
-  "sample_count": 4,
-  "sample_sum": 21,
-  "bucket": [
-    {
-      "cumulative_count": 1,
-      "upper_bound": 1
-    },
-    {
-      "cumulative_count": 1,
-      "upper_bound": 2
-    },
-    {
-      "cumulative_count": 1,
-      "upper_bound": 3
-    },
-    {
-      "cumulative_count": 1,
-      "upper_bound": 4
-    },
-    {
-      "cumulative_count": 3,
-      "upper_bound": 5
-    },
-    {
-      "cumulative_count": 3,
-      "upper_bound": 6
-    },
-    {
-      "cumulative_count": 4,
-      "upper_bound": 10
-    },
-    {
-      "cumulative_count": 4,
-      "upper_bound": 20
-    },
-    {
-      "cumulative_count": 4,
-      "upper_bound": 30
-    }
-  ]
+sample_count: 4
+sample_sum: 21
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.0905077326652577
 }
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.189207115002721
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.2968395546510096
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.4142135623730951
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.542210825407941
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.6817928305074292
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 1.8340080864093424
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 2
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 2.1810154653305154
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 2.378414230005442
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 2.5936791093020193
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 2.8284271247461903
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 3.084421650815882
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 3.3635856610148585
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 3.668016172818685
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 4
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 4.362030930661031
+}
+bucket: {
+  cumulative_count: 1
+  upper_bound: 4.756828460010884
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 5.187358218604039
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 5.656854249492381
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 6.168843301631764
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 6.727171322029717
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 7.33603234563737
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 8
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 8.724061861322062
+}
+bucket: {
+  cumulative_count: 3
+  upper_bound: 9.513656920021768
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 10.374716437208077
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 11.313708498984761
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 12.337686603263528
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 13.454342644059434
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 14.67206469127474
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 16
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 17.448123722644123
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 19.027313840043536
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 20.749432874416154
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 22.627416997969522
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 24.675373206527055
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 26.908685288118868
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 29.34412938254948
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: 30
+}
+bucket: {
+  cumulative_count: 4
+  upper_bound: inf
+}
+schema: 3
+zero_threshold: 5e-324
+zero_count: 0
+positive_span: {
+  offset: 1
+  length: 1
+}
+positive_span: {
+  offset: 17
+  length: 1
+}
+positive_span: {
+  offset: 7
+  length: 1
+}
+positive_delta: 1
+positive_delta: 1
+positive_delta: -1

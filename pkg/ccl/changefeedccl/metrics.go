@@ -440,7 +440,6 @@ func newJobScopedUsageMetrics(histogramWindow time.Duration) *JobScopedUsageMetr
 			Metadata:     metaChangefeedUsageQueryDuration,
 			Duration:     histogramWindow,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 	}
 	m.mu.metrics = make(map[catpb.JobID]*innerJobScopedUsageMetrics)
@@ -1207,16 +1206,12 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		EmittedBatchSizes: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedEmittedBatchSizes,
 			Duration:     histogramWindow,
-			MaxVal:       16e6, /* 16M max batch size */
-			SigFigs:      1,
 			BucketConfig: metric.DataCount16MBuckets,
 		}),
 		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
 		MessageSize: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaMessageSize,
 			Duration:     histogramWindow,
-			MaxVal:       10 << 20, /* 10MB max message size */
-			SigFigs:      1,
 			BucketConfig: metric.DataSize16MBBuckets,
 		}),
 		EmittedBytes:     b.Counter(metaChangefeedEmittedBytes),
@@ -1226,16 +1221,12 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		ParallelIOPendingQueueNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedParallelIOQueueNanos,
 			Duration:     histogramWindow,
-			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOPendingRows: b.Gauge(metaChangefeedParallelIOPendingRows),
 		ParallelIOResultQueueNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedParallelIOResultQueueNanos,
 			Duration:     histogramWindow,
-			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOInFlightKeys: b.Gauge(metaChangefeedParallelIOInFlightKeys),
@@ -1243,37 +1234,27 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		SinkBackpressureNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedSinkBackpressureNanos,
 			Duration:     histogramWindow,
-			MaxVal:       backpressureMaxValue.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOWorkers: b.Gauge(metaChangefeedParallelIOWorkers),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
-			MaxVal:       changefeedBatchHistMaxLatency.Nanoseconds(),
-			SigFigs:      1,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		FlushHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedFlushHistNanos,
 			Duration:     histogramWindow,
-			MaxVal:       changefeedFlushHistMaxLatency.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		CommitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaCommitLatency,
 			Duration:     histogramWindow,
-			MaxVal:       commitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 			BucketConfig: metric.ChangefeedPipelineLatencyBuckets,
 		}),
 		AdmitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaAdmitLatency,
 			Duration:     histogramWindow,
-			MaxVal:       admitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 			BucketConfig: metric.ChangefeedPipelineLatencyBuckets,
 		}),
 		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
@@ -1291,8 +1272,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		KafkaThrottlingNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedKafkaThrottlingNanos,
 			Duration:     histogramWindow,
-			MaxVal:       kafkaThrottlingTimeMaxValue.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		SinkErrors:        b.Counter(metaSinkErrors),
@@ -1519,8 +1498,6 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 		CheckpointHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedCheckpointHistNanos,
 			Duration:     histogramWindow,
-			MaxVal:       changefeedCheckpointHistMaxLatency.Nanoseconds(),
-			SigFigs:      2,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
@@ -1531,13 +1508,11 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 			Metadata:     metaChangefeedEventConsumerFlushNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerConsumeNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedEventConsumerConsumeNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
-			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
 	}
@@ -1575,8 +1550,6 @@ func MakeMemoryMetrics(
 	maxHist = metric.NewHistogram(metric.HistogramOptions{
 		Metadata:     metaMemMaxBytes,
 		Duration:     histogramWindow,
-		MaxVal:       log10int64times1000,
-		SigFigs:      3,
 		BucketConfig: metric.MemoryUsage64MBBuckets,
 	})
 	return curCount, maxHist

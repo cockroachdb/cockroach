@@ -361,7 +361,6 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		HeartbeatFailures:  telemetry.NewCounterWithMetric(metaHeartbeatFailures),
 		EpochIncrements:    telemetry.NewCounterWithMetric(metaEpochIncrements),
 		HeartbeatLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaHeartbeatLatency,
 			Duration:     opts.HistogramWindowInterval,
 			BucketConfig: metric.IOLatencyBuckets,

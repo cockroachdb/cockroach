@@ -88,7 +88,6 @@ type SnapshotMetrics struct {
 func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
 	m := &SnapshotMetrics{
 		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     snapshotWaitDur,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,

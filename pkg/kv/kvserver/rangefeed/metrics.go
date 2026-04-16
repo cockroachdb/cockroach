@@ -216,7 +216,6 @@ func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *Shard
 	}
 	return &ShardMetrics{
 		QueueTime: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     expandTemplate(metaQueueTimeHistogramsTemplate),
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,

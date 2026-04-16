@@ -280,14 +280,12 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		DLQedRowUpdates:      metric.NewCounter(metaDLQedRowUpdates),
 		ReceivedLogicalBytes: metric.NewCounter(metaReceivedLogicalBytes),
 		CommitToCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaCommitToCommitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),
 		ApplyBatchNanosHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaApplyBatchNanosHist,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,

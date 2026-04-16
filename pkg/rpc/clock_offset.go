@@ -197,7 +197,6 @@ func createRoundtripLatencyMetricHelper(
 	meta metric.Metadata, histogramWindowInterval time.Duration,
 ) metric.IHistogram {
 	return metric.NewHistogram(metric.HistogramOptions{
-		Mode:         metric.HistogramModePreferHdrLatency,
 		Metadata:     meta,
 		Duration:     histogramWindowInterval,
 		BucketConfig: metric.IOLatencyBuckets,

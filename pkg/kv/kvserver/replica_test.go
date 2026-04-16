@@ -9136,27 +9136,6 @@ func TestReplicaMetrics(t *testing.T) {
 	}
 }
 
-func TestCalcQuotaPoolPercentUsed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const mb = 1 << 20
-
-	for _, tc := range []struct {
-		qpUsed, qpCap int64
-		exp           int64
-	}{
-		{0, 0, 0},
-		{0, 16 * mb, 0},
-		{1, 16 * mb, 0},
-		{8 * mb, 16 * mb, 50},
-		{16 * mb, 16 * mb, 100},
-		{16*mb - 1, 16 * mb, 100},
-		{32 * mb, 16 * mb, 200},
-	} {
-		assert.Equal(t, tc.exp, calcQuotaPoolPercentUsed(tc.qpUsed, tc.qpCap), "%+v", tc)
-	}
-}
-
 // TestCancelPendingCommands verifies that cancelPendingCommands sends
 // an error to each command awaiting execution.
 func TestCancelPendingCommands(t *testing.T) {

@@ -1751,15 +1751,6 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	// Quota pool metrics.
-	metaRaftQuotaPoolPercentUsed = metric.Metadata{
-		Name:        "raft.quota_pool.percent_used",
-		Help:        `Histogram of proposal quota pool utilization (0-100) per leaseholder per metrics interval`,
-		Measurement: "Percent",
-		// TODO(kv-obs): There is Unit_PERCENT but it seems to operate on float64
-		// (0 to 1.0) so it probably won't produce useful results here.
-		Unit: metric.Unit_COUNT,
-	}
 	// Raft entry bytes loaded in memory.
 	metaRaftLoadedEntriesBytes = metric.Metadata{
 		Name:        "raft.loaded_entries.bytes",
@@ -3610,24 +3601,24 @@ type StoreMetrics struct {
 	RaftTicks                  *metric.Counter
 	RaftProposalsDropped       *metric.Counter
 	RaftProposalsDroppedLeader *metric.Counter
-	RaftQuotaPoolPercentUsed   metric.IHistogram
-	RaftLoadedEntriesBytes     *metric.Gauge
-	RaftWorkingDurationNanos   *metric.Counter
-	RaftTickingDurationNanos   *metric.Counter
-	RaftCommandsProposed       *metric.Counter
-	RaftCommandsReproposed     *metric.Counter
-	RaftCommandsReproposedLAI  *metric.Counter
-	RaftCommandsPending        *metric.Gauge
-	RaftCommandsApplied        *metric.Counter
-	RaftLogCommitLatency       metric.IHistogram
-	RaftCommandCommitLatency   metric.IHistogram
-	RaftHandleReadyLatency     metric.IHistogram
-	RaftApplyCommittedLatency  metric.IHistogram
-	RaftReplicationLatency     metric.IHistogram
-	RaftSchedulerLatency       metric.IHistogram
-	RaftTimeoutCampaign        *metric.Counter
-	RaftStorageReadBytes       *metric.Counter
-	RaftStorageError           *metric.Counter
+
+	RaftLoadedEntriesBytes    *metric.Gauge
+	RaftWorkingDurationNanos  *metric.Counter
+	RaftTickingDurationNanos  *metric.Counter
+	RaftCommandsProposed      *metric.Counter
+	RaftCommandsReproposed    *metric.Counter
+	RaftCommandsReproposedLAI *metric.Counter
+	RaftCommandsPending       *metric.Gauge
+	RaftCommandsApplied       *metric.Counter
+	RaftLogCommitLatency      metric.IHistogram
+	RaftCommandCommitLatency  metric.IHistogram
+	RaftHandleReadyLatency    metric.IHistogram
+	RaftApplyCommittedLatency metric.IHistogram
+	RaftReplicationLatency    metric.IHistogram
+	RaftSchedulerLatency      metric.IHistogram
+	RaftTimeoutCampaign       *metric.Counter
+	RaftStorageReadBytes      *metric.Counter
+	RaftStorageError          *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -4144,7 +4135,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
 		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
 		LeaseRequestLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLeaseRequestLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
@@ -4387,53 +4377,40 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftTicks:                  metric.NewCounter(metaRaftTicks),
 		RaftProposalsDropped:       metric.NewCounter(metaRaftProposalsDropped),
 		RaftProposalsDroppedLeader: metric.NewCounter(metaRaftProposalsDroppedLeader),
-		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
-			Metadata:     metaRaftQuotaPoolPercentUsed,
-			Duration:     histogramWindow,
-			MaxVal:       100,
-			SigFigs:      1,
-			BucketConfig: metric.Percent100Buckets,
-		}),
-		RaftLoadedEntriesBytes:    metric.NewGauge(metaRaftLoadedEntriesBytes),
-		RaftWorkingDurationNanos:  metric.NewCounter(metaRaftWorkingDurationNanos),
-		RaftTickingDurationNanos:  metric.NewCounter(metaRaftTickingDurationNanos),
-		RaftCommandsProposed:      metric.NewCounter(metaRaftCommandsProposed),
-		RaftCommandsReproposed:    metric.NewCounter(metaRaftCommandsReproposed),
-		RaftCommandsReproposedLAI: metric.NewCounter(metaRaftCommandsReproposedLAI),
-		RaftCommandsPending:       metric.NewGauge(metaRaftCommandsPending),
-		RaftCommandsApplied:       metric.NewCounter(metaRaftCommandsApplied),
+		RaftLoadedEntriesBytes:     metric.NewGauge(metaRaftLoadedEntriesBytes),
+		RaftWorkingDurationNanos:   metric.NewCounter(metaRaftWorkingDurationNanos),
+		RaftTickingDurationNanos:   metric.NewCounter(metaRaftTickingDurationNanos),
+		RaftCommandsProposed:       metric.NewCounter(metaRaftCommandsProposed),
+		RaftCommandsReproposed:     metric.NewCounter(metaRaftCommandsReproposed),
+		RaftCommandsReproposedLAI:  metric.NewCounter(metaRaftCommandsReproposedLAI),
+		RaftCommandsPending:        metric.NewGauge(metaRaftCommandsPending),
+		RaftCommandsApplied:        metric.NewCounter(metaRaftCommandsApplied),
 		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftLogCommitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftCommandCommitLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftCommandCommitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftHandleReadyLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftHandleReadyLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftApplyCommittedLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftApplyCommittedLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftReplicationLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaRaftReplicationLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftSchedulerLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
@@ -4602,7 +4579,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		VirtualResolveBatches:             metric.NewCounter(concurrency.MetaVirtualResolveBatches),
 		VirtualResolveBatchErrors:         metric.NewCounter(concurrency.MetaVirtualResolveBatchErrors),
 		LatchWaitDurations: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLatchConflictWaitDurations,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
@@ -4617,13 +4593,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Replica batch evaluation.
 		ReplicaReadBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaReplicaReadBatchEvaluationLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaReplicaWriteBatchEvaluationLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,

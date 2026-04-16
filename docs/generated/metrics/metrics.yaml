@@ -19306,15 +19306,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
-    - name: raft.quota_pool.percent_used
-      exported_name: raft_quota_pool_percent_used
-      description: Histogram of proposal quota pool utilization (0-100) per leaseholder per metrics interval
-      y_axis_label: Percent
-      type: HISTOGRAM
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-      owner: cockroachdb/kv
     - name: raft.rcvd.app
       exported_name: raft_rcvd_app
       description: Number of MsgApp messages received by this store
