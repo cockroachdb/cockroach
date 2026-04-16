@@ -109,6 +109,7 @@ owners:
   changefeed_buffer_pushback_nanos: cockroachdb/cdc
   changefeed_checkpoint_create_nanos: cockroachdb/cdc
   changefeed_checkpoint_hist_nanos: cockroachdb/cdc
+  changefeed_checkpoint_lag: cockroachdb/cdc
   changefeed_checkpoint_progress: cockroachdb/cdc
   changefeed_checkpoint_span_count: cockroachdb/cdc
   changefeed_checkpoint_timestamp_count: cockroachdb/cdc

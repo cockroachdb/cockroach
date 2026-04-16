@@ -1646,12 +1646,26 @@ func (b *changefeedResumer) setJobStatusMessage(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) error {
+func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 	jobID := b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	description := b.job.Payload().Description
+
+	// Drop the per-job entry from the cluster checkpoint-lag metric on
+	// successful completion (e.g., initial_scan_only finished, end_time
+	// reached).
+	defer func() {
+		if retErr != nil {
+			return
+		}
+		if state := b.job.State(); state == jobs.StatePauseRequested || state == jobs.StatePaused {
+			return
+		}
+		metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+		metrics.ClusterMetrics.DeleteJob(b.job.ID())
+	}()
 
 	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
 		return err
@@ -2138,8 +2152,10 @@ func (b *changefeedResumer) OnFailOrCancel(
 			ptsID,
 		)
 	}
-
 	maybeCleanUpProtectedTimestamp(progress.GetChangefeed().ProtectedTimestampRecord)
+	// Drop per-job entries from the changefeed cluster metrics.
+	metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	metrics.ClusterMetrics.DeleteJob(b.job.ID())
 	// We clean up the per-table protected timestamps (and their accompanying
 	// system tables protected timestamp record) in a transaction since we need
 	// to read from the job info.

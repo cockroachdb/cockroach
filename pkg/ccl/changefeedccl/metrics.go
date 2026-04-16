@@ -10,6 +10,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/crlib/crtime"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -871,7 +876,47 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_CHANGEFEEDS,
 	}
+	metaCheckpointLag = metric.Metadata{
+		Name:        "changefeed.checkpoint_lag",
+		Help:        "Per-job earliest timestamp of any changefeed's persisted checkpoint persists and the cluster-metrics writer flushes.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 )
+
+// ClusterMetrics groups all per-job cluster metrics emitted by the
+// changefeed package. New cluster metrics should be added by extending
+// this struct.
+type ClusterMetrics struct {
+	CheckpointLag *cmmetrics.WriteStopwatchVec
+}
+
+// RegisterWith attaches all cluster metrics to the given writer.
+func (cm *ClusterMetrics) RegisterClusterMetric(writer sql.ClusterMetricAdder) {
+	if writer == nil {
+		return
+	}
+	writer.AddMetricStruct(cm)
+}
+
+// SetCheckpointLag records the resolved-frontier nanos of the most
+// recent persisted checkpoint for the given job.
+func (cm *ClusterMetrics) SetCheckpointLag(jobID jobspb.JobID, frontierNanos int64) {
+	cm.CheckpointLag.UpdateStartTime(jobIDLabels(jobID), frontierNanos)
+}
+
+// DeleteJob drops all cluster metric entries belonging to the given
+// job.
+func (cm *ClusterMetrics) DeleteJob(jobID jobspb.JobID) {
+	cm.CheckpointLag.Delete(jobIDLabels(jobID))
+}
+
+// jobIDLabels is a helper function used by Cluster level CheckpointLag metric.
+func jobIDLabels(jobID jobspb.JobID) map[string]string {
+	return map[string]string{"job_id": strconv.FormatInt(int64(jobID), 10)}
+}
 
 func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
@@ -1491,6 +1536,7 @@ type Metrics struct {
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
+	ClusterMetrics                 *ClusterMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -1540,6 +1586,9 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		ClusterMetrics: &ClusterMetrics{
+			CheckpointLag: cmmetrics.NewWriteStopwatchVec(metaCheckpointLag, timeutil.DefaultTimeSource{}, "job_id"),
+		},
 	}
 
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
