@@ -694,3 +694,71 @@ query I
 SELECT estimated_row_count FROM crdb_internal.table_row_statistics WHERE table_name = 't'
 ----
 10
+
+subtest lock_table
+
+# LOCK TABLE is not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE t IN ACCESS SHARE MODE
+
+# Bare LOCK (without IN ... MODE) is also not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK t
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+# LOCK TABLE is a no-op when pg_dump_compatibility is enabled.
+statement ok
+LOCK TABLE t IN ACCESS SHARE MODE
+
+# Multiple tables work too (pg_dump batches locks).
+statement ok
+LOCK TABLE t, pg_class IN ACCESS SHARE MODE
+
+# NOWAIT variant also works.
+statement ok
+LOCK TABLE t IN ACCESS SHARE MODE NOWAIT
+
+# All lock modes are accepted.
+statement ok
+LOCK TABLE t IN ROW SHARE MODE
+
+statement ok
+LOCK TABLE t IN ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN SHARE UPDATE EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN SHARE MODE
+
+statement ok
+LOCK TABLE t IN SHARE ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE t IN ACCESS EXCLUSIVE MODE
+
+# Bare LOCK (no IN ... MODE) defaults to ACCESS EXCLUSIVE.
+statement ok
+LOCK t
+
+# Bare LOCK with NOWAIT.
+statement ok
+LOCK t NOWAIT
+
+# TABLE keyword is optional.
+statement ok
+LOCK TABLE t
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+# Verify LOCK TABLE is rejected again after disabling compat mode.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE t IN ACCESS SHARE MODE
+
+subtest end
