@@ -19,6 +19,10 @@ CREATE TABLE c (c CHAR PRIMARY KEY)
 ----
 
 exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v VECTOR(3))
+----
+
+exec-ddl
 CREATE TABLE b
 (
     k INT PRIMARY KEY,
@@ -66,6 +70,24 @@ project
       ├── k:1 & (i:2 ^ 2) [as=x:14, outer=(1,2), immutable]
       ├── k:1 | (i:2 ^ 2) [as=y:15, outer=(1,2), immutable]
       └── k:1 # (i:2 * i:2) [as=z:16, outer=(1,2), immutable]
+
+# Commute vector distance operators so that the variable is on the left.
+norm expect=CommuteVar
+SELECT
+    '[1,2,3]' <-> v AS r,
+    '[1,2,3]' <=> v AS s,
+    '[1,2,3]' <#> v AS t
+FROM t
+----
+project
+ ├── columns: r:5 s:6 t:7
+ ├── immutable
+ ├── scan t
+ │    └── columns: v:2
+ └── projections
+      ├── v:2 <-> '[1,2,3]' [as=r:5, outer=(2), immutable]
+      ├── v:2 <=> '[1,2,3]' [as=s:6, outer=(2), immutable]
+      └── v:2 <#> '[1,2,3]' [as=t:7, outer=(2), immutable]
 
 # --------------------------------------------------
 # CommuteConst
