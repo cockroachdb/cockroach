@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -182,5 +183,11 @@ func (t *tenantServerWrapper) serveConn(
 ) error {
 	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
 	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
+	stopCtx, stopHandle, err := t.stopper.GetHandle(pgCtx, stop.TaskOpts{TaskName: "serve-conn"})
+	if err != nil {
+		return errors.Wrap(err, "error getting stop handle")
+	}
+	handle := stopHandle.Activate(stopCtx)
+	defer handle.Release(stopCtx)
 	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
 }
