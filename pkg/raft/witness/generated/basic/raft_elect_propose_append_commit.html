@@ -89,7 +89,7 @@ function semicircleLayout(voterIds, hasWitness) {
   if (n === 0) return [];
 
   
-  const arenaW = Math.max(n * (CARD_W + 20), 600);
+  const arenaW = Math.max(n * (CARD_W + 220), 600);
   const radius = (arenaW - CARD_W) / 2;
   const cx = arenaW / 2;
   const cy = radius + CARD_H / 2;
@@ -220,50 +220,45 @@ function makeArc(from, to, sag, label, cls, color) {
   const shortenPx = 40;
   const t0 = shortenPx / len;
   const t1 = 1 - t0;
-  const sx = from.x + (to.x - from.x) * t0;
-  const sy = from.y + (to.y - from.y) * t0;
-  const ex = from.x + (to.x - from.x) * t1;
-  const ey = from.y + (to.y - from.y) * t1;
+  const sx = from.x + dx * t0;
+  const sy = from.y + dy * t0;
+  const ex = from.x + dx * t1;
+  const ey = from.y + dy * t1;
 
   const path = 'M' + sx + ',' + sy + ' Q' + qx + ',' + qy + ' ' + ex + ',' + ey;
 
   
-  const tdx = ex - qx;
-  const tdy = ey - qy;
-  const tlen = Math.sqrt(tdx * tdx + tdy * tdy);
-  const arrowLen = 10;
-  const arrowW = 5;
-  if (tlen > 1) {
-    var tux = tdx / tlen;
-    var tuy = tdy / tlen;
-  } else {
-    var tux = dx / len;
-    var tuy = dy / len;
-  }
-  
-  const ax1 = ex - tux * arrowLen + tuy * arrowW;
-  const ay1 = ey - tuy * arrowLen - tux * arrowW;
-  const ax2 = ex - tux * arrowLen - tuy * arrowW;
-  const ay2 = ey - tuy * arrowLen + tux * arrowW;
+  const midX = 0.25 * sx + 0.5 * qx + 0.25 * ex;
+  const midY = 0.25 * sy + 0.5 * qy + 0.25 * ey;
 
   
-  const lx = 0.25 * sx + 0.5 * qx + 0.25 * ex;
-  const ly = 0.25 * sy + 0.5 * qy + 0.25 * ey;
+  const tmx = ex - sx;
+  const tmy = ey - sy;
+  const tmLen = Math.sqrt(tmx * tmx + tmy * tmy);
+  const tux = tmLen > 0 ? tmx / tmLen : 1;
+  const tuy = tmLen > 0 ? tmy / tmLen : 0;
 
   
-  let angleDeg = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+  const arrowLen = 7;
+  const arrowW = 4;
+  const ax1 = midX - tux * arrowLen + tuy * arrowW;
+  const ay1 = midY - tuy * arrowLen - tux * arrowW;
+  const ax2 = midX - tux * arrowLen - tuy * arrowW;
+  const ay2 = midY - tuy * arrowLen + tux * arrowW;
+
   
+  let angleDeg = Math.atan2(tmy, tmx) * 180 / Math.PI;
   if (angleDeg > 90) angleDeg -= 180;
   if (angleDeg < -90) angleDeg += 180;
 
   
   const offsetDist = sag > 0 ? -8 : 12;
   const angleRad = angleDeg * Math.PI / 180;
-  const olx = lx + Math.sin(angleRad) * offsetDist;
-  const oly = ly - Math.cos(angleRad) * offsetDist;
+  const olx = midX + Math.sin(angleRad) * offsetDist;
+  const oly = midY - Math.cos(angleRad) * offsetDist;
 
   return '<path class="msg-arc ' + cls + '" d="' + path + '"/>' +
-    '<polygon points="' + ex + ',' + ey + ' ' + ax1 + ',' + ay1 + ' ' + ax2 + ',' + ay2 + '" fill="' + color + '"/>' +
+    '<polygon points="' + midX + ',' + midY + ' ' + ax1 + ',' + ay1 + ' ' + ax2 + ',' + ay2 + '" fill="' + color + '"/>' +
     '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
     'text-anchor="middle" ' +
     'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
