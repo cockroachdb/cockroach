@@ -198,7 +198,7 @@ func registerCopyFrom(r registry.Registry) {
 		tc := tc
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:            registry.OwnerSQLQueries,
+			Owner:            registry.OwnerSQLFoundations,
 			Benchmark:        true,
 			Cluster:          r.MakeClusterSpec(tc.nodes),
 			CompatibleClouds: registry.AllExceptAWS,
@@ -210,7 +210,7 @@ func registerCopyFrom(r registry.Registry) {
 		})
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:            registry.OwnerSQLQueries,
+			Owner:            registry.OwnerSQLFoundations,
 			Benchmark:        true,
 			Cluster:          r.MakeClusterSpec(tc.nodes),
 			CompatibleClouds: registry.AllExceptAWS,
@@ -222,7 +222,7 @@ func registerCopyFrom(r registry.Registry) {
 		})
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:            registry.OwnerSQLQueries,
+			Owner:            registry.OwnerSQLFoundations,
 			Benchmark:        true,
 			Cluster:          r.MakeClusterSpec(tc.nodes),
 			CompatibleClouds: registry.AllExceptAWS,
