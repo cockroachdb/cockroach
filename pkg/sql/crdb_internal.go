@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -3115,7 +3116,7 @@ CREATE TABLE crdb_internal.builtin_functions (
 var crdbInternalBuiltinFunctionCommentsTable = virtualSchemaTable{
 	comment: "built-in functions (RAM/static)",
 	schema:  vtable.CrdbInternalBuiltinFunctionComments,
-	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames() {
 			_, overloads := builtinsregistry.GetBuiltinProperties(name)
 			for _, f := range overloads {
@@ -6019,11 +6020,23 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				objOid = getOIDFromConstraint(c, tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableDesc)
 			}
 
+			compatClassOid := classOid
+			if classOid != tree.DNull {
+				compatClassOid = tree.NewDOid(
+					catconstants.RemapPgCatalogOid(
+						catconstants.PgCatalogName,
+						uint32(tree.MustBeDOid(classOid).Oid),
+						sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility),
+					),
+				)
+			}
+
 			return addRow(
 				classOid,
 				objOid,
 				objSubID,
-				tree.NewDString(cmt))
+				tree.NewDString(cmt),
+				compatClassOid)
 		}); err != nil {
 			return err
 		}

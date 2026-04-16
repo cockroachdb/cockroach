@@ -638,6 +638,12 @@ func TestMemoIsStale(t *testing.T) {
 	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
 	notStale()
 
+	// Stale pg_dump_compatibility.
+	evalCtx.SessionData().PgDumpCompatibility = "postgres"
+	stale()
+	evalCtx.SessionData().PgDumpCompatibility = ""
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

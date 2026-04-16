@@ -1133,6 +1133,9 @@ func (v *pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 			return next
 		}
 	case *ast.ReturnStmt:
+		if len(n.Results) == 0 {
+			return v
+		}
 		result, ok := n.Results[0].(*ast.Ident)
 		if !ok {
 			return v

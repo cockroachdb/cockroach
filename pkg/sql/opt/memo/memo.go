@@ -223,6 +223,7 @@ type Memo struct {
 	inlineAnyUnnestSubquery                    bool
 	useMinRowCountAntiJoinFix                  bool
 	useBackupsWithIDs                          bool
+	pgDumpCompatibility                        string
 	// builtWithStatsRollout records the stats rollout mode under which
 	// this memo was built.
 	//
@@ -372,6 +373,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
+		pgDumpCompatibility:                        evalCtx.SessionData().PgDumpCompatibility,
 		builtWithStatsRollout:                      evalCtx.StatsRollout,
 	}
 	m.metadata.Init()
@@ -559,7 +561,8 @@ func (m *Memo) IsStale(
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
-		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {
+		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs ||
+		m.pgDumpCompatibility != evalCtx.SessionData().PgDumpCompatibility {
 		return true, nil
 	}
 

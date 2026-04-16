@@ -14,11 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq/oid"
 )
 
 func constructPlan(
@@ -335,7 +336,12 @@ func constructVirtualScan(
 			exprs[i] = tree.NewTypedOrdinalReference(i, inputCols[i].Typ)
 		}
 		tableID := table.(*optVirtualTable).desc.GetID()
-		exprs[len(inputCols)] = tree.NewDOid(oid.Oid(tableID))
+		tableOidValue := catconstants.RemapPgCatalogOid(
+			tn.Schema(),
+			uint32(tableID),
+			sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility),
+		)
+		exprs[len(inputCols)] = tree.NewDOid(tableOidValue)
 		n, err = ef.ConstructRender(n, renderCols, exprs, nil /* reqOrdering */)
 		if err != nil {
 			return nil, err
