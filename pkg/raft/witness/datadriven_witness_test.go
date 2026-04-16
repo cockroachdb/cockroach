@@ -120,7 +120,7 @@ func fmtVoterLine(v testVoter, cfg string) string {
 	suffix := ""
 	if v.leader {
 		if v.committed > 0 {
-			suffix = fmt.Sprintf(" committed=%d leader", v.committed)
+			suffix = fmt.Sprintf(" committed=%s leader", fmtLogMark(v.log[v.committed-1]))
 		} else {
 			suffix = " leader"
 		}
@@ -258,40 +258,29 @@ func handleCampaign(
 			continue
 		}
 		label := fmt.Sprintf("v%d", v.id)
+		if dropped[label] {
+			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
+			continue
+		}
 
 		granted, reason := voterGrantsVote(v, candidateID, campaignTerm, candidateLastLM)
-
 		if granted {
-			if dropped[label] {
-				fmt.Fprintf(&buf, "%s: yes (dropped)\n", label)
-			} else {
-				fmt.Fprintf(&buf, "%s: yes\n", label)
-				yesCount++
-			}
+			fmt.Fprintf(&buf, "%s: yes\n", label)
+			yesCount++
 		} else {
-			if dropped[label] {
-				fmt.Fprintf(&buf, "%s: no, %s (dropped)\n", label, reason)
-			} else {
-				fmt.Fprintf(&buf, "%s: no, %s\n", label, reason)
-			}
+			fmt.Fprintf(&buf, "%s: no, %s\n", label, reason)
 		}
 	}
 
 	// Witness votes.
-	next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
-	if ok {
-		env.w = next
-	}
-	if ok {
-		if dropped["w"] {
-			fmt.Fprintf(&buf, "w:  yes (dropped)\n")
-		} else {
+	if dropped["w"] {
+		fmt.Fprintf(&buf, "w:  (dropped)\n")
+	} else {
+		next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
+		if ok {
+			env.w = next
 			fmt.Fprintf(&buf, "w:  yes\n")
 			yesCount++
-		}
-	} else {
-		if dropped["w"] {
-			fmt.Fprintf(&buf, "w:  no (dropped)\n")
 		} else {
 			fmt.Fprintf(&buf, "w:  no\n")
 		}
@@ -369,27 +358,23 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 		}
 		label := fmt.Sprintf("v%d", v.id)
 
+		if dropped[label] {
+			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
+			continue
+		}
 		ok, reason := followerAcceptsAppend(v, leader)
 		if ok {
-			if dropped[label] {
-				fmt.Fprintf(&buf, "%s: ok (dropped)\n", label)
-			} else {
-				// Recognize sender as leader: bump term, step down.
-				if leader.term > v.term {
-					v.term = leader.term
-					v.votedFor = 0
-				}
-				v.leader = false
-				v.log = append([]raft.LogMark{}, leader.log...)
-				env.matchIndex[v.id] = uint64(len(leader.log))
-				fmt.Fprintf(&buf, "%s: ok\n", label)
+			// Recognize sender as leader: bump term, step down.
+			if leader.term > v.term {
+				v.term = leader.term
+				v.votedFor = 0
 			}
+			v.leader = false
+			v.log = append([]raft.LogMark{}, leader.log...)
+			env.matchIndex[v.id] = uint64(len(leader.log))
+			fmt.Fprintf(&buf, "%s: ok\n", label)
 		} else {
-			if dropped[label] {
-				fmt.Fprintf(&buf, "%s: rejected, %s (dropped)\n", label, reason)
-			} else {
-				fmt.Fprintf(&buf, "%s: rejected, %s\n", label, reason)
-			}
+			fmt.Fprintf(&buf, "%s: rejected, %s\n", label, reason)
 		}
 	}
 
