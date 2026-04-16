@@ -11359,6 +11359,93 @@ func TestChangefeedMetricsScopeNotice(t *testing.T) {
 	expectNotice(t, s.Server, sqlAlter, `server.child_metrics.enabled is set to false, metrics will only be published to the 'other' label when it is set to true`)
 }
 
+// TestChangefeedClusterMetric
+func TestChangefeedClusterMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t, feedTestNoTenants)
+	defer stopServer()
+
+	ctx := context.Background()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	clusterMetricsWriter := s.Server.SQLServerInternal().(*server.SQLServer).ClusterMetricsWriter()
+
+	type checkpointLagMetric struct {
+		jobID string
+		scope string
+	}
+	checkpointLagMetrics := func() []checkpointLagMetric {
+		rows := sqlDB.QueryStr(t, `SELECT labels->>'job_id', labels->>'scope' FROM system.cluster_metrics WHERE name = 'changefeed.checkpoint_lag' ORDER BY 1, 2`)
+		metrics := make([]checkpointLagMetric, 0, len(rows))
+		for _, row := range rows {
+			metrics = append(metrics, checkpointLagMetric{jobID: row[0], scope: row[1]})
+		}
+		return metrics
+	}
+	expectCheckpointLagMetrics := func(want ...checkpointLagMetric) {
+		t.Helper()
+		sort.Slice(want, func(i, j int) bool {
+			return want[i].jobID < want[j].jobID ||
+				(want[i].jobID == want[j].jobID && want[i].scope < want[j].scope)
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			clusterMetricsWriter.Flush(ctx)
+			got := checkpointLagMetrics()
+			if slices.Equal(got, want) {
+				return nil
+			}
+			return errors.Errorf("expected checkpoint-lag metrics %v, got %v", want, got)
+		})
+	}
+	checkpointLag := func(jobID jobspb.JobID, scope string) checkpointLagMetric {
+		return checkpointLagMetric{
+			jobID: strconv.FormatInt(int64(jobID), 10),
+			scope: scope,
+		}
+	}
+
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	var feedA, feedB jobspb.JobID
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'null://' WITH no_initial_scan, resolved = '10ms', min_checkpoint_frequency = '1ns'`).Scan(&feedA)
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'null://' WITH no_initial_scan, resolved = '10ms', min_checkpoint_frequency = '1ns', metrics_label = 'Scope_B'`).Scan(&feedB)
+	expectCheckpointLagMetrics(
+		checkpointLag(feedA, defaultSLIScope),
+		checkpointLag(feedB, "scope_b"),
+	)
+
+	sqlDB.Exec(t, `PAUSE JOB $1`, feedA)
+	waitForJobState(sqlDB, t, feedA, jobs.StatePaused)
+	expectCheckpointLagMetrics(
+		checkpointLag(feedA, defaultSLIScope),
+		checkpointLag(feedB, "scope_b"),
+	)
+
+	sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET metrics_label = 'Altered_Scope'`, feedA))
+	expectCheckpointLagMetrics(checkpointLag(feedB, "scope_b"))
+
+	sqlDB.Exec(t, `RESUME JOB $1`, feedA)
+	waitForJobState(sqlDB, t, feedA, jobs.StateRunning)
+	expectCheckpointLagMetrics(
+		checkpointLag(feedA, "altered_scope"),
+		checkpointLag(feedB, "scope_b"),
+	)
+
+	sqlDB.Exec(t, `CANCEL JOB $1`, feedA)
+	sqlDB.Exec(t, `CANCEL JOB $1`, feedB)
+	waitForJobState(sqlDB, t, feedA, jobs.StateCanceled)
+	waitForJobState(sqlDB, t, feedB, jobs.StateCanceled)
+	expectCheckpointLagMetrics()
+
+	var scanOnlyFeed jobspb.JobID
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'null://' WITH initial_scan = 'only'`).Scan(&scanOnlyFeed)
+	waitForJobState(sqlDB, t, scanOnlyFeed, jobs.StateSucceeded)
+	expectCheckpointLagMetrics()
+
+}
+
 // TestPubsubValidationErrors tests error messages during pubsub sink URI validations.
 func TestPubsubValidationErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
