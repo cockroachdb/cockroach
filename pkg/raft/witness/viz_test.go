@@ -47,8 +47,17 @@ type vizStep struct {
 	Comment string `json:"comment,omitempty"`
 	Output  string `json:"output"`
 
-	Voters  map[string]*vizVoterDelta `json:"voters,omitempty"`
-	Witness *vizWitnessDelta          `json:"witness,omitempty"`
+	Voters   map[string]*vizVoterDelta `json:"voters,omitempty"`
+	Witness  *vizWitnessDelta          `json:"witness,omitempty"`
+	Messages []vizMessage              `json:"messages,omitempty"`
+}
+
+type vizMessage struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Type    string `json:"type"`
+	Label   string `json:"label"`
+	Dropped bool   `json:"dropped,omitempty"`
 }
 
 type vizVoterDelta struct {
@@ -252,6 +261,77 @@ func diffWitness(prev, next testWitness) *vizWitnessDelta {
 }
 
 // ---------------------------------------------------------------------------
+// Exchange to viz message conversion
+// ---------------------------------------------------------------------------
+
+func exchangesToVizMessages(exchanges []testExchange) []vizMessage {
+	if len(exchanges) == 0 {
+		return nil
+	}
+	msgs := make([]vizMessage, 0, len(exchanges)*2)
+	for _, ex := range exchanges {
+		// Request message.
+		reqType, reqLabel := fmtMsgPayload(ex.req.msg)
+		msgs = append(msgs, vizMessage{
+			From: ex.req.from, To: ex.req.to,
+			Type: reqType, Label: reqLabel,
+		})
+		// Response message.
+		_, dropped := ex.resp.msg.(msgDropped)
+		respType, respLabel := fmtMsgPayload(ex.resp.msg)
+		msgs = append(msgs, vizMessage{
+			From: ex.resp.from, To: ex.resp.to,
+			Type: respType, Label: respLabel, Dropped: dropped,
+		})
+	}
+	return msgs
+}
+
+func fmtMsgPayload(msg any) (typ, label string) {
+	switch m := msg.(type) {
+	case msgVoteReq:
+		typ = "VoteReq"
+		if m.prevote {
+			typ = "PreVoteReq"
+		}
+		label = fmt.Sprintf("%s(term=%s, log=%s)",
+			typ, fmtTerm(m.term), fmtLogMark(raft.LogMark(m.lastLog)),
+		)
+		return typ, label
+	case msgVoteResp:
+		if m.granted {
+			return "VoteResp", "yes"
+		}
+		if m.reason != "" {
+			return "VoteResp", "no: " + m.reason
+		}
+		return "VoteResp", "no"
+	case msgAppendReq:
+		last := m.leader.lastLogMark()
+		return "AppendReq", fmt.Sprintf("AppendReq(through %s)", fmtLogMark(last))
+	case msgAppendResp:
+		return "AppendResp", m.detail
+	case msgEngage:
+		return "Engage", fmt.Sprintf("Engage(term=%s, hi=%s)",
+			fmtTerm(m.term), fmtLogMark(raft.LogMark(m.hi)),
+		)
+	case msgRelease:
+		return "Release", fmt.Sprintf("Release(term=%s, hi=%s)",
+			fmtTerm(m.term), fmtLogMark(raft.LogMark(m.hi)),
+		)
+	case msgWitnessResp:
+		if m.ok {
+			return "WitnessResp", "ok"
+		}
+		return "WitnessResp", "rejected"
+	case msgDropped:
+		return "Dropped", "(dropped)"
+	default:
+		return "?", fmt.Sprintf("%T", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Deep copy helpers
 // ---------------------------------------------------------------------------
 
@@ -407,6 +487,9 @@ func TestGenerateViz(t *testing.T) {
 					}
 				}
 			}
+
+			// Capture message exchanges.
+			step.Messages = exchangesToVizMessages(env.lastExchanges)
 
 			trace.Steps = append(trace.Steps, step)
 			stepIdx++

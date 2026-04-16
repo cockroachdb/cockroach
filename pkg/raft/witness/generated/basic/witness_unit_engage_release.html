@@ -30,13 +30,19 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .log-entry.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 2px; border-radius: 2px; }
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+.msg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.msg-arc { fill: none; stroke-width: 1.5; }
+.msg-arc.req { stroke: #5a9; }
+.msg-arc.resp { stroke: #a75; }
+.msg-arc.dropped { stroke: #666; stroke-dasharray: 4 3; }
+.msg-label { font-size: 10px; fill: #aaa; dominant-baseline: central; }
 </style>
 </head>
 <body>
 <h1>testdata/basic/witness_unit_engage_release.txt</h1>
 <div id="app"></div>
 <script>
-const TRACE = {"testFile":"testdata/basic/witness_unit_engage_release.txt","steps":[{"index":0,"command":"vote from=(v1) term=(a) lm=(a0)","comment":"Vote for peer 1 in term a, then engage and release.","output":"ok\nw:  vote=(a, v1) acked=none"},{"index":1,"command":"engage term=(a) lm=(a5)","comment":"Engage at a5.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)"},{"index":2,"command":"engage term=(a) lm=(a5)","comment":"Idempotent engage.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)"},{"index":3,"command":"release term=(a) lm=(a10)","comment":"Release at a10.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)"},{"index":4,"command":"release term=(a) lm=(a10)","comment":"Idempotent release.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)"},{"index":5,"command":"engage term=(a) lm=(a10)","comment":"Re-engage must be at strictly greater log mark (replay protection).","output":"rejected"},{"index":6,"command":"engage term=(a) lm=(a15)","comment":"Re-engage at a15: succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, engaged)"},{"index":7,"command":"release term=(a) lm=(a10)","comment":"Stale release at a10: rejected.","output":"rejected"},{"index":8,"command":"release term=(a) lm=(a15)","comment":"Release at a15 (same as current hi): succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, released)"},{"index":9,"command":"engage term=(a) lm=(a20)","comment":"Re-engage at a20 in same term: succeeds (a20 \u003e a15).","output":"ok\nw:  vote=(a, v1) acked=(a20, engaged)"},{"index":10,"command":"release term=(a) lm=(a20)","comment":"Release again.","output":"ok\nw:  vote=(a, v1) acked=(a20, released)"},{"index":11,"command":"set","input":"term=b voted-for=v1","comment":"Stale term engage (from an old term) is rejected.\nBump to term b first, then try engaging at term a.","output":"w:  vote=(b, v1) acked=none"},{"index":12,"command":"engage term=(a) lm=(a25)","output":"rejected"},{"index":13,"command":"set","input":"term=b voted-for=v1 hi=b5 engaged=true","comment":"Wrong term release: rejected.","output":"w:  vote=(b, v1) acked=(b5, engaged)"},{"index":14,"command":"release term=(a) lm=(a20)","output":"rejected"},{"index":15,"command":"set","input":"term=a voted-for=v1","comment":"Engage from higher term bumps term (maybeBumpTerm).","output":"w:  vote=(a, v1) acked=none"},{"index":16,"command":"engage term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, engaged)"},{"index":17,"command":"set","input":"term=a voted-for=v1","comment":"Release from higher term also bumps term.","output":"w:  vote=(a, v1) acked=none"},{"index":18,"command":"release term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, released)"},{"index":19,"command":"set","input":"term=b voted-for=v1","comment":"Refuse to engage for old log terms (Hi must be in current term).","output":"w:  vote=(b, v1) acked=none"},{"index":20,"command":"engage term=(b) lm=(a5)","output":"rejected"}]};
+const TRACE = {"testFile":"testdata/basic/witness_unit_engage_release.txt","steps":[{"index":0,"command":"vote from=(v1) term=(a) lm=(a0)","comment":"Vote for peer 1 in term a, then engage and release.","output":"ok\nw:  vote=(a, v1) acked=none","messages":[{"from":"v1","to":"w","type":"VoteReq","label":"VoteReq(term=a, log=a0)"},{"from":"w","to":"v1","type":"VoteResp","label":"yes"}]},{"index":1,"command":"engage term=(a) lm=(a5)","comment":"Engage at a5.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a5)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":2,"command":"engage term=(a) lm=(a5)","comment":"Idempotent engage.","output":"ok\nw:  vote=(a, v1) acked=(a5, engaged)","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a5)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":3,"command":"release term=(a) lm=(a10)","comment":"Release at a10.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a10)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":4,"command":"release term=(a) lm=(a10)","comment":"Idempotent release.","output":"ok\nw:  vote=(a, v1) acked=(a10, released)","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a10)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":5,"command":"engage term=(a) lm=(a10)","comment":"Re-engage must be at strictly greater log mark (replay protection).","output":"rejected","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a10)"},{"from":"w","to":"","type":"WitnessResp","label":"rejected"}]},{"index":6,"command":"engage term=(a) lm=(a15)","comment":"Re-engage at a15: succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, engaged)","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a15)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":7,"command":"release term=(a) lm=(a10)","comment":"Stale release at a10: rejected.","output":"rejected","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a10)"},{"from":"w","to":"","type":"WitnessResp","label":"rejected"}]},{"index":8,"command":"release term=(a) lm=(a15)","comment":"Release at a15 (same as current hi): succeeds.","output":"ok\nw:  vote=(a, v1) acked=(a15, released)","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a15)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":9,"command":"engage term=(a) lm=(a20)","comment":"Re-engage at a20 in same term: succeeds (a20 \u003e a15).","output":"ok\nw:  vote=(a, v1) acked=(a20, engaged)","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a20)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":10,"command":"release term=(a) lm=(a20)","comment":"Release again.","output":"ok\nw:  vote=(a, v1) acked=(a20, released)","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a20)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":11,"command":"set","input":"term=b voted-for=v1","comment":"Stale term engage (from an old term) is rejected.\nBump to term b first, then try engaging at term a.","output":"w:  vote=(b, v1) acked=none"},{"index":12,"command":"engage term=(a) lm=(a25)","output":"rejected","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=a, hi=a25)"},{"from":"w","to":"","type":"WitnessResp","label":"rejected"}]},{"index":13,"command":"set","input":"term=b voted-for=v1 hi=b5 engaged=true","comment":"Wrong term release: rejected.","output":"w:  vote=(b, v1) acked=(b5, engaged)"},{"index":14,"command":"release term=(a) lm=(a20)","output":"rejected","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=a, hi=a20)"},{"from":"w","to":"","type":"WitnessResp","label":"rejected"}]},{"index":15,"command":"set","input":"term=a voted-for=v1","comment":"Engage from higher term bumps term (maybeBumpTerm).","output":"w:  vote=(a, v1) acked=none"},{"index":16,"command":"engage term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, engaged)","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=b, hi=b1)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":17,"command":"set","input":"term=a voted-for=v1","comment":"Release from higher term also bumps term.","output":"w:  vote=(a, v1) acked=none"},{"index":18,"command":"release term=(b) lm=(b1)","output":"ok\nw:  vote=(b, -) acked=(b1, released)","messages":[{"from":"","to":"w","type":"Release","label":"Release(term=b, hi=b1)"},{"from":"w","to":"","type":"WitnessResp","label":"ok"}]},{"index":19,"command":"set","input":"term=b voted-for=v1","comment":"Refuse to engage for old log terms (Hi must be in current term).","output":"w:  vote=(b, v1) acked=none"},{"index":20,"command":"engage term=(b) lm=(a5)","output":"rejected","messages":[{"from":"","to":"w","type":"Engage","label":"Engage(term=b, hi=a5)"},{"from":"w","to":"","type":"WitnessResp","label":"rejected"}]}]};
 
 let currentStep = 0;
 
@@ -129,6 +135,132 @@ function semicircleLayout(voterIds, hasWitness) {
   const arenaH = cy - minY + CARD_H / 2 + 10;
 
   return { positions, arenaW, arenaH };
+}
+
+
+
+
+
+
+
+function renderMessageArcs(messages, posMap, arenaW, arenaH) {
+  if (!messages || messages.length === 0) return '';
+
+  
+  const pairs = [];
+  for (let i = 0; i + 1 < messages.length; i += 2) {
+    pairs.push({ req: messages[i], resp: messages[i + 1] });
+  }
+
+  
+  const pairKey = (a, b) => a < b ? a + '-' + b : b + '-' + a;
+  const countPerPair = {};
+  const indexPerPair = {};
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    countPerPair[k] = (countPerPair[k] || 0) + 1;
+  }
+
+  let arcs = '';
+
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    indexPerPair[k] = (indexPerPair[k] || 0);
+    const pairIdx = indexPerPair[k]++;
+
+    const fromPos = posMap[p.req.from];
+    const toPos = posMap[p.req.to];
+    if (!fromPos || !toPos) continue;
+
+    
+    const baseSag = 35;
+    const sagStep = 25;
+    const sag = baseSag + pairIdx * sagStep;
+
+    
+    const reqDropped = p.resp.dropped;
+    arcs += makeArc(fromPos, toPos, sag, p.req.label,
+      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? 'arr-dropped' : 'arr-req');
+
+    
+    if (!p.resp.dropped) {
+      arcs += makeArc(toPos, fromPos, -sag * 0.7, p.resp.label,
+        'resp', 'arr-resp');
+    }
+  }
+
+  const marker = (id, color) =>
+    '<marker id="' + id + '" markerWidth="8" markerHeight="6" ' +
+    'refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="' + color + '"/>' +
+    '</marker>';
+
+  return '<svg class="msg-svg" width="' + arenaW + '" height="' + arenaH + '">' +
+    '<defs>' + marker('arr-req', '#5a9') + marker('arr-resp', '#a75') +
+    marker('arr-dropped', '#666') + '</defs>' + arcs + '</svg>';
+}
+
+
+
+
+
+function makeArc(from, to, sag, label, cls, markerId) {
+  const mx = (from.x + to.x) / 2;
+  const my = (from.y + to.y) / 2;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return '';
+
+  
+  
+  let px = -dy / len;
+  let py = dx / len;
+  
+  if (py > 0) { px = -px; py = -py; }
+
+  const cx = mx + px * sag;
+  const cy = my + py * sag;
+
+  
+  const shortenPx = 40;
+  const t0 = shortenPx / len;
+  const t1 = 1 - t0;
+  const sx = from.x + (to.x - from.x) * t0;
+  const sy = from.y + (to.y - from.y) * t0;
+  const ex = from.x + (to.x - from.x) * t1;
+  const ey = from.y + (to.y - from.y) * t1;
+
+  const path = 'M' + sx + ',' + sy + ' Q' + cx + ',' + cy + ' ' + ex + ',' + ey;
+
+  
+  const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex;
+  const ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+
+  
+  
+  let angleDeg = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+  
+  if (angleDeg > 90) angleDeg -= 180;
+  if (angleDeg < -90) angleDeg += 180;
+
+  
+  const offsetDist = sag > 0 ? -8 : 12;
+  const angleRad = angleDeg * Math.PI / 180;
+  const olx = lx + Math.sin(angleRad) * offsetDist;
+  const oly = ly - Math.cos(angleRad) * offsetDist;
+
+  return '<path class="msg-arc ' + cls + '" d="' + path + '" ' +
+    'marker-end="url(#' + markerId + ')"/>' +
+    '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
+    'text-anchor="middle" ' +
+    'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
+    escHtmlAttr(label) + '</text>';
+}
+
+function escHtmlAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function isChanged(step, replicaId, field) {
@@ -226,7 +358,15 @@ function render() {
   const hasWitness = state.witness !== null;
   const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
 
+  
+  const posMap = {};
+  for (const p of positions) {
+    posMap[p.id] = { x: p.x + CARD_W / 2, y: p.y + CARD_H / 2 };
+  }
+
   html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
+  
+  html += renderMessageArcs(step.messages, posMap, arenaW, arenaH);
   for (const p of positions) {
     if (p.id === 'w') {
       html += renderWitnessCard(state.witness, step, p.x, p.y);

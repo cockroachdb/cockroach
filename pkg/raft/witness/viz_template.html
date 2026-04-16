@@ -30,6 +30,12 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .log-entry.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 2px; border-radius: 2px; }
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+.msg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.msg-arc { fill: none; stroke-width: 1.5; }
+.msg-arc.req { stroke: #5a9; }
+.msg-arc.resp { stroke: #a75; }
+.msg-arc.dropped { stroke: #666; stroke-dasharray: 4 3; }
+.msg-label { font-size: 10px; fill: #aaa; dominant-baseline: central; }
 </style>
 </head>
 <body>
@@ -131,6 +137,132 @@ function semicircleLayout(voterIds, hasWitness) {
   return { positions, arenaW, arenaH };
 }
 
+// ---------------------------------------------------------------------------
+// Message arc rendering
+// ---------------------------------------------------------------------------
+
+// renderMessageArcs returns an SVG element containing arcs for each message.
+// posMap maps replica IDs to {x, y} centers. Messages alternate req/resp.
+function renderMessageArcs(messages, posMap, arenaW, arenaH) {
+  if (!messages || messages.length === 0) return '';
+
+  // Group messages into request/response pairs.
+  const pairs = [];
+  for (let i = 0; i + 1 < messages.length; i += 2) {
+    pairs.push({ req: messages[i], resp: messages[i + 1] });
+  }
+
+  // Compute how many arcs share each (from,to) pair so we can offset them.
+  const pairKey = (a, b) => a < b ? a + '-' + b : b + '-' + a;
+  const countPerPair = {};
+  const indexPerPair = {};
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    countPerPair[k] = (countPerPair[k] || 0) + 1;
+  }
+
+  let arcs = '';
+
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    indexPerPair[k] = (indexPerPair[k] || 0);
+    const pairIdx = indexPerPair[k]++;
+
+    const fromPos = posMap[p.req.from];
+    const toPos = posMap[p.req.to];
+    if (!fromPos || !toPos) continue;
+
+    // Base sag factor, increased for multiple arcs on the same pair.
+    const baseSag = 35;
+    const sagStep = 25;
+    const sag = baseSag + pairIdx * sagStep;
+
+    // Request arc curves upward (positive sag).
+    const reqDropped = p.resp.dropped;
+    arcs += makeArc(fromPos, toPos, sag, p.req.label,
+      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? 'arr-dropped' : 'arr-req');
+
+    // Response arc curves downward (negative sag) — opposed to request.
+    if (!p.resp.dropped) {
+      arcs += makeArc(toPos, fromPos, -sag * 0.7, p.resp.label,
+        'resp', 'arr-resp');
+    }
+  }
+
+  const marker = (id, color) =>
+    '<marker id="' + id + '" markerWidth="8" markerHeight="6" ' +
+    'refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="' + color + '"/>' +
+    '</marker>';
+
+  return '<svg class="msg-svg" width="' + arenaW + '" height="' + arenaH + '">' +
+    '<defs>' + marker('arr-req', '#5a9') + marker('arr-resp', '#a75') +
+    marker('arr-dropped', '#666') + '</defs>' + arcs + '</svg>';
+}
+
+// makeArc draws a quadratic bezier arc between two card centers with a
+// perpendicular sag. Positive sag curves upward (toward smaller y), negative
+// sag curves downward. This lets callers place request and response arcs on
+// opposite sides.
+function makeArc(from, to, sag, label, cls, markerId) {
+  const mx = (from.x + to.x) / 2;
+  const my = (from.y + to.y) / 2;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return '';
+
+  // Perpendicular unit vector. We pick one consistent orientation, then
+  // the sign of sag controls which side the arc bows toward.
+  let px = -dy / len;
+  let py = dx / len;
+  // Normalize so that positive sag always means "upward" (toward smaller y).
+  if (py > 0) { px = -px; py = -py; }
+
+  const cx = mx + px * sag;
+  const cy = my + py * sag;
+
+  // Shorten start/end to card edges (roughly card_w/2 from center).
+  const shortenPx = 40;
+  const t0 = shortenPx / len;
+  const t1 = 1 - t0;
+  const sx = from.x + (to.x - from.x) * t0;
+  const sy = from.y + (to.y - from.y) * t0;
+  const ex = from.x + (to.x - from.x) * t1;
+  const ey = from.y + (to.y - from.y) * t1;
+
+  const path = 'M' + sx + ',' + sy + ' Q' + cx + ',' + cy + ' ' + ex + ',' + ey;
+
+  // Label at the curve midpoint (t=0.5 on the quadratic bezier).
+  const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex;
+  const ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+
+  // Tangent at t=0.5: derivative of Q(t) = (1-t)²·S + 2(1-t)t·C + t²·E
+  // is Q'(t) = 2(1-t)(C-S) + 2t(E-C). At t=0.5: Q'(0.5) = (E-S).
+  let angleDeg = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+  // Flip if text would render upside-down.
+  if (angleDeg > 90) angleDeg -= 180;
+  if (angleDeg < -90) angleDeg += 180;
+
+  // Offset label perpendicular to the tangent, away from the arc.
+  const offsetDist = sag > 0 ? -8 : 12;
+  const angleRad = angleDeg * Math.PI / 180;
+  const olx = lx + Math.sin(angleRad) * offsetDist;
+  const oly = ly - Math.cos(angleRad) * offsetDist;
+
+  return '<path class="msg-arc ' + cls + '" d="' + path + '" ' +
+    'marker-end="url(#' + markerId + ')"/>' +
+    '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
+    'text-anchor="middle" ' +
+    'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
+    escHtmlAttr(label) + '</text>';
+}
+
+function escHtmlAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function isChanged(step, replicaId, field) {
   if (replicaId === 'w') {
     if (!step.witness) return false;
@@ -226,7 +358,15 @@ function render() {
   const hasWitness = state.witness !== null;
   const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
 
+  // Build position map (card centers) for message arcs.
+  const posMap = {};
+  for (const p of positions) {
+    posMap[p.id] = { x: p.x + CARD_W / 2, y: p.y + CARD_H / 2 };
+  }
+
   html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
+  // Message arcs (SVG layer behind cards).
+  html += renderMessageArcs(step.messages, posMap, arenaW, arenaH);
   for (const p of positions) {
     if (p.id === 'w') {
       html += renderWitnessCard(state.witness, step, p.x, p.y);

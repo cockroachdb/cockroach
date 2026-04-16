@@ -30,13 +30,19 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .log-entry.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 2px; border-radius: 2px; }
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+.msg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.msg-arc { fill: none; stroke-width: 1.5; }
+.msg-arc.req { stroke: #5a9; }
+.msg-arc.resp { stroke: #a75; }
+.msg-arc.dropped { stroke: #666; stroke-dasharray: 4 3; }
+.msg-label { font-size: 10px; fill: #aaa; dominant-baseline: central; }
 </style>
 </head>
 <body>
 <h1>testdata/basic/raft_stale_leader.txt</h1>
 <div id="app"></div>
 <script>
-const TRACE = {"testFile":"testdata/basic/raft_stale_leader.txt","steps":[{"index":0,"command":"setup","input":"v1: [a1]\nv2: [a1]\nv3: [a1]\nv4: [a1]","comment":"Stale leader falls behind, loses election, gets its log truncated when the\nnew leader replicates to it.\n#\nFour voters, no witness. Quorum = 3.","output":"v1: [a1] term=a\nv2: [a1] term=a\nv3: [a1] term=a\nv4: [a1] term=a","voters":{"v1":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v2":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v3":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v4":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false}}},{"index":1,"command":"campaign v1","comment":"v1 wins election.","output":"v1 campaigns at term b\nv1: yes (self)\nv2: yes\nv3: yes\nv4: yes\noutcome: won","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2}],"term":"b","votedFor":"v1","leader":true,"matchIndex":2},"v2":{"term":"b","votedFor":"v1"},"v3":{"term":"b","votedFor":"v1"},"v4":{"term":"b","votedFor":"v1"}}},{"index":2,"command":"propose v1","comment":"v1 proposes two entries but does NOT replicate them.","output":"v1: [a1 b2 b3] term=b leader\nv2: [a1] term=b\nv3: [a1] term=b\nv4: [a1] term=b","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"b","index":3}],"matchIndex":3}}},{"index":3,"command":"propose v1","output":"v1: [a1 b2 b3 b4] term=b leader\nv2: [a1] term=b\nv3: [a1] term=b\nv4: [a1] term=b","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"b","index":3},{"term":"b","index":4}],"matchIndex":4}}},{"index":4,"command":"campaign v2 drop=(v1)","comment":"v2 campaigns. v1 is dropped (partitioned). v2 wins with v3+v4.\nv1 is not contacted so it stays at term b, still believing it's leader.","output":"v2 campaigns at term c\nv2: yes (self)\nv1: (dropped)\nv3: yes\nv4: yes\noutcome: won","voters":{"v2":{"log":[{"term":"a","index":1},{"term":"c","index":2}],"term":"c","votedFor":"v2","leader":true,"matchIndex":2},"v3":{"term":"c","votedFor":"v2"},"v4":{"term":"c","votedFor":"v2"}}},{"index":5,"command":"propose v2","comment":"v2 proposes an entry.","output":"v1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1] term=c\nv4: [a1] term=c","voters":{"v2":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}],"matchIndex":3}}},{"index":6,"command":"append v2 drop=(v1, v4)","comment":"v2 appends to v3 only. Matches: [0, 3, 3, 0]. Quorum match = 0, not committed.","output":"v2 appends through c3\nv1: (dropped)\nv3: ok\nv4: (dropped)\nv1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1 c2 c3] term=c\nv4: [a1] term=c","voters":{"v3":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}]}}},{"index":7,"command":"append v2 drop=(v1)","comment":"v2 appends to v3 and v4. Matches: [0, 3, 3, 3]. Quorum match = 3, committed.","output":"v2 appends through c3\nv1: (dropped)\nv3: ok\nv4: ok\nv1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1 c2 c3] term=c\nv4: [a1 c2 c3] term=c","voters":{"v4":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}]}}},{"index":8,"command":"prevote v1","comment":"v1 prevotes to check if it could win. No: v2/v3/v4's logs (ending at c3)\nare ahead of v1's (ending at b4) since term c \u003e b. No state changes.","output":"v1 prevotes at term c\nv1: yes (self)\nv2: no, log not up to date (c3 \u003e b4)\nv3: no, log not up to date (c3 \u003e b4)\nv4: no, log not up to date (c3 \u003e b4)\noutcome: lost"},{"index":9,"command":"append v2","comment":"v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets\ntruncated and replaced with v2's log. v1 recognizes v2 as leader and bumps\nto term c.","output":"v2 appends through c3\nv1: ok, replaced 3 entries\nv3: ok\nv4: ok\nv1: [a1 c2 c3] term=c\nv2: [a1 c2 c3] term=c committed=c3 leader\nv3: [a1 c2 c3] term=c\nv4: [a1 c2 c3] term=c","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}],"term":"c","votedFor":"-","leader":false},"v2":{"committed":3}}}]};
+const TRACE = {"testFile":"testdata/basic/raft_stale_leader.txt","steps":[{"index":0,"command":"setup","input":"v1: [a1]\nv2: [a1]\nv3: [a1]\nv4: [a1]","comment":"Stale leader falls behind, loses election, gets its log truncated when the\nnew leader replicates to it.\n#\nFour voters, no witness. Quorum = 3.","output":"v1: [a1] term=a\nv2: [a1] term=a\nv3: [a1] term=a\nv4: [a1] term=a","voters":{"v1":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v2":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v3":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false},"v4":{"log":[{"term":"a","index":1}],"term":"a","votedFor":"-","leader":false,"committed":0,"witnessEngaged":false,"cfg":"(v1 v2 v3 v4)","matchIndex":0,"down":false}}},{"index":1,"command":"campaign v1","comment":"v1 wins election.","output":"v1 campaigns at term b\nv1: yes (self)\nv2: yes\nv3: yes\nv4: yes\noutcome: won","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2}],"term":"b","votedFor":"v1","leader":true,"matchIndex":2},"v2":{"term":"b","votedFor":"v1"},"v3":{"term":"b","votedFor":"v1"},"v4":{"term":"b","votedFor":"v1"}},"messages":[{"from":"v1","to":"v2","type":"VoteReq","label":"VoteReq(term=b, log=a1)"},{"from":"v2","to":"v1","type":"VoteResp","label":"yes"},{"from":"v1","to":"v3","type":"VoteReq","label":"VoteReq(term=b, log=a1)"},{"from":"v3","to":"v1","type":"VoteResp","label":"yes"},{"from":"v1","to":"v4","type":"VoteReq","label":"VoteReq(term=b, log=a1)"},{"from":"v4","to":"v1","type":"VoteResp","label":"yes"}]},{"index":2,"command":"propose v1","comment":"v1 proposes two entries but does NOT replicate them.","output":"v1: [a1 b2 b3] term=b leader\nv2: [a1] term=b\nv3: [a1] term=b\nv4: [a1] term=b","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"b","index":3}],"matchIndex":3}}},{"index":3,"command":"propose v1","output":"v1: [a1 b2 b3 b4] term=b leader\nv2: [a1] term=b\nv3: [a1] term=b\nv4: [a1] term=b","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"b","index":2},{"term":"b","index":3},{"term":"b","index":4}],"matchIndex":4}}},{"index":4,"command":"campaign v2 drop=(v1)","comment":"v2 campaigns. v1 is dropped (partitioned). v2 wins with v3+v4.\nv1 is not contacted so it stays at term b, still believing it's leader.","output":"v2 campaigns at term c\nv2: yes (self)\nv1: (dropped)\nv3: yes\nv4: yes\noutcome: won","voters":{"v2":{"log":[{"term":"a","index":1},{"term":"c","index":2}],"term":"c","votedFor":"v2","leader":true,"matchIndex":2},"v3":{"term":"c","votedFor":"v2"},"v4":{"term":"c","votedFor":"v2"}},"messages":[{"from":"v2","to":"v1","type":"VoteReq","label":"VoteReq(term=c, log=a1)"},{"from":"v1","to":"v2","type":"Dropped","label":"(dropped)","dropped":true},{"from":"v2","to":"v3","type":"VoteReq","label":"VoteReq(term=c, log=a1)"},{"from":"v3","to":"v2","type":"VoteResp","label":"yes"},{"from":"v2","to":"v4","type":"VoteReq","label":"VoteReq(term=c, log=a1)"},{"from":"v4","to":"v2","type":"VoteResp","label":"yes"}]},{"index":5,"command":"propose v2","comment":"v2 proposes an entry.","output":"v1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1] term=c\nv4: [a1] term=c","voters":{"v2":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}],"matchIndex":3}}},{"index":6,"command":"append v2 drop=(v1, v4)","comment":"v2 appends to v3 only. Matches: [0, 3, 3, 0]. Quorum match = 0, not committed.","output":"v2 appends through c3\nv1: (dropped)\nv3: ok\nv4: (dropped)\nv1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1 c2 c3] term=c\nv4: [a1] term=c","voters":{"v3":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}]}},"messages":[{"from":"v2","to":"v1","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v1","to":"v2","type":"Dropped","label":"(dropped)","dropped":true},{"from":"v2","to":"v3","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v3","to":"v2","type":"AppendResp","label":"ok"},{"from":"v2","to":"v4","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v4","to":"v2","type":"Dropped","label":"(dropped)","dropped":true}]},{"index":7,"command":"append v2 drop=(v1)","comment":"v2 appends to v3 and v4. Matches: [0, 3, 3, 3]. Quorum match = 3, committed.","output":"v2 appends through c3\nv1: (dropped)\nv3: ok\nv4: ok\nv1: [a1 b2 b3 b4] term=b leader\nv2: [a1 c2 c3] term=c leader\nv3: [a1 c2 c3] term=c\nv4: [a1 c2 c3] term=c","voters":{"v4":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}]}},"messages":[{"from":"v2","to":"v1","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v1","to":"v2","type":"Dropped","label":"(dropped)","dropped":true},{"from":"v2","to":"v3","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v3","to":"v2","type":"AppendResp","label":"ok"},{"from":"v2","to":"v4","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v4","to":"v2","type":"AppendResp","label":"ok"}]},{"index":8,"command":"prevote v1","comment":"v1 prevotes to check if it could win. No: v2/v3/v4's logs (ending at c3)\nare ahead of v1's (ending at b4) since term c \u003e b. No state changes.","output":"v1 prevotes at term c\nv1: yes (self)\nv2: no, log not up to date (c3 \u003e b4)\nv3: no, log not up to date (c3 \u003e b4)\nv4: no, log not up to date (c3 \u003e b4)\noutcome: lost","messages":[{"from":"v1","to":"v2","type":"PreVoteReq","label":"PreVoteReq(term=c, log=b4)"},{"from":"v2","to":"v1","type":"VoteResp","label":"no: log not up to date (c3 \u003e b4)"},{"from":"v1","to":"v3","type":"PreVoteReq","label":"PreVoteReq(term=c, log=b4)"},{"from":"v3","to":"v1","type":"VoteResp","label":"no: log not up to date (c3 \u003e b4)"},{"from":"v1","to":"v4","type":"PreVoteReq","label":"PreVoteReq(term=c, log=b4)"},{"from":"v4","to":"v1","type":"VoteResp","label":"no: log not up to date (c3 \u003e b4)"}]},{"index":9,"command":"append v2","comment":"v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets\ntruncated and replaced with v2's log. v1 recognizes v2 as leader and bumps\nto term c.","output":"v2 appends through c3\nv1: ok, replaced 3 entries\nv3: ok\nv4: ok\nv1: [a1 c2 c3] term=c\nv2: [a1 c2 c3] term=c committed=c3 leader\nv3: [a1 c2 c3] term=c\nv4: [a1 c2 c3] term=c","voters":{"v1":{"log":[{"term":"a","index":1},{"term":"c","index":2},{"term":"c","index":3}],"term":"c","votedFor":"-","leader":false},"v2":{"committed":3}},"messages":[{"from":"v2","to":"v1","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v1","to":"v2","type":"AppendResp","label":"ok, replaced 3 entries"},{"from":"v2","to":"v3","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v3","to":"v2","type":"AppendResp","label":"ok"},{"from":"v2","to":"v4","type":"AppendReq","label":"AppendReq(through c3)"},{"from":"v4","to":"v2","type":"AppendResp","label":"ok"}]}]};
 
 let currentStep = 0;
 
@@ -129,6 +135,132 @@ function semicircleLayout(voterIds, hasWitness) {
   const arenaH = cy - minY + CARD_H / 2 + 10;
 
   return { positions, arenaW, arenaH };
+}
+
+
+
+
+
+
+
+function renderMessageArcs(messages, posMap, arenaW, arenaH) {
+  if (!messages || messages.length === 0) return '';
+
+  
+  const pairs = [];
+  for (let i = 0; i + 1 < messages.length; i += 2) {
+    pairs.push({ req: messages[i], resp: messages[i + 1] });
+  }
+
+  
+  const pairKey = (a, b) => a < b ? a + '-' + b : b + '-' + a;
+  const countPerPair = {};
+  const indexPerPair = {};
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    countPerPair[k] = (countPerPair[k] || 0) + 1;
+  }
+
+  let arcs = '';
+
+  for (const p of pairs) {
+    const k = pairKey(p.req.from, p.req.to);
+    indexPerPair[k] = (indexPerPair[k] || 0);
+    const pairIdx = indexPerPair[k]++;
+
+    const fromPos = posMap[p.req.from];
+    const toPos = posMap[p.req.to];
+    if (!fromPos || !toPos) continue;
+
+    
+    const baseSag = 35;
+    const sagStep = 25;
+    const sag = baseSag + pairIdx * sagStep;
+
+    
+    const reqDropped = p.resp.dropped;
+    arcs += makeArc(fromPos, toPos, sag, p.req.label,
+      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? 'arr-dropped' : 'arr-req');
+
+    
+    if (!p.resp.dropped) {
+      arcs += makeArc(toPos, fromPos, -sag * 0.7, p.resp.label,
+        'resp', 'arr-resp');
+    }
+  }
+
+  const marker = (id, color) =>
+    '<marker id="' + id + '" markerWidth="8" markerHeight="6" ' +
+    'refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="' + color + '"/>' +
+    '</marker>';
+
+  return '<svg class="msg-svg" width="' + arenaW + '" height="' + arenaH + '">' +
+    '<defs>' + marker('arr-req', '#5a9') + marker('arr-resp', '#a75') +
+    marker('arr-dropped', '#666') + '</defs>' + arcs + '</svg>';
+}
+
+
+
+
+
+function makeArc(from, to, sag, label, cls, markerId) {
+  const mx = (from.x + to.x) / 2;
+  const my = (from.y + to.y) / 2;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return '';
+
+  
+  
+  let px = -dy / len;
+  let py = dx / len;
+  
+  if (py > 0) { px = -px; py = -py; }
+
+  const cx = mx + px * sag;
+  const cy = my + py * sag;
+
+  
+  const shortenPx = 40;
+  const t0 = shortenPx / len;
+  const t1 = 1 - t0;
+  const sx = from.x + (to.x - from.x) * t0;
+  const sy = from.y + (to.y - from.y) * t0;
+  const ex = from.x + (to.x - from.x) * t1;
+  const ey = from.y + (to.y - from.y) * t1;
+
+  const path = 'M' + sx + ',' + sy + ' Q' + cx + ',' + cy + ' ' + ex + ',' + ey;
+
+  
+  const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex;
+  const ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+
+  
+  
+  let angleDeg = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+  
+  if (angleDeg > 90) angleDeg -= 180;
+  if (angleDeg < -90) angleDeg += 180;
+
+  
+  const offsetDist = sag > 0 ? -8 : 12;
+  const angleRad = angleDeg * Math.PI / 180;
+  const olx = lx + Math.sin(angleRad) * offsetDist;
+  const oly = ly - Math.cos(angleRad) * offsetDist;
+
+  return '<path class="msg-arc ' + cls + '" d="' + path + '" ' +
+    'marker-end="url(#' + markerId + ')"/>' +
+    '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
+    'text-anchor="middle" ' +
+    'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
+    escHtmlAttr(label) + '</text>';
+}
+
+function escHtmlAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function isChanged(step, replicaId, field) {
@@ -226,7 +358,15 @@ function render() {
   const hasWitness = state.witness !== null;
   const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
 
+  
+  const posMap = {};
+  for (const p of positions) {
+    posMap[p.id] = { x: p.x + CARD_W / 2, y: p.y + CARD_H / 2 };
+  }
+
   html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
+  
+  html += renderMessageArcs(step.messages, posMap, arenaW, arenaH);
   for (const p of positions) {
     if (p.id === 'w') {
       html += renderWitnessCard(state.witness, step, p.x, p.y);

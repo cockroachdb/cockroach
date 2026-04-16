@@ -41,6 +41,51 @@ type testWitness struct {
 	down bool
 }
 
+// testMsg carries a single message between replicas.
+type testMsg struct {
+	from, to string
+	msg      any
+}
+
+// testExchange pairs a request with its response.
+type testExchange struct {
+	req, resp testMsg
+}
+
+// Message payloads. Each type corresponds to a specific message kind; deliver
+// routes based on the concrete type.
+type (
+	msgVoteReq struct {
+		candidate raftpb.PeerID
+		term      raftpb.Term
+		lastLog   raft.LogMark
+		prevote   bool
+	}
+	msgVoteResp struct {
+		granted bool
+		reason  string
+	}
+	msgAppendReq struct {
+		leader testVoter
+	}
+	msgAppendResp struct {
+		ok     bool
+		detail string
+	}
+	msgEngage struct {
+		term raftpb.Term
+		hi   raft.LogMark
+	}
+	msgRelease struct {
+		term raftpb.Term
+		hi   raft.LogMark
+	}
+	msgWitnessResp struct {
+		ok bool
+	}
+	msgDropped struct{}
+)
+
 // lastLogMark returns the last entry in the voter's log, or the zero LogMark.
 func (v testVoter) lastLogMark() raft.LogMark {
 	if len(v.log) == 0 {
@@ -51,9 +96,10 @@ func (v testVoter) lastLogMark() raft.LogMark {
 
 // testEnv holds the witness state and any voters added for scenario modeling.
 type testEnv struct {
-	w          testWitness
-	hasWitness bool
-	voters     []testVoter
+	w             testWitness
+	hasWitness    bool
+	voters        []testVoter
+	lastExchanges []testExchange // populated by deliver; reset each command
 }
 
 func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
@@ -159,6 +205,97 @@ func fmtVoterLine(v testVoter, cfg string) string {
 	)
 }
 
+func (e *testEnv) voterByLabel(label string) *testVoter {
+	for i := range e.voters {
+		if fmt.Sprintf("v%d", e.voters[i].id) == label {
+			return &e.voters[i]
+		}
+	}
+	return nil
+}
+
+// deliver routes outbound messages to their recipients, collecting exchanges.
+// Messages to downed or dropped peers produce msgDropped responses.
+func (e *testEnv) deliver(ctx context.Context, outbound []testMsg, dropped map[string]bool) {
+	e.lastExchanges = e.lastExchanges[:0]
+	for _, m := range outbound {
+		var resp testMsg
+		if dropped[m.to] || e.isDown(m.to) {
+			resp = testMsg{from: m.to, to: m.from, msg: msgDropped{}}
+		} else {
+			resp = e.route(ctx, m)
+		}
+		e.lastExchanges = append(e.lastExchanges, testExchange{req: m, resp: resp})
+	}
+}
+
+func (e *testEnv) isDown(label string) bool {
+	if label == "w" {
+		return e.w.down
+	}
+	if v := e.voterByLabel(label); v != nil {
+		return v.down
+	}
+	return false
+}
+
+// route dispatches a single message to its recipient and returns the response.
+func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
+	switch req := m.msg.(type) {
+	case msgVoteReq:
+		if m.to == "w" {
+			ws := e.w.State
+			if req.prevote {
+				ws.Vote.VotedFor = 0
+			}
+			next, ok := ws.HandleMsgVote(ctx, req.candidate, req.term, req.lastLog)
+			if ok && !req.prevote {
+				e.w.State = next
+			}
+			return testMsg{from: "w", to: m.from, msg: msgVoteResp{granted: ok}}
+		}
+		v := e.voterByLabel(m.to)
+		voter := *v
+		if req.prevote {
+			voter.votedFor = 0
+		}
+		next, granted, reason := voter.handleVoteReq(
+			req.candidate, req.term, req.lastLog,
+		)
+		if !req.prevote {
+			*v = next
+		}
+		return testMsg{
+			from: m.to, to: m.from, msg: msgVoteResp{granted: granted, reason: reason},
+		}
+
+	case msgAppendReq:
+		v := e.voterByLabel(m.to)
+		next, ok, detail := v.handleAppendReq(req.leader)
+		*v = next
+		return testMsg{
+			from: m.to, to: m.from, msg: msgAppendResp{ok: ok, detail: detail},
+		}
+
+	case msgEngage:
+		next, ok := e.w.State.HandleMsgEngage(ctx, req.term, req.hi)
+		if ok {
+			e.w.State = next
+		}
+		return testMsg{from: "w", to: m.from, msg: msgWitnessResp{ok: ok}}
+
+	case msgRelease:
+		next, ok := e.w.State.HandleMsgRelease(ctx, req.term, req.hi)
+		if ok {
+			e.w.State = next
+		}
+		return testMsg{from: "w", to: m.from, msg: msgWitnessResp{ok: ok}}
+
+	default:
+		panic(fmt.Sprintf("unknown message type: %T", m.msg))
+	}
+}
+
 func TestDataDrivenWitness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
@@ -172,6 +309,7 @@ func TestDataDrivenWitness(t *testing.T) {
 
 // runCommand dispatches a single datadriven command and returns the text output.
 func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
+	env.lastExchanges = nil
 	switch d.Cmd {
 	case "setup":
 		return handleSetup(t, d, env)
@@ -184,27 +322,11 @@ func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.
 	case "append":
 		return handleAppend(t, d, env, ctx)
 	case "vote":
-		from, term, lm := scanVoteArgs(t, d)
-		next, ok := env.w.State.HandleMsgVote(ctx, from, term, lm)
-		return fmtWitnessResult(&env.w.State, next, ok)
+		return handleVote(t, d, env, ctx)
 	case "engage":
-		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
-		next, ok := env.w.State.HandleMsgEngage(ctx, term, lm)
-		result := fmtWitnessResult(&env.w.State, next, ok)
-		if ok && ldr != nil {
-			ldr.witnessEngaged = true
-			env.updateLeaderCommitted()
-			result += "\n" + fmtVoterLine(*ldr, "")
-		}
-		return result
+		return handleEngage(t, d, env, ctx)
 	case "release":
-		ldr, term, lm := scanEngageReleaseArgs(t, d, env)
-		next, ok := env.w.State.HandleMsgRelease(ctx, term, lm)
-		result := fmtWitnessResult(&env.w.State, next, ok)
-		if ok && ldr != nil {
-			ldr.witnessEngaged = false
-		}
-		return result
+		return handleRelease(t, d, env, ctx)
 	case "state":
 		return fmtWitness(env.w.State)
 	case "set":
@@ -269,10 +391,9 @@ func handleSetup(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	return env.fmtVoters()
 }
 
-// handleCampaign simulates a voter campaigning for leadership. When prevote is
-// false, all peers update their state (term bumps, vote grants). When prevote
-// is true, no state is mutated — it's a speculative check of whether the
-// candidate would win.
+// handleCampaign simulates a voter campaigning for leadership. The candidate
+// sends vote requests to all peers via the delivery layer. When prevote is
+// true, no state is mutated — it's a speculative check.
 func handleCampaign(
 	t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context, prevote bool,
 ) string {
@@ -281,8 +402,6 @@ func handleCampaign(
 	}
 	candidateID := mustParsePeerID(t, d.CmdArgs[0].Key)
 	candidate := env.voter(t, candidateID)
-
-	// Parse drop set.
 	dropped := parseDrop(d)
 
 	// Campaign: increment term, vote for self. Prevote: use term+1 without
@@ -297,72 +416,67 @@ func handleCampaign(
 	}
 	candidateLastLM := candidate.lastLogMark()
 
-	totalMembers := len(env.voters)
-	if env.hasWitness {
-		totalMembers++ // voters + witness
+	// Build outbound vote requests to all peers.
+	from := fmt.Sprintf("v%d", candidateID)
+	var outbound []testMsg
+	for _, v := range env.voters {
+		if v.id == candidateID {
+			continue
+		}
+		outbound = append(outbound, testMsg{
+			from: from,
+			to:   fmt.Sprintf("v%d", v.id),
+			msg: msgVoteReq{
+				candidate: candidateID, term: campaignTerm,
+				lastLog: candidateLastLM, prevote: prevote,
+			},
+		})
 	}
-	quorum := totalMembers/2 + 1
-	yesCount := 0
+	if env.hasWitness {
+		outbound = append(outbound, testMsg{
+			from: from, to: "w",
+			msg: msgVoteReq{
+				candidate: candidateID, term: campaignTerm,
+				lastLog: candidateLastLM, prevote: prevote,
+			},
+		})
+	}
 
+	env.deliver(ctx, outbound, dropped)
+
+	// Format output from exchanges.
 	verb := "campaigns"
 	if prevote {
 		verb = "prevotes"
 	}
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "v%d %s at term %s\n", candidateID, verb, fmtTerm(campaignTerm))
-
-	// Candidate's self-vote always counts.
 	fmt.Fprintf(&buf, "v%d: yes (self)\n", candidateID)
-	yesCount++
 
-	// Other voters vote. Each voter produces an updated state; the caller
-	// applies it only for real campaigns (not prevotes). For prevotes, votedFor
-	// is cleared on the input so the "already voted" check doesn't apply.
-	for i := range env.voters {
-		v := &env.voters[i]
-		if v.id == candidateID {
-			continue
-		}
-		label := fmt.Sprintf("v%d", v.id)
-		if dropped[label] || v.down {
-			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
-			continue
-		}
-		voter := *v
-		if prevote {
-			voter.votedFor = 0
-		}
-		next, granted, reason := voter.handleVoteReq(candidateID, campaignTerm, candidateLastLM)
-		if !prevote {
-			*v = next
-		}
-		if granted {
-			fmt.Fprintf(&buf, "%s: yes\n", label)
-			yesCount++
-		} else {
-			fmt.Fprintf(&buf, "%s: no, %s\n", label, reason)
-		}
-	}
-
-	// Witness votes (only if present). In prevote mode, check against a copy
-	// with VotedFor cleared and don't apply state.
+	totalMembers := len(env.voters)
 	if env.hasWitness {
-		if dropped["w"] || env.w.down {
-			fmt.Fprintf(&buf, "w:  (dropped)\n")
-		} else {
-			ws := env.w.State
-			if prevote {
-				ws.Vote.VotedFor = 0
-			}
-			next, ok := ws.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
-			if ok {
-				if !prevote {
-					env.w.State = next
-				}
-				fmt.Fprintf(&buf, "w:  yes\n")
+		totalMembers++
+	}
+	quorum := totalMembers/2 + 1
+	yesCount := 1 // self
+
+	for _, ex := range env.lastExchanges {
+		label := ex.resp.from
+		pad := " "
+		if label == "w" {
+			pad = "  "
+		}
+		switch resp := ex.resp.msg.(type) {
+		case msgDropped:
+			fmt.Fprintf(&buf, "%s:%s(dropped)\n", label, pad)
+		case msgVoteResp:
+			if resp.granted {
+				fmt.Fprintf(&buf, "%s:%syes\n", label, pad)
 				yesCount++
+			} else if resp.reason != "" {
+				fmt.Fprintf(&buf, "%s:%sno, %s\n", label, pad, resp.reason)
 			} else {
-				fmt.Fprintf(&buf, "w:  no\n")
+				fmt.Fprintf(&buf, "%s:%sno\n", label, pad)
 			}
 		}
 	}
@@ -380,7 +494,6 @@ func handleCampaign(
 				candidate.log,
 				raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
 			)
-			// Initialize match indices. Leader matches itself; others unknown.
 			candidate.matchIndex = map[raftpb.PeerID]uint64{
 				candidateID: uint64(len(candidate.log)),
 			}
@@ -409,10 +522,9 @@ func handlePropose(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	return env.fmtVoters()
 }
 
-// handleAppend simulates a leader replicating its log to followers. Followers
-// adopt the leader's log, truncating any divergent suffix. Peers in the drop
-// set are not contacted.
-func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.Context) string {
+// handleAppend simulates a leader replicating its log to followers via the
+// delivery layer.
+func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
 	if len(d.CmdArgs) < 1 {
 		t.Fatal("usage: append <vN> [drop=(<ids>)]")
 	}
@@ -421,31 +533,38 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 	if !leader.leader {
 		t.Fatalf("v%d is not the leader", leaderID)
 	}
-
-	// Parse drop set.
 	dropped := parseDrop(d)
+
+	from := fmt.Sprintf("v%d", leaderID)
+	var outbound []testMsg
+	for _, v := range env.voters {
+		if v.id == leaderID {
+			continue
+		}
+		outbound = append(outbound, testMsg{
+			from: from,
+			to:   fmt.Sprintf("v%d", v.id),
+			msg:  msgAppendReq{leader: *leader},
+		})
+	}
+
+	env.deliver(ctx, outbound, dropped)
 
 	leaderLastLM := leader.lastLogMark()
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "v%d appends through %s\n", leaderID, fmtLogMark(leaderLastLM))
 
-	// Replicate to other voters. Each voter produces an updated state; the
-	// caller applies it and updates match indices on success.
-	for i := range env.voters {
-		v := &env.voters[i]
-		if v.id == leaderID {
-			continue
-		}
-		label := fmt.Sprintf("v%d", v.id)
-		if dropped[label] || v.down {
+	for _, ex := range env.lastExchanges {
+		label := ex.resp.from
+		switch resp := ex.resp.msg.(type) {
+		case msgDropped:
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
-			continue
-		}
-		next, ok, detail := v.handleAppendReq(*leader)
-		*v = next
-		fmt.Fprintf(&buf, "%s: %s\n", label, detail)
-		if ok {
-			leader.matchIndex[v.id] = uint64(len(leader.log))
+		case msgAppendResp:
+			fmt.Fprintf(&buf, "%s: %s\n", label, resp.detail)
+			if resp.ok {
+				v := env.voterByLabel(label)
+				leader.matchIndex[v.id] = uint64(len(leader.log))
+			}
 		}
 	}
 
@@ -547,33 +666,84 @@ func parseDrop(d *datadriven.TestData) map[string]bool {
 	return dropped
 }
 
-// scanVoteArgs parses from=<id> term=<letter> lm=<logmark> arguments.
-func scanVoteArgs(t *testing.T, d *datadriven.TestData) (raftpb.PeerID, raftpb.Term, raft.LogMark) {
+// handleVote sends a single vote request to the witness.
+func handleVote(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
 	var fromStr, termStr, lmStr string
 	d.ScanArgs(t, "from", &fromStr)
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)
-	return mustParsePeerID(t, fromStr), mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
+	from := mustParsePeerID(t, fromStr)
+	term := mustParseTerm(t, termStr)
+	lm := mustParseLogMark(t, lmStr)
+
+	fromLabel := fmt.Sprintf("v%d", from)
+	env.deliver(ctx, []testMsg{{
+		from: fromLabel, to: "w",
+		msg: msgVoteReq{candidate: from, term: term, lastLog: lm},
+	}}, nil)
+	resp := env.lastExchanges[0].resp.msg.(msgVoteResp)
+	if resp.granted {
+		return "ok\n" + fmtWitness(env.w.State)
+	}
+	return "rejected"
 }
 
-// scanEngageReleaseArgs accepts either `v<N>` (derive term and lm from the
-// leader's state) or explicit `term=<letter> lm=<logmark>` arguments. When the
-// v<N> form is used, returns a pointer to the leader; otherwise returns nil.
-func scanEngageReleaseArgs(
+// handleEngage sends an engage request to the witness. Accepts either `v<N>`
+// (derive term and lm from the leader) or explicit `term=<letter> lm=<logmark>`.
+func handleEngage(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
+	ldr, fromLabel, term, hi := scanWitnessReqArgs(t, d, env)
+	env.deliver(ctx, []testMsg{{
+		from: fromLabel, to: "w",
+		msg: msgEngage{term: term, hi: hi},
+	}}, nil)
+	resp := env.lastExchanges[0].resp.msg.(msgWitnessResp)
+	if resp.ok {
+		result := "ok\n" + fmtWitness(env.w.State)
+		if ldr != nil {
+			ldr.witnessEngaged = true
+			env.updateLeaderCommitted()
+			result += "\n" + fmtVoterLine(*ldr, "")
+		}
+		return result
+	}
+	return "rejected"
+}
+
+// handleRelease sends a release request to the witness.
+func handleRelease(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context) string {
+	ldr, fromLabel, term, hi := scanWitnessReqArgs(t, d, env)
+	env.deliver(ctx, []testMsg{{
+		from: fromLabel, to: "w",
+		msg: msgRelease{term: term, hi: hi},
+	}}, nil)
+	resp := env.lastExchanges[0].resp.msg.(msgWitnessResp)
+	if resp.ok {
+		result := "ok\n" + fmtWitness(env.w.State)
+		if ldr != nil {
+			ldr.witnessEngaged = false
+		}
+		return result
+	}
+	return "rejected"
+}
+
+// scanWitnessReqArgs accepts either `v<N>` (derive term and lm from the
+// leader's state) or explicit `term=<letter> lm=<logmark>` arguments.
+func scanWitnessReqArgs(
 	t *testing.T, d *datadriven.TestData, env *testEnv,
-) (*testVoter, raftpb.Term, raft.LogMark) {
+) (ldr *testVoter, fromLabel string, term raftpb.Term, hi raft.LogMark) {
 	if len(d.CmdArgs) > 0 && strings.HasPrefix(d.CmdArgs[0].Key, "v") {
 		id := mustParsePeerID(t, d.CmdArgs[0].Key)
 		v := env.voter(t, id)
 		if !v.leader {
 			t.Fatalf("v%d is not the leader", id)
 		}
-		return v, v.term, v.lastLogMark()
+		return v, fmt.Sprintf("v%d", id), v.term, v.lastLogMark()
 	}
 	var termStr, lmStr string
 	d.ScanArgs(t, "term", &termStr)
 	d.ScanArgs(t, "lm", &lmStr)
-	return nil, mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
+	return nil, "", mustParseTerm(t, termStr), mustParseLogMark(t, lmStr)
 }
 
 func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
@@ -596,14 +766,6 @@ func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
 			t.Fatalf("unknown set field: %s", k)
 		}
 	}
-}
-
-func fmtWitnessResult(w *State, next State, ok bool) string {
-	if ok {
-		*w = next
-		return "ok\n" + fmtWitness(*w)
-	}
-	return "rejected"
 }
 
 func fmtWitness(s State) string {
