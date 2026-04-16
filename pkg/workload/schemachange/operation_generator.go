@@ -2303,6 +2303,7 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 	})
 	if pickedReferenced {
 		opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+		og.potentialCommitErrors.add(pgcode.DependentObjectsStillExist)
 	}
 	return opStmt, nil
 }
@@ -5727,6 +5728,12 @@ func (og *operationGenerator) createTriggerFunction(
 			if member["non_public"].(bool) {
 				continue
 			}
+			// TODO(#168534): skip the multi-region enum to avoid a validation
+			// bug where CREATE TRIGGER on a REGIONAL BY TABLE table fails
+			// with an internal error.
+			if strings.HasSuffix(member["name"].(string), "crdb_internal_region") {
+				continue
+			}
 			publicEnumExprs = append(publicEnumExprs,
 				fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
 		}
@@ -5832,6 +5839,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.UndefinedColumn, condition: true},
 		{code: pgcode.UndefinedObject, condition: true},
 		{code: pgcode.InvalidParameterValue, condition: true},
+		{code: pgcode.InvalidTextRepresentation, condition: true},
 	})
 
 	return opStmt, nil
