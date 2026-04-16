@@ -18,14 +18,16 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .card { background: #16213e; border: 1px solid #333; border-radius: 10px; padding: 12px; width: 180px; position: absolute; }
 .card.down { opacity: 0.4; }
 .card.down::after { content: '\00D7'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; color: rgba(220,50,50,0.35); pointer-events: none; line-height: 1; }
+.card.leader::before { content: '\2655'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 100px; color: rgba(255,215,0,0.18); pointer-events: none; line-height: 1; }
+.card.stale-leader::before { content: '\2655'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 100px; color: rgba(220,50,50,0.22); pointer-events: none; line-height: 1; }
 .card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
 .card .field { display: flex; justify-content: space-between; padding: 2px 0; }
 .card .field .key { color: #888; }
 .card .field .val { color: #e0e0e0; }
 .card .field.changed .val { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 4px; border-radius: 2px; }
-.card .field.changed .key { color: #ffd700; }
 .log-entries { color: #e0e0e0; word-break: break-all; }
-.log-entries.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 4px; border-radius: 2px; }
+.log-entry { display: inline; }
+.log-entry.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 2px; border-radius: 2px; }
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
 </style>
@@ -140,9 +142,20 @@ function isChanged(step, replicaId, field) {
   return step.voters && step.voters[replicaId] && step.voters[replicaId][field] !== undefined;
 }
 
-function fmtLog(log) {
+function fmtLog(log, prevLog) {
   if (!log || log.length === 0) return '(empty)';
-  return log.map(e => e.term + e.index).join(' ');
+  return log.map((e, i) => {
+    const txt = e.term + e.index;
+    const prev = prevLog && prevLog[i];
+    const changed = !prev || prev.term !== e.term || prev.index !== e.index;
+    return '<span class="log-entry' + (changed ? ' changed' : '') + '">' + txt + '</span>';
+  }).join(' ');
+}
+
+function termOrd(t) {
+  if (!t || t === '-') return 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') return t.charCodeAt(0) - 96;
+  return parseInt(t, 10) || 0;
 }
 
 function fmtLogMark(lm) {
@@ -150,16 +163,21 @@ function fmtLogMark(lm) {
   return lm.term + lm.index;
 }
 
-function renderVoterCard(id, voter, step, x, y) {
+function renderVoterCard(id, voter, step, x, y, allVoters, prevVoter) {
   const f = (key, val) => {
     const cls = isChanged(step, id, key) ? ' changed' : '';
     return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
   };
-  const logCls = isChanged(step, id, 'log') ? ' changed' : '';
-  const downCls = voter.down ? ' down' : '';
+  let cls = '';
+  if (voter.down) cls += ' down';
+  if (voter.leader) {
+    const stale = Object.values(allVoters).some(v => v !== voter && termOrd(v.term) > termOrd(voter.term));
+    cls += stale ? ' stale-leader' : ' leader';
+  }
   const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
-  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>' + id + '</h2>';
-  html += '<div class="field"><span class="key">log</span><span class="log-entries' + logCls + '">' + fmtLog(voter.log) + '</span></div>';
+  const prevLog = prevVoter ? prevVoter.log : null;
+  let html = '<div class="card' + cls + '" style="' + style + '"><h2>' + id + '</h2>';
+  html += '<div class="field"><span class="key">log</span><span class="log-entries">' + fmtLog(voter.log, prevLog) + '</span></div>';
   html += f('term', voter.term || '-');
   html += f('votedFor', voter.votedFor || '-');
   html += f('leader', voter.leader ? 'yes' : 'no');
@@ -191,6 +209,7 @@ function renderWitnessCard(witness, step, x, y) {
 function render() {
   const step = TRACE.steps[currentStep];
   const state = computeState(currentStep);
+  const prevState = currentStep > 0 ? computeState(currentStep - 1) : null;
 
   let html = '';
 
@@ -212,7 +231,8 @@ function render() {
     if (p.id === 'w') {
       html += renderWitnessCard(state.witness, step, p.x, p.y);
     } else {
-      html += renderVoterCard(p.id, state.voters[p.id], step, p.x, p.y);
+      const prev = prevState && prevState.voters[p.id];
+      html += renderVoterCard(p.id, state.voters[p.id], step, p.x, p.y, state.voters, prev);
     }
   }
   html += '</div>';
@@ -241,6 +261,7 @@ function go(delta) {
   const next = currentStep + delta;
   if (next >= 0 && next < TRACE.steps.length) {
     currentStep = next;
+    location.hash = currentStep;
     render();
   }
 }
@@ -256,6 +277,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') go(1);
 });
 
+// Restore step from URL hash on load/refresh.
+const hashStep = parseInt(location.hash.slice(1), 10);
+if (hashStep >= 0 && hashStep < TRACE.steps.length) currentStep = hashStep;
 render();
 </script>
 </body>
