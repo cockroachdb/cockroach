@@ -721,6 +721,15 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 	return s.Sink.Flush(ctx)
 }
 
+// EmitResolvedTimestamp overrides the embedded Sink's method to notify the
+// test's sinkSynchronizer when a resolved timestamp is written.
+func (s *notifyFlushSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	defer s.sync.addFlush()
+	return s.Sink.EmitResolvedTimestamp(ctx, encoder, resolved)
+}
+
 func (s *notifyFlushSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
