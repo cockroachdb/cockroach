@@ -4924,6 +4924,46 @@ ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR RE
 
 subtest end
 
+subtest regression_168527_add_constraint_unique_storing
+
+statement ok
+CREATE TABLE t_168527 (a INT PRIMARY KEY, b INT, c INT, d INT);
+
+# Test STORING clause.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing UNIQUE (c) STORING (b);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing (c ASC) STORING (b)%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test partial unique constraint (WHERE predicate).
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_partial UNIQUE (d) WHERE d > 0;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_partial (d ASC) WHERE d > 0%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test STORING combined with WHERE predicate.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing_partial UNIQUE (c) STORING (d) WHERE c > 100;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing_partial (c ASC) STORING (d) WHERE c > 100%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+statement ok
+DROP TABLE t_168527
+
+subtest end
+
 subtest alter_table_add_column_serial
 
 statement ok
