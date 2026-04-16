@@ -215,6 +215,7 @@ func (v *vectorSearchProcessor) generateMeta() []execinfrapb.ProducerMetadata {
 
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.KVCPUTime = kvStats.KVCPUTime
+	meta.Metrics.LocalKVCPUTime = kvStats.LocalKVCPUTime
 	meta.Metrics.BytesRead = kvStats.KVBytesRead
 
 	// Currently, vector search is not distributed, but when distribution
@@ -494,6 +495,7 @@ func (v *vectorMutationSearchProcessor) generateMeta() []execinfrapb.ProducerMet
 
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.KVCPUTime = kvStats.KVCPUTime
+	meta.Metrics.LocalKVCPUTime = kvStats.LocalKVCPUTime
 	meta.Metrics.BytesRead = kvStats.KVBytesRead
 
 	// Currently, vector mutation search is not distributed, but when

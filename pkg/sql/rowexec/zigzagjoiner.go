@@ -925,6 +925,14 @@ func (z *zigzagJoiner) getLocalKVCPUTime() int64 {
 	return localKVCPUTime
 }
 
+func (z *zigzagJoiner) getLocalKVCPUTime() int64 {
+	var localKVCPUTime int64
+	for i := range z.infos {
+		localKVCPUTime += z.infos[i].fetcher.GetLocalKVCPUTime()
+	}
+	return localKVCPUTime
+}
+
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]

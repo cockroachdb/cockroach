@@ -1353,6 +1353,7 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
 	meta.Metrics.KVCPUTime = jr.fetcher.GetKVCPUTime()
+	meta.Metrics.LocalKVCPUTime = jr.fetcher.GetLocalKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx(), jr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

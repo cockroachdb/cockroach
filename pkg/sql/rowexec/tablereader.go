@@ -349,6 +349,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
 	meta.Metrics.KVCPUTime = tr.fetcher.GetKVCPUTime()
 	meta.Metrics.RowsRead = tr.rowsRead
+	meta.Metrics.LocalKVCPUTime = tr.fetcher.GetLocalKVCPUTime()
 	meta.Metrics.StageID = tr.stageID
 	return append(trailingMeta, *meta)
 }

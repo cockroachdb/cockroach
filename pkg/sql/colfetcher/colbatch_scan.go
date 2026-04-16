@@ -288,6 +288,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
 	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
+	meta.Metrics.LocalKVCPUTime = s.GetLocalKVCPUTime()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
