@@ -68,7 +68,7 @@ state engine:
 log engine:
 Delete (Sized at 38): 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): 
 Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 
-Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r2/1:10,EventSubsume)
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r2/1:10,EventSubsume) (r1/1:11,EventMerge)
 > Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): key:"m" timestamp:<wall_time:10 > priority:100 
 > Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000002" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff02000100): key:"m" timestamp:<wall_time:10 > priority:100 
 > Delete (Sized at 71): 0,0 /Local/RangeID/2/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x01698a726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): 
@@ -86,5 +86,5 @@ Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r2/1:10,EventSu
 print-range-state
 ----
 range desc: r1:{a-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=11
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified

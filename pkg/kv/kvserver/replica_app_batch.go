@@ -382,6 +382,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.readOnlyCmdMu.Unlock()
 
 		in := mergePreApplyInput{
+			lhsID:          b.r.ID(),
+			raftIndex:      cmd.Index(),
 			rhsDestroyInfo: rhsRepl.destroyInfoRaftMuLocked(),
 		}
 		if err := mergePreApply(ctx, b.ReadWriter(), b.batch.WagWriter(), in); err != nil {

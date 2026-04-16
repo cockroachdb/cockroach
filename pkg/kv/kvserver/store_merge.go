@@ -9,8 +9,10 @@ import (
 	"context"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
@@ -21,18 +23,27 @@ import (
 
 // mergePreApplyInput contains the input needed for mergePreApply.
 type mergePreApplyInput struct {
+	// lhsID identifies the LHS replica applying the merge.
+	lhsID roachpb.FullReplicaID
+	// raftIndex is the raft log index of the merge command.
+	raftIndex kvpb.RaftIndex
 	// rhsDestroyInfo describes the RHS replica being subsumed.
 	rhsDestroyInfo kvstorage.DestroyReplicaInfo
 }
 
 // mergePreApply is called when the raft merge command is applied. It subsumes
-// the RHS replica.
+// the RHS replica and stages WAG events for both sides of the merge.
 //
 // The caller is responsible for flushing the writer after mergePreApply returns.
 func mergePreApply(
 	ctx context.Context, rw kvstorage.ReadWriter, wagWriter *wag.Writer, in mergePreApplyInput,
 ) error {
-	return kvstorage.SubsumeReplica(ctx, rw, wagWriter, in.rhsDestroyInfo)
+	if err := kvstorage.SubsumeReplica(ctx, rw, wagWriter, in.rhsDestroyInfo); err != nil {
+		return err
+	}
+	// Stage a WAG EventMerge for the LHS.
+	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventMerge)
+	return nil
 }
 
 // maybeAssertNoHole, if enabled (see within), starts a watcher that
