@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -213,6 +214,65 @@ func initTestData(
 	return expectedStats, nil
 }
 
+// addTestEntry adds a cache entry with the given stats directly. The caller
+// must hold sc.mu.
+func addTestEntry(
+	ctx context.Context, sc *TableStatisticsCache, tableID descpb.ID, stats []*TableStatistic,
+) *cacheEntry {
+	e := &cacheEntry{
+		stats:    stats,
+		waitCond: sync.Cond{L: &sc.mu},
+	}
+	sc.mu.cache.Add(tableID, e)
+	return e
+}
+
+func TestCacheCapacitySetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	sc := NewTableStatisticsCache(st, nil /* db */, nil /* stopper */)
+
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	emptyStats := []*TableStatistic{{
+		TableStatisticProto: TableStatisticProto{
+			TableID:     1,
+			StatisticID: 1,
+			ColumnIDs:   []descpb.ColumnID{1},
+		},
+	}}
+
+	// Default capacity is 256; add 5 entries.
+	for i := 1; i <= 5; i++ {
+		addTestEntry(ctx, sc, descpb.ID(i), emptyStats)
+	}
+	require.Equal(t, 5, sc.mu.cache.Len())
+
+	// Lower the capacity to 3. Existing entries remain until new entries
+	// push the cache past the limit.
+	TableStatsCacheSize.Override(ctx, &st.SV, 3)
+
+	// Adding a sixth entry should trigger eviction down to the new limit.
+	addTestEntry(ctx, sc, 6, emptyStats)
+	require.Equal(t, 3, sc.mu.cache.Len())
+
+	// The most recently accessed entries should remain.
+	_, ok := sc.mu.cache.Get(descpb.ID(6))
+	require.True(t, ok, "newest entry should be in cache")
+
+	// Raise the capacity — should allow more entries without eviction.
+	TableStatsCacheSize.Override(ctx, &st.SV, 10)
+	for i := 7; i <= 12; i++ {
+		addTestEntry(ctx, sc, descpb.ID(i), emptyStats)
+	}
+	require.Equal(t, 9, sc.mu.cache.Len())
+}
+
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -238,7 +298,8 @@ func TestCacheBasic(t *testing.T) {
 	// Create a cache and iteratively query the cache for each tableID. This
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
-	sc := NewTableStatisticsCache(2 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 2)
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -340,7 +401,8 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	insqlDB := s.InternalDB().(descs.DB)
 
 	// Make a stats cache.
-	sc := NewTableStatisticsCache(1, s.ClusterSettings(), insqlDB, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 1)
+	sc := NewTableStatisticsCache(s.ClusterSettings(), insqlDB, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -393,7 +455,8 @@ func TestCacheWait(t *testing.T) {
 		tableIDs = append(tableIDs, tableID)
 	}
 	sort.Sort(tableIDs)
-	sc := NewTableStatisticsCache(len(tableIDs) /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, int64(len(tableIDs)))
+	sc := NewTableStatisticsCache(s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -441,8 +504,8 @@ func TestCacheAutoRefresh(t *testing.T) {
 	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
+	TableStatsCacheSize.Override(ctx, &s.ClusterSettings().SV, 10)
 	sc := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
