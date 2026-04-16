@@ -278,8 +278,9 @@ func handleCampaign(
 	fmt.Fprintf(&buf, "v%d: yes (self)\n", candidateID)
 	yesCount++
 
-	// Other voters vote. In prevote mode, use a copy with votedFor cleared so
-	// the "already voted" check doesn't apply and no state is mutated.
+	// Other voters vote. Each voter produces an updated state; the caller
+	// applies it only for real campaigns (not prevotes). For prevotes, votedFor
+	// is cleared on the input so the "already voted" check doesn't apply.
 	for i := range env.voters {
 		v := &env.voters[i]
 		if v.id == candidateID {
@@ -290,14 +291,14 @@ func handleCampaign(
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 			continue
 		}
-
-		target := v
+		voter := *v
 		if prevote {
-			vCopy := *v
-			vCopy.votedFor = 0
-			target = &vCopy
+			voter.votedFor = 0
 		}
-		granted, reason := voterGrantsVote(target, candidateID, campaignTerm, candidateLastLM)
+		next, granted, reason := voter.handleVoteReq(candidateID, campaignTerm, candidateLastLM)
+		if !prevote {
+			*v = next
+		}
 		if granted {
 			fmt.Fprintf(&buf, "%s: yes\n", label)
 			yesCount++
@@ -332,6 +333,8 @@ func handleCampaign(
 	if yesCount >= quorum {
 		if !prevote {
 			// Winner becomes leader and appends a noop entry at the campaign term.
+			// Other voters already stepped down via handleVoteReq (term bump sets
+			// leader=false). Dropped voters retain their stale leader belief.
 			candidate.leader = true
 			candidate.committed = 0
 			candidate.witnessEngaged = false
@@ -340,13 +343,6 @@ func handleCampaign(
 				candidate.log,
 				raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
 			)
-			// Other voters that participated lose leader status.
-			for i := range env.voters {
-				v := &env.voters[i]
-				if v.id != candidateID && !dropped[fmt.Sprintf("v%d", v.id)] {
-					v.leader = false
-				}
-			}
 			// Initialize match indices. Leader matches itself; others unknown.
 			env.matchIndex = map[raftpb.PeerID]uint64{
 				candidateID: uint64(len(candidate.log)),
@@ -396,48 +392,23 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "v%d appends through %s\n", leaderID, fmtLogMark(leaderLastLM))
 
-	// Replicate to other voters.
+	// Replicate to other voters. Each voter produces an updated state; the
+	// caller applies it and updates match indices on success.
 	for i := range env.voters {
 		v := &env.voters[i]
 		if v.id == leaderID {
 			continue
 		}
 		label := fmt.Sprintf("v%d", v.id)
-
 		if dropped[label] {
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 			continue
 		}
-
-		// Reject append from a stale leader.
-		if leader.term < v.term {
-			fmt.Fprintf(&buf, "%s: rejected, stale leader term %s < %s\n",
-				label, fmtTerm(leader.term), fmtTerm(v.term))
-			continue
-		}
-
-		// Recognize sender as leader: bump term, step down.
-		if leader.term > v.term {
-			v.term = leader.term
-			v.votedFor = 0
-		}
-		v.leader = false
-
-		// Find common prefix length, then truncate and adopt leader's log.
-		common := 0
-		for common < len(v.log) && common < len(leader.log) {
-			if v.log[common].Term != leader.log[common].Term {
-				break
-			}
-			common++
-		}
-		replaced := len(v.log) - common
-		v.log = append(v.log[:common], leader.log[common:]...)
-		env.matchIndex[v.id] = uint64(len(leader.log))
-		if replaced > 0 {
-			fmt.Fprintf(&buf, "%s: ok, replaced %d entries\n", label, replaced)
-		} else {
-			fmt.Fprintf(&buf, "%s: ok\n", label)
+		next, ok, detail := v.handleAppendReq(*leader)
+		*v = next
+		fmt.Fprintf(&buf, "%s: %s\n", label, detail)
+		if ok {
+			env.matchIndex[v.id] = uint64(len(leader.log))
 		}
 	}
 
@@ -446,36 +417,67 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 	return buf.String()
 }
 
-// voterGrantsVote decides whether a voter grants a vote to the candidate.
-// It updates the voter's state (term, votedFor) as a side effect.
-func voterGrantsVote(
-	v *testVoter, candidateID raftpb.PeerID, campaignTerm raftpb.Term, candidateLastLM raft.LogMark,
-) (granted bool, reason string) {
+// handleVoteReq processes a vote request and returns the voter's updated state.
+// The caller decides whether to apply the result: skip for prevotes (speculative
+// check) and for dropped peers (never received the message). This mirrors the
+// witness's HandleMsgVote pattern.
+func (v testVoter) handleVoteReq(
+	candidateID raftpb.PeerID, campaignTerm raftpb.Term, candidateLastLM raft.LogMark,
+) (next testVoter, granted bool, reason string) {
 	// Bump term if needed; step down if we were leader.
 	if campaignTerm > v.term {
 		v.term = campaignTerm
 		v.votedFor = 0
 		v.leader = false
 	}
-
 	if campaignTerm < v.term {
-		return false, fmt.Sprintf("stale term %s < %s", fmtTerm(campaignTerm), fmtTerm(v.term))
+		return v, false, fmt.Sprintf("stale term %s < %s", fmtTerm(campaignTerm), fmtTerm(v.term))
 	}
-
 	// Already voted for someone else this term.
 	if v.votedFor != 0 && v.votedFor != candidateID {
-		return false, fmt.Sprintf("already voted for v%d", v.votedFor)
+		return v, false, fmt.Sprintf("already voted for v%d", v.votedFor)
 	}
-
 	// Log up-to-date check.
 	voterLastLM := v.lastLogMark()
 	if voterLastLM != (raft.LogMark{}) && voterLastLM.After(candidateLastLM) {
-		return false, fmt.Sprintf("log not up to date (%s > %s)",
+		return v, false, fmt.Sprintf("log not up to date (%s > %s)",
 			fmtLogMark(voterLastLM), fmtLogMark(candidateLastLM))
 	}
-
 	v.votedFor = candidateID
-	return true, ""
+	return v, true, ""
+}
+
+// handleAppendReq processes an append from a leader and returns the voter's
+// updated state. On success the voter adopts the leader's log, truncating any
+// divergent suffix. The caller applies the result and updates env-level state
+// (match indices, committed).
+func (v testVoter) handleAppendReq(leader testVoter) (next testVoter, ok bool, detail string) {
+	if leader.term < v.term {
+		return v, false, fmt.Sprintf(
+			"rejected, stale leader term %s < %s", fmtTerm(leader.term), fmtTerm(v.term),
+		)
+	}
+	if leader.term > v.term {
+		v.term = leader.term
+		v.votedFor = 0
+	}
+	v.leader = false
+	// Find common prefix, then truncate and adopt leader's log. Clone first
+	// to avoid sharing the backing array with the caller's copy.
+	common := 0
+	for common < len(v.log) && common < len(leader.log) {
+		if v.log[common].Term != leader.log[common].Term {
+			break
+		}
+		common++
+	}
+	replaced := len(v.log) - common
+	v.log = slices.Clone(v.log[:common])
+	v.log = append(v.log, leader.log[common:]...)
+	if replaced > 0 {
+		return v, true, fmt.Sprintf("ok, replaced %d entries", replaced)
+	}
+	return v, true, "ok"
 }
 
 // parseDrop extracts the drop=(<ids>) argument from a datadriven command.
