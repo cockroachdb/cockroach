@@ -83,15 +83,21 @@ export function Settings({ history }: RouteComponentProps): React.ReactElement {
     ascending: true,
     columnTitle: "lastUpdated",
   });
+  const [changedOnly, setChangedOnly] = useState(false);
 
   const { settingValues, isLoading, error } = useClusterSettings();
 
   const renderTable = (wantPublic: boolean) => {
-    const dataArray = settingsToIterableArray(settingValues);
+    let dataArray = settingsToIterableArray(settingValues).filter(obj =>
+      wantPublic ? obj.public : !obj.public,
+    );
+    if (changedOnly) {
+      dataArray = dataArray.filter(obj => obj.last_updated != null);
+    }
 
     return (
       <SortedTable
-        data={dataArray.filter(obj => (wantPublic ? obj.public : !obj.public))}
+        data={dataArray}
         columns={columns}
         sortSetting={sortSetting}
         onChangeSortSetting={(ss: SortSetting) =>
@@ -115,6 +121,14 @@ export function Settings({ history }: RouteComponentProps): React.ReactElement {
         error={error}
         render={() => (
           <div>
+            <label className="settings-changed-only">
+              <input
+                type="checkbox"
+                checked={changedOnly}
+                onChange={e => setChangedOnly(e.target.checked)}
+              />
+              Changed only
+            </label>
             <p className="settings-note">
               Note that some settings have been redacted for security purposes.
             </p>
