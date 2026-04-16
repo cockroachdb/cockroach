@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,15 +30,15 @@ func TestWalk(t *testing.T) {
 		_ = scpb.ForEachElementType(func(e scpb.Element) error {
 			typ := reflect.TypeOf(e)
 			elem := reflect.New(typ.Elem()).Interface().(scpb.Element)
-			require.NoError(t, WalkDescIDs(elem, func(id *catid.DescID) error { return nil }))
-			require.NoError(t, WalkTypes(elem, func(id *types.T) error { return nil }))
-			require.NoError(t, WalkExpressions(elem, func(id *catpb.Expression) error { return nil }))
+			require.NoError(t, walkutil.Walk(elem, func(id *catid.DescID) error { return nil }))
+			require.NoError(t, walkutil.Walk(elem, func(id *types.T) error { return nil }))
+			require.NoError(t, walkutil.Walk(elem, func(id *catpb.Expression) error { return nil }))
 			return nil
 		})
 	})
 
 	t.Run("errors propagate", func(t *testing.T) {
-		require.EqualError(t, WalkDescIDs(&scpb.Column{}, func(id *catid.DescID) error {
+		require.EqualError(t, walkutil.Walk(&scpb.Column{}, func(id *catid.DescID) error {
 			return errors.New("boom")
 		}), "boom")
 	})
@@ -126,7 +127,7 @@ func TestWalk(t *testing.T) {
 		t.Run(fmt.Sprintf("%T", tc.elem), func(t *testing.T) {
 			t.Run("DescIDs", func(t *testing.T) {
 				var got []*catid.DescID
-				require.NoError(t, WalkDescIDs(tc.elem, func(id *catid.DescID) error {
+				require.NoError(t, walkutil.Walk(tc.elem, func(id *catid.DescID) error {
 					got = append(got, id)
 					return nil
 				}))
@@ -134,7 +135,7 @@ func TestWalk(t *testing.T) {
 			})
 			t.Run("Types", func(t *testing.T) {
 				var got []*types.T
-				require.NoError(t, WalkTypes(tc.elem, func(t *types.T) error {
+				require.NoError(t, walkutil.Walk(tc.elem, func(t *types.T) error {
 					got = append(got, t)
 					return nil
 				}))
@@ -142,20 +143,20 @@ func TestWalk(t *testing.T) {
 			})
 			t.Run("Expressions", func(t *testing.T) {
 				var got []*catpb.Expression
-				require.NoError(t, WalkExpressions(tc.elem, func(t *catpb.Expression) error {
+				require.NoError(t, walkutil.Walk(tc.elem, func(t *catpb.Expression) error {
 					got = append(got, t)
 					return nil
 				}))
 				require.Equal(t, tc.expExpressions, got)
 			})
 			t.Run("errors", func(t *testing.T) {
-				require.EqualError(t, WalkDescIDs(tc.elem, func(id *catid.DescID) error {
+				require.EqualError(t, walkutil.Walk(tc.elem, func(id *catid.DescID) error {
 					return errors.New("boom")
 				}), "boom")
 			})
 			t.Run("stop iteration", func(t *testing.T) {
 				var called int
-				require.NoError(t, WalkDescIDs(tc.elem, func(id *catid.DescID) error {
+				require.NoError(t, walkutil.Walk(tc.elem, func(id *catid.DescID) error {
 					called++
 					return iterutil.StopIteration()
 				}))

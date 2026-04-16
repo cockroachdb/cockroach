@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,7 +56,7 @@ func AllTargetDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
 		// database won't have back-references to any tables.
 		ids.Add(te.TableID)
 	default:
-		_ = WalkDescIDs(e, func(id *catid.DescID) error {
+		_ = walkutil.Walk(e, func(id *catid.DescID) error {
 			ids.Add(*id)
 			return nil
 		})
@@ -70,7 +71,7 @@ func AllDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
 	}
 	// For certain elements the references needed will not be attributes, so manually
 	// include these.
-	_ = WalkDescIDs(e, func(id *catid.DescID) error {
+	_ = walkutil.Walk(e, func(id *catid.DescID) error {
 		ids.Add(*id)
 		return nil
 	})
@@ -79,7 +80,7 @@ func AllDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
 
 // ContainsDescID searches the element to see if it contains a descriptor id.
 func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) {
-	_ = WalkDescIDs(haystack, func(id *catid.DescID) error {
+	_ = walkutil.Walk(haystack, func(id *catid.DescID) error {
 		if contains = *id == needle; contains {
 			return iterutil.StopIteration()
 		}

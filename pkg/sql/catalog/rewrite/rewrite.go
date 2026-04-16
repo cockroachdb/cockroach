@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -1104,7 +1105,7 @@ func rewriteSchemaChangerState(
 		}
 
 		missingID := descpb.InvalidID
-		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
+		if err := walkutil.Walk(t.Element(), func(id *descpb.ID) error {
 			if *id == descpb.InvalidID {
 				// Some descriptor ID fields in elements may be deliberately unset.
 				// Skip these as they are not subject to rewrite.
@@ -1206,7 +1207,7 @@ func rewriteSchemaChangerState(
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
 
-		if err := screl.WalkExpressions(t.Element(), func(expr *catpb.Expression) error {
+		if err := walkutil.Walk(t.Element(), func(expr *catpb.Expression) error {
 			if *expr == "" {
 				return nil
 			}
@@ -1227,7 +1228,7 @@ func rewriteSchemaChangerState(
 		}); err != nil {
 			return err
 		}
-		if err := screl.WalkTypes(t.Element(), func(t *types.T) error {
+		if err := walkutil.Walk(t.Element(), func(t *types.T) error {
 			RewriteIDsInTypesT(t, descriptorRewrites)
 			return nil
 		}); err != nil {
@@ -1240,7 +1241,7 @@ func rewriteSchemaChangerState(
 	// Drop all children targets of dropped CHECK constraint.
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
-		if err := screl.WalkConstraintIDs(t.Element(), func(id *catid.ConstraintID) error {
+		if err := walkutil.Walk(t.Element(), func(id *catid.ConstraintID) error {
 			if !droppedConstraints.Contains(*id) {
 				return nil
 			}
@@ -1258,7 +1259,7 @@ func rewriteSchemaChangerState(
 	if !droppedTriggers.Empty() {
 		for i := 0; i < len(state.Targets); i++ {
 			t := &state.Targets[i]
-			if err := screl.WalkTriggerIDs(t.Element(), func(id *catid.TriggerID) error {
+			if err := walkutil.Walk(t.Element(), func(id *catid.TriggerID) error {
 				if !droppedTriggers.Contains(*id) {
 					return nil
 				}

@@ -572,6 +572,11 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 	return desc.DeclarativeSchemaChangerState.Clone()
 }
 
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(_ catalog.DescriptorRewriteFn) error {
+	return errors.AssertionFailedf("Rewrite is not implemented for database descriptors")
+}
+
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
 // interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {

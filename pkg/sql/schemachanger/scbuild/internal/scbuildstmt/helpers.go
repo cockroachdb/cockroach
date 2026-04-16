@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -575,7 +576,7 @@ func referencesColumnIDFilter(
 	columnID catid.ColumnID,
 ) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
 	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
-		_ = screl.WalkColumnIDs(e, func(id *catid.ColumnID) error {
+		_ = walkutil.Walk(e, func(id *catid.ColumnID) error {
 			if id != nil && *id == columnID {
 				included = true
 			}
