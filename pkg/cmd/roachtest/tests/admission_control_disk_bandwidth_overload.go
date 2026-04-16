@@ -31,198 +31,202 @@ import (
 // bandwidth much higher than the provisioned one, the AC bandwidth limiter
 // paces the traffic at the set bandwidth limit.
 func registerDiskBandwidthOverload(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:      "admission-control/disk-bandwidth-limiter",
-		Owner:     registry.OwnerAdmissionControl,
-		Timeout:   3 * time.Hour,
-		Benchmark: true,
-		// Disabled on IBM only because the Azure test suite was used as a base
-		// for IBM tests, and this test was disabled on Azure as of 05/2025.
-		CompatibleClouds: registry.AllExceptAzure,
-		// TODO(aaditya): change to weekly once the test stabilizes.
-		Suites: registry.Suites(registry.Nightly),
+	// Disabled on IBM only because the Azure test suite was used as a base
+	// for IBM tests, and this test was disabled on Azure as of 05/2025.
+	baseClouds := registry.AllExceptAzure
+	baseSpecOpts := []spec.Option{
+		spec.CPU(8),
+		spec.WorkloadNode(),
+		spec.ReuseNone(),
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
-		Cluster: r.MakeClusterSpec(
-			2,
-			spec.CPU(8),
-			spec.WorkloadNode(),
-			spec.ReuseNone(),
-			spec.Arch(spec.AllExceptFIPS),
-			spec.RandomizeVolumeType(),
-			spec.RandomlyUseXfs(),
-		),
-		Leases: registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().NodeCount != 2 {
-				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
-			}
-
-			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
-				WithNodeExporter(c.CRDBNodes().InstallNodes()).
-				WithCluster(c.CRDBNodes().InstallNodes()).
-				WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
-			err := c.StartGrafana(ctx, t.L(), promCfg)
-			require.NoError(t, err)
-
-			startOpts := option.NewStartOpts(option.NoBackupSchedule)
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-				"--vmodule=io_load_listener=2")
-			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
-			settings := install.MakeClusterSettings()
-			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
-
-			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
-			require.NoError(t, err)
-			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
-
-			roachtestutil.SetAdmissionControl(ctx, t, c, true)
-
-			const provisionedBandwidth = 128 << 20 // 128 MiB
-			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
-			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-				false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
-			staller.Setup(ctx)
-			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth /* bytesPerSecond */)
-
-			// TODO(aaditya): Extend this test to also limit reads once we have a
-			// mechanism to pace read traffic in AC.
-
-			// Initialize the kv databases.
-			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", 2*time.Minute))
-			url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-			const foregroundDB = " --db='regular_kv'"
-			const backgroundDB = " --db='background_kv'"
-
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
-				"./cockroach workload init kv --drop --insert-count=400 "+
-					"--max-block-bytes=256 --min-block-bytes=256"+foregroundDB+url)
-
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
-				"./cockroach workload init kv --drop --insert-count=400 "+
-					"--max-block-bytes=4096 --min-block-bytes=4096"+backgroundDB+url)
-
-			// Run foreground kv workload, QoS="regular".
-			duration := 90 * time.Minute
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
-				dur := " --duration=" + duration.String()
-				labels := map[string]string{
-					"concurrency":  "2",
-					"splits":       "1000",
-					"read-percent": "50",
+		spec.Arch(spec.AllExceptFIPS),
+	}
+	for _, svReg := range storageVariantRegs(baseClouds, false) {
+		r.Add(registry.TestSpec{
+			Name:             "admission-control/disk-bandwidth-limiter" + svReg.nameSuffix,
+			Owner:            registry.OwnerAdmissionControl,
+			Timeout:          3 * time.Hour,
+			Benchmark:        true,
+			CompatibleClouds: svReg.clouds,
+			// TODO(aaditya): change to weekly once the test stabilizes.
+			Suites: registry.Suites(registry.Nightly),
+			Cluster: r.MakeClusterSpec(
+				2,
+				append(baseSpecOpts, svReg.specOpts...)...,
+			),
+			Leases: registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Spec().NodeCount != 2 {
+					t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
 				}
+
+				promCfg := &prometheus.Config{}
+				promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
+					WithNodeExporter(c.CRDBNodes().InstallNodes()).
+					WithCluster(c.CRDBNodes().InstallNodes()).
+					WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
+				err := c.StartGrafana(ctx, t.L(), promCfg)
+				require.NoError(t, err)
+
+				startOpts := option.NewStartOpts(option.NoBackupSchedule)
+				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+					"--vmodule=io_load_listener=2")
+				roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
+				settings := install.MakeClusterSettings()
+				c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+				promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+				require.NoError(t, err)
+				statCollector := clusterstats.NewStatsCollector(ctx, promClient)
+
+				roachtestutil.SetAdmissionControl(ctx, t, c, true)
+
+				const provisionedBandwidth = 128 << 20 // 128 MiB
+				t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
+				staller := roachtestutil.MakeCgroupDiskStaller(t, c,
+					false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
+				staller.Setup(ctx)
+				staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth /* bytesPerSecond */)
+
+				// TODO(aaditya): Extend this test to also limit reads once we have a
+				// mechanism to pace read traffic in AC.
+
+				// Initialize the kv databases.
+				t.Status(fmt.Sprintf("initializing kv dataset (<%s)", 2*time.Minute))
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=2 "+
-					"--splits=1000 --read-percent=50 --min-block-bytes=256 --max-block-bytes=256 "+
-					"--txn-qos='regular' --tolerate-errors %s %s %s",
-					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-				return nil
-			})
+				const foregroundDB = " --db='regular_kv'"
+				const backgroundDB = " --db='background_kv'"
 
-			// Run background kv workload, QoS="background".
-			m.Go(func(ctx context.Context) error {
-				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
-				dur := " --duration=" + duration.String()
-				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				labels := map[string]string{
-					"concurrency":  "1024",
-					"read-percent": "0",
-				}
-				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=1024 "+
-					"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 "+
-					"--txn-qos='background' --tolerate-errors %s %s %s", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), backgroundDB, dur, url)
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-				return nil
-			})
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
+					"./cockroach workload init kv --drop --insert-count=400 "+
+						"--max-block-bytes=256 --min-block-bytes=256"+foregroundDB+url)
 
-			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 30*time.Minute))
-			time.Sleep(60 * time.Minute)
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
+					"./cockroach workload init kv --drop --insert-count=400 "+
+						"--max-block-bytes=4096 --min-block-bytes=4096"+backgroundDB+url)
 
-			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
-			defer db.Close()
-
-			const bandwidthLimitMbs = 75
-			if _, err := db.ExecContext(
-				// We intentionally set this to much lower than the provisioned value
-				// above to clearly show that the bandwidth limiter works.
-				ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
-				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
-			}
-
-			t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
-			time.Sleep(5 * time.Minute)
-
-			m.Go(func(ctx context.Context) error {
-				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
-				writeBWMetric := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20 /* 1MiB */)
-				readBWMetric := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20 /* 1MiB */)
-				getMetricVal := func(query string, label string) (float64, error) {
-					point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
-					if err != nil {
-						t.L().Errorf("could not query prom %s", err.Error())
-						return 0, err
+				// Run foreground kv workload, QoS="regular".
+				duration := 90 * time.Minute
+				m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+				m.Go(func(ctx context.Context) error {
+					t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
+					dur := " --duration=" + duration.String()
+					labels := map[string]string{
+						"concurrency":  "2",
+						"splits":       "1000",
+						"read-percent": "50",
 					}
-					val := point[label]
-					if len(val) != 1 {
-						err = errors.Errorf(
-							"unexpected number %d of points for metric %s", len(val), query)
-						t.L().Errorf("%s", err.Error())
-						return 0, err
+					url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+					cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=2 "+
+						"--splits=1000 --read-percent=50 --min-block-bytes=256 --max-block-bytes=256 "+
+						"--txn-qos='regular' --tolerate-errors %s %s %s",
+						roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
+					c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+					return nil
+				})
+
+				// Run background kv workload, QoS="background".
+				m.Go(func(ctx context.Context) error {
+					t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
+					dur := " --duration=" + duration.String()
+					url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+					labels := map[string]string{
+						"concurrency":  "1024",
+						"read-percent": "0",
 					}
-					for storeID, v := range val {
-						t.L().Printf("%s(store=%s): %f", query, storeID, v.Value)
-						return v.Value, nil
-					}
-					// Unreachable.
-					panic("unreachable")
+					cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=1024 "+
+						"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 "+
+						"--txn-qos='background' --tolerate-errors %s %s %s", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), backgroundDB, dur, url)
+					c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+					return nil
+				})
+
+				t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 30*time.Minute))
+				time.Sleep(60 * time.Minute)
+
+				db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
+				defer db.Close()
+
+				const bandwidthLimitMbs = 75
+				if _, err := db.ExecContext(
+					// We intentionally set this to much lower than the provisioned value
+					// above to clearly show that the bandwidth limiter works.
+					ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
+					t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 				}
 
-				// Allow a 30% room for error.
-				const bandwidthThreshold = bandwidthLimitMbs * 1.30
-				const sampleCountForBW = 12
-				const collectionIntervalSeconds = 10.0
-				// Loop for ~20 minutes.
-				const numIterations = int(20 / (collectionIntervalSeconds / 60))
-				var writeBWValues []float64
-				numErrors := 0
-				numSuccesses := 0
-				for i := 0; i < numIterations; i++ {
-					time.Sleep(collectionIntervalSeconds * time.Second)
-					writeVal, err := getMetricVal(writeBWMetric, "node")
-					if err != nil {
-						numErrors++
-						continue
-					}
-					readVal, err := getMetricVal(readBWMetric, "node")
-					if err != nil {
-						numErrors++
-						continue
-					}
-					totalBW := writeVal + readVal
-					writeBWValues = append(writeBWValues, writeVal)
-					// We want to use the mean of the last 2m of data to avoid short-lived
-					// spikes causing failures.
-					if len(writeBWValues) >= sampleCountForBW {
-						// TODO(aaditya): We should be asserting on total bandwidth once reads
-						// are being paced.
-						latestSampleMeanForBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, writeBWValues)
-						if latestSampleMeanForBW > bandwidthThreshold {
-							t.Fatalf("mean write bandwidth over the last 2m %f (last iter: %f) exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", latestSampleMeanForBW, writeVal, bandwidthThreshold, readVal, totalBW)
+				t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
+				time.Sleep(5 * time.Minute)
+
+				m.Go(func(ctx context.Context) error {
+					t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
+					writeBWMetric := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20 /* 1MiB */)
+					readBWMetric := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20 /* 1MiB */)
+					getMetricVal := func(query string, label string) (float64, error) {
+						point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
+						if err != nil {
+							t.L().Errorf("could not query prom %s", err.Error())
+							return 0, err
 						}
+						val := point[label]
+						if len(val) != 1 {
+							err = errors.Errorf(
+								"unexpected number %d of points for metric %s", len(val), query)
+							t.L().Errorf("%s", err.Error())
+							return 0, err
+						}
+						for storeID, v := range val {
+							t.L().Printf("%s(store=%s): %f", query, storeID, v.Value)
+							return v.Value, nil
+						}
+						// Unreachable.
+						panic("unreachable")
 					}
-					numSuccesses++
-				}
-				t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
-				if numErrors > numSuccesses {
-					t.Fatalf("too many errors retrieving metrics")
-				}
-				return nil
-			})
 
-			m.Wait()
-		},
-	})
+					// Allow a 30% room for error.
+					const bandwidthThreshold = bandwidthLimitMbs * 1.30
+					const sampleCountForBW = 12
+					const collectionIntervalSeconds = 10.0
+					// Loop for ~20 minutes.
+					const numIterations = int(20 / (collectionIntervalSeconds / 60))
+					var writeBWValues []float64
+					numErrors := 0
+					numSuccesses := 0
+					for i := 0; i < numIterations; i++ {
+						time.Sleep(collectionIntervalSeconds * time.Second)
+						writeVal, err := getMetricVal(writeBWMetric, "node")
+						if err != nil {
+							numErrors++
+							continue
+						}
+						readVal, err := getMetricVal(readBWMetric, "node")
+						if err != nil {
+							numErrors++
+							continue
+						}
+						totalBW := writeVal + readVal
+						writeBWValues = append(writeBWValues, writeVal)
+						// We want to use the mean of the last 2m of data to avoid short-lived
+						// spikes causing failures.
+						if len(writeBWValues) >= sampleCountForBW {
+							// TODO(aaditya): We should be asserting on total bandwidth once reads
+							// are being paced.
+							latestSampleMeanForBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, writeBWValues)
+							if latestSampleMeanForBW > bandwidthThreshold {
+								t.Fatalf("mean write bandwidth over the last 2m %f (last iter: %f) exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", latestSampleMeanForBW, writeVal, bandwidthThreshold, readVal, totalBW)
+							}
+						}
+						numSuccesses++
+					}
+					t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
+					if numErrors > numSuccesses {
+						t.Fatalf("too many errors retrieving metrics")
+					}
+					return nil
+				})
+
+				m.Wait()
+			},
+		})
+	}
 }

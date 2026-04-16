@@ -343,17 +343,6 @@ func registerKV(r registry.Registry) {
 		if opts.nodes > 3 {
 			workloadNodeCPUs = opts.cpus
 		}
-		cSpec := r.MakeClusterSpec(
-			opts.nodes+1,
-			spec.CPU(opts.cpus),
-			spec.WorkloadNode(),
-			spec.WorkloadNodeCPU(workloadNodeCPUs),
-			spec.Disks(opts.ssds),
-			spec.RAID0(opts.raid0),
-			spec.RandomizeVolumeType(),
-			spec.RandomlyUseXfs(),
-		)
-
 		var clouds registry.CloudSet
 		tags := make(map[string]struct{})
 		if opts.ssds != 0 {
@@ -379,96 +368,115 @@ func registerKV(r registry.Registry) {
 			skipPostValidations = registry.PostValidationReplicaDivergence
 		}
 
-		r.Add(registry.TestSpec{
-			Name:      strings.Join(nameParts, "/"),
-			Owner:     owner,
-			Benchmark: true,
-			Cluster:   cSpec,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runKV(ctx, t, c, opts)
-			},
-			CompatibleClouds:    clouds,
-			Suites:              suites,
-			EncryptionSupport:   encryption,
-			SkipPostValidations: skipPostValidations,
-		})
+		baseName := strings.Join(nameParts, "/")
+		baseSpecOpts := []spec.Option{
+			spec.CPU(opts.cpus),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(workloadNodeCPUs),
+			spec.Disks(opts.ssds),
+			spec.RAID0(opts.raid0),
+		}
+		for _, svReg := range storageVariantRegs(clouds, false) {
+			cSpec := r.MakeClusterSpec(
+				opts.nodes+1,
+				append(baseSpecOpts, svReg.specOpts...)...,
+			)
+			r.Add(registry.TestSpec{
+				Name:      baseName + svReg.nameSuffix,
+				Owner:     owner,
+				Benchmark: true,
+				Cluster:   cSpec,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runKV(ctx, t, c, opts)
+				},
+				CompatibleClouds:    svReg.clouds,
+				Suites:              suites,
+				EncryptionSupport:   encryption,
+				SkipPostValidations: skipPostValidations,
+			})
+		}
 	}
 }
 
 func registerKVContention(r registry.Registry) {
 	const nodes = 4
-	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:     registry.OwnerKV,
-		Benchmark: true,
-		Cluster: r.MakeClusterSpec(
-			nodes+1,
-			spec.WorkloadNode(),
-			spec.RandomizeVolumeType(),
-			spec.RandomlyUseXfs(),
-		),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// Start the cluster with an extremely high txn liveness threshold.
-			// If requests ever get stuck on a transaction that was abandoned
-			// then it will take 10m for them to get unstuck, at which point the
-			// QPS threshold check in the test is guaranteed to fail.
-			settings := install.MakeClusterSettings()
-			settings.Env = append(settings.Env, "COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.CRDBNodes())
+	baseName := fmt.Sprintf("kv/contention/nodes=%d", nodes)
+	baseClouds := registry.AllExceptAWS
+	baseSpecOpts := []spec.Option{
+		spec.WorkloadNode(),
+	}
+	for _, svReg := range storageVariantRegs(baseClouds, false) {
+		r.Add(registry.TestSpec{
+			Name:      baseName + svReg.nameSuffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Cluster: r.MakeClusterSpec(
+				nodes+1,
+				append(baseSpecOpts, svReg.specOpts...)...,
+			),
+			CompatibleClouds: svReg.clouds,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				// Start the cluster with an extremely high txn liveness threshold.
+				// If requests ever get stuck on a transaction that was abandoned
+				// then it will take 10m for them to get unstuck, at which point the
+				// QPS threshold check in the test is guaranteed to fail.
+				settings := install.MakeClusterSettings()
+				settings.Env = append(settings.Env, "COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
+				c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.CRDBNodes())
 
-			conn := c.Conn(ctx, t.L(), 1)
-			// Enable request tracing, which is a good tool for understanding
-			// how different transactions are interacting.
-			if _, err := conn.Exec(`
+				conn := c.Conn(ctx, t.L(), 1)
+				// Enable request tracing, which is a good tool for understanding
+				// how different transactions are interacting.
+				if _, err := conn.Exec(`
 				SET CLUSTER SETTING trace.debug.enable = true;
 			`); err != nil {
-				t.Fatal(err)
-			}
-			// Drop the deadlock detection delay because the test creates a
-			// large number transaction deadlocks.
-			if _, err := conn.Exec(`
+					t.Fatal(err)
+				}
+				// Drop the deadlock detection delay because the test creates a
+				// large number transaction deadlocks.
+				if _, err := conn.Exec(`
 				SET CLUSTER SETTING kv.lock_table.deadlock_detection_push_delay = '5ms'
 			`); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
-				t.Fatal(err)
-			}
+					t.Fatal(err)
+				}
 
-			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				// Write to a small number of keys to generate a large amount of
-				// contention. Use a relatively high amount of concurrency and
-				// aim to average one concurrent write for each key in the keyspace.
-				const cycleLength = 512
-				const concurrency = 128
-				const avgConcPerKey = 1
-				const batchSize = avgConcPerKey * (cycleLength / concurrency)
+				t.Status("running workload")
+				m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+				m.Go(func(ctx context.Context) error {
+					// Write to a small number of keys to generate a large amount of
+					// contention. Use a relatively high amount of concurrency and
+					// aim to average one concurrent write for each key in the keyspace.
+					const cycleLength = 512
+					const concurrency = 128
+					const avgConcPerKey = 1
+					const batchSize = avgConcPerKey * (cycleLength / concurrency)
 
-				// Split the table so that each node can have a single leaseholder.
-				splits := nodes
+					// Split the table so that each node can have a single leaseholder.
+					splits := nodes
 
-				// Run the workload for an hour. Add a secondary index to avoid
-				// UPSERTs performing blind writes.
-				const duration = 1 * time.Hour
-				cmd := fmt.Sprintf("./cockroach workload run kv --init --secondary-index --duration=%s "+
-					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl%s}",
-					duration, cycleLength, concurrency, batchSize, splits, c.CRDBNodes())
-				start := timeutil.Now()
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-				end := timeutil.Now()
+					// Run the workload for an hour. Add a secondary index to avoid
+					// UPSERTs performing blind writes.
+					const duration = 1 * time.Hour
+					cmd := fmt.Sprintf("./cockroach workload run kv --init --secondary-index --duration=%s "+
+						"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl%s}",
+						duration, cycleLength, concurrency, batchSize, splits, c.CRDBNodes())
+					start := timeutil.Now()
+					c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+					end := timeutil.Now()
 
-				// Assert that the average throughput stayed above a certain
-				// threshold. In this case, assert that max throughput only
-				// dipped below 50 qps for 10% of the time.
-				const minQPS = 50
-				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.1)
-				return nil
-			})
-			m.Wait()
-		},
-	})
+					// Assert that the average throughput stayed above a certain
+					// threshold. In this case, assert that max throughput only
+					// dipped below 50 qps for 10% of the time.
+					const minQPS = 50
+					verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.1)
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
 
 func registerKVGracefulDraining(r registry.Registry) {
@@ -719,12 +727,12 @@ func registerKVSplits(r registry.Registry) {
 		},
 	} {
 		item := item // for use in closure below
-		name := fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases)
+		baseName := fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases)
 		if item.envVars != nil {
-			name += "/tuned"
+			baseName += "/tuned"
 		}
 		r.Add(registry.TestSpec{
-			Name:    name,
+			Name:    baseName,
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
 			Cluster: r.MakeClusterSpec(
