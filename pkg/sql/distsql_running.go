@@ -1643,6 +1643,7 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 	meta.Metrics.IndexRowsWritten = stats.indexRowsWritten
 	meta.Metrics.IndexBytesWritten = stats.indexBytesWritten
 	meta.Metrics.KVCPUTime = int64(stats.kvCPUTimeNanos)
+	meta.Metrics.LocalKVCPUTime = int64(stats.localKVCPUTime)
 	// stats.networkEgressEstimate and stats.clientTime are ignored since they
 	// only matter at the "true" top-level query (and actually should be zero
 	// here anyway).
@@ -1701,6 +1702,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.indexRowsWritten += meta.Metrics.IndexRowsWritten
 		r.stats.indexBytesWritten += meta.Metrics.IndexBytesWritten
 		r.stats.kvCPUTimeNanos += time.Duration(meta.Metrics.KVCPUTime)
+		r.stats.localKVCPUTime += time.Duration(meta.Metrics.LocalKVCPUTime)
 
 		if sm, ok := r.scanStageEstimateMap[meta.Metrics.StageID]; ok {
 			sm.rowsRead += uint64(meta.Metrics.RowsRead)

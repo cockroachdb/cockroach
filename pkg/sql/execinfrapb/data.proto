@@ -333,7 +333,13 @@ message RemoteProducerMetadata {
     // representative of the "synchronous" portion of work performed by KV.
     // See the CPUTime field in the kvpb.BatchResponse_Header.
     optional int64 kv_cpu_time = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTime"];
-    // NEXT ID: 8
+    // LocalKVCPUTime is the SQL goroutine CPU time (in nanoseconds) spent
+    // inside KV calls for this flow, as measured by the grunning library. This
+    // is the portion of SQL goroutine CPU that overlapped with KV work, not
+    // the CPU consumed on KV servers (see KVCPUTime for that). The gateway
+    // subtracts it from total goroutine CPU to derive SQL-only CPU.
+    optional int64 local_kv_cpu_time = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "LocalKVCPUTime"];
+    // NEXT ID: 9
   }
   oneof value {
     RangeInfos range_info = 1;

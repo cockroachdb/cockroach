@@ -72,9 +72,10 @@ func newTxnKVStreamer(
 		acc:            acc,
 		rawMVCCValues:  rawMVCCValues,
 	}
-	// The streaming KV fetcher dispatches requests on async goroutines where
-	// per-goroutine grunning measurement is not meaningful, so localKVCPUTime
-	// is always nil.
+	// The streaming KV fetcher dispatches requests on async worker goroutines
+	// rather than on the SQL goroutine, so grunning around the call site does
+	// not measure SQL goroutine CPU; localKVCPUTime is therefore always nil
+	// here.
 	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued, kvCPUTime, nil /* localKVCPUTime */)
 	return f
 }
