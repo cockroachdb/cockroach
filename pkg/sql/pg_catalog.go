@@ -473,7 +473,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 // join that silently degrades to a full scan.
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
+https://www.postgresql.org/docs/18/catalog-pg-attribute.html`,
 	vtable.PGCatalogAttribute,
 	virtualMany, true, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
@@ -530,9 +530,10 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				zeroVal,                         // attndims
 				negOneVal,                       // attcacheoff
 				tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
-				tree.DNull, // attbyval (see pg_type.typbyval)
-				tree.DNull, // attstorage
-				tree.DNull, // attalign
+				tree.DNull,          // attbyval (see pg_type.typbyval)
+				tree.DNull,          // attstorage
+				tree.NewDString(""), // attcompression
+				tree.DNull,          // attalign
 				tree.MakeDBool(tree.DBool(!column.IsNullable())), // attnotnull
 				tree.MakeDBool(tree.DBool(column.HasDefault() ||
 					column.IsComputed())), // atthasdef
@@ -589,6 +590,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					negOneVal,                           // atttypmod
 					tree.DNull,                          // attbyval (see pg_type.typbyval)
 					tree.DNull,                          // attstorage
+					tree.NewDString(""),                 // attcompression
 					tree.DNull,                          // attalign
 					tree.DBoolFalse,                     // attnotnull
 					tree.DBoolFalse,                     // atthasdef
@@ -813,17 +815,20 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 
 var pgCatalogAuthMembersTable = virtualSchemaTable{
 	comment: `role membership
-https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
+https://www.postgresql.org/docs/18/catalog-pg-auth-members.html`,
 	schema: vtable.PGCatalogAuthMembers,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRoleMembershipAtCacheReadTS(ctx, p,
 			func(ctx context.Context, roleName, memberName username.SQLUsername, isAdmin bool) error {
 				return addRow(
-					h.UserOid(roleName),                 // roleid
-					h.UserOid(memberName),               // member
-					tree.DNull,                          // grantor
-					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
+					h.RoleMembershipOid(roleName, memberName), // oid
+					h.UserOid(roleName),                       // roleid
+					h.UserOid(memberName),                     // member
+					tree.DNull,                                // grantor
+					tree.MakeDBool(tree.DBool(isAdmin)),       // admin_option
+					tree.MakeDBool(tree.DBool(true)),          // inherit_option
+					tree.MakeDBool(tree.DBool(true)),          // set_option
 				)
 			},
 		)
@@ -975,6 +980,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull,                     // relpages
 			tree.DNull,                     // reltuples
 			zeroVal,                        // relallvisible
+			zeroVal,                        // relallfrozen
 			oidZero,                        // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 			tree.DBoolFalse, // relisshared
@@ -1044,6 +1050,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull,                               // relpages
 				tree.DNull,                               // reltuples
 				zeroVal,                                  // relallvisible
+				zeroVal,                                  // relallfrozen
 				oidZero,                                  // reltoastrelid
 				tree.DBoolFalse,                          // relhasindex
 				tree.DBoolFalse,                          // relisshared
@@ -1077,7 +1084,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 
 var pgCatalogCollationTable = virtualSchemaTable{
 	comment: `available collations (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
+https://www.postgresql.org/docs/18/catalog-pg-collation.html`,
 	schema: vtable.PGCatalogCollation,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
@@ -1086,18 +1093,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 			add := func(collName string) error {
 				return addRow(
 					h.CollationOid(collName),  // oid
-					tree.NewDString(collName), // collname
+					tree.NewDName(collName),   // collname
 					namespaceOid,              // collnamespace
 					nodeOID,                   // collowner
+					tree.DNull,                // collprovider
+					tree.DNull,                // collisdeterministic
 					builtins.DatEncodingUTFId, // collencoding
+					tree.DNull,                // colllocale
+					tree.DNull,                // collicurules
 					// It's not clear how to translate a Go collation tag into the format
 					// required by LC_COLLATE and LC_CTYPE.
 					tree.DNull, // collcollate
 					tree.DNull, // collctype
-					// These columns were automatically created by pg_catalog_test's missing column generator.
-					tree.DNull, // collprovider
 					tree.DNull, // collversion
-					tree.DNull, // collisdeterministic
 				)
 			}
 			for _, tag := range collatedstring.Supported() {
@@ -1335,6 +1343,7 @@ func populateTableConstraints(
 			tblOid,         // conrelid
 			oidZero,        // contypid
 			conindid,       // conindid
+			oidZero,        // conparentid
 			confrelid,      // confrelid
 			confupdtype,    // confupdtype
 			confdeltype,    // confdeltype
@@ -1347,11 +1356,13 @@ func populateTableConstraints(
 			tree.DNull,     // conpfeqop
 			tree.DNull,     // conppeqop
 			tree.DNull,     // conffeqop
+			tree.DNull,     // confdelsetcols
 			tree.DNull,     // conexclop
 			conbin,         // conbin
 			consrc,         // consrc
 			condef,         // condef
-			oidZero,        // conparentid
+			tree.MakeDBool(tree.DBool(c.IsEnforced())), // conenforced
+			tree.DBoolFalse, // conperiod
 		); err != nil {
 			return err
 		}
@@ -1518,7 +1529,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 
 var pgCatalogConstraintTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table constraints (incomplete - see also information_schema.table_constraints)
-https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html`,
+https://www.postgresql.org/docs/18/catalog-pg-constraint.html`,
 	vtable.PGCatalogConstraint,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */
@@ -1565,7 +1576,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
 
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	comment: `available databases (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
+https://www.postgresql.org/docs/18/catalog-pg-database.html`,
 	schema: vtable.PGCatalogDatabase,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
@@ -1586,17 +1597,21 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 					ownerOid,                    // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
-					builtins.DatEncodingUTFId,  // encoding
-					builtins.DatEncodingEnUTF8, // datcollate
-					builtins.DatEncodingEnUTF8, // datctype
-					tree.DBoolFalse,            // datistemplate
-					tree.DBoolTrue,             // datallowconn
-					negOneVal,                  // datconnlimit
-					oidZero,                    // datlastsysoid
-					tree.DNull,                 // datfrozenxid
-					tree.DNull,                 // datminmxid
-					oidZero,                    // dattablespace
-					datacl,                     // datacl
+					builtins.DatEncodingUTFId,   // encoding
+					builtins.DatLocProviderLibC, // datlocprovider
+					tree.DBoolFalse,             // datistemplate
+					tree.DBoolTrue,              // datallowconn
+					negOneVal,                   // datconnlimit
+					tree.DNull,                  // datfrozenxid
+					tree.DNull,                  // datminmxid
+					oidZero,                     // dattablespace
+					builtins.DatEncodingEnUTF8,  // datcollate
+					builtins.DatEncodingEnUTF8,  // datctype
+					tree.DNull,                  // datlocale
+					tree.DNull,                  // daticurules
+					tree.DNull,                  // datcollversion
+					tree.DBoolFalse,             // dathasloginevt
+					datacl,                      // datacl
 				)
 			})
 	},
@@ -2901,7 +2916,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
 // cockroach are slightly different.
 var pgCatalogPreparedStatementsTable = virtualSchemaTable{
 	comment: `prepared statements
-https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
+https://www.postgresql.org/docs/18/view-pg-prepared-statements.html`,
 	schema: vtable.PGCatalogPreparedStatements,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for name, stmt := range p.preparedStatements.List() {
@@ -2933,6 +2948,18 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 				fromSQL = tree.DBoolTrue
 			}
 
+			resultTypes := tree.NewDArray(types.RegType)
+			for _, col := range stmt.Metadata.Columns {
+				resultTypes.Array = append(resultTypes.Array, tree.NewDOidWithTypeAndName(
+					col.Typ.Oid(),
+					col.Typ,
+					col.Typ.SQLStandardName(),
+				))
+			}
+			if len(resultTypes.Array) > 0 {
+				resultTypes.SetHasNonNulls(true /* hasNonNulls */)
+			}
+
 			ts, err := tree.MakeDTimestampTZ(stmt.CreatedAt(), time.Microsecond)
 			if err != nil {
 				return err
@@ -2942,7 +2969,10 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name, argumentsStr, stmt.SQL)),
 				ts,
 				paramTypes,
+				resultTypes, // result_types
 				fromSQL,
+				tree.DNull, // custom_plans
+				tree.DNull, // generic_plans
 			); err != nil {
 				return err
 			}
@@ -3945,6 +3975,7 @@ func addPGTypeRowForTable(
 		oidZero,                  // typmodin
 		oidZero,                  // typmodout
 		oidZero,                  // typanalyze
+		oidZero,                  // typsubscript
 
 		tree.DNull,      // typalign
 		tree.DNull,      // typstorage
@@ -4057,6 +4088,7 @@ func addPGTypeRow(
 		oidZero,                         // typmodin
 		oidZero,                         // typmodout
 		oidZero,                         // typanalyze
+		oidZero,                         // typsubscript
 
 		tree.DNull,      // typalign
 		tree.DNull,      // typstorage
@@ -4101,6 +4133,7 @@ func addPGClassRowForCompositeType(
 		tree.DNull,                      // relpages
 		tree.DNull,                      // reltuples
 		zeroVal,                         // relallvisible
+		zeroVal,                         // relallfrozen
 		oidZero,                         // reltoastrelid
 		tree.DBoolFalse,                 // relhasindex (composite types implemented as virtual tables - no indexes)
 		tree.DBoolFalse,                 // relisshared
@@ -4157,6 +4190,7 @@ func addPGAttributeRowForCompositeType(
 			tree.NewDInt(tree.DInt(colTyp.TypeModifier())), // atttypmod
 			tree.DNull,          // attbyval (see pg_type.typbyval)
 			tree.DNull,          // attstorage
+			tree.NewDString(""), // attcompression
 			tree.DNull,          // attalign
 			tree.DBoolFalse,     // attnotnull
 			tree.DBoolFalse,     // atthasdef
@@ -4516,7 +4550,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 
 var pgCatalogStatisticExtTable = virtualSchemaTable{
 	comment: `pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
+https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html`,
 	schema: vtable.PgCatalogStatisticExt,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 
@@ -4580,9 +4614,10 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 				row[1],                       // stxname
 				schemaOid(statSchema),        // stxnamespace
 				nodeOID,                      // stxowner
-				statTgt,                      // stxstattarget
 				columnIDs,                    // stxkeys
+				statTgt,                      // stxstattarget
 				statisticsKind,               // stxkind
+				tree.DNull,                   // stxexprs
 			); err != nil {
 				return err
 			}
@@ -5803,6 +5838,7 @@ const (
 	castTypeTag
 	triggerTypeTag
 	policyTypeTag
+	roleMembershipTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -5933,6 +5969,13 @@ func (h oidHasher) RegProc(name string) tree.Datum {
 func (h oidHasher) UserOid(userName username.SQLUsername) *tree.DOid {
 	h.writeTypeTag(userTypeTag)
 	h.writeStr(userName.Normalized())
+	return h.getOid()
+}
+
+func (h oidHasher) RoleMembershipOid(roleName, memberName username.SQLUsername) *tree.DOid {
+	h.writeTypeTag(roleMembershipTypeTag)
+	h.writeStr(roleName.Normalized())
+	h.writeStr(memberName.Normalized())
 	return h.getOid()
 }
 

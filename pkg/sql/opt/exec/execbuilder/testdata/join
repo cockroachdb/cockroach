@@ -415,7 +415,7 @@ vectorized: true
         │ render relname: relname
         │
         └── • hash join (inner)
-            │ columns: (oid, nspname, oid, relname, relnamespace, attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+            │ columns: (oid, nspname, oid, relname, relnamespace, attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
             │ estimated row count: 110,908 (missing stats)
             │ equality: (oid) = (attrelid)
             │
@@ -435,7 +435,7 @@ vectorized: true
             │         table: pg_class@primary
             │
             └── • hash join (inner)
-                │ columns: (attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+                │ columns: (attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
                 │ estimated row count: 1,779 (missing stats)
                 │ equality: (attrelid) = (oid)
                 │ pred: attnum = conkey[generate_series]
@@ -446,12 +446,12 @@ vectorized: true
                 │     table: pg_attribute@primary
                 │
                 └── • cross join (inner)
-                    │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+                    │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
                     │ estimated row count: 539 (missing stats)
                     │ pred: attnum = confkey[generate_series]
                     │
                     ├── • hash join (inner)
-                    │   │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │   │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │   │ estimated row count: 163 (missing stats)
                     │   │ equality: (attrelid) = (confrelid)
                     │   │
@@ -461,7 +461,7 @@ vectorized: true
                     │   │     table: pg_attribute@primary
                     │   │
                     │   └── • hash join (inner)
-                    │       │ columns: (objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │       │ columns: (objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │       │ estimated row count: 17 (missing stats)
                     │       │ equality: (objid) = (oid)
                     │       │
@@ -486,26 +486,26 @@ vectorized: true
                     │       │             table: pg_class@primary
                     │       │
                     │       └── • hash join (inner)
-                    │           │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │           │ columns: (oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │           │ estimated row count: 11 (missing stats)
                     │           │ equality: (relnamespace) = (oid)
                     │           │
                     │           ├── • virtual table lookup join (inner)
-                    │           │   │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace)
+                    │           │   │ columns: (oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
                     │           │   │ estimated row count: 10 (missing stats)
-                    │           │   │ table: pg_class@pg_class_oid_idx
-                    │           │   │ equality: (conrelid) = (oid)
-                    │           │   │ pred: relname = 'orders'
+                    │           │   │ table: pg_constraint@pg_constraint_conrelid_idx
+                    │           │   │ equality: (oid) = (conrelid)
+                    │           │   │ pred: contype = 'f'
                     │           │   │
                     │           │   └── • filter
-                    │           │       │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
+                    │           │       │ columns: (oid, relname, relnamespace)
                     │           │       │ estimated row count: 10 (missing stats)
-                    │           │       │ filter: contype = 'f'
+                    │           │       │ filter: relname = 'orders'
                     │           │       │
                     │           │       └── • virtual table
-                    │           │             columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
+                    │           │             columns: (oid, relname, relnamespace)
                     │           │             estimated row count: 1,000 (missing stats)
-                    │           │             table: pg_constraint@primary
+                    │           │             table: pg_class@primary
                     │           │
                     │           └── • filter
                     │               │ columns: (oid, nspname)

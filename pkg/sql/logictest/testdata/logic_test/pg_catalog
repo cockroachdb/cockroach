@@ -470,28 +470,28 @@ oid  datname        datdba      encoding  datcollate  datctype    datistemplate 
 104  test           1546506610  6         en_US.utf8  en_US.utf8  false          true
 108  constraint_db  1546506610  6         en_US.utf8  en_US.utf8  false          true
 
-query OTIOIIOT colnames
-SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+query OTIIIOTT colnames
+SELECT oid, datname, datconnlimit, datfrozenxid, datminmxid, dattablespace, datlocprovider, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid
 ----
-oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
-100  defaultdb      -1            0              NULL          NULL        0              NULL
-102  postgres       -1            0              NULL          NULL        0              NULL
-104  test           -1            0              NULL          NULL        0              {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
-108  constraint_db  -1            0              NULL          NULL        0              NULL
+oid  datname        datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
+1    system         -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
+100  defaultdb      -1            NULL          NULL        0              c               NULL
+102  postgres       -1            NULL          NULL        0              c               NULL
+104  test           -1            NULL          NULL        0              c               {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
+108  constraint_db  -1            NULL          NULL        0              c               NULL
 
 user testuser
 
 # Should be globally visible
-query OTIOIIOT colnames
-SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, dattablespace, datacl
+query OTIIIOTT colnames
+SELECT oid, datname, datconnlimit, datfrozenxid, datminmxid, dattablespace, datlocprovider, datacl
 FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
-oid  datname  datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system   -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
+oid  datname  datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
+1    system   -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
 
 user root
 
@@ -1662,12 +1662,12 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 statement ok
 SET DATABASE = constraint_db
 
-query OTOOITTTTT colnames,strip-oids
+query OTOOTTITTTTT colnames,strip-oids
 SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
-oid      collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-__OID__  en-US     __OID__        __OID__    6             NULL         NULL       NULL          NULL         NULL
+oid      collname  collnamespace  collowner  collprovider  collisdeterministic  collencoding  colllocale  collicurules  collcollate  collctype  collversion
+__OID__  en-US     __OID__        __OID__    NULL          NULL                 6             NULL        NULL          NULL         NULL       NULL
 
 user testuser
 
@@ -1715,34 +1715,34 @@ t6_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
 t6_expr_key    109           u        UNIQUE_(lower(c)_ASC)
 mv1_pkey       109           p        PRIMARY_KEY_(rowid_ASC)
 
-query TTBBBOOO colnames,rowsort
-SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
+query TTBBBOOOB colnames,rowsort
+SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid, conenforced
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
-t1_pkey        p        false          false        true          110       0         3687884466
-t1_a_key       u        false          false        true          110       0         3687884465
-index_key      u        false          false        true          110       0         3687884464
-primary        p        false          false        true          111       0         2342807459
-primary        p        false          false        true          112       0         5181036
-t2_pkey        p        false          false        true          113       0         2955071325
-fk             f        false          false        true          113       0         3687884465
-t3_pkey        p        false          false        true          114       0         2695335054
-check_b        c        false          false        true          114       0         0
-check_c        c        false          false        true          114       0         0
-fk             f        false          false        true          114       0         3687884464
-t4_pkey        p        false          false        true          116       0         3214807592
-unique_a       u        false          false        true          116       0         0
-uwi_b_c        u        false          false        true          116       0         0
-uwi_b_partial  u        false          false        true          116       0         0
-t5_pkey        p        false          false        true          117       0         1869730585
-fk_b_c         f        false          false        true          117       0         0
-t5_a_fkey      f        false          false        true          117       0         0
-t6_pkey        p        false          false        true          120       0         2129466852
-t6_expr_key    u        false          false        true          120       0         2129466848
-mv1_pkey       p        false          false        true          121       0         784389845
+conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid    conenforced
+t1_pkey        p        false          false        true          110       0         3687884466  true
+t1_a_key       u        false          false        true          110       0         3687884465  true
+index_key      u        false          false        true          110       0         3687884464  true
+primary        p        false          false        true          111       0         2342807459  true
+primary        p        false          false        true          112       0         5181036     true
+t2_pkey        p        false          false        true          113       0         2955071325  true
+fk             f        false          false        true          113       0         3687884465  true
+t3_pkey        p        false          false        true          114       0         2695335054  true
+check_b        c        false          false        true          114       0         0           true
+check_c        c        false          false        true          114       0         0           true
+fk             f        false          false        true          114       0         3687884464  true
+t4_pkey        p        false          false        true          116       0         3214807592  true
+unique_a       u        false          false        true          116       0         0           true
+uwi_b_c        u        false          false        true          116       0         0           true
+uwi_b_partial  u        false          false        true          116       0         0           true
+t5_pkey        p        false          false        true          117       0         1869730585  true
+fk_b_c         f        false          false        true          117       0         0           true
+t5_a_fkey      f        false          false        true          117       0         0           true
+t6_pkey        p        false          false        true          120       0         2129466852  true
+t6_expr_key    u        false          false        true          120       0         2129466848  true
+mv1_pkey       p        false          false        true          121       0         784389845   true
 
 query T
 SELECT conname
@@ -1857,6 +1857,31 @@ fk_b_c     {2,3}    NULL       NULL       NULL       NULL       NULL    NULL
 fk         {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
 t5_a_fkey  {1}      NULL       NULL       NULL       NULL       NULL    NULL
 fk         {2}      NULL       NULL       NULL       NULL       NULL    NULL
+
+# NOT VALID constraints are still enforced for new writes (they skip
+# validation of existing data). conenforced should be true. In PG 18,
+# conenforced is false only for NOT ENFORCED constraints, which CRDB
+# does not support.
+
+statement ok
+ALTER TABLE constraint_db.t3 ADD CONSTRAINT check_not_valid CHECK (a > 0) NOT VALID
+
+query TBB
+SELECT conname, convalidated, conenforced
+FROM pg_catalog.pg_constraint
+WHERE conrelid = 'constraint_db.t3'::regclass AND conname = 'check_not_valid'
+----
+check_not_valid  false  true
+
+statement ok
+ALTER TABLE constraint_db.t3 VALIDATE CONSTRAINT check_not_valid
+
+query TBB
+SELECT conname, convalidated, conenforced
+FROM pg_catalog.pg_constraint
+WHERE conrelid = 'constraint_db.t3'::regclass AND conname = 'check_not_valid'
+----
+check_not_valid  true  true
 
 ## pg_catalog.pg_depend
 
@@ -3054,12 +3079,12 @@ DROP ROLE test_dst_replication;
 
 ## pg_catalog.pg_auth_members
 
-query OOOB colnames
-SELECT roleid, member, grantor, admin_option
+query OOOOBBB colnames
+SELECT oid, roleid, member, grantor, admin_option, inherit_option, set_option
 FROM pg_catalog.pg_auth_members
 ----
-roleid      member      grantor  admin_option
-2310524507  1546506610  NULL     true
+oid         roleid      member      grantor  admin_option  inherit_option  set_option
+3818609862  2310524507  1546506610  NULL     true          true            true
 
 ## pg_catalog.pg_user
 
@@ -4122,11 +4147,23 @@ PREPARE test_insert_statement (integer, timestamptz) AS INSERT INTO types VALUES
 statement ok
 PREPARE test_select_statement AS SELECT * FROM types
 
-query TTTB
-select name, statement, parameter_types, from_sql from pg_prepared_statements ORDER BY 1, 2
+query TTTTB
+select name, statement, parameter_types, result_types, from_sql from pg_prepared_statements ORDER BY 1, 2
 ----
-test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  true
-test_select_statement  PREPARE test_select_statement AS SELECT * FROM types                                   {}                                     true
+test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  {}                                              true
+test_select_statement  PREPARE test_select_statement AS SELECT * FROM types  {}  {"'timestamp with time zone'",bigint}  true
+
+# INSERT ... RETURNING populates result_types with the returned columns.
+statement ok
+PREPARE insert_returning (integer) AS INSERT INTO types VALUES (now(), $1) RETURNING b
+
+query TTT
+SELECT name, parameter_types, result_types FROM pg_prepared_statements WHERE name = 'insert_returning'
+----
+insert_returning  {bigint}  {bigint}
+
+statement ok
+DEALLOCATE insert_returning
 
 subtest pg_catalog.pg_prepare_statement,with_possible_mismatch_num_types
 

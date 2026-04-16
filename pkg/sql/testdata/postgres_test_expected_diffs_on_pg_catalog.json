@@ -4,8 +4,8 @@
     "TotalTables": 144,
     "TotalColumns": 1283,
     "MissingTables": 15,
-    "MissingColumns": 20,
-    "DatatypeMismatches": 21
+    "MissingColumns": 0,
+    "DatatypeMismatches": 15
   },
   "diffs": {
     "pg_aios": {},
@@ -17,57 +17,7 @@
         "expectedDataType": "regproc"
       }
     },
-    "pg_attribute": {
-      "attcompression": null,
-      "attinhcount": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "attndims": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "attstattarget": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      }
-    },
-    "pg_auth_members": {
-      "inherit_option": null,
-      "oid": null,
-      "set_option": null
-    },
     "pg_backend_memory_contexts": {},
-    "pg_class": {
-      "relallfrozen": null
-    },
-    "pg_collation": {
-      "collicurules": null,
-      "colllocale": null,
-      "collname": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": 19,
-        "expectedDataType": "name"
-      }
-    },
-    "pg_constraint": {
-      "conenforced": null,
-      "confdelsetcols": null,
-      "coninhcount": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      },
-      "conperiod": null
-    },
     "pg_conversion": {
       "conproc": {
         "oid": 26,
@@ -75,13 +25,6 @@
         "expectedOid": 24,
         "expectedDataType": "regproc"
       }
-    },
-    "pg_database": {
-      "datcollversion": null,
-      "dathasloginevt": null,
-      "daticurules": null,
-      "datlocale": null,
-      "datlocprovider": null
     },
     "pg_enum": {
       "enumlabel": {
@@ -127,11 +70,6 @@
       }
     },
     "pg_parameter_acl": {},
-    "pg_prepared_statements": {
-      "custom_plans": null,
-      "generic_plans": null,
-      "result_types": null
-    },
     "pg_publication_namespace": {},
     "pg_range": {
       "rngcanonical": {
@@ -185,15 +123,6 @@
     "pg_stat_replication_slots": {},
     "pg_stat_subscription_stats": {},
     "pg_stat_wal": {},
-    "pg_statistic_ext": {
-      "stxexprs": null,
-      "stxstattarget": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": 21,
-        "expectedDataType": "int2"
-      }
-    },
     "pg_statistic_ext_data": {
       "stxdexpr": {
         "oid": 1009,
@@ -203,9 +132,6 @@
       }
     },
     "pg_stats_ext_exprs": {},
-    "pg_type": {
-      "typsubscript": null
-    },
     "pg_wait_events": {}
   },
   "unimplementedTypes": {
