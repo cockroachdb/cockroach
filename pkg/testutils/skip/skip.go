@@ -257,8 +257,8 @@ func maybeSkip(t SkippableTest, reason string, args ...interface{}) {
 
 var miscNightly = envutil.EnvOrDefaultBool("COCKROACH_MISC_NIGHTLY", false)
 
-// IfNotMiscNightly skips this test unless the COCKROACH_MISC_NIGHTLY env var is
-// set to 'true'.
+// IfNotMiscNightly skips this test unless the COCKROACH_MISC_NIGHTLY
+// env var is set to 'true'.
 //
 // Does not respect COCKROACH_FORCE_RUN_SKIPPED_TESTS.
 func IfNotMiscNightly(t SkippableTest) {
