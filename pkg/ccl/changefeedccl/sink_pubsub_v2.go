@@ -223,11 +223,10 @@ func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) erro
 }
 
 type pubsubBuffer struct {
-	sc           *pubsubSinkClient
-	topic        string
-	topicEncoded []byte
-	messages     []*pb.PubsubMessage
-	numBytes     int
+	sc       *pubsubSinkClient
+	topic    string
+	messages []*pb.PubsubMessage
+	numBytes int
 	// Cache for attributes which are sent along with each message. This lets us
 	// re-use expensive map allocs for messages in the batch with the same
 	// attributes. This does not include headers, as they are per-row. In fact,
@@ -239,20 +238,27 @@ var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
 func (psb *pubsubBuffer) Append(
-	ctx context.Context, key []byte, value []byte, attributes attributes,
+	ctx context.Context, topic string, key []byte, value []byte, attributes attributes,
 ) {
+	// Track the topic for Close; pubsub batches are per-topic.
+	psb.topic = topic
+
+	var topicEncoded bytes.Buffer
+	json.FromString(topic).Format(&topicEncoded)
+
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
 		var buffer bytes.Buffer
+		topicBytes := topicEncoded.Bytes()
 		// Grow all at once to avoid reallocations
-		buffer.Grow(26 /* Key/Value/Topic keys */ + len(key) + len(value) + len(psb.topicEncoded))
+		buffer.Grow(26 /* Key/Value/Topic keys */ + len(key) + len(value) + len(topicBytes))
 		buffer.WriteString("{\"Key\":")
 		buffer.Write(key)
 		buffer.WriteString(",\"Value\":")
 		buffer.Write(value)
 		buffer.WriteString(",\"Topic\":")
-		buffer.Write(psb.topicEncoded)
+		buffer.Write(topicBytes)
 		buffer.WriteString("}")
 		content = buffer.Bytes()
 	case changefeedbase.OptFormatCSV:
@@ -286,14 +292,10 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 }
 
 // MakeBatchBuffer implements the SinkClient interface
-func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
-	var topicBuffer bytes.Buffer
-	json.FromString(topic).Format(&topicBuffer)
+func (sc *pubsubSinkClient) MakeBatchBuffer() BatchBuffer {
 	psb := &pubsubBuffer{
-		sc:           sc,
-		topic:        topic,
-		topicEncoded: topicBuffer.Bytes(),
-		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
+		sc:       sc,
+		messages: make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
 	if sc.withTableNameAttribute {
 		psb.attributesCache = make(map[string]map[string]string)

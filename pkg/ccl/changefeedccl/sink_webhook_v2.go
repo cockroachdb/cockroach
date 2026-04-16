@@ -363,7 +363,9 @@ type webhookCSVBuffer struct {
 var _ BatchBuffer = (*webhookCSVBuffer)(nil)
 
 // Append implements the BatchBuffer interface.
-func (cb *webhookCSVBuffer) Append(ctx context.Context, key []byte, value []byte, _ attributes) {
+func (cb *webhookCSVBuffer) Append(
+	ctx context.Context, _ string, key []byte, value []byte, _ attributes,
+) {
 	cb.bytes = append(cb.bytes, value...)
 	cb.messageCount += 1
 }
@@ -387,7 +389,9 @@ type webhookJSONBuffer struct {
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
 
 // Append implements the BatchBuffer interface.
-func (jb *webhookJSONBuffer) Append(ctx context.Context, key []byte, value []byte, _ attributes) {
+func (jb *webhookJSONBuffer) Append(
+	ctx context.Context, _ string, key []byte, value []byte, _ attributes,
+) {
 	jb.messages = append(jb.messages, value)
 	jb.numBytes += len(value)
 }
@@ -418,7 +422,7 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 }
 
 // MakeBatchBuffer implements the SinkClient interface.
-func (sc *webhookSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
+func (sc *webhookSinkClient) MakeBatchBuffer() BatchBuffer {
 	if sc.format == changefeedbase.OptFormatCSV {
 		return &webhookCSVBuffer{sc: sc}
 	} else {
