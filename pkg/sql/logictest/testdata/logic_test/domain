@@ -737,3 +737,38 @@ statement ok
 DROP DOMAIN d_atom
 
 subtest end
+
+subtest domain_over_array
+# Test domains over array types, which create internal nested array aliases.
+# These aliases must be unmarshalable even though nested arrays are not
+# fully supported for execution/storage.
+
+statement ok
+CREATE DOMAIN d_array AS INT[]
+
+# Checking the create statement involves unmarshaling the alias.
+query T
+SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_name = 'd_array'
+----
+CREATE DOMAIN public.d_array AS INT8[]
+
+# Creating an array of this domain: d_array[] works without DistSQL.
+# Internally this is represented as INT[][].
+# While we can't use it in a table yet, creating it shouldn't panic background tasks.
+# We can test that its SQL string representation is correct.
+skipif config fakedist
+skipif config fakedist-disk
+skipif config fakedist-vec-off
+query T
+SELECT '{}'::d_array[]
+----
+{}
+
+# Attempting to use a truly nested array should still fail at the SQL level.
+statement error nested array unsupported as column type: int[][]
+CREATE TABLE t (a d_array[])
+
+statement ok
+DROP DOMAIN d_array
+
+subtest end

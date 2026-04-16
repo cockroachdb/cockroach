@@ -1690,7 +1690,11 @@ func RemapUserDefinedTypeOIDs(t *T, newOID, newArrayOID oid.Oid) {
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
-	return IsOIDUserDefinedType(t.Oid())
+	// A type is user-defined if its OID is in the user-defined range.
+	// We also consider it user-defined if it has OID 0 (unassigned) but
+	// contains UDTMetadata; this happens during parsing and descriptor
+	// construction before an ID is allocated.
+	return IsOIDUserDefinedType(t.Oid()) || (t.Oid() == 0 && t.InternalType.UDTMetadata != nil)
 }
 
 // IsOIDUserDefinedType returns whether or not o corresponds to a user
@@ -2726,8 +2730,12 @@ func (t *T) upgradeType() error {
 			t.InternalType.Oid = CalcArrayOid(t.ArrayContents())
 		}
 
-		// Marshaling/unmarshaling nested arrays is not yet supported.
-		if t.ArrayContents().Family() == ArrayFamily {
+		// Marshaling/unmarshaling nested arrays is not yet supported in general,
+		// but they are required for user defined types (like domains over arrays)
+		// which store their internal structure using this format. This is safe
+		// because existing runtime and storage-level blocks (e.g., in colinfo)
+		// still prevent multidimensional arrays from being used as column types.
+		if t.ArrayContents().Family() == ArrayFamily && !t.ArrayContents().UserDefined() {
 			return errors.AssertionFailedf("nested array should never be unmarshaled")
 		}
 
