@@ -544,11 +544,16 @@ func (db *DB) scan(
 	str kvpb.KeyLockingStrengthType,
 	readConsistency kvpb.ReadConsistencyType,
 	dur kvpb.KeyLockingDurabilityType,
+	opts ...ScanOption,
 ) ([]KeyValue, error) {
+	cfg := buildScanConfig(opts)
 	b := &Batch{}
 	b.Header.ReadConsistency = readConsistency
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
+	}
+	if cfg.targetBytes > 0 {
+		b.Header.TargetBytes = cfg.targetBytes
 	}
 	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
@@ -561,9 +566,13 @@ func (db *DB) scan(
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
+// Use WithTargetBytes to set a byte limit on the response size. When both
+// maxRows and a byte limit are set, the scan stops as soon as either limit is
+// reached.
+//
 // key can be either a byte slice or a string.
-func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid)
+func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64, opts ...ScanOption) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid, opts...)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -574,10 +583,10 @@ func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) (
 //
 // key can be either a byte slice or a string.
 func (db *DB) ScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
 	return db.scan(
-		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur,
+		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur, opts...,
 	)
 }
 
@@ -589,10 +598,10 @@ func (db *DB) ScanForUpdate(
 //
 // key can be either a byte slice or a string.
 func (db *DB) ScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
 	return db.scan(
-		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur,
+		ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur, opts...,
 	)
 }
 
@@ -601,11 +610,15 @@ func (db *DB) ScanForShare(
 //
 // The returned []KeyValue will contain up to maxRows elements.
 //
+// Use WithTargetBytes to set a byte limit on the response size. When both
+// maxRows and a byte limit are set, the scan stops as soon as either limit is
+// reached.
+//
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScan(
-	ctx context.Context, begin, end interface{}, maxRows int64,
+	ctx context.Context, begin, end interface{}, maxRows int64, opts ...ScanOption,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT, kvpb.Invalid, opts...)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -616,10 +629,10 @@ func (db *DB) ReverseScan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScanForUpdate(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
 	return db.scan(
-		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur,
+		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT, dur, opts...,
 	)
 }
 
@@ -631,10 +644,10 @@ func (db *DB) ReverseScanForUpdate(
 //
 // key can be either a byte slice or a string.
 func (db *DB) ReverseScanForShare(
-	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
+	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType, opts ...ScanOption,
 ) ([]KeyValue, error) {
 	return db.scan(
-		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur,
+		ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT, dur, opts...,
 	)
 }
 
