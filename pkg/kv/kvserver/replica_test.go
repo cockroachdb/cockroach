@@ -2789,49 +2789,6 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
-		baRead := &kvpb.BatchRequest{}
-		if pointReads {
-			gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
-			gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
-			baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
-		} else {
-			// Split into two back-to-back scans for better test coverage.
-			sArgs1 := scanArgsString("a", "c")
-			sArgs2 := scanArgsString("c", "e")
-			baRead.Add(sArgs1, sArgs2)
-		}
-		// The state that will block a write while holding latches.
-		var blockKey, blockWriter atomic.Value
-		blockKey.Store(roachpb.Key("a"))
-		blockWriter.Store(false)
-		blockCh := make(chan struct{}, 1)
-		blockedCh := make(chan struct{}, 1)
-		// Setup filter to block the write.
-		tc := testContext{}
-		tsc := TestStoreConfig(nil)
-		tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-			func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
-				// Make sure the direct GC path doesn't interfere with this test.
-				if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
-					return nil
-				}
-				if filterArgs.Req.Method() == kvpb.Put && blockWriter.Load().(bool) {
-					blockedCh <- struct{}{}
-					<-blockCh
-				}
-				return nil
-			}
-		ctx := context.Background()
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		tc.StartWithStoreConfig(ctx, t, stopper, tsc)
-		// Write initial keys.
-		for _, k := range []string{"a", "b", "c", "d"} {
-			pArgs := putArgs([]byte(k), []byte("value"))
-			if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
-		}
 		testCases := []struct {
 			writeKey   string
 			limit      int64
@@ -2858,9 +2815,54 @@ func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 		}
 		for _, test := range testCases {
 			t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
+				// Each subtest gets its own store to prevent async intent
+				// resolution from a previous subtest's writes from racing
+				// with the current subtest's optimistic read. See #167535.
+				baRead := &kvpb.BatchRequest{}
+				if pointReads {
+					gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
+					gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
+					baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
+				} else {
+					// Split into two back-to-back scans for better test coverage.
+					sArgs1 := scanArgsString("a", "c")
+					sArgs2 := scanArgsString("c", "e")
+					baRead.Add(sArgs1, sArgs2)
+				}
+				// The state that will block a write while holding latches.
+				var blockWriter atomic.Value
+				blockWriter.Store(false)
+				blockCh := make(chan struct{}, 1)
+				blockedCh := make(chan struct{}, 1)
+				// Setup filter to block the write.
+				tc := testContext{}
+				tsc := TestStoreConfig(nil)
+				tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+					func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
+						// Make sure the direct GC path doesn't interfere with this test.
+						if !filterArgs.Req.Header().Key.Equal(roachpb.Key(test.writeKey)) {
+							return nil
+						}
+						if filterArgs.Req.Method() == kvpb.Put && blockWriter.Load().(bool) {
+							blockedCh <- struct{}{}
+							<-blockCh
+						}
+						return nil
+					}
+				ctx := context.Background()
+				stopper := stop.NewStopper()
+				defer stopper.Stop(ctx)
+				tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+				// Write initial keys.
+				for _, k := range []string{"a", "b", "c", "d"} {
+					pArgs := putArgs([]byte(k), []byte("value"))
+					if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
+						t.Fatal(pErr)
+					}
+				}
+
 				errCh := make(chan *kvpb.Error, 2)
 				pArgs := putArgs([]byte(test.writeKey), []byte("value"))
-				blockKey.Store(roachpb.Key(test.writeKey))
 				blockWriter.Store(true)
 				go func() {
 					_, pErr := tc.SendWrapped(&pArgs)
