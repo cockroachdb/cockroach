@@ -614,6 +614,9 @@ var (
 	defaultWorkmem = flag.Bool("default-workmem", false,
 		"disable randomization of sql.distsql.temp_storage.workmem",
 	)
+	traceOnError = flag.Bool("trace-on-error", false,
+		"enable SQL session tracing for each statement/query and dump the trace to a file on failure",
+	)
 	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
@@ -1101,6 +1104,10 @@ type logicTest struct {
 	// traceFile holds the current trace file between "traceon"
 	// and "traceoff" directives.
 	traceFile *os.File
+	// traceDir holds the directory for --trace-on-error output files. It
+	// points to the test's log scope directory so that traces are written
+	// alongside CockroachDB logs and survive test failure.
+	traceDir string
 	// verbose indicate whether -v was passed.
 	verbose bool
 	// perErrorSummary retains the per-error list of failing queries
@@ -1185,6 +1192,97 @@ func (t *logicTest) traceStop() {
 		t.traceFile.Close()
 		t.traceFile = nil
 	}
+}
+
+// enableSessionTracing enables SQL session tracing if --trace-on-error is set.
+// It should be called before executing a statement or query. The caller must
+// call disableSessionTracing after execution completes to stop recording.
+func (t *logicTest) enableSessionTracing() {
+	if !*traceOnError {
+		return
+	}
+	if _, err := t.db.Exec("SET TRACING = on"); err != nil {
+		t.t().Logf("warning: could not enable session tracing: %v", err)
+	}
+}
+
+// disableSessionTracing disables SQL session tracing if --trace-on-error is
+// set. It should be called after a statement or query has completed execution,
+// including after all result rows have been consumed and closed. The recorded
+// trace remains available via SHOW TRACE FOR SESSION until the next SET TRACING
+// = on.
+func (t *logicTest) disableSessionTracing() {
+	if !*traceOnError {
+		return
+	}
+	if _, err := t.db.Exec("SET TRACING = off"); err != nil {
+		t.t().Logf("warning: could not disable session tracing: %v", err)
+	}
+}
+
+// dumpSessionTrace retrieves the most recent session trace and writes it to a
+// file. pos is the file:line of the failing directive and sql is the SQL text
+// that was executed. The trace file is written to the test's log scope
+// directory so that it survives test failure.
+func (t *logicTest) dumpSessionTrace(pos, sql string) {
+	if !*traceOnError {
+		return
+	}
+	rows, err := t.db.Query(
+		"SELECT age, message, tag, location, operation FROM [SHOW TRACE FOR SESSION]",
+	)
+	if err != nil {
+		t.t().Logf("warning: could not retrieve session trace: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Session trace for failed statement at %s\n", pos)
+	fmt.Fprintf(&buf, "SQL: %s\n", sql)
+	fmt.Fprintf(&buf, "%s\n", strings.Repeat("-", 80))
+
+	tw := tabwriter.NewWriter(&buf, 0, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "AGE\tMESSAGE\tTAG\tLOCATION\tOPERATION\n")
+	for rows.Next() {
+		var age, message, tag, location, operation string
+		if err := rows.Scan(&age, &message, &tag, &location, &operation); err != nil {
+			t.t().Logf("warning: error scanning trace row: %v", err)
+			return
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", age, message, tag, location, operation)
+	}
+	if err := tw.Flush(); err != nil {
+		t.t().Logf("warning: error flushing trace writer: %v", err)
+		return
+	}
+	if err := rows.Err(); err != nil {
+		t.t().Logf("warning: error reading trace rows: %v", err)
+		return
+	}
+
+	// Build a short, filesystem-safe name from pos (e.g. "\n/long/path/to/jobs:30").
+	// Use only the base filename and line number to avoid exceeding the OS
+	// filename length limit (255 bytes) with long Bazel sandbox paths.
+	cleanPos := strings.TrimLeft(pos, "\n")
+	if i := strings.LastIndex(cleanPos, "/"); i >= 0 {
+		cleanPos = cleanPos[i+1:]
+	}
+	cleanPos = strings.ReplaceAll(cleanPos, ":", "_")
+
+	// Write to the test's log scope directory so that traces appear
+	// alongside CockroachDB logs and survive test failure.
+	if t.traceDir == "" {
+		t.t().Logf("warning: no trace directory configured; skipping trace dump")
+		return
+	}
+	filename := filepath.Join(t.traceDir, fmt.Sprintf("trace_%s.txt", cleanPos))
+
+	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
+		t.t().Logf("warning: could not write trace file: %v", err)
+		return
+	}
+	t.t().Logf("session trace written to %s", filename)
 }
 
 // substituteVars replaces all occurrences of "$abc", where "abc" is a variable
@@ -2859,6 +2957,9 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
+					if !stmt.expectAsync {
+						t.enableSessionTracing()
+					}
 					var cont bool
 					var err error
 					if t.retry {
@@ -2871,7 +2972,11 @@ func (t *logicTest) processSubtest(
 					} else {
 						cont, err = t.execStatement(stmt, disableCFMutator)
 					}
+					if !stmt.expectAsync {
+						t.disableSessionTracing()
+					}
 					if err != nil {
+						t.dumpSessionTrace(stmt.pos, stmt.sql)
 						if !cont {
 							return err
 						}
@@ -3185,6 +3290,11 @@ func (t *logicTest) processSubtest(
 			}
 
 			if !s.Skip {
+				// Save the original SQL before kvtrace rewrites it to
+				// a filtering SELECT. We use this for trace-on-error so
+				// the trace dump labels the original statement.
+				origSQL := query.sql
+
 				if query.kvtrace {
 					_, err := t.db.Exec("SET TRACING=on,kv")
 					if err != nil {
@@ -3244,12 +3354,19 @@ func (t *logicTest) processSubtest(
 				}
 
 				for i := 0; i < repeat; i++ {
+					// Enable session tracing unless the query already manages
+					// its own tracing (kvtrace, noticetrace) or runs async.
+					traceThis := !query.kvtrace && !query.noticetrace && !query.expectAsync
+					if traceThis {
+						t.enableSessionTracing()
+					}
+					var queryErr error
 					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}, t.retryDuration); err != nil {
-							t.Error(err)
+							queryErr = err
 						}
 					} else {
 						if t.retry && *rewriteResultsInTestfiles {
@@ -3261,8 +3378,19 @@ func (t *logicTest) processSubtest(
 							time.Sleep(time.Second * 2)
 						}
 						if err := t.execQuery(query); err != nil {
-							t.Error(err)
+							queryErr = err
 						}
+					}
+					if traceThis {
+						t.disableSessionTracing()
+					}
+					if queryErr != nil {
+						// For kvtrace queries, the session trace from the
+						// original statement is still available because the
+						// filtering SELECT doesn't start a new trace. Pass
+						// origSQL so the dump labels the actual statement.
+						t.dumpSessionTrace(query.pos, origSQL)
+						t.Error(queryErr)
 					}
 				}
 			} else {
@@ -4790,6 +4918,7 @@ func RunLogicTest(
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
+		traceDir:                   logScope.GetDirectory(),
 	}
 	lt.allowUnsafe.Store(true)
 	if *printErrorSummary {
