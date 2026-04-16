@@ -234,8 +234,15 @@ func DecodeStoreUnsafeReplicaRecoveryKey(key roachpb.Key) (uuid.UUID, error) {
 
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
-	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
-	key = append(key, NodeLivenessPrefix...)
+	return NodeLivenessKeyWithPrefix(NodeLivenessPrefix, nodeID)
+}
+
+// NodeLivenessKeyWithPrefix returns the key for a node liveness record under
+// the given prefix. This is used by tests that operate on a synthetic liveness
+// keyspace.
+func NodeLivenessKeyWithPrefix(prefix roachpb.Key, nodeID roachpb.NodeID) roachpb.Key {
+	key := make(roachpb.Key, 0, len(prefix)+9)
+	key = append(key, prefix...)
 	key = encoding.EncodeUvarintAscending(key, uint64(nodeID))
 	return key
 }
