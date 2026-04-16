@@ -9,6 +9,8 @@ import (
 	"context"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
@@ -16,6 +18,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// mergePreApplyInput contains the input needed for mergePreApply.
+type mergePreApplyInput struct {
+	// rhsDestroyInfo describes the RHS replica being subsumed.
+	rhsDestroyInfo kvstorage.DestroyReplicaInfo
+}
+
+// mergePreApply is called when the raft merge command is applied. It subsumes
+// the RHS replica.
+//
+// The caller is responsible for flushing the writer after mergePreApply returns.
+func mergePreApply(
+	ctx context.Context, rw kvstorage.ReadWriter, wagWriter *wag.Writer, in mergePreApplyInput,
+) error {
+	return kvstorage.SubsumeReplica(ctx, rw, wagWriter, in.rhsDestroyInfo)
+}
 
 // maybeAssertNoHole, if enabled (see within), starts a watcher that
 // periodically checks the replicasByKey btree for any gaps in the monitored
