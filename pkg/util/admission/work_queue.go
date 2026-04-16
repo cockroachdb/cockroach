@@ -307,11 +307,13 @@ type WorkQueue struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Groups with waiting work. In serverless mode each group is a
-		// SQL tenant keyed by tenant ID; in resource manager mode each
-		// group is a resource group keyed by resource group ID.
+		// Groups with waiting work. In serverless mode each group is a SQL tenant
+		// keyed by tenant ID; in resource manager mode each group is a resource
+		// group keyed by resource group ID. Ordered by burst qualification then
+		// used/weight.
 		groupHeap groupHeap
-		// All groups, including those without waiting work. Periodically cleaned.
+		// All groups, including those without waiting work. Keyed by resource group
+		// ID. Periodically cleaned.
 		groups       map[uint64]*groupInfo
 		groupWeights struct {
 			mu syncutil.Mutex
@@ -325,6 +327,24 @@ type WorkQueue struct {
 			// The maps are lazily allocated.
 			active, inactive map[uint64]uint32
 		}
+		// maxCPUGroups maps resource group ID to whether that group always
+		// qualifies for burst (MAX_CPU). Only used if mode == usesCPUTimeTokens and
+		// admission.cpu_time_tokens.mode == "resource_manager".
+		maxCPUGroups map[uint64]bool
+
+		// useResourceGroup, when true, derives the resource group ID from
+		// WorkInfo.Priority instead of WorkInfo.TenantID. Used in Resource
+		// Manager mode to split work into foreground (priority >= NormalPri)
+		// and background (priority < NormalPri) groups.
+		//
+		// This is a bool rather than a live read of the cluster setting so
+		// that mode transitions can update this and all components have a
+		// consistent view.
+		//
+		// TODO(wenyihu): support mode transitions and consider
+		// replacing this with an enum for serverless vs RM mode.
+		useResourceGroup bool
+
 		// The highest epoch that is closed.
 		closedEpochThreshold int64
 		// Following values are copied from the cluster settings.
@@ -667,7 +687,14 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 type AdmitResponse struct {
 	// If true, admission control is enabled.
 	Enabled bool
-
+	// groupID is the groupID under which this work was admitted. Used by
+	// AdmittedWorkDone to look up the correct groupInfo entry. groupID represents
+	// tenant in Serverless and resource group in resource group manager.
+	// TODO(wenyihu6): need to figure out the proto changes here
+	// TODO(wenyihu6): captures the key at admission time, so AdmittedWorkDone
+	// finds the right entry even if the mode switches between Admit and
+	// AdmittedWorkDone. Need to make sure lookup misses fail gracefully if the
+	// entry has been GCed after a mode switch.
 	groupID roachpb.TenantID
 	// requestedCount is the number of slots or tokens taken at Admit time.
 	// It is useful to return, so that in AdmittedWorkDone, we can adjust
@@ -675,6 +702,47 @@ type AdmitResponse struct {
 	// CPU time token AC, where a grunning-based measurement of CPU time
 	// is available by the time AdmittedWorkDone is called.
 	requestedCount int64
+}
+
+// Resource group IDs used in Resource Manager mode when
+// useResourceGroup is true. Work is split into two groups based on
+// WorkInfo.Priority.
+const (
+	// highResourceGroupID is used for work with priority >= NormalPri.
+	highResourceGroupID uint64 = 1
+	// lowResourceGroupID is used for work with priority < NormalPri.
+	lowResourceGroupID uint64 = 2
+)
+
+// priorityToResourceGroup maps a WorkPriority to one of the two
+// hardcoded resource groups. Used in Resource Manager mode.
+func priorityToResourceGroup(pri admissionpb.WorkPriority) uint64 {
+	if pri >= admissionpb.NormalPri {
+		return highResourceGroupID
+	}
+	return lowResourceGroupID
+}
+
+// setUseResourceGroup enables or disables priority-based resource
+// group derivation. When enabled, the resource group ID is derived
+// from WorkInfo.Priority instead of WorkInfo.TenantID.
+func (q *WorkQueue) setUseResourceGroup(enabled bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.useResourceGroup = enabled
+}
+
+// groupIDForWorkLocked returns the resource group ID for the given
+// WorkInfo. In RM mode (useResourceGroup), the group is derived from
+// WorkInfo.Priority; otherwise it is the TenantID.
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) groupIDForWorkLocked(info WorkInfo) uint64 {
+	q.mu.AssertHeld()
+	if q.mu.useResourceGroup {
+		return priorityToResourceGroup(info.Priority)
+	}
+	return info.TenantID.ToUint64()
 }
 
 // Admit is called when requesting admission for some work. If
@@ -723,12 +791,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	q.metrics.incRequested(info.Priority)
 
-	groupID := info.TenantID.ToUint64()
 	// The code in this method does not use defer to unlock the mutex because it
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
 	// unlocked on all code paths.
 	q.mu.Lock()
+
+	groupID := q.groupIDForWorkLocked(info)
+
 	group, ok := q.mu.groups[groupID]
 	if !ok {
 		// See comment below about CPU time token estimation. If no groupInfo
@@ -736,10 +806,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that group yet. When we create the groupInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all groups.
-		// TODO(wenyihu6): look up maxCPU from per-resource-group config here
+		maxCPU := q.getMaxCPULocked(groupID)
 		group = newGroupInfo(groupID, q.getGroupWeightLocked(groupID),
 			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-			false /* maxCPU */, q.perGroupAggMetrics)
+			maxCPU, q.perGroupAggMetrics)
 		q.mu.groups[groupID] = group
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -756,7 +826,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		info.RequestedCount = group.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
-		groupID:        info.TenantID,
+		groupID:        roachpb.TenantID{InternalValue: groupID},
 		requestedCount: info.RequestedCount,
 	}
 
@@ -870,14 +940,20 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// the state of the requesters to see if there is any queued work that
 		// can be granted admission.
 		q.mu.Lock()
+
+		// Re-derive groupID: the mode may have changed while the lock
+		// was released (though mode transitions are not yet supported).
+		groupID = q.groupIDForWorkLocked(info)
+		admitResponse.groupID = roachpb.TenantID{InternalValue: groupID}
+
 		// The group could have been removed. See the comment where the
 		// groupInfo struct is declared.
 		group, ok = q.mu.groups[groupID]
 		if !ok {
-			// TODO(wenyihu6): look up maxCPU from per-resource-group config here
+			maxCPU := q.getMaxCPULocked(groupID)
 			group = newGroupInfo(groupID, q.getGroupWeightLocked(groupID),
 				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-				false /* maxCPU */, q.perGroupAggMetrics)
+				maxCPU, q.perGroupAggMetrics)
 			q.mu.groups[groupID] = group
 		}
 		q.adjustGroupUsedLocked(group, -info.RequestedCount)
@@ -1313,8 +1389,11 @@ func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int
 }
 
 // refillBurstBuckets adds tokens to all group burst buckets and updates
-// their capacity. This is called by cpuTimeTokenAllocator periodically (every
-// 1ms). If a group's burst qualification changes as a result of the refill,
+// their capacity. This is called by serverlessStrategy.refillBurst
+// periodically (every 1ms). toAdd and capacity are passed uniformly to
+// all tenants with no per-tenant scaling.
+//
+// If a group's burst qualification changes as a result of the refill,
 // the group's position in the groupHeap is updated to maintain correct
 // priority ordering.
 func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
@@ -1322,12 +1401,45 @@ func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
 	defer q.mu.Unlock()
 	q.mu.burstBucketCapacity = capacity
 	for _, group := range q.mu.groups {
-		prevBurstQual := group.cpuTimeBurstBucket.burstQualification()
-		group.cpuTimeBurstBucket.refill(toAdd, capacity)
-		curBurstQual := group.cpuTimeBurstBucket.burstQualification()
-		if prevBurstQual != curBurstQual && isInGroupHeap(group) {
-			q.mu.groupHeap.fix(group)
-		}
+		q.refillBurstBucketLocked(group, toAdd, capacity)
+	}
+}
+
+// refillBurstBucketForGroup adds tokens to a specific resource group's
+// burst bucket and updates its capacity. This is called by
+// rmStrategy.refillBurst with pre-scaled per-group amounts. For example,
+// a group with WEIGHT_CPU=10% gets toAdd and capacity equal to 10% of the
+// 100% CPU rate, so its burst bucket stays at steady state when the
+// group uses ~10% of node CPU.
+// TODO(wenyihu6): actually finish the plumbing from ^
+//
+// If the group's burst qualification changes, its position in the
+// groupHeap is updated.
+//
+// TODO(wenyihu6): investigate whether refill rates need a pre-warming
+// period after RM config changes. A sudden config swap (e.g. changing
+// which groups have maxCPU) could interact poorly with the filler's
+// model if it hasn't had time to stabilize at the new rates.
+func (q *WorkQueue) refillBurstBucketForGroup(groupID uint64, toAdd int64, capacity int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	group, ok := q.mu.groups[groupID]
+	if !ok {
+		return
+	}
+	q.mu.burstBucketCapacity = capacity
+	q.refillBurstBucketLocked(group, toAdd, capacity)
+}
+
+// refillBurstBucketLocked refills a group's burst bucket and fixes its
+// heap position if the burst qualification changed. q.mu must be held.
+func (q *WorkQueue) refillBurstBucketLocked(group *groupInfo, toAdd int64, capacity int64) {
+	q.mu.AssertHeld()
+	prevBurstQual := group.cpuTimeBurstBucket.burstQualification()
+	group.cpuTimeBurstBucket.refill(toAdd, capacity)
+	curBurstQual := group.cpuTimeBurstBucket.burstQualification()
+	if prevBurstQual != curBurstQual && isInGroupHeap(group) {
+		q.mu.groupHeap.fix(group)
 	}
 }
 
@@ -1416,6 +1528,43 @@ func (q *WorkQueue) getGroupWeightLocked(groupID uint64) uint32 {
 		weight = defaultGroupWeight
 	}
 	return weight
+}
+
+// getMaxCPULocked returns the maxCPU flag for the given resource
+// group. Returns false if the group is not in the map. See
+// cpuTimeBurstBucket for how this flag affects burst qualification.
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) getMaxCPULocked(groupID uint64) bool {
+	q.mu.AssertHeld()
+	if q.mu.maxCPUGroups != nil {
+		if maxCPU, ok := q.mu.maxCPUGroups[groupID]; ok {
+			return maxCPU
+		}
+	}
+	return false
+}
+
+// SetMaxCPUGroups replaces all per-resource-group maxCPU flags with
+// the provided map. Groups absent from the map revert to the default
+// (maxCPU=false). Existing groups have their burst buckets updated;
+// new groups will pick up their flag when created. The map is captured
+// by reference; the caller must not modify it after calling.
+func (q *WorkQueue) SetMaxCPUGroups(groups map[uint64]bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.maxCPUGroups = groups
+	for id, group := range q.mu.groups {
+		maxCPU := q.getMaxCPULocked(id)
+		if group.cpuTimeBurstBucket.maxCPU != maxCPU {
+			prevQual := group.cpuTimeBurstBucket.burstQualification()
+			group.cpuTimeBurstBucket.maxCPU = maxCPU
+			curQual := group.cpuTimeBurstBucket.burstQualification()
+			if prevQual != curQual && isInGroupHeap(group) {
+				q.mu.groupHeap.fix(group)
+			}
+		}
+	}
 }
 
 // SetOverrideAllToBypassAdmission sets whether all work should bypass
@@ -1660,13 +1809,14 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 	return priority
 }
 
-// groupInfo is the per-group information in the groupHeap. A group
-// represents a SQL tenant in serverless mode or a resource group in
-// resource manager mode; id is the tenant ID or resource group ID
-// respectively.
+// groupInfo is the per-group information in the groupHeap. In Serverless mode,
+// the resource group ID is the tenant ID. In RM mode with useResourceGroup,
+// the resource group ID is derived from the work's priority (see
+// priorityToResourceGroup).
 type groupInfo struct {
 	id uint64
-	// The weight assigned to the group. Must be > 0.
+	// The weight assigned to the resource group. Must be > 0. For
+	// resource groups, this is WEIGHT_CPU.
 	weight uint32
 	// used is computed over an interval and periodically reset. Ordering
 	// between groups, for fair sharing, utilizes this value.
