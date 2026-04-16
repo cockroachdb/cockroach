@@ -55,47 +55,52 @@ Start simple (event count) and add byte-based limits if needed.
 
 Detailed `sync.Cond` usage for each operation:
 
+**`addRow`** — blocks during flush, then wakes one worker:
+```go
+mu.Lock()
+defer mu.Unlock()
+for flushing && !closed {
+    cond.Wait()  // block new events while Flush is draining
+}
+// ... append event, update heap ...
+cond.Signal()  // one new event can only be taken by one worker
+```
+
 **`getBatch`** (workers) — blocks until actionable work is available:
 ```go
 mu.Lock()
 defer mu.Unlock()
-for !hasActionableWork() {  // must be a for loop, not if (spurious wakeups, stolen work)
+for !hasActionableWork() && !closed {  // no flushing check here
     cond.Wait()
 }
 return buildBatchFromHeap()
 ```
 
-**`addRow`** — wakes one blocked worker:
-```go
-mu.Lock()
-// ... append event, update heap ...
-cond.Signal()  // one new event can only be taken by one worker
-mu.Unlock()
-```
-
 **`completeBatch`** — wakes all blocked waiters (workers and Flush):
 ```go
 mu.Lock()
-// ... remove keys from inflight, re-add to heap if events remain ...
+defer mu.Unlock()
+// ... remove keys from inflight, re-add to heap with oldest remaining mvcc ...
 cond.Broadcast()  // may unblock work for multiple workers
-mu.Unlock()
 ```
 
-**`Flush`** — blocks until all inflight work drains:
+**`Flush`** — blocks addRow and waits for full drain:
 ```go
 mu.Lock()
 defer mu.Unlock()
-s.flushing = true
-for s.totalInflight() > 0 {
+flushing = true
+defer func() { flushing = false; cond.Broadcast() }()
+for (totalInflight > 0 || totalEvents > 0) && termErr == nil && !closed {
     cond.Wait()  // woken by completeBatch's Broadcast
 }
-s.flushing = false
-cond.Broadcast()  // wake workers, flushing is over
 ```
 
-While `flushing` is true, `hasActionableWork()` returns false, preventing
-workers from pulling new batches. Inflight workers continue to completion
-since they are past `getBatch` and do not need to acquire new work to finish.
+**Why Flush blocks `addRow`, not `getBatch`:** The original design blocked
+workers from pulling new batches during Flush. This causes a deadlock when
+Flush must wait for both inflight and pending events: pending events can
+never become inflight (workers are blocked), so Flush waits forever. The
+fix: block new arrivals instead. Workers keep pulling and draining the
+buffer, no new events arrive, and eventually everything drains.
 
 ## Metrics Mapping (Old → New)
 

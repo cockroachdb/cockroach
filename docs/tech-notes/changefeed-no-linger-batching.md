@@ -175,9 +175,10 @@ construction:
 The `noLingerSink` implements the existing `Sink` interface:
 
 - **`EmitRow`**: Calls `addRow` on the pending buffer.
-- **`Flush`**: Stops workers from pulling new batches, waits for all inflight
-  batches to complete, then returns. Same semantics as today (required before
-  emitting resolved timestamps).
+- **`Flush`**: Blocks new `EmitRow` calls (via a flushing gate on `addRow`)
+  and waits for all pending and inflight events to drain. Workers continue
+  pulling batches during Flush — only new arrivals are blocked. Required
+  before emitting resolved timestamps.
 - **`EmitResolvedTimestamp`**: Calls `Flush`, then emits the resolved payload
   via `SinkClient.FlushResolvedPayload`. Same as today.
 - **`Close`**: Signals workers to stop, waits for shutdown.
@@ -191,8 +192,8 @@ work with the updated `BatchBuffer` signature.
 
 ## Rollout Strategy
 
-The `noLingerSink` will be gated behind a cluster setting (on by default) so it
-can be toggled off if issues arise in production. Both `batchingSink` and
+The `noLingerSink` is gated behind a cluster setting (off by default during
+validation) so it can be toggled on for testing and eventually made the default. Both `batchingSink` and
 `noLingerSink` share the same `SinkClient` and `BatchBuffer` interfaces, so the
 cluster setting simply controls which batching/dispatch layer wraps the
 `SinkClient`. The `BatchBuffer` interface refactor (moving topic from
@@ -212,9 +213,10 @@ worker goroutines. Synchronization uses a `sync.Mutex` paired with a single
 - A condition variable coordinates blocking and waking across producers,
   workers, and flush requests. All waiters recheck their own condition on
   wakeup, so one cond serves multiple wait reasons.
-- `addRow` signals one worker (new event). `completeBatch` broadcasts to all
-  (may unblock multiple workers and Flush). During `Flush`, workers are
-  prevented from pulling new batches; inflight workers continue to completion.
+- `addRow` signals one worker (new event) and blocks while a Flush is
+  draining (flushing gate). `completeBatch` broadcasts to all (may unblock
+  multiple workers and Flush). During `Flush`, new `addRow` calls are
+  blocked, but workers continue pulling batches and draining the buffer.
 - This replaces the current single-goroutine batching worker with
   channel-based interface, avoiding the producer-consumer deadlock issues in
   the current design.
@@ -289,34 +291,25 @@ all `SinkClient` implementations (Kafka v2, webhook, pubsub) and update
 refactor with no behavioral change, and unblocks both sinks to share a single
 interface.
 
-### M2: Throughput/Latency Benchmark
+### M2: PendingBuffer + noLingerSink
 
-Build a test that measures throughput and latency for both Kafka and webhook
-sinks under varying load. Two levels:
-- A unit-level benchmark with a mock sink client for fast development iteration.
-- A roachtest against real Kafka/webhook endpoints for real-world validation.
+Implement the full batching algorithm (mvcc-ordered key heap, key grouping,
+`maxMessages`/`maxBytes` limits) and the `noLingerSink` worker loop. The
+original plan split this into incremental steps (FIFO → heap), but the
+heap-based algorithm can be implemented directly. Unit tests should cover
+ordering, conflict avoidance, parallelism, flush draining, error propagation,
+alloc release, multi-topic, and mvcc-based re-queuing.
 
-Establishes a baseline with the current batching sink to compare against.
+### M3: Sink Integration
 
-### M3: Basic Batching Algorithm
+Wire `noLingerSink` into the sink creation path for Kafka, Webhook, and PubSub
+behind a cluster setting (default false initially).
 
-Implement the `PendingBuffer` with `addRow`, `getBatch`, and `completeBatch`
-using a simple FIFO queue. One event per batch. No key-grouping heap, no
-conflict optimization. Includes `sync.Cond` wiring. Unit tested in isolation
-for correctness: ordering, blocking behavior, basic conflict avoidance (skip
-inflight keys).
+### M4: Production Readiness
 
-### M4: IO Loop + Sink Integration
-
-Wire the worker loop to the `PendingBuffer` and connect to the `SinkClient`
-interface. Implement `Flush` and `EmitResolvedTimestamp` to complete the `Sink`
-interface. Gate behind a cluster setting. Can re-run M2 benchmark at this
-point — expected to work but not perform optimally due to naive batching.
-
-### M5: Full Batching Algorithm
-
-Replace the FIFO queue with the global key heap using composite (topic + key)
-hashes. `getBatch` groups events by key to minimize cross-batch conflicts, fills
-batches up to `maxMessages` / `maxBytes`. Re-run M2 benchmark and expect
-performance improvement.
+- Admission pacer integration
+- Buffer bound / backpressure on `addRow`
+- New metrics (`getBatch` wait time, batch fill ratio, buffer depth)
+- Throughput/latency benchmarks
+- Flip cluster setting default to true
 
