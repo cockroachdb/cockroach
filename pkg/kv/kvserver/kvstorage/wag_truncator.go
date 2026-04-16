@@ -8,6 +8,7 @@ package kvstorage
 import (
 	"context"
 	"math"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -40,6 +41,9 @@ type WAGTruncator struct {
 	// truncating WAG nodes. Not having gaps helps us remember where to start
 	// truncation from, and allows us to jump over potential WAG garbage.
 	initIndex uint64
+	// truncIndex is the index of the last WAG node that was successfully
+	// truncated.
+	truncIndex atomic.Uint64
 }
 
 // NewWAGTruncator creates a WAGTruncator.
@@ -51,17 +55,16 @@ func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTrunca
 // Does so iteratively, splitting its work into batches.
 //
 // Returns an error if any occurred during truncation.
-func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context, startIndex uint64) error {
+func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context) error {
 	stateReader := t.eng.StateEngine().NewReader(storage.GuaranteedDurability)
 	defer stateReader.Close()
-	nextIndex := startIndex
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		b := t.eng.LogEngine().NewWriteBatch()
 		truncatedIdx, err := t.truncateAppliedWAGNodeAndClearRaftState(
-			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader, nextIndex,
+			ctx, Raft{RO: t.eng.LogEngine(), WO: b}, stateReader,
 		)
 		if err == nil && truncatedIdx != 0 {
 			err = b.Commit(false /* sync */)
@@ -75,17 +78,14 @@ func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context, startIndex uint
 		}
 		// At this point we know that the last truncation succeeded and the batch
 		// was committed, and we can move on to the next node.
-		nextIndex = truncatedIdx + 1
+		t.truncIndex.Store(truncatedIdx)
 	}
 }
 
-// truncateAppliedWAGNodeAndClearRaftState deletes a WAG node if all of its
-// events have been applied to the state engine. For nodes containing
+// truncateAppliedWAGNodeAndClearRaftState deletes the first WAG node if all of
+// its events have been applied to the state engine. For nodes containing
 // EventDestroy or EventSubsume events, it also clears the corresponding raft
 // log prefix from the engine and the sideloaded entries storage.
-//
-// It iterates from truncateIndex and attempts to delete the first WAG node it
-// sees.
 //
 // Returns the following:
 // - the index of the last WAG node that was deleted, or 0 if no nodes were
@@ -99,9 +99,10 @@ func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context, startIndex uint
 // raft.WO.
 // TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
 func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
-	ctx context.Context, raft Raft, stateRO StateRO, truncateIndex uint64,
+	ctx context.Context, raft Raft, stateRO StateRO,
 ) (uint64, error) {
 	var iter wag.Iterator
+	truncateIndex := t.truncIndex.Load() + 1
 	iterStartKey := keys.StoreWAGNodeKey(truncateIndex)
 	for index, node := range iter.IterFrom(ctx, raft.RO, iterStartKey) {
 		if truncateIndex != index && index > t.initIndex {
