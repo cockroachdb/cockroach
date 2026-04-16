@@ -3598,6 +3598,11 @@ type topLevelQueryStats struct {
 	clientTime time.Duration
 	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
 	kvCPUTimeNanos time.Duration
+	// localKVCPUTime is the SQL goroutine CPU time spent inside KV calls, as
+	// measured by the grunning library. This is the portion of SQL goroutine
+	// CPU that overlapped with KV work (not the CPU consumed on KV servers);
+	// it is subtracted from raw goroutine grunning to derive SQL-only CPU.
+	localKVCPUTime time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3611,6 +3616,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
 	s.kvCPUTimeNanos += other.kvCPUTimeNanos
+	s.localKVCPUTime += other.localKVCPUTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and

@@ -427,6 +427,7 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
+	meta.Metrics.LocalKVCPUTime = s.GetLocalKVCPUTime()
 	trailingMeta = append(trailingMeta, *meta)
 	if !s.flowCtx.Gateway {
 		if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
