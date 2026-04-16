@@ -4924,6 +4924,25 @@ ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR RE
 
 subtest end
 
+subtest regression_168527_add_constraint_unique_storing
+
+statement ok
+CREATE TABLE t_168527 (a INT PRIMARY KEY, b INT, c INT);
+
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_constraint UNIQUE (c) STORING (b);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_constraint (c ASC) STORING (b)%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+statement ok
+DROP TABLE t_168527
+
+subtest end
+
 subtest alter_table_add_column_serial
 
 statement ok
