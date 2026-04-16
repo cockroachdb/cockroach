@@ -689,11 +689,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	}
 	skip.UnderRace(t, "test is too slow to run under race")
 
-	// Aug 30 2021 19:50:00 GMT+0000
-	aggregatedTs := int64(1630353000)
-	oneMinAfterAggregatedTs := aggregatedTs + 60
 	statsKnobs := sqlstats.CreateTestingKnobs()
-	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -707,6 +703,11 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
+	// Use the real current time (truncated to the default 1-hour aggregation
+	// interval) to build the endpoint time range, since AggregatedTs is now
+	// stamped at record time using timeutil.Now().
+	aggregatedTs := timeutil.Now().Truncate(time.Hour).Unix()
+	oneMinAfterAggregatedTs := aggregatedTs + 60
 	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
 	findJobQuery := "SELECT status FROM crdb_internal.jobs WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
 	testAppName := "TestCombinedStatementsWithFullScans"

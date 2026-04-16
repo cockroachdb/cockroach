@@ -127,6 +127,13 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 	return a
 }
 
+func (s *SQLStats) getTimeNow() time.Time {
+	if s.knobs != nil && s.knobs.StubTimeNow != nil {
+		return s.knobs.StubTimeNow()
+	}
+	return timeutil.Now()
+}
+
 // resetAndMaybeDumpStats clears all the stored per-app, per-statement and
 // per-transaction statistics. If target is not nil, then the stats in s will be
 // flushed into target.
@@ -201,6 +208,22 @@ func (s *SQLStats) ObserveTransaction(
 		// under the assumption that we either have a valid transaction
 		// or some statements to work with.
 		return
+	}
+
+	// Compute the aggregation timestamp once for the entire batch so that
+	// all statements and their enclosing transaction land in the same
+	// aggregation window.
+	interval := sqlstats.SQLStatsAggregationInterval.Get(&s.st.SV)
+	aggTs := s.getTimeNow().Truncate(interval)
+	for _, stmt := range statements {
+		if stmt.AggregatedTs.IsZero() {
+			stmt.AggregatedTs = aggTs
+			stmt.AggInterval = interval
+		}
+	}
+	if transaction != nil && transaction.AggregatedTs.IsZero() {
+		transaction.AggregatedTs = aggTs
+		transaction.AggInterval = interval
 	}
 
 	// Retrieve application container.

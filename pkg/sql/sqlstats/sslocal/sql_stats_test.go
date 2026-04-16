@@ -1920,6 +1920,136 @@ func TestTransactionLatencies(t *testing.T) {
 
 }
 
+// TestObserveTransactionStampsAggregationTimestamp verifies that
+// ObserveTransaction stamps all statements and the transaction with the same
+// non-zero AggregatedTs and AggInterval.
+func TestObserveTransactionStampsAggregationTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlstats.SQLStatsAggregationInterval.Override(ctx, &st.SV, time.Hour)
+	sqlstats.MaxMemSQLStatsStmtFingerprints.Override(ctx, &st.SV, 100000)
+	sqlstats.MaxMemSQLStatsTxnFingerprints.Override(ctx, &st.SV, 100000)
+
+	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     mon.MakeName("test-observe"),
+		Settings: st,
+	})
+
+	sqlStats := sslocal.NewSQLStats(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		nil, /* curMemoryBytesCount */
+		nil, /* maxMemoryBytesHist */
+		nil, /* discardedStatsCount */
+		monitor,
+		nil, /* reportingSink */
+		nil, /* knobs */
+	)
+
+	stmts := []*sqlstats.RecordedStmtStats{
+		{
+			FingerprintID: 1,
+			Query:         "SELECT _",
+			App:           "test-app",
+		},
+		{
+			FingerprintID: 2,
+			Query:         "INSERT INTO _ VALUES (_)",
+			App:           "test-app",
+		},
+		{
+			FingerprintID: 3,
+			Query:         "UPDATE _ SET _ = _",
+			App:           "test-app",
+		},
+	}
+	txn := &sqlstats.RecordedTxnStats{
+		FingerprintID: 100,
+		Application:   "test-app",
+		Committed:     true,
+	}
+
+	// Before ObserveTransaction, all timestamps should be zero.
+	for _, s := range stmts {
+		require.True(t, s.AggregatedTs.IsZero())
+	}
+	require.True(t, txn.AggregatedTs.IsZero())
+
+	sqlStats.ObserveTransaction(ctx, txn, stmts)
+
+	// After ObserveTransaction, all should have the same non-zero aggTs.
+	require.False(t, txn.AggregatedTs.IsZero(), "transaction should have non-zero AggregatedTs")
+	require.Equal(t, time.Hour, txn.AggInterval, "transaction should have 1h AggInterval")
+
+	expectedTs := txn.AggregatedTs
+	for i, s := range stmts {
+		require.Equal(t, expectedTs, s.AggregatedTs,
+			"statement %d should have same AggregatedTs as transaction", i)
+		require.Equal(t, time.Hour, s.AggInterval,
+			"statement %d should have 1h AggInterval", i)
+	}
+
+	// Verify the timestamp is properly truncated to the hour boundary.
+	require.Equal(t, 0, expectedTs.Minute(), "aggregated_ts should be truncated to hour")
+	require.Equal(t, 0, expectedTs.Second(), "aggregated_ts should be truncated to hour")
+}
+
+// TestObserveTransactionDoesNotOverwriteExistingTimestamp verifies that
+// ObserveTransaction does not overwrite a pre-set AggregatedTs.
+func TestObserveTransactionDoesNotOverwriteExistingTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlstats.SQLStatsAggregationInterval.Override(ctx, &st.SV, time.Hour)
+	sqlstats.MaxMemSQLStatsStmtFingerprints.Override(ctx, &st.SV, 100000)
+	sqlstats.MaxMemSQLStatsTxnFingerprints.Override(ctx, &st.SV, 100000)
+
+	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     mon.MakeName("test-observe-no-overwrite"),
+		Settings: st,
+	})
+
+	sqlStats := sslocal.NewSQLStats(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		nil, nil, nil,
+		monitor,
+		nil, nil,
+	)
+
+	presetTs := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	stmts := []*sqlstats.RecordedStmtStats{
+		{
+			FingerprintID: 1,
+			Query:         "SELECT _",
+			App:           "test-app",
+			AggregatedTs:  presetTs,
+			AggInterval:   time.Hour,
+		},
+	}
+	txn := &sqlstats.RecordedTxnStats{
+		FingerprintID: 100,
+		Application:   "test-app",
+		AggregatedTs:  presetTs,
+		AggInterval:   time.Hour,
+		Committed:     true,
+	}
+
+	sqlStats.ObserveTransaction(ctx, txn, stmts)
+
+	require.Equal(t, presetTs, stmts[0].AggregatedTs,
+		"pre-set AggregatedTs should not be overwritten")
+	require.Equal(t, presetTs, txn.AggregatedTs,
+		"pre-set AggregatedTs should not be overwritten")
+}
+
 func createNewSqlStats() *sslocal.SQLStats {
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{

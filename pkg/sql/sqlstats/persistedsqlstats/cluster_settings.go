@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
 )
@@ -107,16 +108,8 @@ var SQLStatsCleanupRecurrence = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
-// SQLStatsAggregationInterval is the cluster setting that controls the aggregation
-// interval for stats when we flush to disk.
-var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"sql.stats.aggregation.interval",
-	"the interval at which we aggregate SQL execution statistics upon flush, "+
-		"this value must be greater than or equal to sql.stats.flush.interval",
-	time.Hour,
-	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-)
+// SQLStatsAggregationInterval is an alias for sqlstats.SQLStatsAggregationInterval.
+var SQLStatsAggregationInterval = sqlstats.SQLStatsAggregationInterval
 
 // CompactionJobRowsToDeletePerTxn is the cluster setting that controls
 // how many rows in the statement/transaction_statistics tables gets deleted
