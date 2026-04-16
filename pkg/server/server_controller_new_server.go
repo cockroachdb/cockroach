@@ -354,7 +354,6 @@ func makeSharedProcessTenantServerConfig(
 	// of them will be mostly idle.
 	// We might want to reconsider this if we use more than 1 in-memory tenant at a time.
 	sqlCfg.MemoryPoolSize = kvServerCfg.SQLConfig.MemoryPoolSize
-	sqlCfg.TableStatCacheSize = kvServerCfg.SQLConfig.TableStatCacheSize
 	sqlCfg.QueryCacheSize = kvServerCfg.SQLConfig.QueryCacheSize
 
 	// LocalKVServerInfo tells the rpc.Context of the tenant's server
