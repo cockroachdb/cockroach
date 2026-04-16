@@ -262,7 +262,7 @@ func TestTruncateAppliedOnly(t *testing.T) {
 			tc.setup(t, &e)
 			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
 			require.NoError(t, e.stateEngine.Flush())
-			require.NoError(t, truncator.truncateAppliedNodes(ctx, 0 /* startIndex */))
+			require.NoError(t, truncator.truncateAppliedNodes(ctx))
 			require.Equal(t, tc.wantWAGIndices, e.listWAGNodes(t))
 		})
 	}
@@ -319,7 +319,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 				require.NoError(t, ss.Put(ctx, idx, 1 /* term */, []byte("sst-data")))
 			}
 			require.NoError(t, e.stateEngine.Flush())
-			require.NoError(t, truncator.truncateAppliedNodes(ctx, 1 /* startIndex */))
+			require.NoError(t, truncator.truncateAppliedNodes(ctx))
 			// Raft entries <= 20 belong to the old replica and must be deleted. The
 			// rest shouldn't be deleted by the WAG truncator.
 			require.Equal(t,
@@ -355,19 +355,20 @@ func TestTruncateAppliedNodes(t *testing.T) {
 	sl := MakeStateLoader(r1.RangeID)
 
 	for _, tc := range []struct {
-		wagIndices    []uint64
-		initIndex     uint64
-		wantRemaining []uint64
+		wagIndices     []uint64
+		initIndex      uint64
+		wantRemaining  []uint64
+		wantTruncIndex uint64
 	}{
-		{wagIndices: []uint64{}, initIndex: 0, wantRemaining: nil},
-		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 0, wantRemaining: nil},
-		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 2, wantRemaining: nil},
-		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 4, wantRemaining: nil},
-		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 0, wantRemaining: []uint64{2, 5, 6, 7, 10}},
-		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 2, wantRemaining: []uint64{5, 6, 7, 10}},
-		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 5, wantRemaining: []uint64{10}},
-		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 7, wantRemaining: []uint64{10}},
-		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 10, wantRemaining: nil},
+		{wagIndices: []uint64{}, initIndex: 0, wantRemaining: nil, wantTruncIndex: 0},
+		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 0, wantRemaining: nil, wantTruncIndex: 4},
+		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 2, wantRemaining: nil, wantTruncIndex: 4},
+		{wagIndices: []uint64{1, 2, 3, 4}, initIndex: 4, wantRemaining: nil, wantTruncIndex: 4},
+		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 0, wantRemaining: []uint64{2, 5, 6, 7, 10}, wantTruncIndex: 0},
+		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 2, wantRemaining: []uint64{5, 6, 7, 10}, wantTruncIndex: 2},
+		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 5, wantRemaining: []uint64{10}, wantTruncIndex: 7},
+		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 7, wantRemaining: []uint64{10}, wantTruncIndex: 7},
+		{wagIndices: []uint64{2, 5, 6, 7, 10}, initIndex: 10, wantRemaining: nil, wantTruncIndex: 10},
 	} {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
@@ -379,8 +380,9 @@ func TestTruncateAppliedNodes(t *testing.T) {
 				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 100}))
 			require.NoError(t, e.stateEngine.Flush())
 			truncator.initIndex = tc.initIndex
-			require.NoError(t, truncator.truncateAppliedNodes(ctx, 1 /* startIndex */))
+			require.NoError(t, truncator.truncateAppliedNodes(ctx))
 			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
+			require.Equal(t, tc.wantTruncIndex, truncator.truncIndex.Load())
 		})
 	}
 }
