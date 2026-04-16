@@ -41,19 +41,21 @@ witness is just a `2k+1` configuration in which:
 
 - the witness can only vote when a regular voter would (but may "happen to be
   unavailable") in certain situations
-- it "implicitly" acks every append from a leader it has voted for immediately
-  (it happens to be unavailable for many other appends). The leader toggles
-  this behavior depending on whether it currently relies on the witness for
-  quorum or not.
+- it can promise the leader to not respond to any other append in the term,
+  so the leader can "implicitly" count the witness for commit quorum whenever
+  it needs it. (When the witness is not needed, the leader tells it, which
+  improves availability on leader failure, see below).
 - it "happens to be unavailable" whenever anything would require it to actually
   produce any log entry it may have (implicitly) acked.
 
 As a result of this behavior, the witness doesn't actually need to store the
 log, and the leader doesn't actually need to tell it about the log entries it
-participated in getting quorum for. And, thankfully it turns out that in the
-common case, the witness can actually vote (doesn't have to feign
-unavailability) when it counts: broadly speaking, we have the diagram,
-with n=2k voters (i.e. quorum=k+1) and one witness,
+participated in getting quorum for. In the common case of loss of k=n/2 voters,
+the witness can vote (doesn't have to feign unavailability) and elect a new
+leader (or maintain the existing leader's ability to reach quorum). Only when
+additionally the leader fails is the group unavailable until a majority of
+*voters* becomes available again (perhaps surprisingly, the witness is allowed
+to fail).
 
 	            ┌──────────── k replicas down ───────────┐
 	            │            (witness still up)          │

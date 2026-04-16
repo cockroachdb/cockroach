@@ -308,7 +308,7 @@ func fmtMsgPayload(msg any) (typ, label string) {
 		return "VoteResp", "no"
 	case msgAppendReq:
 		last := m.leader.lastLogMark()
-		return "AppendReq", fmt.Sprintf("AppendReq(through %s)", fmtLogMark(last))
+		return "AppendReq", fmt.Sprintf("AppendReq([... %s])", fmtLogMark(last))
 	case msgAppendResp:
 		return "AppendResp", m.detail
 	case msgEngage:

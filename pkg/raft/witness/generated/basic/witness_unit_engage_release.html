@@ -31,7 +31,7 @@ h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; 
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
 .msg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
-.msg-arc { fill: none; stroke-width: 1.5; }
+.msg-arc { fill: none; stroke-width: 2; }
 .msg-arc.req { stroke: #5a9; }
 .msg-arc.resp { stroke: #a75; }
 .msg-arc.dropped { stroke: #666; stroke-dasharray: 4 3; }
@@ -180,30 +180,24 @@ function renderMessageArcs(messages, posMap, arenaW, arenaH) {
     
     const reqDropped = p.resp.dropped;
     arcs += makeArc(fromPos, toPos, sag, p.req.label,
-      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? 'arr-dropped' : 'arr-req');
+      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? '#666' : '#5a9');
 
     
     if (!p.resp.dropped) {
       arcs += makeArc(toPos, fromPos, -sag * 0.7, p.resp.label,
-        'resp', 'arr-resp');
+        'resp', '#a75');
     }
   }
 
-  const marker = (id, color) =>
-    '<marker id="' + id + '" markerWidth="8" markerHeight="6" ' +
-    'refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="' + color + '"/>' +
-    '</marker>';
-
   return '<svg class="msg-svg" width="' + arenaW + '" height="' + arenaH + '">' +
-    '<defs>' + marker('arr-req', '#5a9') + marker('arr-resp', '#a75') +
-    marker('arr-dropped', '#666') + '</defs>' + arcs + '</svg>';
+    arcs + '</svg>';
 }
 
 
 
 
 
-function makeArc(from, to, sag, label, cls, markerId) {
+function makeArc(from, to, sag, label, cls, color) {
   const mx = (from.x + to.x) / 2;
   const my = (from.y + to.y) / 2;
 
@@ -219,8 +213,8 @@ function makeArc(from, to, sag, label, cls, markerId) {
   
   if (py > 0) { px = -px; py = -py; }
 
-  const cx = mx + px * sag;
-  const cy = my + py * sag;
+  const qx = mx + px * sag;
+  const qy = my + py * sag;
 
   
   const shortenPx = 40;
@@ -231,13 +225,31 @@ function makeArc(from, to, sag, label, cls, markerId) {
   const ex = from.x + (to.x - from.x) * t1;
   const ey = from.y + (to.y - from.y) * t1;
 
-  const path = 'M' + sx + ',' + sy + ' Q' + cx + ',' + cy + ' ' + ex + ',' + ey;
+  const path = 'M' + sx + ',' + sy + ' Q' + qx + ',' + qy + ' ' + ex + ',' + ey;
 
   
-  const lx = 0.25 * sx + 0.5 * cx + 0.25 * ex;
-  const ly = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+  const tdx = ex - qx;
+  const tdy = ey - qy;
+  const tlen = Math.sqrt(tdx * tdx + tdy * tdy);
+  const arrowLen = 10;
+  const arrowW = 5;
+  if (tlen > 1) {
+    var tux = tdx / tlen;
+    var tuy = tdy / tlen;
+  } else {
+    var tux = dx / len;
+    var tuy = dy / len;
+  }
+  
+  const ax1 = ex - tux * arrowLen + tuy * arrowW;
+  const ay1 = ey - tuy * arrowLen - tux * arrowW;
+  const ax2 = ex - tux * arrowLen - tuy * arrowW;
+  const ay2 = ey - tuy * arrowLen + tux * arrowW;
 
   
+  const lx = 0.25 * sx + 0.5 * qx + 0.25 * ex;
+  const ly = 0.25 * sy + 0.5 * qy + 0.25 * ey;
+
   
   let angleDeg = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
   
@@ -250,8 +262,8 @@ function makeArc(from, to, sag, label, cls, markerId) {
   const olx = lx + Math.sin(angleRad) * offsetDist;
   const oly = ly - Math.cos(angleRad) * offsetDist;
 
-  return '<path class="msg-arc ' + cls + '" d="' + path + '" ' +
-    'marker-end="url(#' + markerId + ')"/>' +
+  return '<path class="msg-arc ' + cls + '" d="' + path + '"/>' +
+    '<polygon points="' + ex + ',' + ey + ' ' + ax1 + ',' + ay1 + ' ' + ax2 + ',' + ay2 + '" fill="' + color + '"/>' +
     '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
     'text-anchor="middle" ' +
     'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
