@@ -331,7 +331,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					idx.Predicate = expr
+					idx.Predicate = descpb.Expression(expr)
 				}
 
 				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
@@ -1388,7 +1388,7 @@ func updateNonComputedColExpr(
 	tab *tabledesc.Mutable,
 	col catalog.Column,
 	newExpr tree.Expr,
-	exprField **string,
+	exprField **descpb.Expression,
 	op tree.SchemaExprContext,
 ) error {
 	if col.IsGeneratedAsIdentity() {
@@ -1414,7 +1414,8 @@ func updateNonComputedColExpr(
 			return err
 		}
 
-		*exprField = &s
+		expr := descpb.Expression(s)
+		*exprField = &expr
 	}
 
 	if err := updateSequenceDependencies(params, tab, col, op); err != nil {
@@ -1479,7 +1480,7 @@ func updateSequenceDependencies(
 		colExprKind    tabledesc.ColExprKind
 		colExprContext tree.SchemaExprContext
 		exists         func() bool
-		get            func() string
+		get            func() catpb.Expression
 	}{
 		{
 			colExprKind:    tabledesc.DefaultExpr,
@@ -1497,7 +1498,7 @@ func updateSequenceDependencies(
 		if !colExpr.exists() {
 			continue
 		}
-		untypedExpr, err := parser.ParseExpr(colExpr.get())
+		untypedExpr, err := parser.ParseExpr(string(colExpr.get()))
 		if err != nil {
 			panic(err)
 		}
@@ -2101,7 +2102,7 @@ func dropColumnImpl(
 			idx.CollectKeySuffixColumnIDs().Contains(colToDrop.GetID()) ||
 			idx.CollectSecondaryStoredColumnIDs().Contains(colToDrop.GetID())
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parser.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}
@@ -2146,7 +2147,7 @@ func dropColumnImpl(
 	// Drop non-index-backed unique constraints which reference the column.
 	for _, uwoi := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
 		if uwoi.IsPartial() {
-			expr, err := parser.ParseExpr(uwoi.GetPredicate())
+			expr, err := parser.ParseExpr(string(uwoi.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}

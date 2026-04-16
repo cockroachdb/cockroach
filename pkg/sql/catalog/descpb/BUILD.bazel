@@ -22,6 +22,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/protoreflect",

@@ -7,6 +7,7 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -119,6 +120,15 @@ const (
 
 // PGAttributeNum is a custom type for ColumnDescriptor's PGAttributeNum field.
 type PGAttributeNum = catid.PGAttributeNum
+
+// Expression is a SQL expression encoded as a string.
+type Expression = catpb.Expression
+
+// Statement is a SQL statement encoded as a string.
+type Statement = catpb.Statement
+
+// RoutineBody is a PL/pgSQL routine body encoded as a string.
+type RoutineBody = catpb.RoutineBody
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID = catid.ColumnID

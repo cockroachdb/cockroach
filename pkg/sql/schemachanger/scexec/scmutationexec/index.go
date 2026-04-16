@@ -112,7 +112,7 @@ func (i *immediateVisitor) SetAddedIndexPartialPredicate(
 		return err
 	}
 	idx := mut.AsIndex().IndexDesc()
-	idx.Predicate = string(op.Expr)
+	idx.Predicate = op.Expr
 	return nil
 }
 

@@ -112,7 +112,8 @@ message UniqueWithoutIndexConstraint {
   // Predicate, if it's not empty, indicates that the constraint is a partial
   // unique constraint with Predicate as the expression. Columns are referred to
   // in the expression by their name.
-  optional string predicate = 5 [(gogoproto.nullable) = false];
+  optional string predicate = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 
   // Used within the table descriptor to uniquely identify individual
   // constraints.
@@ -134,7 +135,7 @@ message ColumnDescriptor {
   // as output to display to a user. User defined types within DefaultExpr
   // have been serialized in a internal format. Instead, use one of the
   // schemaexpr.FormatExpr* functions.
-  optional string default_expr = 5;
+  optional string default_expr = 5 [(gogoproto.casttype) = "Expression"];
   reserved 9;
 
   // On update expression to use to populate the column on update if no
@@ -142,7 +143,7 @@ message ColumnDescriptor {
   // as output to display to a user. User defined types within OnUpdateExpr
   // have been serialized in a internal format. Instead, use one of the
   // schemaexpr.FormatExpr* functions.
-  optional string on_update_expr = 18;
+  optional string on_update_expr = 18 [(gogoproto.casttype) = "Expression"];
 
   // A hidden column does not appear in star expansion, but can be referenced in
   // queries and can be viewed when inspecting a table via SHOW CREATE TABLE. A
@@ -183,7 +184,7 @@ message ColumnDescriptor {
   // as output to display to a user. User defined types within ComputeExpr
   // have been serialized in a internal format. Instead, use one of the
   // schemaexpr.FormatExpr* functions.
-  optional string compute_expr = 11;
+  optional string compute_expr = 11 [(gogoproto.casttype) = "Expression"];
 
   // A computed column can be stored or virtual.
   // Virtual can only be true if there is a compute expression.
@@ -446,7 +447,8 @@ message IndexDescriptor {
   // a partial index. Columns are referred to in the expression by their name.
   // TODO(mgartner): Update the comment to explain that columns are referenced
   // by their ID once #49766 is addressed.
-  optional string predicate = 23 [(gogoproto.nullable) = false];
+  optional string predicate = 23 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 
   // UseDeletePreservingEncoding, if true, causes the index to be encoded with
   // an additional bit that indicates whether or not the value has been deleted.
@@ -561,7 +563,8 @@ message TriggerDescriptor {
 
   // An optional boolean condition that must be satisfied for the trigger to
   // execute. Empty if a WHEN clause was not specified.
-  optional string when_expr = 8 [(gogoproto.nullable) = false];
+  optional string when_expr = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 
   // The ID of the function that is executed when the trigger is fired.
   optional uint32 func_id = 9 [(gogoproto.customname) = "FuncID", (gogoproto.nullable) = false,(gogoproto.casttype) = "ID"];
@@ -572,7 +575,8 @@ message TriggerDescriptor {
   // The PL/pgSQL statements that make up the body of the trigger function. This
   // is stored with the trigger descriptor with by-name references to
   // user-defined objects replaced with ID references.
-  optional string func_body = 11 [(gogoproto.nullable) = false];
+  optional string func_body = 11 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "RoutineBody"];
 
   // If true, indicates that the trigger is active.
   optional bool enabled = 12 [(gogoproto.nullable) = false];
@@ -659,7 +663,7 @@ message PrimaryKeySwap {
     // context on what the database is. The default expression should be already
     // serialized in the same internal format as default_expr on the
     // ColumnDescriptor.
-    optional string new_regional_by_row_column_default_expr = 4;
+    optional string new_regional_by_row_column_default_expr = 4 [(gogoproto.casttype) = "Expression"];
   }
   // LocalityConfigSwap is set for ALTER TABLE SET LOCALITY when the command
   // requires PK changes. If set, additional zone configurations are set to
@@ -684,7 +688,8 @@ message ComputedColumnSwap {
   optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
   // inverse_expr is the expression used to compute values for the old column
   // once it is swapped for the new column.
-  optional string inverse_expr = 3 [(gogoproto.nullable) = false];
+  optional string inverse_expr = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 }
 
 // MaterializedViewRefresh is a mutation corresponding to a request to
@@ -735,7 +740,8 @@ message PolicyDescriptor {
 
   // UsingExpr defines the condition applied to read existing rows. If this
   // field is omitted, the policy will not be used for reads.
-  optional string using_expr = 6 [(gogoproto.nullable) = false];
+  optional string using_expr = 6 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 
   // UsingColumnIDs is an ordered list of column IDs used by the USING expression.
   repeated uint32 using_column_ids = 11 [(gogoproto.customname) = "UsingColumnIDs",
@@ -744,7 +750,8 @@ message PolicyDescriptor {
   // WithCheck defines the condition applied to validate new rows during
   // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
   // will serve as a fallback, provided it is defined.
-  optional string with_check_expr = 7 [(gogoproto.nullable) = false];
+  optional string with_check_expr = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Expression"];
 
   // WithCheckColumnIDs is an ordered list of column IDs used by the WITH CHECK
   // expression.
@@ -1068,7 +1075,8 @@ message TableDescriptor {
     // to a user. User defined types within Expr have been serialized
     // in a internal format. Instead, use one of the schemaexpr.FormatExpr*
     // functions.
-    optional string expr = 1 [(gogoproto.nullable) = false];
+    optional string expr = 1 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "Expression"];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
     reserved 4;
@@ -1102,7 +1110,8 @@ message TableDescriptor {
   //
   // Note: The presence of this field is used to determine whether or not
   // a TableDescriptor represents a view.
-  optional string view_query = 24 [(gogoproto.nullable) = false];
+  optional string view_query = 24 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Statement"];
   // IsMaterializedView indicates whether this view is materialized or not.
   // A materialized view has the view query results stored durably on disk
   // as a table. The data on disk is refreshed with the REFRESH MATERIALIZED
@@ -1271,7 +1280,8 @@ message TableDescriptor {
 
   reserved 33;
 
-  optional string create_query = 34 [(gogoproto.nullable) = false];
+  optional string create_query = 34 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "Statement"];
 
   // Starting in 19.2 CreateAsOfTime is initialized to zero for the first
   // version of a table and is populated from the MVCC timestamp of the read
@@ -1944,7 +1954,8 @@ message FunctionDescriptor {
 
   // function_body contains all statements/expression in specified languages in one string.
   // SQL statements in this string are rewritten with fully qualified table names.
-  optional string function_body = 8 [(gogoproto.nullable) = false];
+  optional string function_body = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "RoutineBody"];
 
   optional cockroach.sql.catalog.catpb.Function.Volatility volatility = 9 [(gogoproto.nullable) = false];
   optional bool leak_proof = 10 [(gogoproto.nullable) = false];

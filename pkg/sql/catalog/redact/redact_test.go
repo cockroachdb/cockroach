@@ -65,7 +65,7 @@ $$`)
 		)
 		mut := tabledesc.NewBuilder(view.TableDesc()).BuildCreatedMutableTable()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
-		require.Equal(t, `SELECT k, v, e FROM defaultdb.public.kv WHERE (v != '_') AND (e != '_')`, mut.ViewQuery)
+		require.Equal(t, `SELECT k, v, e FROM defaultdb.public.kv WHERE (v != '_') AND (e != '_')`, string(mut.ViewQuery))
 	})
 
 	t.Run("create table as", func(t *testing.T) {
@@ -74,14 +74,14 @@ $$`)
 		)
 		mut := tabledesc.NewBuilder(ctas.TableDesc()).BuildCreatedMutableTable()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
-		require.Equal(t, `SELECT k, v, e FROM defaultdb.public.kv WHERE (v != '_') AND (e != '_')`, mut.CreateQuery)
+		require.Equal(t, `SELECT k, v, e FROM defaultdb.public.kv WHERE (v != '_') AND (e != '_')`, string(mut.CreateQuery))
 	})
 
 	t.Run("create function sql", func(t *testing.T) {
 		fn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "defaultdb", "public", "f1")
 		mut := funcdesc.NewBuilder(fn.FuncDesc()).BuildCreatedMutableFunction()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
-		require.Equal(t, `SELECT k FROM defaultdb.public.kv WHERE v != '_'; SELECT k FROM defaultdb.public.kv WHERE v = '_'; SELECT k FROM defaultdb.public.kv WHERE e != '_'; SELECT k FROM defaultdb.public.kv WHERE e = '_';`, mut.FunctionBody)
+		require.Equal(t, `SELECT k FROM defaultdb.public.kv WHERE v != '_'; SELECT k FROM defaultdb.public.kv WHERE v = '_'; SELECT k FROM defaultdb.public.kv WHERE e != '_'; SELECT k FROM defaultdb.public.kv WHERE e = '_';`, string(mut.FunctionBody))
 	})
 
 	t.Run("create function plpgsql", func(t *testing.T) {
@@ -96,6 +96,6 @@ BEGIN
 SELECT k FROM defaultdb.public.kv WHERE (v != '_') AND (e != '_':::@100104);
 RETURN x + _;
 END;
-`, mut.FunctionBody)
+`, string(mut.FunctionBody))
 	})
 }

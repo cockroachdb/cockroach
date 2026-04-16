@@ -605,7 +605,7 @@ func setFuncOptions(
 				return err
 			}
 		}
-		udfDesc.SetFuncBody(body)
+		udfDesc.SetFuncBody(descpb.RoutineBody(body))
 	}
 	return nil
 }

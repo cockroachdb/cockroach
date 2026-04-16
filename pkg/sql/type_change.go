@@ -747,9 +747,9 @@ func visitExprToCheckEnumValueUsage(
 // findUsagesOfEnumValue takes an expr, type ID and a enum member of that type,
 // and checks if the expr uses that enum member.
 func findUsagesOfEnumValue(
-	exprStr string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+	exprStr catpb.Expression, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
 ) (bool, error) {
-	expr, err := parser.ParseExpr(exprStr)
+	expr, err := parser.ParseExpr(string(exprStr))
 	if err != nil {
 		return false, err
 	}
@@ -772,7 +772,7 @@ func findUsagesOfEnumValue(
 // findUsagesOfEnumValueInViewQuery takes a view query, type ID and an
 // enum member of that type, and checks if the view query uses that enum member.
 func findUsagesOfEnumValueInViewQuery(
-	viewQuery string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+	viewQuery catpb.Statement, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
 ) (bool, error) {
 	var foundUsage, foundUsageInCurrentWalk bool
 	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -782,7 +782,7 @@ func findUsagesOfEnumValueInViewQuery(
 		return recurse, newExpr, err
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return false, err
 	}
@@ -814,7 +814,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 	}
 	switch udfDesc.GetLanguage() {
 	case catpb.Function_SQL:
-		parsedStmts, err := parser.Parse(udfDesc.GetFunctionBody())
+		parsedStmts, err := parser.Parse(string(udfDesc.GetFunctionBody()))
 		if err != nil {
 			return err
 		}
@@ -828,7 +828,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 			}
 		}
 	case catpb.Function_PLPGSQL:
-		stmt, err := plpgsql.Parse(udfDesc.GetFunctionBody())
+		stmt, err := plpgsql.Parse(string(udfDesc.GetFunctionBody()))
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 		}

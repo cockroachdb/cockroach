@@ -30,7 +30,7 @@ func TestIndexForDisplay(t *testing.T) {
 	table := tree.Name("bar")
 	tableName := tree.MakeTableNameWithSchema(database, catconstants.PublicSchemaName, table)
 
-	compExpr := "a + b"
+	compExpr := catpb.Expression("a + b")
 	cols := []descpb.ColumnDescriptor{
 		// a INT
 		{

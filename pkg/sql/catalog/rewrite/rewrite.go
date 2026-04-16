@@ -117,33 +117,33 @@ func TableDescs(
 			func(expr *string, typ catalog.DescExprType) error {
 				switch typ {
 				case catalog.SQLExpr:
-					newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+					newExpr, err := rewriteTypesInExpr((catpb.Expression)(*expr), descriptorRewrites)
 					if err != nil {
 						return err
 					}
-					*expr = newExpr
+					*expr = string(newExpr)
 
-					newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
+					newExpr, err = rewriteSequencesInExpr((catpb.Expression)(*expr), descriptorRewrites)
 					if err != nil {
 						return err
 					}
-					*expr = newExpr
+					*expr = string(newExpr)
 
-					newExpr, err = rewriteFunctionsInExpr(*expr, descriptorRewrites)
+					newExpr, err = rewriteFunctionsInExpr((catpb.Expression)(*expr), descriptorRewrites)
 					if err != nil {
 						return err
 					}
-					*expr = newExpr
+					*expr = string(newExpr)
 				case catalog.SQLStmt, catalog.PLpgSQLStmt:
 					lang := catpb.Function_SQL
 					if typ == catalog.PLpgSQLStmt {
 						lang = catpb.Function_PLPGSQL
 					}
-					newExpr, err := rewriteRoutineBody(descriptorRewrites, *expr, overrideDB, lang)
+					newExpr, err := rewriteRoutineBody(descriptorRewrites, (catpb.RoutineBody)(*expr), overrideDB, lang)
 					if err != nil {
 						return err
 					}
-					*expr = newExpr
+					*expr = string(newExpr)
 				default:
 					return errors.AssertionFailedf("unexpected expression type")
 				}
@@ -587,7 +587,7 @@ func makeDBNameReplaceFunc(newDB string) func(ctx *tree.FmtCtx, tn *tree.TableNa
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
 // non-empty db qualifiers with `newDB`.
 func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
-	stmt, err := parser.ParseOne(table.ViewQuery)
+	stmt, err := parser.ParseOne(string(table.ViewQuery))
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.Syntax,
 			"failed to parse underlying query from view %q", table.Name)
@@ -598,18 +598,18 @@ func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
 		tree.FmtReformatTableNames(makeDBNameReplaceFunc(newDB)),
 	)
 	f.FormatNode(stmt.AST)
-	table.ViewQuery = f.CloseAndGetString()
+	table.ViewQuery = descpb.Statement(f.CloseAndGetString())
 	return nil
 }
 
 func rewriteFunctionBodyDBNames(
-	fnBody string, newDB string, lang catpb.Function_Language,
-) (string, error) {
+	fnBody catpb.RoutineBody, newDB string, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
 	replaceFunc := makeDBNameReplaceFunc(newDB)
 	switch lang {
 	case catpb.Function_SQL:
 		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-		stmts, err := parser.Parse(fnBody)
+		stmts, err := parser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
@@ -625,10 +625,10 @@ func rewriteFunctionBodyDBNames(
 			fmtCtx.WriteString(f.CloseAndGetString())
 			fmtCtx.WriteString(";")
 		}
-		return fmtCtx.CloseAndGetString(), nil
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
 
 	case catpb.Function_PLPGSQL:
-		stmt, err := plpgsqlparser.Parse(fnBody)
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
@@ -637,7 +637,7 @@ func rewriteFunctionBodyDBNames(
 			tree.FmtReformatTableNames(replaceFunc),
 		)
 		fmtCtx.FormatNode(stmt.AST)
-		return fmtCtx.CloseAndGetString(), nil
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
 
 	default:
 		return "", errors.AssertionFailedf("unexpected function language %s", lang)
@@ -646,35 +646,39 @@ func rewriteFunctionBodyDBNames(
 
 // rewriteTypesInExpr rewrites all explicit ID type references in the input
 // expression string according to rewrites.
-func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, error) {
-	parsed, err := parser.ParseExpr(expr)
+func rewriteTypesInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return "", err
 	}
 	ctx := makeTypeReplaceFmtCtx(rewrites)
 	ctx.FormatNode(parsed)
-	return ctx.CloseAndGetString(), nil
+	return catpb.Expression(ctx.CloseAndGetString()), nil
 }
 
 // rewriteTypesInView rewrites all explicit ID type references in the input view
 // query string according to rewrites.
-func rewriteTypesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (string, error) {
-	stmt, err := parser.ParseOne(viewQuery)
+func rewriteTypesInView(
+	viewQuery catpb.Statement, rewrites jobspb.DescRewriteMap,
+) (catpb.Statement, error) {
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return "", err
 	}
 	ctx := makeTypeReplaceFmtCtx(rewrites)
 	ctx.FormatNode(stmt.AST)
-	return ctx.CloseAndGetString(), nil
+	return catpb.Statement(ctx.CloseAndGetString()), nil
 }
 
 func rewriteTypesInRoutine(
-	fnBody string, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
-) (string, error) {
+	fnBody catpb.RoutineBody, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
 	switch lang {
 	case catpb.Function_SQL:
 		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-		stmts, err := parser.Parse(fnBody)
+		stmts, err := parser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
@@ -687,16 +691,16 @@ func rewriteTypesInRoutine(
 			fmtCtx.WriteString(typeReplaceCtx.CloseAndGetString())
 			fmtCtx.WriteString(";")
 		}
-		return fmtCtx.CloseAndGetString(), nil
+		return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
 
 	case catpb.Function_PLPGSQL:
-		stmt, err := plpgsqlparser.Parse(fnBody)
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
 		typeReplaceCtx := makeTypeReplaceFmtCtx(rewrites)
 		typeReplaceCtx.FormatNode(stmt.AST)
-		return typeReplaceCtx.CloseAndGetString(), nil
+		return catpb.RoutineBody(typeReplaceCtx.CloseAndGetString()), nil
 
 	default:
 		return "", errors.AssertionFailedf("unexpected function language: %v", lang)
@@ -721,8 +725,10 @@ func makeTypeReplaceFmtCtx(rewrites jobspb.DescRewriteMap) *tree.FmtCtx {
 
 // rewriteSequencesInExpr rewrites all sequence IDs in the input expression
 // string according to rewrites.
-func rewriteSequencesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, error) {
-	parsed, err := parser.ParseExpr(expr)
+func rewriteSequencesInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return "", err
 	}
@@ -731,11 +737,13 @@ func rewriteSequencesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string
 	if err != nil {
 		return "", err
 	}
-	return newExpr.String(), nil
+	return catpb.Expression(newExpr.String()), nil
 }
 
-func rewriteFunctionsInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, error) {
-	parsed, err := parser.ParseExpr(expr)
+func rewriteFunctionsInExpr(
+	expr catpb.Expression, rewrites jobspb.DescRewriteMap,
+) (catpb.Expression, error) {
+	parsed, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return "", err
 	}
@@ -765,7 +773,7 @@ func rewriteFunctionsInExpr(expr string, rewrites jobspb.DescRewriteMap) (string
 	if err != nil {
 		return "", err
 	}
-	return newExpr.String(), nil
+	return catpb.Expression(newExpr.String()), nil
 }
 
 func makeSequenceReplaceFunc(
@@ -795,8 +803,10 @@ func makeSequenceReplaceFunc(
 
 // rewriteSequencesInView walks the given viewQuery and
 // rewrites all sequence IDs in it according to rewrites.
-func rewriteSequencesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (string, error) {
-	stmt, err := parser.ParseOne(viewQuery)
+func rewriteSequencesInView(
+	viewQuery catpb.Statement, rewrites jobspb.DescRewriteMap,
+) (catpb.Statement, error) {
+	stmt, err := parser.ParseOne(string(viewQuery))
 	if err != nil {
 		return "", err
 	}
@@ -804,17 +814,17 @@ func rewriteSequencesInView(viewQuery string, rewrites jobspb.DescRewriteMap) (s
 	if err != nil {
 		return "", err
 	}
-	return newStmt.String(), nil
+	return catpb.Statement(newStmt.String()), nil
 }
 
 func rewriteSequencesInFunction(
-	fnBody string, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
-) (string, error) {
+	fnBody catpb.RoutineBody, rewrites jobspb.DescRewriteMap, lang catpb.Function_Language,
+) (catpb.RoutineBody, error) {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	replaceSeqFunc := makeSequenceReplaceFunc(rewrites)
 	switch lang {
 	case catpb.Function_SQL:
-		stmts, err := parser.Parse(fnBody)
+		stmts, err := parser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
@@ -831,7 +841,7 @@ func rewriteSequencesInFunction(
 		}
 
 	case catpb.Function_PLPGSQL:
-		stmt, err := plpgsqlparser.Parse(fnBody)
+		stmt, err := plpgsqlparser.Parse(string(fnBody))
 		if err != nil {
 			return "", err
 		}
@@ -842,7 +852,7 @@ func rewriteSequencesInFunction(
 	default:
 		return "", errors.AssertionFailedf("unexpected function language %s", lang)
 	}
-	return fmtCtx.CloseAndGetString(), nil
+	return catpb.RoutineBody(fmtCtx.CloseAndGetString()), nil
 }
 
 // RewriteIDsInTypesT rewrites all ID's in the input types.T using the input
@@ -873,9 +883,10 @@ func RewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 // rewriteRoutineBody rewrites a set of SQL or PL/pgSQL statements.
 func rewriteRoutineBody(
 	descriptorRewrites jobspb.DescRewriteMap,
-	fnBody, overrideDB string,
+	fnBody catpb.RoutineBody,
+	overrideDB string,
 	fnLang catpb.Function_Language,
-) (string, error) {
+) (catpb.RoutineBody, error) {
 	if overrideDB != "" {
 		dbNameReplaced, err := rewriteFunctionBodyDBNames(fnBody, overrideDB, fnLang)
 		if err != nil {
@@ -1199,7 +1210,7 @@ func rewriteSchemaChangerState(
 			if *expr == "" {
 				return nil
 			}
-			newExpr, err := rewriteTypesInExpr(string(*expr), descriptorRewrites)
+			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
 			if err != nil {
 				return errors.Wrapf(err, "rewriting expression type references: %q", *expr)
 			}
@@ -1211,7 +1222,7 @@ func rewriteSchemaChangerState(
 			if err != nil {
 				return errors.Wrapf(err, "rewriting expression function references: %q", newExpr)
 			}
-			*expr = catpb.Expression(newExpr)
+			*expr = newExpr
 			return nil
 		}); err != nil {
 			return err

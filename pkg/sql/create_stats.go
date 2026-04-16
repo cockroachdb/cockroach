@@ -940,7 +940,7 @@ func createStatsDefaultColumns(
 		// inverted index stats, and json type columns should respect the
 		// sql.stats.non_indexed_json_histograms.enabled cluster setting.
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parser.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return nil, err
 			}

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -269,7 +270,7 @@ func enqueueIndexMutation(
 
 func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 	var all catalog.DescriptorIDSet
-	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+	for _, expr := range [3]*descpb.Expression{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
 		if expr == nil {
 			continue
 		}
@@ -285,7 +286,7 @@ func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 
 func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 	var all catalog.DescriptorIDSet
-	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+	for _, expr := range [3]*descpb.Expression{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
 		if expr == nil {
 			continue
 		}
@@ -299,8 +300,8 @@ func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 	return nil
 }
 
-func sequenceIDsInExpr(expr string) (ids catalog.DescriptorIDSet, _ error) {
-	e, err := parser.ParseExpr(expr)
+func sequenceIDsInExpr(expr catpb.Expression) (ids catalog.DescriptorIDSet, _ error) {
+	e, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return ids, err
 	}

@@ -141,7 +141,7 @@ func (w index) IsCreatedExplicitly() bool {
 // GetPredicate returns the empty string when the index is not partial,
 // otherwise it returns the corresponding expression of the partial index.
 // Columns are referred to in the expression by their name.
-func (w index) GetPredicate() string {
+func (w index) GetPredicate() catpb.Expression {
 	return w.desc.Predicate
 }
 

@@ -95,7 +95,7 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 	if err != nil {
 		return err
 	}
-	fn.SetFuncBody(op.Body.Body)
+	fn.SetFuncBody(descpb.RoutineBody(op.Body.Body))
 	fn.SetLang(op.Body.Lang.Lang)
 	return nil
 }

@@ -1661,7 +1661,7 @@ func ValidateConstraint(
 					return validateUniqueConstraint(
 						ctx, tableDesc, uwi.GetName(),
 						uwi.CollectKeyColumnIDs().Ordered(),
-						uwi.GetPredicate(),
+						string(uwi.GetPredicate()),
 						indexIDForValidation,
 						txn,
 						sessionData.User(),
@@ -1860,7 +1860,7 @@ func countExpectedRowsForInvertedIndex(
 	// exist" error.
 	var colNameOrExpr string
 	if col.IsExpressionIndexColumn() {
-		colNameOrExpr = col.GetComputeExpr()
+		colNameOrExpr = string(col.GetComputeExpr())
 	} else {
 		// Format the column name so that it can be parsed if it has special
 		// characters, like "-" or a newline.
@@ -2222,7 +2222,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					tableDesc,
 					idx.GetName(),
 					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
-					idx.GetPredicate(),
+					string(idx.GetPredicate()),
 					desc.GetPrimaryIndexID(), /* indexIDForValidation */
 					txn,
 					username.NodeUserName(),
@@ -2933,7 +2933,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 				tableDesc,
 				uc.Name,
 				uc.ColumnIDs,
-				uc.Predicate,
+				string(uc.Predicate),
 				0, /* indexIDForValidation */
 				txn,
 				user,

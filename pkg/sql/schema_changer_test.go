@@ -1351,7 +1351,7 @@ CREATE TABLE t.test (
 	if len(tableDesc.EnforcedCheckConstraints()) != 1 {
 		checkExprs := make([]string, 0)
 		for i := range tableDesc.EnforcedCheckConstraints() {
-			checkExprs = append(checkExprs, tableDesc.EnforcedCheckConstraints()[i].GetExpr())
+			checkExprs = append(checkExprs, string(tableDesc.EnforcedCheckConstraints()[i].GetExpr()))
 		}
 		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.EnforcedCheckConstraints()), strings.Join(checkExprs, ", "))
 	}

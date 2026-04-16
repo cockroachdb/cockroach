@@ -21,7 +21,7 @@ import (
 // Returns "" if neither exists.
 func colDefaultExpr(col catalog.Column) string {
 	if col.HasDefault() {
-		return col.GetDefaultExpr()
+		return string(col.GetDefaultExpr())
 	}
 	colType := col.GetType()
 	if colType.TypeMeta.DomainData != nil {

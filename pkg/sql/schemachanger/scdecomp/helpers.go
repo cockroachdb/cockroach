@@ -58,8 +58,8 @@ func maybeMutationStatus(mm catalog.TableElementMaybeMutation) scpb.Status {
 
 // newExpression parses the expression and walks its AST to collect all by-ID
 // type and sequence references into an scpb.Expression expression wrapper.
-func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
-	e, err := parser.ParseExpr(expr)
+func (w *walkCtx) newExpression(expr catpb.Expression) (*scpb.Expression, error) {
+	e, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 		return nil, err
 	}
 	return &scpb.Expression{
-		Expr:                catpb.Expression(expr),
+		Expr:                expr,
 		UsesTypeIDs:         typIDs.Ordered(),
 		UsesSequenceIDs:     seqIDs.Ordered(),
 		UsesFunctionIDs:     referencedFnIDs.Ordered(),
