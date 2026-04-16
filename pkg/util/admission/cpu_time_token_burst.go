@@ -39,7 +39,7 @@ import "github.com/cockroachdb/redact"
 // than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
 //
 // TODO(wenyihu6): refillBurstBuckets currently applies the same uniform
-// toAdd/capacity to all tenants. Add per-group scaling of refill rates.
+// toAdd/capacity to all groups. Add per-group scaling of refill rates.
 type cpuTimeBurstBucket struct {
 	tokens   int64
 	capacity int64
@@ -56,7 +56,7 @@ func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
 	// The bucket of a new group is inited full. This implies that
 	// a group can burst when its work first appears on a KV node.
 	// After <= 1s, the bucket state should track the usage of the
-	// tenant accurately.
+	// group accurately.
 	*m = cpuTimeBurstBucket{
 		tokens:   capacity,
 		capacity: capacity,
