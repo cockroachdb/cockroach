@@ -31,7 +31,7 @@ func TestTxnDecoder(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `CREATE TABLE a (id INT PRIMARY KEY, value STRING)`)
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `CREATE TABLE b (id INT PRIMARY KEY, data INT)`)
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `CREATE TABLE b (id INT PRIMARY KEY, val INT)`)
 
 	descA := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name("a"))
 	descB := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name("b"))

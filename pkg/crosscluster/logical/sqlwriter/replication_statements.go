@@ -6,7 +6,9 @@
 package sqlwriter
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -25,9 +27,11 @@ type ColumnSchema struct {
 }
 
 // GetColumnSchema returns the list of all columns that is decoded by the CRUD
-// writer. It returns columns in column key order. The crud writer passes
-// around a tree.Datums for each row where column[i] is the column definition
-// for datums[i].
+// writer. It returns columns sorted alphabetically by column name so that both
+// clusters in a logical data replication pair use the same deterministic
+// ordering for tie-breaking comparisons. The crud writer passes around a
+// tree.Datums for each row where column[i] is the column definition for
+// datums[i].
 //
 // A column is decoded by crud LDR writer if either are true:
 //  1. The column is part of the primary key. Every primary key column is needed
@@ -38,7 +42,6 @@ type ColumnSchema struct {
 // Notably, this excludes computed columns that are not part of the primary key
 // and system columns like crdb_internal_mvcc_timestamp.
 func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
-	// Create a map of column ID to column for fast lookup
 	primaryIdx := table.GetPrimaryIndex()
 	isPrimaryKey := make(map[catid.ColumnID]bool)
 	for _, col := range primaryIdx.IndexDesc().KeyColumnIDs {
@@ -64,6 +67,12 @@ func GetColumnSchema(table catalog.TableDescriptor) []ColumnSchema {
 			IsComputed:   isComputed,
 		})
 	}
+
+	// Sort by column name so that both clusters use the same
+	// deterministic ordering for LWW tie-breaking comparisons.
+	slices.SortFunc(result, func(a, b ColumnSchema) int {
+		return cmp.Compare(a.Column.GetName(), b.Column.GetName())
+	})
 
 	return result
 }

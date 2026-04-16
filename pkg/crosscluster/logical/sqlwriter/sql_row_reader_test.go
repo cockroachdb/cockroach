@@ -37,13 +37,13 @@ func TestSQLRowReader(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlRunner.Exec(t, "CREATE TABLE defaultdb.tab (pk INT PRIMARY KEY, payload STRING)")
+	sqlRunner.Exec(t, "CREATE TABLE defaultdb.tab (pk INT PRIMARY KEY, val STRING)")
 
 	session := newInternalSession(t, s)
 	defer session.Close(ctx)
 
 	// Insert one row with an origin timetamp
-	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.tab (pk, payload) VALUES ($1, $2)")
+	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.tab (pk, val) VALUES ($1, $2)")
 	require.NoError(t, err)
 	prepared, err := session.Prepare(ctx, "insert", insertStmt, []*types.T{types.Int, types.String})
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestSQLRowReader(t *testing.T) {
 	require.NoError(t, err)
 
 	// Insert one row without an origin timestamp
-	sqlRunner.Exec(t, "INSERT INTO defaultdb.tab (pk, payload) VALUES (20, 'local')")
+	sqlRunner.Exec(t, "INSERT INTO defaultdb.tab (pk, val) VALUES (20, 'local')")
 
 	// Create sqlRowReader for source table
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab")
@@ -75,7 +75,7 @@ func TestSQLRowReader(t *testing.T) {
 	readRowsSql := func(t *testing.T, db *sqlutils.SQLRunner, primaryKeys []int) map[int]PriorRow {
 		sqlRows := db.Query(t, `
 			SELECT pk,
-				   payload,
+				   val,
 				   COALESCE(crdb_internal_origin_timestamp, crdb_internal_mvcc_timestamp) as timestamp,
 				   crdb_internal_origin_timestamp IS NULL as is_local
 			FROM tab
@@ -86,10 +86,10 @@ func TestSQLRowReader(t *testing.T) {
 
 		for sqlRows.Next() {
 			var pk int
-			var payload string
+			var val string
 			var mvccTS string
 			var isLocal bool
-			require.NoError(t, sqlRows.Scan(&pk, &payload, &mvccTS, &isLocal))
+			require.NoError(t, sqlRows.Scan(&pk, &val, &mvccTS, &isLocal))
 
 			mvccDec, _, err := apd.NewFromString(mvccTS)
 			require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestSQLRowReader(t *testing.T) {
 			require.NoError(t, err)
 
 			result[slices.Index(primaryKeys, pk)] = PriorRow{
-				Row:              []tree.Datum{tree.NewDInt(tree.DInt(pk)), tree.NewDString(payload)},
+				Row:              []tree.Datum{tree.NewDInt(tree.DInt(pk)), tree.NewDString(val)},
 				LogicalTimestamp: logicalTimestamp,
 				IsLocal:          isLocal,
 			}

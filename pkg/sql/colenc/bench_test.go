@@ -138,7 +138,7 @@ type noopPutter struct{}
 
 func (n *noopPutter) CPut(key, value interface{}, expValue []byte) {}
 func (n *noopPutter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
 }
 func (n *noopPutter) Put(key, value interface{})                                {}

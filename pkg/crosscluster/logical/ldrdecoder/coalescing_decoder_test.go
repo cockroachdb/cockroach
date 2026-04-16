@@ -225,7 +225,7 @@ func TestEventDecoder_UserDefinedTypes(t *testing.T) {
 			id INT PRIMARY KEY,
 			status status_enum,
 			tags TEXT[],
-			metadata metadata_type
+			user_metadata metadata_type
 		)`)
 	}
 
@@ -243,7 +243,7 @@ func TestEventDecoder_UserDefinedTypes(t *testing.T) {
 	// Build test row with user-defined types
 	enumType := catalog.FindColumnByName(srcDesc, "status").GetType()
 	arrayType := catalog.FindColumnByName(srcDesc, "tags").GetType()
-	tupleType := catalog.FindColumnByName(srcDesc, "metadata").GetType()
+	tupleType := catalog.FindColumnByName(srcDesc, "user_metadata").GetType()
 	testRow := tree.Datums{
 		tree.NewDInt(1),
 		&tree.DEnum{
@@ -275,6 +275,6 @@ func TestEventDecoder_UserDefinedTypes(t *testing.T) {
 
 	// Verify tuple type mapping
 	tuple := row[3].(*tree.DTuple)
-	dstTupleType := catalog.FindColumnByName(dstDesc, "metadata").GetType()
+	dstTupleType := catalog.FindColumnByName(dstDesc, "user_metadata").GetType()
 	require.Equal(t, dstTupleType, tuple.ResolvedType())
 }

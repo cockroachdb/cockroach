@@ -15,11 +15,12 @@ import (
 )
 
 // refresh reads local state for all rows in the batch and builds new
-// transactions with LWW losers filtered out. A row is an LWW loser if the
-// local row's timestamp is >= the incoming transaction's timestamp. Note: we
-// can only filter rows that lose to live rows. If a row loses to a tombstone,
-// we depend on a tryApply's Insert observing a cput error to surface the LWW
-// loser.
+// transactions with LWW losers filtered out. A row is an LWW loser if it
+// loses the IsLwwWinner comparison, which checks timestamps first and
+// breaks ties deterministically by comparing column values. Note: we can
+// only filter rows that lose to live rows. If a row loses to a tombstone,
+// we depend on a tryApply's Insert observing a cput error to surface the
+// LWW loser.
 //
 // The returned transactions preserve the original WriteSet order so
 // that dependent operations (e.g., delete-before-insert for unique key
@@ -74,9 +75,15 @@ func (tw *transactionWriter) refresh(
 			idx := rowIndex{txn: txnIdx, row: rowIdx}
 			pr, rowExists := priorRows[idx]
 
-			if rowExists && !pr.LogicalTimestamp.Less(transaction.TxnID.Timestamp) {
-				results[txnIdx].LwwLoserRows++
-				continue
+			if rowExists {
+				won, err := sqlwriter.IsLwwWinner(transaction.TxnID.Timestamp, pr.LogicalTimestamp, row.Row, pr.Row)
+				if err != nil {
+					return nil, err
+				}
+				if !won {
+					results[txnIdx].LwwLoserRows++
+					continue
+				}
 			}
 
 			refreshedRow := row

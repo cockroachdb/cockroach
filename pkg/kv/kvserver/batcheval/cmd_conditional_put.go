@@ -81,6 +81,7 @@ func ConditionalPut(
 		},
 		AllowIfDoesNotExist: storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
 		OriginTimestamp:     args.OriginTimestamp,
+		ShouldWinTie:        args.ShouldWinOriginTimestampTie,
 	}
 
 	var err error

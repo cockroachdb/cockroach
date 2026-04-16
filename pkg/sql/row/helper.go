@@ -584,6 +584,9 @@ type OriginTimestampCPutHelper struct {
 	// distinguish between a delete of a value that had no columns
 	// in the value vs a delete of a non-existent value.
 	PreviousWasDeleted bool
+	// ShouldWinTie, if true, causes the OriginTimestamp comparison
+	// to be inclusive so that this write wins on equal timestamps.
+	ShouldWinTie bool
 }
 
 func (oh *OriginTimestampCPutHelper) IsSet() bool {
@@ -604,7 +607,7 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 			oh.OriginTimestamp,
 		)
 	}
-	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
 }
 
 func (oh *OriginTimestampCPutHelper) DelWithCPut(
@@ -615,7 +618,7 @@ func (oh *OriginTimestampCPutHelper) DelWithCPut(
 			ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp,
 		)
 	}
-	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp)
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
 }
 
 func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {

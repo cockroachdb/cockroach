@@ -78,7 +78,13 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 2)
 	defer server.Stopper().Stop(ctx)
 
-	// Create test table on both databases
+	// Recreate the table with column names that preserve alphabetical order:
+	// pk < val, so the datum order matches the column definition order.
+	for _, r := range runners {
+		r.Exec(t, "DROP TABLE tab")
+		r.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING)")
+	}
+
 	destRunner := runners[1]
 
 	// Create a tombstone updater
@@ -99,8 +105,8 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	destRunner.Exec(t, "INSERT INTO tab VALUES (1, 42)")
 
 	row := tree.Datums{
-		tree.NewDInt(tree.DInt(1)), // k
-		tree.DNull,                 // v (deleted)
+		tree.NewDInt(tree.DInt(1)), // pk
+		tree.DNull,                 // val (deleted)
 	}
 
 	_, err := tu.updateTombstone(ctx, nil, s.Clock().Now(), row)
@@ -119,7 +125,7 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), destRunner, jobID)
 
 	// Verify the row still exists in the destination
-	destRunner.CheckQueryResults(t, "SELECT pk, payload FROM tab", [][]string{
+	destRunner.CheckQueryResults(t, "SELECT pk, val FROM tab", [][]string{
 		{"1", "42"},
 	})
 }

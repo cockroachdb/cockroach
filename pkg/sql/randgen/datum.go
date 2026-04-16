@@ -369,6 +369,9 @@ func RandDatumWithNullChance(
 	case types.TSQueryFamily:
 		return tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
 	case types.PGVectorFamily:
+		if width := typ.Width(); width > 0 {
+			return tree.NewDPGVector(vector.MakeRandom(rng, int(width)))
+		}
 		var maxDim = 1000
 		if util.RaceEnabled {
 			// Some tests might be significantly slower under race, so we reduce

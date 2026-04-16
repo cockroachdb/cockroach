@@ -20,7 +20,7 @@ import (
 // encoding logic to kv.Batch.
 type Putter interface {
 	CPut(key, value interface{}, expValue []byte)
-	CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp)
+	CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool)
 	Put(key, value interface{})
 	PutMustAcquireExclusiveLock(key, value interface{})
 	Del(key ...interface{})
@@ -47,10 +47,10 @@ func (t *TracePutter) CPut(key, value interface{}, expValue []byte) {
 }
 
 func (t *TracePutter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
 	log.VEventfDepth(t.Ctx, 1, 2, "CPutWithOriginTimestamp %v -> %v @ %v", key, value, ts)
-	t.Putter.CPutWithOriginTimestamp(key, value, expValue, ts)
+	t.Putter.CPutWithOriginTimestamp(key, value, expValue, ts, shouldWinTie)
 }
 
 func (t *TracePutter) Put(key, value interface{}) {
@@ -182,9 +182,9 @@ func (s *SortingPutter) CPut(key, value interface{}, expValue []byte) {
 }
 
 func (s *SortingPutter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
-	s.Putter.CPutWithOriginTimestamp(key, value, expValue, ts)
+	s.Putter.CPutWithOriginTimestamp(key, value, expValue, ts, shouldWinTie)
 }
 
 func (s *SortingPutter) Put(key, value interface{}) {
@@ -279,9 +279,9 @@ type KVBatchAdapter struct {
 var _ Putter = &KVBatchAdapter{}
 
 func (k *KVBatchAdapter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, originTimestamp hlc.Timestamp,
+	key, value interface{}, expValue []byte, originTimestamp hlc.Timestamp, shouldWinTie bool,
 ) {
-	k.Batch.CPutWithOriginTimestamp(key, value, expValue, originTimestamp)
+	k.Batch.CPutWithOriginTimestamp(key, value, expValue, originTimestamp, shouldWinTie)
 }
 
 func (k *KVBatchAdapter) CPut(key, value interface{}, expValue []byte) {

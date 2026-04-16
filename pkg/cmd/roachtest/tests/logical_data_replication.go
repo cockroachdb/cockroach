@@ -457,6 +457,27 @@ func TestLDRConflict(
 
 	c.Run(ctx, option.WithNodes(setup.workloadNode), "./workload", "init", "conflict", leftURL)
 
+	// Log the generated schema and indexes for debugging.
+	var discard, createTable string
+	setup.left.sysSQL.QueryRow(t, "SHOW CREATE TABLE conflict.conflict").Scan(&discard, &createTable)
+	t.L().Printf("generated schema:\n%s", createTable)
+
+	rows := setup.left.sysSQL.Query(t, "SHOW INDEXES FROM conflict.conflict")
+	defer rows.Close()
+	t.L().Printf("indexes:")
+	cols, _ := rows.Columns()
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("  %v", vals)
+	}
+
 	t.Status("creating bidirectional replication job")
 	setup.right.sysSQL.QueryRow(t, `
 	CREATE LOGICALLY REPLICATED TABLE conflict.conflict FROM TABLE conflict.conflict

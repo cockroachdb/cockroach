@@ -81,33 +81,33 @@ func TestNewTableConstraints(t *testing.T) {
 			name: "multiple unique constraints",
 			createStmt: `
 				CREATE TABLE test3 (
-					id INT PRIMARY KEY,
-					email STRING UNIQUE,
-					username STRING UNIQUE,
-					data STRING
+					a_pk INT PRIMARY KEY,
+					b_email STRING UNIQUE,
+					c_username STRING UNIQUE,
+					d_data STRING
 				)
 			`,
 			tableName:         "test3",
 			primaryKeyColumns: []int32{0},
 			wantUniqueColumns: [][]int32{
-				{1}, // unique "email"
-				{2}, // unique "username"
+				{1}, // unique "b_email"
+				{2}, // unique "c_username"
 			},
 		},
 		{
 			name: "unique without index constraint",
 			createStmt: `
 				CREATE TABLE test_uwi (
-					id INT PRIMARY KEY,
-					a INT,
+					a INT PRIMARY KEY,
 					b INT,
-					UNIQUE WITHOUT INDEX (a, b)
+					c INT,
+					UNIQUE WITHOUT INDEX (b, c)
 				)
 			`,
 			tableName:         "test_uwi",
 			primaryKeyColumns: []int32{0},
 			wantUniqueColumns: [][]int32{
-				{1, 2}, // unique without index (a, b)
+				{1, 2}, // unique without index (b, c)
 			},
 		},
 	}
