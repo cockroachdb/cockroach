@@ -1,53 +1,50 @@
 # Basic raft interactions: elections, proposals, replication, leader transitions.
-# The witness vote is dropped throughout — witness interactions belong in
-# scenario/.
+# No witness — witness interactions belong in scenario/.
 
 add-voters
 v1: [a1]
 v2: [a1 b2]
 ----
-v1: [a1] term=a cfg=(v1 v2 w)
-v2: [a1 b2] term=b cfg=(v1 v2 w)
+v1: [a1] term=a cfg=(v1 v2)
+v2: [a1 b2] term=b cfg=(v1 v2)
 
 # v2 campaigns. Its log is more up-to-date, everyone votes yes.
-campaign v2 drop=(w)
+campaign v2
 ----
 v2 campaigns at term c
 v2: yes (self)
 v1: yes
-w:  (dropped)
 outcome: won
 
 # Propose and replicate. Both voters have the entries, quorum reached.
 propose v2
 ----
-v1: [a1] term=c cfg=(v1 v2 w)
-v2: [a1 b2 c3 c4] term=c cfg=(v1 v2 w) leader
+v1: [a1] term=c cfg=(v1 v2)
+v2: [a1 b2 c3 c4] term=c cfg=(v1 v2) leader
 
 append v2
 ----
 v2 appends through c4
 v1: ok
-v1: [a1 b2 c3 c4] term=c cfg=(v1 v2 w)
-v2: [a1 b2 c3 c4] term=c cfg=(v1 v2 w) committed=c4 leader
+v1: [a1 b2 c3 c4] term=c cfg=(v1 v2)
+v2: [a1 b2 c3 c4] term=c cfg=(v1 v2) committed=c4 leader
 
 # Leader transition: v1 campaigns. Logs match, all yes.
-campaign v1 drop=(w)
+campaign v1
 ----
 v1 campaigns at term d
 v1: yes (self)
 v2: yes
-w:  (dropped)
 outcome: won
 
 propose v1
 ----
-v1: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2 w) leader
-v2: [a1 b2 c3 c4] term=d cfg=(v1 v2 w)
+v1: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2) leader
+v2: [a1 b2 c3 c4] term=d cfg=(v1 v2)
 
 append v1
 ----
 v1 appends through d6
 v2: ok
-v1: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2 w) committed=d6 leader
-v2: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2 w)
+v1: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2) committed=d6 leader
+v2: [a1 b2 c3 c4 d5 d6] term=d cfg=(v1 v2)

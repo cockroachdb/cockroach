@@ -1,0 +1,104 @@
+# A voter goes down. The leader engages the witness to maintain commit quorum,
+# then later releases it and transitions back to voter-based commits.
+#
+# Two voters, one witness. Quorum = 2.
+
+add-voters
+v1: [a1]
+v2: [a1]
+w
+----
+v1: [a1] term=a cfg=(v1 v2 w)
+v2: [a1] term=a cfg=(v1 v2 w)
+
+# v1 wins election. Witness vote is dropped to keep setup minimal.
+campaign v1 drop=(w)
+----
+v1 campaigns at term b
+v1: yes (self)
+v2: yes
+w:  (dropped)
+outcome: won
+
+# v1 proposes an entry. v2 is down (partitioned from here on).
+# Matches: [v1=3, v2=0, w=0]. Quorum match = 0, not committed.
+propose v1
+----
+v1: [a1 b2 b3] term=b cfg=(v1 v2 w) leader
+v2: [a1] term=b cfg=(v1 v2 w)
+
+append v1 drop=(v2)
+----
+v1 appends through b3
+v2: (dropped)
+v1: [a1 b2 b3] term=b cfg=(v1 v2 w) leader
+v2: [a1] term=b cfg=(v1 v2 w)
+
+# v1 engages the witness. Now it counts toward quorum.
+# Matches: [v1=3, v2=0, w=3]. Quorum match = 3, committed!
+engage v1
+----
+ok
+w:  vote=(b, -) acked=(b3, engaged)
+v1: [a1 b2 b3] term=b cfg=(v1 v2 w) committed=b3 leader
+
+# Same append as before — but now with the witness engaged, committed advances.
+append v1 drop=(v2)
+----
+v1 appends through b3
+v2: (dropped)
+v1: [a1 b2 b3] term=b cfg=(v1 v2 w) committed=b3 leader
+v2: [a1] term=b cfg=(v1 v2 w)
+
+# v2 tries to campaign (v1 partitioned away). The witness rejects: v2's last
+# log entry a1 is from term a, which doesn't prove any leader was elected after
+# the term b leader that engaged the witness. Without that proof, granting a
+# vote could let v2 form a quorum that misses entries the witness helped commit.
+campaign v2 drop=(v1)
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: (dropped)
+w:  no
+outcome: lost
+
+# v1 releases the witness, returning to voter-based commits.
+release v1
+----
+ok
+w:  vote=(b, -) acked=(b3, released)
+
+# v2 tries again after the release. The witness is no longer engaged, but its
+# acked high-water mark b3 is still ahead of v2's last log entry a1. The
+# witness won't vote for a candidate whose log doesn't cover what it has acked.
+campaign v2 drop=(v1)
+----
+v2 campaigns at term d
+v2: yes (self)
+v1: (dropped)
+w:  no
+outcome: lost
+
+# v1 re-campaigns to catch up to v2's term bumps. v2 rejects (v1's campaign
+# term c is stale compared to v2's term d), but the witness grants.
+campaign v1
+----
+v1 campaigns at term c
+v1: yes (self)
+v2: no, stale term c < d
+w:  yes
+outcome: won
+
+# v2 comes back online. v1 proposes and replicates to v2, committing via the
+# traditional v1+v2 quorum — no witness engagement needed.
+propose v1
+----
+v1: [a1 b2 b3 c4 c5] term=c cfg=(v1 v2 w) leader
+v2: [a1] term=d cfg=(v1 v2 w)
+
+append v1
+----
+v1 appends through c5
+v2: ok
+v1: [a1 b2 b3 c4 c5] term=c cfg=(v1 v2 w) committed=c5 leader
+v2: [a1 b2 b3 c4 c5] term=d cfg=(v1 v2 w)

@@ -2,15 +2,13 @@
 vote from=v1 term=a lm=a0
 ----
 ok
-vote:  (a, v1)
-acked: none
+w:  vote=(a, v1) acked=none
 
 # Idempotent: same vote accepted again.
 vote from=v1 term=a lm=a0
 ----
 ok
-vote:  (a, v1)
-acked: none
+w:  vote=(a, v1) acked=none
 
 # Same term, different candidate: rejected (already voted).
 vote from=v2 term=a lm=a0
@@ -26,16 +24,14 @@ rejected
 vote from=v2 term=b lm=a0
 ----
 ok
-vote:  (b, v2)
-acked: none
+w:  vote=(b, v2) acked=none
 
 # Higher term but log behind our acked hi: rejected.
 # First set up some acked state.
 set
 term=c voted-for=v1 hi=c10 engaged=false
 ----
-vote:  (c, v1)
-acked: (c10, released)
+w:  vote=(c, v1) acked=(c10, released)
 
 vote from=v2 term=d lm=c9
 ----
@@ -45,5 +41,4 @@ rejected
 vote from=v2 term=d lm=c10
 ----
 ok
-vote:  (d, v2)
-acked: none
+w:  vote=(d, v2) acked=none

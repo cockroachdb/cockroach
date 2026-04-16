@@ -40,8 +40,9 @@ func (v testVoter) lastLogMark() raft.LogMark {
 
 // testEnv holds the witness state and any voters added for scenario modeling.
 type testEnv struct {
-	w      State
-	voters []testVoter
+	w          State
+	hasWitness bool
+	voters     []testVoter
 	// matchIndex tracks what the current leader believes each peer's
 	// match index to be. Reset when a new leader is elected.
 	matchIndex map[raftpb.PeerID]uint64
@@ -78,10 +79,12 @@ func (e *testEnv) updateLeaderCommitted() {
 		matches = append(matches, e.matchIndex[v.id])
 	}
 	// Witness: if the leader believes it's engaged, it matches everything.
-	if ldr.witnessEngaged {
-		matches = append(matches, uint64(len(ldr.log)))
-	} else {
-		matches = append(matches, 0)
+	if e.hasWitness {
+		if ldr.witnessEngaged {
+			matches = append(matches, uint64(len(ldr.log)))
+		} else {
+			matches = append(matches, 0)
+		}
 	}
 	slices.Sort(matches)
 	quorum := len(matches)/2 + 1
@@ -99,7 +102,9 @@ func (e *testEnv) fmtConfig() string {
 	for _, v := range e.voters {
 		parts = append(parts, fmt.Sprintf("v%d", v.id))
 	}
-	parts = append(parts, "w")
+	if e.hasWitness {
+		parts = append(parts, "w")
+	}
 	return "(" + strings.Join(parts, " ") + ")"
 }
 
@@ -149,29 +154,30 @@ func TestDataDrivenWitness(t *testing.T) {
 			case "vote":
 				from, term, lm := scanVoteArgs(t, d)
 				next, ok := env.w.HandleMsgVote(ctx, from, term, lm)
-				return fmtResult(&env.w, next, ok)
+				return fmtWitnessResult(&env.w, next, ok)
 			case "engage":
 				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgEngage(ctx, term, lm)
-				result := fmtResult(&env.w, next, ok)
+				result := fmtWitnessResult(&env.w, next, ok)
 				if ok && ldr != nil {
 					ldr.witnessEngaged = true
 					env.updateLeaderCommitted()
+					result += "\n" + fmtVoterLine(*ldr, env.fmtConfig())
 				}
 				return result
 			case "release":
 				ldr, term, lm := scanEngageReleaseArgs(t, d, &env)
 				next, ok := env.w.HandleMsgRelease(ctx, term, lm)
-				result := fmtResult(&env.w, next, ok)
+				result := fmtWitnessResult(&env.w, next, ok)
 				if ok && ldr != nil {
 					ldr.witnessEngaged = false
 				}
 				return result
 			case "state":
-				return fmtState(env.w)
+				return fmtWitness(env.w)
 			case "set":
 				handleSet(t, d, &env.w)
-				return fmtState(env.w)
+				return fmtWitness(env.w)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 				return ""
@@ -186,9 +192,14 @@ func handleAddVoters(t *testing.T, d *datadriven.TestData, env *testEnv) string 
 		if line == "" {
 			continue
 		}
+		// "w" on its own line adds the witness.
+		if line == "w" {
+			env.hasWitness = true
+			continue
+		}
 		colonIdx := strings.IndexByte(line, ':')
 		if colonIdx < 0 {
-			t.Fatalf("invalid voter line (expected 'vN: [...]'): %s", line)
+			t.Fatalf("invalid voter line (expected 'vN: [...]' or 'w'): %s", line)
 		}
 		id := mustParsePeerID(t, strings.TrimSpace(line[:colonIdx]))
 		logStr := strings.TrimSpace(line[colonIdx+1:])
@@ -240,7 +251,10 @@ func handleCampaign(
 	candidate.votedFor = candidate.id
 	candidateLastLM := candidate.lastLogMark()
 
-	totalMembers := len(env.voters) + 1 // voters + witness
+	totalMembers := len(env.voters)
+	if env.hasWitness {
+		totalMembers++ // voters + witness
+	}
 	quorum := totalMembers/2 + 1
 	yesCount := 0
 
@@ -272,17 +286,19 @@ func handleCampaign(
 		}
 	}
 
-	// Witness votes.
-	if dropped["w"] {
-		fmt.Fprintf(&buf, "w:  (dropped)\n")
-	} else {
-		next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
-		if ok {
-			env.w = next
-			fmt.Fprintf(&buf, "w:  yes\n")
-			yesCount++
+	// Witness votes (only if present).
+	if env.hasWitness {
+		if dropped["w"] {
+			fmt.Fprintf(&buf, "w:  (dropped)\n")
 		} else {
-			fmt.Fprintf(&buf, "w:  no\n")
+			next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
+			if ok {
+				env.w = next
+				fmt.Fprintf(&buf, "w:  yes\n")
+				yesCount++
+			} else {
+				fmt.Fprintf(&buf, "w:  no\n")
+			}
 		}
 	}
 
@@ -331,8 +347,8 @@ func handlePropose(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 }
 
 // handleAppend simulates a leader replicating its log to followers. Followers
-// accept the append if their log is a prefix of the leader's (simplified log
-// matching). Responses from peers in the drop set are not counted.
+// adopt the leader's log, truncating any divergent suffix. Peers in the drop
+// set are not contacted.
 func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.Context) string {
 	if len(d.CmdArgs) < 1 {
 		t.Fatal("usage: append <vN> [drop=(<ids>)]")
@@ -362,19 +378,29 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 			continue
 		}
-		ok, reason := followerAcceptsAppend(v, leader)
-		if ok {
-			// Recognize sender as leader: bump term, step down.
-			if leader.term > v.term {
-				v.term = leader.term
-				v.votedFor = 0
+
+		// Recognize sender as leader: bump term, step down.
+		if leader.term > v.term {
+			v.term = leader.term
+			v.votedFor = 0
+		}
+		v.leader = false
+
+		// Find common prefix length, then truncate and adopt leader's log.
+		common := 0
+		for common < len(v.log) && common < len(leader.log) {
+			if v.log[common].Term != leader.log[common].Term {
+				break
 			}
-			v.leader = false
-			v.log = append([]raft.LogMark{}, leader.log...)
-			env.matchIndex[v.id] = uint64(len(leader.log))
-			fmt.Fprintf(&buf, "%s: ok\n", label)
+			common++
+		}
+		replaced := len(v.log) - common
+		v.log = append(v.log[:common], leader.log[common:]...)
+		env.matchIndex[v.id] = uint64(len(leader.log))
+		if replaced > 0 {
+			fmt.Fprintf(&buf, "%s: ok, replaced %d entries\n", label, replaced)
 		} else {
-			fmt.Fprintf(&buf, "%s: rejected, %s\n", label, reason)
+			fmt.Fprintf(&buf, "%s: ok\n", label)
 		}
 	}
 
@@ -383,35 +409,16 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 	return buf.String()
 }
 
-// followerAcceptsAppend checks whether a follower's log is compatible with the
-// leader's for a simplified append. The follower's log must be a prefix of the
-// leader's log (matching terms at each index).
-func followerAcceptsAppend(follower *testVoter, leader *testVoter) (ok bool, reason string) {
-	for i, lm := range follower.log {
-		if i >= len(leader.log) {
-			return false, fmt.Sprintf(
-				"follower log longer (%d > %d)", len(follower.log), len(leader.log),
-			)
-		}
-		if lm.Term != leader.log[i].Term {
-			return false, fmt.Sprintf(
-				"log diverges at index %d (%s vs %s)",
-				i+1, fmtLogMark(lm), fmtLogMark(leader.log[i]),
-			)
-		}
-	}
-	return true, ""
-}
-
 // voterGrantsVote decides whether a voter grants a vote to the candidate.
 // It updates the voter's state (term, votedFor) as a side effect.
 func voterGrantsVote(
 	v *testVoter, candidateID raftpb.PeerID, campaignTerm raftpb.Term, candidateLastLM raft.LogMark,
 ) (granted bool, reason string) {
-	// Bump term if needed.
+	// Bump term if needed; step down if we were leader.
 	if campaignTerm > v.term {
 		v.term = campaignTerm
 		v.votedFor = 0
+		v.leader = false
 	}
 
 	if campaignTerm < v.term {
@@ -498,31 +505,31 @@ func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
 	}
 }
 
-func fmtResult(w *State, next State, ok bool) string {
+func fmtWitnessResult(w *State, next State, ok bool) string {
 	if ok {
 		*w = next
-		return "ok\n" + fmtState(*w)
+		return "ok\n" + fmtWitness(*w)
 	}
 	return "rejected"
 }
 
-func fmtState(s State) string {
-	var buf strings.Builder
+func fmtWitness(s State) string {
+	var vote, acked string
 	if s.Vote == (Vote{}) {
-		buf.WriteString("vote:  none\n")
+		vote = "none"
 	} else if s.Vote.VotedFor == 0 {
-		fmt.Fprintf(&buf, "vote:  (%s, -)\n", fmtTerm(s.Vote.Term))
+		vote = fmt.Sprintf("(%s, -)", fmtTerm(s.Vote.Term))
 	} else {
-		fmt.Fprintf(&buf, "vote:  (%s, v%d)\n", fmtTerm(s.Vote.Term), s.Vote.VotedFor)
+		vote = fmt.Sprintf("(%s, v%d)", fmtTerm(s.Vote.Term), s.Vote.VotedFor)
 	}
 	if s.Acked == (Acked{}) {
-		buf.WriteString("acked: none")
+		acked = "none"
 	} else if s.Acked.Engaged {
-		fmt.Fprintf(&buf, "acked: (%s, engaged)", fmtLogMark(s.Acked.Hi))
+		acked = fmt.Sprintf("(%s, engaged)", fmtLogMark(s.Acked.Hi))
 	} else {
-		fmt.Fprintf(&buf, "acked: (%s, released)", fmtLogMark(s.Acked.Hi))
+		acked = fmt.Sprintf("(%s, released)", fmtLogMark(s.Acked.Hi))
 	}
-	return buf.String()
+	return fmt.Sprintf("w:  vote=%s acked=%s", vote, acked)
 }
 
 // mustParsePeerID converts "v<N>" to a raftpb.PeerID.

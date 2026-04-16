@@ -6,8 +6,7 @@
 set
 term=a voted-for=v1 hi=a5 engaged=true
 ----
-vote:  (a, v1)
-acked: (a5, engaged)
+w:  vote=(a, v1) acked=(a5, engaged)
 
 # Candidate at term b with log ending at a5: rejected.
 # The candidate's last log term (a) is not ahead of our vote term (a), so
@@ -32,31 +31,27 @@ rejected
 vote from=v2 term=b lm=b1
 ----
 ok
-vote:  (b, v2)
-acked: none
+w:  vote=(b, v2) acked=none
 
 # Same scenario but candidate is from a much higher term.
 set
 term=a voted-for=v1 hi=a5 engaged=true
 ----
-vote:  (a, v1)
-acked: (a5, engaged)
+w:  vote=(a, v1) acked=(a5, engaged)
 
 # Candidate from term e with log at c3: accepted.
 # Log term c > vote term a proves disengagement is safe.
 vote from=v3 term=e lm=c3
 ----
 ok
-vote:  (e, v3)
-acked: none
+w:  vote=(e, v3) acked=none
 
 # Engagement was released (not engaged), candidate log behind hi: rejected
 # on log-up-to-date check, not engagement.
 set
 term=a voted-for=v1 hi=a5 engaged=false
 ----
-vote:  (a, v1)
-acked: (a5, released)
+w:  vote=(a, v1) acked=(a5, released)
 
 vote from=v2 term=b lm=a4
 ----
@@ -66,8 +61,7 @@ rejected
 vote from=v2 term=b lm=a5
 ----
 ok
-vote:  (b, v2)
-acked: none
+w:  vote=(b, v2) acked=none
 
 # Witness learns of term b through an engage, then the leader requests a
 # vote in that same term. The witness hasn't voted for anyone in term b yet,
@@ -75,19 +69,16 @@ acked: none
 set
 term=a voted-for=v1
 ----
-vote:  (a, v1)
-acked: none
+w:  vote=(a, v1) acked=none
 
 engage term=b lm=b1
 ----
 ok
-vote:  (b, -)
-acked: (b1, engaged)
+w:  vote=(b, -) acked=(b1, engaged)
 
 # Leader now asks for our vote in term b. We haven't voted yet in this term,
 # so this is granted, preserving the existing acked state.
 vote from=v1 term=b lm=b1
 ----
 ok
-vote:  (b, v1)
-acked: (b1, engaged)
+w:  vote=(b, v1) acked=(b1, engaged)

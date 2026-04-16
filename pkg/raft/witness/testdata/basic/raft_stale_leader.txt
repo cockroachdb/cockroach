@@ -1,0 +1,131 @@
+# Stale leader falls behind, loses election, gets its log truncated when the
+# new leader replicates to it.
+#
+# Four voters, no witness. Quorum = 3.
+
+add-voters
+v1: [a1]
+v2: [a1]
+v3: [a1]
+v4: [a1]
+----
+v1: [a1] term=a cfg=(v1 v2 v3 v4)
+v2: [a1] term=a cfg=(v1 v2 v3 v4)
+v3: [a1] term=a cfg=(v1 v2 v3 v4)
+v4: [a1] term=a cfg=(v1 v2 v3 v4)
+
+# v1 wins election.
+campaign v1
+----
+v1 campaigns at term b
+v1: yes (self)
+v2: yes
+v3: yes
+v4: yes
+outcome: won
+
+# v1 proposes two entries but does NOT replicate them.
+propose v1
+----
+v1: [a1 b2 b3] term=b cfg=(v1 v2 v3 v4) leader
+v2: [a1] term=b cfg=(v1 v2 v3 v4)
+v3: [a1] term=b cfg=(v1 v2 v3 v4)
+v4: [a1] term=b cfg=(v1 v2 v3 v4)
+
+propose v1
+----
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4) leader
+v2: [a1] term=b cfg=(v1 v2 v3 v4)
+v3: [a1] term=b cfg=(v1 v2 v3 v4)
+v4: [a1] term=b cfg=(v1 v2 v3 v4)
+
+# v2 campaigns. v1 is dropped (partitioned). v2 wins with v3+v4.
+# v1 is not contacted so it stays at term b, still believing it's leader.
+campaign v2 drop=(v1)
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: (dropped)
+v3: yes
+v4: yes
+outcome: won
+
+# v2 proposes an entry.
+propose v2
+----
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
+v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) leader
+v3: [a1] term=c cfg=(v1 v2 v3 v4)
+v4: [a1] term=c cfg=(v1 v2 v3 v4)
+
+# v2 appends to v3 only. Matches: [0, 3, 3, 0]. Quorum match = 0, not committed.
+append v2 drop=(v1, v4)
+----
+v2 appends through c3
+v1: (dropped)
+v3: ok
+v4: (dropped)
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
+v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) leader
+v3: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
+v4: [a1] term=c cfg=(v1 v2 v3 v4)
+
+# v2 appends to v3 and v4. Matches: [0, 3, 3, 3]. Quorum match = 3, committed.
+append v2 drop=(v1)
+----
+v2 appends through c3
+v1: (dropped)
+v3: ok
+v4: ok
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
+v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) committed=c3 leader
+v3: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
+v4: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
+
+# v1 tries to campaign. It's at term b, so it campaigns at term c.
+# Everyone already voted for v2 in term c, so v1 is rejected.
+campaign v1
+----
+v1 campaigns at term c
+v1: yes (self)
+v2: no, already voted for v2
+v3: no, already voted for v2
+v4: no, already voted for v2
+outcome: lost
+
+# v1 tries again at term d. Now the log-up-to-date check kicks in: v2/v3/v4's
+# last entry c3 has a higher term than v1's b4, so they reject.
+# Side effect: everyone bumps to term d, v2 loses leader status.
+campaign v1
+----
+v1 campaigns at term d
+v1: yes (self)
+v2: no, log not up to date (c3 > b4)
+v3: no, log not up to date (c3 > b4)
+v4: no, log not up to date (c3 > b4)
+outcome: lost
+
+# v2 must re-campaign to resume leadership after the term bump.
+# v1's log ends at b4 which is not ahead of v2's c3 (term c > b), so v1
+# grants the vote despite having more entries.
+campaign v2
+----
+v2 campaigns at term e
+v2: yes (self)
+v1: yes
+v3: yes
+v4: yes
+outcome: won
+
+# v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets
+# truncated and replaced with v2's log [c2 c3 e4].
+append v2
+----
+v2 appends through e4
+v1: ok, replaced 3 entries
+v3: ok
+v4: ok
+v1: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
+v2: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4) committed=e4 leader
+v3: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
+v4: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
