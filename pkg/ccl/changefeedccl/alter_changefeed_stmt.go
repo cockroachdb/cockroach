@@ -390,6 +390,7 @@ func finalizeAlterChangefeed(
 	resultsCh chan<- tree.Datums,
 ) error {
 	prevDescription := job.Payload().Description
+	prevDetails := job.Details().(jobspb.ChangefeedDetails)
 
 	newPayload := job.Payload()
 	newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
@@ -423,6 +424,13 @@ func finalizeAlterChangefeed(
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	prevScope := prevDetails.Opts[changefeedbase.OptMetricsScope]
+	newScope := newDetails.Opts[changefeedbase.OptMetricsScope]
+	if normalizeSLIScope(prevScope) != normalizeSLIScope(newScope) {
+		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+		metrics.ClusterMetrics.DeleteJob(jobID, prevScope)
 	}
 
 	telemetry.Count(telemetryPath)

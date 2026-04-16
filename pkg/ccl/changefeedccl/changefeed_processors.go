@@ -1342,6 +1342,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
 	cf.metrics = cf.FlowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 
+	// Attach changefeed cluster metrics to the local writer so values
+	// flush to system.cluster_metrics. Idempotent and a no-op if the
+	// writer is nil (test setups that bypass the SQL server).
+	execCfg := cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	cf.metrics.ClusterMetrics.RegisterClusterMetric(execCfg.ClusterMetricsWriter)
+
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
@@ -1750,6 +1756,9 @@ func (cf *changeFrontier) maybeCheckpoint(
 	// checkpoint_progress metric which will return the lowest timestamp across
 	// all feeds in the scope.
 	cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
+	cf.metrics.ClusterMetrics.SetCheckpointLag(
+		cf.spec.JobID, cf.spec.Feed.Opts[changefeedbase.OptMetricsScope], newResolved.WallTime,
+	)
 
 	return cf.maybeEmitResolved(ctx, newResolved)
 }
