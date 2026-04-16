@@ -4920,7 +4920,73 @@ create table t_124546(a int);
 
 # Regression Test for https://github.com/cockroachdb/cockroach/issues/124546
 statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESSION INDEX ELEMENT
+ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( a );
+
+skipif config local-legacy-schema-changer
+statement error index "ident" already contains column "ident"
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
+
+subtest end
+
+subtest regression_168527_add_constraint_unique_storing
+
+statement ok
+CREATE TABLE t_168527 (a INT PRIMARY KEY, b INT, c INT, d INT);
+
+# Test STORING clause.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing UNIQUE (c) STORING (b);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing (c ASC) STORING (b)%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test partial unique constraint (WHERE predicate).
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_partial UNIQUE (d) WHERE d > 0;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_partial (d ASC) WHERE d > 0%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test STORING combined with WHERE predicate.
+statement ok
+ALTER TABLE t_168527 ADD CONSTRAINT t_168527_storing_partial UNIQUE (c) STORING (d) WHERE c > 100;
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_storing_partial (c ASC) STORING (d) WHERE c > 100%'
+FROM [SHOW CREATE t_168527]
+----
+true
+
+# Test PARTITION BY clause.
+statement ok
+CREATE TABLE t_168527_part (a INT PRIMARY KEY, b INT, c INT) PARTITION BY LIST (a) (
+  PARTITION p1 VALUES IN (1, 2, 3),
+  PARTITION p2 VALUES IN (4, 5, 6)
+);
+
+statement ok
+ALTER TABLE t_168527_part ADD CONSTRAINT t_168527_part_idx UNIQUE (b) PARTITION BY LIST (b) (
+  PARTITION bp1 VALUES IN (10, 20),
+  PARTITION bp2 VALUES IN (30, 40)
+);
+
+query B
+SELECT create_statement LIKE '%UNIQUE INDEX t_168527_part_idx (b ASC) PARTITION BY LIST (b)%'
+FROM [SHOW CREATE t_168527_part]
+----
+true
+
+statement ok
+DROP TABLE t_168527_part;
+
+statement ok
+DROP TABLE t_168527
 
 subtest end
 
