@@ -68,7 +68,6 @@ func TestMaybeRefreshStats(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -230,7 +229,6 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 
 	internalDB := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -332,7 +330,6 @@ func BenchmarkEnsureAllTables(b *testing.B) {
 
 			internalDB := s.InternalDB().(descs.DB)
 			cache := NewTableStatisticsCache(
-				10, /* cacheSize */
 				s.ClusterSettings(),
 				s.InternalDB().(descs.DB),
 				s.AppStopper(),
@@ -406,7 +403,6 @@ func TestAverageRefreshTime(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -656,7 +652,6 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	internalDB := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -712,7 +707,6 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 
 	internalDB := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -760,7 +754,6 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	internalDB := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -878,7 +871,6 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -999,7 +991,6 @@ func TestAutoStatsDisabledReadOnlyTenant(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
@@ -1075,7 +1066,6 @@ func TestEstimateStaleness(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
