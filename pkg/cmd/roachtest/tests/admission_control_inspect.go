@@ -44,7 +44,7 @@ func makeInspectAdmissionControlTest(
 	return registry.TestSpec{
 		Name:                fmt.Sprintf("inspect/admission-control/nodes=%d/cpu=%d/rows=%d", numCRDBNodes, numCPUs, numRows),
 		Timeout:             timeout,
-		Owner:               registry.OwnerSQLFoundations,
+		Owner:               registry.OwnerSQLQueries,
 		Benchmark:           true,
 		CompatibleClouds:    registry.AllExceptAWS,
 		Suites:              registry.Suites(registry.Weekly),
