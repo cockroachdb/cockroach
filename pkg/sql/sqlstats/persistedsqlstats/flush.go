@@ -29,16 +29,12 @@ import (
 )
 
 type flushBucket struct {
-	aggInterval  time.Duration
-	aggregatedTs time.Time
-	nodeID       base.SQLInstanceID
+	nodeID base.SQLInstanceID
 }
 
 func (s *PersistedSQLStats) getBucket() flushBucket {
 	return flushBucket{
-		aggInterval:  s.GetAggregationInterval(),
-		aggregatedTs: s.ComputeAggregatedTs(),
-		nodeID:       s.GetEnabledSQLInstanceID(),
+		nodeID: s.GetEnabledSQLInstanceID(),
 	}
 }
 
@@ -186,9 +182,14 @@ func (s *PersistedSQLStats) flush(
 	txnStats []*appstatspb.CollectedTransactionStatistics,
 ) {
 	if s.cfg.Knobs != nil && s.cfg.Knobs.FlushInterceptor != nil {
-		s.cfg.Knobs.FlushInterceptor(ctx, stopper, flushBucket.aggregatedTs, stmtStats, txnStats)
+		s.cfg.Knobs.FlushInterceptor(ctx, stopper, stmtStats, txnStats)
 		return
 	}
+
+	// Backstop for mixed-version compatibility: stats drained from older
+	// nodes may lack per-stat timestamps. Fill them in to avoid writing
+	// zero timestamps to the system tables.
+	s.ensureAggregationTimestamps(stmtStats, txnStats)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -277,6 +278,36 @@ func (s *PersistedSQLStats) GetAggregationInterval() time.Duration {
 	return SQLStatsAggregationInterval.Get(&s.cfg.Settings.SV)
 }
 
+// ensureAggregationTimestamps fills in zero-valued AggregatedTs and
+// AggregationInterval on any stats that lack them. This provides a
+// backstop for mixed-version rolling upgrades where older nodes drain
+// stats without per-stat timestamps.
+func (s *PersistedSQLStats) ensureAggregationTimestamps(
+	stmtStats []*appstatspb.CollectedStatementStatistics,
+	txnStats []*appstatspb.CollectedTransactionStatistics,
+) {
+	var fallbackTs time.Time
+	var fallbackInterval time.Duration
+	getFallback := func() (time.Time, time.Duration) {
+		if fallbackTs.IsZero() {
+			fallbackInterval = s.GetAggregationInterval()
+			fallbackTs = s.ComputeAggregatedTs()
+		}
+		return fallbackTs, fallbackInterval
+	}
+
+	for _, stat := range stmtStats {
+		if stat.AggregatedTs.IsZero() {
+			stat.AggregatedTs, stat.AggregationInterval = getFallback()
+		}
+	}
+	for _, stat := range txnStats {
+		if stat.AggregatedTs.IsZero() {
+			stat.AggregatedTs, stat.AggregationInterval = getFallback()
+		}
+	}
+}
+
 func (s *PersistedSQLStats) getTimeNow() time.Time {
 	if s.cfg.Knobs != nil && s.cfg.Knobs.StubTimeNow != nil {
 		return s.cfg.Knobs.StubTimeNow()
@@ -321,13 +352,13 @@ func doFlushTxnStats(
 		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
 			i*7+1, i*7+2, i*7+3, i*7+4, i*7+5, i*7+6, i*7+7))
 		args = append(args,
-			bucket.aggregatedTs,     // aggregated_ts
-			serializedFingerprintID, // fingerprint_id
-			stat.App,                // app_name
-			bucket.nodeID,           // node_id
-			bucket.aggInterval,      // agg_interval
-			metadata,                // metadata
-			statistics,              // statistics
+			stat.AggregatedTs,        // aggregated_ts
+			serializedFingerprintID,  // fingerprint_id
+			stat.App,                 // app_name
+			bucket.nodeID,            // node_id
+			stat.AggregationInterval, // agg_interval
+			metadata,                 // metadata
+			statistics,               // statistics
 		)
 	}
 
@@ -391,13 +422,13 @@ func doFlushStmtStats(
 			i*11+1, i*11+2, i*11+3, i*11+4, i*11+5, i*11+6, i*11+7, i*11+8, i*11+9, i*11+10, i*11+11))
 
 		args = append(args,
-			flushBucket.aggregatedTs,           // aggregated_ts
+			stat.AggregatedTs,                  // aggregated_ts
 			serializedFingerprintID,            // fingerprint_id
 			serializedTransactionFingerprintID, // transaction_fingerprint_id
 			serializedPlanHash,                 // plan_hash
 			stat.Key.App,                       // app_name
 			flushBucket.nodeID,                 // node_id
-			flushBucket.aggInterval,            // agg_interval
+			stat.AggregationInterval,           // agg_interval
 			metadata,                           // metadata
 			statistics,                         // statistics
 			plan,                               // plan

@@ -7106,8 +7106,13 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				// Prefer per-stat timestamp; fall back to query-time
+				// computation for mixed-version compatibility.
+				stmtAggTs := statistics.AggregatedTs
+				if stmtAggTs.IsZero() {
+					stmtAggTs = curAggTs
+				}
+				aggregatedTs, err := tree.MakeDTimestampTZ(stmtAggTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7131,8 +7136,12 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				}
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
+				stmtAggInterval := statistics.AggregationInterval
+				if stmtAggInterval == 0 {
+					stmtAggInterval = aggInterval
+				}
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(stmtAggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				indexRecommendations := tree.NewDArray(types.String)
@@ -7541,8 +7550,13 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			}, func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				// Prefer per-stat timestamp; fall back to query-time
+				// computation for mixed-version compatibility.
+				txnAggTs := statistics.AggregatedTs
+				if txnAggTs.IsZero() {
+					txnAggTs = curAggTs
+				}
+				aggregatedTs, err := tree.MakeDTimestampTZ(txnAggTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7559,8 +7573,12 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 					return err
 				}
 
+				txnAggInterval := statistics.AggregationInterval
+				if txnAggInterval == 0 {
+					txnAggInterval = aggInterval
+				}
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(txnAggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				row = append(row[:0],

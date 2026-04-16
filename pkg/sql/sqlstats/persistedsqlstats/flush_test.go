@@ -918,7 +918,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 			DisableElasticCPUAdmission: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, aggregatedTs time.Time, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
+					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
 						for _, stmt := range stmtStats {
 							if stmt.Key.App == appName {
 								flushedStmtStats++
@@ -1005,6 +1005,104 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 		require.Equal(t, 2, flushedStmtStats)
 		require.Equal(t, 2, flushedTxnStats)
 	})
+}
+
+// TestFlushUsesRecordTimeAggregatedTs verifies that stats carry their own
+// aggregated_ts from record time and that the flush path writes those
+// per-stat timestamps to the system tables. Previously, the flush path
+// computed a single aggregated_ts at flush time and applied it uniformly,
+// which could attribute stats to the wrong aggregation window when the
+// flush was delayed.
+func TestFlushUsesRecordTimeAggregatedTs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Record the current hour boundary before executing any queries. The
+	// recording-time aggregated_ts must be truncated to this boundary.
+	// We also accept the next hour in case the test crosses an hour boundary.
+	now := timeutil.Now()
+	expectedAggTs := now.Truncate(time.Hour)
+	nextHourAggTs := expectedAggTs.Add(time.Hour)
+
+	var interceptedStmts []*appstatspb.CollectedStatementStatistics
+	var interceptedTxns []*appstatspb.CollectedTransactionStatistics
+	var mu syncutil.Mutex
+
+	appName := "record_time_agg_test"
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				FlushInterceptor: func(
+					ctx context.Context,
+					stopper *stop.Stopper,
+					stmtStats []*appstatspb.CollectedStatementStatistics,
+					txnStats []*appstatspb.CollectedTransactionStatistics,
+				) {
+					mu.Lock()
+					defer mu.Unlock()
+					for _, s := range stmtStats {
+						if s.Key.App == appName {
+							interceptedStmts = append(interceptedStmts, s)
+						}
+					}
+					for _, tx := range txnStats {
+						if tx.App == appName {
+							interceptedTxns = append(interceptedTxns, tx)
+						}
+					}
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	obsConn := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'")
+	sqlConn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+
+	sqlConn.Exec(t, "SELECT 1")
+	sqlConn.Exec(t, "SELECT 1, 2")
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 2,
+		sqlstatstestutil.StatementFilter{App: appName})
+
+	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	pss.MaybeFlush(ctx, s.AppStopper())
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.NotEmpty(t, interceptedStmts, "expected intercepted statement stats")
+	require.NotEmpty(t, interceptedTxns, "expected intercepted transaction stats")
+
+	// Every flushed stat must carry a non-zero AggregatedTs that was set at
+	// record time (by ObserveTransaction), not by the flush path.
+	for _, stmt := range interceptedStmts {
+		require.False(t, stmt.AggregatedTs.IsZero(),
+			"statement stat should have non-zero AggregatedTs (query: %s)", stmt.Key.Query)
+		require.NotZero(t, stmt.AggregationInterval,
+			"statement stat should have non-zero AggregationInterval")
+		aggTs := stmt.AggregatedTs.UTC()
+		require.True(t, aggTs.Equal(expectedAggTs) || aggTs.Equal(nextHourAggTs),
+			"statement AggregatedTs %v should match recording-time hour boundary %v (or %v if hour rolled over)",
+			aggTs, expectedAggTs, nextHourAggTs)
+	}
+	for _, txn := range interceptedTxns {
+		require.False(t, txn.AggregatedTs.IsZero(),
+			"transaction stat should have non-zero AggregatedTs")
+		require.NotZero(t, txn.AggregationInterval,
+			"transaction stat should have non-zero AggregationInterval")
+		aggTs := txn.AggregatedTs.UTC()
+		require.True(t, aggTs.Equal(expectedAggTs) || aggTs.Equal(nextHourAggTs),
+			"transaction AggregatedTs %v should match recording-time hour boundary %v (or %v if hour rolled over)",
+			aggTs, expectedAggTs, nextHourAggTs)
+	}
 }
 
 type stubTime struct {
