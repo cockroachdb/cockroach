@@ -437,7 +437,6 @@
 /pkg/cmd/cr2pg/              @cockroachdb/sql-foundations
 /pkg/cmd/dev/                @cockroachdb/dev-inf
 #!/pkg/cmd/docgen/             @cockroachdb/docs-infra-prs
-/pkg/cmd/docs-issue-generation/ @cockroachdb/dev-inf
 /pkg/cmd/drt*                @cockroachdb/drp-eng
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-foundations
