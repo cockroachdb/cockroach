@@ -47,6 +47,7 @@ import (
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -95,14 +96,6 @@ const (
 var (
 	invalidVersionRE = regexp.MustCompile(`[^a-zA-Z0-9\.]`)
 	invalidDBNameRE  = regexp.MustCompile(`[\-\.:/]`)
-
-	// retry options while waiting for a backup to complete
-	backupCompletionRetryOptions = retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     1 * time.Minute,
-		Multiplier:     1.5,
-		MaxRetries:     80,
-	}
 
 	v231CV = "23.1"
 
@@ -1928,12 +1921,11 @@ func (d *BackupRestoreTestDriver) backupCollectionName(
 }
 
 // waitForJobSuccess waits for the given job with the given ID to
-// succeed (according to `backupCompletionRetryOptions`). Returns an
-// error if the job doesn't succeed within the attempted retries.
+// succeed. Returns an error if the job doesn't succeed within the
+// attempted retries.
 func (u *CommonTestUtils) waitForJobSuccess(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int, internalSystemJobs bool,
 ) (resErr error) {
-	var lastErr error
 	node := u.RandomNode(rng, u.roachNodes)
 	l.Printf("querying job status through node %d", node)
 
@@ -1951,7 +1943,14 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	if internalSystemJobs {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
-	r := retry.StartWithCtx(ctx, backupCompletionRetryOptions)
+
+	var lastStatus jobs.State
+	logThrottler := util.Every(30 * time.Second)
+	r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Second,
+		MaxDuration:    80 * time.Minute,
+	})
 	for r.Next() {
 		var status string
 		var payloadBytes []byte
@@ -1959,26 +1958,26 @@ func (u *CommonTestUtils) waitForJobSuccess(
 			fmt.Sprintf(`SELECT status, payload FROM %s`, jobsQuery), jobID,
 		).Scan(&status, &payloadBytes)
 		if err != nil {
-			lastErr = fmt.Errorf("error reading (status, payload) for job %d: %w", jobID, err)
-			l.Printf("%v", lastErr)
+			l.Printf("error reading (status, payload) for job %d: %v", jobID, err)
 			continue
 		}
 
 		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				lastErr = fmt.Errorf("job %d failed with error: %s", jobID, payload.Error)
+				return fmt.Errorf("job %d failed with error: %s", jobID, payload.Error)
 			} else {
-				lastErr = fmt.Errorf("job %d failed, and could not unmarshal payload: %w", jobID, err)
+				return fmt.Errorf("job %d failed, and could not unmarshal payload: %w", jobID, err)
 			}
-
-			l.Printf("%v", lastErr)
-			break
 		}
 
 		if expected, actual := jobs.StateSucceeded, jobs.State(status); expected != actual {
-			lastErr = fmt.Errorf("job %d: current status %q, waiting for %q", jobID, actual, expected)
-			l.Printf("%v", lastErr)
+			// Log current status if there has been a change or if it has been long
+			// enough since the last update.
+			if logThrottler.ShouldProcess(timeutil.Now()) || lastStatus != actual {
+				l.Printf("job %d: current status %q, waiting for %q", jobID, actual, expected)
+			}
+			lastStatus = actual
 			continue
 		}
 
@@ -1986,11 +1985,11 @@ func (u *CommonTestUtils) waitForJobSuccess(
 		return nil
 	}
 
-	if r.CurrentAttempt() >= backupCompletionRetryOptions.MaxRetries {
-		return fmt.Errorf("exhausted all %d retries waiting for job %d to finish, last err: %w", backupCompletionRetryOptions.MaxRetries, jobID, lastErr)
+	if err := ctx.Err(); err != nil {
+		return errors.Wrapf(err, "error waiting for job %d to finish", jobID)
 	}
 
-	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
+	return errors.Newf("retries exhausted waiting for job %d to finish", jobID)
 }
 
 // computeTableContents will generate a list of `tableContents`
