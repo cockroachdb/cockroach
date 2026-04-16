@@ -63,12 +63,10 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 	if b.NumShards > 0 {
 		nameParts = append(nameParts, fmt.Sprintf("shards=%d", b.NumShards))
 	}
-	opts := []spec.Option{
+	baseSpecOpts := []spec.Option{
 		spec.CPU(b.CPUs),
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(b.CPUs),
-		spec.RandomizeVolumeType(),
-		spec.RandomlyUseXfs(),
 	}
 	switch b.KeyDistribution {
 	case sequential:
@@ -85,24 +83,27 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		nameParts = append(nameParts, "2nd_idx")
 	}
 
-	name := strings.Join(nameParts, "/")
-	nodes := r.MakeClusterSpec(b.Nodes+1, opts...)
-	r.Add(registry.TestSpec{
-		Name: name,
-		// These tests don't have pass/fail conditions so we don't want to run them
-		// nightly. Currently they're only good for printing the results of a search
-		// for --max-rate.
-		// TODO(andrei): output something to roachperf and start running them
-		// nightly.
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.ManualOnly,
-		Owner:            registry.OwnerKV,
-		Benchmark:        true,
-		Cluster:          nodes,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runKVBench(ctx, t, c, b)
-		},
-	})
+	baseName := strings.Join(nameParts, "/")
+	baseClouds := registry.AllClouds
+	for _, svReg := range storageVariantRegs(baseClouds, false) {
+		cSpec := r.MakeClusterSpec(b.Nodes+1, append(baseSpecOpts, svReg.specOpts...)...)
+		r.Add(registry.TestSpec{
+			Name: baseName + svReg.nameSuffix,
+			// These tests don't have pass/fail conditions so we don't want to run them
+			// nightly. Currently they're only good for printing the results of a search
+			// for --max-rate.
+			// TODO(andrei): output something to roachperf and start running them
+			// nightly.
+			CompatibleClouds: svReg.clouds,
+			Suites:           registry.ManualOnly,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Cluster:          cSpec,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runKVBench(ctx, t, c, b)
+			},
+		})
+	}
 }
 
 func registerKVBench(r registry.Registry) {
