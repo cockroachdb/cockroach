@@ -649,6 +649,66 @@ func hasZ(g geo.Geometry) bool {
 	return t.Layout().ZIndex() != -1
 }
 
+// MaxDistance3D returns the maximum 3D distance across every pair of points
+// comprising geometries A and B. If either input lacks a Z dimension this
+// falls back to 2D, matching PostGIS's lwgeom_maxdistance3d_tolerance.
+// Returns a geo.EmptyGeometryError if either A or B is EMPTY.
+func MaxDistance3D(a geo.Geometry, b geo.Geometry) (float64, error) {
+	if a.SRID() != b.SRID() {
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	a, b, err := normalizeFor3D(a, b)
+	if err != nil {
+		return 0, err
+	}
+	if !hasZ(a) || !hasZ(b) {
+		return MaxDistance(a, b)
+	}
+	return maxDistance3DInternal(a, b, math.MaxFloat64, geo.EmptyBehaviorOmit)
+}
+
+// DFullyWithin3D determines whether the maximum 3D distance across every
+// pair of points comprising geometries A and B is within D units.
+// DFullyWithin3D is equivalent to ST_3DMaxDistance(a, b) <= d. If either
+// input lacks a Z dimension this falls back to 2D, matching PostGIS.
+func DFullyWithin3D(a geo.Geometry, b geo.Geometry, d float64) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
+	}
+	if d < 0 {
+		return false, pgerror.Newf(
+			pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero",
+		)
+	}
+	a, b, err := normalizeFor3D(a, b)
+	if err != nil {
+		return false, err
+	}
+	if !hasZ(a) || !hasZ(b) {
+		return DFullyWithin(a, b, d, geo.FnInclusive)
+	}
+	dist, err := maxDistance3DInternal(a, b, d, geo.EmptyBehaviorError)
+	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return dist <= d, nil
+}
+
+// maxDistance3DInternal finds the 3D maximum distance between two geometries.
+func maxDistance3DInternal(
+	a geo.Geometry, b geo.Geometry, stopAfter float64, emptyBehavior geo.EmptyBehavior,
+) (float64, error) {
+	u := newGeomMaxDistance3DUpdater(stopAfter)
+	c := &geomDistance3DCalculator{
+		updater:               u,
+		boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()),
+	}
+	return distanceInternal(a, b, c, emptyBehavior)
+}
+
 // minDistance3DInternal finds the 3D minimum distance between two geometries.
 func minDistance3DInternal(
 	a geo.Geometry, b geo.Geometry, stopAfter float64, emptyBehavior geo.EmptyBehavior,
@@ -754,6 +814,68 @@ func (u *geomMinDistance3DUpdater) IsMaxDistance() bool {
 
 // FlipGeometries implements the geodist.DistanceUpdater interface.
 func (u *geomMinDistance3DUpdater) FlipGeometries() {
+	u.geometricalObjOrder = -u.geometricalObjOrder
+}
+
+// geomMaxDistance3DUpdater finds the maximum distance using 3D geom
+// calculations. Methods return early if the maximum distance found is
+// >= stopAfter.
+type geomMaxDistance3DUpdater struct {
+	currentValue float64
+	stopAfter    float64
+	coordA       geom.Coord
+	coordB       geom.Coord
+
+	geometricalObjOrder geometricalObjectsOrder
+}
+
+var _ geodist.DistanceUpdater = (*geomMaxDistance3DUpdater)(nil)
+
+func newGeomMaxDistance3DUpdater(stopAfter float64) *geomMaxDistance3DUpdater {
+	return &geomMaxDistance3DUpdater{
+		currentValue:        -math.MaxFloat64,
+		stopAfter:           stopAfter,
+		geometricalObjOrder: geometricalObjectsNotFlipped,
+	}
+}
+
+// Distance implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistance3DUpdater) Distance() float64 {
+	return u.currentValue
+}
+
+// Update implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistance3DUpdater) Update(aPoint geodist.Point, bPoint geodist.Point) bool {
+	a := aPoint.GeomPoint
+	b := bPoint.GeomPoint
+
+	dist := coordNorm3D(coordSub3D(a, b))
+	if dist > u.currentValue || u.coordA == nil {
+		u.currentValue = dist
+		if u.geometricalObjOrder == geometricalObjectsFlipped {
+			u.coordA = b
+			u.coordB = a
+		} else {
+			u.coordA = a
+			u.coordB = b
+		}
+		return dist >= u.stopAfter
+	}
+	return false
+}
+
+// OnIntersects implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistance3DUpdater) OnIntersects(p geodist.Point) bool {
+	return false
+}
+
+// IsMaxDistance implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistance3DUpdater) IsMaxDistance() bool {
+	return true
+}
+
+// FlipGeometries implements the geodist.DistanceUpdater interface.
+func (u *geomMaxDistance3DUpdater) FlipGeometries() {
 	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 

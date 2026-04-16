@@ -611,3 +611,100 @@ SELECT _ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry, 1)
 true
 
 subtest end
+
+subtest st_3dmaxdistance
+
+query R
+SELECT ST_3DMaxDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+1.7320508075688772
+
+query R
+SELECT ST_3DMaxDistance('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 5 5)'::geometry)
+----
+8.660254037844387
+
+query R
+SELECT ST_3DMaxDistance('POINT EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+NULL
+
+# When either input lacks Z, ST_3DMaxDistance falls back to 2D distance,
+# matching PostGIS. The missing Z is not implicitly treated as 0.
+query R
+SELECT ST_3DMaxDistance('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+0
+
+# XYM input has its M dimension stripped, leaving an XY geometry, so the
+# comparison falls back to 2D.
+query R
+SELECT ST_3DMaxDistance('POINT M(0 0 100)'::geometry, 'POINT M(0 0 0)'::geometry)
+----
+0
+
+query R
+SELECT ST_3DMaxDistance('POINT M(0 0 5)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+subtest end
+
+subtest st_3ddfullywithin
+
+query B
+SELECT ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 1)
+----
+true
+
+query B
+SELECT ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 0.5)
+----
+false
+
+query B
+SELECT _ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 1)
+----
+true
+
+query error dwithin distance cannot be less than zero
+SELECT ST_3DDFullyWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, -1)
+
+# Mixed 2D/3D falls back to 2D ST_DFullyWithin.
+query B
+SELECT ST_3DDFullyWithin('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry, 0)
+----
+true
+
+subtest end
+
+subtest st_3dintersects
+
+query B
+SELECT ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry)
+----
+true
+
+query B
+SELECT ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry)
+----
+false
+
+query B
+SELECT ST_3DIntersects('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 0 0)'::geometry)
+----
+true
+
+query B
+SELECT _ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry)
+----
+true
+
+# ST_3DIntersects delegates to DWithin3D and inherits its 2D fallback:
+# when either input lacks Z, the comparison happens in 2D.
+query B
+SELECT ST_3DIntersects('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+true
+
+subtest end
