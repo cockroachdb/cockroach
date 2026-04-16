@@ -2400,9 +2400,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.stopper)
 
 	// Let the server controller start watching tenant service mode changes.
-	if err := s.serverController.start(workersCtx,
-		s.node.execCfg.InternalDB.Executor(),
-	); err != nil {
+	if err := s.serverController.start(workersCtx); err != nil {
 		return errors.Wrap(err, "failed to start the server controller")
 	}
 
