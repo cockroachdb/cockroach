@@ -476,6 +476,51 @@ func TestPendingBuffer_DrainWithInflight(t *testing.T) {
 	require.Equal(t, 0, pb.totalEvents)
 }
 
+func TestPendingBuffer_RequeueByMVCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pb := newPendingBuffer()
+
+	// Key A: 6 events with mvcc timestamps 1-6.
+	for i := 1; i <= 6; i++ {
+		pb.addRow("t", pendingEvent{
+			key:  []byte("A"),
+			val:  []byte("A"),
+			mvcc: hlc.Timestamp{WallTime: int64(i)},
+		})
+	}
+	// Key B: 1 event with a much higher mvcc timestamp.
+	pb.addRow("t", pendingEvent{
+		key:  []byte("B"),
+		val:  []byte("B"),
+		mvcc: hlc.Timestamp{WallTime: 10},
+	})
+
+	// First batch: maxMessages=3. Should take A's first 3 events.
+	batch1 := pb.getBatch(3, 0)
+	require.Len(t, batch1.events, 3)
+	require.Equal(t, []byte("A"), batch1.events[0].key)
+
+	// Complete the batch. Key A has 3 remaining (mvcc=4,5,6).
+	// Key B has mvcc=10. Key A's oldest remaining (mvcc=4) is older
+	// than key B (mvcc=10), so key A should be served next.
+	pb.completeBatch(batch1)
+
+	batch2 := pb.getBatch(3, 0)
+	require.Len(t, batch2.events, 3)
+	require.Equal(t, []byte("A"), batch2.events[0].key,
+		"key A (mvcc=4) should be served before key B (mvcc=10)")
+
+	pb.completeBatch(batch2)
+
+	// Now key B should finally be served.
+	batch3 := pb.getBatch(3, 0)
+	require.Len(t, batch3.events, 1)
+	require.Equal(t, []byte("B"), batch3.events[0].key)
+	pb.completeBatch(batch3)
+}
+
 // --- NoLingerSink Tests ---
 
 func TestNoLingerSink_EmitAndFlush(t *testing.T) {

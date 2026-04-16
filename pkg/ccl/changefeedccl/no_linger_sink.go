@@ -37,17 +37,19 @@ type pendingBatch struct {
 	keys   intsets.Fast
 }
 
-// keyHeapEntry pairs a key hash with a sequence number for heap ordering.
+// keyHeapEntry pairs a key hash with the mvcc timestamp of the oldest
+// pending event for that key, used for age-based heap ordering.
 type keyHeapEntry struct {
 	keyHash int
-	seq     uint64
+	mvcc    hlc.Timestamp
 }
 
-// keyHeap is a min-heap of keyHeapEntry ordered by seq.
+// keyHeap is a min-heap of keyHeapEntry ordered by mvcc timestamp
+// (oldest first).
 type keyHeap []keyHeapEntry
 
 func (h keyHeap) Len() int            { return len(h) }
-func (h keyHeap) Less(i, j int) bool  { return h[i].seq < h[j].seq }
+func (h keyHeap) Less(i, j int) bool  { return h[i].mvcc.Less(h[j].mvcc) }
 func (h keyHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *keyHeap) Push(x interface{}) { *h = append(*h, x.(keyHeapEntry)) }
 func (h *keyHeap) Pop() interface{} {
@@ -67,7 +69,6 @@ type pendingBuffer struct {
 	keyHeap     keyHeap
 	keyMessages map[int][]pendingEvent
 	inflight    intsets.Fast
-	seqCounter  uint64
 	totalEvents int
 	// totalInflight counts events currently being processed by workers.
 	totalInflight int
@@ -109,9 +110,9 @@ func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
 	pb.totalEvents++
 
 	// Only push to heap if this key is new (not already queued or inflight).
+	// Use the event's mvcc timestamp for age-based ordering.
 	if !exists && !pb.inflight.Contains(h) {
-		pb.seqCounter++
-		heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, seq: pb.seqCounter})
+		heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, mvcc: e.mvcc})
 	}
 
 	pb.cond.Signal()
@@ -195,8 +196,7 @@ func (pb *pendingBuffer) completeBatch(batch *pendingBatch) {
 	batch.keys.ForEach(func(h int) {
 		pb.inflight.Remove(h)
 		if events, ok := pb.keyMessages[h]; ok && len(events) > 0 {
-			pb.seqCounter++
-			heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, seq: pb.seqCounter})
+			heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, mvcc: events[0].mvcc})
 		}
 	})
 
