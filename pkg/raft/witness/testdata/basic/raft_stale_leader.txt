@@ -53,7 +53,7 @@ outcome: won
 # v2 proposes an entry.
 propose v2
 ----
-v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4) leader
 v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) leader
 v3: [a1] term=c cfg=(v1 v2 v3 v4)
 v4: [a1] term=c cfg=(v1 v2 v3 v4)
@@ -65,7 +65,7 @@ v2 appends through c3
 v1: (dropped)
 v3: ok
 v4: (dropped)
-v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4) leader
 v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) leader
 v3: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
 v4: [a1] term=c cfg=(v1 v2 v3 v4)
@@ -77,55 +77,32 @@ v2 appends through c3
 v1: (dropped)
 v3: ok
 v4: ok
-v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4)
-v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) committed=c3 leader
+v1: [a1 b2 b3 b4] term=b cfg=(v1 v2 v3 v4) committed=b3 leader
+v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) leader
 v3: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
 v4: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
 
-# v1 tries to campaign. It's at term b, so it campaigns at term c.
-# Everyone already voted for v2 in term c, so v1 is rejected.
-campaign v1
+# v1 prevotes to check if it could win. No: v2/v3/v4's logs (ending at c3)
+# are ahead of v1's (ending at b4) since term c > b. No state changes.
+prevote v1
 ----
-v1 campaigns at term c
-v1: yes (self)
-v2: no, already voted for v2
-v3: no, already voted for v2
-v4: no, already voted for v2
-outcome: lost
-
-# v1 tries again at term d. Now the log-up-to-date check kicks in: v2/v3/v4's
-# last entry c3 has a higher term than v1's b4, so they reject.
-# Side effect: everyone bumps to term d, v2 loses leader status.
-campaign v1
-----
-v1 campaigns at term d
+v1 prevotes at term c
 v1: yes (self)
 v2: no, log not up to date (c3 > b4)
 v3: no, log not up to date (c3 > b4)
 v4: no, log not up to date (c3 > b4)
 outcome: lost
 
-# v2 must re-campaign to resume leadership after the term bump.
-# v1's log ends at b4 which is not ahead of v2's c3 (term c > b), so v1
-# grants the vote despite having more entries.
-campaign v2
-----
-v2 campaigns at term e
-v2: yes (self)
-v1: yes
-v3: yes
-v4: yes
-outcome: won
-
 # v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets
-# truncated and replaced with v2's log [c2 c3 e4].
+# truncated and replaced with v2's log. v1 recognizes v2 as leader and bumps
+# to term c.
 append v2
 ----
-v2 appends through e4
+v2 appends through c3
 v1: ok, replaced 3 entries
 v3: ok
 v4: ok
-v1: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
-v2: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4) committed=e4 leader
-v3: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
-v4: [a1 c2 c3 e4] term=e cfg=(v1 v2 v3 v4)
+v1: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
+v2: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4) committed=c3 leader
+v3: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)
+v4: [a1 c2 c3] term=c cfg=(v1 v2 v3 v4)

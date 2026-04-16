@@ -146,7 +146,9 @@ func TestDataDrivenWitness(t *testing.T) {
 			case "add-voters":
 				return handleAddVoters(t, d, &env)
 			case "campaign":
-				return handleCampaign(t, d, &env, ctx)
+				return handleCampaign(t, d, &env, ctx, false /* prevote */)
+			case "prevote":
+				return handleCampaign(t, d, &env, ctx, true /* prevote */)
 			case "propose":
 				return handlePropose(t, d, &env)
 			case "append":
@@ -230,14 +232,15 @@ func handleAddVoters(t *testing.T, d *datadriven.TestData, env *testEnv) string 
 	return env.fmtVoters()
 }
 
-// handleCampaign simulates a voter campaigning for leadership. All peers
-// (voters + witness) process the vote request and update their state. Responses
-// from peers in the drop set are not counted toward quorum.
+// handleCampaign simulates a voter campaigning for leadership. When prevote is
+// false, all peers update their state (term bumps, vote grants). When prevote
+// is true, no state is mutated — it's a speculative check of whether the
+// candidate would win.
 func handleCampaign(
-	t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context,
+	t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.Context, prevote bool,
 ) string {
 	if len(d.CmdArgs) < 1 {
-		t.Fatal("usage: campaign <vN> [drop=(<ids>)]")
+		t.Fatal("usage: campaign/prevote <vN> [drop=(<ids>)]")
 	}
 	candidateID := mustParsePeerID(t, d.CmdArgs[0].Key)
 	candidate := env.voter(t, candidateID)
@@ -245,10 +248,16 @@ func handleCampaign(
 	// Parse drop set.
 	dropped := parseDrop(d)
 
-	// Campaign: increment term, vote for self.
-	candidate.term++
-	campaignTerm := candidate.term
-	candidate.votedFor = candidate.id
+	// Campaign: increment term, vote for self. Prevote: use term+1 without
+	// actually bumping.
+	var campaignTerm raftpb.Term
+	if prevote {
+		campaignTerm = candidate.term + 1
+	} else {
+		candidate.term++
+		campaignTerm = candidate.term
+		candidate.votedFor = candidate.id
+	}
 	candidateLastLM := candidate.lastLogMark()
 
 	totalMembers := len(env.voters)
@@ -258,14 +267,19 @@ func handleCampaign(
 	quorum := totalMembers/2 + 1
 	yesCount := 0
 
+	verb := "campaigns"
+	if prevote {
+		verb = "prevotes"
+	}
 	var buf strings.Builder
-	fmt.Fprintf(&buf, "v%d campaigns at term %s\n", candidateID, fmtTerm(campaignTerm))
+	fmt.Fprintf(&buf, "v%d %s at term %s\n", candidateID, verb, fmtTerm(campaignTerm))
 
 	// Candidate's self-vote always counts.
 	fmt.Fprintf(&buf, "v%d: yes (self)\n", candidateID)
 	yesCount++
 
-	// Other voters vote.
+	// Other voters vote. In prevote mode, use a copy with votedFor cleared so
+	// the "already voted" check doesn't apply and no state is mutated.
 	for i := range env.voters {
 		v := &env.voters[i]
 		if v.id == candidateID {
@@ -277,7 +291,13 @@ func handleCampaign(
 			continue
 		}
 
-		granted, reason := voterGrantsVote(v, candidateID, campaignTerm, candidateLastLM)
+		target := v
+		if prevote {
+			vCopy := *v
+			vCopy.votedFor = 0
+			target = &vCopy
+		}
+		granted, reason := voterGrantsVote(target, candidateID, campaignTerm, candidateLastLM)
 		if granted {
 			fmt.Fprintf(&buf, "%s: yes\n", label)
 			yesCount++
@@ -286,14 +306,21 @@ func handleCampaign(
 		}
 	}
 
-	// Witness votes (only if present).
+	// Witness votes (only if present). In prevote mode, check against a copy
+	// with VotedFor cleared and don't apply state.
 	if env.hasWitness {
 		if dropped["w"] {
 			fmt.Fprintf(&buf, "w:  (dropped)\n")
 		} else {
-			next, ok := env.w.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
+			ws := env.w
+			if prevote {
+				ws.Vote.VotedFor = 0
+			}
+			next, ok := ws.HandleMsgVote(ctx, candidateID, campaignTerm, candidateLastLM)
 			if ok {
-				env.w = next
+				if !prevote {
+					env.w = next
+				}
 				fmt.Fprintf(&buf, "w:  yes\n")
 				yesCount++
 			} else {
@@ -303,24 +330,27 @@ func handleCampaign(
 	}
 
 	if yesCount >= quorum {
-		// Winner becomes leader and appends a noop entry at the campaign term.
-		candidate.leader = true
-		candidate.committed = 0
-		candidate.witnessEngaged = false
-		nextIdx := uint64(len(candidate.log) + 1)
-		candidate.log = append(
-			candidate.log,
-			raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
-		)
-		// Other voters lose leader status.
-		for i := range env.voters {
-			if env.voters[i].id != candidateID {
-				env.voters[i].leader = false
+		if !prevote {
+			// Winner becomes leader and appends a noop entry at the campaign term.
+			candidate.leader = true
+			candidate.committed = 0
+			candidate.witnessEngaged = false
+			nextIdx := uint64(len(candidate.log) + 1)
+			candidate.log = append(
+				candidate.log,
+				raft.LogMark{Term: uint64(campaignTerm), Index: nextIdx},
+			)
+			// Other voters that participated lose leader status.
+			for i := range env.voters {
+				v := &env.voters[i]
+				if v.id != candidateID && !dropped[fmt.Sprintf("v%d", v.id)] {
+					v.leader = false
+				}
 			}
-		}
-		// Initialize match indices. Leader matches itself; others unknown.
-		env.matchIndex = map[raftpb.PeerID]uint64{
-			candidateID: uint64(len(candidate.log)),
+			// Initialize match indices. Leader matches itself; others unknown.
+			env.matchIndex = map[raftpb.PeerID]uint64{
+				candidateID: uint64(len(candidate.log)),
+			}
 		}
 		buf.WriteString("outcome: won")
 	} else {
@@ -376,6 +406,13 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, _ context.
 
 		if dropped[label] {
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
+			continue
+		}
+
+		// Reject append from a stale leader.
+		if leader.term < v.term {
+			fmt.Fprintf(&buf, "%s: rejected, stale leader term %s < %s\n",
+				label, fmtTerm(leader.term), fmtTerm(v.term))
 			continue
 		}
 
