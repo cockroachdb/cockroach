@@ -73,11 +73,12 @@ const cockroachDB = "github.com/cockroachdb/cockroach"
 //go:embed gcassert_paths.txt
 var rawGcassertPaths string
 
-func init() {
+func TestMain(m *testing.M) {
 	if bazel.BuiltWithBazel() {
 		goSdk := os.Getenv("GO_SDK")
 		if goSdk == "" {
-			panic("expected GO_SDK")
+			fmt.Println("GO_SDK not set; skipping lint tests (require bespoke CI setup)")
+			os.Exit(0)
 		}
 		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Join(goSdk, "bin"), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
 			panic(err)
@@ -86,6 +87,7 @@ func init() {
 			panic(err)
 		}
 	}
+	os.Exit(m.Run())
 }
 
 func dirCmd(
