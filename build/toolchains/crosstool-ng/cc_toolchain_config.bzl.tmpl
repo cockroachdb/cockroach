@@ -116,7 +116,7 @@ def _impl(ctx):
                     flag_group(
                         flags = [
                             "-Wall",
-                            "-Iexternal/%{repo_name}/%{target}/include/c++/6.5.0",
+                            "-Iexternal/%{repo_name}/%{target}/include/c++/8.5.0",
                             "-no-canonical-prefixes",
                             "-fno-canonical-system-headers",
                             "-fno-use-linker-plugin",
@@ -180,9 +180,9 @@ def _impl(ctx):
         action_configs = action_configs,
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
-            "external/%{repo_name}/%{target}/include/c++/6.5.0",
-            "external/%{repo_name}/lib/gcc/%{target}/6.5.0/include",
-            "external/%{repo_name}/lib/gcc/%{target}/6.5.0/include-fixed",
+            "external/%{repo_name}/%{target}/include/c++/8.5.0",
+            "external/%{repo_name}/lib/gcc/%{target}/8.5.0/include",
+            "external/%{repo_name}/lib/gcc/%{target}/8.5.0/include-fixed",
         ],
         builtin_sysroot = "external/%{repo_name}/%{target}/sysroot",
     )
