@@ -1,5 +1,5 @@
-# A voter goes down. The leader engages the witness to maintain commit quorum,
-# then later releases it and transitions back to voter-based commits.
+# A voter goes down. The leader engages the witness to maintain commit quorum.
+# The leader then crashes and re-campaigns, winning with the witness' help.
 #
 # Two voters, one witness. Quorum = 2.
 
@@ -98,18 +98,9 @@ v2: (dropped)
 v1: [a1 b2 b3 c4] term=c committed=b3 leader
 v2: [a1] term=b
 
-# v1 releases the witness, returning to voter-based commits. Note that the
-# witness reflects the updated high water mark, i.e. it knows the highest
-# position it has helped commit.
-release v1
-----
-ok
-w:  vote=(c, v1) acked=(c4, released)
-
-# v2 comes back, v1 goes down again. v2 prevotes again after the release. The
-# witness is no longer engaged, but its acked high-water mark b4 is still ahead
-# of v2's last log entry a1. The witness won't vote for a candidate whose log
-# doesn't cover what it has acked.
+# v2 comes back, v1 goes down again. The witness is already disengaged (the
+# vote at term c reset the acked state), so v2's prevote succeeds — the witness
+# has no engagement to protect.
 up v2
 ----
 ok
