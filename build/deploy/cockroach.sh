@@ -158,9 +158,8 @@ setup_db() {
   if [[ -n "$COCKROACH_USER" ]]; then
     init_env_query+=( -e "GRANT ALL ON DATABASE "$COCKROACH_DATABASE" TO "$COCKROACH_USER"" \
                       -e "GRANT admin TO "$COCKROACH_USER" " )
+    run_sql_query "${init_env_query[@]}"
   fi
-
-  run_sql_query "${init_env_query[@]}"
 }
 
 # process_init_files run all the init scripts from /docker-entrypoint-initdb.d.
