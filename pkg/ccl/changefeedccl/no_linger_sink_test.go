@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -865,4 +866,184 @@ func TestNoLingerSink_MultiTopic(t *testing.T) {
 	}
 	require.True(t, topics["t1"])
 	require.True(t, topics["t2"])
+}
+
+// TestNoLingerSink_FlushBlocksAddRow demonstrates that Flush blocks all
+// addRow calls while draining, preventing pipelining of new events.
+//
+// The core issue: noLingerSink.Flush sets flushing=true which blocks ALL
+// addRow calls until every pending and inflight event is drained. In
+// contrast, batchingSink.Flush triggers IO for current batches but
+// continues accepting new events into fresh buffers.
+//
+// During initial scan, Flush is called at every resolved timestamp
+// checkpoint. Each Flush creates a full stop-and-drain in noLingerSink,
+// whereas batchingSink pipelines new events while old batches flush.
+func TestNoLingerSink_FlushBlocksAddRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Use 50ms flush delay to simulate real network latency.
+	var flushCount atomic.Int64
+	slowClient := &slowMockSinkClient{
+		mockSinkClient: &mockSinkClient{},
+		flushDelay:     50 * time.Millisecond,
+		flushCount:     &flushCount,
+	}
+
+	td := topicN("t", 1)
+	sink := makeTestNoLingerSinkWithClient(t, slowClient, 3, 100, td)
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	ctx := context.Background()
+	const totalRows = 5000
+	const flushEvery = 500
+
+	// Emit rows with periodic Flush calls (simulating checkpoint behavior).
+	start := time.Now()
+	for i := 0; i < totalRows; i++ {
+		key := []byte(fmt.Sprintf("key-%06d", i))
+		require.NoError(t, sink.EmitRow(
+			ctx, td, key, []byte("value"),
+			zeroTS, zeroTS, zeroAlloc, nil,
+		))
+		if (i+1)%flushEvery == 0 {
+			require.NoError(t, sink.Flush(ctx))
+		}
+	}
+	require.NoError(t, sink.Flush(ctx))
+	elapsed := time.Since(start)
+
+	msgs := slowClient.allFlushedMessages()
+	require.Equal(t, totalRows, len(msgs))
+
+	// Key observation: During each Flush, addRow is blocked. Workers drain
+	// the buffer, then Flush completes, then addRow resumes. This creates
+	// dead time where no events are being enqueued.
+	//
+	// 5000 rows / 100 per batch = 50 batches total.
+	// With 3 workers and 50ms flush: ~17 serial rounds × 50ms = ~850ms just
+	// for IO. But with 10 flush barriers (every 500 rows), each barrier
+	// forces a full drain. While the 5 batches from 500 rows drain across
+	// 3 workers (~2 rounds × 50ms = 100ms), addRow is blocked for that
+	// entire duration. Total drain time: ~10 × 100ms = 1000ms of dead time.
+	//
+	// If the sink were pipelining (like batchingSink), new events would
+	// accumulate during IO, eliminating most of this dead time.
+	rowsPerSec := float64(totalRows) / elapsed.Seconds()
+	t.Logf("elapsed=%s flushes=%d msgs=%d rows/s=%.0f",
+		elapsed, flushCount.Load(), len(msgs), rowsPerSec)
+
+	// With 50ms flush delay, 10 flush barriers, and 3 workers, each flush
+	// barrier adds ~100ms of dead time. Total should be ~1-2s. If it takes
+	// much longer than that, there's additional contention beyond the
+	// flush-blocks-addRow issue.
+	require.Less(t, elapsed, 10*time.Second,
+		"sink throughput is unreasonably slow")
+}
+
+// TestNoLingerSink_FlushDeadTime measures the fraction of time spent
+// blocked in Flush (dead time) vs. actively processing events.
+func TestNoLingerSink_FlushDeadTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// 200ms flush latency — realistic for cross-region webhook calls.
+	var flushCount atomic.Int64
+	slowClient := &slowMockSinkClient{
+		mockSinkClient: &mockSinkClient{},
+		flushDelay:     200 * time.Millisecond,
+		flushCount:     &flushCount,
+	}
+
+	td := topicN("t", 1)
+	// 3 workers, batches of 100 messages.
+	sink := makeTestNoLingerSinkWithClient(t, slowClient, 3, 100, td)
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	ctx := context.Background()
+	const totalRows = 5000
+	const flushEvery = 500 // 10 flush barriers
+
+	// Measure time in Flush (dead time) vs. total time.
+	var flushTime time.Duration
+	start := time.Now()
+	for i := 0; i < totalRows; i++ {
+		key := []byte(fmt.Sprintf("key-%06d", i))
+		require.NoError(t, sink.EmitRow(
+			ctx, td, key, []byte("value"),
+			zeroTS, zeroTS, zeroAlloc, nil,
+		))
+		if (i+1)%flushEvery == 0 {
+			flushStart := time.Now()
+			require.NoError(t, sink.Flush(ctx))
+			flushTime += time.Since(flushStart)
+		}
+	}
+	flushStart := time.Now()
+	require.NoError(t, sink.Flush(ctx))
+	flushTime += time.Since(flushStart)
+	elapsed := time.Since(start)
+
+	msgs := slowClient.allFlushedMessages()
+	require.Equal(t, totalRows, len(msgs))
+
+	deadPct := float64(flushTime) / float64(elapsed) * 100
+	rowsPerSec := float64(totalRows) / elapsed.Seconds()
+	t.Logf("elapsed=%s flushTime=%s deadPct=%.1f%% flushes=%d rows/s=%.0f",
+		elapsed, flushTime, deadPct, flushCount.Load(), rowsPerSec)
+
+	// The dead time percentage reveals how much throughput is lost to the
+	// Flush-blocks-addRow pattern. With pipelining (batchingSink), dead
+	// time would be near zero because new events accumulate while old
+	// batches flush.
+}
+
+// slowMockSinkClient wraps mockSinkClient with a configurable flush delay.
+type slowMockSinkClient struct {
+	*mockSinkClient
+	flushDelay time.Duration
+	flushCount *atomic.Int64
+}
+
+func (c *slowMockSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
+	c.flushCount.Add(1)
+	time.Sleep(c.flushDelay)
+	return c.mockSinkClient.Flush(ctx, payload)
+}
+
+func (c *slowMockSinkClient) MakeBatchBuffer() BatchBuffer {
+	return c.mockSinkClient.MakeBatchBuffer()
+}
+
+// makeTestNoLingerSinkWithClient is like makeTestNoLingerSink but accepts
+// any SinkClient implementation.
+func makeTestNoLingerSinkWithClient(
+	t *testing.T, client SinkClient, numWorkers int, maxMessages int, topics ...*tableDescriptorTopic,
+) *noLingerSink {
+	t.Helper()
+
+	targets := changefeedbase.Targets{}
+	for _, td := range topics {
+		targets.Add(td.spec)
+	}
+	topicNamer, err := MakeTopicNamer(targets,
+		WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	return makeNoLingerSink(
+		ctx,
+		sinkTypeKafka,
+		client,
+		retry.Options{MaxRetries: 1, InitialBackoff: time.Millisecond},
+		numWorkers,
+		maxMessages,
+		0, // maxBytes
+		topicNamer,
+		(*sliMetrics)(nil),
+		settings,
+	)
 }

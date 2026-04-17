@@ -3079,6 +3079,40 @@ CONFIGURE ZONE USING
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/webhook-sink/initial-scan-only",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			err := c.Install(ctx, t.L(), ct.sinkNodes, "go")
+			if err != nil {
+				t.Skip(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 10})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: webhookSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"initial_scan":        "'only'",
+					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+				},
+			})
+
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 10 * time.Minute,
+			})
+			waitForCompletion()
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:             "cdc/webhook-sink/no-wait",
 		Owner:            `cdc`,
 		Benchmark:        true,
