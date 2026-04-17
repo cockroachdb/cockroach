@@ -160,7 +160,12 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 	// data page size and row group size are uncapped. This means that the library will not flush
 	// automatically when the buffered data size is large. It will only flush the caller calls Flush().
 	// Note that this means there will be one data page per column per row group in the final file.
-	defaultFlushSize := int64(math.MaxInt64)
+	//
+	// NB: We use MaxInt32 instead of MaxInt64 because the Apache Arrow parquet
+	// library internally uses int32 for buffer size calculations
+	// (column_writer.go), and larger values can cause int32 overflow, resulting
+	// in a panic when bytes.Buffer.Grow is called with a negative value.
+	defaultFlushSize := int64(math.MaxInt32)
 
 	cfg := config{
 		maxRowGroupLength: defaultFlushSize,

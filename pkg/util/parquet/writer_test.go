@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -868,4 +869,29 @@ func TestBufferedBytes(t *testing.T) {
 			require.Equal(t, writer.BufferedBytesEstimate(), int64(0))
 		})
 	}
+}
+
+// TestLargeRowGroupNoPanic is a regression test for #140030. It verifies that
+// writing a large number of rows into a single row group (without intermediate
+// flushes) does not cause a panic due to int32 overflow in the Apache Arrow
+// parquet library's internal buffer size calculations.
+func TestLargeRowGroupNoPanic(t *testing.T) {
+	sch := &colSchema{
+		columnNames: []string{"a"},
+		columnTypes: []*types.T{types.String},
+	}
+
+	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	writer, err := NewWriter(schemaDef, &buf)
+	require.NoError(t, err)
+
+	largeString := tree.NewDString(strings.Repeat("x", 1024))
+	for i := 0; i < 5000; i++ {
+		require.NoError(t, writer.AddRow([]tree.Datum{largeString}))
+	}
+
+	require.NoError(t, writer.Close())
 }
