@@ -7,7 +7,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/raft",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -23,6 +25,7 @@ go_test(
     deps = [
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/raft/rafttest",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sniffarg",
         "//pkg/util/leaktest",

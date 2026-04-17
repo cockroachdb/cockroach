@@ -1,11 +1,12 @@
 package witness
 
 import (
-	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/redact"
 )
 
 /*
@@ -81,9 +82,60 @@ witness would not have this problem, though in the common case of `n=2`, there
 typically isn't an alternative leader available until quorum heals anyway.
 */
 
+// Formatting wrapper types for use in log messages. These produce the same
+// letter-based notation used in the test harness (a-z for terms 1-26, etc.).
+
+type fmtTerm raftpb.Term
+
+func (t fmtTerm) SafeFormat(w redact.SafePrinter, _ rune) {
+	if t >= 1 && t <= 26 {
+		w.Printf("%c", rune('a'+byte(t-1)))
+	} else {
+		w.Printf("%d", uint64(t))
+	}
+}
+
+func (t fmtTerm) String() string {
+	return redact.StringWithoutMarkers(t)
+}
+
+type logMark raft.LogMark
+
+func (l logMark) SafeFormat(w redact.SafePrinter, _ rune) {
+	if l == (logMark{}) {
+		w.SafeString("0")
+		return
+	}
+	if l.Index == math.MaxUint64 {
+		w.Printf("%s∞", fmtTerm(l.Term))
+		return
+	}
+	w.Printf("%s%d", fmtTerm(l.Term), l.Index)
+}
+
+func (l logMark) String() string {
+	return redact.StringWithoutMarkers(l)
+}
+
 type Vote struct {
 	Term     raftpb.Term
 	VotedFor raftpb.PeerID // may be zero if we never voted in this term
+}
+
+func (v Vote) SafeFormat(w redact.SafePrinter, _ rune) {
+	if v == (Vote{}) {
+		w.SafeString("none")
+		return
+	}
+	if v.VotedFor == 0 {
+		w.Printf("(%s, -)", fmtTerm(v.Term))
+	} else {
+		w.Printf("(%s, v%d)", fmtTerm(v.Term), v.VotedFor)
+	}
+}
+
+func (v Vote) String() string {
+	return redact.StringWithoutMarkers(v)
 }
 
 // Acked tracks the witness' knowledge of prefix of the log (for an associated
@@ -113,9 +165,33 @@ type Acked struct {
 	Engaged bool
 }
 
+func (a Acked) SafeFormat(w redact.SafePrinter, _ rune) {
+	if a == (Acked{}) {
+		w.SafeString("none")
+		return
+	}
+	eng := "released"
+	if a.Engaged {
+		eng = "engaged"
+	}
+	w.Printf("(%s, %s)", logMark(a.Hi), eng)
+}
+
+func (a Acked) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
 type State struct {
 	Vote  Vote
 	Acked Acked
+}
+
+func (s State) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("vote=%s acked=%s", s.Vote, s.Acked)
+}
+
+func (s State) String() string {
+	return redact.StringWithoutMarkers(s)
 }
 
 func leq(a, b raft.LogMark) bool {
@@ -127,7 +203,7 @@ func le(a, b raft.LogMark) bool {
 }
 
 func (s State) HandleMsgVote(
-	ctx context.Context, from raftpb.PeerID, candTerm raftpb.Term, lm raft.LogMark,
+	logger raftlogger.Logger, from raftpb.PeerID, candTerm raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
 	// We intentionally do NOT call maybeBumpTerm here and instead bump the term
 	// only if we can actually grant the vote. This gives us the invariant that
@@ -140,11 +216,16 @@ func (s State) HandleMsgVote(
 		// Either idempotent vote, or we learned about this term via engage/release
 		// but haven't voted yet. Grant the vote, preserving existing acked state.
 		s.Vote.VotedFor = from
+		logger.Infof("granted vote for v%d at term %s (same-term)", from, fmtTerm(candTerm))
 		return s, true
 	}
 
 	if candTerm <= s.Vote.Term {
 		// Stale vote request, or already voted for someone else this term.
+		logger.Infof(
+			"rejected vote for v%d: candidate term %s <= vote term %s (votedFor=v%d)",
+			from, fmtTerm(candTerm), fmtTerm(s.Vote.Term), s.Vote.VotedFor,
+		)
 		return State{}, false
 	}
 
@@ -168,10 +249,19 @@ func (s State) HandleMsgVote(
 	effectiveHi := s.Acked.Hi
 	if s.Acked.Engaged {
 		effectiveHi.Index = math.MaxUint64
+		logger.Infof("engaged: effectiveHi inflated to %s", logMark(effectiveHi))
 	}
 
-	if !(s.Acked.Engaged && s.Vote.VotedFor == from) && !leq(effectiveHi, lm) {
+	if s.Acked.Engaged && s.Vote.VotedFor == from {
+		logger.Infof(
+			"engaged leader v%d re-campaigning: skipping log check", from,
+		)
+	} else if !leq(effectiveHi, lm) {
 		// Log-up-to-date check failed.
+		logger.Infof(
+			"rejected vote for v%d: log not up to date (effectiveHi %s > lm %s)",
+			from, logMark(effectiveHi), logMark(lm),
+		)
 		return State{}, false
 	}
 
@@ -193,6 +283,9 @@ func (s State) HandleMsgVote(
 		},
 		Acked: Acked{Hi: effectiveHi},
 	}
+	logger.Infof("granted vote for v%d at term %s, hi carried as %s",
+		from, fmtTerm(candTerm), logMark(effectiveHi),
+	)
 	return next, true
 }
 
@@ -201,18 +294,20 @@ func (s State) HandleMsgVote(
 // (engage/release), so the leader's identity is recorded. If the term doesn't
 // advance but VotedFor is unset, we record the leader — accepting an
 // engage/release is effectively acknowledging the leader.
-func (s State) maybeBumpTerm(ctx context.Context, term raftpb.Term, lead raftpb.PeerID) State {
+func (s State) maybeBumpTerm(logger raftlogger.Logger, term raftpb.Term, lead raftpb.PeerID) State {
 	if term < s.Vote.Term {
 		return s
 	}
 	if term == s.Vote.Term {
 		if s.Vote.VotedFor == 0 {
 			s.Vote.VotedFor = lead
+			logger.Infof("recorded leader v%d for term %s", lead, fmtTerm(term))
 		}
 		return s
 	}
 	// Term advanced. The leader was elected without our help, so its log
 	// is up to date with a traditional quorum of voters.
+	logger.Infof("term advance %s -> %s (leader v%d)", fmtTerm(s.Vote.Term), fmtTerm(term), lead)
 	return State{
 		Vote:  Vote{Term: term, VotedFor: lead},
 		Acked: Acked{},
@@ -220,32 +315,37 @@ func (s State) maybeBumpTerm(ctx context.Context, term raftpb.Term, lead raftpb.
 }
 
 func (s State) HandleMsgEngage(
-	ctx context.Context, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
+	logger raftlogger.Logger, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
-	s = s.maybeBumpTerm(ctx, term, from)
+	s = s.maybeBumpTerm(logger, term, from)
 
 	if term != s.Vote.Term {
-		// Stale message.
+		logger.Infof("engage rejected: stale term %s < %s", fmtTerm(term), fmtTerm(s.Vote.Term))
 		return State{}, false
 	}
 
 	if s.Acked.Engaged && s.Acked.Hi == lm {
-		// Idempotency.
+		logger.Infof("engage idempotent at %s", logMark(lm))
 		return s, true
 	}
 
 	if lm.Term < uint64(s.Vote.Term) {
 		// Refuse to engage directly on behalf of old log terms to keep things
 		// simple. See `Acked.Hi`.
+		logger.Infof("engage rejected: lm term %s < vote term %s",
+			fmtTerm(raftpb.Term(lm.Term)), fmtTerm(s.Vote.Term))
 		return State{}, false
 	}
 
 	if !le(s.Acked.Hi, lm) {
 		// Stale request - engagements need to be for a strictly larger log mark
 		// than the last release due to replay protection.
+		logger.Infof("engage rejected: hi %s not ahead of %s",
+			logMark(lm), logMark(s.Acked.Hi))
 		return State{}, false
 	}
 
+	logger.Infof("engaged at %s", logMark(lm))
 	return State{
 		Vote: s.Vote,
 		Acked: Acked{
@@ -256,21 +356,22 @@ func (s State) HandleMsgEngage(
 }
 
 func (s State) HandleMsgRelease(
-	ctx context.Context, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
+	logger raftlogger.Logger, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
-	s = s.maybeBumpTerm(ctx, term, from)
+	s = s.maybeBumpTerm(logger, term, from)
 
 	if term != s.Vote.Term {
-		// Stale message from old leader.
+		logger.Infof("release rejected: stale term %s < %s", fmtTerm(term), fmtTerm(s.Vote.Term))
 		return State{}, false
 	}
 
 	if !leq(s.Acked.Hi, lm) {
-		// Stale message from current leader.
+		logger.Infof("release rejected: stale hi %s > %s",
+			logMark(s.Acked.Hi), logMark(lm))
 		return State{}, false
 	}
 
-	// Newer or idempotent release.
+	logger.Infof("released at %s", logMark(lm))
 	next := State{
 		Vote: s.Vote,
 		Acked: Acked{

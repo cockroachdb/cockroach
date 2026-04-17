@@ -14,14 +14,22 @@ w:  vote=(a, v1) acked=(a5, engaged)
 # have relied on us to commit entries beyond a5.
 vote from=v2 term=b lm=a5
 ----
-rejected
+w:
+  - INFO engaged: effectiveHi inflated to a∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi a∞ > lm a5)
+  no
+w:  vote=(a, v1) acked=(a5, engaged)
 
 # Candidate at term b with log ending at a100: still rejected.
 # Even though the candidate has more entries, they're all from term a.
 # The old leader could have committed with our help up to any index.
 vote from=v2 term=b lm=a100
 ----
-rejected
+w:
+  - INFO engaged: effectiveHi inflated to a∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi a∞ > lm a100)
+  no
+w:  vote=(a, v1) acked=(a5, engaged)
 
 # Candidate at term b with log ending at b1: accepted!
 # The candidate has an entry from term b > our vote term a. This proves
@@ -30,7 +38,10 @@ rejected
 # log is up to date with anything committed.
 vote from=v2 term=b lm=b1
 ----
-ok
+w:
+  - INFO engaged: effectiveHi inflated to a∞
+  - INFO granted vote for v2 at term b, hi carried as a∞
+  yes
 w:  vote=(b, v2) acked=(a∞, released)
 
 # Same scenario but candidate is from a much higher term.
@@ -43,7 +54,10 @@ w:  vote=(a, v1) acked=(a5, engaged)
 # Log term c > vote term a proves disengagement is safe.
 vote from=v3 term=e lm=c3
 ----
-ok
+w:
+  - INFO engaged: effectiveHi inflated to a∞
+  - INFO granted vote for v3 at term e, hi carried as a∞
+  yes
 w:  vote=(e, v3) acked=(a∞, released)
 
 # Engagement was released (not engaged), candidate log behind hi: rejected
@@ -55,12 +69,17 @@ w:  vote=(a, v1) acked=(a5, released)
 
 vote from=v2 term=b lm=a4
 ----
-rejected
+w:
+  - INFO rejected vote for v2: log not up to date (effectiveHi a5 > lm a4)
+  no
+w:  vote=(a, v1) acked=(a5, released)
 
 # Same but candidate log at a5: accepted (log is up to date with hi).
 vote from=v2 term=b lm=a5
 ----
-ok
+w:
+  - INFO granted vote for v2 at term b, hi carried as a5
+  yes
 w:  vote=(b, v2) acked=(a5, released)
 
 # Witness learns of term b through an engage, then the leader requests a
@@ -73,14 +92,19 @@ w:  vote=(a, v1) acked=none
 
 engage from=v1 term=b lm=b1
 ----
-ok
+w:
+  - INFO term advance a -> b (leader v1)
+  - INFO engaged at b1
+  ok
 w:  vote=(b, v1) acked=(b1, engaged)
 
 # Leader now asks for our vote in term b. We haven't voted yet in this term,
 # so this is granted, preserving the existing acked state.
 vote from=v1 term=b lm=b1
 ----
-ok
+w:
+  - INFO granted vote for v1 at term b (same-term)
+  yes
 w:  vote=(b, v1) acked=(b1, engaged)
 
 # Engage populates VotedFor when it was previously unset. Even when the
@@ -94,7 +118,10 @@ w:  vote=(b, -) acked=none
 
 engage from=v1 term=b lm=b5
 ----
-ok
+w:
+  - INFO recorded leader v1 for term b
+  - INFO engaged at b5
+  ok
 w:  vote=(b, v1) acked=(b5, engaged)
 
 # Engaged leader re-campaigns at a higher term. Even though the witness is
@@ -110,7 +137,11 @@ w:  vote=(b, v1) acked=(b5, engaged)
 # for term c only anyway at this point.
 vote from=v1 term=c lm=b5
 ----
-ok
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO engaged leader v1 re-campaigning: skipping log check
+  - INFO granted vote for v1 at term c, hi carried as b∞
+  yes
 w:  vote=(c, v1) acked=(b∞, released)
 
 # Contrast: a *different* candidate at the same term is still rejected.
@@ -121,7 +152,11 @@ w:  vote=(b, v1) acked=(b5, engaged)
 
 vote from=v2 term=c lm=b5
 ----
-rejected
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b5)
+  no
+w:  vote=(b, v1) acked=(b5, engaged)
 
 # Engagement unwound by a competing candidate whose log proves a post-engagement
 # election (log term c > engagement term b). The witness votes for v2, and the
@@ -133,7 +168,10 @@ w:  vote=(b, v1) acked=(b5, engaged)
 
 vote from=v2 term=c lm=c3
 ----
-ok
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO granted vote for v2 at term c, hi carried as b∞
+  yes
 w:  vote=(c, v2) acked=(b∞, released)
 
 # The old leader tries to campaign. Its log is still at term b, which can't
@@ -144,7 +182,10 @@ w:  vote=(c, v2) acked=(b∞, released)
 # leader. This could be improved, but pre-vote exists, so not worth it.
 vote from=v1 term=d lm=b10
 ----
-rejected
+w:
+  - INFO rejected vote for v1: log not up to date (effectiveHi b∞ > lm b10)
+  no
+w:  vote=(c, v2) acked=(b∞, released)
 
 # A candidate with entries from term > b can satisfy b∞. The b∞ high water
 # mark is carried forward — Hi is monotonically non-decreasing. This is safe
@@ -152,5 +193,7 @@ rejected
 # strictly up to date with any older promises we made.
 vote from=v1 term=d lm=c1
 ----
-ok
+w:
+  - INFO granted vote for v1 at term d, hi carried as b∞
+  yes
 w:  vote=(d, v1) acked=(b∞, released)

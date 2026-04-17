@@ -7,7 +7,6 @@ package witness
 
 import (
 	"bufio"
-	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/rafttest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,11 +54,12 @@ type vizStep struct {
 }
 
 type vizMessage struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Type    string `json:"type"`
-	Label   string `json:"label"`
-	Dropped bool   `json:"dropped,omitempty"`
+	From    string   `json:"from"`
+	To      string   `json:"to"`
+	Type    string   `json:"type"`
+	Label   string   `json:"label"`
+	Dropped bool     `json:"dropped,omitempty"`
+	Trace   []string `json:"trace,omitempty"`
 }
 
 type vizVoterDelta struct {
@@ -108,7 +109,7 @@ func fmtVizIndex(idx uint64) string {
 func toVizLog(log []raft.LogMark) []vizLogMark {
 	out := make([]vizLogMark, len(log))
 	for i, lm := range log {
-		out[i] = vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: fmtVizIndex(lm.Index)}
+		out[i] = vizLogMark{Term: fmtTerm(lm.Term).String(), Index: fmtVizIndex(lm.Index)}
 	}
 	return out
 }
@@ -117,7 +118,7 @@ func toVizLogMark(lm raft.LogMark) *vizLogMark {
 	if lm == (raft.LogMark{}) {
 		return nil
 	}
-	return &vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: fmtVizIndex(lm.Index)}
+	return &vizLogMark{Term: fmtTerm(lm.Term).String(), Index: fmtVizIndex(lm.Index)}
 }
 
 func vizLogEqual(a, b []vizLogMark) bool {
@@ -144,7 +145,7 @@ func ptr[T any](v T) *T { return &v }
 // snapshotVoter returns a full delta (every field set) for a voter.
 func snapshotVoter(v testVoter) *vizVoterDelta {
 	log := toVizLog(v.log)
-	term := fmtTerm(v.term)
+	term := fmtTerm(v.term).String()
 	votedFor := fmtVotedFor(v.votedFor)
 	var mi uint64
 	if v.matchIndex != nil {
@@ -175,7 +176,7 @@ func diffVoter(prev, next testVoter) *vizVoterDelta {
 		changed = true
 	}
 	if prev.term != next.term {
-		d.Term = ptr(fmtTerm(next.term))
+		d.Term = ptr(fmtTerm(next.term).String())
 		changed = true
 	}
 	if prev.votedFor != next.votedFor {
@@ -222,7 +223,7 @@ func diffVoter(prev, next testVoter) *vizVoterDelta {
 }
 
 func snapshotWitness(w testWitness) *vizWitnessDelta {
-	term := fmtTerm(w.Vote.Term)
+	term := fmtTerm(w.Vote.Term).String()
 	votedFor := fmtVotedFor(w.Vote.VotedFor)
 	return &vizWitnessDelta{
 		Vote: &vizVoteDelta{
@@ -242,7 +243,7 @@ func diffWitness(prev, next testWitness) *vizWitnessDelta {
 	if prev.Vote != next.Vote {
 		vd = &vizVoteDelta{}
 		if prev.Vote.Term != next.Vote.Term {
-			vd.Term = ptr(fmtTerm(next.Vote.Term))
+			vd.Term = ptr(fmtTerm(next.Vote.Term).String())
 		}
 		if prev.Vote.VotedFor != next.Vote.VotedFor {
 			vd.VotedFor = ptr(fmtVotedFor(next.Vote.VotedFor))
@@ -290,6 +291,7 @@ func exchangesToVizMessages(exchanges []testExchange) []vizMessage {
 		msgs = append(msgs, vizMessage{
 			From: ex.resp.from, To: ex.resp.to,
 			Type: respType, Label: respLabel, Dropped: dropped,
+			Trace: ex.trace,
 		})
 	}
 	return msgs
@@ -303,7 +305,7 @@ func fmtMsgPayload(msg any) (typ, label string) {
 			typ = "PreVoteReq"
 		}
 		label = fmt.Sprintf("%s(term=%s, log=%s)",
-			typ, fmtTerm(m.term), fmtLogMark(raft.LogMark(m.lastLog)),
+			typ, fmtTerm(m.term), logMark(m.lastLog),
 		)
 		return typ, label
 	case msgVoteResp:
@@ -316,16 +318,16 @@ func fmtMsgPayload(msg any) (typ, label string) {
 		return "VoteResp", "no"
 	case msgAppendReq:
 		last := m.leader.lastLogMark()
-		return "AppendReq", fmt.Sprintf("AppendReq([... %s])", fmtLogMark(last))
+		return "AppendReq", fmt.Sprintf("AppendReq([... %s])", logMark(last))
 	case msgAppendResp:
 		return "AppendResp", m.detail
 	case msgEngage:
 		return "Engage", fmt.Sprintf("Engage(term=%s, hi=%s)",
-			fmtTerm(m.term), fmtLogMark(raft.LogMark(m.hi)),
+			fmtTerm(m.term), logMark(m.hi),
 		)
 	case msgRelease:
 		return "Release", fmt.Sprintf("Release(term=%s, hi=%s)",
-			fmtTerm(m.term), fmtLogMark(raft.LogMark(m.hi)),
+			fmtTerm(m.term), logMark(m.hi),
 		)
 	case msgWitnessResp:
 		if m.ok {
@@ -444,8 +446,9 @@ func TestGenerateViz(t *testing.T) {
 		comments, err := parseComments(path)
 		require.NoError(t, err)
 
-		env := testEnv{}
-		ctx := context.Background()
+		env := testEnv{
+			logger: rafttest.RedirectLogger{Builder: &strings.Builder{}},
+		}
 		var trace vizTrace
 		trace.TestFile = path
 
@@ -458,7 +461,7 @@ func TestGenerateViz(t *testing.T) {
 			prevVoters = cloneVoters(env.voters)
 			prevWitness = env.w
 
-			output := runCommand(t, d, &env, ctx)
+			output := runCommand(t, d, &env)
 
 			// Build step.
 			step := vizStep{

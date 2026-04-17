@@ -21,7 +21,9 @@ v1: yes (self)
 v2: yes
 v3: yes
 v4: yes
-w:  yes
+w:
+  - INFO granted vote for v1 at term b, hi carried as 0
+  yes
 outcome: won
 
 # v4 goes dark.
@@ -77,7 +79,9 @@ v4: [a1] term=b
 # Realizing this, the leader can engage the witness.
 engage v1
 ----
-ok
+w:
+  - INFO engaged at b4
+  ok
 w:  vote=(b, v1) acked=(b4, engaged)
 v1: [a1 b2 b3 b4] term=b committed=b4 leader
 
@@ -92,7 +96,10 @@ v2: yes (self)
 v1: yes
 v3: (dropped)
 v4: (dropped)
-w:  no
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
 outcome: lost
 
 # Another entry on v1, now v2 is not up to date with it any longer.
@@ -111,7 +118,10 @@ v2: yes (self)
 v1: no, log not up to date (b5 > b4)
 v3: (dropped)
 v4: (dropped)
-w:  no
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
 outcome: lost
 
 # v1 goes down. v3 comes up in its stead, but this is not enough.
@@ -128,7 +138,10 @@ v2: yes (self)
 v1: (dropped)
 v3: yes
 v4: (dropped)
-w:  no
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
 outcome: lost
 
 # We need a traditional quorum to forcibly release the witness.
@@ -145,7 +158,10 @@ v2: yes (self)
 v1: (dropped)
 v3: yes
 v4: yes
-w:  no
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
+  no
 outcome: won
 
 # v2 could release the witness (engaging it would also work), but instead we
@@ -177,5 +193,8 @@ v4: yes (self)
 v1: (dropped)
 v2: yes
 v3: yes
-w:  yes
+w:
+  - INFO engaged: effectiveHi inflated to b∞
+  - INFO granted vote for v4 at term d, hi carried as b∞
+  yes
 outcome: won
