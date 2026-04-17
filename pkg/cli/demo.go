@@ -233,6 +233,7 @@ func runDemoInternal(
 	defer c.Close(ctx)
 
 	initGEOS(ctx)
+	initEmbedding(ctx)
 
 	if err := c.Start(ctx); err != nil {
 		return clierrorplus.CheckAndMaybeShout(err)

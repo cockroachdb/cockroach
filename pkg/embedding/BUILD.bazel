@@ -2,12 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "embedding",
-    srcs = ["engine.go"],
+    srcs = [
+        "engine.go",
+        "singleton.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/embedding",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/embedding/onnxruntime",
         "//pkg/embedding/tokenizer",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -15,11 +20,16 @@ go_library(
 go_test(
     name = "embedding_test",
     size = "small",
-    srcs = ["engine_test.go"],
+    srcs = [
+        "engine_test.go",
+        "singleton_test.go",
+    ],
     data = glob(["testdata/**"]) + glob(["onnxruntime/testdata/**"]),
     embed = [":embedding"],
     deps = [
         "//pkg/embedding/onnxruntime",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_stretchr_testify//require",
     ],
 )

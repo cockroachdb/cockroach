@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -662,6 +663,7 @@ If problems persist, please see %s.`
 	}
 
 	initGEOS(ctx)
+	initEmbedding(ctx)
 
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
@@ -1545,6 +1547,24 @@ func initGEOS(ctx context.Context) {
 			log.SafeManaged(err))
 	} else {
 		log.Ops.Infof(ctx, "GEOS loaded from directory %s", log.SafeManaged(loc))
+	}
+}
+
+// initEmbedding sets up the embedding engine for the embed() SQL builtin.
+// We need to make sure this happens before any queries using embed() are
+// executed.
+func initEmbedding(ctx context.Context) {
+	err := embedding.Init(
+		startCtx.embeddingLibsDir,
+		startCtx.embeddingModelPath,
+		startCtx.embeddingVocabPath,
+	)
+	if err != nil {
+		log.Ops.Warningf(ctx,
+			"could not initialize embedding engine - embed() function may not be available: %v",
+			log.SafeManaged(err))
+	} else {
+		log.Ops.Infof(ctx, "embedding engine initialized successfully")
 	}
 }
 
