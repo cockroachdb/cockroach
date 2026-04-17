@@ -452,7 +452,7 @@ func makeViewTableDesc(
 		privileges,
 		persistence,
 	)
-	desc.ViewQuery = viewQuery
+	desc.ViewQuery = descpb.Statement(viewQuery)
 	if isMultiRegion {
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
@@ -462,15 +462,15 @@ func makeViewTableDesc(
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
-		desc.ViewQuery = sequenceReplacedQuery
+		desc.ViewQuery = descpb.Statement(sequenceReplacedQuery)
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, string(desc.ViewQuery),
 		false /* multiStmt */, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
-	desc.ViewQuery = typeReplacedQuery
+	desc.ViewQuery = descpb.Statement(typeReplacedQuery)
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
@@ -737,22 +737,22 @@ func (p *planner) replaceViewDesc(
 	backRefMutables map[descpb.ID]*tabledesc.Mutable,
 ) (*tabledesc.Mutable, error) {
 	// Set the query to the new query.
-	toReplace.ViewQuery = n.viewQuery
+	toReplace.ViewQuery = descpb.Statement(n.viewQuery)
 
 	if sc != nil {
 		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
 		if err != nil {
 			return nil, err
 		}
-		toReplace.ViewQuery = updatedQuery
+		toReplace.ViewQuery = descpb.Statement(updatedQuery)
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), string(toReplace.ViewQuery),
 		false /* multiStmt */, "view queries")
 	if err != nil {
 		return nil, err
 	}
-	toReplace.ViewQuery = typeReplacedQuery
+	toReplace.ViewQuery = descpb.Statement(typeReplacedQuery)
 
 	// Update view options if specified in the replacement.
 	if n.createView.Options != nil {

@@ -173,7 +173,7 @@ type Index interface {
 	IsNotVisible() bool
 	IsCreatedExplicitly() bool
 	GetInvisibility() float64
-	GetPredicate() string
+	GetPredicate() catpb.Expression
 	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
 	GetVecConfig() vecpb.Config
@@ -343,21 +343,21 @@ type Column interface {
 
 	// GetDefaultExpr returns the column default expression if it exists,
 	// empty string otherwise.
-	GetDefaultExpr() string
+	GetDefaultExpr() catpb.Expression
 
 	// HasOnUpdate returns true iff the column has an on update expression set.
 	HasOnUpdate() bool
 
 	// GetOnUpdateExpr returns the column on update expression if it exists,
 	// empty string otherwise.
-	GetOnUpdateExpr() string
+	GetOnUpdateExpr() catpb.Expression
 
 	// IsComputed returns true iff the column is a computed column.
 	IsComputed() bool
 
 	// GetComputeExpr returns the column computed expression if it exists,
 	// empty string otherwise.
-	GetComputeExpr() string
+	GetComputeExpr() catpb.Expression
 
 	// IsHidden returns true iff the column is not visible.
 	IsHidden() bool
@@ -502,7 +502,7 @@ type UniqueConstraint interface {
 	IsPartial() bool
 
 	// GetPredicate returns the partial predicate if there is one, "" otherwise.
-	GetPredicate() string
+	GetPredicate() catpb.Expression
 }
 
 // UniqueWithIndexConstraint is an interface around a unique constraint
@@ -526,7 +526,7 @@ type CheckConstraint interface {
 	CheckDesc() *descpb.TableDescriptor_CheckConstraint
 
 	// GetExpr returns the check expression as a string.
-	GetExpr() string
+	GetExpr() catpb.Expression
 
 	// NumReferencedColumns returns the number of column references in the check
 	// expression. Note that a column may be referenced multiple times in an
@@ -560,7 +560,7 @@ type CheckConstraintValidator interface {
 	GetName() string
 
 	// GetExpr returns the check expression as a string.
-	GetExpr() string
+	GetExpr() catpb.Expression
 
 	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
 	// to enforce row-level security policies.

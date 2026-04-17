@@ -245,7 +245,7 @@ func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Col
 			continue
 		}
 
-		expr, err := parserutils.ParseExpr(c.GetComputeExpr())
+		expr, err := parserutils.ParseExpr(string(c.GetComputeExpr()))
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)
@@ -302,7 +302,7 @@ func MakeComputedExprs(
 	exprStrings := make([]string, 0, len(input))
 	for _, col := range input {
 		if col.IsComputed() {
-			exprStrings = append(exprStrings, col.GetComputeExpr())
+			exprStrings = append(exprStrings, string(col.GetComputeExpr()))
 		}
 	}
 

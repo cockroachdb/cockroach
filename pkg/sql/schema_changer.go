@@ -366,7 +366,7 @@ func (sc *SchemaChanger) validateBackfillQueryIntoTable(
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
-	query string,
+	query catpb.Statement,
 	ts hlc.Timestamp,
 	opName redact.SafeString,
 	backfillAsUser username.SQLUsername,
@@ -441,7 +441,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 
-		stmt, err := parser.ParseOne(query)
+		stmt, err := parser.ParseOne(string(query))
 		if err != nil {
 			return err
 		}

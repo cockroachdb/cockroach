@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -52,7 +53,7 @@ func (c checkConstraint) CheckDesc() *descpb.TableDescriptor_CheckConstraint {
 }
 
 // GetExpr implements the catalog.CheckConstraint interface.
-func (c checkConstraint) GetExpr() string {
+func (c checkConstraint) GetExpr() catpb.Expression {
 	return c.desc.Expr
 }
 
@@ -142,7 +143,7 @@ type rlsSyntheticCheckConstraint struct {
 var _ catalog.CheckConstraintValidator = (*rlsSyntheticCheckConstraint)(nil)
 
 // GetExpr implements the catalog.CheckConstraintValidator interface.
-func (r rlsSyntheticCheckConstraint) GetExpr() string {
+func (r rlsSyntheticCheckConstraint) GetExpr() catpb.Expression {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
@@ -219,7 +220,7 @@ func (c uniqueWithoutIndexConstraint) IsPartial() bool {
 }
 
 // GetPredicate implements the catalog.UniqueConstraint interface.
-func (c uniqueWithoutIndexConstraint) GetPredicate() string {
+func (c uniqueWithoutIndexConstraint) GetPredicate() catpb.Expression {
 	return c.desc.Predicate
 }
 

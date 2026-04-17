@@ -5,14 +5,17 @@
 
 package schemaexpr
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // MakeHashShardComputeExpr creates the serialized computed expression for a hash shard
 // column based on the column names and the number of buckets. The expression will be
 // of the form:
 //
 //	mod(fnv32(md5(crdb_internal.datums_to_bytes(...))),buckets)
-func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
+func MakeHashShardComputeExpr(colNames []string, buckets int) *catpb.Expression {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
 			FunctionReference: &tree.UnresolvedName{
@@ -53,6 +56,6 @@ func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 			},
 		}
 	}
-	res := tree.Serialize(modBuckets(hashedColumnsExpr()))
+	res := catpb.Expression(tree.Serialize(modBuckets(hashedColumnsExpr())))
 	return &res
 }

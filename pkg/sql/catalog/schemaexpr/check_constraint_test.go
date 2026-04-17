@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -42,7 +43,7 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 		name          string
 		expr          string
 		expectedValid bool
-		expectedExpr  string
+		expectedExpr  catpb.Expression
 		expectedName  string
 	}{
 		// Respect custom names.

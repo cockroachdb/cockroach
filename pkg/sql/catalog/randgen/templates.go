@@ -185,7 +185,7 @@ outer:
 	}
 }
 
-var uniqueRowIDString = "unique_rowid()"
+var uniqueRowIDString = descpb.Expression("unique_rowid()")
 
 // defaultTemplate provides a simple test template that is used when
 // the caller does not specify any template.

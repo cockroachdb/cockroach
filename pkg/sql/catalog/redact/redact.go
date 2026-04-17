@@ -92,21 +92,21 @@ func redactTableDescriptor(d *descpb.TableDescriptor) (errs []error) {
 	return errs
 }
 
-func redactQuery(sql *string) error {
-	q, err := parser.ParseOne(*sql)
+func redactQuery(sql *descpb.Statement) error {
+	q, err := parser.ParseOne(string(*sql))
 	if err != nil {
 		*sql = "_"
 		return err
 	}
 	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
 	q.AST.Format(fmtCtx)
-	*sql = fmtCtx.String()
+	*sql = descpb.Statement(fmtCtx.String())
 	return nil
 }
 
 func redactIndex(idx *descpb.IndexDescriptor) error {
 	redactPartitioning(&idx.Partitioning)
-	return errors.Wrap(redactExprStr(&idx.Predicate), "partial predicate")
+	return errors.Wrap(redactExpr(&idx.Predicate), "partial predicate")
 }
 
 func redactColumn(col *descpb.ColumnDescriptor) (errs []error) {
@@ -116,23 +116,23 @@ func redactColumn(col *descpb.ColumnDescriptor) (errs []error) {
 		}
 	}
 	if ce := col.ComputeExpr; ce != nil {
-		handleErr(errors.Wrap(redactExprStr(ce), "compute expr"))
+		handleErr(errors.Wrap(redactExpr(ce), "compute expr"))
 	}
 	if de := col.DefaultExpr; de != nil {
-		handleErr(errors.Wrap(redactExprStr(de), "default expr"))
+		handleErr(errors.Wrap(redactExpr(de), "default expr"))
 	}
 	if ue := col.OnUpdateExpr; ue != nil {
-		handleErr(errors.Wrap(redactExprStr(ue), "on-update expr"))
+		handleErr(errors.Wrap(redactExpr(ue), "on-update expr"))
 	}
 	return errs
 }
 
 func redactCheckConstraints(chk *descpb.TableDescriptor_CheckConstraint) error {
-	return redactExprStr(&chk.Expr)
+	return redactExpr(&chk.Expr)
 }
 
 func redactUniqueWithoutIndexConstraint(uwi *descpb.UniqueWithoutIndexConstraint) error {
-	return redactExprStr(&uwi.Predicate)
+	return redactExpr(&uwi.Predicate)
 }
 
 func redactTypeDescriptor(d *descpb.TypeDescriptor) {
@@ -186,24 +186,17 @@ func redactPartitioning(p *catpb.PartitioningDescriptor) {
 }
 
 func redactExpr(expr *catpb.Expression) error {
-	str := string(*expr)
-	err := redactExprStr(&str)
-	*expr = catpb.Expression(str)
-	return err
-}
-
-func redactExprStr(expr *string) error {
 	if *expr == "" {
 		return nil
 	}
-	parsedExpr, err := parser.ParseExpr(*expr)
+	parsedExpr, err := parser.ParseExpr(string(*expr))
 	if err != nil {
 		*expr = "_"
 		return err
 	}
 	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
 	parsedExpr.Format(fmtCtx)
-	*expr = fmtCtx.String()
+	*expr = descpb.Expression(fmtCtx.String())
 	return nil
 }
 
@@ -214,7 +207,7 @@ func redactFunctionDescriptor(desc *descpb.FunctionDescriptor) (errs []error) {
 		}
 	}
 
-	if err := redactFunctionBodyStr(desc.Lang, &desc.FunctionBody); err != nil {
+	if err := redactFunctionBodyStr(desc.Lang, (*string)(&desc.FunctionBody)); err != nil {
 		return []error{err}
 	}
 	if scs := desc.DeclarativeSchemaChangerState; scs != nil {

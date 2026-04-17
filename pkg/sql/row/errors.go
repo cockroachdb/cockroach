@@ -296,7 +296,7 @@ func DecodeRowInfo(
 	values := make([]string, len(cols))
 	for i := range cols {
 		if cols[i].IsExpressionIndexColumn() {
-			names[i] = cols[i].GetComputeExpr()
+			names[i] = string(cols[i].GetComputeExpr())
 		} else {
 			names[i] = cols[i].GetName()
 		}

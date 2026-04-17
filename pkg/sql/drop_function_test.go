@@ -84,7 +84,7 @@ SELECT b FROM defaultdb.public.t@t_idx_b;
 SELECT c FROM defaultdb.public.t@t_idx_c;
 SELECT a FROM defaultdb.public.v;
 SELECT nextval(%d:::REGCLASS);`, seqID)
-		require.Equal(t, expectedBody, funcDesc.GetFunctionBody())
+		require.Equal(t, expectedBody, string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]

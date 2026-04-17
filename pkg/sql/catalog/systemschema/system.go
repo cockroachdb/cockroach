@@ -154,44 +154,44 @@ CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 	commitLatSqDiffComputeExpr = `(((statistics->'statistics':::STRING)->'commitLat':::STRING)->'sqDiff':::STRING)::FLOAT8`
 )
 
-var indexUsageComputeExprStr = indexUsageComputeExpr
-var executionCountComputeExprStr = executionCountComputeExpr
-var serviceLatencyComputeExprStr = serviceLatencyComputeExpr
-var cpuSqlNanosComputeExprStr = cpuSqlNanosComputeExpr
-var contentionTimeComputeExprStr = contentionTimeComputeExpr
-var totalEstimatedExecutionTimeExprStr = totalEstimatedExecutionTimeExpr
-var p99LatencyComputeExprStr = p99LatencyComputeExpr
-var execSampleCountComputeExprStr = execStatsExecCountComputeExpr
-var svcLatSumComputeExprStr = serviceLatencyComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var cpuSqlNanosSumComputeExprStr = cpuSqlNanosComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8"
-var contentionTimeSumComputeExprStr = contentionTimeComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8"
+var indexUsageComputeExprStr = descpb.Expression(indexUsageComputeExpr)
+var executionCountComputeExprStr = descpb.Expression(executionCountComputeExpr)
+var serviceLatencyComputeExprStr = descpb.Expression(serviceLatencyComputeExpr)
+var cpuSqlNanosComputeExprStr = descpb.Expression(cpuSqlNanosComputeExpr)
+var contentionTimeComputeExprStr = descpb.Expression(contentionTimeComputeExpr)
+var totalEstimatedExecutionTimeExprStr = descpb.Expression(totalEstimatedExecutionTimeExpr)
+var p99LatencyComputeExprStr = descpb.Expression(p99LatencyComputeExpr)
+var execSampleCountComputeExprStr = descpb.Expression(execStatsExecCountComputeExpr)
+var svcLatSumComputeExprStr = descpb.Expression(serviceLatencyComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var cpuSqlNanosSumComputeExprStr = descpb.Expression(cpuSqlNanosComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8")
+var contentionTimeSumComputeExprStr = descpb.Expression(contentionTimeComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8")
 
 // sum_sq expressions: sqDiff + count * mean^2 (enables aggregation for stddev calculation)
 // Note: parenthesization must match what SQL produces: sqDiff + ((count * mean) * mean)
-var svcLatSumSqComputeExprStr = svcLatSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + serviceLatencyComputeExpr + ") * " + serviceLatencyComputeExpr + ")"
-var cpuSqlNanosSumSqComputeExprStr = cpuSqlNanosSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + cpuSqlNanosComputeExpr + ") * " + cpuSqlNanosComputeExpr + ")"
-var contentionTimeSumSqComputeExprStr = contentionTimeSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + contentionTimeComputeExpr + ") * " + contentionTimeComputeExpr + ")"
+var svcLatSumSqComputeExprStr = descpb.Expression(svcLatSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + serviceLatencyComputeExpr + ") * " + serviceLatencyComputeExpr + ")")
+var cpuSqlNanosSumSqComputeExprStr = descpb.Expression(cpuSqlNanosSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + cpuSqlNanosComputeExpr + ") * " + cpuSqlNanosComputeExpr + ")")
+var contentionTimeSumSqComputeExprStr = descpb.Expression(contentionTimeSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + contentionTimeComputeExpr + ") * " + contentionTimeComputeExpr + ")")
 
 // kv_cpu_time_nanos expressions
-var kvCpuTimeNanosSumComputeExprStr = kvCpuTimeNanosComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var kvCpuTimeNanosSumSqComputeExprStr = kvCpuTimeNanosSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + kvCpuTimeNanosComputeExpr + ") * " + kvCpuTimeNanosComputeExpr + ")"
+var kvCpuTimeNanosSumComputeExprStr = descpb.Expression(kvCpuTimeNanosComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var kvCpuTimeNanosSumSqComputeExprStr = descpb.Expression(kvCpuTimeNanosSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + kvCpuTimeNanosComputeExpr + ") * " + kvCpuTimeNanosComputeExpr + ")")
 
 // admission_wait_time expressions
-var admissionWaitTimeSumComputeExprStr = admissionWaitTimeComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8"
-var admissionWaitTimeSumSqComputeExprStr = admissionWaitTimeSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + admissionWaitTimeComputeExpr + ") * " + admissionWaitTimeComputeExpr + ")"
+var admissionWaitTimeSumComputeExprStr = descpb.Expression(admissionWaitTimeComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8")
+var admissionWaitTimeSumSqComputeExprStr = descpb.Expression(admissionWaitTimeSqDiffComputeExpr + " + ((" + execStatsExecCountComputeExpr + "::FLOAT8 * " + admissionWaitTimeComputeExpr + ") * " + admissionWaitTimeComputeExpr + ")")
 
 // rows/bytes expressions - these use executionCountComputeExpr (from statistics.cnt)
-var rowsReadSumComputeExprStr = rowsReadComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var rowsWrittenSumComputeExprStr = rowsWrittenComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var bytesReadSumComputeExprStr = bytesReadComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var bytesReadSumSqComputeExprStr = bytesReadSqDiffExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + bytesReadComputeExpr + ") * " + bytesReadComputeExpr + ")"
+var rowsReadSumComputeExprStr = descpb.Expression(rowsReadComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var rowsWrittenSumComputeExprStr = descpb.Expression(rowsWrittenComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var bytesReadSumComputeExprStr = descpb.Expression(bytesReadComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var bytesReadSumSqComputeExprStr = descpb.Expression(bytesReadSqDiffExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + bytesReadComputeExpr + ") * " + bytesReadComputeExpr + ")")
 
 // max retries expression
-var maxRetriesComputeExprStr = maxRetriesComputeExpr
+var maxRetriesComputeExprStr = descpb.Expression(maxRetriesComputeExpr)
 
 // commit latency expressions (transaction_statistics only)
-var commitLatSumComputeExprStr = commitLatComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
-var commitLatSumSqComputeExprStr = commitLatSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + commitLatComputeExpr + ") * " + commitLatComputeExpr + ")"
+var commitLatSumComputeExprStr = descpb.Expression(commitLatComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8")
+var commitLatSumSqComputeExprStr = descpb.Expression(commitLatSqDiffComputeExpr + " + ((" + executionCountComputeExpr + "::FLOAT8 * " + commitLatComputeExpr + ") * " + commitLatComputeExpr + ")")
 
 // These system tables are not part of the system config.
 const (
@@ -1435,9 +1435,9 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr   = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
-	sqlTxnHashComputeExpr    = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
-	timestampHashComputeExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)`
+	sqlStmtHashComputeExpr   = descpb.Expression(`mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`)
+	sqlTxnHashComputeExpr    = descpb.Expression(`mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`)
+	timestampHashComputeExpr = descpb.Expression(`mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)`)
 )
 
 const (
@@ -1722,9 +1722,9 @@ var (
 			pk("id"),
 		))
 
-	falseBoolString = "false"
-	trueBoolString  = "true"
-	zeroIntString   = "0:::INT8"
+	falseBoolString = descpb.Expression("false")
+	trueBoolString  = descpb.Expression("true")
+	zeroIntString   = descpb.Expression("0:::INT8")
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = makeSystemTable(
@@ -2030,7 +2030,7 @@ var (
 		)
 	}
 
-	uuidV4String = "uuid_v4()"
+	uuidV4String = descpb.Expression("uuid_v4()")
 
 	// EventLogTable is the descriptor for the event log table.
 	EventLogTable = makeSystemTable(
@@ -2077,7 +2077,7 @@ var (
 			},
 		))
 
-	uniqueRowIDString = "unique_rowid()"
+	uniqueRowIDString = descpb.Expression("unique_rowid()")
 
 	// RangeEventTable is the descriptor for the range log table.
 	RangeEventTable = makeSystemTable(
@@ -2131,7 +2131,7 @@ var (
 			pk("key"),
 		))
 
-	nowString = "now():::TIMESTAMP"
+	nowString = descpb.Expression("now():::TIMESTAMP")
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = makeSystemTable(
@@ -2741,7 +2741,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:         "check_singleton",
-				Expr:         "singleton",
+				Expr:         descpb.Expression("singleton"),
 				ColumnIDs:    []descpb.ColumnID{1},
 				ConstraintID: tbl.NextConstraintID,
 			}}
@@ -2845,7 +2845,7 @@ var (
 			pk("id"),
 		))
 
-	emptyString = "'':::STRING"
+	emptyString = descpb.Expression("'':::STRING")
 
 	// TODO(andrei): Add a foreign key reference to the statement_diagnostics table when
 	// it no longer requires us to create an index on statement_diagnostics_id.
@@ -2893,7 +2893,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:         "check_sampling_probability",
-				Expr:         "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
+				Expr:         descpb.Expression("sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8"),
 				ColumnIDs:    []descpb.ColumnID{8},
 				ConstraintID: tbl.NextConstraintID,
 			}}
@@ -2995,7 +2995,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:         "check_sampling_probability",
-				Expr:         "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
+				Expr:         descpb.Expression("sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8"),
 				ColumnIDs:    []descpb.ColumnID{9},
 				ConstraintID: tbl.NextConstraintID,
 			}}
@@ -3027,7 +3027,7 @@ var (
 			pk("id"),
 		))
 
-	nowTZString = "now():::TIMESTAMPTZ"
+	nowTZString = descpb.Expression("now():::TIMESTAMPTZ")
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
 	ScheduledJobsTable = makeSystemTable(
@@ -3183,7 +3183,7 @@ var (
 			},
 		))
 
-	defaultIndexRec = "ARRAY[]:::STRING[]"
+	defaultIndexRec = descpb.Expression("ARRAY[]:::STRING[]")
 
 	// StatementStatisticsTable is the descriptor for the SQL statement stats table.
 	// It stores statistics for statement fingerprints.
@@ -3343,12 +3343,12 @@ var (
 				StoreColumnIDs:     []descpb.ColumnID{14, 20, 21, 22, 23, 27, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35},
 				StoreColumnNames:   []string{"execution_count", "exec_sample_count", "svc_lat_sum", "cpu_sql_nanos_sum", "contention_time_sum", "kv_cpu_time_nanos_sum", "svc_lat_sum_sq", "cpu_sql_nanos_sum_sq", "contention_time_sum_sq", "kv_cpu_time_nanos_sum_sq", "admission_wait_time_sum", "admission_wait_time_sum_sq", "rows_read_sum", "rows_written_sum", "bytes_read_sum", "bytes_read_sum_sq", "max_retries"},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
-				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
+				Predicate:          descpb.Expression("app_name NOT LIKE '$ internal%':::STRING"),
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)"),
 				Name:                  "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{11},
@@ -3495,12 +3495,12 @@ var (
 				StoreColumnIDs:     []descpb.ColumnID{9, 15, 16, 17, 18, 22, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
 				StoreColumnNames:   []string{"execution_count", "exec_sample_count", "svc_lat_sum", "cpu_sql_nanos_sum", "contention_time_sum", "kv_cpu_time_nanos_sum", "svc_lat_sum_sq", "cpu_sql_nanos_sum_sq", "contention_time_sum_sq", "kv_cpu_time_nanos_sum_sq", "admission_wait_time_sum", "admission_wait_time_sum_sq", "rows_read_sum", "rows_written_sum", "bytes_read_sum", "bytes_read_sum_sq", "max_retries", "commit_lat_sum", "commit_lat_sum_sq"},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
-				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
+				Predicate:          descpb.Expression("app_name NOT LIKE '$ internal%':::STRING"),
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)"),
 				Name:                  "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{8},
@@ -4054,7 +4054,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:         "check_bounds",
-				Expr:         "start_key < end_key",
+				Expr:         descpb.Expression("start_key < end_key"),
 				ColumnIDs:    []descpb.ColumnID{1, 2},
 				ConstraintID: tbl.NextConstraintID,
 			}}
@@ -4126,7 +4126,7 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:         "single_row",
-				Expr:         "singleton",
+				Expr:         descpb.Expression("singleton"),
 				ColumnIDs:    []descpb.ColumnID{1},
 				ConstraintID: tbl.NextConstraintID,
 			}}
@@ -4436,7 +4436,7 @@ var (
 			}),
 	)
 
-	genRandomUUIDString = "gen_random_uuid()"
+	genRandomUUIDString = descpb.Expression("gen_random_uuid()")
 
 	SpanStatsUniqueKeysTable = makeSystemTable(
 		SpanStatsUniqueKeysTableSchema,
@@ -4696,7 +4696,7 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)"),
 				Name:                  "check_crdb_internal_created_at_database_id_index_id_table_id_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{6},
@@ -4708,7 +4708,7 @@ var (
 		},
 	)
 
-	timeRangeHashComputeExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)`
+	timeRangeHashComputeExpr = descpb.Expression(`mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)`)
 
 	TransactionExecInsightsTable = makeSystemTable(
 		TxnExecutionStatsTableSchema,
@@ -4828,7 +4828,7 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)"),
 				Name:                  "check_crdb_internal_end_time_start_time_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{23},
@@ -5004,7 +5004,7 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)"),
 				Name:                  "check_crdb_internal_end_time_start_time_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{29},
@@ -5016,7 +5016,7 @@ var (
 		},
 	)
 
-	crdbInternalTableIdLastUpdatedShardStr = crdbInternalTableIdLastUpdatedShard
+	crdbInternalTableIdLastUpdatedShardStr = descpb.Expression(crdbInternalTableIdLastUpdatedShard)
 
 	TableMetadata = makeSystemTable(
 		TableMetadataTableSchema,
@@ -5224,7 +5224,7 @@ var (
 			},
 		), func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)"),
 				Name:                  "check_crdb_internal_last_updated_table_id_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{18},
@@ -5261,7 +5261,7 @@ var (
 		),
 	)
 
-	inspectErrorsExpirationString = "current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL"
+	inspectErrorsExpirationString = descpb.Expression("current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL")
 
 	InspectErrorsTable = makeSystemTable(
 		InspectErrorsTableSchema,
@@ -5313,7 +5313,7 @@ var (
 		},
 	)
 
-	statementHintsComputeExpr                = "fnv64(fingerprint)"
+	statementHintsComputeExpr                = descpb.Expression("fnv64(fingerprint)")
 	StatementHintsHashIndexID descpb.IndexID = 2
 	StatementHintsTable                      = makeSystemTable(
 		StatementHintsTableSchema,
@@ -5360,8 +5360,8 @@ var (
 		),
 	)
 
-	clusterMetricsDefaultLabels        = "'{}':::JSONB"
-	clusterMetricsLastUpdatedShardExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(last_updated))), 8:::INT8)`
+	clusterMetricsDefaultLabels        = descpb.Expression("'{}':::JSONB")
+	clusterMetricsLastUpdatedShardExpr = descpb.Expression(`mod(fnv32(md5(crdb_internal.datums_to_bytes(last_updated))), 8:::INT8)`)
 	ClusterMetricsTable                = makeSystemTable(
 		ClusterMetricsTableSchema,
 		systemTable(
@@ -5444,7 +5444,7 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                  "crdb_internal_last_updated_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Expr:                  descpb.Expression("crdb_internal_last_updated_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)"),
 				Name:                  "check_crdb_internal_last_updated_shard_8",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{8},

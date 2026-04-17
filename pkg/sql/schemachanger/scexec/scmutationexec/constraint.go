@@ -69,7 +69,7 @@ func (i *immediateVisitor) AddCheckConstraint(
 	}
 
 	ck := &descpb.TableDescriptor_CheckConstraint{
-		Expr:                  string(op.CheckExpr),
+		Expr:                  op.CheckExpr,
 		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:              op.Validity,
 		ColumnIDs:             op.ColumnIDs,
@@ -519,7 +519,7 @@ func (i *immediateVisitor) AddUniqueWithoutIndexConstraint(
 		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:     op.Validity,
 		ConstraintID: op.ConstraintID,
-		Predicate:    string(op.PartialExpr),
+		Predicate:    op.PartialExpr,
 	}
 	if op.Validity == descpb.ConstraintValidity_Unvalidated {
 		// Unvalidated constraint doesn't need to transition through an intermediate

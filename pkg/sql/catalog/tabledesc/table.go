@@ -185,8 +185,7 @@ func MakeColumnDefDescs(
 		// Otherwise we want to keep the default expression nil.
 		if ret.DefaultExpr != tree.DNull {
 			d.DefaultExpr.Expr = ret.DefaultExpr
-			s := tree.Serialize(d.DefaultExpr.Expr)
-			col.DefaultExpr = &s
+			col.DefaultExpr = new(descpb.Expression(tree.Serialize(d.DefaultExpr.Expr)))
 		}
 	}
 
@@ -208,8 +207,7 @@ func MakeColumnDefDescs(
 		}
 
 		d.OnUpdateExpr.Expr = ret.OnUpdateExpr
-		s := tree.Serialize(d.OnUpdateExpr.Expr)
-		col.OnUpdateExpr = &s
+		col.OnUpdateExpr = new(descpb.Expression(tree.Serialize(d.OnUpdateExpr.Expr)))
 	}
 
 	if d.IsComputed() {
@@ -218,8 +216,7 @@ func MakeColumnDefDescs(
 		// descriptor. Callers must validate the expression with
 		// schemaexpr.ValidateComputedColumnExpression once all possible
 		// reference columns are part of the table descriptor.
-		s := tree.Serialize(d.Computed.Expr)
-		col.ComputeExpr = &s
+		col.ComputeExpr = new(descpb.Expression(tree.Serialize(d.Computed.Expr)))
 	}
 
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
@@ -574,7 +571,7 @@ func RenameColumnInTable(
 	newName tree.Name,
 	isShardColumnRenameable func(shardCol catalog.Column, newShardColName tree.Name) (bool, error),
 ) error {
-	renameInExpr := func(expr *string) error {
+	renameInExpr := func(expr *descpb.Expression) error {
 		newExpr, renameErr := schemaexpr.RenameColumn(*expr, col.ColName(), newName)
 		if renameErr != nil {
 			return renameErr
@@ -610,12 +607,10 @@ func RenameColumnInTable(
 
 	// Rename the column in the TTL expiration expression.
 	if tableDesc.HasRowLevelTTL() {
-		if expirationExpr := tableDesc.GetRowLevelTTL().ExpirationExpr; expirationExpr != "" {
-			expirationExprStr := string(expirationExpr)
-			if err := renameInExpr(&expirationExprStr); err != nil {
+		if ttl := tableDesc.GetRowLevelTTL(); ttl.ExpirationExpr != "" {
+			if err := renameInExpr(&ttl.ExpirationExpr); err != nil {
 				return err
 			}
-			tableDesc.GetRowLevelTTL().ExpirationExpr = catpb.Expression(expirationExprStr)
 		}
 	}
 
