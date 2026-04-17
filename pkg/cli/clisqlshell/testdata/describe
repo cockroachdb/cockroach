@@ -498,9 +498,9 @@ pg_catalog,pg_amproc,table,node,permanent,prefix,pg_amproc was created for compa
 pg_catalog,pg_attrdef,table,node,permanent,prefix,"column default values
 https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html"
 pg_catalog,pg_attribute,table,node,permanent,prefix,"table columns (incomplete - see also information_schema.columns)
-https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
+https://www.postgresql.org/docs/18/catalog-pg-attribute.html"
 pg_catalog,pg_auth_members,table,node,permanent,prefix,"role membership
-https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html"
+https://www.postgresql.org/docs/18/catalog-pg-auth-members.html"
 pg_catalog,pg_authid,table,node,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html"
@@ -512,16 +512,16 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html"
 pg_catalog,pg_class,table,node,permanent,prefix,"tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html"
 pg_catalog,pg_collation,table,node,permanent,prefix,"available collations (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-collation.html"
+https://www.postgresql.org/docs/18/catalog-pg-collation.html"
 pg_catalog,pg_config,table,node,permanent,prefix,pg_config was created for compatibility and is currently unimplemented
 pg_catalog,pg_constraint,table,node,permanent,prefix,"table constraints (incomplete - see also information_schema.table_constraints)
-https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html"
+https://www.postgresql.org/docs/18/catalog-pg-constraint.html"
 pg_catalog,pg_conversion,table,node,permanent,prefix,"encoding conversions (empty - unimplemented)
 https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html"
 pg_catalog,pg_cursors,table,node,permanent,prefix,"contains currently active SQL cursors created with DECLARE
 https://www.postgresql.org/docs/14/view-pg-cursors.html"
 pg_catalog,pg_database,table,node,permanent,prefix,"available databases (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-database.html"
+https://www.postgresql.org/docs/18/catalog-pg-database.html"
 pg_catalog,pg_db_role_setting,table,node,permanent,prefix,"contains the default values that have been configured for session variables
 https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html"
 pg_catalog,pg_default_acl,table,node,permanent,prefix,"default ACLs; these are the privileges that will be assigned to newly created objects
@@ -573,7 +573,7 @@ https://www.postgresql.org/docs/17/view-pg-policies.html"
 pg_catalog,pg_policy,table,node,permanent,prefix,"stores row-level security policies for tables
 https://www.postgresql.org/docs/17/catalog-pg-policy.html"
 pg_catalog,pg_prepared_statements,table,node,permanent,prefix,"prepared statements
-https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
+https://www.postgresql.org/docs/18/view-pg-prepared-statements.html"
 pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
 pg_catalog,pg_proc,table,node,permanent,prefix,"built-in functions (incomplete)
@@ -650,7 +650,7 @@ pg_catalog,pg_statio_user_sequences,table,node,permanent,prefix,pg_statio_user_s
 pg_catalog,pg_statio_user_tables,table,node,permanent,prefix,pg_statio_user_tables was created for compatibility and is currently unimplemented
 pg_catalog,pg_statistic,table,node,permanent,prefix,pg_statistic was created for compatibility and is currently unimplemented
 pg_catalog,pg_statistic_ext,table,node,permanent,prefix,"pg_statistic_ext has the statistics objects created with CREATE STATISTICS
-https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html"
+https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html"
 pg_catalog,pg_statistic_ext_data,table,node,permanent,prefix,pg_statistic_ext_data was created for compatibility and is currently unimplemented
 pg_catalog,pg_stats,table,node,permanent,prefix,pg_stats was created for compatibility and is currently unimplemented
 pg_catalog,pg_stats_ext,table,node,permanent,prefix,pg_stats_ext was created for compatibility and is currently unimplemented

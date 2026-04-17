@@ -67,20 +67,21 @@ CREATE TABLE pg_catalog.pg_attrdef (
 )`
 
 // PGCatalogAttribute describes the schema of the pg_catalog.pg_attribute table.
-// https://www.postgresql.org/docs/12/catalog-pg-attribute.html,
+// https://www.postgresql.org/docs/18/catalog-pg-attribute.html,
 const PGCatalogAttribute = `
 CREATE TABLE pg_catalog.pg_attribute (
 	attrelid OID NOT NULL,
 	attname NAME,
 	atttypid OID,
-	attstattarget INT4,
+	attstattarget INT2,
 	attlen INT2,
 	attnum INT2,
-	attndims INT4,
+	attndims INT2,
 	attcacheoff INT4,
 	atttypmod INT4,
 	attbyval BOOL,
 	attstorage "char",
+	attcompression "char",
 	attalign "char",
 	attnotnull BOOL,
 	atthasdef BOOL,
@@ -88,7 +89,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attgenerated "char",
 	attisdropped BOOL,
 	attislocal BOOL,
-	attinhcount INT4,
+	attinhcount INT2,
 	attcollation OID,
 	attacl STRING[],
 	attoptions STRING[],
@@ -131,13 +132,16 @@ CREATE TABLE pg_catalog.pg_authid (
 
 // PGCatalogAuthMembers describes the schema of the pg_catalog.pg_auth_members
 // table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html,
+// https://www.postgresql.org/docs/18/catalog-pg-auth-members.html,
 const PGCatalogAuthMembers = `
 CREATE TABLE pg_catalog.pg_auth_members (
+	oid OID,
 	roleid OID,
 	member OID,
 	grantor OID,
-	admin_option BOOL
+	admin_option BOOL,
+	inherit_option BOOL,
+	set_option BOOL
 )`
 
 // PGCatalogAvailableExtensions describes the schema of the
@@ -152,7 +156,7 @@ CREATE TABLE pg_catalog.pg_available_extensions (
 )`
 
 // PGCatalogClass describes the schema of the pg_catalog.pg_class table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-class.html,
+// https://www.postgresql.org/docs/18/catalog-pg-class.html,
 const PGCatalogClass = `
 CREATE TABLE pg_catalog.pg_class (
 	oid OID NOT NULL,
@@ -167,6 +171,7 @@ CREATE TABLE pg_catalog.pg_class (
 	relpages INT4,
 	reltuples FLOAT4,
 	relallvisible INT4,
+	relallfrozen INT4,
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
@@ -195,24 +200,26 @@ CREATE TABLE pg_catalog.pg_class (
 )`
 
 // PGCatalogCollation describes the schema of the pg_catalog.pg_collation table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-collation.html,
+// https://www.postgresql.org/docs/18/catalog-pg-collation.html,
 const PGCatalogCollation = `
 CREATE TABLE pg_catalog.pg_collation (
   oid OID,
-  collname STRING,
+  collname NAME,
   collnamespace OID,
   collowner OID,
+  collprovider "char",
+  collisdeterministic BOOL,
   collencoding INT4,
+  colllocale STRING,
+  collicurules STRING,
   collcollate STRING,
   collctype STRING,
-  collprovider "char",
-  collversion STRING,
-  collisdeterministic BOOL
+  collversion STRING
 )`
 
 // PGCatalogConstraint describes the schema of the pg_catalog.pg_constraint
 // table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html,
+// https://www.postgresql.org/docs/18/catalog-pg-constraint.html,
 const PGCatalogConstraint = `
 CREATE TABLE pg_catalog.pg_constraint (
 	oid OID,
@@ -225,25 +232,28 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conrelid OID NOT NULL,
 	contypid OID,
 	conindid OID,
+	conparentid OID,
 	confrelid OID,
 	confupdtype "char",
 	confdeltype "char",
 	confmatchtype "char",
 	conislocal BOOL,
-	coninhcount INT4,
+	coninhcount INT2,
 	connoinherit BOOL,
 	conkey INT2[],
 	confkey INT2[],
 	conpfeqop OID[],
 	conppeqop OID[],
 	conffeqop OID[],
+	confdelsetcols INT2[],
 	conexclop OID[],
 	conbin STRING,
 	consrc STRING,
 	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
 	-- style string, for use by pg_get_constraintdef().
 	condef STRING,
-	conparentid OID,
+	conenforced BOOL,
+	conperiod BOOL,
   INDEX (conrelid)
 )`
 
@@ -263,22 +273,26 @@ CREATE TABLE pg_catalog.pg_conversion (
 )`
 
 // PGCatalogDatabase describes the schema of the pg_catalog.pg_database table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-database.html,
+// https://www.postgresql.org/docs/18/catalog-pg-database.html,
 const PGCatalogDatabase = `
 CREATE TABLE pg_catalog.pg_database (
 	oid OID,
 	datname Name,
 	datdba OID,
 	encoding INT4,
-	datcollate STRING,
-	datctype STRING,
+	datlocprovider "char",
 	datistemplate BOOL,
 	datallowconn BOOL,
 	datconnlimit INT4,
-	datlastsysoid OID,
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
+	datcollate STRING,
+	datctype STRING,
+	datlocale STRING,
+	daticurules STRING,
+	datcollversion STRING,
+	dathasloginevt BOOL,
 	datacl STRING[]
 )`
 
@@ -585,14 +599,17 @@ CREATE TABLE pg_catalog.pg_prepared_xacts (
 // of the PREPARE statement.
 // The parameter_types field differs from Postgres as the type names in
 // CockroachDB are slightly different.
-// https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html,
+// https://www.postgresql.org/docs/18/view-pg-prepared-statements.html,
 const PGCatalogPreparedStatements = `
 CREATE TABLE pg_catalog.pg_prepared_statements (
 	name TEXT,
 	statement TEXT,
 	prepare_time TIMESTAMPTZ,
 	parameter_types REGTYPE[],
-	from_sql boolean
+	result_types REGTYPE[],
+	from_sql BOOLEAN,
+	custom_plans INT8,
+	generic_plans INT8
 )`
 
 // PGCatalogProc describes the schema of the pg_catalog.pg_proc table.
@@ -796,7 +813,7 @@ CREATE TABLE pg_catalog.pg_trigger (
 )`
 
 // PGCatalogType describes the schema of the pg_catalog.pg_type table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-type.html,
+// https://www.postgresql.org/docs/18/catalog-pg-type.html,
 const PGCatalogType = `
 CREATE TABLE pg_catalog.pg_type (
 	oid OID NOT NULL,
@@ -820,6 +837,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typmodin REGPROC,
 	typmodout REGPROC,
 	typanalyze REGPROC,
+	typsubscript REGPROC,
 	typalign "char",
 	typstorage "char",
 	typnotnull BOOL,
@@ -975,17 +993,18 @@ CREATE TABLE pg_catalog.pg_shadow (
 )`
 
 // PgCatalogStatisticExt describes the schema of pg_catalog.pg_statistic_ext
-// https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html
+// https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html
 const PgCatalogStatisticExt = `
 CREATE TABLE pg_catalog.pg_statistic_ext (
 	oid OID,
 	stxrelid OID,
-  stxname NAME,
-  stxnamespace OID,
+	stxname NAME,
+	stxnamespace OID,
 	stxowner OID,
-	stxstattarget INT4,
 	stxkeys INT2VECTOR,
-	stxkind "char"[]
+	stxstattarget INT2,
+	stxkind "char"[],
+	stxexprs STRING
 )`
 
 // PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet

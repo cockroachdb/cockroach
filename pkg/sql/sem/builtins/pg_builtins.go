@@ -326,6 +326,10 @@ var (
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
 
+// DatLocProviderLibC is the locale provider for our databases. CockroachDB
+// uses the libc locale provider, represented as 'c' in pg_database.
+var DatLocProviderLibC = tree.NewDString("c")
+
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{

@@ -1004,7 +1004,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing, attmissingval, attishidden)
+  columns: (attrelid, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attcompression, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing, attmissingval, attishidden)
   estimated row count: 10 (missing stats)
   table: pg_attribute@pg_attribute_attrelid_idx
   spans: [/t - /t]
@@ -1041,7 +1041,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/t - /t]
@@ -1053,7 +1053,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/3 - /3]
@@ -1065,7 +1065,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/106 - /106]
@@ -1077,7 +1077,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, relallfrozen, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
   spans: [/101 - /101]
@@ -1092,7 +1092,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typsubscript, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/public.status - /public.status]
@@ -1104,7 +1104,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typsubscript, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/boolean - /boolean]
@@ -1116,7 +1116,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typsubscript, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/boolean[] - /boolean[]]
@@ -1128,7 +1128,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typsubscript, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/1 - /1]
@@ -1140,7 +1140,7 @@ distribution: local
 vectorized: true
 ·
 • virtual table
-  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typsubscript, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/1 - /1]
