@@ -571,8 +571,8 @@ github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:z
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112 h1:T1++5Vt0/4/IWZ1mHmUYl7fhQnz50QhNWIY+ITvLLIM=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
-github.com/cockroachdb/drpc v0.0.0-20260415093302-c77b0003a4b1 h1:qjQV6Qlxm0fC/9TyYcs7RSghgHv1MwelpaSRk3XZD+Q=
-github.com/cockroachdb/drpc v0.0.0-20260415093302-c77b0003a4b1/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
+github.com/cockroachdb/drpc v0.0.0-20260417145945-a58986c28cc3 h1:8127Cb4ApK/0iYkifY+D7+M7zuLU5AapROe57TCWHW8=
+github.com/cockroachdb/drpc v0.0.0-20260417145945-a58986c28cc3/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f h1:lUmJxzb2/ukuRIvKTaNkvuj5LwlX4u/KxnI3zmx1SSw=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f/go.mod h1:SvzfYNNBshAVbZ8wzNc/UPK3w1vf0dKDUP41ucAIf7g=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
