@@ -17,8 +17,14 @@ campaign v1
 ----
 v1 campaigns at term b
 v1: yes (self)
-v2: yes
-v3: yes
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes
+v3:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes
 outcome: won
 
 propose v1
@@ -34,7 +40,10 @@ campaign v2 drop=(v1)
 v2 campaigns at term c
 v2: yes (self)
 v1: (dropped)
-v3: yes
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes
 outcome: won
 
 # v1 (stale leader at term b) tries to append. v2 and v3 reject because
@@ -42,8 +51,12 @@ outcome: won
 append v1
 ----
 v1 appends through b3
-v2: rejected, stale leader term b < c
-v3: rejected, stale leader term b < c
+v2:
+  - rejected, stale leader term b < c
+  rejected, stale leader term b < c
+v3:
+  - rejected, stale leader term b < c
+  rejected, stale leader term b < c
 v1: [a1 b2 b3] term=b leader
 v2: [a1 c2] term=c leader
 v3: [a1] term=c

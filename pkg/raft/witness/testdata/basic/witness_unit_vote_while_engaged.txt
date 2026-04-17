@@ -15,8 +15,8 @@ w:  vote=(a, v1) acked=(a5, engaged)
 vote from=v2 term=b lm=a5
 ----
 w:
-  - INFO engaged: effectiveHi inflated to a∞
-  - INFO rejected vote for v2: log not up to date (effectiveHi a∞ > lm a5)
+  - engaged: effectiveHi inflated to a∞
+  - rejected vote for v2: log not up to date (effectiveHi a∞ > lm a5)
   no
 w:  vote=(a, v1) acked=(a5, engaged)
 
@@ -26,8 +26,8 @@ w:  vote=(a, v1) acked=(a5, engaged)
 vote from=v2 term=b lm=a100
 ----
 w:
-  - INFO engaged: effectiveHi inflated to a∞
-  - INFO rejected vote for v2: log not up to date (effectiveHi a∞ > lm a100)
+  - engaged: effectiveHi inflated to a∞
+  - rejected vote for v2: log not up to date (effectiveHi a∞ > lm a100)
   no
 w:  vote=(a, v1) acked=(a5, engaged)
 
@@ -39,8 +39,8 @@ w:  vote=(a, v1) acked=(a5, engaged)
 vote from=v2 term=b lm=b1
 ----
 w:
-  - INFO engaged: effectiveHi inflated to a∞
-  - INFO granted vote for v2 at term b, hi carried as a∞
+  - engaged: effectiveHi inflated to a∞
+  - granted vote for v2 at term b, hi carried as a∞
   yes
 w:  vote=(b, v2) acked=(a∞, released)
 
@@ -55,8 +55,8 @@ w:  vote=(a, v1) acked=(a5, engaged)
 vote from=v3 term=e lm=c3
 ----
 w:
-  - INFO engaged: effectiveHi inflated to a∞
-  - INFO granted vote for v3 at term e, hi carried as a∞
+  - engaged: effectiveHi inflated to a∞
+  - granted vote for v3 at term e, hi carried as a∞
   yes
 w:  vote=(e, v3) acked=(a∞, released)
 
@@ -70,7 +70,7 @@ w:  vote=(a, v1) acked=(a5, released)
 vote from=v2 term=b lm=a4
 ----
 w:
-  - INFO rejected vote for v2: log not up to date (effectiveHi a5 > lm a4)
+  - rejected vote for v2: log not up to date (effectiveHi a5 > lm a4)
   no
 w:  vote=(a, v1) acked=(a5, released)
 
@@ -78,7 +78,7 @@ w:  vote=(a, v1) acked=(a5, released)
 vote from=v2 term=b lm=a5
 ----
 w:
-  - INFO granted vote for v2 at term b, hi carried as a5
+  - granted vote for v2 at term b, hi carried as a5
   yes
 w:  vote=(b, v2) acked=(a5, released)
 
@@ -93,8 +93,8 @@ w:  vote=(a, v1) acked=none
 engage from=v1 term=b lm=b1
 ----
 w:
-  - INFO term advance a -> b (leader v1)
-  - INFO engaged at b1
+  - term advance a -> b (leader v1)
+  - engaged at b1
   ok
 w:  vote=(b, v1) acked=(b1, engaged)
 
@@ -103,7 +103,7 @@ w:  vote=(b, v1) acked=(b1, engaged)
 vote from=v1 term=b lm=b1
 ----
 w:
-  - INFO granted vote for v1 at term b (same-term)
+  - granted vote for v1 at term b (same-term)
   yes
 w:  vote=(b, v1) acked=(b1, engaged)
 
@@ -119,8 +119,8 @@ w:  vote=(b, -) acked=none
 engage from=v1 term=b lm=b5
 ----
 w:
-  - INFO recorded leader v1 for term b
-  - INFO engaged at b5
+  - recorded leader v1 for term b
+  - engaged at b5
   ok
 w:  vote=(b, v1) acked=(b5, engaged)
 
@@ -138,9 +138,9 @@ w:  vote=(b, v1) acked=(b5, engaged)
 vote from=v1 term=c lm=b5
 ----
 w:
-  - INFO engaged: effectiveHi inflated to b∞
-  - INFO engaged leader v1 re-campaigning: skipping log check
-  - INFO granted vote for v1 at term c, hi carried as b∞
+  - engaged: effectiveHi inflated to b∞
+  - engaged leader v1 re-campaigning: skipping log check
+  - granted vote for v1 at term c, hi carried as b∞
   yes
 w:  vote=(c, v1) acked=(b∞, released)
 
@@ -153,8 +153,8 @@ w:  vote=(b, v1) acked=(b5, engaged)
 vote from=v2 term=c lm=b5
 ----
 w:
-  - INFO engaged: effectiveHi inflated to b∞
-  - INFO rejected vote for v2: log not up to date (effectiveHi b∞ > lm b5)
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b5)
   no
 w:  vote=(b, v1) acked=(b5, engaged)
 
@@ -169,8 +169,8 @@ w:  vote=(b, v1) acked=(b5, engaged)
 vote from=v2 term=c lm=c3
 ----
 w:
-  - INFO engaged: effectiveHi inflated to b∞
-  - INFO granted vote for v2 at term c, hi carried as b∞
+  - engaged: effectiveHi inflated to b∞
+  - granted vote for v2 at term c, hi carried as b∞
   yes
 w:  vote=(c, v2) acked=(b∞, released)
 
@@ -183,7 +183,7 @@ w:  vote=(c, v2) acked=(b∞, released)
 vote from=v1 term=d lm=b10
 ----
 w:
-  - INFO rejected vote for v1: log not up to date (effectiveHi b∞ > lm b10)
+  - rejected vote for v1: log not up to date (effectiveHi b∞ > lm b10)
   no
 w:  vote=(c, v2) acked=(b∞, released)
 
@@ -194,6 +194,6 @@ w:  vote=(c, v2) acked=(b∞, released)
 vote from=v1 term=d lm=c1
 ----
 w:
-  - INFO granted vote for v1 at term d, hi carried as b∞
+  - granted vote for v1 at term d, hi carried as b∞
   yes
 w:  vote=(d, v1) acked=(b∞, released)

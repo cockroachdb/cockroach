@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/rafttest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -96,13 +96,42 @@ func (v testVoter) lastLogMark() raft.LogMark {
 	return v.log[len(v.log)-1]
 }
 
+// testLogger is a simple logger that captures output without level prefixes.
+type testLogger struct {
+	strings.Builder
+}
+
+var _ raftlogger.Logger = (*testLogger)(nil)
+
+func (l *testLogger) logf(format string, v ...interface{}) {
+	fmt.Fprintf(&l.Builder, format, v...)
+	if n := len(format); n > 0 && format[n-1] != '\n' {
+		l.Builder.WriteByte('\n')
+	}
+}
+
+func (l *testLogger) Debug(v ...interface{})                 { fmt.Fprintln(&l.Builder, v...) }
+func (l *testLogger) Debugf(format string, v ...interface{}) { l.logf(format, v...) }
+func (l *testLogger) Info(v ...interface{})                  { fmt.Fprintln(&l.Builder, v...) }
+func (l *testLogger) Infof(format string, v ...interface{})  { l.logf(format, v...) }
+func (l *testLogger) Warning(v ...interface{})               { fmt.Fprintln(&l.Builder, v...) }
+func (l *testLogger) Warningf(format string, v ...interface{}) {
+	l.logf(format, v...)
+}
+func (l *testLogger) Error(v ...interface{})                 { fmt.Fprintln(&l.Builder, v...) }
+func (l *testLogger) Errorf(format string, v ...interface{}) { l.logf(format, v...) }
+func (l *testLogger) Fatal(v ...interface{})                 { panic(fmt.Sprint(v...)) }
+func (l *testLogger) Fatalf(format string, v ...interface{}) { panic(fmt.Sprintf(format, v...)) }
+func (l *testLogger) Panic(v ...interface{})                 { panic(fmt.Sprint(v...)) }
+func (l *testLogger) Panicf(format string, v ...interface{}) { panic(fmt.Sprintf(format, v...)) }
+
 // testEnv holds the witness state and any voters added for scenario modeling.
 type testEnv struct {
 	w             testWitness
 	hasWitness    bool
 	voters        []testVoter
 	lastExchanges []testExchange // populated by deliver; reset each command
-	logger        rafttest.RedirectLogger
+	logger        testLogger
 }
 
 func (e *testEnv) voter(t *testing.T, id raftpb.PeerID) *testVoter {
@@ -267,23 +296,27 @@ func (e *testEnv) route(m testMsg) (testMsg, []string) {
 		voter := *v
 		// req.term is already candidate.term+1 for prevotes, so handleVoteReq
 		// naturally takes the term-advance path when appropriate.
+		e.logger.Reset()
 		next, granted, reason := voter.handleVoteReq(
-			req.candidate, req.term, req.lastLog,
+			&e.logger, req.candidate, req.term, req.lastLog,
 		)
+		trace := captureTrace(&e.logger)
 		if !req.prevote {
 			*v = next
 		}
 		return testMsg{
 			from: m.to, to: m.from, msg: msgVoteResp{granted: granted, reason: reason},
-		}, nil
+		}, trace
 
 	case msgAppendReq:
 		v := e.voterByLabel(m.to)
-		next, ok, detail := v.handleAppendReq(req.leader)
+		e.logger.Reset()
+		next, ok, detail := v.handleAppendReq(&e.logger, req.leader)
+		trace := captureTrace(&e.logger)
 		*v = next
 		return testMsg{
 			from: m.to, to: m.from, msg: msgAppendResp{ok: ok, detail: detail},
-		}, nil
+		}, trace
 
 	case msgEngage:
 		from := parsePeerID(m.from)
@@ -311,7 +344,7 @@ func (e *testEnv) route(m testMsg) (testMsg, []string) {
 }
 
 // captureTrace extracts non-empty lines from the logger output.
-func captureTrace(logger *rafttest.RedirectLogger) []string {
+func captureTrace(logger *testLogger) []string {
 	s := logger.String()
 	if s == "" {
 		return nil
@@ -328,9 +361,7 @@ func captureTrace(logger *rafttest.RedirectLogger) []string {
 func TestDataDrivenWitness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		env := testEnv{
-			logger: rafttest.RedirectLogger{Builder: &strings.Builder{}},
-		}
+		env := testEnv{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return runCommand(t, d, &env)
 		})
@@ -496,7 +527,11 @@ func handleCampaign(t *testing.T, d *datadriven.TestData, env *testEnv, prevote 
 		case msgVoteResp:
 			var verdict string
 			if resp.granted {
-				verdict = "yes"
+				if prevote {
+					verdict = "yes (prevote, no state change)"
+				} else {
+					verdict = "yes"
+				}
 				yesCount++
 			} else if resp.reason != "" {
 				verdict = "no, " + resp.reason
@@ -585,7 +620,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 		case msgDropped:
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 		case msgAppendResp:
-			fmt.Fprintf(&buf, "%s: %s\n", label, resp.detail)
+			fmtExchangeResult(&buf, label, resp.detail, ex.trace)
 			if resp.ok {
 				v := env.voterByLabel(label)
 				leader.matchIndex[v.id] = uint64(len(leader.log))
@@ -653,28 +688,43 @@ func handleSetAvail(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 // check) and for dropped peers (never received the message). This mirrors the
 // witness's HandleMsgVote pattern.
 func (v testVoter) handleVoteReq(
-	candidateID raftpb.PeerID, campaignTerm raftpb.Term, candidateLastLM raft.LogMark,
+	logger raftlogger.Logger,
+	candidateID raftpb.PeerID,
+	campaignTerm raftpb.Term,
+	candidateLastLM raft.LogMark,
 ) (next testVoter, granted bool, reason string) {
 	// Bump term if needed; step down if we were leader.
 	if campaignTerm > v.term {
+		logger.Infof("term advance %s -> %s", fmtTerm(v.term), fmtTerm(campaignTerm))
+		wasLeader := v.leader
 		v.term = campaignTerm
 		v.votedFor = 0
-		v.leader = false
+		if wasLeader {
+			v.leader = false
+			logger.Infof("stepped down as leader")
+		}
 	}
 	if campaignTerm < v.term {
-		return v, false, fmt.Sprintf("stale term %s < %s", fmtTerm(campaignTerm), fmtTerm(v.term))
+		reason = fmt.Sprintf("stale term %s < %s", fmtTerm(campaignTerm), fmtTerm(v.term))
+		logger.Infof("rejected vote for v%d: %s", candidateID, reason)
+		return v, false, reason
 	}
 	// Already voted for someone else this term.
 	if v.votedFor != 0 && v.votedFor != candidateID {
-		return v, false, fmt.Sprintf("already voted for v%d", v.votedFor)
+		reason = fmt.Sprintf("already voted for v%d", v.votedFor)
+		logger.Infof("rejected vote for v%d: %s", candidateID, reason)
+		return v, false, reason
 	}
 	// Log up-to-date check.
 	voterLastLM := v.lastLogMark()
 	if voterLastLM != (raft.LogMark{}) && voterLastLM.After(candidateLastLM) {
-		return v, false, fmt.Sprintf("log not up to date (%s > %s)",
+		reason = fmt.Sprintf("log not up to date (%s > %s)",
 			logMark(voterLastLM), logMark(candidateLastLM))
+		logger.Infof("rejected vote for v%d: %s", candidateID, reason)
+		return v, false, reason
 	}
 	v.votedFor = candidateID
+	logger.Infof("granted vote for v%d at term %s", candidateID, fmtTerm(campaignTerm))
 	return v, true, ""
 }
 
@@ -682,17 +732,25 @@ func (v testVoter) handleVoteReq(
 // updated state. On success the voter adopts the leader's log, truncating any
 // divergent suffix. The caller applies the result and updates env-level state
 // (match indices, committed).
-func (v testVoter) handleAppendReq(leader testVoter) (next testVoter, ok bool, detail string) {
+func (v testVoter) handleAppendReq(
+	logger raftlogger.Logger, leader testVoter,
+) (next testVoter, ok bool, detail string) {
 	if leader.term < v.term {
-		return v, false, fmt.Sprintf(
-			"rejected, stale leader term %s < %s", fmtTerm(leader.term), fmtTerm(v.term),
-		)
+		detail = fmt.Sprintf("rejected, stale leader term %s < %s",
+			fmtTerm(leader.term), fmtTerm(v.term))
+		logger.Infof("%s", detail)
+		return v, false, detail
 	}
 	if leader.term > v.term {
+		logger.Infof("term advance %s -> %s (leader v%d)",
+			fmtTerm(v.term), fmtTerm(leader.term), leader.id)
 		v.term = leader.term
 		v.votedFor = 0
 	}
-	v.leader = false
+	if v.leader {
+		v.leader = false
+		logger.Infof("stepped down as leader")
+	}
 	// Find common prefix, then truncate and adopt leader's log. Clone first
 	// to avoid sharing the backing array with the caller's copy.
 	common := 0
@@ -706,9 +764,12 @@ func (v testVoter) handleAppendReq(leader testVoter) (next testVoter, ok bool, d
 	v.log = slices.Clone(v.log[:common])
 	v.log = append(v.log, leader.log[common:]...)
 	if replaced > 0 {
-		return v, true, fmt.Sprintf("ok, replaced %d entries", replaced)
+		detail = fmt.Sprintf("ok, replaced %d entries", replaced)
+	} else {
+		detail = "ok"
 	}
-	return v, true, "ok"
+	logger.Infof("accepted append through %s (%s)", logMark(leader.lastLogMark()), detail)
+	return v, true, detail
 }
 
 // parseDrop extracts the drop=(<ids>) argument from a datadriven command.

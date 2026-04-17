@@ -19,9 +19,18 @@ campaign v1
 ----
 v1 campaigns at term b
 v1: yes (self)
-v2: yes
-v3: yes
-v4: yes
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes
+v3:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes
+v4:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes
 outcome: won
 
 # v1 proposes two entries but does NOT replicate them.
@@ -46,8 +55,14 @@ campaign v2 drop=(v1)
 v2 campaigns at term c
 v2: yes (self)
 v1: (dropped)
-v3: yes
-v4: yes
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes
+v4:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes
 outcome: won
 
 # v2 proposes an entry.
@@ -63,7 +78,9 @@ append v2 drop=(v1, v4)
 ----
 v2 appends through c3
 v1: (dropped)
-v3: ok
+v3:
+  - accepted append through c3 (ok)
+  ok
 v4: (dropped)
 v1: [a1 b2 b3 b4] term=b leader
 v2: [a1 c2 c3] term=c leader
@@ -75,8 +92,12 @@ append v2 drop=(v1)
 ----
 v2 appends through c3
 v1: (dropped)
-v3: ok
-v4: ok
+v3:
+  - accepted append through c3 (ok)
+  ok
+v4:
+  - accepted append through c3 (ok)
+  ok
 v1: [a1 b2 b3 b4] term=b leader
 v2: [a1 c2 c3] term=c leader
 v3: [a1 c2 c3] term=c
@@ -88,9 +109,15 @@ prevote v1
 ----
 v1 prevotes at term c
 v1: yes (self)
-v2: no, already voted for v2
-v3: no, already voted for v2
-v4: no, already voted for v2
+v2:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
+v3:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
+v4:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
 outcome: lost
 
 # Bump v1 to term c (i.e. pretend it had some contact with the leader but is
@@ -105,9 +132,19 @@ prevote v1
 ----
 v1 prevotes at term d
 v1: yes (self)
-v2: no, log not up to date (c3 > b4)
-v3: no, log not up to date (c3 > b4)
-v4: no, log not up to date (c3 > b4)
+v2:
+  - term advance c -> d
+  - stepped down as leader
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
+v3:
+  - term advance c -> d
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
+v4:
+  - term advance c -> d
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
 outcome: lost
 
 # v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets
@@ -116,9 +153,15 @@ outcome: lost
 append v2
 ----
 v2 appends through c3
-v1: ok, replaced 3 entries
-v3: ok
-v4: ok
+v1:
+  - accepted append through c3 (ok, replaced 3 entries)
+  ok, replaced 3 entries
+v3:
+  - accepted append through c3 (ok)
+  ok
+v4:
+  - accepted append through c3 (ok)
+  ok
 v1: [a1 c2 c3] term=c
 v2: [a1 c2 c3] term=c committed=c3 leader
 v3: [a1 c2 c3] term=c

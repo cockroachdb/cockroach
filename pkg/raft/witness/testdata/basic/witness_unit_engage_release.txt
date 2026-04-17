@@ -2,7 +2,7 @@
 vote from=v1 term=a lm=a0
 ----
 w:
-  - INFO granted vote for v1 at term a, hi carried as 0
+  - granted vote for v1 at term a, hi carried as 0
   yes
 w:  vote=(a, v1) acked=none
 
@@ -10,7 +10,7 @@ w:  vote=(a, v1) acked=none
 engage from=v1 term=a lm=a5
 ----
 w:
-  - INFO engaged at a5
+  - engaged at a5
   ok
 w:  vote=(a, v1) acked=(a5, engaged)
 
@@ -18,7 +18,7 @@ w:  vote=(a, v1) acked=(a5, engaged)
 engage from=v1 term=a lm=a5
 ----
 w:
-  - INFO engage idempotent at a5
+  - engage idempotent at a5
   ok
 w:  vote=(a, v1) acked=(a5, engaged)
 
@@ -26,7 +26,7 @@ w:  vote=(a, v1) acked=(a5, engaged)
 release from=v1 term=a lm=a10
 ----
 w:
-  - INFO released at a10
+  - released at a10
   ok
 w:  vote=(a, v1) acked=(a10, released)
 
@@ -34,7 +34,7 @@ w:  vote=(a, v1) acked=(a10, released)
 release from=v1 term=a lm=a10
 ----
 w:
-  - INFO released at a10
+  - released at a10
   ok
 w:  vote=(a, v1) acked=(a10, released)
 
@@ -42,14 +42,14 @@ w:  vote=(a, v1) acked=(a10, released)
 engage from=v1 term=a lm=a10
 ----
 w:
-  - INFO engage rejected: hi a10 not ahead of a10
+  - engage rejected: hi a10 not ahead of a10
   rejected
 
 # Re-engage at a15: succeeds.
 engage from=v1 term=a lm=a15
 ----
 w:
-  - INFO engaged at a15
+  - engaged at a15
   ok
 w:  vote=(a, v1) acked=(a15, engaged)
 
@@ -57,14 +57,14 @@ w:  vote=(a, v1) acked=(a15, engaged)
 release from=v1 term=a lm=a10
 ----
 w:
-  - INFO release rejected: stale hi a15 > a10
+  - release rejected: stale hi a15 > a10
   rejected
 
 # Release at a15 (same as current hi): succeeds.
 release from=v1 term=a lm=a15
 ----
 w:
-  - INFO released at a15
+  - released at a15
   ok
 w:  vote=(a, v1) acked=(a15, released)
 
@@ -72,7 +72,7 @@ w:  vote=(a, v1) acked=(a15, released)
 engage from=v1 term=a lm=a20
 ----
 w:
-  - INFO engaged at a20
+  - engaged at a20
   ok
 w:  vote=(a, v1) acked=(a20, engaged)
 
@@ -80,7 +80,7 @@ w:  vote=(a, v1) acked=(a20, engaged)
 release from=v1 term=a lm=a20
 ----
 w:
-  - INFO released at a20
+  - released at a20
   ok
 w:  vote=(a, v1) acked=(a20, released)
 
@@ -94,7 +94,7 @@ w:  vote=(b, v1) acked=none
 engage from=v1 term=a lm=a25
 ----
 w:
-  - INFO engage rejected: stale term a < b
+  - engage rejected: stale term a < b
   rejected
 
 # Wrong term release: rejected.
@@ -106,7 +106,7 @@ w:  vote=(b, v1) acked=(b5, engaged)
 release from=v1 term=a lm=a20
 ----
 w:
-  - INFO release rejected: stale term a < b
+  - release rejected: stale term a < b
   rejected
 
 # Engage from higher term bumps term (maybeBumpTerm).
@@ -118,8 +118,8 @@ w:  vote=(a, v1) acked=none
 engage from=v1 term=b lm=b1
 ----
 w:
-  - INFO term advance a -> b (leader v1)
-  - INFO engaged at b1
+  - term advance a -> b (leader v1)
+  - engaged at b1
   ok
 w:  vote=(b, v1) acked=(b1, engaged)
 
@@ -132,8 +132,8 @@ w:  vote=(a, v1) acked=none
 release from=v1 term=b lm=b1
 ----
 w:
-  - INFO term advance a -> b (leader v1)
-  - INFO released at b1
+  - term advance a -> b (leader v1)
+  - released at b1
   ok
 w:  vote=(b, v1) acked=(b1, released)
 
@@ -146,5 +146,5 @@ w:  vote=(b, v1) acked=none
 engage from=v1 term=b lm=a5
 ----
 w:
-  - INFO engage rejected: lm term a < vote term b
+  - engage rejected: lm term a < vote term b
   rejected

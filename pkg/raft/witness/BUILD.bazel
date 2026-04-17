@@ -24,8 +24,8 @@ go_test(
     embedsrcs = ["viz_template.html"],
     deps = [
         "//pkg/raft",
+        "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
-        "//pkg/raft/rafttest",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sniffarg",
         "//pkg/util/leaktest",

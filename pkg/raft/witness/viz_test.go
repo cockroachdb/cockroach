@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/rafttest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -446,9 +445,7 @@ func TestGenerateViz(t *testing.T) {
 		comments, err := parseComments(path)
 		require.NoError(t, err)
 
-		env := testEnv{
-			logger: rafttest.RedirectLogger{Builder: &strings.Builder{}},
-		}
+		env := testEnv{}
 		var trace vizTrace
 		trace.TestFile = path
 

@@ -2,7 +2,7 @@
 vote from=v1 term=a lm=a0
 ----
 w:
-  - INFO granted vote for v1 at term a, hi carried as 0
+  - granted vote for v1 at term a, hi carried as 0
   yes
 w:  vote=(a, v1) acked=none
 
@@ -10,7 +10,7 @@ w:  vote=(a, v1) acked=none
 vote from=v1 term=a lm=a0
 ----
 w:
-  - INFO granted vote for v1 at term a (same-term)
+  - granted vote for v1 at term a (same-term)
   yes
 w:  vote=(a, v1) acked=none
 
@@ -18,7 +18,7 @@ w:  vote=(a, v1) acked=none
 vote from=v2 term=a lm=a0
 ----
 w:
-  - INFO rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
+  - rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
   no
 w:  vote=(a, v1) acked=none
 
@@ -26,7 +26,7 @@ w:  vote=(a, v1) acked=none
 vote from=v2 term=a lm=a5
 ----
 w:
-  - INFO rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
+  - rejected vote for v2: candidate term a <= vote term a (votedFor=v1)
   no
 w:  vote=(a, v1) acked=none
 
@@ -34,7 +34,7 @@ w:  vote=(a, v1) acked=none
 vote from=v2 term=b lm=a0
 ----
 w:
-  - INFO granted vote for v2 at term b, hi carried as 0
+  - granted vote for v2 at term b, hi carried as 0
   yes
 w:  vote=(b, v2) acked=none
 
@@ -48,7 +48,7 @@ w:  vote=(c, v1) acked=(c10, released)
 vote from=v2 term=d lm=c9
 ----
 w:
-  - INFO rejected vote for v2: log not up to date (effectiveHi c10 > lm c9)
+  - rejected vote for v2: log not up to date (effectiveHi c10 > lm c9)
   no
 w:  vote=(c, v1) acked=(c10, released)
 
@@ -56,6 +56,6 @@ w:  vote=(c, v1) acked=(c10, released)
 vote from=v2 term=d lm=c10
 ----
 w:
-  - INFO granted vote for v2 at term d, hi carried as c10
+  - granted vote for v2 at term d, hi carried as c10
   yes
 w:  vote=(d, v2) acked=(c10, released)
