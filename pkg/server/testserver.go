@@ -334,7 +334,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
-	cfg.UseDRPC = params.UseDRPC
+	cfg.UseDRPC = params.DefaultDRPCOption == base.TestDRPCEnabled
 
 	return cfg
 }
