@@ -40,6 +40,10 @@ type vectorSearchProcessor struct {
 	targetCount uint64
 
 	pkDecoder vecstore.PKDecoder
+
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 var _ execinfra.RowSourcedProcessor = &vectorSearchProcessor{}
@@ -96,6 +100,9 @@ func newVectorSearchProcessor(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			v.contentionEventsListener.Init(flowTxn.ID())
+		}
 		v.ExecStatsForTrace = v.execStatsForTrace
 	}
 
@@ -104,7 +111,10 @@ func newVectorSearchProcessor(
 
 // Start is part of the RowSource interface.
 func (v *vectorSearchProcessor) Start(ctx context.Context) {
-	v.StartInternal(ctx, "vector search")
+	v.StartInternal(
+		ctx, "vector search", &v.contentionEventsListener,
+		&v.scanStatsListener, &v.tenantConsumptionListener,
+	)
 }
 
 // Next is part of the RowSource interface.
@@ -178,16 +188,23 @@ func (v *vectorSearchProcessor) Child(nth int, verbose bool) execopnode.OpNode {
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (v *vectorSearchProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	kvStats := v.searcher.KVStats()
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BatchRequestsIssued: optional.MakeUint(uint64(kvStats.BatchRequestsIssued)),
 			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
 			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
 			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
 			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
+			ContentionTime:      optional.MakeTimeValue(v.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:        optional.MakeTimeValue(v.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:       optional.MakeTimeValue(v.contentionEventsListener.GetLatchWaitTime()),
 		},
 		Output: v.OutputHelper.Stats(),
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(v.tenantConsumptionListener.GetConsumedRU())
+	scanStats := v.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
+	return ret
 }
 
 // generateMeta produces trailing metadata containing accumulated KV metrics
@@ -227,6 +244,10 @@ type vectorMutationSearchProcessor struct {
 
 	searcher   vecindex.MutationSearcher
 	isIndexPut bool
+
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 var _ execinfra.RowSourcedProcessor = &vectorMutationSearchProcessor{}
@@ -287,6 +308,9 @@ func newVectorMutationSearchProcessor(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			v.contentionEventsListener.Init(flowTxn.ID())
+		}
 		v.ExecStatsForTrace = v.execStatsForTrace
 	}
 
@@ -295,7 +319,10 @@ func newVectorMutationSearchProcessor(
 
 // Start is part of the RowSource interface.
 func (v *vectorMutationSearchProcessor) Start(ctx context.Context) {
-	ctx = v.StartInternal(ctx, "vector mutation search")
+	ctx = v.StartInternal(
+		ctx, "vector mutation search", &v.contentionEventsListener,
+		&v.scanStatsListener, &v.tenantConsumptionListener,
+	)
 	v.input.Start(ctx)
 }
 
@@ -443,15 +470,22 @@ func (v *vectorMutationSearchProcessor) Child(nth int, verbose bool) execopnode.
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (v *vectorMutationSearchProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	kvStats := v.searcher.KVStats()
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BatchRequestsIssued: optional.MakeUint(uint64(kvStats.BatchRequestsIssued)),
 			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
 			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
 			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
 			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
+			ContentionTime:      optional.MakeTimeValue(v.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:        optional.MakeTimeValue(v.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:       optional.MakeTimeValue(v.contentionEventsListener.GetLatchWaitTime()),
 		},
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(v.tenantConsumptionListener.GetConsumedRU())
+	scanStats := v.scanStatsListener.GetScanStats()
+	execstats.PopulateKVMVCCStats(&ret.KV, &scanStats)
+	return ret
 }
 
 // generateMeta produces trailing metadata with KV metrics.

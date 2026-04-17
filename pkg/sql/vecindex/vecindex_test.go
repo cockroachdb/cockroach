@@ -465,6 +465,10 @@ func TestVecSearchKVStats(t *testing.T) {
 	require.Regexp(t, `KV pairs read: [1-9]`, vsSection)
 	require.Regexp(t, `KV bytes read: [1-9]`, vsSection)
 	require.Regexp(t, `KV gRPC calls: [1-9]`, vsSection)
+
+	// Verify that MVCC scan stats from the ScanStatsListener are present.
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, vsSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, vsSection)
 }
 
 // TestVecMutationSearchKVStats verifies that KV statistics are reported in
@@ -529,6 +533,8 @@ func TestVecMutationSearchKVStats(t *testing.T) {
 	require.Regexp(t, `KV pairs read: [1-9]`, insertSection)
 	require.Regexp(t, `KV bytes read: [1-9]`, insertSection)
 	require.Regexp(t, `KV gRPC calls: [1-9]`, insertSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, insertSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, insertSection)
 
 	// Verify UPDATE mutation search has KV stats. UPDATE produces two
 	// vector mutation search nodes (del + put). extractSection captures
@@ -541,6 +547,8 @@ func TestVecMutationSearchKVStats(t *testing.T) {
 	require.Regexp(t, `KV pairs read: [1-9]`, updateSection)
 	require.Regexp(t, `KV bytes read: [1-9]`, updateSection)
 	require.Regexp(t, `KV gRPC calls: [1-9]`, updateSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, updateSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, updateSection)
 
 	// Verify DELETE mutation search has KV stats.
 	deleteRows := runner.QueryStr(t,
@@ -551,6 +559,8 @@ func TestVecMutationSearchKVStats(t *testing.T) {
 	require.Regexp(t, `KV pairs read: [1-9]`, deleteSection)
 	require.Regexp(t, `KV bytes read: [1-9]`, deleteSection)
 	require.Regexp(t, `KV gRPC calls: [1-9]`, deleteSection)
+	require.Regexp(t, `MVCC step count \(ext/int\): \d+/\d+`, deleteSection)
+	require.Regexp(t, `MVCC seek count \(ext/int\): \d+/\d+`, deleteSection)
 }
 
 // TestVecIndexDeletion tests that rows can be properly deleted from a vector index.
