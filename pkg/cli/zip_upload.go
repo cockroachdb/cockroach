@@ -130,8 +130,12 @@ var debugZipUploadOpts = struct {
 	logFormat            string
 	maxConcurrentUploads int
 	dryRun               bool
+	destination          string // "datadog" (default) or "upload-server"
+	uploadServerAPIKey   string // API key for the CRL upload server
+	uploadServerURL      string // upload server base URL
 }{
 	maxConcurrentUploads: system.NumCPU() * 4,
+	destination:          "datadog",
 }
 
 // This is the list of all supported artifact types. The "possible values" part
@@ -306,12 +310,39 @@ func validateRedactionStatus(debugDirPath string) error {
 func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	runtime.GOMAXPROCS(system.NumCPU())
 
+	dest := debugZipUploadOpts.destination
+	inputPath := args[0]
+
+	switch dest {
+	case "upload-server":
+		return runServerUpload(cmd.Context(), inputPath)
+	case "datadog":
+		return runDatadogUpload(cmd, inputPath)
+	default:
+		return errors.Newf(
+			"unsupported destination %q; valid values are: datadog, upload-server",
+			dest,
+		)
+	}
+}
+
+func runServerUpload(ctx context.Context, inputPath string) error {
+	if err := validateUploadServerReadiness(inputPath); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "\n=== uploading debug zip to upload server\n\n")
+
+	return uploadDebugZipViaServer(ctx, inputPath)
+}
+
+func runDatadogUpload(cmd *cobra.Command, inputPath string) error {
 	if err := validateZipUploadReadiness(); err != nil {
 		return err
 	}
 
 	// Check redaction status before proceeding with upload
-	if err := validateRedactionStatus(args[0]); err != nil {
+	if err := validateRedactionStatus(inputPath); err != nil {
 		return err
 	}
 
@@ -333,7 +364,7 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	for _, artType := range artifactsToUpload {
 		fmt.Printf("\n=== uploading %s\n\n", artType)
 
-		if err := uploadZipArtifactFuncs[artType](cmd.Context(), uploadID, args[0]); err != nil {
+		if err := uploadZipArtifactFuncs[artType](cmd.Context(), uploadID, inputPath); err != nil {
 			// Log the error and continue with the next artifact
 			fmt.Printf("Failed to upload %s: %s\n", artType, err)
 		}

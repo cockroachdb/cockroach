@@ -27,11 +27,21 @@ requires the cluster to be live.
 	RunE: clierrorplus.MaybeDecorateError(runDebugZip),
 }
 
-// debugZipUploadCmd is a hidden command that uploads the generated debug.zip
-// to datadog. This will not apprear in the help text of the zip command.
+// debugZipUploadCmd is a hidden command that uploads the generated
+// debug.zip to an observability platform or CRL's upload server. This
+// will not appear in the help text of the zip command.
 var debugZipUploadCmd = &cobra.Command{
-	Use:    "upload <path to debug dir>",
-	Short:  "upload the contents of the debug.zip to an observability platform",
+	Use:   "upload <path to debug zip file or dir>",
+	Short: "upload debug zip artifacts to an observability platform or CRL upload server",
+	Long: `Upload debug zip data to a supported destination.
+
+Use --destination=datadog to upload extracted debug zip artifacts to Datadog.
+This requires a path to an extracted debug directory.
+
+Use --destination=upload-server to upload the raw debug.zip file to CRL's
+upload server. This requires a path to a .zip file and authentication via
+--upload-server-api-key and --upload-server-url.
+`,
 	Args:   cobra.ExactArgs(1),
 	Hidden: true,
 	RunE:   clierrorplus.MaybeDecorateError(runDebugZipUpload),
