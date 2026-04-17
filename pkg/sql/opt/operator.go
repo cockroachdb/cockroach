@@ -30,6 +30,16 @@ func (op Operator) String() string {
 	return opNames[opNameIndexes[op]:opNameIndexes[op+1]]
 }
 
+// CamelCase returns the camel-case name of the operator, matching how operator
+// names appear in .opt files, canned opt plans, and plangrams (e.g. "Scan",
+// "InnerJoin").
+func (op Operator) CamelCase() string {
+	if op >= Operator(len(opCamelCaseNames)-1) {
+		return fmt.Sprintf("Operator(%d)", op)
+	}
+	return opCamelCaseNames[opCamelCaseNameIndexes[op]:opCamelCaseNameIndexes[op+1]]
+}
+
 // SyntaxTag returns the name of the operator using the SQL syntax that most
 // closely matches it.
 func (op Operator) SyntaxTag() string {
