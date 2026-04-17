@@ -247,3 +247,95 @@ SHOW INSPECT ERRORS FOR JOB 999
 ----
 
 subtest end
+
+# Verify that when a table/database/schema is dropped, the SHOW INSPECT ERRORS
+# output shows the descriptor IDs.
+subtest dropped_object_shows_id
+
+user root
+
+statement ok
+CREATE TABLE dropme (x INT);
+
+let $dropme_table_id
+SELECT 'dropme'::regclass::oid
+
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (1100, 'testuser', 'failed', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  1100,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $dropme_table_id)
+        )
+      )
+    )
+  )
+);
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (1100, 'dropped_test', '$aost', $database_id, $schema_id, $dropme_table_id, '{"detail":"dropped"}');
+
+# While the table exists, names should resolve normally.
+user testuser
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR JOB 1100
+----
+dropped_test  test  public  dropme  NULL  1100  2025-09-23 04:00:00.000000
+
+# Drop the table so its namespace entry is removed.
+user root
+
+statement ok
+DROP TABLE dropme;
+
+# After dropping, the LEFT JOIN on fully_qualified_names returns NULLs for
+# names. The COALESCE should fall through to the <id:N> format.
+user testuser
+
+query BBBB
+SELECT
+  database_name = '<id:' || $database_id::TEXT || '>',
+  schema_name = '<id:' || $schema_id::TEXT || '>',
+  table_name = '<id:' || $dropme_table_id::TEXT || '>',
+  error_type = 'dropped_test'
+FROM [SHOW INSPECT ERRORS FOR JOB 1100]
+----
+true  true  true  true
+
+subtest end
+
+# Verify that when an ID column is NULL, the output falls back to <unknown>.
+subtest null_id_shows_unknown
+
+user root
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (1100, 'null_id_test', '$aost', NULL, NULL, $dropme_table_id, '{"detail":"null ids"}');
+
+user testuser
+
+# database_id and schema_id are NULL so '<id:' || NULL || '>' evaluates to
+# NULL and COALESCE falls through to '<unknown>'. The table id is NOT NULL so
+# it shows '<id:N>'.
+query BBBB
+SELECT
+  database_name = '<unknown>',
+  schema_name = '<unknown>',
+  table_name = '<id:' || $dropme_table_id::TEXT || '>',
+  error_type = 'null_id_test'
+FROM [SHOW INSPECT ERRORS FOR JOB 1100]
+WHERE error_type = 'null_id_test'
+----
+true  true  true  true
+
+subtest end

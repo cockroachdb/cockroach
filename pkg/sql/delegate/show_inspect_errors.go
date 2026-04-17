@@ -90,9 +90,9 @@ func (d *delegator) delegateShowInspectErrors(n *tree.ShowInspectErrors) (tree.S
 	query.WriteString(`
 	SELECT 
 		ie.error_type,
-		COALESCE(t.database_name, '<unknown>') AS database_name,
-		COALESCE(t.schema_name, '<unknown>') AS schema_name,
-		COALESCE(t.object_name, '<unknown>') AS table_name,
+		COALESCE(t.database_name, '<id:' || ie.database_id::TEXT || '>', '<unknown>') AS database_name,
+		COALESCE(t.schema_name, '<id:' || ie.schema_id::TEXT || '>', '<unknown>') AS schema_name,
+		COALESCE(t.object_name, '<id:' || ie.id::TEXT || '>', '<unknown>') AS table_name,
 		primary_key,
 		ie.job_id,
 		to_char(aost, 'YYYY-MM-DD HH24:MI:SS.US') as aost`)
