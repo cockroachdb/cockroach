@@ -162,14 +162,14 @@ func (ss *StatementStore) addToCacheIfAbsent(
 	if _, ok := ss.cacheMu.cache.Get(id); ok {
 		return false
 	}
-	// Add may trigger eviction, which shrinks the account via OnEvicted.
-	ss.cacheMu.cache.Add(id, struct{}{})
 	if ss.memAcc != nil {
 		if err := ss.memAcc.Grow(ctx, cacheEntrySize); err != nil {
 			log.Ops.Warningf(ctx,
 				"statement store cache memory accounting error: %s", err)
+			return false
 		}
 	}
+	ss.cacheMu.cache.Add(id, struct{}{})
 	return true
 }
 
@@ -185,13 +185,17 @@ func (ss *StatementStore) appendPending(ctx context.Context, info StatementInfo)
 	if len(ss.flushMu.pending) >= maxPendingSize {
 		// Buffer full — evict from cache so we retry on the next
 		// occurrence rather than silently dropping the fingerprint.
+		log.Ops.Warningf(ctx, "statement store pending buffer full, skipping fingerprint. ID: %d", info.FingerprintID)
 		ss.evictFromCacheByID(info.FingerprintID)
 		return
 	}
-	ss.flushMu.pending = append(ss.flushMu.pending, info)
 	if ss.memAcc != nil {
-		_ = ss.memAcc.Grow(ctx, statementInfoSize(info))
+		if err := ss.memAcc.Grow(ctx, statementInfoSize(info)); err != nil {
+			ss.evictFromCacheByID(info.FingerprintID)
+			return
+		}
 	}
+	ss.flushMu.pending = append(ss.flushMu.pending, info)
 }
 
 var logEvery = log.Every(10 * time.Second)
@@ -203,7 +207,7 @@ func (ss *StatementStore) Start(ctx context.Context, stopper *stop.Stopper) {
 			panic(errors.AssertionFailedf(
 				"StatementStore.Start called before SetInternalExecutor"))
 		}
-		log.Dev.Error(ctx,
+		log.Ops.Errorf(ctx,
 			"StatementStore.Start called before SetInternalExecutor")
 		return
 	}
