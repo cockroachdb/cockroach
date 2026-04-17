@@ -137,6 +137,8 @@ set-avail up=(v1)
 ----
 ok
 
+# v1 is back. We assume it's still the leader (didn't step down, maybe short
+# network partition).
 # v1 proposes and replicates to v2, committing via the traditional v1+v2
 # quorum — no witness engagement needed.
 propose v1
