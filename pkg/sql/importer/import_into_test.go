@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	// Register the bank workload generator for workload:// URI tests.
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -624,4 +626,77 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 				[][]string{{fmt.Sprintf("%d", tc.totalRows)}})
 		})
 	}
+}
+
+// TestImportIntoWorkloadURIRowCountCheckAfterRetry verifies that INSPECT row
+// count validation passes after an import using a workload:// URI is retried
+// mid-processing. The duringDistImport knob injects an error after the first
+// batch is persisted, so distImport fails with intermediate ResumePos values.
+// On retry the import should complete and INSPECT should confirm the correct
+// row count.
+//
+// This currently fails because the workload reader ignores resumePos (#168396),
+// re-reading all rows from scratch, while bulkSummary accumulates across
+// retries — inflating the expected count.
+func TestImportIntoWorkloadURIRowCountCheckAfterRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "uses short job adoption intervals that don't work well in slow test configurations")
+
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Use sync mode so the import blocks until the inspect job completes. If
+	// the row count is wrong the import statement itself will fail.
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
+
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	var once sync.Once
+	var retryTriggered atomic.Bool
+	registry.TestingWrapResumerConstructor(
+		jobspb.TypeImport,
+		func(resumer jobs.Resumer) jobs.Resumer {
+			r := resumer.(interface {
+				TestingSetAlwaysFlushJobProgress()
+				TestingSetDuringDistImportKnob(func() error)
+			})
+			// Flush progress after every batch so that intermediate
+			// ResumePos and partial Summary are persisted to the job
+			// record before we inject the error.
+			r.TestingSetAlwaysFlushJobProgress()
+			r.TestingSetDuringDistImportKnob(func() error {
+				var err error
+				once.Do(func() {
+					retryTriggered.Store(true)
+					// The "rpc error" substring makes this retryable
+					// per sqlerrors.IsDistSQLRetryableError.
+					err = errors.New("rpc error: injected test retry")
+				})
+				return err
+			})
+			return resumer
+		})
+
+	runner.Exec(t, `CREATE TABLE bank (id INT PRIMARY KEY, balance INT, payload STRING)`)
+
+	runner.Exec(t,
+		`IMPORT INTO bank (id, balance, payload) CSV DATA ('workload:///csv/bank/bank?rows=100&row-start=0&row-end=1&version=1.0.0')`)
+
+	require.True(t, retryTriggered.Load(), "expected injected error to trigger a retry")
+
+	runner.CheckQueryResults(t,
+		`SELECT count(*) FROM bank`, [][]string{{"100"}})
 }
