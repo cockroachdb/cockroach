@@ -41,7 +41,7 @@ vote from=v2 term=b lm=b1
 w:
   - engaged: effectiveHi inflated to a∞
   - granted vote for v2 at term b, hi carried as a∞
-  yes
+  yes (term a->b, voted v2, hi a5->a∞, released)
 w:  vote=(b, v2) acked=(a∞, released)
 
 # Same scenario but candidate is from a much higher term.
@@ -57,7 +57,7 @@ vote from=v3 term=e lm=c3
 w:
   - engaged: effectiveHi inflated to a∞
   - granted vote for v3 at term e, hi carried as a∞
-  yes
+  yes (term a->e, voted v3, hi a5->a∞, released)
 w:  vote=(e, v3) acked=(a∞, released)
 
 # Engagement was released (not engaged), candidate log behind hi: rejected
@@ -79,7 +79,7 @@ vote from=v2 term=b lm=a5
 ----
 w:
   - granted vote for v2 at term b, hi carried as a5
-  yes
+  yes (term a->b, voted v2)
 w:  vote=(b, v2) acked=(a5, released)
 
 # Witness learns of term b through an engage, then the leader requests a
@@ -95,7 +95,7 @@ engage from=v1 term=b lm=b1
 w:
   - term advance a -> b (leader v1)
   - engaged at b1
-  ok
+  ok (term a->b, hi 0->b1, engaged)
 w:  vote=(b, v1) acked=(b1, engaged)
 
 # Leader now asks for our vote in term b. We haven't voted yet in this term,
@@ -121,7 +121,7 @@ engage from=v1 term=b lm=b5
 w:
   - recorded leader v1 for term b
   - engaged at b5
-  ok
+  ok (voted v1, hi 0->b5, engaged)
 w:  vote=(b, v1) acked=(b5, engaged)
 
 # Engaged leader re-campaigns at a higher term. Even though the witness is
@@ -141,7 +141,7 @@ w:
   - engaged: effectiveHi inflated to b∞
   - engaged leader v1 re-campaigning: skipping log check
   - granted vote for v1 at term c, hi carried as b∞
-  yes
+  yes (term b->c, hi b5->b∞, released)
 w:  vote=(c, v1) acked=(b∞, released)
 
 # Contrast: a *different* candidate at the same term is still rejected.
@@ -171,7 +171,7 @@ vote from=v2 term=c lm=c3
 w:
   - engaged: effectiveHi inflated to b∞
   - granted vote for v2 at term c, hi carried as b∞
-  yes
+  yes (term b->c, voted v2, hi b5->b∞, released)
 w:  vote=(c, v2) acked=(b∞, released)
 
 # The old leader tries to campaign. Its log is still at term b, which can't
@@ -195,5 +195,5 @@ vote from=v1 term=d lm=c1
 ----
 w:
   - granted vote for v1 at term d, hi carried as b∞
-  yes
+  yes (term c->d, voted v1)
 w:  vote=(d, v1) acked=(b∞, released)

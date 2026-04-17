@@ -3,7 +3,7 @@ vote from=v1 term=a lm=a0
 ----
 w:
   - granted vote for v1 at term a, hi carried as 0
-  yes
+  yes (term 0->a, voted v1)
 w:  vote=(a, v1) acked=none
 
 # Idempotent: same vote accepted again.
@@ -35,7 +35,7 @@ vote from=v2 term=b lm=a0
 ----
 w:
   - granted vote for v2 at term b, hi carried as 0
-  yes
+  yes (term a->b, voted v2)
 w:  vote=(b, v2) acked=none
 
 # Higher term but log behind our acked hi: rejected.
@@ -57,5 +57,5 @@ vote from=v2 term=d lm=c10
 ----
 w:
   - granted vote for v2 at term d, hi carried as c10
-  yes
+  yes (term c->d, voted v2)
 w:  vote=(d, v2) acked=(c10, released)

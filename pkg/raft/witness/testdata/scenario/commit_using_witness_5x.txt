@@ -21,18 +21,18 @@ v1: yes (self)
 v2:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 v3:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 v4:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 w:
   - granted vote for v1 at term b, hi carried as 0
-  yes
+  yes (term 0->b, voted v1)
 outcome: won
 
 # v4 goes dark.
@@ -54,10 +54,10 @@ append v1
 v1 appends through b3
 v2:
   - accepted append through b3 (ok)
-  ok
+  ok (log=[a1 | b2 b3])
 v3:
   - accepted append through b3 (ok)
-  ok
+  ok (log=[a1 | b2 b3])
 v4: (dropped)
 v1: [a1 b2 b3] term=b committed=b3 leader
 v2: [a1 b2 b3] term=b
@@ -83,7 +83,7 @@ append v1
 v1 appends through b4
 v2:
   - accepted append through b4 (ok)
-  ok
+  ok (log=[... b3 | b4])
 v3: (dropped)
 v4: (dropped)
 v1: [a1 b2 b3 b4] term=b committed=b3 leader
@@ -96,7 +96,7 @@ engage v1
 ----
 w:
   - engaged at b4
-  ok
+  ok (hi 0->b4, engaged)
 w:  vote=(b, v1) acked=(b4, engaged)
 v1: [a1 b2 b3 b4] term=b committed=b4 leader
 
@@ -185,11 +185,11 @@ v1: (dropped)
 v3:
   - term advance b -> c
   - granted vote for v2 at term c
-  yes
+  yes (term b->c, voted v2)
 v4:
   - term advance b -> c
   - granted vote for v2 at term c
-  yes
+  yes (term b->c, voted v2)
 w:
   - engaged: effectiveHi inflated to b∞
   - rejected vote for v2: log not up to date (effectiveHi b∞ > lm b4)
@@ -212,10 +212,10 @@ v2 appends through c5
 v1: (dropped)
 v3:
   - accepted append through c5 (ok)
-  ok
+  ok (log=[... b3 | b4 c5])
 v4:
   - accepted append through c5 (ok)
-  ok
+  ok (log=[a1 | b2 b3 b4 c5])
 v1: [a1 b2 b3 b4 b5] term=b committed=b4 leader
 v2: [a1 b2 b3 b4 c5] term=c leader
 v3: [a1 b2 b3 b4 c5] term=c

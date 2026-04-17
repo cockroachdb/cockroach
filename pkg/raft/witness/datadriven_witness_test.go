@@ -48,10 +48,11 @@ type testMsg struct {
 }
 
 // testExchange pairs a request with its response, along with any log output
-// produced by the witness state machine during message handling.
+// produced during message handling and a summary of state changes.
 type testExchange struct {
 	req, resp testMsg
-	trace     []string // log lines from the witness, if any
+	trace     []string // log lines from the handler
+	delta     string   // human-readable summary of state changes
 }
 
 // Message payloads. Each type corresponds to a specific message kind; deliver
@@ -251,15 +252,32 @@ func (e *testEnv) voterByLabel(label string) *testVoter {
 func (e *testEnv) deliver(outbound []testMsg, dropped map[string]bool) {
 	e.lastExchanges = e.lastExchanges[:0]
 	for _, m := range outbound {
-		var resp testMsg
-		var trace []string
 		if dropped[m.to] || e.isDown(m.to) {
-			resp = testMsg{from: m.to, to: m.from, msg: msgDropped{}}
-		} else {
-			resp, trace = e.route(m)
+			e.lastExchanges = append(e.lastExchanges, testExchange{
+				req:  m,
+				resp: testMsg{from: m.to, to: m.from, msg: msgDropped{}},
+			})
+			continue
+		}
+		// Snapshot recipient state before routing.
+		var prevVoter testVoter
+		var prevWitness State
+		if m.to == "w" {
+			prevWitness = e.w.State
+		} else if v := e.voterByLabel(m.to); v != nil {
+			prevVoter = *v
+			prevVoter.log = slices.Clone(v.log)
+		}
+		resp, trace := e.route(m)
+		// Compute state delta.
+		var delta string
+		if m.to == "w" {
+			delta = diffWitnessState(prevWitness, e.w.State)
+		} else if v := e.voterByLabel(m.to); v != nil {
+			delta = diffVoterState(prevVoter, *v)
 		}
 		e.lastExchanges = append(e.lastExchanges, testExchange{
-			req: m, resp: resp, trace: trace,
+			req: m, resp: resp, trace: trace, delta: delta,
 		})
 	}
 }
@@ -538,7 +556,7 @@ func handleCampaign(t *testing.T, d *datadriven.TestData, env *testEnv, prevote 
 			} else {
 				verdict = "no"
 			}
-			fmtExchangeResult(&buf, label, verdict, ex.trace)
+			fmtExchangeResult(&buf, label, verdict, ex.trace, ex.delta)
 		}
 	}
 
@@ -620,7 +638,7 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 		case msgDropped:
 			fmt.Fprintf(&buf, "%s: (dropped)\n", label)
 		case msgAppendResp:
-			fmtExchangeResult(&buf, label, resp.detail, ex.trace)
+			fmtExchangeResult(&buf, label, resp.detail, ex.trace, ex.delta)
 			if resp.ok {
 				v := env.voterByLabel(label)
 				leader.matchIndex[v.id] = uint64(len(leader.log))
@@ -804,9 +822,9 @@ func handleVote(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	resp := ex.resp.msg.(msgVoteResp)
 	var buf strings.Builder
 	if resp.granted {
-		fmtExchangeResult(&buf, "w", "yes", ex.trace)
+		fmtExchangeResult(&buf, "w", "yes", ex.trace, ex.delta)
 	} else {
-		fmtExchangeResult(&buf, "w", "no", ex.trace)
+		fmtExchangeResult(&buf, "w", "no", ex.trace, ex.delta)
 	}
 	buf.WriteString(fmtWitness(env.w.State))
 	return buf.String()
@@ -824,7 +842,7 @@ func handleEngage(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	resp := ex.resp.msg.(msgWitnessResp)
 	var buf strings.Builder
 	if resp.ok {
-		fmtExchangeResult(&buf, "w", "ok", ex.trace)
+		fmtExchangeResult(&buf, "w", "ok", ex.trace, ex.delta)
 		buf.WriteString(fmtWitness(env.w.State))
 		if ldr != nil {
 			ldr.witnessEngaged = true
@@ -832,7 +850,7 @@ func handleEngage(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 			buf.WriteString("\n" + fmtVoterLine(*ldr, ""))
 		}
 	} else {
-		fmtExchangeResult(&buf, "w", "rejected", ex.trace)
+		fmtExchangeResult(&buf, "w", "rejected", ex.trace, ex.delta)
 	}
 	return buf.String()
 }
@@ -848,13 +866,13 @@ func handleRelease(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	resp := ex.resp.msg.(msgWitnessResp)
 	var buf strings.Builder
 	if resp.ok {
-		fmtExchangeResult(&buf, "w", "ok", ex.trace)
+		fmtExchangeResult(&buf, "w", "ok", ex.trace, ex.delta)
 		buf.WriteString(fmtWitness(env.w.State))
 		if ldr != nil {
 			ldr.witnessEngaged = false
 		}
 	} else {
-		fmtExchangeResult(&buf, "w", "rejected", ex.trace)
+		fmtExchangeResult(&buf, "w", "rejected", ex.trace, ex.delta)
 	}
 	return buf.String()
 }
@@ -909,7 +927,80 @@ func handleSet(t *testing.T, d *datadriven.TestData, w *State) {
 //	  yes
 //
 // Otherwise a single line: "v2: yes"
-func fmtExchangeResult(buf *strings.Builder, label, verdict string, trace []string) {
+// diffVoterState returns a human-readable summary of what changed in a voter's
+// state. Returns "" if nothing changed.
+func diffVoterState(prev, next testVoter) string {
+	var parts []string
+	if prev.term != next.term {
+		parts = append(parts, fmt.Sprintf("term %s->%s", fmtTerm(prev.term), fmtTerm(next.term)))
+	}
+	if prev.votedFor != next.votedFor && next.votedFor != 0 {
+		parts = append(parts, fmt.Sprintf("voted v%d", next.votedFor))
+	}
+	if prev.leader && !next.leader {
+		parts = append(parts, "stepped down")
+	}
+	if !slices.Equal(prev.log, next.log) {
+		parts = append(parts, fmtLogDiff(prev.log, next.log))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// diffWitnessState returns a human-readable summary of what changed in the
+// witness state. Returns "" if nothing changed.
+func diffWitnessState(prev, next State) string {
+	var parts []string
+	if prev.Vote.Term != next.Vote.Term {
+		parts = append(parts, fmt.Sprintf("term %s->%s",
+			fmtTerm(prev.Vote.Term), fmtTerm(next.Vote.Term)))
+	}
+	if prev.Vote.VotedFor != next.Vote.VotedFor && next.Vote.VotedFor != 0 {
+		parts = append(parts, fmt.Sprintf("voted v%d", next.Vote.VotedFor))
+	}
+	if prev.Acked.Hi != next.Acked.Hi {
+		parts = append(parts, fmt.Sprintf("hi %s->%s",
+			logMark(prev.Acked.Hi), logMark(next.Acked.Hi)))
+	}
+	if prev.Acked.Engaged != next.Acked.Engaged {
+		if next.Acked.Engaged {
+			parts = append(parts, "engaged")
+		} else {
+			parts = append(parts, "released")
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// fmtLogDiff formats the change between two log states. The output uses "|" to
+// separate unchanged entries from new/replaced entries:
+//
+//	log=[... a2 | b3 b4]  — entries through a2 unchanged, b3 b4 are new
+//	log=[a1 | c2]         — only a1 unchanged, c2 replaces old entries
+//	log=[b1 b2]           — no common prefix (fresh log)
+func fmtLogDiff(prev, next []raft.LogMark) string {
+	common := 0
+	for common < len(prev) && common < len(next) {
+		if prev[common] != next[common] {
+			break
+		}
+		common++
+	}
+	var parts []string
+	if common > 1 {
+		parts = append(parts, "...", logMark(prev[common-1]).String(), "|")
+	} else if common == 1 {
+		parts = append(parts, logMark(prev[0]).String(), "|")
+	}
+	for i := common; i < len(next); i++ {
+		parts = append(parts, logMark(next[i]).String())
+	}
+	return "log=[" + strings.Join(parts, " ") + "]"
+}
+
+func fmtExchangeResult(buf *strings.Builder, label, verdict string, trace []string, delta string) {
+	if delta != "" {
+		verdict += " (" + delta + ")"
+	}
 	if len(trace) == 0 {
 		fmt.Fprintf(buf, "%s: %s\n", label, verdict)
 		return

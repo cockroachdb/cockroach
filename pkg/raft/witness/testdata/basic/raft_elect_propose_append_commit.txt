@@ -16,7 +16,7 @@ v2: yes (self)
 v1:
   - term advance a -> c
   - granted vote for v2 at term c
-  yes
+  yes (term a->c, voted v2)
 outcome: won
 
 # Propose and replicate. Both voters have the entries, quorum reached.
@@ -30,7 +30,7 @@ append v2
 v2 appends through c4
 v1:
   - accepted append through c4 (ok)
-  ok
+  ok (log=[a1 | b2 c3 c4])
 v1: [a1 b2 c3 c4] term=c
 v2: [a1 b2 c3 c4] term=c committed=c4 leader
 
@@ -43,7 +43,7 @@ v2:
   - term advance c -> d
   - stepped down as leader
   - granted vote for v1 at term d
-  yes
+  yes (term c->d, voted v1, stepped down)
 outcome: won
 
 propose v1
@@ -56,6 +56,6 @@ append v1
 v1 appends through d6
 v2:
   - accepted append through d6 (ok)
-  ok
+  ok (log=[... c4 | d5 d6])
 v1: [a1 b2 c3 c4 d5 d6] term=d committed=d6 leader
 v2: [a1 b2 c3 c4 d5 d6] term=d

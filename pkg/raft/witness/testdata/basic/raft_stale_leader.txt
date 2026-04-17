@@ -22,15 +22,15 @@ v1: yes (self)
 v2:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 v3:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 v4:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 outcome: won
 
 # v1 proposes two entries but does NOT replicate them.
@@ -58,11 +58,11 @@ v1: (dropped)
 v3:
   - term advance b -> c
   - granted vote for v2 at term c
-  yes
+  yes (term b->c, voted v2)
 v4:
   - term advance b -> c
   - granted vote for v2 at term c
-  yes
+  yes (term b->c, voted v2)
 outcome: won
 
 # v2 proposes an entry.
@@ -80,7 +80,7 @@ v2 appends through c3
 v1: (dropped)
 v3:
   - accepted append through c3 (ok)
-  ok
+  ok (log=[a1 | c2 c3])
 v4: (dropped)
 v1: [a1 b2 b3 b4] term=b leader
 v2: [a1 c2 c3] term=c leader
@@ -97,7 +97,7 @@ v3:
   ok
 v4:
   - accepted append through c3 (ok)
-  ok
+  ok (log=[a1 | c2 c3])
 v1: [a1 b2 b3 b4] term=b leader
 v2: [a1 c2 c3] term=c leader
 v3: [a1 c2 c3] term=c
@@ -155,7 +155,7 @@ append v2
 v2 appends through c3
 v1:
   - accepted append through c3 (ok, replaced 3 entries)
-  ok, replaced 3 entries
+  ok, replaced 3 entries (log=[a1 | c2 c3])
 v3:
   - accepted append through c3 (ok)
   ok

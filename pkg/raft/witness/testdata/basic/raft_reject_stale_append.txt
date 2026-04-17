@@ -20,11 +20,11 @@ v1: yes (self)
 v2:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 v3:
   - term advance a -> b
   - granted vote for v1 at term b
-  yes
+  yes (term a->b, voted v1)
 outcome: won
 
 propose v1
@@ -43,7 +43,7 @@ v1: (dropped)
 v3:
   - term advance b -> c
   - granted vote for v2 at term c
-  yes
+  yes (term b->c, voted v2)
 outcome: won
 
 # v1 (stale leader at term b) tries to append. v2 and v3 reject because
