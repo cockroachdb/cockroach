@@ -1,6 +1,5 @@
-# A voter goes down. The leader engages the witness to maintain commit quorum.
-# The leader then crashes and re-campaigns, winning with the witness' help.
-# Two voters, one witness. Quorum = 2.
+# Explore some interesting interactions between two voters and a witness
+# (i.e. in 3x configuration).
 
 setup
 v1: [a1]
