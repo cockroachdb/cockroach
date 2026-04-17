@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -868,4 +869,45 @@ func TestBufferedBytes(t *testing.T) {
 			require.Equal(t, writer.BufferedBytesEstimate(), int64(0))
 		})
 	}
+}
+
+// TestDataPageAutoFlush is a regression test for #140030. It verifies that the
+// Apache Arrow parquet library correctly auto-flushes data pages when the data
+// page size is exceeded.
+//
+// Issue #140030 was caused by setting the data page size to MaxInt64, which
+// caused int32 overflow in the Arrow library's internal buffer calculations
+// (column_writer.go). The fix caps the data page size to MaxInt32. This test
+// sets a small data page size to exercise the auto-flush code path and verifies
+// that the written data is still readable and correct.
+func TestDataPageAutoFlush(t *testing.T) {
+	sch := &colSchema{
+		columnNames: []string{"a"},
+		columnTypes: []*types.T{types.String},
+	}
+
+	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
+	require.NoError(t, err)
+
+	numRows := 100
+	rowStr := tree.NewDString(strings.Repeat("x", 1024))
+	datums := make([][]tree.Datum, numRows)
+	for i := range datums {
+		datums[i] = []tree.Datum{rowStr}
+	}
+
+	fileName := "TestDataPageAutoFlush.parquet"
+	f, err := os.CreateTemp("", fileName)
+	require.NoError(t, err)
+	defer removeFileUnlessFailed(t, f)
+
+	writer, err := NewWriter(schemaDef, f, withDataPageSize(1024))
+	require.NoError(t, err)
+
+	for _, row := range datums {
+		require.NoError(t, writer.AddRow(row))
+	}
+	require.NoError(t, writer.Close())
+
+	ReadFileAndVerifyDatums(t, f.Name(), numRows, 1, datums)
 }
