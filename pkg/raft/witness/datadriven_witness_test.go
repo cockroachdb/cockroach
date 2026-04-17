@@ -8,6 +8,7 @@ package witness
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -850,6 +851,9 @@ func fmtTerm(term raftpb.Term) string {
 func fmtLogMark(lm raft.LogMark) string {
 	if lm == (raft.LogMark{}) {
 		return "0"
+	}
+	if lm.Index == math.MaxUint64 {
+		return fmt.Sprintf("%s∞", fmtTerm(raftpb.Term(lm.Term)))
 	}
 	if lm.Term >= 1 && lm.Term <= 26 {
 		return fmt.Sprintf("%c%d", 'a'+byte(lm.Term-1), lm.Index)

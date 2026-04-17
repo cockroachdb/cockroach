@@ -1,6 +1,5 @@
 # A voter goes down. The leader engages the witness to maintain commit quorum.
 # The leader then crashes and re-campaigns, winning with the witness' help.
-#
 # Two voters, one witness. Quorum = 2.
 
 setup
@@ -11,7 +10,9 @@ w
 v1: [a1] term=a
 v2: [a1] term=a
 
-# v1 wins election. Witness vote is dropped to keep setup minimal.
+# v1 wins election. Witness vote is dropped to hit an interesting case in
+# which the witness finds out about the leader later. Letting it vote would
+# work too and is unit tested.
 campaign v1 drop=(w)
 ----
 v1 campaigns at term b
@@ -20,18 +21,19 @@ v2: yes
 w:  (dropped)
 outcome: won
 
-# v2 goes down (partitioned from here on).
+# v2 goes down.
 set-avail down=(v2)
 ----
 ok
 
 # v1 proposes an entry.
-# Matches: [v1=3, v2=0, w=0]. Quorum match = 0, not committed.
 propose v1
 ----
 v1: [a1 b2 b3] term=b leader
 v2: [a1] term=b
 
+# Since v2 is down, there's no way to commit unless v2 returns or the witness
+# comes into play.
 append v1
 ----
 v1 appends through b3
@@ -39,23 +41,27 @@ v2: (dropped)
 v1: [a1 b2 b3] term=b leader
 v2: [a1] term=b
 
-# v1 engages the witness. Now it counts toward quorum.
-# Matches: [v1=3, v2=0, w=3]. Quorum match = 3, committed!
+# v1 engages the witness using its last index. The witness promises to "ack" the
+# log up to this point, and also any future entries in the term until
+# disengagement. Because (v1+witness) is a quorum, v1 commits its log.
 engage v1
 ----
 ok
 w:  vote=(b, v1) acked=(b3, engaged)
 v1: [a1 b2 b3] term=b committed=b3 leader
 
-# v2 comes back, but v1 goes down.
+# v2 comes back, but v1 goes down. We are now unavailable: the witness has the
+# more up to date (fictitious) log, so it won't vote for v2, but it also can't
+# campaign. Also, if v1 were lost permanently (not just unavailable), we'd have
+# lost durability. Effectively, (v1+witness) has the durability of a single-voter
+# group.
 set-avail up=(v2) down=(v1)
 ----
 ok
 
-# v2 prevotes (v1 partitioned away). The witness rejects: v2's last log entry
-# a1 is from term a, which is not ahead of the witness' vote term b. Without
-# proof that a post-engagement leader was elected, granting a vote could let v2
-# form a quorum that misses entries the witness helped commit.
+# Confirm that witness won't vote for v2. The witness has to assume that v1 has
+# more up to date log entries from the engaged term, and v2's log is not
+# obviously up to date with whatever the engaged term's entries might be.
 prevote v2
 ----
 v2 prevotes at term c
@@ -64,15 +70,23 @@ v1: (dropped)
 w:  no
 outcome: lost
 
-# v1 comes back up, v2 goes back down. v1 could continue using the witness
-# (nothing in the state has changed since it last did) but for extra spice,
-# let's say it power cycled and lost leadership.
+# v1 comes back up, v2 goes back down.
 set-avail up=(v1) down=(v2)
 ----
 ok
 
-# v1 re-campaigns. Even though the witness is still engaged, it recognizes v1
-# as the leader it supported and grants the vote.
+# v1 could continue using the witness (nothing in the pair's state has changed
+# since it last did) but for extra spice, let's say it power cycled and lost
+# leadership. This creates the interesting situation in which v1 re-campaigns,
+# and needs a vote from the witness but the witness is still engaged at the
+# prior term. It typically wouldn't be able to vote here, but it is able to
+# here because it remembers that the candidate is the leader for the engaged
+# term, which proves that its log is up to date with anything the witness may
+# have helped synthesize acks for.
+#
+# Note that the witness disengages in the new term, preserving a high water mark
+# of b∞ (anything in term b may have been committed with the witness's help).
+# The leader also doesn't consider the witness engaged. It's a new term.
 campaign v1
 ----
 v1 campaigns at term c
@@ -89,9 +103,12 @@ v2: (dropped)
 v1: [a1 b2 b3 c4] term=c committed=b3 leader
 v2: [a1] term=b
 
-# v2 comes back, v1 goes down again. The witness is already disengaged (the
-# vote at term c reset the acked state), so v2's prevote succeeds — the witness
-# has no engagement to protect.
+# v2 comes back, v1 goes down again. The witness disengaged when it voted for
+# v1 at term c, but preserved a high water mark of b∞ — reflecting that it may
+# have helped commit any entry in term b. v2's prevote at the same term (c)
+# succeeds via the same-term path (which doesn't check the log), but a real
+# election at a higher term would require the candidate's log to have an entry
+# from a term > b.
 set-avail up=(v2) down=(v1)
 ----
 ok

@@ -2,6 +2,7 @@ package witness
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -186,14 +187,38 @@ func (s State) HandleMsgVote(
 		return State{}, false
 	}
 
-	// We can grant the vote. Note that if we disengaged above, the outcome
-	// of that will be included in the returned state.
+	// We can grant the vote. If we were engaged, we must preserve a high water
+	// mark that reflects what we may have helped commit. We use
+	// Hi={Term:engagementTerm, Index:∞} rather than the candidate's log mark.
+	//
+	// Why not the candidate's log mark? The candidate's log may contain entries
+	// from terms beyond the engagement that haven't committed yet. If this
+	// election fizzles, those entries may never commit, but we'd have recorded
+	// them as our Hi — potentially blocking future candidates whose logs don't
+	// include them. Example:
+	//
+	//   - Witness engaged at term b, hi=b5.
+	//   - Leader re-campaigns at term z with log [... b5 c6 d7 ... z100].
+	//   - If we set Hi=z100 and the election fizzles, no candidate without
+	//     z100 in its log can get our vote — but z100 may never commit.
+	//
+	// With Hi={b,∞}, we assert only what we know: we may have helped commit
+	// entries in term b, up to an unknown index. Any candidate with a log entry
+	// from a term > b can satisfy this check, proving a post-engagement election
+	// occurred via traditional quorum.
+	var acked Acked
+	if s.Acked.Engaged {
+		acked.Hi = raft.LogMark{
+			Term:  uint64(s.Vote.Term),
+			Index: math.MaxUint64,
+		}
+	}
 	next := State{
 		Vote: Vote{
 			Term:     term,
 			VotedFor: from,
 		},
-		Acked: Acked{}, // not engaged
+		Acked: acked,
 	}
 	return next, true
 }

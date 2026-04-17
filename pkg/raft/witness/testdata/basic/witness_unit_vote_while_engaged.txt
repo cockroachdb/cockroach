@@ -31,7 +31,7 @@ rejected
 vote from=v2 term=b lm=b1
 ----
 ok
-w:  vote=(b, v2) acked=none
+w:  vote=(b, v2) acked=(a∞, released)
 
 # Same scenario but candidate is from a much higher term.
 set
@@ -44,7 +44,7 @@ w:  vote=(a, v1) acked=(a5, engaged)
 vote from=v3 term=e lm=c3
 ----
 ok
-w:  vote=(e, v3) acked=none
+w:  vote=(e, v3) acked=(a∞, released)
 
 # Engagement was released (not engaged), candidate log behind hi: rejected
 # on log-up-to-date check, not engagement.
@@ -102,11 +102,12 @@ w:  vote=(b, v1) acked=(b5, engaged)
 # of the engagement term (b), the candidate IS the leader we supported, so
 # the witness grants the vote. The leader's log is by definition at least
 # as up-to-date as what the witness helped commit.
-# Note that acked resets to none: the new term starts with no engagement.
+# Note that acked becomes b∞: the witness is no longer engaged, but preserves
+# a high water mark reflecting that it may have helped commit anything in term b.
 vote from=v1 term=c lm=b5
 ----
 ok
-w:  vote=(c, v1) acked=none
+w:  vote=(c, v1) acked=(b∞, released)
 
 # Contrast: a *different* candidate at the same term is still rejected.
 set
