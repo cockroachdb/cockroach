@@ -7,6 +7,7 @@ index a556ba52..db4fbfc1 100644
          "cgo_off.go",
          "cgo_on.go",
 -        "invariants_off.go",
+         "iterv2_off.go",
          "race_off.go",
          "race_on.go",
          "slow_build_off.go",
