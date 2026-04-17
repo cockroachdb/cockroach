@@ -334,10 +334,8 @@ func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.
 	case "set":
 		handleSet(t, d, &env.w.State)
 		return fmtWitness(env.w.State)
-	case "down":
-		return handleDown(t, d, env, true)
-	case "up":
-		return handleDown(t, d, env, false)
+	case "set-avail":
+		return handleSetAvail(t, d, env)
 	default:
 		t.Fatalf("unknown command: %s", d.Cmd)
 		return ""
@@ -574,18 +572,29 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, ctx contex
 	return buf.String()
 }
 
-// handleDown sets or clears the down flag on the specified replicas.
-func handleDown(t *testing.T, d *datadriven.TestData, env *testEnv, down bool) string {
+// handleSetAvail sets availability for replicas.
+// Usage: set-avail up=(v1,w) down=(v2)
+func handleSetAvail(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	for _, arg := range d.CmdArgs {
-		id := arg.Key
-		if id == "w" {
-			if !env.hasWitness {
-				t.Fatal("no witness configured")
+		var down bool
+		switch arg.Key {
+		case "up":
+			down = false
+		case "down":
+			down = true
+		default:
+			t.Fatalf("set-avail: unknown key %q, expected up or down", arg.Key)
+		}
+		for _, id := range arg.Vals {
+			if id == "w" {
+				if !env.hasWitness {
+					t.Fatal("no witness configured")
+				}
+				env.w.down = down
+			} else {
+				v := env.voter(t, mustParsePeerID(t, id))
+				v.down = down
 			}
-			env.w.down = down
-		} else {
-			v := env.voter(t, mustParsePeerID(t, id))
-			v.down = down
 		}
 	}
 	return "ok"

@@ -21,7 +21,7 @@ w:  (dropped)
 outcome: won
 
 # v2 goes down (partitioned from here on).
-down v2
+set-avail down=(v2)
 ----
 ok
 
@@ -47,19 +47,15 @@ ok
 w:  vote=(b, v1) acked=(b3, engaged)
 v1: [a1 b2 b3] term=b committed=b3 leader
 
-# v2 comes back, but v1 goes down. v2 prevotes (v1 partitioned away). The
-# witness rejects: v2's last log entry a1 is from term a, which is older than
-# the term b leader that engaged the witness. Without proof that a
-# post-engagement leader was elected, granting a vote could let v2 form a
-# quorum that misses entries the witness helped commit.
-up v2
+# v2 comes back, but v1 goes down.
+set-avail up=(v2) down=(v1)
 ----
 ok
 
-down v1
-----
-ok
-
+# v2 prevotes (v1 partitioned away). The witness rejects: v2's last log entry
+# a1 is from term a, which is not ahead of the witness' vote term b. Without
+# proof that a post-engagement leader was elected, granting a vote could let v2
+# form a quorum that misses entries the witness helped commit.
 prevote v2
 ----
 v2 prevotes at term c
@@ -68,15 +64,10 @@ v1: (dropped)
 w:  no
 outcome: lost
 
-# v2 goes back down.
-down v2
-----
-ok
-
-# v1 comes back up. It could continue using the witness (nothing in the
-# state has changed since it last did) but for extra spice, let's say it
-# power cycled and lost leadership.
-up v1
+# v1 comes back up, v2 goes back down. v1 could continue using the witness
+# (nothing in the state has changed since it last did) but for extra spice,
+# let's say it power cycled and lost leadership.
+set-avail up=(v1) down=(v2)
 ----
 ok
 
@@ -101,11 +92,7 @@ v2: [a1] term=b
 # v2 comes back, v1 goes down again. The witness is already disengaged (the
 # vote at term c reset the acked state), so v2's prevote succeeds — the witness
 # has no engagement to protect.
-up v2
-----
-ok
-
-down v1
+set-avail up=(v2) down=(v1)
 ----
 ok
 
@@ -117,7 +104,7 @@ v1: (dropped)
 w:  yes
 outcome: won
 
-up v1
+set-avail up=(v1)
 ----
 ok
 
