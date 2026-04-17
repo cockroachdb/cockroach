@@ -254,6 +254,10 @@ func distImport(
 		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
+	// hookFired is set when duringDistImport returns an error. After that,
+	// we skip progress persistence to preserve intermediate ResumePos in
+	// the job record. Safe without a mutex: metaFn runs on a single goroutine.
+	var hookFired bool
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
 			// Decode map progress outside the lock since it doesn't touch
@@ -283,8 +287,16 @@ func distImport(
 				}
 			}
 
-			if testingKnobs.alwaysFlushJobProgress {
-				return checkpoint.Persist(ctx, job)
+			if testingKnobs.alwaysFlushJobProgress && !hookFired {
+				if err := checkpoint.Persist(ctx, job); err != nil {
+					return err
+				}
+			}
+			if !hookFired && testingKnobs.duringDistImport != nil {
+				if err := testingKnobs.duringDistImport(); err != nil {
+					hookFired = true
+					return err
+				}
 			}
 		}
 		return nil
