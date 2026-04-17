@@ -190,6 +190,21 @@ func distImport(
 	}
 
 	lastSummary := getLastImportSummary(job)
+	// If no file has made progress, reset the summary to prevent readers that
+	// re-read everything on retry from double counting and inflating the
+	// summary.
+	if importDetails.ResumePos != nil {
+		allFromStart := true
+		for _, pos := range importDetails.ResumePos {
+			if pos > 0 {
+				allFromStart = false
+				break
+			}
+		}
+		if allFromStart {
+			lastSummary = kvpb.BulkOpSummary{}
+		}
+	}
 	checkpoint := newImportCheckpointTracker(
 		len(from), lastSummary, nil, /* manifestBuf */
 	)
