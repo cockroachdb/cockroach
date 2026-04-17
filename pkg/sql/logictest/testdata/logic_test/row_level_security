@@ -6414,3 +6414,38 @@ statement ok
 DROP USER cascade_test_user;
 
 subtest end
+
+# Regression test: ALTER FUNCTION RENAME/SET SCHEMA should be blocked when the
+# function is referenced in a policy expression.
+subtest regression_policy_udf_rename_dep
+
+statement ok
+CREATE TABLE t_rls_dep (k INT PRIMARY KEY, v INT);
+
+statement ok
+CREATE FUNCTION rls_dep_fn(v INT) RETURNS BOOL LANGUAGE SQL AS $$ SELECT v > 0 $$;
+
+statement ok
+ALTER TABLE t_rls_dep ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_rls_dep ON t_rls_dep USING (public.rls_dep_fn(v));
+
+# Renaming the function referenced by the policy should be blocked.
+statement error cannot rename function "rls_dep_fn" because other objects \(\[policy "p_rls_dep" on .*t_rls_dep\]\) still depend on it
+ALTER FUNCTION rls_dep_fn(INT) RENAME TO rls_dep_fn_renamed;
+
+# Moving the function to another schema should also be blocked.
+statement ok
+CREATE SCHEMA sc_rls_dep;
+
+statement error cannot set schema for function "rls_dep_fn" because other objects \(\[policy "p_rls_dep" on .*t_rls_dep\]\) still depend on it
+ALTER FUNCTION rls_dep_fn(INT) SET SCHEMA sc_rls_dep;
+
+statement ok
+DROP POLICY p_rls_dep ON t_rls_dep;
+DROP TABLE t_rls_dep;
+DROP FUNCTION rls_dep_fn;
+DROP SCHEMA sc_rls_dep;
+
+subtest end
