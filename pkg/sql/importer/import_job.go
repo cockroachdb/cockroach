@@ -417,8 +417,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	validationMode := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
-	switch validationMode {
+	switch validationMode := importRowCountValidation.Get(&p.ExecCfg().Settings.SV); validationMode {
 	case ImportRowCountValidationOff:
 	// No validation required.
 	case ImportRowCountValidationAsync, ImportRowCountValidationSync:
@@ -429,6 +428,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 		var checks []*jobspb.InspectDetails_Check
 		var tableName string
+		var expectedRowCount uint64
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -452,7 +452,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if importProgress := prog.GetImport(); importProgress != nil {
 				totalImportedRows = importProgress.Summary.EntryCounts[pkID]
 			}
-			expectedRowCount := uint64(totalImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
+			expectedRowCount = uint64(totalImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
 			checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
@@ -473,12 +473,70 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			r.inspectJobID = inspectJob.ID()
 			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", inspectJob.ID(), tableName, setPublicTimestamp)
 
-			// For sync mode, wait for the inspect job to complete.
-			if validationMode == ImportRowCountValidationSync {
-				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{inspectJob.ID()}); err != nil {
+			switch validationMode {
+			case ImportRowCountValidationSync:
+				if err := p.ExecCfg().JobRegistry.WaitForJobsIgnoringJobErrors(ctx, []jobspb.JobID{inspectJob.ID()}); err != nil {
 					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", inspectJob.ID(), tableName)
 				}
-				log.Eventf(ctx, "inspect job %d completed for table %s", inspectJob.ID(), tableName)
+
+				completedJob, err := p.ExecCfg().JobRegistry.LoadJob(ctx, inspectJob.ID())
+				if err != nil {
+					return errors.Wrapf(err, "failed to load inspect job %d for table %s", inspectJob.ID(), tableName)
+				}
+
+				var inspectRowCount uint64
+				completedProgress := completedJob.Progress()
+				if inspectProgress := completedProgress.GetInspect(); inspectProgress != nil {
+					inspectRowCount = inspectProgress.RowCount
+				}
+
+				payload := completedJob.Payload()
+				if payload.FinalResumeError != nil {
+					decodedErr := errors.DecodeError(ctx, *payload.FinalResumeError)
+					log.Eventf(ctx,
+						"inspect job %d found issues for table %s (inspectRowCount=%d, expected=%d)",
+						inspectJob.ID(), tableName, inspectRowCount, expectedRowCount,
+					)
+
+					// Run a count(*) to independently validate the inspect row
+					// count.
+					besteffort.Warning(ctx, "import-expected-count-validation", func(ctx context.Context) error {
+						query := fmt.Sprintf(
+							`SELECT count(*) FROM [%d AS t] AS OF SYSTEM TIME '%s'`,
+							table.Desc.ID, setPublicTimestamp.AsOfSystemTime(),
+						)
+						row, err := p.ExecCfg().InternalDB.Executor().QueryRowEx(
+							ctx, "import-count-validation", nil, /* txn */
+							sessiondata.InternalExecutorOverride{
+								User: username.NodeUserName(),
+							},
+							query,
+						)
+						if err != nil {
+							return err
+						}
+						actualCount := uint64(tree.MustBeDInt(row[0]))
+
+						prog := r.job.Progress()
+						var totalImportedRows int64
+						if importProgress := prog.GetImport(); importProgress != nil {
+							totalImportedRows = importProgress.Summary.EntryCounts[pkID]
+						}
+
+						log.Ops.Errorf(ctx,
+							"import row count validation for table %s (id=%d): count(*)=%d, inspectRowCount=%d, expected=%d (imported=%d + initial=%d)",
+							tableName, table.Desc.ID, actualCount, inspectRowCount, expectedRowCount,
+							totalImportedRows, table.InitialRowCount,
+						)
+						return nil
+					})
+
+					return errors.Wrapf(decodedErr,
+						"inspect job %d found issues for table %s", inspectJob.ID(), tableName)
+				}
+
+				log.Eventf(ctx, "inspect job %d completed for table %s (inspectRowCount=%d, expected=%d)",
+					inspectJob.ID(), tableName, inspectRowCount, expectedRowCount)
 			}
 		}
 	}
