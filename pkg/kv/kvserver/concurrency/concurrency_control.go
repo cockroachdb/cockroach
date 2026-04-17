@@ -329,6 +329,14 @@ type RangeStateListener interface {
 	// into.
 	OnRangeMerge()
 
+	// OnReplicaRemoval informs the concurrency manager that this replica is
+	// being removed. It clears and disables the lock table and txn wait-queue,
+	// releasing any waiters. This ensures that requests waiting in the lock
+	// table are not stranded when a replica is removed without going through
+	// the normal merge trigger path (e.g. dangling subsume via replica GC,
+	// subsumed by snapshot).
+	OnReplicaRemoval()
+
 	// OnReplicaSnapshotApplied informs the concurrency manager that its replica
 	// has received a snapshot from another replica in its range.
 	OnReplicaSnapshotApplied()

@@ -1084,3 +1084,100 @@ finish req=req2
 
 reset namespace
 ----
+
+# -------------------------------------------------------------
+# OnReplicaRemoval - removing a replica clears the lock-table
+# and disables it, just like OnRangeMerge. This is critical for
+# the dangling subsume path where OnRangeMerge is never called.
+# See #167995.
+#
+# Setup: txn1 acquires lock on k
+#
+# Test:  txn2 enters lock's wait-queue
+#        replica is removed
+#        txn2 proceeds (lock table cleared)
+#        lock-table is disabled
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=10,1
+  put key=k value=v
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k
+----
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 1, queuedReaders: 0)
+[2] sequence req2: pushing after 1h0m0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[2] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 18, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+
+on-replica-removal
+----
+[-] remove replica: complete
+[2] sequence req2: lock wait-queue event: done waiting
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+debug-lock-table
+----
+num=0
+
+# Verify that the lock table is disabled: discovered locks are ignored.
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
+----
+[3] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----

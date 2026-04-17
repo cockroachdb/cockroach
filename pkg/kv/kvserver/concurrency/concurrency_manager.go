@@ -786,9 +786,13 @@ func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquis
 
 // OnRangeMerge implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeMerge() {
-	// Disable all queues - the range is being merged into its LHS neighbor.
-	// It will no longer be informed about all state transitions to locks and
-	// transactions.
+	m.OnReplicaRemoval()
+}
+
+// OnReplicaRemoval implements the RangeStateListener interface.
+func (m *managerImpl) OnReplicaRemoval() {
+	// Disable all queues - the replica is being removed and will no longer be
+	// informed about all state transitions to locks and transactions.
 	const disable = true
 	m.lt.Clear(disable)
 	m.twq.Clear(disable)
@@ -834,7 +838,7 @@ func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int
 	return acquisitions, approximateBatchSize
 }
 
-// TestingLockTableString implements the MetricExporter interface.
+// TestingLockTableString implements the TestingAccessor interface.
 func (m *managerImpl) TestingLockTableString() string {
 	return m.lt.String()
 }
