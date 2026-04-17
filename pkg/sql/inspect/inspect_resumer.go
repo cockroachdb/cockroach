@@ -6,7 +6,9 @@
 package inspect
 
 import (
+	"bytes"
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -86,6 +88,22 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		remainingPartitionedSpans := c.extractSpansFromPlan(ctx, plan)
 		if err := c.initProgress(ctx, execCfg, progressTracker, remainingPartitionedSpans, completedSpans); err != nil {
 			return err
+		}
+
+		// Assert that the partitioned spans are non-overlapping. It is checked
+		// explicitly for debugging.
+		//
+		// It has the side effect of sorting the partitioned spans by start key.
+		slices.SortFunc(remainingPartitionedSpans, func(a, b roachpb.Span) int {
+			return bytes.Compare(a.Key, b.Key)
+		})
+		for i := 1; i < len(remainingPartitionedSpans); i++ {
+			if bytes.Compare(remainingPartitionedSpans[i-1].EndKey, remainingPartitionedSpans[i].Key) > 0 {
+				return errors.AssertionFailedf(
+					"inspect spans overlapping: span %d [%q, %q) overlaps span %d [%q, %q)",
+					i-1, remainingPartitionedSpans[i-1].Key, remainingPartitionedSpans[i-1].EndKey,
+					i, remainingPartitionedSpans[i].Key, remainingPartitionedSpans[i].EndKey)
+			}
 		}
 
 		if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
