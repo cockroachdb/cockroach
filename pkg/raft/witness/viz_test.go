@@ -374,7 +374,11 @@ func parseComments(path string) (map[int]string, error) {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
-			commentLines = append(commentLines, strings.TrimPrefix(trimmed, "# "))
+			text := strings.TrimPrefix(trimmed, "# ")
+			if text == "#" {
+				text = "" // bare "#" is a blank line in comments
+			}
+			commentLines = append(commentLines, text)
 		} else if trimmed == "" {
 			// Blank lines between comments and commands are fine; keep accumulating.
 		} else {
