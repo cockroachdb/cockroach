@@ -633,11 +633,7 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 // mid-processing. The duringDistImport knob injects an error after the first
 // batch is persisted, so distImport fails with intermediate ResumePos values.
 // On retry the import should complete and INSPECT should confirm the correct
-// row count.
-//
-// This currently fails because the workload reader ignores resumePos (#168396),
-// re-reading all rows from scratch, while bulkSummary accumulates across
-// retries — inflating the expected count.
+// row count. This is a regression test for #168396.
 func TestImportIntoWorkloadURIRowCountCheckAfterRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
