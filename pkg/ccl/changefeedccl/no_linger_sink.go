@@ -240,6 +240,56 @@ type noLingerSinkStats struct {
 	lastLog         time.Time
 }
 
+type statsSnapshot struct {
+	emitted, flushed, batches, flushNanos int64
+	elapsed                               time.Duration
+}
+
+// recordBatch records a completed batch and returns whether a periodic
+// log is due along with a snapshot of the accumulated stats.
+func (st *noLingerSinkStats) recordBatch(
+	events int64, flushDur time.Duration,
+) (bool, statsSnapshot) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.totalFlushed += events
+	st.totalBatches++
+	st.totalFlushNanos += flushDur.Nanoseconds()
+	elapsed := timeutil.Since(st.lastLog)
+	if elapsed < noLingerLogInterval {
+		return false, statsSnapshot{}
+	}
+	snap := statsSnapshot{
+		emitted:    st.totalEmitted,
+		flushed:    st.totalFlushed,
+		batches:    st.totalBatches,
+		flushNanos: st.totalFlushNanos,
+		elapsed:    elapsed,
+	}
+	st.totalEmitted = 0
+	st.totalFlushed = 0
+	st.totalBatches = 0
+	st.totalFlushNanos = 0
+	st.lastLog = timeutil.Now()
+	return true, snap
+}
+
+type bufferSnapshot struct {
+	pending, inflight, heapKeys, bufKeys int
+}
+
+// snapshot returns a point-in-time view of buffer state under the lock.
+func (pb *pendingBuffer) snapshot() bufferSnapshot {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	return bufferSnapshot{
+		pending:  pb.totalEvents,
+		inflight: pb.totalInflight,
+		heapKeys: pb.keyHeap.Len(),
+		bufKeys:  len(pb.keyMessages),
+	}
+}
+
 // noLingerSink implements the Sink interface using a pull-based model
 // where idle workers pull batches from a shared pendingBuffer.
 type noLingerSink struct {
@@ -449,42 +499,16 @@ func (s *noLingerSink) runWorker(ctx context.Context) error {
 			"no-linger batch: events=%d keys=%d wait=%s flush=%s err=%v",
 			len(batch.events), nKeys, waitDur, flushDur, err)
 
-		s.stats.mu.Lock()
-		s.stats.totalFlushed += int64(len(batch.events))
-		s.stats.totalBatches++
-		s.stats.totalFlushNanos += flushDur.Nanoseconds()
-		sinceLastLog := timeutil.Since(s.stats.lastLog)
-		shouldLog := sinceLastLog >= noLingerLogInterval
-		var emitted, flushed, batches, flushNanos int64
+		shouldLog, snapshot := s.stats.recordBatch(int64(len(batch.events)), flushDur)
 		if shouldLog {
-			emitted = s.stats.totalEmitted
-			flushed = s.stats.totalFlushed
-			batches = s.stats.totalBatches
-			flushNanos = s.stats.totalFlushNanos
-			s.stats.totalEmitted = 0
-			s.stats.totalFlushed = 0
-			s.stats.totalBatches = 0
-			s.stats.totalFlushNanos = 0
-			s.stats.lastLog = timeutil.Now()
-		}
-		s.stats.mu.Unlock()
-
-		if shouldLog {
-			// Read buffer stats under buf.mu.
-			s.buf.mu.Lock()
-			pending := s.buf.totalEvents
-			inflight := s.buf.totalInflight
-			heapKeys := s.buf.keyHeap.Len()
-			bufKeys := len(s.buf.keyMessages)
-			s.buf.mu.Unlock()
-
+			bufSnap := s.buf.snapshot()
 			log.Changefeed.Infof(ctx,
 				"no-linger stats (last %s): emitted=%d flushed=%d batches=%d "+
 					"avgFlush=%s pending=%d inflight=%d heapKeys=%d bufKeys=%d",
-				sinceLastLog.Truncate(time.Second),
-				emitted, flushed, batches,
-				time.Duration(flushNanos/max(batches, 1)),
-				pending, inflight, heapKeys, bufKeys)
+				snapshot.elapsed.Truncate(time.Second),
+				snapshot.emitted, snapshot.flushed, snapshot.batches,
+				time.Duration(snapshot.flushNanos/max(snapshot.batches, 1)),
+				bufSnap.pending, bufSnap.inflight, bufSnap.heapKeys, bufSnap.bufKeys)
 		}
 
 		if err != nil {
