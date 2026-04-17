@@ -134,7 +134,7 @@ func registerFailover(r registry.Registry) {
 			Benchmark:              true,
 			Timeout:                45 * time.Minute,
 			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds:       registry.AllExceptAWS,
+			CompatibleClouds:       registry.OnlyGCE,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
 			PostProcessPerfMetrics: failoverAggregateFunction,
@@ -147,7 +147,7 @@ func registerFailover(r registry.Registry) {
 			Benchmark:              true,
 			Timeout:                45 * time.Minute,
 			Cluster:                r.MakeClusterSpec(7, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds:       registry.AllExceptAWS,
+			CompatibleClouds:       registry.OnlyGCE,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
 			PostProcessPerfMetrics: failoverAggregateFunction,
@@ -160,7 +160,7 @@ func registerFailover(r registry.Registry) {
 			Benchmark:              true,
 			Timeout:                45 * time.Minute,
 			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds:       registry.AllExceptAWS,
+			CompatibleClouds:       registry.OnlyGCE,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
 			PostProcessPerfMetrics: failoverAggregateFunction,
@@ -170,7 +170,7 @@ func registerFailover(r registry.Registry) {
 		for _, failureMode := range allFailureModes {
 			clusterOpts := make([]spec.Option, 0)
 			clusterOpts = append(clusterOpts, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2))
-			clouds := registry.AllExceptAWS
+			clouds := registry.OnlyGCE
 
 			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
@@ -204,7 +204,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                   fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
 				Owner:                  registry.OwnerKV,
-				CompatibleClouds:       registry.AllExceptAWS,
+				CompatibleClouds:       registry.OnlyGCE,
 				Suites:                 registry.Suites(registry.Weekly),
 				Benchmark:              true,
 				Timeout:                45 * time.Minute,
@@ -219,7 +219,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                   fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
 				Owner:                  registry.OwnerKV,
-				CompatibleClouds:       registry.AllExceptAWS,
+				CompatibleClouds:       registry.OnlyGCE,
 				Suites:                 registry.Suites(registry.Weekly),
 				Benchmark:              true,
 				Timeout:                45 * time.Minute,
