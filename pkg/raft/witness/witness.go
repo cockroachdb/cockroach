@@ -127,85 +127,64 @@ func le(a, b raft.LogMark) bool {
 }
 
 func (s State) HandleMsgVote(
-	ctx context.Context, from raftpb.PeerID, term raftpb.Term, lm raft.LogMark,
+	ctx context.Context, from raftpb.PeerID, candTerm raftpb.Term, lm raft.LogMark,
 ) (State, bool) {
-	if term == s.Vote.Term && (s.Vote.VotedFor == from || s.Vote.VotedFor == 0) {
+	// We intentionally do NOT call maybeBumpTerm here and instead bump the term
+	// only if we can actually grant the vote. This gives us the invariant that
+	// while an engagement is active, our Term reflects the engagement and
+	// VotedFor the leader that engagement is for. We could track these explicitly
+	// with the engagement, but higher cognitive load would result from having two
+	// terms and leaders floating around.
+
+	if candTerm == s.Vote.Term && (s.Vote.VotedFor == from || s.Vote.VotedFor == 0) {
 		// Either idempotent vote, or we learned about this term via engage/release
 		// but haven't voted yet. Grant the vote, preserving existing acked state.
 		s.Vote.VotedFor = from
 		return s, true
 	}
 
-	if term <= s.Vote.Term {
+	if candTerm <= s.Vote.Term {
 		// Stale vote request, or already voted for someone else this term.
 		return State{}, false
 	}
 
-	// Term advanced. Need to check for log compatibility before granting vote.
-
-	// If the candidate has entries from a newer term in its log, this proves that
-	// our leader's term ended without this witness having cast a vote. This means
-	// there must have been a proper leader election for some newer term, and a
-	// traditional "log-up-to-date" check on a quorum of regular voters.
-
-	// Witness is still engaged from `s.Vote.Term`. If at all possible, we want
-	// to convince ourselves that we can disengage. If the candidate's last log
-	// term is not ahead of the term we support, it's possible that the leader
-	// relied on us to commit log entries that this candidate is not up to date
-	// with.
-	// For example, the term 10 leader could have asked us (at t5i100) to
-	// support all future appends in this term, so when a follower shows up with
-	// their log ending at t5i109, we don't know if we can vote - for all we
-	// know, the leader had a longer log and committed it with our help:
-	// - term 10 leader's log: t5i100 ... t5i110 relied_on_witness=t5i110
-	// - witness state: term=10 hi=t5i100 engaged=true
-	// - candidate's request: term=15 lm=t5i109
-	// Note that from the witness' perspective, this is indistinguishable from
-	// the same situation but with a different leader log, in which the witness
-	// could vote, but has no way of discovering the fact.
-	// - term 10 leader's log: t5i100 ... t5i105 relied_on_witness=t5i110
-	// - (rest unchanged)
+	// Campaign is at strictly higher term. Need to check for log compatibility
+	// before granting vote. Any log definitely must be up-to-date with
+	// `s.Acked.Hi` at a minimum.
 	//
-	// But if the candidate has an entry from a strictly newer term in its log,
-	// we know that there was a traditional-quorum leader election without the
-	// witness' involvement. This means that the old leader is unable to commit
-	// new entries (a traditional quorum in `n=2k` overlaps all near-quorums of
-	// size `k`). Because the candidate's log has an entry with a newer log
-	// term, we also know that the candidate's log is up to date with any prefix
-	// of the previous leader's log that was ultimately committed. We can thus
-	// disregard the engagement while deciding whether to respond to this vote.
-
-	// Exception: if the candidate is the leader we're engaged for, their log is
-	// by definition at least as up-to-date as what we helped commit. The normal
-	// log-up-to-date check below is sufficient.
-	if s.Acked.Engaged && s.Vote.VotedFor != from && lm.Term <= uint64(s.Vote.Term) {
-		return State{}, false
+	// If engaged, the witness may have implicitly acked any log entry in the
+	// engagement term (it must have an entry from a more recent term in its log,
+	// which proves that it is up to date with whatever actually happened in the
+	// engagement term).
+	// The exception we carve out is if we're voting for the engagement's leader:
+	// its log is up to date by definition. Importantly, this allows the leader to
+	// win an election after it failed while using the witness, when it may be the
+	// only possible leader (e.g. 2v+w config with one voter down).
+	effectiveHi := s.Acked.Hi
+	if s.Acked.Engaged {
+		if s.Vote.VotedFor == from {
+			effectiveHi = lm
+		} else {
+			effectiveHi.Index = math.MaxUint64
+		}
 	}
 
-	if !leq(s.Acked.Hi, lm) {
+	if !leq(effectiveHi, lm) {
 		// Log-up-to-date check failed.
 		return State{}, false
 	}
 
-	// We can grant the vote. If we were engaged, we must preserve a high water
-	// mark that reflects what we may have helped commit. We use
-	// Hi={Term:engagementTerm, Index:∞} rather than the candidate's log mark.
-	//
-	// Why not the candidate's log mark? The candidate's log may contain entries
-	// from terms beyond the engagement that haven't committed yet. If this
-	// election fizzles, those entries may never commit, but we'd have recorded
-	// them as our Hi — potentially blocking future candidates whose logs don't
-	// include them. Example:
-	//
-	//   - Witness engaged at term b, hi=b5.
-	//   - Leader re-campaigns at term z with log [... b5 c6 d7 ... z100].
-	//   - If we set Hi=z100 and the election fizzles, no candidate without
-	//     z100 in its log can get our vote — but z100 may never commit.
-	//
-	// With Hi={b,∞}, we assert only what we know: we may have helped commit
-	// entries in term b, up to an unknown index. Any candidate with a log entry
-	// from a term > b can satisfy this check, proving a post-engagement election
-	// occurred via traditional quorum.
+	// We grant the vote. For simplicity, we want the existing engagement (if any)
+	// to terminate, since it was from a previous term. We do not know if the
+	// candidate will win the election, and its log mark may reflect a higher term
+	// and an index that may never actually commit, so we don't want to leak that
+	// into the high water mark. Instead, we close the engagement out at term ∞.
+	// Note that if the engagement-term leader tries to campaign in the future
+	// without having a newer term in its log (which can happen if this vote that
+	// unwinds the engagement succeeds but the campaign fails), the witness will
+	// not be able to grant the vote. This is a non-issue with pre-vote, but if we
+	// explicitly remembered the leader of the most recent engagement, we could
+	// waive the log completeness check even in that case - for now we don't.
 	var acked Acked
 	if s.Acked.Engaged {
 		acked.Hi = raft.LogMark{
@@ -215,7 +194,7 @@ func (s State) HandleMsgVote(
 	}
 	next := State{
 		Vote: Vote{
-			Term:     term,
+			Term:     candTerm,
 			VotedFor: from,
 		},
 		Acked: acked,
