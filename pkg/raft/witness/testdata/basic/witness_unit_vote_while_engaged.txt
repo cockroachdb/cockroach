@@ -102,6 +102,7 @@ w:  vote=(b, v1) acked=(b5, engaged)
 # of the engagement term (b), the candidate IS the leader we supported, so
 # the witness grants the vote. The leader's log is by definition at least
 # as up-to-date as what the witness helped commit.
+# Note that acked resets to none: the new term starts with no engagement.
 vote from=v1 term=c lm=b5
 ----
 ok
