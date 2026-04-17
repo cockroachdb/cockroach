@@ -3079,6 +3079,47 @@ CONFIGURE ZONE USING
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/webhook-sink/no-wait",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			err := c.Install(ctx, t.L(), ct.sinkNodes, "go")
+			if err != nil {
+				t.Skip(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{
+				warehouses: 100,
+				duration:   "5m",
+				noWait:     true,
+			})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: webhookSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"metrics_label":       "'webhook'",
+					"webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+				},
+			})
+
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 10 * time.Minute,
+			})
+
+			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-auth",
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(1),
