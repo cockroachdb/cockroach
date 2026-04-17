@@ -692,6 +692,7 @@ go_test(
         "descriptor_test.go",
         "distsql_check_test.go",
         "distsql_leaf_txn_test.go",
+        "distsql_physical_planner_adaptive_test.go",
         "distsql_physical_planner_test.go",
         "distsql_plan_backfill_test.go",
         "distsql_plan_bulk_test.go",
