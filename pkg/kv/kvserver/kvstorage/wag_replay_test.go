@@ -20,6 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// replicaMark is a test helper that constructs a ReplicaMark.
+func replicaMark(replicaID, nextReplicaID roachpb.ReplicaID) ReplicaMark {
+	return ReplicaMark{
+		RaftReplicaID:  kvserverpb.RaftReplicaID{ReplicaID: replicaID},
+		RangeTombstone: kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID},
+	}
+}
+
 // TestCanApply exercises the per-event replay decision logic, verifying that
 // canApply correctly classifies events as needing application or not, and that
 // raftCatchUp returns the right catch-up index for applicable events.
@@ -42,12 +50,12 @@ func TestCanApply(t *testing.T) {
 		{
 			name:        "event below tombstone",
 			event:       event(3, 10, wagpb.EventApply),
-			state:       persistedRangeState{tombstoneNextReplicaID: 5},
+			state:       persistedRangeState{mark: replicaMark(0, 5)},
 			shouldApply: false,
 		}, {
 			name:        "old replica, superseded by current replica",
 			event:       event(3, 10, wagpb.EventApply),
-			state:       persistedRangeState{replicaID: 5, appliedIndex: 10},
+			state:       persistedRangeState{mark: replicaMark(5, 0), appliedIndex: 10},
 			shouldApply: false,
 		},
 
@@ -56,44 +64,44 @@ func TestCanApply(t *testing.T) {
 		{
 			name:        "apply below applied index",
 			event:       event(3, 49, wagpb.EventApply),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: false,
 		}, {
 			name:        "apply at applied index",
 			event:       event(3, 50, wagpb.EventApply),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: false,
 		}, {
 			name:        "apply above applied index",
 			event:       event(3, 51, wagpb.EventApply),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 51,
 		}, {
 			name:        "split above applied index",
 			event:       event(3, 100, wagpb.EventSplit),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 99,
 		}, {
 			name:        "merge above applied index",
 			event:       event(3, 100, wagpb.EventMerge),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 99,
 		}, {
 			name:        "destroy above applied index",
 			event:       event(3, 100, wagpb.EventDestroy),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 100,
 		}, {
 			// Destroy/Subsume at the applied index still need applying — if they
 			// had already been applied, the tombstone would have been bumped.
 			name:        "destroy at applied index",
 			event:       event(3, 50, wagpb.EventDestroy),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 50,
 		}, {
 			name:        "subsume at applied index",
 			event:       event(3, 50, wagpb.EventSubsume),
-			state:       persistedRangeState{replicaID: 3, appliedIndex: 50},
+			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
 			shouldApply: true, shouldCatchUp: 50,
 		},
 
@@ -105,12 +113,12 @@ func TestCanApply(t *testing.T) {
 		}, {
 			name:        "create at tombstone boundary",
 			event:       event(5, 0, wagpb.EventCreate),
-			state:       persistedRangeState{tombstoneNextReplicaID: 5},
+			state:       persistedRangeState{mark: replicaMark(0, 5)},
 			shouldApply: true,
 		}, {
 			name:        "create above tombstone",
 			event:       event(10, 0, wagpb.EventCreate),
-			state:       persistedRangeState{tombstoneNextReplicaID: 5},
+			state:       persistedRangeState{mark: replicaMark(0, 5)},
 			shouldApply: true,
 		},
 	} {
@@ -132,10 +140,9 @@ func writePersistedRangeState(
 	t.Helper()
 	ctx := context.Background()
 	sl := MakeStateLoader(rangeID)
-	ts := kvserverpb.RangeTombstone{NextReplicaID: state.tombstoneNextReplicaID}
 	as := &kvserverpb.RangeAppliedState{RaftAppliedIndex: state.appliedIndex}
-	require.NoError(t, sl.SetRaftReplicaID(ctx, stateRW, state.replicaID))
-	require.NoError(t, sl.SetRangeTombstone(ctx, stateRW, ts))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, stateRW, state.mark.ReplicaID))
+	require.NoError(t, sl.SetRangeTombstone(ctx, stateRW, state.mark.RangeTombstone))
 	require.NoError(t, sl.SetRangeAppliedState(ctx, stateRW, as))
 }
 
@@ -158,7 +165,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 		{
 			name: "single event, needs apply",
 			states: map[roachpb.RangeID]persistedRangeState{
-				1: {replicaID: 3, appliedIndex: 50},
+				1: {mark: replicaMark(3, 0), appliedIndex: 50},
 			},
 			node: wagpb.Node{Events: []wagpb.Event{
 				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 3, Index: 51}, Type: wagpb.EventApply},
@@ -168,7 +175,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 		}, {
 			name: "single event, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{
-				1: {replicaID: 3, appliedIndex: 50},
+				1: {mark: replicaMark(3, 0), appliedIndex: 50},
 			},
 			node: wagpb.Node{Events: []wagpb.Event{
 				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 3, Index: 50}, Type: wagpb.EventApply},
@@ -177,7 +184,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 		}, {
 			name: "multi-event split, needs apply with per-range catch-ups",
 			states: map[roachpb.RangeID]persistedRangeState{
-				1: {replicaID: 3, appliedIndex: 99},
+				1: {mark: replicaMark(3, 0), appliedIndex: 99},
 			},
 			node: wagpb.Node{Events: []wagpb.Event{
 				// EventSplit for LHS (catch-up to index 99).
@@ -190,8 +197,8 @@ func TestCanApplyWAGNode(t *testing.T) {
 		}, {
 			name: "multi-event split, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{
-				1: {replicaID: 3, appliedIndex: 100},
-				2: {replicaID: 1, tombstoneNextReplicaID: 1, appliedIndex: 10},
+				1: {mark: replicaMark(3, 0), appliedIndex: 100},
+				2: {mark: replicaMark(1, 1), appliedIndex: 10},
 			},
 			node: wagpb.Node{Events: []wagpb.Event{
 				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 3, Index: 100}, Type: wagpb.EventSplit},
@@ -201,7 +208,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 		}, {
 			name: "multi-event disagreement returns error",
 			states: map[roachpb.RangeID]persistedRangeState{
-				1: {replicaID: 3, appliedIndex: 100},
+				1: {mark: replicaMark(3, 0), appliedIndex: 100},
 			},
 			// LHS already applied but RHS not yet — should not happen.
 			node: wagpb.Node{Events: []wagpb.Event{
