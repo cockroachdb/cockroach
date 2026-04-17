@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -21,19 +22,35 @@ import (
 )
 
 // DrainSqlStatsRespBuilder is a builder for the DrainSqlStatsResponse. When
-// adding StatementStatistics and TransactionStatistics,  it will merge the
-// new statistic with an existing one, if it already exists in the map.
+// adding StatementStatistics and TransactionStatistics, it will merge the
+// new statistic with an existing one if it already exists in the map.
+// Merging takes the aggregated timestamp into account so that stats from
+// different aggregation windows are not combined.
 type DrainSqlStatsRespBuilder struct {
 	stmtFingerprintCount map[appstatspb.StmtFingerprintID]struct{}
-	stmtMap              map[appstatspb.StatementStatisticsKey]*appstatspb.CollectedStatementStatistics
-	txnMap               map[appstatspb.TransactionFingerprintID]*appstatspb.CollectedTransactionStatistics
+	stmtMap              map[stmtDrainKey]*appstatspb.CollectedStatementStatistics
+	txnMap               map[txnDrainKey]*appstatspb.CollectedTransactionStatistics
+}
+
+// stmtDrainKey includes the aggregated timestamp so that stats from different
+// aggregation windows are not merged together during drain.
+type stmtDrainKey struct {
+	key          appstatspb.StatementStatisticsKey
+	aggregatedTs time.Time
+}
+
+// txnDrainKey includes the aggregated timestamp so that stats from different
+// aggregation windows are not merged together during drain.
+type txnDrainKey struct {
+	fingerprintID appstatspb.TransactionFingerprintID
+	aggregatedTs  time.Time
 }
 
 func NewDrainSqlStatsRespBuilder() *DrainSqlStatsRespBuilder {
 	return &DrainSqlStatsRespBuilder{
 		stmtFingerprintCount: make(map[appstatspb.StmtFingerprintID]struct{}),
-		stmtMap:              make(map[appstatspb.StatementStatisticsKey]*appstatspb.CollectedStatementStatistics),
-		txnMap:               make(map[appstatspb.TransactionFingerprintID]*appstatspb.CollectedTransactionStatistics),
+		stmtMap:              make(map[stmtDrainKey]*appstatspb.CollectedStatementStatistics),
+		txnMap:               make(map[txnDrainKey]*appstatspb.CollectedTransactionStatistics),
 	}
 }
 
@@ -41,8 +58,9 @@ func (b *DrainSqlStatsRespBuilder) AddStmtStats(
 	stmtStats []*appstatspb.CollectedStatementStatistics,
 ) {
 	for _, stmt := range stmtStats {
-		if existingStmt, ok := b.stmtMap[stmt.Key]; !ok {
-			b.stmtMap[stmt.Key] = stmt
+		dk := stmtDrainKey{key: stmt.Key, aggregatedTs: stmt.AggregatedTs}
+		if existingStmt, ok := b.stmtMap[dk]; !ok {
+			b.stmtMap[dk] = stmt
 		} else {
 			existingStmt.Stats.Add(&stmt.Stats)
 		}
@@ -57,8 +75,12 @@ func (b *DrainSqlStatsRespBuilder) AddTxnStats(
 	txnStats []*appstatspb.CollectedTransactionStatistics,
 ) {
 	for _, txn := range txnStats {
-		if existingTx, ok := b.txnMap[txn.TransactionFingerprintID]; !ok {
-			b.txnMap[txn.TransactionFingerprintID] = txn
+		dk := txnDrainKey{
+			fingerprintID: txn.TransactionFingerprintID,
+			aggregatedTs:  txn.AggregatedTs,
+		}
+		if existingTx, ok := b.txnMap[dk]; !ok {
+			b.txnMap[dk] = txn
 		} else {
 			existingTx.Stats.Add(&txn.Stats)
 		}

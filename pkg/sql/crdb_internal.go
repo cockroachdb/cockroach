@@ -7095,10 +7095,6 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.persistedSQLStats
-		curAggTs := s.ComputeAggregatedTs()
-		aggInterval := s.GetAggregationInterval()
-
 		const numDatums = 10
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
@@ -7106,8 +7102,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7132,7 +7127,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				indexRecommendations := tree.NewDArray(types.String)
@@ -7528,10 +7523,6 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.persistedSQLStats
-		curAggTs := s.ComputeAggregatedTs()
-		aggInterval := s.GetAggregationInterval()
-
 		const numDatums = 6
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
@@ -7541,8 +7532,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			}, func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics) error {
-
-				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -7560,7 +7550,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 				}
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				row = append(row[:0],
