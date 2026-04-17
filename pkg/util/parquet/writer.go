@@ -19,6 +19,7 @@ import (
 
 type config struct {
 	maxRowGroupLength int64
+	dataPageSize      int64
 	version           parquet.Version
 	compression       compress.Compression
 
@@ -157,13 +158,20 @@ type Writer struct {
 // compression schemes, allocator, batch size, page size etc
 func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, error) {
 	// We want the caller to have control over when the buffer is flushed, so the max
-	// data page size and row group size are uncapped. This means that the library will not flush
-	// automatically when the buffered data size is large. It will only flush the caller calls Flush().
-	// Note that this means there will be one data page per column per row group in the final file.
-	defaultFlushSize := int64(math.MaxInt64)
-
+	// row group size is uncapped. This means that the library will not flush
+	// automatically based on row count. It will only flush when the caller calls Flush().
+	//
+	// The data page size is set to MaxInt32 instead of MaxInt64 because the
+	// Apache Arrow parquet library internally uses int32 for buffer size
+	// calculations (column_writer.go), and larger values can cause int32
+	// overflow, resulting in a panic when bytes.Buffer.Grow is called with a
+	// negative value. In practice, this means there will be one data page per
+	// column per row group in the final file unless a single column in a row
+	// group exceeds 2GB, in which case the library will split it into
+	// multiple data pages.
 	cfg := config{
-		maxRowGroupLength: defaultFlushSize,
+		maxRowGroupLength: math.MaxInt64,
+		dataPageSize:      math.MaxInt32,
 		version:           parquet.V2_6,
 		compression:       compress.Codecs.Uncompressed,
 		metadata:          metadata.KeyValueMetadata{},
@@ -186,7 +194,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 		parquet.WithCreatedBy("cockroachdb"),
 		parquet.WithVersion(cfg.version),
 		parquet.WithCompression(cfg.compression),
-		parquet.WithDataPageSize(defaultFlushSize),
+		parquet.WithDataPageSize(cfg.dataPageSize),
 	}
 	props := parquet.NewWriterProperties(parquetOpts...)
 	writer := file.NewParquetWriter(sink, sch.schema.Root(), file.WithWriterProps(props),
