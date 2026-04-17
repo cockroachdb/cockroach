@@ -105,10 +105,8 @@ v2: [a1] term=b
 
 # v2 comes back, v1 goes down again. The witness disengaged when it voted for
 # v1 at term c, but preserved a high water mark of b∞ — reflecting that it may
-# have helped commit any entry in term b. v2's prevote at the same term (c)
-# succeeds via the same-term path (which doesn't check the log), but a real
-# election at a higher term would require the candidate's log to have an entry
-# from a term > b.
+# have helped commit any entry in term b. v2's log (term a) can't prove it
+# covers what the witness helped commit, so the prevote fails.
 set-avail up=(v2) down=(v1)
 ----
 ok
@@ -118,8 +116,8 @@ prevote v2
 v2 prevotes at term c
 v2: yes (self)
 v1: (dropped)
-w:  yes
-outcome: won
+w:  no
+outcome: lost
 
 set-avail up=(v1)
 ----

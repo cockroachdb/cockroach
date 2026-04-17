@@ -245,11 +245,15 @@ func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
 	switch req := m.msg.(type) {
 	case msgVoteReq:
 		if m.to == "w" {
-			ws := e.w.State
+			// For prevotes, force the term-advance path so that engagement and
+			// log-up-to-date checks are always evaluated. A real campaign would
+			// bump both sides to a fresh term where VotedFor is unset, so the
+			// prevote must bypass same-term vote restrictions.
+			term := req.term
 			if req.prevote {
-				ws.Vote.VotedFor = 0
+				term = e.w.State.Vote.Term + 1
 			}
-			next, ok := ws.HandleMsgVote(ctx, req.candidate, req.term, req.lastLog)
+			next, ok := e.w.State.HandleMsgVote(ctx, req.candidate, term, req.lastLog)
 			if ok && !req.prevote {
 				e.w.State = next
 			}
@@ -257,8 +261,9 @@ func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
 		}
 		v := e.voterByLabel(m.to)
 		voter := *v
+		// For prevotes, force the term-advance path (same reasoning as above).
 		if req.prevote {
-			voter.votedFor = 0
+			voter.term = 0
 		}
 		next, granted, reason := voter.handleVoteReq(
 			req.candidate, req.term, req.lastLog,

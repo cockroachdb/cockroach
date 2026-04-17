@@ -149,55 +149,49 @@ func (s State) HandleMsgVote(
 	}
 
 	// Campaign is at strictly higher term. Need to check for log compatibility
-	// before granting vote. Any log definitely must be up-to-date with
-	// `s.Acked.Hi` at a minimum.
+	// before granting vote. The candidate's log must be up-to-date with
+	// effectiveHi, which is our best knowledge of what we may have helped commit.
 	//
 	// If engaged, the witness may have implicitly acked any log entry in the
-	// engagement term (it must have an entry from a more recent term in its log,
+	// engagement term, so effectiveHi is inflated to (engagementTerm, ∞). The
+	// candidate must then have an entry from a strictly newer term in its log,
 	// which proves that it is up to date with whatever actually happened in the
-	// engagement term).
-	// The exception we carve out is if we're voting for the engagement's leader:
-	// its log is up to date by definition. Importantly, this allows the leader to
-	// win an election after it failed while using the witness, when it may be the
-	// only possible leader (e.g. 2v+w config with one voter down).
+	// engagement term.
+	//
+	// The exception is if we're voting for the engagement's leader: its log is up
+	// to date by definition, so we skip the check entirely. Importantly, this
+	// allows the leader to win an election after it failed while using the
+	// witness, when it may be the only possible leader (e.g. 2v+w config with one
+	// voter down). This relies on prevote to prevent disruptive candidates from
+	// overwriting VotedFor and breaking the leader identification; without
+	// prevote, a competing election can cause availability loss.
 	effectiveHi := s.Acked.Hi
 	if s.Acked.Engaged {
-		if s.Vote.VotedFor == from {
-			effectiveHi = lm
-		} else {
-			effectiveHi.Index = math.MaxUint64
-		}
+		effectiveHi.Index = math.MaxUint64
 	}
 
-	if !leq(effectiveHi, lm) {
+	if !(s.Acked.Engaged && s.Vote.VotedFor == from) && !leq(effectiveHi, lm) {
 		// Log-up-to-date check failed.
 		return State{}, false
 	}
 
-	// We grant the vote. For simplicity, we want the existing engagement (if any)
-	// to terminate, since it was from a previous term. We do not know if the
-	// candidate will win the election, and its log mark may reflect a higher term
-	// and an index that may never actually commit, so we don't want to leak that
-	// into the high water mark. Instead, we close the engagement out at term ∞.
-	// Note that if the engagement-term leader tries to campaign in the future
-	// without having a newer term in its log (which can happen if this vote that
-	// unwinds the engagement succeeds but the campaign fails), the witness will
-	// not be able to grant the vote. This is a non-issue with pre-vote, but if we
-	// explicitly remembered the leader of the most recent engagement, we could
-	// waive the log completeness check even in that case - for now we don't.
-	var acked Acked
-	if s.Acked.Engaged {
-		acked.Hi = raft.LogMark{
-			Term:  uint64(s.Vote.Term),
-			Index: math.MaxUint64,
-		}
-	}
+	// We grant the vote. The engagement (if any) terminates, but we carry
+	// effectiveHi forward rather than resetting it: this preserves our knowledge
+	// of what we may have helped commit, and keeps Hi monotonically
+	// non-decreasing. We intentionally do not use the candidate's log mark as
+	// the new Hi, since the candidate may not win the election, and its log mark
+	// may reflect entries from higher terms that never actually commit.
+	//
+	// Note that carrying forward effectiveHi is safe even though we're "losing"
+	// the engagement: any future engagement must be at [candTerm, X] or later,
+	// which is strictly up to date with any older promises we made. It would also
+	// be safe to instead "forget" the past engagement.
 	next := State{
 		Vote: Vote{
 			Term:     candTerm,
 			VotedFor: from,
 		},
-		Acked: acked,
+		Acked: Acked{Hi: effectiveHi},
 	}
 	return next, true
 }

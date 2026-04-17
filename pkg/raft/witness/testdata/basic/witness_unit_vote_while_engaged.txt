@@ -61,7 +61,7 @@ rejected
 vote from=v2 term=b lm=a5
 ----
 ok
-w:  vote=(b, v2) acked=none
+w:  vote=(b, v2) acked=(a5, released)
 
 # Witness learns of term b through an engage, then the leader requests a
 # vote in that same term. The witness hasn't voted for anyone in term b yet,
@@ -104,6 +104,10 @@ w:  vote=(b, v1) acked=(b5, engaged)
 # as up-to-date as what the witness helped commit.
 # Note that acked becomes b∞: the witness is no longer engaged, but preserves
 # a high water mark reflecting that it may have helped commit anything in term b.
+# It has slightly better information here - we just learned the old leader's
+# actual last log index. We don't exploit this case since there's no benefit
+# and the vote code would be more complex; a new engagement can be granted
+# for term c only anyway at this point.
 vote from=v1 term=c lm=b5
 ----
 ok
@@ -118,3 +122,35 @@ w:  vote=(b, v1) acked=(b5, engaged)
 vote from=v2 term=c lm=b5
 ----
 rejected
+
+# Engagement unwound by a competing candidate whose log proves a post-engagement
+# election (log term c > engagement term b). The witness votes for v2, and the
+# engagement winds down to b∞.
+set
+term=b voted-for=v1 hi=b5 engaged=true
+----
+w:  vote=(b, v1) acked=(b5, engaged)
+
+vote from=v2 term=c lm=c3
+----
+ok
+w:  vote=(c, v2) acked=(b∞, released)
+
+# The old leader tries to campaign. Its log is still at term b, which can't
+# satisfy b∞. Without prevote, this is a real availability loss — the old leader
+# can't win despite its log being authoritative for term b, which it would have
+# been able to had there not be the failed campaign attempt by the other candidate
+# which effectively disabled the "exception" we have for re-electing the old
+# leader. This could be improved, but pre-vote exists, so not worth it.
+vote from=v1 term=d lm=b10
+----
+rejected
+
+# A candidate with entries from term > b can satisfy b∞. The b∞ high water
+# mark is carried forward — Hi is monotonically non-decreasing. This is safe
+# because any future engagement must be at [newTerm, X] or later, which is
+# strictly up to date with any older promises we made.
+vote from=v1 term=d lm=c1
+----
+ok
+w:  vote=(d, v1) acked=(b∞, released)

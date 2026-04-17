@@ -41,4 +41,4 @@ rejected
 vote from=v2 term=d lm=c10
 ----
 ok
-w:  vote=(d, v2) acked=none
+w:  vote=(d, v2) acked=(c10, released)
