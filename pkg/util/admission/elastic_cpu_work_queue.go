@@ -48,7 +48,7 @@ type elasticCPUInternalWorkQueue interface {
 	requester
 	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
 	SetTenantWeights(tenantWeights map[uint64]uint32)
-	adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64)
+	adjustGroupUsed(groupID roachpb.TenantID, additionalUsed int64)
 }
 
 func makeElasticCPUWorkQueue(
@@ -106,7 +106,7 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 
 	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
 	_, difference := h.overLimitInner()
-	e.workQueue.adjustTenantUsed(h.tenantID, difference.Nanoseconds())
+	e.workQueue.adjustGroupUsed(h.tenantID, difference.Nanoseconds())
 	if h.bypassedAdmission {
 		e.metrics.bypassedAdmissionCumNanos.Add(difference.Nanoseconds())
 	}

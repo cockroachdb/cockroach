@@ -311,28 +311,28 @@ func printWorkQueue(q *WorkQueue) string {
 	var buf strings.Builder
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	buf.WriteString(fmt.Sprintf("len(tenant-heap)=%d", len(q.mu.tenantHeap)))
-	if len(q.mu.tenantHeap) > 0 {
-		buf.WriteString(fmt.Sprintf(" top-tenant=t%d", q.mu.tenantHeap[0].id))
+	buf.WriteString(fmt.Sprintf("len(group-heap)=%d", len(q.mu.groupHeap)))
+	if len(q.mu.groupHeap) > 0 {
+		buf.WriteString(fmt.Sprintf(" top-group=t%d", q.mu.groupHeap[0].id))
 	}
 	var ids []uint64
-	for id := range q.mu.tenants {
+	for id := range q.mu.groups {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
-		tenant := q.mu.tenants[id]
-		buf.WriteString(fmt.Sprintf("\n tenant=t%d weight=%d fifo-threshold=%s used=%s",
-			tenant.id,
-			tenant.weight,
-			admissionpb.WorkPriority(tenant.fifoPriorityThreshold),
-			printTrimmedBytes(int64(tenant.used)),
+		group := q.mu.groups[id]
+		buf.WriteString(fmt.Sprintf("\n group=t%d weight=%d fifo-threshold=%s used=%s",
+			group.id,
+			group.weight,
+			admissionpb.WorkPriority(group.fifoPriorityThreshold),
+			printTrimmedBytes(int64(group.used)),
 		))
-		if len(tenant.waitingWorkHeap) > 0 {
+		if len(group.waitingWorkHeap) > 0 {
 			buf.WriteString("\n")
 
-			for i := range tenant.waitingWorkHeap {
-				w := tenant.waitingWorkHeap[i]
+			for i := range group.waitingWorkHeap {
+				w := group.waitingWorkHeap[i]
 				if i != 0 {
 					buf.WriteString("\n")
 				}

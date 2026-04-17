@@ -7,25 +7,25 @@ package admission
 
 import "github.com/cockroachdb/redact"
 
-// cpuTimeBurstBucket is a per-tenant token bucket that determines whether a
-// tenant qualifies for burst priority. If a tenant qualifies, two things
+// cpuTimeBurstBucket is a per-group token bucket that determines whether a
+// group qualifies for burst priority. If a group qualifies, two things
 // happen:
 //
-//  1. In the WorkQueue, its work sorts above the work of tenants that don't
+//  1. In the WorkQueue, its work sorts above the work of groups that don't
 //     qualify for burst priority.
-//  2. It has access to more CPU time tokens than tenants that don't qualify
+//  2. It has access to more CPU time tokens than groups that don't qualify
 //     (see cpu_time_token_granter.go for more).
 //
-// These two things are related. Since canBurst tenants have access to more
-// CPU time than noBurst tenants, it is important that work from a
-// canBurst tenant always sorts before work from a noBurst tenant -- else
+// These two things are related. Since canBurst groups have access to more
+// CPU time than noBurst groups, it is important that work from a
+// canBurst group always sorts before work from a noBurst group -- else
 // available capacity is left on the table.
 //
 // The bucket works as follows:
 //   - Tokens are added periodically via refill(), called by
 //     cpuTimeTokenAllocator.
 //   - Tokens are deducted when work is admitted, etc. via adjust().
-//     1. In serverless, a tenant qualifies for burst (canBurst) when its bucket
+//     1. In serverless, a group qualifies for burst (canBurst) when its bucket
 //     is > 90% full.
 //     2. In resource manager, a resource group qualifies for burst (canBurst)
 //     when it has MAX_CPU = true or when its bucket is > 90% full.
@@ -39,7 +39,7 @@ import "github.com/cockroachdb/redact"
 // than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
 //
 // TODO(wenyihu6): refillBurstBuckets currently applies the same uniform
-// toAdd/capacity to all tenants. Add per-group scaling of refill rates.
+// toAdd/capacity to all groups. Add per-group scaling of refill rates.
 type cpuTimeBurstBucket struct {
 	tokens   int64
 	capacity int64
@@ -53,10 +53,10 @@ type cpuTimeBurstBucket struct {
 }
 
 func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
-	// The bucket of a new tenant is inited full. This implies that
-	// a tenant can burst when its work first appears on a KV node.
+	// The bucket of a new group is inited full. This implies that
+	// a group can burst when its work first appears on a KV node.
 	// After <= 1s, the bucket state should track the usage of the
-	// tenant accurately.
+	// group accurately.
 	*m = cpuTimeBurstBucket{
 		tokens:   capacity,
 		capacity: capacity,
@@ -65,7 +65,7 @@ func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
 	}
 }
 
-// burstQualification returns whether this tenant qualifies for burst
+// burstQualification returns whether this group qualifies for burst
 // priority. See the cpuTimeBurstBucket comment for qualification rules.
 func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
 	if m.disabled {
@@ -100,7 +100,7 @@ func (m *cpuTimeBurstBucket) adjust(delta int64) {
 
 // refill adds tokens to the bucket and updates capacity. This is called
 // periodically by cpuTimeTokenAllocator (every 1ms). The token count is capped
-// at capacity and floored at -capacity/4. The negative floor allows tenants
+// at capacity and floored at -capacity/4. The negative floor allows groups
 // that have gone into debt (consumed more than their share) to recover over
 // time rather than being disqualified from bursting for arbitrarily long periods
 // of time.
