@@ -9,6 +9,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -137,6 +138,10 @@ type Builder struct {
 	// If set, we are processing a function definition; in this case catalog caches
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
+
+	// If set, we are processing a procedure definition (not a function or DO
+	// block). Used to selectively allow DDL that is permitted in procedures.
+	insideProcDef bool
 
 	// If set, we are processing a trigger definition; in this case catalog caches
 	// are disabled.
@@ -381,6 +386,23 @@ func (b *Builder) buildStmt(
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
 		case *tree.DoBlock:
+		case *tree.CreateTable, *tree.DropTable:
+			if !b.insideProcDef {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported",
+					stmt.StatementTag(),
+				))
+			}
+			// DDL is allowed inside stored procedures when the cluster has
+			// been upgraded to v26.3.
+			if !b.evalCtx.Settings.Version.IsActive(
+				b.ctx, clusterversion.V26_3,
+			) {
+				panic(pgerror.Newf(pgcode.FeatureNotSupported,
+					"%s usage inside a stored procedure is not supported until upgrade to version 26.3 is finalized",
+					stmt.StatementTag(),
+				))
+			}
 		default:
 			if tree.CanModifySchema(stmt) {
 				panic(unimplemented.NewWithIssuef(110080,

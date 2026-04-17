@@ -44,6 +44,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	cf.Name.ObjectNamePrefix = resName
 
 	b.insideFuncDef = true
+	b.insideProcDef = cf.IsProcedure
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
 	b.qualifyDataSourceNamesInAST = true
@@ -51,6 +52,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	oldSemaCtxAnn := b.semaCtx.Annotations
 	defer func() {
 		b.insideFuncDef = false
+		b.insideProcDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
