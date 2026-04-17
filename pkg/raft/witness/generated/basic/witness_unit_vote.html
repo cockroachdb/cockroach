@@ -321,7 +321,6 @@ function renderVoterCard(id, voter, step, x, y, allVoters, prevVoter) {
   html += '<div class="field"><span class="key">log</span><span class="log-entries">' + fmtLog(voter.log, prevLog) + '</span></div>';
   html += f('term', voter.term || '-');
   html += f('votedFor', voter.votedFor || '-');
-  html += f('leader', voter.leader ? 'yes' : 'no');
   html += f('committed', voter.committed || 0);
   if (voter.witnessEngaged) html += f('witnessEngaged', 'yes');
   html += '</div>';
