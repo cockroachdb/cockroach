@@ -2303,6 +2303,7 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 	})
 	if pickedReferenced {
 		opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+		og.potentialCommitErrors.add(pgcode.DependentObjectsStillExist)
 	}
 	return opStmt, nil
 }
