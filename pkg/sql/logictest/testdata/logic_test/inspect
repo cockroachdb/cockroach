@@ -913,3 +913,37 @@ DROP TABLE uniqueness_check_complex;
 subtest end
 
 subtest end
+
+subtest import_validation_job_description
+
+statement ok
+SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'async';
+
+statement ok
+CREATE TABLE import_desc_test (k INT PRIMARY KEY, v INT);
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/import-desc-test' FROM SELECT i, i*10 FROM generate_series(1, 5) AS g(i)) SELECT filename FROM cte;
+
+statement ok
+IMPORT INTO import_desc_test CSV DATA ('nodelocal://1/import-desc-test/$exp_file');
+
+let $import_job_id
+SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' ORDER BY created DESC LIMIT 1
+
+query B retry
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description'
+  = 'Validating IMPORT of test.public.import_desc_test (IMPORT job ' || $import_job_id::STRING || ')'
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT' ORDER BY id DESC LIMIT 1
+----
+true
+
+statement ok
+DROP TABLE import_desc_test;
+
+statement ok
+RESET CLUSTER SETTING bulkio.import.row_count_validation.mode;
+
+subtest end
