@@ -55,7 +55,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		joinAddr          string
 		sqlPoolMemorySize int64
 		cacheSize         int64
-		useDRPC           bool
+		useDRPC           bool // sets demoCtx.UseDRPC
 
 		expected base.TestServerArgs
 	}{
@@ -79,6 +79,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:                     1 << 10,
 				NoAutoInitializeCluster:       true,
 				EnableDemoLoginEndpoint:       true,
+				DefaultDRPCOption:             base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -107,6 +108,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:                     4 << 10,
 				NoAutoInitializeCluster:       true,
 				EnableDemoLoginEndpoint:       true,
+				DefaultDRPCOption:             base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -136,7 +138,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:                     1 << 10,
 				NoAutoInitializeCluster:       true,
 				EnableDemoLoginEndpoint:       true,
-				UseDRPC:                       true,
+				DefaultDRPCOption:             base.TestDRPCEnabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
