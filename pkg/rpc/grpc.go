@@ -103,6 +103,7 @@ func newGRPCPeerOptions(
 		peers:    &rpcCtx.peers,
 		connOptions: &ConnectionOptions[*grpc.ClientConn]{
 			dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (*grpc.ClientConn, error) {
+				log.Ops.Infof(ctx, "dialing gRPC connection to %s", target)
 				additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 				additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 				// onNetworkDial is a callback that is called after we dial a TCP connection.

@@ -24,7 +24,6 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcconn"
-	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
 )
 
@@ -115,11 +114,7 @@ func TestStreamContextCancel(t *testing.T) {
 	tlsCfg = tlsCfg.Clone()
 	tlsCfg.ServerName = "*.local"
 	tlsConn := tls.Client(rawconn, tlsCfg)
-	conn := drpcconn.NewWithOptions(tlsConn, drpcconn.Options{
-		Manager: drpcmanager.Options{
-			SoftCancel: true, // don't close the transport when stream context is canceled
-		},
-	})
+	conn := drpcconn.NewWithOptions(tlsConn, drpcconn.Options{})
 	defer func() {
 		require.NoError(t, conn.Close())
 	}()
@@ -244,7 +239,7 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 			return mockStreamInterceptor
 		},
 	}
-	getConn := rpc.DialDRPC(rpcCtx, nil)
+	getConn := rpc.DialDRPC(rpcCtx)
 	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, conn.Close()) }()
