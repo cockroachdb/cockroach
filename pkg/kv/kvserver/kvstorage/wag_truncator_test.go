@@ -7,6 +7,7 @@ package kvstorage
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -54,13 +55,16 @@ func (e *testEngines) writeWAGNode(t *testing.T, event wagpb.Event) {
 }
 
 // writeWAGNodesAt writes WAG nodes at the specified WAG sequence indices for
-// the given replica. Each node contains an EventApply event with its raft index
-// set to the WAG entry index + 10.
-func (e *testEngines) writeWAGNodesAt(t *testing.T, wagIndices []uint64, r roachpb.FullReplicaID) {
+// the given replica. Each node contains an EventApply event with its raft
+// index set to the corresponding entry in raftIndices.
+func (e *testEngines) writeWAGNodesAt(
+	t *testing.T, wagIndices []uint64, raftIndices []kvpb.RaftIndex, r roachpb.FullReplicaID,
+) {
 	t.Helper()
+	require.Equal(t, len(wagIndices), len(raftIndices))
 	for idx, wagIdx := range wagIndices {
 		event := wagpb.Event{
-			Addr: wagpb.MakeAddr(r, kvpb.RaftIndex(idx+10)),
+			Addr: wagpb.MakeAddr(r, raftIndices[idx]),
 			Type: wagpb.EventApply,
 		}
 		require.NoError(t, wag.Write(
@@ -368,7 +372,11 @@ func TestTruncateAppliedNodes(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			e := makeTestEngines()
 			defer e.Close()
-			e.writeWAGNodesAt(t, tc.wagIndices, r1)
+			raftIndices := make([]kvpb.RaftIndex, len(tc.wagIndices))
+			for i := range raftIndices {
+				raftIndices[i] = kvpb.RaftIndex(i + 1)
+			}
+			e.writeWAGNodesAt(t, tc.wagIndices, raftIndices, r1)
 			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
 			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
 			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
@@ -461,4 +469,108 @@ func TestWAGTruncatorBackground(t *testing.T) {
 	flushAndWaitForTruncation()
 	require.Empty(t, e.listWAGNodes(t))
 	require.Equal(t, uint64(7), truncator.truncIndex.Load())
+}
+
+// TestTruncateBatching verifies that truncateBatch() respects the batch size
+// setting.
+//
+// WAG layout: indices [3, 7, 10, 11, 12], and node at index 12 is not durably
+// applied.
+func TestTruncateBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+	wagNodeIndices := []uint64{3, 7, 10, 11, 12}
+	raftIndices := []kvpb.RaftIndex{1, 2, 3, 4, 5}
+	for _, tc := range []struct {
+		init          uint64
+		batch         int64
+		wantRemaining []uint64
+		wantTrunc     uint64
+	}{
+		{init: 0, batch: 1, wantRemaining: []uint64{3, 7, 10, 11, 12}, wantTrunc: 0},
+		{init: 0, batch: 8, wantRemaining: []uint64{3, 7, 10, 11, 12}, wantTrunc: 0},
+		{init: 3, batch: 1, wantRemaining: []uint64{7, 10, 11, 12}, wantTrunc: 3},
+		{init: 3, batch: 8, wantRemaining: []uint64{7, 10, 11, 12}, wantTrunc: 3},
+		{init: 7, batch: 1, wantRemaining: []uint64{7, 10, 11, 12}, wantTrunc: 3},
+		{init: 7, batch: 2, wantRemaining: []uint64{10, 11, 12}, wantTrunc: 7},
+		{init: 7, batch: 8, wantRemaining: []uint64{10, 11, 12}, wantTrunc: 7},
+		{init: 10, batch: 1, wantRemaining: []uint64{7, 10, 11, 12}, wantTrunc: 3},
+		{init: 10, batch: 4, wantRemaining: []uint64{12}, wantTrunc: 11},
+		// Node 11 isn't applied yet, so it's not truncated.
+		{init: 10, batch: 8, wantRemaining: []uint64{12}, wantTrunc: 11},
+	} {
+		t.Run("", func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			wagTruncatorBatchSize.Override(ctx, &st.SV, tc.batch)
+			e := makeTestEngines()
+			defer e.Close()
+			e.writeWAGNodesAt(t, wagNodeIndices, raftIndices, r1)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+			truncator.initIndex = tc.init
+
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			// The last WAG entry has raft index of 5, set the applied index to 4 to
+			// make the last WAG node ineligible for truncation.
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: kvpb.RaftIndex(4)}))
+			require.NoError(t, e.stateEngine.Flush())
+
+			stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
+			defer stateReader.Close()
+			truncated, err := truncator.truncateBatch(ctx, stateReader)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.wantRemaining) != len(wagNodeIndices), truncated)
+			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
+			require.Equal(t, tc.wantTrunc, truncator.truncIndex.Load())
+		})
+	}
+}
+
+// BenchmarkWAGTruncation measures the cost of truncating WAG nodes at different
+// batch sizes. It uses an in-memory engine so it doesn't really test the real
+// thing, but it should give an idea of the improvement of different batch
+// sizes.
+func BenchmarkWAGTruncation(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+	for _, batchSize := range []int64{1, 4, 8, 16, 32, 64} {
+		b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {
+			b.StopTimer()
+			st := cluster.MakeTestingClusterSettings()
+			wagTruncatorBatchSize.Override(ctx, &st.SV, batchSize)
+			eng := storage.NewDefaultInMemForTesting()
+			defer eng.Close()
+			engines := MakeEngines(eng)
+			var seq wag.Seq
+			truncator := NewWAGTruncator(st, engines, &seq)
+
+			// Write numNodes WAG nodes that are all eligible for truncation.
+			for j := 0; j < b.N; j++ {
+				index := seq.Next()
+				require.NoError(b, wag.Write(eng, index, wagpb.Node{
+					Events: []wagpb.Event{{
+						Addr: wagpb.MakeAddr(r1, kvpb.RaftIndex(j+1)),
+						Type: wagpb.EventApply,
+					}},
+				}))
+			}
+			require.NoError(b, sl.SetRaftReplicaID(ctx, eng, r1.ReplicaID))
+			require.NoError(b, sl.SetRangeAppliedState(
+				ctx, eng, &kvserverpb.RangeAppliedState{
+					RaftAppliedIndex: kvpb.RaftIndex(b.N + 1),
+				}))
+			require.NoError(b, eng.Flush())
+
+			b.StartTimer()
+			err := truncator.truncateAppliedNodes(ctx)
+			b.StopTimer()
+			require.NoError(b, err)
+			require.Equal(b, uint64(b.N), truncator.truncIndex.Load())
+		})
+	}
 }
