@@ -18,23 +18,8 @@ import (
 // persistedRangeState describes the applied state of a range in the state
 // machine, as needed by the WAG replay decision logic.
 type persistedRangeState struct {
-	replicaID              roachpb.ReplicaID
-	tombstoneNextReplicaID roachpb.ReplicaID
-	appliedIndex           kvpb.RaftIndex
-}
-
-// validate checks persistedRangeState invariants.
-func (s persistedRangeState) validate() error {
-	// When a replica exists (ReplicaID > 0), the tombstone must not exceed the
-	// replica ID. The tombstone is only bumped above a replica's ID when that
-	// replica is destroyed.
-	if s.replicaID > 0 && s.tombstoneNextReplicaID > s.replicaID {
-		return errors.AssertionFailedf(
-			"tombstone (NextReplicaID=%d) is above current ReplicaID=%d",
-			s.tombstoneNextReplicaID, s.replicaID,
-		)
-	}
-	return nil
+	mark         ReplicaMark
+	appliedIndex kvpb.RaftIndex
 }
 
 // loadPersistedRangeState loads the replay-relevant state for a range from the
@@ -51,12 +36,10 @@ func loadPersistedRangeState(
 	if err != nil {
 		return persistedRangeState{}, err
 	}
-	state := persistedRangeState{
-		replicaID:              mark.ReplicaID,
-		tombstoneNextReplicaID: mark.NextReplicaID,
-		appliedIndex:           as.RaftAppliedIndex,
-	}
-	return state, state.validate()
+	return persistedRangeState{
+		mark:         mark,
+		appliedIndex: as.RaftAppliedIndex,
+	}, nil
 }
 
 // replayAction describes what the replay loop must do for a WAG node.
@@ -82,43 +65,38 @@ type raftCatchUpTarget struct {
 // event against the state machine's current position for this range. See
 // canApplyWAGNode for the node-level wrapper.
 //
-// The decision is based on where event replica ID falls relative to
-// state.replicaID on the number line, giving three regions:
+// The decision is based on where the event's replica ID falls relative to
+// the current ReplicaMark, giving three cases:
 //
-//	[0, state.replicaID)   → old (destroyed or never existed); skip
-//	state.replicaID        → current replica; compare raft indices
-//	(state.replicaID, ∞)   → new replica; apply
-//
-// TODO(mira): Refactor to use ReplicaMark (#156696) which will encapsulate
-// the replicaID/tombstone comparison logic.
+//   - Destroyed: the replica ID is below the mark's tombstone or current
+//     replica ID, meaning it can never (re-)appear. Skip.
+//   - Current: the replica ID matches the mark's current replica. Compare
+//     raft indices to determine whether the event has already been applied.
+//   - New: the replica ID is above the mark's current replica and not
+//     destroyed. Apply.
 //
 // TODO(mira): Some of the cases below are not possible for all event types.
-// E.g. For a new replica with event.Addr.ReplicaID > state.replicaID, we'd
-// expect an EventCreate, not another type of event. Assert on these.
+// E.g. For a new replica with event.Addr.ReplicaID > state.mark.ReplicaID,
+// we'd expect an EventCreate, not another type of event. Assert on these.
 func (state persistedRangeState) canApply(event wagpb.Event) bool {
 	// The WAG protocol ensures that any WAG node event has a non-zero ReplicaID.
 	if event.Addr.ReplicaID == 0 {
 		panic(errors.AssertionFailedf("WAG event for r%d has zero ReplicaID", event.Addr.RangeID))
 	}
 	switch {
-	case event.Addr.ReplicaID < state.tombstoneNextReplicaID ||
-		event.Addr.ReplicaID < state.replicaID:
-		// Old replica (destroyed or never existed); skip. The persistedRangeState
-		// validation guarantees state.tombstoneNextReplicaID <= state.replicaID
-		// when a replica exists, but we can't rely on the state.replicaID
-		// comparison alone because when no current replica exists
-		// (state.replicaID == 0), only the tombstone can identify stale events.
+	case state.mark.Destroyed(event.Addr.ReplicaID):
+		// Old replica (destroyed or never existed); skip.
 		return false
-	case event.Addr.ReplicaID == state.replicaID:
+	case state.mark.Is(event.Addr.ReplicaID):
 		// Current replica. Destroy/Subsume events always need applying here —
 		// if their mutation had already been applied, the tombstone would have
-		// been bumped and the first case would have matched.
+		// been bumped and the Destroyed case would have matched.
 		if event.Type == wagpb.EventDestroy || event.Type == wagpb.EventSubsume {
 			return true
 		}
 		// For other events, compare raft indices.
 		return event.Addr.Index > state.appliedIndex
-	case event.Addr.ReplicaID > state.replicaID:
+	case event.Addr.ReplicaID > state.mark.ReplicaID:
 		// New replica not yet seen on this store; apply.
 		return true
 	default:
