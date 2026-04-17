@@ -361,7 +361,7 @@ func TestImportIntoNonEmptyTableRowCountCheck(t *testing.T) {
 
 		_, err := db.Exec(`IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')`)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "INSPECT found inconsistencies")
+		require.ErrorContains(t, err, "import row count validation failed")
 
 		// Extract the inspect job ID from the error hint and verify the error
 		// details contain the expected and actual row counts.
