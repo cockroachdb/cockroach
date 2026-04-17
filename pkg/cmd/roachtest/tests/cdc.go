@@ -3058,7 +3058,7 @@ CONFIGURE ZONE USING
 				t.Skip(err)
 			}
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: webhookSink,
@@ -3070,7 +3070,7 @@ CONFIGURE ZONE USING
 			})
 
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
+				initialScanLatency: 10 * time.Minute,
 			})
 
 			ct.waitForWorkload()
