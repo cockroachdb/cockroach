@@ -245,15 +245,9 @@ func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
 	switch req := m.msg.(type) {
 	case msgVoteReq:
 		if m.to == "w" {
-			// For prevotes, force the term-advance path so that engagement and
-			// log-up-to-date checks are always evaluated. A real campaign would
-			// bump both sides to a fresh term where VotedFor is unset, so the
-			// prevote must bypass same-term vote restrictions.
-			term := req.term
-			if req.prevote {
-				term = e.w.State.Vote.Term + 1
-			}
-			next, ok := e.w.State.HandleMsgVote(ctx, req.candidate, term, req.lastLog)
+			// A pre-vote is modeled as a vote at req.term (already candidate.term+1)
+			// but without mutating anyone's state. This mirrors raft.
+			next, ok := e.w.State.HandleMsgVote(ctx, req.candidate, req.term, req.lastLog)
 			if ok && !req.prevote {
 				e.w.State = next
 			}
@@ -261,10 +255,8 @@ func (e *testEnv) route(ctx context.Context, m testMsg) testMsg {
 		}
 		v := e.voterByLabel(m.to)
 		voter := *v
-		// For prevotes, force the term-advance path (same reasoning as above).
-		if req.prevote {
-			voter.term = 0
-		}
+		// req.term is already candidate.term+1 for prevotes, so handleVoteReq
+		// naturally takes the term-advance path when appropriate.
 		next, granted, reason := voter.handleVoteReq(
 			req.candidate, req.term, req.lastLog,
 		)
@@ -342,6 +334,8 @@ func runCommand(t *testing.T, d *datadriven.TestData, env *testEnv, ctx context.
 		return fmtWitness(env.w.State)
 	case "set-avail":
 		return handleSetAvail(t, d, env)
+	case "set-term":
+		return handleSetTerm(t, d, env)
 	default:
 		t.Fatalf("unknown command: %s", d.Cmd)
 		return ""
@@ -580,6 +574,28 @@ func handleAppend(t *testing.T, d *datadriven.TestData, env *testEnv, ctx contex
 
 // handleSetAvail sets availability for replicas.
 // Usage: set-avail up=(v1,w) down=(v2)
+// handleSetTerm bumps a voter's term. The term must not regress. If the term
+// advances, votedFor is reset (the voter hasn't voted in the new term).
+//
+// Syntax: set-term <voter> <term>
+func handleSetTerm(t *testing.T, d *datadriven.TestData, env *testEnv) string {
+	if len(d.CmdArgs) != 2 {
+		t.Fatalf("set-term: expected 2 args (voter, term), got %d", len(d.CmdArgs))
+	}
+	v := env.voterByLabel(d.CmdArgs[0].Key)
+	newTerm := mustParseTerm(t, d.CmdArgs[1].Key)
+	if newTerm < v.term {
+		t.Fatalf("set-term: term %s < current term %s (regression not allowed)",
+			fmtTerm(newTerm), fmtTerm(v.term))
+	}
+	if newTerm > v.term {
+		v.term = newTerm
+		v.votedFor = 0
+		v.leader = false
+	}
+	return "ok"
+}
+
 func handleSetAvail(t *testing.T, d *datadriven.TestData, env *testEnv) string {
 	for _, arg := range d.CmdArgs {
 		var down bool

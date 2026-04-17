@@ -82,11 +82,28 @@ v2: [a1 c2 c3] term=c leader
 v3: [a1 c2 c3] term=c
 v4: [a1 c2 c3] term=c
 
-# v1 prevotes to check if it could win. No: v2/v3/v4's logs (ending at c3)
-# are ahead of v1's (ending at b4) since term c > b. No state changes.
+# v1 prevotes to check if it could win. Because it's at a stale term,
+# its votes get rejected.
 prevote v1
 ----
 v1 prevotes at term c
+v1: yes (self)
+v2: no, already voted for v2
+v3: no, already voted for v2
+v4: no, already voted for v2
+outcome: lost
+
+# Bump v1 to term c (i.e. pretend it had some contact with the leader but is
+# now trying for the subsequent term) so it can try a proper prevote.
+set-term v1 c
+----
+ok
+
+# Now the rejection is on log up-to-date: v2/v3/v4's logs (ending at c3) are
+# ahead of v1's (ending at b4) since term c > b.
+prevote v1
+----
+v1 prevotes at term d
 v1: yes (self)
 v2: no, log not up to date (c3 > b4)
 v3: no, log not up to date (c3 > b4)
