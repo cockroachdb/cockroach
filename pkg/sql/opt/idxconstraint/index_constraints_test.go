@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -53,6 +54,10 @@ import (
 //   - semtree-normalize
 //
 //     Run TypedExpr normalization before building the memo.
+//
+//   - span-limit=<int>
+//
+//     Set a limit on the number of spans generated.
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -64,6 +69,7 @@ func TestIndexConstraints(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var sv testutils.ScalarVars
 			var indexCols []opt.OrderingColumn
+			var spanLimit int
 			var err error
 
 			var f norm.Factory
@@ -89,6 +95,15 @@ func TestIndexConstraints(t *testing.T) {
 
 				case "nonormalize":
 					f.DisableOptimizations()
+
+				case "span-limit":
+					if len(vals) != 1 {
+						d.Fatalf(t, "span-limit requires a single value")
+					}
+					spanLimit, err = strconv.Atoi(vals[0])
+					if err != nil {
+						d.Fatalf(t, "invalid span-limit: %v", err)
+					}
 
 				default:
 					d.Fatalf(t, "unknown argument: %s", key)
@@ -133,6 +148,7 @@ func TestIndexConstraints(t *testing.T) {
 					ctx, filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
 					colsInComputedColsExpressions,
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
+					spanLimit,
 					func() {}, /* checkCancellation */
 				)
 				var result constraint.Constraint
@@ -254,6 +270,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 					nil /* computedCols */, opt.ColSet{}, /* colsInComputedColsExpressions */
 					true, /* consolidate */
 					&evalCtx, &f, partition.PrefixSorter{},
+					0,         /* spanLimit */
 					func() {}, /* checkCancellation */
 				)
 				var result constraint.Constraint
