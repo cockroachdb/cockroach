@@ -1793,3 +1793,57 @@ statement ok
 DROP DATABASE "DelimitedDB_113782" CASCADE
 
 subtest end
+
+# Regression test #168543: creating a trigger on a REGIONAL BY TABLE table
+# or a GLOBAL table should succeed even when the trigger function references
+# the multi-region enum type. Previously, descriptor validation incorrectly 
+# rejected the region enum reference added by the trigger's type dependencies.
+subtest trigger_with_region_enum_reference
+
+statement ok
+CREATE DATABASE trigger_mr_db PRIMARY REGION "us-east-1" REGIONS "us-east-1", "ca-central-1", "ap-southeast-2";
+
+statement ok
+USE trigger_mr_db;
+
+statement ok
+CREATE TABLE rbt_primary (k INT PRIMARY KEY, v STRING);
+
+statement ok
+CREATE TABLE global_t (k INT PRIMARY KEY, v STRING) LOCALITY GLOBAL;
+
+statement ok
+CREATE OR REPLACE FUNCTION trigger_fn_mr()
+RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  r crdb_internal_region;
+BEGIN
+  r := 'us-east-1';
+  RETURN NEW;
+END;
+$$;
+
+# This should succeed — the trigger function references the region enum, but
+# that is a legitimate non-locality-config type dependency.
+statement ok
+CREATE TRIGGER tr_rbt BEFORE INSERT ON rbt_primary FOR EACH ROW EXECUTE FUNCTION trigger_fn_mr();
+
+statement ok
+CREATE TRIGGER tr_global BEFORE INSERT ON global_t FOR EACH ROW EXECUTE FUNCTION trigger_fn_mr();
+
+# Verify the triggers work.
+statement ok
+INSERT INTO rbt_primary VALUES (1, 'a');
+
+statement ok
+INSERT INTO global_t VALUES (1, 'a');
+
+statement ok
+USE system;
+
+statement ok
+DROP DATABASE trigger_mr_db CASCADE;
+
+subtest end
+
+
