@@ -265,8 +265,8 @@ github.com/PuerkitoBio/purell v1.1.0/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbt
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20160726150825-5bd2802263f2/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
-github.com/RaduBerinde/axisds/v2 v2.0.0 h1:sjW1xADsV/Bcv+WmfCYDyxz41tnL6QcNICfBWe9uUgE=
-github.com/RaduBerinde/axisds/v2 v2.0.0/go.mod h1:mU/V9RwBbKLbo9Eyucnjv/vp1tFRqd9WKRXgQKmDmyI=
+github.com/RaduBerinde/axisds/v3 v3.0.0-20260318150237-54e03a7b4b4a h1:EOwtLyC2JkRkIvZRwfxYLGz28NAymjTG0DK2sMYVirA=
+github.com/RaduBerinde/axisds/v3 v3.0.0-20260318150237-54e03a7b4b4a/go.mod h1:aGeTsYMfaboP0vOve7otFM0yfHQk3CJXlMydZTWK2w4=
 github.com/RaduBerinde/btreemap v0.0.0-20260105202824-d3184786f603 h1:fSdiBlO4Bad28mJOPlAynvfgdDC9v+yRlzSFHvvjKYI=
 github.com/RaduBerinde/btreemap v0.0.0-20260105202824-d3184786f603/go.mod h1:0tr7FllbE9gJkHq7CVeeDDFAFKQVy5RnCSSNBOvdqbc=
 github.com/RaduBerinde/tdigest v0.0.0-20251022152254-90e030c3a314 h1:RcSNrxDZ1ZyEfpGwrpWqd3YWfMjQbKOtT+p3Wht6XN0=
@@ -587,8 +587,8 @@ github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 h1:ASDL+UJcILM
 github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506/go.mod h1:Mw7HqKr2kdtu6aYGn3tPmAftiP3QPX63LdK/zcariIo=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895 h1:XANOgPYtvELQ/h4IrmPAohXqe2pWA8Bwhejr3VQoZsA=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895/go.mod h1:aPd7gM9ov9M8v32Yy5NJrDyOcD8z642dqs+F0CeNXfA=
-github.com/cockroachdb/pebble v0.0.0-20260408192806-413cdc789c68 h1:4MKIEnKIdL8N5YSJp5t3YSeM+fDujHTVR+Phmcnj6j4=
-github.com/cockroachdb/pebble v0.0.0-20260408192806-413cdc789c68/go.mod h1:/Yg5ASP6WRGhcKOEehjk/g+7iEU0flCB0qol2P5yF9c=
+github.com/cockroachdb/pebble v0.0.0-20260416170322-077bb4f92046 h1:M+T9UWCOfyAXle2ZtB5r132K7J5MGM0x1xVDvf5/bvA=
+github.com/cockroachdb/pebble v0.0.0-20260416170322-077bb4f92046/go.mod h1:ZDJqEfy0XjyRcqudiUC/FNs4lHlCnvbmOVD+YUJ8gBI=
 github.com/cockroachdb/redact v1.1.8 h1:8eVLLj6juKxiKrAEw2b8cJvNqWq++U8WOfQFuL7KTaA=
 github.com/cockroachdb/redact v1.1.8/go.mod h1:GceHHpJ0rMDpYARL5In88Alq/xMBUtVlz7Qxix6ZVkw=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
