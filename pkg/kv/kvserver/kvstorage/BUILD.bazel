@@ -29,6 +29,7 @@ go_library(
         "//pkg/kv/kvserver/spanset",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",

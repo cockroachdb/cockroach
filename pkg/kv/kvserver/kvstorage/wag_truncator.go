@@ -16,12 +16,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
+)
+
+var wagTruncatorBatchSize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.wag.truncator_batch_size",
+	"number of WAG nodes to delete per write batch during truncation",
+	8,
+	settings.IntInRange(1, 1024),
 )
 
 // WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
@@ -118,39 +127,39 @@ func (t *WAGTruncator) truncateAppliedNodes(ctx context.Context) error {
 	stateReader := t.eng.StateEngine().NewReader(storage.GuaranteedDurability)
 	defer stateReader.Close()
 	for {
-		truncated, err := t.truncateAppliedWAGNodeAndClearRaftState(ctx, stateReader)
+		truncated, err := t.truncateBatch(ctx, stateReader)
 		if err != nil || !truncated {
 			return err
 		}
 	}
 }
 
-// truncateAppliedWAGNodeAndClearRaftState deletes the first WAG node if all of
-// its events have been applied to the state engine. For nodes containing
+// truncateBatch deletes up to a batch-sized prefix of WAG nodes if all of
+// their events have been applied to the state engine. For nodes containing
 // EventDestroy or EventSubsume events, it also clears the corresponding raft
-// log prefix from the engine and the sideloaded entries storage.
+// log prefix from the engine and the sideloaded entries.
 //
-// Returns a bool indicating whether a WAG node was deleted or not.
+// Returns a bool indicating whether some WAG nodes were deleted or not.
 //
 // The caller must provide a stateRO reader with GuaranteedDurability so that
 // only state confirmed flushed to persistent storage is visible. This ensures
 // we never delete a WAG node whose mutations aren't flushed yet. The caller is
 // also responsible for creating and committing/closing the write batch in
 // raft.WO.
-// TODO(ibrahim): Support deleting multiple WAG nodes within the same batch.
-func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
-	ctx context.Context, stateRO StateRO,
-) (bool, error) {
+func (t *WAGTruncator) truncateBatch(ctx context.Context, stateRO StateRO) (bool, error) {
+	batchSize := wagTruncatorBatchSize.Get(&t.st.SV)
+	var count int64
 	var iter wag.Iterator
-	truncateIndex := t.truncIndex.Load() + 1
-	iterStartKey := keys.StoreWAGNodeKey(truncateIndex)
+	targetIndex := t.truncIndex.Load() + 1
+
 	b := t.eng.LogEngine().NewWriteBatch()
 	defer b.Close()
-
-	for index, node := range iter.IterFrom(ctx, t.eng.LogEngine(), iterStartKey) {
-		if index != truncateIndex && index > t.initIndex {
+	for index, node := range iter.IterFrom(
+		ctx, t.eng.LogEngine(), keys.StoreWAGNodeKey(targetIndex),
+	) {
+		if index != targetIndex && index > t.initIndex {
 			// We cannot ignore gaps for WAG indices > initIndex.
-			return false, nil
+			break
 		}
 		// TODO(ibrahim): Right now, the canApplyWAGNode function returns a list of
 		// raftCatchUpTargets that are not needed for the purposes of truncation,
@@ -161,7 +170,7 @@ func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
 		}
 		if action.apply {
 			// If an event needs to be applied, the WAG node cannot be deleted yet.
-			return false, nil
+			break
 		}
 		if err := wag.Delete(b, index); err != nil {
 			return false, err
@@ -178,13 +187,23 @@ func (t *WAGTruncator) truncateAppliedWAGNodeAndClearRaftState(
 			}
 		}
 
-		if err = b.Commit(false); err != nil {
-			return false, err
+		targetIndex = index + 1
+		count++
+		if count >= batchSize {
+			break
 		}
-		t.truncIndex.Store(index)
-		return true, nil
 	}
-	return false, iter.Error() // either no more WAG nodes or iter hit an error
+	if count == 0 {
+		return false, nil
+	}
+	if err := iter.Error(); err != nil {
+		return false, err
+	}
+	if err := b.Commit(false); err != nil {
+		return false, err
+	}
+	t.truncIndex.Store(targetIndex - 1) // targetIndex is pointing at the last index truncated + 1.
+	return true, nil
 }
 
 // clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
