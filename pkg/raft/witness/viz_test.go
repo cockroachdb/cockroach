@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -74,7 +75,7 @@ type vizVoterDelta struct {
 
 type vizLogMark struct {
 	Term  string `json:"term"`
-	Index uint64 `json:"index"`
+	Index string `json:"index"`
 }
 
 type vizWitnessDelta struct {
@@ -97,10 +98,17 @@ type vizAckedDelta struct {
 // Snapshot and diff helpers
 // ---------------------------------------------------------------------------
 
+func fmtVizIndex(idx uint64) string {
+	if idx == math.MaxUint64 {
+		return "∞"
+	}
+	return strconv.FormatUint(idx, 10)
+}
+
 func toVizLog(log []raft.LogMark) []vizLogMark {
 	out := make([]vizLogMark, len(log))
 	for i, lm := range log {
-		out[i] = vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: lm.Index}
+		out[i] = vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: fmtVizIndex(lm.Index)}
 	}
 	return out
 }
@@ -109,7 +117,7 @@ func toVizLogMark(lm raft.LogMark) *vizLogMark {
 	if lm == (raft.LogMark{}) {
 		return nil
 	}
-	return &vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: lm.Index}
+	return &vizLogMark{Term: fmtTerm(raftpb.Term(lm.Term)), Index: fmtVizIndex(lm.Index)}
 }
 
 func vizLogEqual(a, b []vizLogMark) bool {
