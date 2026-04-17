@@ -428,17 +428,28 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		var checks []*jobspb.InspectDetails_Check
-		var tableName string
+		var dbName, schemaName, tableName string
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
 			// INSPECT requires the latest descriptor. The one cached in the job is
 			// out of date as it has an old table version.
-			tblDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, table.Desc.ID)
+			descriptors := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get()
+			tblDesc, err := descriptors.Table(ctx, table.Desc.ID)
 			if err != nil {
 				return err
 			}
 			tableName = tblDesc.GetName()
+			dbDesc, err := descriptors.Database(ctx, tblDesc.GetParentID())
+			if err != nil {
+				return err
+			}
+			dbName = dbDesc.GetName()
+			scDesc, err := descriptors.Schema(ctx, tblDesc.GetParentSchemaID())
+			if err != nil {
+				return err
+			}
+			schemaName = scDesc.GetName()
 
 			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
 				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
@@ -462,7 +473,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if len(checks) > 0 {
 			inspectJob, err := inspect.TriggerJob(
 				ctx,
-				fmt.Sprintf("import-validation-%s", tableName),
+				fmt.Sprintf("Validating IMPORT of %s.%s.%s (IMPORT job %d)", dbName, schemaName, tableName, r.job.ID()),
 				p.ExecCfg(),
 				checks,
 				setPublicTimestamp,
