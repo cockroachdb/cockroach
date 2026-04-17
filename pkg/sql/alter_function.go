@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -539,7 +540,7 @@ func getFuncRefsDisallowingAlter(
 		}
 		switch t := desc.(type) {
 		case catalog.TableDescriptor:
-			if !t.IsView() {
+			if !t.IsView() && len(dep.TriggerIDs) == 0 && len(dep.PolicyIDs) == 0 {
 				continue
 			}
 			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(
@@ -547,7 +548,24 @@ func getFuncRefsDisallowingAlter(
 			if err != nil {
 				return nil, err
 			}
-			dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
+			if t.IsView() {
+				dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
+				continue
+			}
+			for _, triggerID := range dep.TriggerIDs {
+				trigger := catalog.FindTriggerByID(t, triggerID)
+				if trigger != nil {
+					dependentObjects = append(dependentObjects,
+						fmt.Sprintf("trigger %q on %s", trigger.Name, fullyResolvedName.FQString()))
+				}
+			}
+			for _, policyID := range dep.PolicyIDs {
+				policy := catalog.FindPolicyByID(t, policyID)
+				if policy != nil {
+					dependentObjects = append(dependentObjects,
+						fmt.Sprintf("policy %q on %s", policy.Name, fullyResolvedName.FQString()))
+				}
+			}
 		case catalog.FunctionDescriptor:
 			fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
 			if err != nil {

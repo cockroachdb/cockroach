@@ -1414,7 +1414,7 @@ statement ok
 ALTER TYPE typ RENAME TO typ2;
 
 # Routines are referenced by name, so renaming is not allowed.
-statement ok
+statement error cannot rename function "g" because other functions or views \(.*\) still depend on it
 ALTER FUNCTION g RENAME TO g2;
 
 statement ok
@@ -1422,7 +1422,7 @@ DROP TRIGGER foo ON xy;
 
 statement ok
 DROP FUNCTION trigger_func;
-DROP FUNCTION g2;
+DROP FUNCTION g;
 DROP TYPE typ2;
 DROP SEQUENCE s2;
 DROP TABLE t;
@@ -6467,6 +6467,58 @@ DROP POLICY my_policy ON t_tr_policy;
 DROP TABLE t_tr_policy;
 DROP FUNCTION trigger_fn_policy;
 DROP SEQUENCE seq_tr_policy;
+
+subtest end
+
+# Regression test: ALTER FUNCTION RENAME/SET SCHEMA should be blocked when the
+# function is referenced in a trigger function body. The trigger body stores
+# fully-qualified function names, so renaming or moving the function breaks the
+# trigger at DML time.
+subtest regression_trigger_udf_rename_dep
+
+statement ok
+CREATE TABLE t_tr_udf_dep (k INT PRIMARY KEY, v INT);
+
+statement ok
+CREATE FUNCTION udf_dep_helper() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE FUNCTION trigger_fn_udf_dep() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT public.udf_dep_helper();
+  RETURN NEW;
+END
+$$;
+
+statement ok
+CREATE TRIGGER tr_udf_dep BEFORE INSERT ON t_tr_udf_dep
+FOR EACH ROW EXECUTE FUNCTION trigger_fn_udf_dep();
+
+# INSERT should work before any rename.
+statement ok
+INSERT INTO t_tr_udf_dep VALUES (1, 1);
+
+# Renaming the UDF referenced by the trigger body should be blocked.
+statement error cannot rename function "udf_dep_helper" because other functions or views \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
+ALTER FUNCTION udf_dep_helper() RENAME TO udf_dep_helper_renamed;
+
+# Moving the UDF to another schema should also be blocked.
+statement ok
+CREATE SCHEMA sc_tr_dep;
+
+statement error cannot set schema for function "udf_dep_helper" because other functions or views \(\[trigger "tr_udf_dep" on .*t_tr_udf_dep\]\) still depend on it
+ALTER FUNCTION udf_dep_helper() SET SCHEMA sc_tr_dep;
+
+# INSERT should still work after the blocked operations.
+statement ok
+INSERT INTO t_tr_udf_dep VALUES (2, 2);
+
+statement ok
+DROP TRIGGER tr_udf_dep ON t_tr_udf_dep;
+DROP TABLE t_tr_udf_dep;
+DROP FUNCTION trigger_fn_udf_dep;
+DROP FUNCTION udf_dep_helper;
+DROP SCHEMA sc_tr_dep;
 
 subtest end
 
