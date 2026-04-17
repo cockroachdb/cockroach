@@ -373,6 +373,83 @@ func Test_simulatePR167081(t *testing.T) {
 		"pre-predecessor should be 25.4.5")
 }
 
+// Test_collectPredecessorVersions_PR168432 reproduces the scenario from
+// PR #168432 where 26.2 gets an RC release, causing the old
+// two-predecessor logic to drop the 25.4 binary that
+// cockroach-go-testserver-25.4 tests need.
+func Test_collectPredecessorVersions_PR168432(t *testing.T) {
+	data := map[string]release.Series{
+		"25.3": {Latest: "25.3.7", Predecessor: "25.2"},
+		"25.4": {Latest: "25.4.8", Predecessor: "25.3"},
+		"26.1": {Latest: "26.1.2", Predecessor: "25.4"},
+		"26.2": {Latest: "26.2.0-rc.1", Predecessor: "26.1"},
+		"26.3": {Predecessor: "26.2"},
+	}
+	currentVersion := version.MustParse("v26.3.0")
+
+	// With testserver configs for 25.4 and 26.1, the old logic would
+	// only produce [26.1.2, 26.2.0-rc.1], missing 25.4.8. The new
+	// logic walks back far enough to cover both.
+	requiredSeries := map[string]bool{"25.4": true, "26.1": true}
+	versions, err := collectPredecessorVersions(data, currentVersion, requiredSeries)
+	require.NoError(t, err)
+	require.Equal(t, []string{"25.4.8", "26.1.2", "26.2.0-rc.1"}, versions)
+}
+
+func Test_collectPredecessorVersions(t *testing.T) {
+	data := map[string]release.Series{
+		"25.3": {Latest: "25.3.7", Predecessor: "25.2"},
+		"25.4": {Latest: "25.4.8", Predecessor: "25.3"},
+		"26.1": {Latest: "26.1.2", Predecessor: "25.4"},
+		"26.2": {Latest: "26.2.0-rc.1", Predecessor: "26.1"},
+		"26.3": {Predecessor: "26.2"},
+	}
+
+	testCases := []struct {
+		name           string
+		currentVersion string
+		requiredSeries map[string]bool
+		expected       []string
+		expectedErr    string
+	}{
+		{
+			name:           "two predecessors without gap",
+			currentVersion: "v26.3.0",
+			requiredSeries: map[string]bool{"26.1": true, "25.4": true},
+			// Even though 26.2 is released, we still walk past it to
+			// find 25.4 because the testserver configs require it.
+			expected: []string{"25.4.8", "26.1.2", "26.2.0-rc.1"},
+		},
+		{
+			name:           "single predecessor",
+			currentVersion: "v26.3.0",
+			requiredSeries: map[string]bool{"26.1": true},
+			// Stops after collecting 26.2 and 26.1.
+			expected: []string{"26.1.2", "26.2.0-rc.1"},
+		},
+		{
+			name:           "unreachable series",
+			currentVersion: "v26.3.0",
+			requiredSeries: map[string]bool{"24.0": true},
+			expectedErr:    "could not find released versions for required testserver series",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := collectPredecessorVersions(
+				data, version.MustParse(tc.currentVersion), tc.requiredSeries,
+			)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, result)
+			}
+		})
+	}
+}
+
 func Test_validateReleaseData(t *testing.T) {
 	testCases := []struct {
 		name        string
