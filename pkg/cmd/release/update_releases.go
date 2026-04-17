@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
@@ -101,18 +102,12 @@ func updateReleasesFiles(_ *cobra.Command, _ []string) (retErr error) {
 	if err := saveResultsInYaml(result); err != nil {
 		return err
 	}
-	currentSeries := currentVersion.Format("%X.%Y")
-	predecessor := findLatestReleasedPredecessor(result, currentSeries)
-	if predecessor == "" {
-		return fmt.Errorf("could not determine predecessor version for version %+v", currentVersion)
-	}
-	predecessorSeries := version.MustParse("v" + predecessor).Format("%X.%Y")
-	prePredecessor := findLatestReleasedPredecessor(result, predecessorSeries)
-	if prePredecessor == "" {
-		return fmt.Errorf("could not determine predecessor's predecessor version for version %+v", currentVersion)
+	predecessorVersions, err := findRequiredPredecessorVersions(result, currentVersion)
+	if err != nil {
+		return err
 	}
 	fmt.Printf("writing data to %s\n", logictestReposFile)
-	if err := generateRepositoriesFile(prePredecessor, predecessor); err != nil {
+	if err := generateRepositoriesFile(predecessorVersions...); err != nil {
 		return err
 	}
 	fmt.Printf("done\n")
@@ -248,6 +243,104 @@ func findLatestReleasedPredecessor(data map[string]release.Series, series string
 		cur = s.Predecessor
 	}
 	return ""
+}
+
+// findRequiredPredecessorVersions discovers which released predecessor
+// versions are needed by scanning for cockroach-go-testserver-*
+// directories under the logictest test trees. Each such directory
+// corresponds to a release series that needs a binary in
+// REPOSITORIES.bzl. We walk the predecessor chain from the current
+// version, collecting released versions until all required series are
+// covered.
+func findRequiredPredecessorVersions(
+	data map[string]release.Series, currentVersion version.Version,
+) ([]string, error) {
+	requiredSeries, err := findTestserverSeries()
+	if err != nil {
+		return nil, err
+	}
+	return collectPredecessorVersions(data, currentVersion, requiredSeries)
+}
+
+// collectPredecessorVersions walks the predecessor chain from
+// currentVersion, collecting released versions until all series in
+// requiredSeries are covered. Returns the versions sorted oldest first.
+func collectPredecessorVersions(
+	data map[string]release.Series, currentVersion version.Version, requiredSeries map[string]bool,
+) ([]string, error) {
+	var versions []string
+	covered := map[string]bool{}
+	cur := currentVersion.Format("%X.%Y")
+	visited := map[string]bool{}
+	for len(covered) < len(requiredSeries) {
+		latest := findLatestReleasedPredecessor(data, cur)
+		if latest == "" {
+			break
+		}
+		latestVersion := version.MustParse("v" + latest)
+		series := latestVersion.Format("%X.%Y")
+		if visited[series] {
+			break
+		}
+		visited[series] = true
+		if requiredSeries[series] {
+			versions = append(versions, latest)
+			covered[series] = true
+		}
+		cur = series
+	}
+
+	var missing []string
+	for series := range requiredSeries {
+		if !covered[series] {
+			missing = append(missing, series)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf(
+			"could not find released versions for required testserver series: %s",
+			strings.Join(missing, ", "),
+		)
+	}
+
+	sort.Slice(versions, func(i, j int) bool {
+		return version.MustParse("v"+versions[i]).Compare(version.MustParse("v"+versions[j])) < 0
+	})
+
+	return versions, nil
+}
+
+// testserverDirs lists the directories under the logictest test trees
+// that contain cockroach-go-testserver-* tests. These are relative
+// paths, consistent with releaseDataFile and logictestReposFile; the
+// tool is expected to run from the repository root.
+var testserverDirs = []string{
+	"pkg/sql/logictest/tests",
+	"pkg/ccl/logictestccl/tests",
+}
+
+// findTestserverSeries scans for cockroach-go-testserver-* directories
+// and returns the set of release series they correspond to.
+func findTestserverSeries() (map[string]bool, error) {
+	series := map[string]bool{}
+	for _, dir := range testserverDirs {
+		matches, err := filepath.Glob(
+			filepath.Join(dir, "cockroach-go-testserver-*"),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning for testserver directories: %w", err)
+		}
+		for _, m := range matches {
+			base := filepath.Base(m)
+			s := strings.TrimPrefix(base, "cockroach-go-testserver-")
+			series[s] = true
+		}
+	}
+	if len(series) == 0 {
+		return nil, fmt.Errorf("no cockroach-go-testserver-* directories found")
+	}
+	return series, nil
 }
 
 // loadExistingReleaseData reads the current cockroach_releases.yaml
