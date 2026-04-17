@@ -29,17 +29,17 @@ filegroup(
     srcs = [
         "bin/%{target}-gcc",
         "bin/%{target}-g++",
-        "libexec/gcc/%{target}/6.5.0/cc1",
-        "libexec/gcc/%{target}/6.5.0/cc1plus",
+        "libexec/gcc/%{target}/8.5.0/cc1",
+        "libexec/gcc/%{target}/8.5.0/cc1plus",
     ] + glob([
         "%{target}/bin/*",
-        "%{target}/include/c++/6.5.0/**",
+        "%{target}/include/c++/8.5.0/**",
         "%{target}/sysroot/mingw/include/**",
         "%{target}/sysroot/mingw/lib/**",
         "%{target}/sysroot/mingw/lib32/**",
         "%{target}/sysroot/usr/include/**",
-        "lib/gcc/%{target}/6.5.0/include/**",
-        "lib/gcc/%{target}/6.5.0/include-fixed/**",
+        "lib/gcc/%{target}/8.5.0/include/**",
+        "lib/gcc/%{target}/8.5.0/include-fixed/**",
     ])
 )
 
@@ -62,10 +62,10 @@ filegroup(
         "%{target}/sysroot/usr/lib/**",
         "%{target}/sysroot/usr/lib64/**",
     ]) + glob(
-        ["lib/gcc/%{target}/6.5.0/**"],
+        ["lib/gcc/%{target}/8.5.0/**"],
         exclude=[
-            "lib/gcc/%{target}/6.5.0/include/**",
-            "lib/gcc/%{target}/6.5.0/include-fixed/**",
+            "lib/gcc/%{target}/8.5.0/include/**",
+            "lib/gcc/%{target}/8.5.0/include-fixed/**",
         ]),
 )
 
