@@ -489,7 +489,6 @@ func handleCampaign(
 			// Other voters already stepped down via handleVoteReq (term bump sets
 			// leader=false). Dropped voters retain their stale leader belief.
 			candidate.leader = true
-			candidate.committed = 0
 			candidate.witnessEngaged = false
 			nextIdx := uint64(len(candidate.log) + 1)
 			candidate.log = append(
