@@ -563,11 +563,21 @@ func alterTenantJobCutover(
 	progress := job.Progress()
 
 	replicatedTimeAtCutover := replicationutils.ReplicatedTimeFromProgress(&progress)
-	if replicatedTimeAtCutover.IsEmpty() {
-		replicatedTimeAtCutover = details.ReplicationStartTime
-	}
 
-	if alterTenantStmt.Cutover.Latest {
+	if replicatedTimeAtCutover.IsEmpty() {
+		if alterTenantStmt.Cutover.Latest {
+			return hlc.Timestamp{}, errors.Newf(
+				"replicated tenant %q (%d) has not replicated any data yet; "+
+					"cannot cut over to LATEST",
+				tenantName, tenInfo.ID)
+		}
+		if cutoverTime.Less(details.ReplicationStartTime) {
+			return hlc.Timestamp{}, errors.Newf(
+				"cutover time %s is before the replication start time %s",
+				cutoverTime, details.ReplicationStartTime)
+		}
+		replicatedTimeAtCutover = cutoverTime
+	} else if alterTenantStmt.Cutover.Latest {
 		cutoverTime = replicatedTimeAtCutover
 	}
 
