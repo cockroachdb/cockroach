@@ -120,6 +120,46 @@ func TestGetTableMetadata(t *testing.T) {
 		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultTMComparator))
 	})
 
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_middle -> role_connect.
+		conn.Exec(t, "CREATE ROLE role_middle")
+		conn.Exec(t, "CREATE ROLE role_connect")
+		conn.Exec(t, fmt.Sprintf("GRANT role_middle TO %s", sessionUsername.Normalized()))
+		conn.Exec(t, "GRANT role_connect TO role_middle")
+
+		uri1 := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d", db1Id)
+
+		// Revoke public CONNECT on db1 so only explicit grants matter.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", db1Name))
+		// Also revoke any direct grant to testuser (the prior auth subtest may
+		// have granted admin to this user).
+		conn.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+
+		// Without any CONNECT grant on the role chain, the user should see no
+		// results for db1.
+		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		require.Empty(t, mdResp.Results)
+
+		// Grant CONNECT to role_connect (grandparent role). The user should now
+		// see db1 tables through the chain: testuser -> role_middle -> role_connect.
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO role_connect", db1Name))
+		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		require.NotEmpty(t, mdResp.Results, "user should see tables via inherited CONNECT through role chain")
+
+		// Revoke the role chain and verify access is removed.
+		conn.Exec(t, fmt.Sprintf("REVOKE role_middle FROM %s", sessionUsername.Normalized()))
+		mdResp = makeApiRequest[PaginatedResponse[[]tableMetadata]](t, userClient, ts.AdminURL().WithPath(uri1).String(), http.MethodGet)
+		require.Empty(t, mdResp.Results, "user should lose access after role chain is broken")
+
+		// Restore public CONNECT for other subtests.
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO public", db1Name))
+	})
+
 	t.Run("sorting", func(t *testing.T) {
 		nameComparator := func(first, second tableMetadata) int {
 			return cmp.Or(
@@ -388,6 +428,62 @@ func TestGetTableMetadataWithDetails(t *testing.T) {
 			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		require.NotEmpty(t, resp.Metadata)
 		require.Contains(t, resp.CreateStatement, table.tableName)
+
+		// Test with dedicated admin user (user named 'admin').
+		adminUsername := username.AdminRoleName()
+		adminClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(adminUsername, false, 1)
+		require.NoError(t, err)
+
+		// Admin user should be able to access the table even without explicit CONNECT grants.
+		resp = makeApiRequest[tableMetadataWithDetailsResponse](
+			t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, table.tableName)
+
+		// Admin user should still have access even after revoking public access was already done above.
+		resp = makeApiRequest[tableMetadataWithDetailsResponse](
+			t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata)
+		require.Contains(t, resp.CreateStatement, table.tableName)
+	})
+
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		table := tests[0]
+		db := table.dbName
+		uri := fmt.Sprintf("/api/v2/table_metadata/%d/", table.tableId)
+
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_td_mid -> role_td_top.
+		runner.Exec(t, "CREATE ROLE role_td_mid")
+		runner.Exec(t, "CREATE ROLE role_td_top")
+		runner.Exec(t, fmt.Sprintf("GRANT role_td_mid TO %s", sessionUsername.Normalized()))
+		runner.Exec(t, "GRANT role_td_top TO role_td_mid")
+
+		// Revoke public CONNECT and any direct grants from prior subtests.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE \"%s\" FROM public", db))
+		runner.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+
+		// Without CONNECT on the role chain, the user should get TableNotFound.
+		failed := makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, TableNotFound, failed)
+
+		// Grant CONNECT to role_td_top. The user should now see the table through
+		// the chain: testuser -> role_td_mid -> role_td_top.
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE \"%s\" TO role_td_top", db))
+		resp := makeApiRequest[tableMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.NotEmpty(t, resp.Metadata, "user should see table via inherited CONNECT")
+
+		// Break the role chain and verify access is removed.
+		runner.Exec(t, fmt.Sprintf("REVOKE role_td_mid FROM %s", sessionUsername.Normalized()))
+		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, TableNotFound, failed, "user should lose access after role chain is broken")
+
+		// Restore public CONNECT.
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE \"%s\" TO public", db))
 	})
 
 	t.Run("non GET method 405 error", func(t *testing.T) {
@@ -508,14 +604,14 @@ func TestGetDbMetadata(t *testing.T) {
 
 		// All databases grant CONNECT to public by default, so the user should see all databases.
 		// There should be 4: defaultdb, postgres, new_test_db_1, and new_test_db_2.
-		// The system db should not be included, since it doe snot have CONNECT granted to public.
+		// The system db should not be included, since it does not have CONNECT granted to public.
 		uri := "/api/v2/database_metadata/?sortBy=name"
 		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres"}, mdResp.Results)
 
 		// Revoke connect access for public from db1.
 		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
-		// Asser that user no longer sees db1.
+		// Assert that user no longer sees db1.
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		verifyDatabases([]string{"defaultdb", "new_test_db_2", "postgres"}, mdResp.Results)
 
@@ -535,6 +631,72 @@ func TestGetDbMetadata(t *testing.T) {
 		conn.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
 		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres", "system"}, mdResp.Results)
+
+		// Test with dedicated admin user (user named 'admin').
+		adminUsername := username.AdminRoleName()
+		adminClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(adminUsername, false, 1)
+		require.NoError(t, err)
+
+		// The admin user should see all databases even without explicit CONNECT grants.
+		// There should be 5: defaultdb, postgres, new_test_db_1, and new_test_db_2, system.
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres", "system"}, mdResp.Results)
+
+		// Revoke CONNECT on public from both test databases to ensure the admin user
+		// can still see them.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, "public"))
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db2Name, "public"))
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		verifyDatabases([]string{"defaultdb", "new_test_db_1", "new_test_db_2", "postgres", "system"}, mdResp.Results)
+	})
+
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_mid -> role_top.
+		conn.Exec(t, "CREATE ROLE role_mid")
+		conn.Exec(t, "CREATE ROLE role_top")
+		conn.Exec(t, fmt.Sprintf("GRANT role_mid TO %s", sessionUsername.Normalized()))
+		conn.Exec(t, "GRANT role_top TO role_mid")
+
+		uri := "/api/v2/database_metadata/?sortBy=name"
+
+		// Revoke public CONNECT on db1 and any direct grants from prior subtests.
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", db1Name))
+		conn.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+		conn.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+
+		// Without CONNECT, user should not see db1 in the list.
+		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		dbNames := make([]string, 0, len(mdResp.Results))
+		for _, db := range mdResp.Results {
+			dbNames = append(dbNames, db.DbName)
+		}
+		require.NotContains(t, dbNames, db1Name)
+
+		// Grant CONNECT to role_top. The user should now see db1 through the
+		// chain: testuser -> role_mid -> role_top.
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO role_top", db1Name))
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		dbNames = dbNames[:0]
+		for _, db := range mdResp.Results {
+			dbNames = append(dbNames, db.DbName)
+		}
+		require.Contains(t, dbNames, db1Name, "user should see db via inherited CONNECT through role chain")
+
+		// Break the role chain and verify access is removed.
+		conn.Exec(t, fmt.Sprintf("REVOKE role_mid FROM %s", sessionUsername.Normalized()))
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		dbNames = dbNames[:0]
+		for _, db := range mdResp.Results {
+			dbNames = append(dbNames, db.DbName)
+		}
+		require.NotContains(t, dbNames, db1Name, "user should lose access after role chain is broken")
+
+		// Restore public CONNECT for other subtests.
+		conn.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO public", db1Name))
 	})
 
 	t.Run("pagination", func(t *testing.T) {
@@ -700,6 +862,63 @@ func TestGetDbMetadataWithDetails(t *testing.T) {
 		// Assert that user can see system db.
 		resp = makeApiRequest[dbMetadataWithDetailsResponse](t, userClient, ts.AdminURL().WithPath(systemUri).String(), http.MethodGet)
 		require.Equal(t, int64(1), resp.Metadata.DbId)
+
+		// Test with dedicated admin user (user named 'admin').
+		adminUsername := username.AdminRoleName()
+		adminClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(adminUsername, false, 1)
+		require.NoError(t, err)
+
+		// Admin user should be able to access the database even without explicit CONNECT grants.
+		resp = makeApiRequest[dbMetadataWithDetailsResponse](
+			t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+
+		// Admin user should also see the system database.
+		resp = makeApiRequest[dbMetadataWithDetailsResponse](
+			t, adminClient, ts.AdminURL().WithPath(systemUri).String(), http.MethodGet)
+		require.Equal(t, int64(1), resp.Metadata.DbId)
+
+		// Admin user should still have access even after public access was already revoked above.
+		resp = makeApiRequest[dbMetadataWithDetailsResponse](
+			t, adminClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId)
+	})
+
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_inner -> role_outer.
+		runner.Exec(t, "CREATE ROLE role_inner")
+		runner.Exec(t, "CREATE ROLE role_outer")
+		runner.Exec(t, fmt.Sprintf("GRANT role_inner TO %s", sessionUsername.Normalized()))
+		runner.Exec(t, "GRANT role_outer TO role_inner")
+
+		uri := fmt.Sprintf("/api/v2/database_metadata/%d/", db1Id)
+
+		// Revoke public CONNECT and any direct grants from prior subtests.
+		runner.Exec(t, fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", db1Name))
+		runner.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+
+		// Without CONNECT on the role chain, the user should get DatabaseNotFound.
+		failed := makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed)
+
+		// Grant CONNECT to role_outer. The user should now see db1 through the
+		// chain: testuser -> role_inner -> role_outer.
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO role_outer", db1Name))
+		resp := makeApiRequest[dbMetadataWithDetailsResponse](
+			t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, int64(db1Id), resp.Metadata.DbId, "user should see db via inherited CONNECT")
+
+		// Break the role chain and verify access is removed.
+		runner.Exec(t, fmt.Sprintf("REVOKE role_inner FROM %s", sessionUsername.Normalized()))
+		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, DatabaseNotFound, failed, "user should lose access after role chain is broken")
+
+		// Restore public CONNECT.
+		runner.Exec(t, fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO public", db1Name))
 	})
 
 	t.Run("non GET method 405 error", func(t *testing.T) {
@@ -760,6 +979,44 @@ func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
 		require.Equal(t, true, mdResp.AutomaticUpdatesEnabled)
 		require.Equal(t, 10*time.Minute, mdResp.DataValidDuration)
 	})
+
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		uri := "/api/v2/table_metadata/updatejob/"
+
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_a -> role_b.
+		conn.Exec(t, "CREATE ROLE role_a")
+		conn.Exec(t, "CREATE ROLE role_b")
+		conn.Exec(t, fmt.Sprintf("GRANT role_a TO %s", sessionUsername.Normalized()))
+		conn.Exec(t, "GRANT role_b TO role_a")
+
+		// Revoke public CONNECT and admin from prior subtests.
+		conn.Exec(t, "REVOKE CONNECT ON DATABASE defaultdb FROM public")
+		conn.Exec(t, "REVOKE CONNECT ON DATABASE postgres FROM public")
+		conn.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+
+		// Without CONNECT on the role chain, the user should get 404.
+		failed := makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
+
+		// Grant CONNECT to role_b on defaultdb. The user should now be authorized
+		// through the chain: testuser -> role_a -> role_b.
+		conn.Exec(t, "GRANT CONNECT ON DATABASE defaultdb TO role_b")
+		mdResp := makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.NotEmpty(t, mdResp.CurrentStatus, "user should be authorized via inherited CONNECT")
+
+		// Break the role chain and verify access is removed.
+		conn.Exec(t, fmt.Sprintf("REVOKE role_a FROM %s", sessionUsername.Normalized()))
+		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String(), http.MethodGet)
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed, "user should lose access after role chain is broken")
+
+		// Restore public CONNECT.
+		conn.Exec(t, "GRANT CONNECT ON DATABASE defaultdb TO public")
+		conn.Exec(t, "GRANT CONNECT ON DATABASE postgres TO public")
+	})
 }
 
 func TestTriggerMetadataUpdateJob(t *testing.T) {
@@ -819,6 +1076,41 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 
 		runner.Exec(t, fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
 		triggerAndWaitForJobToComplete(t, client, url, jobCompletedChan)
+	})
+
+	t.Run("authorization via inherited role membership", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Create a role chain: testuser -> role_x -> role_y.
+		runner.Exec(t, "CREATE ROLE role_x")
+		runner.Exec(t, "CREATE ROLE role_y")
+		runner.Exec(t, fmt.Sprintf("GRANT role_x TO %s", sessionUsername.Normalized()))
+		runner.Exec(t, "GRANT role_y TO role_x")
+
+		// Revoke public CONNECT and admin from prior subtests.
+		runner.Exec(t, "REVOKE CONNECT ON DATABASE defaultdb FROM public")
+		runner.Exec(t, "REVOKE CONNECT ON DATABASE postgres FROM public")
+		runner.Exec(t, fmt.Sprintf("REVOKE admin FROM %s", sessionUsername.Normalized()))
+
+		// Without CONNECT on the role chain, the user should get 404.
+		failed := makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
+
+		// Grant CONNECT to role_y. The user should now be authorized through the
+		// chain: testuser -> role_x -> role_y.
+		runner.Exec(t, "GRANT CONNECT ON DATABASE defaultdb TO role_y")
+		triggerAndWaitForJobToComplete(t, userClient, url, jobCompletedChan)
+
+		// Break the role chain and verify access is removed.
+		runner.Exec(t, fmt.Sprintf("REVOKE role_x FROM %s", sessionUsername.Normalized()))
+		failed = makeApiRequest[interface{}](t, userClient, url, http.MethodPost)
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
+
+		// Restore public CONNECT.
+		runner.Exec(t, "GRANT CONNECT ON DATABASE defaultdb TO public")
+		runner.Exec(t, "GRANT CONNECT ON DATABASE postgres TO public")
 	})
 
 	t.Run("staleness", func(t *testing.T) {
