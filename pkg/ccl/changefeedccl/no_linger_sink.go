@@ -11,13 +11,16 @@ import (
 	"hash"
 	"hash/crc32"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -105,8 +108,17 @@ func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
-	for (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
-		pb.cond.Wait()
+	if (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
+		reason := "flush"
+		if pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered {
+			reason = "buffer_full"
+		}
+		log.VEventf(context.Background(), 1,
+			"no-linger addRow blocking: reason=%s totalEvents=%d maxBuffered=%d inflight=%d heapLen=%d",
+			reason, pb.totalEvents, pb.maxBuffered, pb.totalInflight, pb.keyHeap.Len())
+		for (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
+			pb.cond.Wait()
+		}
 	}
 
 	h := pb.computeKeyHash(topicName, e.key)
@@ -217,6 +229,17 @@ func (pb *pendingBuffer) close() {
 	pb.cond.Broadcast()
 }
 
+// noLingerSinkStats tracks aggregate stats for periodic logging.
+type noLingerSinkStats struct {
+	mu              syncutil.Mutex
+	totalEmitted    int64
+	totalFlushed    int64
+	totalBatches    int64
+	totalFlushNanos int64
+	totalBuildNanos int64
+	lastLog         time.Time
+}
+
 // noLingerSink implements the Sink interface using a pull-based model
 // where idle workers pull batches from a shared pendingBuffer.
 type noLingerSink struct {
@@ -234,6 +257,7 @@ type noLingerSink struct {
 	metrics        metricsRecorder
 	noLingerMetric noLingerMetricsRecorder
 	settings       *cluster.Settings
+	stats          noLingerSinkStats
 
 	termErr error // guarded by buf.mu
 
@@ -313,6 +337,9 @@ func (s *noLingerSink) EmitRow(
 	}
 	s.buf.addRow(topicName, e)
 	s.noLingerMetric.recordPendingRows(1)
+	s.stats.mu.Lock()
+	s.stats.totalEmitted++
+	s.stats.mu.Unlock()
 	return nil
 }
 
@@ -330,17 +357,28 @@ func (s *noLingerSink) Flush(ctx context.Context) error {
 	}
 
 	// Block new addRow calls while draining.
+	pending := s.buf.totalEvents
+	inflight := s.buf.totalInflight
 	s.buf.flushing = true
 	defer func() {
 		s.buf.flushing = false
 		s.buf.cond.Broadcast()
 	}()
 
+	log.VEventf(ctx, 1,
+		"no-linger Flush started: pending=%d inflight=%d", pending, inflight)
+
+	flushStart := timeutil.Now()
+
 	// Wait until all pending and inflight events are drained.
 	for (s.buf.totalInflight > 0 || s.buf.totalEvents > 0) &&
 		s.termErr == nil && !s.buf.closed {
 		s.buf.cond.Wait()
 	}
+
+	log.VEventf(ctx, 1,
+		"no-linger Flush completed: dur=%s err=%v",
+		timeutil.Since(flushStart), s.termErr)
 
 	return s.termErr
 }
@@ -371,6 +409,9 @@ func (s *noLingerSink) Topics() []string {
 
 var _ SinkWithTopics = (*noLingerSink)(nil)
 
+// noLingerLogInterval controls how often periodic stats are logged.
+const noLingerLogInterval = 10 * time.Second
+
 // runWorker is the main loop for each IO worker goroutine.
 func (s *noLingerSink) runWorker(ctx context.Context) error {
 	for {
@@ -379,7 +420,8 @@ func (s *noLingerSink) runWorker(ctx context.Context) error {
 		if batch == nil {
 			return nil // closed
 		}
-		s.noLingerMetric.recordGetBatchWait(timeutil.Since(waitStart))
+		waitDur := timeutil.Since(waitStart)
+		s.noLingerMetric.recordGetBatchWait(waitDur)
 		s.noLingerMetric.recordPendingRows(-int64(len(batch.events)))
 
 		if s.maxMessages > 0 {
@@ -387,8 +429,12 @@ func (s *noLingerSink) runWorker(ctx context.Context) error {
 			s.noLingerMetric.recordBatchFillPct(pct)
 		}
 
+		nKeys := batch.keys.Len()
+
+		buildStart := timeutil.Now()
 		s.metrics.recordSinkIOInflightChange(int64(len(batch.events)))
 		err := s.processBatch(ctx, batch)
+		flushDur := timeutil.Since(buildStart)
 		s.metrics.recordSinkIOInflightChange(-int64(len(batch.events)))
 
 		// Release allocs regardless of success.
@@ -396,14 +442,56 @@ func (s *noLingerSink) runWorker(ctx context.Context) error {
 			batch.events[i].alloc.Release(ctx)
 		}
 
+		s.buf.completeBatch(batch)
+
+		// Log per-batch at V(2) and periodic summary at V(1).
+		log.VEventf(ctx, 2,
+			"no-linger batch: events=%d keys=%d wait=%s flush=%s err=%v",
+			len(batch.events), nKeys, waitDur, flushDur, err)
+
+		s.stats.mu.Lock()
+		s.stats.totalFlushed += int64(len(batch.events))
+		s.stats.totalBatches++
+		s.stats.totalFlushNanos += flushDur.Nanoseconds()
+		sinceLastLog := timeutil.Since(s.stats.lastLog)
+		shouldLog := sinceLastLog >= noLingerLogInterval
+		var emitted, flushed, batches, flushNanos int64
+		if shouldLog {
+			emitted = s.stats.totalEmitted
+			flushed = s.stats.totalFlushed
+			batches = s.stats.totalBatches
+			flushNanos = s.stats.totalFlushNanos
+			s.stats.totalEmitted = 0
+			s.stats.totalFlushed = 0
+			s.stats.totalBatches = 0
+			s.stats.totalFlushNanos = 0
+			s.stats.lastLog = timeutil.Now()
+		}
+		s.stats.mu.Unlock()
+
+		if shouldLog {
+			// Read buffer stats under buf.mu.
+			s.buf.mu.Lock()
+			pending := s.buf.totalEvents
+			inflight := s.buf.totalInflight
+			heapKeys := s.buf.keyHeap.Len()
+			bufKeys := len(s.buf.keyMessages)
+			s.buf.mu.Unlock()
+
+			log.Changefeed.Infof(ctx,
+				"no-linger stats (last %s): emitted=%d flushed=%d batches=%d "+
+					"avgFlush=%s pending=%d inflight=%d heapKeys=%d bufKeys=%d",
+				sinceLastLog.Truncate(time.Second),
+				emitted, flushed, batches,
+				time.Duration(flushNanos/max(batches, 1)),
+				pending, inflight, heapKeys, bufKeys)
+		}
+
 		if err != nil {
 			s.setTermErr(err)
-			s.buf.completeBatch(batch)
 			s.buf.close()
 			return err
 		}
-
-		s.buf.completeBatch(batch)
 	}
 }
 
@@ -459,6 +547,7 @@ func makeNoLingerSink(
 		noLingerMetric: metrics.newNoLingerMetricsRecorder(),
 		settings:       settings,
 		cancel:         cancel,
+		stats:          noLingerSinkStats{lastLog: timeutil.Now()},
 	}
 
 	sink.wg = ctxgroup.WithContext(ctx)
