@@ -103,6 +103,12 @@ type RecordedStmtStats struct {
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
 	StatsRollout             eval.StatsRolloutSelection
+
+	// AggregatedTs and AggInterval, when non-zero, override the Container's
+	// own computation so that all statements in a transaction share the same
+	// aggregation window as the transaction itself.
+	AggregatedTs time.Time
+	AggInterval  time.Duration
 }
 
 var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
@@ -177,6 +183,12 @@ type RecordedTxnStats struct {
 	// Normalized user name.
 	UserNormalized   string
 	InternalExecutor bool
+
+	// AggregatedTs and AggInterval, when non-zero, override the Container's
+	// own computation so that all statements in a transaction share the same
+	// aggregation window as the transaction itself.
+	AggregatedTs time.Time
+	AggInterval  time.Duration
 }
 
 // SSDrainer is the interface for draining or resetting sql stats.
