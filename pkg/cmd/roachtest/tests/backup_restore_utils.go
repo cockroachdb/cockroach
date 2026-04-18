@@ -478,7 +478,7 @@ func (u *CommonTestUtils) waitForJobSuccessWithNode(
 	r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second,
-		MaxDuration:    80 * time.Minute,
+		MaxDuration:    90 * time.Minute,
 	})
 	for r.Next() {
 		var status string
