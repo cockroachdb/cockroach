@@ -7,6 +7,7 @@ package vecstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -28,9 +29,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
+
+// KVStats tracks cumulative KV-layer statistics for vector index operations.
+// It is populated by Txn during batch execution and read after the operation
+// completes. It is not thread-safe.
+type KVStats struct {
+	// BatchRequestsIssued is the number of KV batch requests executed.
+	BatchRequestsIssued int64
+	// KVBytesRead is the total number of bytes read from KV.
+	KVBytesRead int64
+	// KVPairsRead is the total number of KV pairs read.
+	KVPairsRead int64
+	// KVTime is the wall-clock time spent in KV batch execution.
+	KVTime time.Duration
+	// KVCPUTime is the CPU time reported by KV, in nanoseconds. This uses
+	// int64 (not time.Duration) to match the BatchResponse.CPUTime field.
+	KVCPUTime int64
+}
 
 // Txn provides a context to make transactional changes to a vector index.
 // Calling methods here will use the wrapped KV Txn to update the vector index's
@@ -50,6 +69,12 @@ type Txn struct {
 	// fullVecFetchSpec is used to fetch vectors from the primary index.
 	fullVecFetchSpec *vecstorepb.GetFullVectorsFetchSpec
 	pkDecoder        PKDecoder
+
+	// kvStats accumulates KV statistics during batch execution.
+	kvStats KVStats
+
+	// collectKVStats indicates whether KV statistics should be collected.
+	collectKVStats bool
 
 	// Retained allocations to prevent excessive reallocation.
 	tmpSpans   []roachpb.Span
@@ -86,6 +111,19 @@ func (tx *Txn) Init(
 	} else {
 		tx.lockDurability = kvpb.GuaranteedDurability
 	}
+}
+
+// EnableKVStats enables collection of KV statistics during batch execution.
+// Statistics can be retrieved via the KVStats method.
+func (tx *Txn) EnableKVStats() {
+	tx.collectKVStats = true
+	tx.kvStats = KVStats{}
+}
+
+// KVStats returns a snapshot of the cumulative KV statistics collected during
+// batch execution.
+func (tx *Txn) KVStats() KVStats {
+	return tx.kvStats
 }
 
 // GetPartitionMetadata implements the cspann.Txn interface.
@@ -131,7 +169,7 @@ func (tx *Txn) GetPartitionMetadata(
 		}
 
 		// Run the batch.
-		if err := tx.kv.Run(ctx, b); err != nil {
+		if err := tx.runAndRecordStats(ctx, b); err != nil {
 			return nil, errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 		}
 
@@ -177,7 +215,7 @@ func (tx *Txn) AddToPartition(
 	// key in order to prevent splits/merges from interfering.
 	metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, partitionKey)
 	b.GetForShare(metadataKey, tx.lockDurability)
-	err := tx.kv.Run(ctx, b)
+	err := tx.runAndRecordStats(ctx, b)
 	if err != nil {
 		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
@@ -214,7 +252,7 @@ func (tx *Txn) AddToPartition(
 	b.Put(entryKey, encodedValue)
 
 	// Run the batch.
-	if err = tx.kv.Run(ctx, b); err != nil {
+	if err = tx.runAndRecordStats(ctx, b); err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
 	return nil
@@ -240,7 +278,7 @@ func (tx *Txn) RemoveFromPartition(
 	// Get partition metadata, needed to quantize the vector. Lock the metadata
 	// key in order to prevent splits/merges from interfering.
 	b.GetForShare(metadataKey, tx.lockDurability)
-	if err := tx.kv.Run(ctx, b); err != nil {
+	if err := tx.runAndRecordStats(ctx, b); err != nil {
 		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
 
@@ -253,7 +291,7 @@ func (tx *Txn) RemoveFromPartition(
 	entryKey := vecencoding.EncodePrefixVectorKey(metadataKey, level)
 	entryKey = vecencoding.EncodeChildKey(entryKey, childKey)
 	b.Del(entryKey)
-	if err := tx.kv.Run(ctx, b); err != nil {
+	if err := tx.runAndRecordStats(ctx, b); err != nil {
 		return err
 	}
 	// We ignore key not found for the deleted child.
@@ -289,7 +327,7 @@ func (tx *Txn) SearchPartitions(
 		}
 	}
 
-	if err := tx.kv.Run(ctx, b); err != nil {
+	if err := tx.runAndRecordStats(ctx, b); err != nil {
 		return err
 	}
 
@@ -538,6 +576,7 @@ func (tx *Txn) getFullVectorsFromPK(
 	})
 	defer fetcher.Close(ctx)
 
+	start := timeutil.Now()
 	err = fetcher.StartScan(
 		ctx,
 		tx.tmpSpans,
@@ -564,6 +603,18 @@ func (tx *Txn) getFullVectorsFromPK(
 		}
 	}
 
+	// Unlike other methods that use runAndRecordStats to wrap tx.kv.Run(),
+	// this method uses a row.Fetcher which manages its own KV batches
+	// internally. Read the fetcher's accumulated stats after the scan
+	// completes.
+	if tx.collectKVStats {
+		tx.kvStats.KVTime += timeutil.Since(start)
+		tx.kvStats.BatchRequestsIssued += fetcher.GetBatchRequestsIssued()
+		tx.kvStats.KVBytesRead += fetcher.GetBytesRead()
+		tx.kvStats.KVPairsRead += fetcher.GetKVPairsRead()
+		tx.kvStats.KVCPUTime += fetcher.GetKVCPUTime()
+	}
+
 	return err
 }
 
@@ -586,7 +637,7 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 		b.Get(metadataKey)
 	}
 
-	if err := tx.kv.Run(ctx, b); err != nil {
+	if err := tx.runAndRecordStats(ctx, b); err != nil {
 		return errors.Wrapf(err, "fetching partition metadata for GetFullVectors")
 	}
 
@@ -647,7 +698,7 @@ func (tx *Txn) createRootPartition(
 	// the root partition. CPut always "sees" the latest version of the metadata
 	// record.
 	b.CPut(metadataKey, encoded, nil /* expValue */)
-	if err := tx.kv.Run(ctx, b); err != nil {
+	if err := tx.runAndRecordStats(ctx, b); err != nil {
 		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
 	}
 	return metadata, nil
@@ -661,4 +712,30 @@ func (tx *Txn) QuantizeAndEncode(
 ) (quantized []byte, err error) {
 	// Quantize and encode the randomized vector.
 	return tx.codec.EncodeVector(partitionKey, randomizedVec, centroid)
+}
+
+// runAndRecordStats runs the given KV batch and, if stats collection is
+// enabled, accumulates timing and I/O statistics from the response.
+func (tx *Txn) runAndRecordStats(ctx context.Context, b *kv.Batch) error {
+	if !tx.collectKVStats {
+		return tx.kv.Run(ctx, b)
+	}
+
+	start := timeutil.Now()
+	if err := tx.kv.Run(ctx, b); err != nil {
+		return err
+	}
+
+	tx.kvStats.KVTime += timeutil.Since(start)
+	tx.kvStats.BatchRequestsIssued++
+
+	resp := b.RawResponse()
+	tx.kvStats.KVCPUTime += resp.CPUTime
+	for _, ru := range resp.Responses {
+		header := ru.GetInner().Header()
+		tx.kvStats.KVBytesRead += header.NumBytes
+		tx.kvStats.KVPairsRead += header.NumKeys
+	}
+
+	return nil
 }

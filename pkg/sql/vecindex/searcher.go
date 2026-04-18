@@ -51,6 +51,7 @@ func (s *Searcher) Init(
 ) {
 	s.idx = idx
 	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, fullVecFetchSpec)
+	s.txn.EnableKVStats()
 	s.idxCtx.Init(&s.txn)
 	s.evalCtx = evalCtx
 
@@ -78,6 +79,12 @@ func (s *Searcher) Search(ctx context.Context, prefix roachpb.Key, vec vector.T)
 	s.results = s.searchSet.PopResults()
 	s.resultIdx = 0
 	return nil
+}
+
+// KVStats returns a snapshot of the cumulative KV statistics collected during
+// search operations.
+func (s *Searcher) KVStats() vecstore.KVStats {
+	return s.txn.KVStats()
 }
 
 // NextResult iterates over search results. It returns nil when there are no
