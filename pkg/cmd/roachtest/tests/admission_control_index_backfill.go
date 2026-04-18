@@ -289,7 +289,7 @@ func runIndexBackfill(
 	// Run TPC-E workload and schema changes concurrently, collecting
 	// disk bandwidth metrics during the schema changes.
 	const (
-		workloadDuration = 90 * time.Minute
+		workloadDuration = 4 * time.Hour
 		baselineWait     = 5 * time.Minute
 	)
 	var backfillDuration time.Duration
@@ -297,10 +297,9 @@ func runIndexBackfill(
 	var totalBWSamples []float64
 	var metricsStart, metricsEnd time.Time
 
-	g := t.NewGroup(task.WithContext(ctx))
-
-	// Goroutine 1: Run TPC-E workload.
-	g.Go(func(ctx context.Context, l *logger.Logger) error {
+	// Run the TPC-E workload with a cancelable context so we can stop it
+	// once the schema changes complete.
+	cancelWorkload := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		t.Status(fmt.Sprintf("starting TPC-E workload with 20000 active customers (<%s)",
 			workloadDuration))
 		runOptions := tpceCmdOptions{
@@ -314,6 +313,12 @@ func runIndexBackfill(
 		}
 		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
+			// Context cancellation is expected when we stop the workload
+			// after schema changes complete.
+			if ctx.Err() != nil {
+				l.Printf("TPC-E workload stopped (schema changes completed)")
+				return nil
+			}
 			l.Printf("TPC-E workload error: %v", err)
 			return err
 		}
@@ -321,7 +326,11 @@ func runIndexBackfill(
 		return nil
 	}, task.Name("tpce-workload"))
 
-	// Goroutine 2: Run index creation after baseline period.
+	// Run schema changes in a separate group so we can wait for them
+	// independently of the workload.
+	g := t.NewGroup(task.WithContext(ctx))
+
+	// Goroutine 1: Run index creation after baseline period.
 	g.Go(func(ctx context.Context, l *logger.Logger) error {
 		t.Status(fmt.Sprintf("recording baseline performance (<%s)", baselineWait))
 		time.Sleep(baselineWait)
@@ -343,7 +352,7 @@ func runIndexBackfill(
 		return nil
 	}, task.Name("index-backfill"))
 
-	// Goroutine 3: Run primary key change, starting 10 minutes after
+	// Goroutine 2: Run primary key change, starting 10 minutes after
 	// test start (5 minutes after the index backfill starts).
 	g.Go(func(ctx context.Context, l *logger.Logger) error {
 		time.Sleep(baselineWait + 5*time.Minute)
@@ -421,8 +430,10 @@ func runIndexBackfill(
 		}
 	}, task.Name("metrics-collector"))
 
-	// Wait for workload and schema changes, then stop metrics collection.
+	// Wait for schema changes to complete, then stop the workload and
+	// metrics collection.
 	g.Wait()
+	cancelWorkload()
 	close(stopMetrics)
 	<-metricsDone
 

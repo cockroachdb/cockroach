@@ -240,13 +240,12 @@ func runSingleNodeIndexBackfill(
 
 	// Run TPC-E workload, KV0 workload, and index backfill concurrently.
 	workloadDuration := 120 * time.Minute
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	var backfillDuration time.Duration
 	var totalBWSamples []float64
 	var metricsStart, metricsEnd time.Time
 
-	// Goroutine 1: Run TPC-E workload.
-	m.Go(func(ctx context.Context) error {
+	// Run TPC-E workload with a cancelable context.
+	cancelTPCE := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		t.Status(fmt.Sprintf("starting TPC-E workload with %d active customers (<%s)",
 			activeCustomers, workloadDuration))
 		runOptions := tpceCmdOptions{
@@ -260,17 +259,19 @@ func runSingleNodeIndexBackfill(
 		}
 		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
-			t.L().Printf("TPC-E workload error: %v", err)
+			if ctx.Err() != nil {
+				l.Printf("TPC-E workload stopped (index backfill completed)")
+				return nil
+			}
+			l.Printf("TPC-E workload error: %v", err)
 			return err
 		}
-		t.L().Printf("TPC-E workload output:\n%s\n", result.Stdout)
+		l.Printf("TPC-E workload output:\n%s\n", result.Stdout)
 		return nil
-	})
+	}, task.Name("tpce-workload"))
 
-	// Goroutine 2: Run KV0 (all writes) workload to add additional write load.
-	// This generates ~5 MiB/s of writes (5000 ops/s × 1024 bytes). This adds
-	// some background write load to the cluster, which TPC-E lacks.
-	m.Go(func(ctx context.Context) error {
+	// Run KV0 workload with a cancelable context.
+	cancelKV := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		t.Status("starting KV0 workload (all writes, ~5 MiB/s)")
 		const (
 			kvBlockSize   = 1024
@@ -291,94 +292,95 @@ func runSingleNodeIndexBackfill(
 		)
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 		if err != nil {
-			t.L().Printf("KV0 workload error: %v", err)
+			if ctx.Err() != nil {
+				l.Printf("KV0 workload stopped (index backfill completed)")
+				return nil
+			}
+			l.Printf("KV0 workload error: %v", err)
 			return err
 		}
-		t.L().Printf("KV0 workload completed")
+		l.Printf("KV0 workload completed")
 		return nil
-	})
+	}, task.Name("kv0-workload"))
 
-	// Goroutine 3: Run index backfill after a short baseline period, with
-	// metrics collection.
-	m.Go(func(ctx context.Context) error {
-		// Wait for workload to stabilize before starting index backfill.
-		t.Status(fmt.Sprintf("recording baseline performance (<%s)", 5*time.Minute))
-		time.Sleep(5 * time.Minute)
+	// Run the index backfill with metrics collection. We wait for this
+	// to complete and then cancel the workloads above.
+	stopMetrics := make(chan struct{})
+	metricsDone := make(chan struct{})
 
-		t.Status("starting index creation on tpce.cash_transaction")
-		indexName := fmt.Sprintf("index_%s", timeutil.Now().Format("20060102_T150405"))
+	t.Go(func(context.Context, *logger.Logger) error {
+		defer close(metricsDone)
+		metricsStart = timeutil.Now()
+		defer func() { metricsEnd = timeutil.Now() }()
+		writeBWQuery := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20)
+		readBWQuery := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20)
 
-		// Start metrics collection goroutine that runs during index backfill.
-		stopMetrics := make(chan struct{})
-		metricsDone := make(chan struct{})
-		t.Go(func(context.Context, *logger.Logger) error {
-			defer close(metricsDone)
-			metricsStart = timeutil.Now()
-			defer func() { metricsEnd = timeutil.Now() }()
-			writeBWQuery := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20)
-			readBWQuery := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20)
-
-			getMetricVal := func(query string) (float64, error) {
-				point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
-				if err != nil {
-					return 0, err
-				}
-				for _, v := range point["node"] {
-					return v.Value, nil
-				}
-				return 0, fmt.Errorf("no data for query %s", query)
+		getMetricVal := func(query string) (float64, error) {
+			point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
+			if err != nil {
+				return 0, err
 			}
-
-			t.L().Printf("=== INDEX BACKFILL METRICS COLLECTION STARTED (1m interval) ===")
-			ticker := time.NewTicker(1 * time.Minute)
-			defer ticker.Stop()
-
-			iteration := 0
-			for {
-				select {
-				case <-ticker.C:
-					iteration++
-					writeBW, writeErr := getMetricVal(writeBWQuery)
-					readBW, readErr := getMetricVal(readBWQuery)
-					if writeErr != nil || readErr != nil {
-						t.L().Printf("[metrics %d] error collecting: write=%v, read=%v",
-							iteration, writeErr, readErr)
-						continue
-					}
-					totalBW := writeBW + readBW
-					totalBWSamples = append(totalBWSamples, totalBW)
-					t.L().Printf("[metrics %d] disk bandwidth: read=%.2f MiB/s, write=%.2f MiB/s, total=%.2f MiB/s",
-						iteration, readBW, writeBW, totalBW)
-				case <-stopMetrics:
-					t.L().Printf("=== INDEX BACKFILL METRICS COLLECTION STOPPED ===")
-					return nil
-				case <-ctx.Done():
-					return nil
-				}
+			for _, v := range point["node"] {
+				return v.Value, nil
 			}
-		}, task.Name("metrics-collector"))
-
-		// Run the actual index creation.
-		backfillStart := timeutil.Now()
-		_, err := db.ExecContext(ctx,
-			fmt.Sprintf("CREATE INDEX %s ON tpce.cash_transaction (ct_dts)", indexName),
-		)
-		backfillDuration = timeutil.Since(backfillStart)
-
-		// Stop metrics collection.
-		close(stopMetrics)
-		<-metricsDone
-
-		if err != nil {
-			t.L().Printf("index creation error: %v", err)
-			return err
+			return 0, fmt.Errorf("no data for query %s", query)
 		}
-		t.L().Printf("index backfill completed in %s", backfillDuration)
-		t.Status("finished index creation")
-		return nil
-	})
 
-	m.Wait()
+		t.L().Printf("=== INDEX BACKFILL METRICS COLLECTION STARTED (1m interval) ===")
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		iteration := 0
+		for {
+			select {
+			case <-ticker.C:
+				iteration++
+				writeBW, writeErr := getMetricVal(writeBWQuery)
+				readBW, readErr := getMetricVal(readBWQuery)
+				if writeErr != nil || readErr != nil {
+					t.L().Printf("[metrics %d] error collecting: write=%v, read=%v",
+						iteration, writeErr, readErr)
+					continue
+				}
+				totalBW := writeBW + readBW
+				totalBWSamples = append(totalBWSamples, totalBW)
+				t.L().Printf("[metrics %d] disk bandwidth: read=%.2f MiB/s, write=%.2f MiB/s, total=%.2f MiB/s",
+					iteration, readBW, writeBW, totalBW)
+			case <-stopMetrics:
+				t.L().Printf("=== INDEX BACKFILL METRICS COLLECTION STOPPED ===")
+				return nil
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}, task.Name("metrics-collector"))
+
+	// Wait for workloads to stabilize, then run the index backfill.
+	t.Status(fmt.Sprintf("recording baseline performance (<%s)", 5*time.Minute))
+	time.Sleep(5 * time.Minute)
+
+	t.Status("starting index creation on tpce.cash_transaction")
+	indexName := fmt.Sprintf("index_%s", timeutil.Now().Format("20060102_T150405"))
+
+	backfillStart := timeutil.Now()
+	_, err = db.ExecContext(ctx,
+		fmt.Sprintf("CREATE INDEX %s ON tpce.cash_transaction (ct_dts)", indexName),
+	)
+	backfillDuration = timeutil.Since(backfillStart)
+
+	// Stop metrics collection.
+	close(stopMetrics)
+	<-metricsDone
+
+	if err != nil {
+		t.Fatal(fmt.Errorf("index creation error: %w", err))
+	}
+	t.L().Printf("index backfill completed in %s", backfillDuration)
+	t.Status("finished index creation")
+
+	// Cancel workloads now that the backfill is done.
+	cancelTPCE()
+	cancelKV()
 
 	t.L().Printf("index backfill duration: %s", backfillDuration)
 
