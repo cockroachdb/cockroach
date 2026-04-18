@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -108,19 +109,17 @@ func (s *windowSizeSettings) initialConnWindowSize(ctx context.Context) int32 {
 }
 
 // sourceAddr is the environment-provided local address for outgoing
-// connections.
-var sourceAddr = func() net.Addr {
+// connections. A zero value means the OS picks the local address.
+var sourceAddr = func() netip.AddrPort {
 	const envKey = "COCKROACH_SOURCE_IP_ADDRESS"
 	if sourceAddr, ok := envutil.EnvString(envKey, 0); ok {
-		sourceIP := net.ParseIP(sourceAddr)
-		if sourceIP == nil {
+		addr, err := netip.ParseAddr(sourceAddr)
+		if err != nil {
 			panic(fmt.Sprintf("unable to parse %s '%s' as IP address", envKey, sourceAddr))
 		}
-		return &net.TCPAddr{
-			IP: sourceIP,
-		}
+		return netip.AddrPortFrom(addr, 0)
 	}
-	return nil
+	return netip.AddrPort{}
 }()
 
 type serverOpts struct {
