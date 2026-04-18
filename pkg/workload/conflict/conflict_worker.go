@@ -19,24 +19,19 @@ import (
 type conflictWorker struct {
 	table   workloadrand.Table
 	rng     *rand.Rand
-	writers []*writer
+	writers []*workloadrand.TableWriter
 	nullPct int
 }
 
-func newConflictWorker(
-	ctx context.Context, connections []*gosql.DB, tableName string,
-) (*conflictWorker, error) {
+func newConflictWorker(connections []*gosql.DB, tableName string) (*conflictWorker, error) {
 	table, err := workloadrand.LoadTable(connections[0], tableName)
 	if err != nil {
 		return nil, err
 	}
 
-	writers := make([]*writer, len(connections))
+	writers := make([]*workloadrand.TableWriter, len(connections))
 	for i := range writers {
-		writers[i], err = newWriter(ctx, connections[i], table)
-		if err != nil {
-			return nil, err
-		}
+		writers[i] = workloadrand.NewTableWriter(connections[i], table)
 	}
 
 	return &conflictWorker{
@@ -71,7 +66,7 @@ func (w *conflictWorker) RunOp(ctx context.Context) (err error) {
 }
 
 func (w *conflictWorker) runOpOnCluster(
-	ctx context.Context, writer *writer, row []any, rng *rand.Rand,
+	ctx context.Context, writer *workloadrand.TableWriter, row []any, rng *rand.Rand,
 ) error {
 	var err error
 	// run between 0, 1, or 2 mutations on each cluster. This way we get coverage of:
@@ -86,11 +81,11 @@ func (w *conflictWorker) runOpOnCluster(
 					return err
 				}
 			}
-			if err := writer.upsertRow(ctx, row); err != nil {
+			if err := writer.UpsertRow(ctx, row); err != nil {
 				return err
 			}
 		} else {
-			if err := writer.deleteRow(ctx, row); err != nil {
+			if err := writer.DeleteRow(ctx, row); err != nil {
 				return err
 			}
 		}
