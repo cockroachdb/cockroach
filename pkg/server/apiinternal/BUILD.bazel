@@ -2,12 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "apiinternal",
-    srcs = [
-        "api_internal.go",
-        "api_internal_admin.go",
-        "api_internal_status.go",
-        "api_internal_ts.go",
-    ],
+    srcs = ["api_internal.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/apiinternal",
     visibility = ["//visibility:public"],
     deps = [
@@ -23,6 +18,7 @@ go_library(
         "@com_github_gogo_protobuf//proto",
         "@com_github_gorilla_mux//:mux",
         "@com_github_gorilla_schema//:schema",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
