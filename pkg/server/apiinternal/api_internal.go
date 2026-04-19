@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"google.golang.org/grpc/codes"
@@ -93,17 +92,17 @@ func (r *apiInternalServer) registerRoutes(routes []drpc.HTTPRoute) {
 
 // createHandlerFromRoute creates an HTTP handler from a drpc.HTTPRoute.Handler,
 // which is typed as any but holds a func(context.Context, *TReq) (*TResp, error).
+// Type safety is guaranteed by the generated DRPC*GatewayRoutes functions.
 func createHandlerFromRoute(rpcMethod any) http.HandlerFunc {
 	fn := reflect.ValueOf(rpcMethod)
-	reqType := fn.Type().In(1).Elem()
-	msgName := proto.MessageName(reflect.New(reqType).Interface().(protoutil.Message))
-	msgType := proto.MessageType(msgName)
-	if msgType == nil {
+	fnType := fn.Type()
+	if fnType.Kind() != reflect.Func || fnType.NumIn() != 2 || fnType.NumOut() != 2 {
 		panic(errors.AssertionFailedf(
-			"failed to determine request protobuf type: %s", msgName))
+			"expected func(context.Context, *TReq) (*TResp, error), got %T", rpcMethod))
 	}
+	reqType := fnType.In(1).Elem()
 	return func(w http.ResponseWriter, req *http.Request) {
-		newReq := reflect.New(msgType.Elem())
+		newReq := reflect.New(reqType)
 		rpcReq := newReq.Interface().(protoutil.Message)
 		ctx := req.Context()
 		ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, req)
@@ -113,10 +112,13 @@ func createHandlerFromRoute(rpcMethod any) http.HandlerFunc {
 			apiutil.WriteHTTPError(ctx, w, req, err)
 			return
 		}
-		if err := decodePathVars(rpcReq, mux.Vars(req)); err != nil {
-			apiutil.WriteHTTPError(ctx, w, req, err)
-			return
+		if vars := mux.Vars(req); len(vars) > 0 {
+			if err := decodePathVars(rpcReq, vars); err != nil {
+				apiutil.WriteHTTPError(ctx, w, req, err)
+				return
+			}
 		}
+		// For POST requests, decode the request body (JSON or protobuf).
 		if req.Method == http.MethodPost {
 			if err := apiutil.DecodeRequest(req, rpcReq); err != nil {
 				apiutil.WriteHTTPError(ctx, w, req,
