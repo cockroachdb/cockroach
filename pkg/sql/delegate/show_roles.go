@@ -38,13 +38,10 @@ ORDER BY 1;
 	return d.parse(selectClause + selectLastLoginTime + endingClauses)
 }
 
-// delegateShowRolesExtended implements SHOW ROLES with optional
-// provisioning filter clauses (SOURCE, LAST LOGIN BEFORE)
-// and LIMIT. When no options are specified, it falls back to
-// delegateShowRoles.
-//
-// TODO(sourav): Wire this into the delegate dispatch for ShowUsers;
-// currently only exercised by unit tests.
+// delegateShowRolesExtended implements SHOW USERS with optional
+// provisioning filter clauses (SOURCE, LAST LOGIN BEFORE) and LIMIT.
+// It is dispatched from the ShowUsers case in the delegate switch.
+// When no options are specified, it falls back to delegateShowRoles.
 func (d *delegator) delegateShowRolesExtended(n *tree.ShowUsers) (tree.Statement, error) {
 	if (n.Options == nil || n.Options.IsDefault()) && n.Limit == nil {
 		return d.delegateShowRoles()
