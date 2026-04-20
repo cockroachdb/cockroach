@@ -38,8 +38,8 @@ import (
 
 const (
 	ProviderName = "gce"
-	DefaultImage = "ubuntu-2204-jammy-v20240319"
-	ARM64Image   = "ubuntu-2204-jammy-arm64-v20240319"
+	DefaultImage = "ubuntu-2204-jammy-v20260414"
+	ARM64Image   = "ubuntu-2204-jammy-arm64-v20260414"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
