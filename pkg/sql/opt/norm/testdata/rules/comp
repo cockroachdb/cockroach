@@ -61,7 +61,7 @@ select
  │    └── fd: (1)-->(2-9)
  └── filters
       ├── (i:2 + k:1) > 6 [outer=(1,2), immutable]
-      ├── (i:2 * 2) >= 8.3333333333333333333 [outer=(2), immutable]
+      ├── (i:2 * 2) >= 8.3333333333333333333333333333333333333 [outer=(2), immutable]
       ├── i:2 < 5 [outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── s:4 <= 'foo' [outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
