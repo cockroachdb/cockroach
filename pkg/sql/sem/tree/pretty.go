@@ -76,6 +76,11 @@ type PrettyCfg struct {
 	ValueRedaction bool
 	// FmtFlags specifies FmtFlags to use when formatting expressions.
 	FmtFlags FmtFlags
+
+	// inPLpgSQL, when set, indicates that the pretty-printer is rendering a
+	// node within a PL/pgSQL body. Set only via WithInPLpgSQL at the
+	// boundary between SQL and PL/pgSQL; do not assign directly.
+	inPLpgSQL bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -88,6 +93,18 @@ func DefaultPrettyCfg() PrettyCfg {
 		UseTabs:   true,
 		Align:     PrettyNoAlign, // TODO(knz): I really want this to be AlignAndDeindent
 	}
+}
+
+// WithInPLpgSQL returns a shallow copy of p marked as rendering a node within
+// a PL/pgSQL body. Use at the boundary between SQL and PL/pgSQL (e.g. DoBlock.Doc,
+// CreateRoutine.Doc for PL/pgSQL bodies) when recursing into a PL/pgSQL body,
+// so that nested expression formatters (e.g. CaseExpr.Doc) emit defensive
+// parens when FmtPLpgSQLParen is set. Returns a copy so the state does not
+// leak to sibling subtrees rendered from the parent cfg.
+func (p *PrettyCfg) WithInPLpgSQL() *PrettyCfg {
+	cp := *p
+	cp.inPLpgSQL = true
+	return &cp
 }
 
 // PrettyAlignMode directs which alignment mode to use.
@@ -191,7 +208,11 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
-	txt := AsStringWithFlags(f, p.FmtFlagsWithDefaults())
+	var opts []FmtCtxOption
+	if p.inPLpgSQL {
+		opts = append(opts, FmtInPLpgSQL(true /* inPLpgSQL */))
+	}
+	txt := AsStringWithFlags(f, p.FmtFlagsWithDefaults(), opts...)
 	return pretty.Text(strings.TrimSpace(txt))
 }
 
@@ -1455,7 +1476,11 @@ func (node *CaseExpr) Doc(p *PrettyCfg) pretty.Doc {
 		)))
 	}
 	d = append(d, pretty.Keyword("END"))
-	return pretty.Stack(d...)
+	result := pretty.Stack(d...)
+	if p.HasFlags(FmtPLpgSQLParen) && p.inPLpgSQL {
+		result = p.bracket("(", result, ")")
+	}
+	return result
 }
 
 func (node *When) Doc(p *PrettyCfg) pretty.Doc {

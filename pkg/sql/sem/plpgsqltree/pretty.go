@@ -350,9 +350,12 @@ func (s *Exception) Doc(p *tree.PrettyCfg) pretty.Doc {
 }
 
 func (s *DoBlock) Doc(p *tree.PrettyCfg) pretty.Doc {
+	p = p.WithInPLpgSQL()
 	// Render the block to a string to find a dollar-quote delimiter that
 	// doesn't collide with the body content.
-	bodyStr := tree.AsStringWithFlags(s.Block, p.FmtFlagsWithDefaults())
+	bodyStr := tree.AsStringWithFlags(
+		s.Block, p.FmtFlagsWithDefaults(), tree.FmtInPLpgSQL(true /* inPLpgSQL */),
+	)
 	tag := "$" + tree.DollarQuoteDelimiter(bodyStr) + "$"
 	return pretty.Fold(pretty.Concat,
 		pretty.ConcatSpace(pretty.Keyword("DO"), pretty.Text(tag)),
