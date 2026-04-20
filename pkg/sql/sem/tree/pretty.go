@@ -76,6 +76,11 @@ type PrettyCfg struct {
 	ValueRedaction bool
 	// FmtFlags specifies FmtFlags to use when formatting expressions.
 	FmtFlags FmtFlags
+
+	// inPLpgSQL, when set, indicates that the pretty-printer is rendering a
+	// node within a PL/pgSQL body. Set only via WithInPLpgSQL at the
+	// boundary between SQL and PL/pgSQL; do not assign directly.
+	inPLpgSQL bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -88,6 +93,18 @@ func DefaultPrettyCfg() PrettyCfg {
 		UseTabs:   true,
 		Align:     PrettyNoAlign, // TODO(knz): I really want this to be AlignAndDeindent
 	}
+}
+
+// WithInPLpgSQL returns a shallow copy of p marked as rendering a node within
+// a PL/pgSQL body. Use at the boundary between SQL and PL/pgSQL (e.g. DoBlock.Doc,
+// CreateRoutine.Doc for PL/pgSQL bodies) when recursing into a PL/pgSQL body,
+// so that nested expression formatters (e.g. CaseExpr.Doc) emit defensive
+// parens when FmtPLpgSQLParen is set. Returns a copy so the state does not
+// leak to sibling subtrees rendered from the parent cfg.
+func (p *PrettyCfg) WithInPLpgSQL() *PrettyCfg {
+	cp := *p
+	cp.inPLpgSQL = true
+	return &cp
 }
 
 // PrettyAlignMode directs which alignment mode to use.
@@ -191,20 +208,32 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
-	txt := AsStringWithFlags(f, p.FmtFlagsWithDefaults())
-	return pretty.Text(strings.TrimSpace(txt))
+	return pretty.Text(strings.TrimSpace(p.AsString(f)))
+}
+
+// AsString formats f using the Format path, propagating all PrettyCfg state
+// (flags, inPLpgSQL) to the FmtCtx.
+func (p *PrettyCfg) AsString(f NodeFormatter) string {
+	return AsStringWithFlags(f, p.fmtFlagsWithDefaults(), p.fmtCtxOptions()...)
+}
+
+// NewFmtCtx creates a FmtCtx that inherits flags and state from this
+// PrettyCfg.
+func (p *PrettyCfg) NewFmtCtx() *FmtCtx {
+	return NewFmtCtx(p.fmtFlagsWithDefaults(), p.fmtCtxOptions()...)
 }
 
 // HasFlags returns true if the given flags are set in the pretty-printer's
 // effective FmtFlags (which includes defaults like FmtParsable when no
 // explicit flags are configured).
 func (p *PrettyCfg) HasFlags(f FmtFlags) bool {
-	return p.FmtFlagsWithDefaults().HasFlags(f)
+	return p.fmtFlagsWithDefaults().HasFlags(f)
 }
 
-// FmtFlagsWithDefaults returns the effective FmtFlags for this configuration,
-// applying defaults (FmtParsable, FmtShowPasswords) when no explicit flags are set.
-func (p *PrettyCfg) FmtFlagsWithDefaults() FmtFlags {
+// fmtFlagsWithDefaults returns the effective FmtFlags for this configuration,
+// applying defaults (FmtParsable, FmtShowPasswords) when no explicit flags
+// are set.
+func (p *PrettyCfg) fmtFlagsWithDefaults() FmtFlags {
 	if p.FmtFlags != FmtFlags(0) {
 		return p.FmtFlags
 	}
@@ -214,6 +243,16 @@ func (p *PrettyCfg) FmtFlagsWithDefaults() FmtFlags {
 		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
 	}
 	return prettyFlags
+}
+
+// fmtCtxOptions returns a slice of FmtCtxOption's that should be used
+// when falling back to Format.
+func (p *PrettyCfg) fmtCtxOptions() []FmtCtxOption {
+	var opts []FmtCtxOption
+	if p.inPLpgSQL {
+		opts = append(opts, FmtInPLpgSQL(true /* inPLpgSQL */))
+	}
+	return opts
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
@@ -1455,7 +1494,11 @@ func (node *CaseExpr) Doc(p *PrettyCfg) pretty.Doc {
 		)))
 	}
 	d = append(d, pretty.Keyword("END"))
-	return pretty.Stack(d...)
+	result := pretty.Stack(d...)
+	if p.HasFlags(FmtPLpgSQLParen) && p.inPLpgSQL {
+		result = p.bracket("(", result, ")")
+	}
+	return result
 }
 
 func (node *When) Doc(p *PrettyCfg) pretty.Doc {
@@ -2157,7 +2200,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 // FormatType formats a ResolvableTypeReference as a pretty.Doc, respecting
 // the configured FmtFlags.
 func (p *PrettyCfg) FormatType(typ ResolvableTypeReference) pretty.Doc {
-	ctx := NewFmtCtx(p.FmtFlagsWithDefaults())
+	ctx := p.NewFmtCtx()
 	ctx.FormatTypeReference(typ)
 	return pretty.Text(strings.TrimSpace(ctx.String()))
 }

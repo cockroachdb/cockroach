@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -302,5 +303,106 @@ func TestPrettyExprs(t *testing.T) {
 		if pretty != got {
 			t.Fatalf("got: %s\nexpected: %s", got, pretty)
 		}
+	}
+}
+
+// TestPrettyPLpgSQLCaseExpr is a regression test for #168216. It verifies
+// that CASE expressions inside PL/pgSQL IF/ELSIF conditions are wrapped in
+// defensive parentheses when pretty-printed with FmtPLpgSQLParen. Without
+// wrapping, the PL/pgSQL parser confuses the CASE's inner THEN with the
+// IF/ELSIF's THEN, producing a syntax error.
+//
+// ASTs are built directly (not parsed from text) because parsing requires
+// parens around CASE in these positions, which would mask the bug we're
+// testing for.
+func TestPrettyPLpgSQLCaseExpr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeCaseExpr := func() *tree.CaseExpr {
+		return &tree.CaseExpr{
+			Whens: []*tree.When{{Cond: tree.MakeDBool(true), Val: tree.NewDInt(1)}},
+			Else:  tree.NewDInt(0),
+		}
+	}
+
+	cfg := tree.DefaultPrettyCfg()
+	cfg.Simplify = false
+	cfg.FmtFlags = tree.FmtPLpgSQLParen
+
+	for name, tc := range map[string]struct {
+		body      []plpgsqltree.Statement
+		unwrapped string
+		wrapped   string
+	}{
+		"if condition": {
+			body: []plpgsqltree.Statement{
+				&plpgsqltree.If{
+					Condition: makeCaseExpr(),
+					ThenBody:  []plpgsqltree.Statement{&plpgsqltree.Null{}},
+				},
+			},
+			unwrapped: `DO $$
+	BEGIN
+		IF CASE WHEN true THEN 1 ELSE 0 END THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+			wrapped: `DO $$
+	BEGIN
+		IF (CASE WHEN true THEN 1 ELSE 0 END) THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+		},
+		"elsif condition": {
+			body: []plpgsqltree.Statement{
+				&plpgsqltree.If{
+					Condition: tree.MakeDBool(false),
+					ThenBody:  []plpgsqltree.Statement{&plpgsqltree.Null{}},
+					ElseIfList: []plpgsqltree.ElseIf{{
+						Condition: makeCaseExpr(),
+						Stmts:     []plpgsqltree.Statement{&plpgsqltree.Null{}},
+					}},
+				},
+			},
+			unwrapped: `DO $$
+	BEGIN
+		IF false THEN
+			NULL;
+		ELSIF CASE WHEN true THEN 1 ELSE 0 END THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+			wrapped: `DO $$
+	BEGIN
+		IF false THEN
+			NULL;
+		ELSIF (CASE WHEN true THEN 1 ELSE 0 END) THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			// Verify that the unwrapped form (bare CASE without defensive
+			// parens) is indeed unparseable due to THEN keyword ambiguity.
+			_, err := parser.ParseOne(tc.unwrapped)
+			require.Errorf(t, err, "unwrapped input must not parse:\n%s", tc.unwrapped)
+
+			// Pretty-print the AST and verify it matches the wrapped form
+			// (CASE wrapped in parens) and that the result reparses.
+			block := &plpgsqltree.Block{Body: tc.body}
+			doBlock := &tree.DoBlock{Code: &plpgsqltree.DoBlock{Block: block}}
+			out, err := cfg.Pretty(doBlock)
+			require.NoError(t, err)
+			require.Equal(t, tc.wrapped, out)
+			_, err = parser.ParseOne(out)
+			require.NoError(t, err, "pretty-printed output must reparse:\n%s", out)
+		})
 	}
 }
