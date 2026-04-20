@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "promql",
+    srcs = [
+        "api.go",
+        "catalog.go",
+        "engine.go",
+        "queryable.go",
+        "series.go",
+        "source_lister.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ts/promql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ts/tspb",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "@com_github_gorilla_mux//:mux",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_prometheus//pkg/labels",
+        "@com_github_prometheus_prometheus//promql",
+        "@com_github_prometheus_prometheus//storage",
+        "@com_github_prometheus_prometheus//tsdb/chunkenc",
+    ],
+)
+
+go_test(
+    name = "promql_test",
+    srcs = [
+        "api_test.go",
+        "catalog_test.go",
+        "queryable_test.go",
+        "series_test.go",
+        "source_lister_test.go",
+    ],
+    embed = [":promql"],
+    deps = [
+        "//pkg/ts/tspb",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_prometheus//pkg/labels",
+        "@com_github_prometheus_prometheus//storage",
+        "@com_github_stretchr_testify//require",
+    ],
+)

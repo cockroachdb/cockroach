@@ -1617,6 +1617,11 @@
             "pkg/raft/.*": "imported third-party package"
 	}
     },
+    "stdmethods": {
+        "exclude_files": {
+            "pkg/ts/promql/series\\.go$": "implements chunkenc.Iterator.Seek(int64) bool, not io.Seeker"
+        }
+    },
     "structtag": {
         "exclude_files": {
             "external/": "exclude all third-party code for all analyzers",

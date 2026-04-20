@@ -116,6 +116,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	tspromql "github.com/cockroachdb/cockroach/pkg/ts/promql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
@@ -2288,6 +2289,59 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		drpcEnabled,
 	); err != nil {
 		return err
+	}
+
+	// Register the PromQL-compatible HTTP API for querying internal TSDB
+	// metrics. This enables standard tools (Grafana, promtool) to query
+	// CockroachDB's time series data using PromQL.
+	{
+		nodeMetadata, appMetadata, srvMetadata :=
+			s.recorder.GetMetricsMetadata(true /* combined */)
+		allMetadata := make(map[string]metric.Metadata)
+		for k, v := range nodeMetadata {
+			allMetadata[k] = v
+		}
+		for k, v := range appMetadata {
+			allMetadata[k] = v
+		}
+		for k, v := range srvMetadata {
+			allMetadata[k] = v
+		}
+		tsdbNames := s.recorder.GetRecordedMetricNames(allMetadata)
+
+		catalog := tspromql.NewMetricCatalog(tsdbNames, allMetadata)
+		sources := &tspromql.FuncSourceLister{
+			NodeSourcesFn: func() []string {
+				vitalityMap := s.nodeLiveness.ScanNodeVitalityFromCache()
+				ids := make([]string, 0, len(vitalityMap))
+				for nodeID := range vitalityMap {
+					ids = append(ids, strconv.Itoa(int(nodeID)))
+				}
+				return ids
+			},
+			StoreSourcesFn: func() []string {
+				var ids []string
+				_ = s.node.stores.VisitStores(func(store *kvserver.Store) error {
+					ids = append(
+						ids, strconv.Itoa(int(store.StoreID())),
+					)
+					return nil
+				})
+				return ids
+			},
+		}
+		queryable := tspromql.NewTSDBQueryable(s.tsServer, catalog, sources)
+
+		promqlEngine := tspromql.NewDefaultEngine()
+		promqlAPI := tspromql.NewAPI(promqlEngine, queryable, catalog)
+
+		promqlHandler := promqlAPI.Handler()
+		if !s.cfg.InsecureWebAccess() {
+			promqlHandler = authserver.NewMux(
+				s.authentication, promqlHandler, false, /* allowAnonymous */
+			)
+		}
+		s.http.mux.Handle("/api/v1/", promqlHandler)
 	}
 
 	// Start garbage collecting system events.
