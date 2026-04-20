@@ -30,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/smithy-go"
 	"github.com/aws/smithy-go/logging"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -714,6 +715,11 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	})
 	u := manager.NewUploader(c, func(uploader *manager.Uploader) {
 		uploader.PartSize = cloud.WriteChunkSize.Get(&s.settings.SV)
+		if s.opts.skipChecksum {
+			uploader.ClientOptions = append(uploader.ClientOptions, func(o *s3.Options) {
+				o.APIOptions = append(o.APIOptions, addClearChecksumMiddleware)
+			})
+		}
 	})
 	return s3Client{client: c, uploader: u}, region, nil
 }
@@ -805,6 +811,29 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 		uploader.input.ChecksumAlgorithm = ""
 	}
 	return uploader, nil
+}
+
+func addClearChecksumMiddleware(stack *smithymiddleware.Stack) error {
+	return stack.Initialize.Add(smithymiddleware.InitializeMiddlewareFunc(
+		"ClearChecksumAlgorithm",
+		func(
+			ctx context.Context,
+			in smithymiddleware.InitializeInput,
+			next smithymiddleware.InitializeHandler,
+		) (smithymiddleware.InitializeOutput, smithymiddleware.Metadata, error) {
+			switch v := in.Parameters.(type) {
+			case *s3.CreateMultipartUploadInput:
+				v.ChecksumAlgorithm = ""
+			case *s3.UploadPartInput:
+				v.ChecksumAlgorithm = ""
+			case *s3.CompleteMultipartUploadInput:
+				v.ChecksumType = ""
+			case *s3.PutObjectInput:
+				v.ChecksumAlgorithm = ""
+			}
+			return next.HandleInitialize(ctx, in)
+		},
+	), smithymiddleware.Before)
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
