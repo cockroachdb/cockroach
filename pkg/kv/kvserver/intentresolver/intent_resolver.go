@@ -84,11 +84,11 @@ var asyncIntentResolutionTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_ASYNC_INTENT_RESOLUTION_TIMEOUT", 30*time.Second,
 )
 
-// gcBatchSize is the maximum number of transaction records that will be GCed
-// in a single batch. Batches that span many ranges (which is possible for the
-// transaction records that spans many ranges) will be split into many batches
-// by the DistSender.
-var gcBatchSize = envutil.EnvOrDefaultInt(
+// txnRecordCleanupBatchSize is the maximum number of transaction records that
+// will be deleted in a single batch. Batches that span many ranges (which is
+// possible for the transaction records that spans many ranges) will be split
+// into many batches by the DistSender.
+var txnRecordCleanupBatchSize = envutil.EnvOrDefaultInt(
 	"COCKROACH_TXN_RECORD_GC_BATCH_SIZE", 1024,
 )
 
@@ -139,15 +139,17 @@ var MaxTxnsPerIntentCleanupBatch = envutil.EnvOrDefaultInt64(
 	"COCKROACH_MAX_TXNS_PER_INTENT_CLEANUP_BATCH", 100,
 )
 
-// defaultGCBatchIdle is the default duration which the gc request batcher
-// will wait between requests for a range before sending it.
-var defaultGCBatchIdle = envutil.EnvOrDefaultDuration(
+// defaultTxnRecordCleanupBatchIdle is the default duration which the txn
+// record cleanup batcher will wait between requests for a range before
+// sending it.
+var defaultTxnRecordCleanupBatchIdle = envutil.EnvOrDefaultDuration(
 	"COCKROACH_GC_BATCH_IDLE", -1, // disabled
 )
 
-// defaultGCBatchWait is the default duration which the gc request batcher
-// will wait between requests for a range before sending it.
-var defaultGCBatchWait = envutil.EnvOrDefaultDuration("COCKROACH_GC_BATCH_WAIT_TIME", time.Second)
+// defaultTxnRecordCleanupBatchWait is the default duration which the txn
+// record cleanup batcher will wait between requests for a range before
+// sending it.
+var defaultTxnRecordCleanupBatchWait = envutil.EnvOrDefaultDuration("COCKROACH_GC_BATCH_WAIT_TIME", time.Second)
 
 // intentResolutionBatchWait is used to configure the RequestBatcher which
 // batches intent resolution requests across transactions. Intent resolution
@@ -166,9 +168,9 @@ var defaultIntentResolutionBatchIdle = envutil.EnvOrDefaultDuration(
 	"COCKROACH_INTENT_RESOLVER_BATCH_IDLE", 5*time.Millisecond,
 )
 
-// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
+// deleteTxnRecordTimeout is the timeout for asynchronous txn record removal
 // during cleanupFinishedTxnIntents.
-var gcTxnRecordTimeout = envutil.EnvOrDefaultDuration("COCKROACH_GC_TXN_RECORD_TIMEOUT", 20*time.Second)
+var deleteTxnRecordTimeout = envutil.EnvOrDefaultDuration("COCKROACH_GC_TXN_RECORD_TIMEOUT", 20*time.Second)
 
 // Config contains the dependencies to construct an IntentResolver.
 type Config struct {
@@ -181,8 +183,8 @@ type Config struct {
 	RangeDescriptorCache RangeCache
 
 	TaskLimit                    int
-	MaxGCBatchWait               time.Duration
-	MaxGCBatchIdle               time.Duration
+	MaxTxnRecordCleanupBatchWait time.Duration
+	MaxTxnRecordCleanupBatchIdle time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
 }
@@ -209,9 +211,9 @@ type IntentResolver struct {
 
 	rdc RangeCache
 
-	gcBatcher      *requestbatcher.RequestBatcher
-	irBatcher      *requestbatcher.RequestBatcher
-	irRangeBatcher *requestbatcher.RequestBatcher
+	txnRecordCleanupBatcher *requestbatcher.RequestBatcher
+	irBatcher               *requestbatcher.RequestBatcher
+	irRangeBatcher          *requestbatcher.RequestBatcher
 
 	mu struct {
 		syncutil.Mutex
@@ -234,11 +236,11 @@ func setConfigDefaults(c *Config) {
 	if c.TaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
 		c.TaskLimit = 0
 	}
-	if c.MaxGCBatchIdle == 0 {
-		c.MaxGCBatchIdle = defaultGCBatchIdle
+	if c.MaxTxnRecordCleanupBatchIdle == 0 {
+		c.MaxTxnRecordCleanupBatchIdle = defaultTxnRecordCleanupBatchIdle
 	}
-	if c.MaxGCBatchWait == 0 {
-		c.MaxGCBatchWait = defaultGCBatchWait
+	if c.MaxTxnRecordCleanupBatchWait == 0 {
+		c.MaxTxnRecordCleanupBatchWait = defaultTxnRecordCleanupBatchWait
 	}
 	if c.MaxIntentResolutionBatchIdle == 0 {
 		c.MaxIntentResolutionBatchIdle = defaultIntentResolutionBatchIdle
@@ -283,25 +285,25 @@ func New(c Config) *IntentResolver {
 	if c.TestingKnobs.MaxIntentResolutionSendBatchTimeout != 0 {
 		intentResolutionSendBatchTimeout = c.TestingKnobs.MaxIntentResolutionSendBatchTimeout
 	}
-	inFlightGCBackpressureLimit := requestbatcher.DefaultInFlightBackpressureLimit
+	inFlightTxnRecordCleanupBackpressureLimit := requestbatcher.DefaultInFlightBackpressureLimit
 	if c.TestingKnobs.InFlightBackpressureLimit != 0 {
-		inFlightGCBackpressureLimit = c.TestingKnobs.InFlightBackpressureLimit
+		inFlightTxnRecordCleanupBackpressureLimit = c.TestingKnobs.InFlightBackpressureLimit
 	}
-	gcBatchSize := gcBatchSize
-	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
-		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
+	txnRecordCleanupBatchSize := txnRecordCleanupBatchSize
+	if c.TestingKnobs.MaxTxnRecordCleanupBatchSize > 0 {
+		txnRecordCleanupBatchSize = c.TestingKnobs.MaxTxnRecordCleanupBatchSize
 	}
-	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
+	ir.txnRecordCleanupBatcher = requestbatcher.New(requestbatcher.Config{
 		AmbientCtx:      c.AmbientCtx,
-		Name:            "intent_resolver_gc_batcher",
-		MaxMsgsPerBatch: gcBatchSize,
-		MaxWait:         c.MaxGCBatchWait,
-		MaxIdle:         c.MaxGCBatchIdle,
+		Name:            "intent_resolver_txn_record_cleanup_batcher",
+		MaxMsgsPerBatch: txnRecordCleanupBatchSize,
+		MaxWait:         c.MaxTxnRecordCleanupBatchWait,
+		MaxIdle:         c.MaxTxnRecordCleanupBatchIdle,
 		MaxTimeout:      intentResolutionSendBatchTimeout,
 		WorkloadID:      workloadid.WORKLOAD_ID_GC,
-		// NB: async GC work is not limited by ir.sem, so we do need an in-flight
-		// backpressure limit.
-		InFlightBackpressureLimit: func() int { return inFlightGCBackpressureLimit },
+		// NB: async txn record cleanup is not limited by ir.sem, so we do need an
+		// in-flight backpressure limit.
+		InFlightBackpressureLimit: func() int { return inFlightTxnRecordCleanupBackpressureLimit },
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
 	})
@@ -845,56 +847,24 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	return nil
 }
 
-func (ir *IntentResolver) gcTxnRecord(
+func (ir *IntentResolver) deleteTxnRecord(
 	ctx context.Context, rangeID roachpb.RangeID, txn *roachpb.Transaction,
 ) error {
-	// We successfully resolved the intents, so we're able to GC from
-	// the txn span directly.
+	// Delete the transaction record by writing an MVCC tombstone. The GC queue
+	// will later clean up the tombstone via processLocalKeyRange.
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	// This is pretty tricky. Transaction keys are range-local and
-	// so they are encoded specially. The key range addressed by
-	// (txnKey, txnKey.Next()) might be empty (since Next() does
-	// not imply monotonicity on the address side). Instead, we
-	// send this request to a range determined using the resolved
-	// transaction anchor, i.e. if the txn is anchored on
-	// /Local/RangeDescriptor/"a"/uuid, the key range below would
-	// be ["a", "a\x00"). However, the first range is special again
-	// because the above procedure results in KeyMin, but we need
-	// at least KeyLocalMax.
-	//
-	// #7880 will address this by making GCRequest less special and
-	// thus obviating the need to cook up an artificial range here.
-	var gcArgs kvpb.GCRequest
-	{
-		key := keys.MustAddr(txn.Key)
-		if localMax := keys.MustAddr(keys.LocalMax); key.Less(localMax) {
-			key = localMax
-		}
-		endKey := key.Next()
-
-		gcArgs.RequestHeader = kvpb.RequestHeader{
-			Key:    key.AsRawKey(),
-			EndKey: endKey.AsRawKey(),
-		}
-	}
-	gcArgs.Keys = append(gcArgs.Keys, kvpb.GCRequest_GCKey{
-		Key: txnKey,
+	_, err := ir.txnRecordCleanupBatcher.Send(ctx, rangeID, &kvpb.DeleteRequest{
+		RequestHeader: kvpb.RequestHeader{Key: txnKey},
 	})
-	// Although the IntentResolver has a RangeDescriptorCache it could consult to
-	// to determine the range to which this request corresponds, GCRequests are
-	// always issued on behalf of the range on which this record resides which is
-	// a strong signal that it is the range which will contain the transaction
-	// record now.
-	_, err := ir.gcBatcher.Send(ctx, rangeID, &gcArgs)
 	if err != nil {
-		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
+		return errors.Wrapf(err, "could not delete transaction record anchored at %s",
 			roachpb.Key(txn.Key))
 	}
 	return nil
 }
 
 // cleanupFinishedTxnIntents cleans up a txn's extant intents and, when all
-// intents have been successfully resolved, the transaction record is GC'ed
+// intents have been successfully resolved, the transaction record is deleted
 // asynchronously. onComplete will be called when all processing has completed
 // which is likely to be after this call returns in the case of success.
 func (ir *IntentResolver) cleanupFinishedTxnIntents(
@@ -918,10 +888,10 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	if pErr := ir.resolveIntents(ctx, (*txnLockUpdates)(txn), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
-	// Run transaction record GC outside of ir.sem. We need a new context, in case
-	// we're still connected to the client's context (which can happen when
+	// Run transaction record deletion outside of ir.sem. We need a new context, in
+	// case we're still connected to the client's context (which can happen when
 	// allowSyncProcessing is true). Otherwise, we may return to the caller before
-	// gcTxnRecord completes, which may cancel the context and abort the cleanup
+	// deleteTxnRecord completes, which may cancel the context and abort the cleanup
 	// either due to a defer cancel() or client disconnection. We give it a timeout
 	// as well, to avoid goroutine leakage.
 	ctx, hdl, err := ir.stopper.GetHandle(ir.ambientCtx.AnnotateCtx(context.Background()), stop.TaskOpts{
@@ -933,8 +903,8 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
 		err := timeutil.RunWithTimeout(ctx, "cleanup txn record",
-			gcTxnRecordTimeout, func(ctx context.Context) error {
-				return ir.gcTxnRecord(ctx, rangeID, txn)
+			deleteTxnRecordTimeout, func(ctx context.Context) error {
+				return ir.deleteTxnRecord(ctx, rangeID, txn)
 			})
 		if onComplete != nil {
 			onComplete(err)

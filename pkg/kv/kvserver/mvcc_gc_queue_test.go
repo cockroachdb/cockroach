@@ -1146,7 +1146,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
 			require.NoError(t, storage.MVCCPutProto(
-				ctx, tc.stateEng, key, hlc.Timestamp{}, txn, storage.MVCCWriteOptions{},
+				ctx, tc.stateEng, key, txn.WriteTimestamp, txn, storage.MVCCWriteOptions{},
 			))
 		}
 		entry := roachpb.AbortSpanEntry{Key: txn.Key, Timestamp: txn.LastActive()}
@@ -1172,7 +1172,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 			txnKey := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
 			txnTombstoneTSCacheKey := transactionTombstoneMarker(
 				roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := storage.MVCCGetProto(ctx, tc.stateEng, txnKey, hlc.Timestamp{}, txn,
+			ok, err := storage.MVCCGetProto(ctx, tc.stateEng, txnKey, hlc.MaxTimestamp, txn,
 				storage.MVCCGetOptions{})
 			if err != nil {
 				return err
@@ -1224,7 +1224,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := storage.MVCCIterate(ctx, tc.store.StateEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
+	if _, err := storage.MVCCIterate(ctx, tc.store.StateEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.MaxTimestamp,
 		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
 			return nil

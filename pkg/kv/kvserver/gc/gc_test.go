@@ -74,7 +74,7 @@ func TestBatchingInlineGCer(t *testing.T) {
 
 	ctx := context.Background()
 	c := &collectingGCer{}
-	m := makeBatchingInlineGCer(c, func(err error) { t.Error(err) })
+	m := makeBatchingGCer(c, func(err error) { t.Error(err) })
 	if m.max == 0 {
 		t.Fatal("did not init max")
 	}
@@ -87,10 +87,10 @@ func TestBatchingInlineGCer(t *testing.T) {
 		Key: roachpb.Key("q"),
 	}
 
-	m.FlushingAdd(ctx, long.Key)
+	m.FlushingAdd(ctx, long.Key, hlc.Timestamp{})
 	require.Nil(t, c.keys) // no flush
 
-	m.FlushingAdd(ctx, short.Key)
+	m.FlushingAdd(ctx, short.Key, hlc.Timestamp{})
 	// Flushed long and short.
 	require.Len(t, c.keys, 1)
 	require.Len(t, c.keys[0], 2)
@@ -100,7 +100,7 @@ func TestBatchingInlineGCer(t *testing.T) {
 	require.Nil(t, m.gcKeys)
 	require.Zero(t, m.size)
 
-	m.FlushingAdd(ctx, short.Key)
+	m.FlushingAdd(ctx, short.Key, hlc.Timestamp{})
 	require.Len(t, c.keys, 1) // no flush
 
 	m.Flush(ctx)
@@ -2395,4 +2395,89 @@ func TestInfoSafeFormat(t *testing.T) {
 		"redacted and unredacted output should be identical (all fields are safe)")
 	echotest.Require(t, redacted,
 		datapathutils.TestDataPath(t, t.Name()))
+}
+
+// TestTransactionRecordTombstoneGC verifies that MVCC tombstones left behind by
+// finalized transaction records are cleaned up by processLocalKeyRange. The
+// lifecycle is:
+//
+//  1. A transaction record is written as an MVCC key at ts1.
+//  2. updateFinalizedTxn auto-GCs it by writing an MVCC tombstone at ts2.
+//  3. The next GC pass (processLocalKeyRange) sees the tombstone and schedules
+//     it for GC.
+//  4. MVCCGarbageCollect physically removes the tombstone and all versions.
+func TestTransactionRecordTombstoneGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Construct a transaction record key.
+	addrKey := roachpb.Key("a")
+	txnID := uuid.MakeV4()
+	txnKey := keys.TransactionKey(addrKey, txnID)
+
+	// Write a COMMITTED transaction record at ts1.
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	txnRecord := roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			ID:             txnID,
+			Key:            addrKey,
+			WriteTimestamp: ts1,
+		},
+		Status: roachpb.COMMITTED,
+	}
+	require.NoError(t, storage.MVCCPutProto(
+		ctx, eng, txnKey, ts1, &txnRecord, storage.MVCCWriteOptions{},
+	))
+
+	// Write an MVCC tombstone at ts2, simulating what updateFinalizedTxn does.
+	ts2 := hlc.Timestamp{WallTime: 2e9}
+	var ms enginepb.MVCCStats
+	_, _, err := storage.MVCCDelete(ctx, eng, txnKey, ts2, storage.MVCCWriteOptions{Stats: &ms})
+	require.NoError(t, err)
+
+	// Verify precondition: reading at MaxTimestamp should see the tombstone
+	// (key exists but value is empty).
+	var readBack roachpb.Transaction
+	ok, err := storage.MVCCGetProto(
+		ctx, eng, txnKey, hlc.MaxTimestamp, &readBack, storage.MVCCGetOptions{},
+	)
+	require.NoError(t, err)
+	require.False(t, ok, "expected tombstone (no value), but got a live value")
+
+	// Run processLocalKeyRange. Use a cutoff far in the future so the tombstone
+	// is eligible for GC.
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(addrKey),
+		EndKey:   roachpb.RKey(addrKey).Next(),
+	}
+	cutoff := hlc.Timestamp{WallTime: 10e9}
+	info := &Info{}
+	gcer := makeFakeGCer()
+	cleanupFn := func(_ context.Context, _ *roachpb.Transaction) error {
+		t.Fatal("unexpected call to cleanupTxnIntentsAsync")
+		return nil
+	}
+	require.NoError(t, processLocalKeyRange(ctx, eng, &desc, cutoff, info, cleanupFn, &gcer))
+
+	// Verify that the GCer received the tombstone's key and timestamp.
+	gcKey, found := gcer.gcKeys[txnKey.String()]
+	require.True(t, found, "expected GCer to schedule txn record tombstone for GC")
+	require.Equal(t, ts2, gcKey.Timestamp)
+
+	// Apply the GC to physically remove the tombstone and all versions.
+	require.NoError(t, storage.MVCCGarbageCollect(
+		ctx, eng, nil /* ms */, []kvpb.GCRequest_GCKey{gcKey}, ts2,
+	))
+
+	// Verify that the key is fully removed — no value, no tombstone.
+	ok, err = storage.MVCCGetProto(
+		ctx, eng, txnKey, hlc.MaxTimestamp, &readBack,
+		storage.MVCCGetOptions{Tombstones: true},
+	)
+	require.NoError(t, err)
+	require.False(t, ok, "expected key to be fully removed after GC")
 }

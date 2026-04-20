@@ -3449,9 +3449,9 @@ message TxnFeedCommitted {
   ];
   // The MVCC timestamp at which the transaction committed.
   util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
-  // The key spans the transaction read.
+  // The key spans that the transaction read.
   repeated Span read_spans = 4 [(gogoproto.nullable) = false];
-  // The key spans the transaction wrote.
+  // The key spans that the transaction wrote.
   repeated Span write_spans = 5 [(gogoproto.nullable) = false];
 }
 
@@ -3497,9 +3497,8 @@ message MuxTxnFeedEvent {
 // GetTxnDetailsRequest retrieves a transaction's raw writes and dependencies on
 // a single range. Transaction A depends on B if A's write set overlaps B's
 // write set, or A's read set overlaps B's write set. The server computes
-// dependencies by MVCC-scanning the transaction's spans to find overlapping
-// write timestamps, then translating those timestamps to transaction IDs via a
-// raft-log-derived mapping maintained by the range.
+// dependencies by identifying overlapping writes in the transaction's spans
+// within the requested time window.
 //
 // Batching across ranges is handled by the KV layer's generic BatchRequest.
 message GetTxnDetailsRequest {
@@ -3512,8 +3511,8 @@ message GetTxnDetailsRequest {
   ];
   // The transaction's commit timestamp.
   util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
-  // Only return dependencies that committed in the exclusive range
-  // (dependency_cutoff, commit_timestamp). Transactions that committed at or
+  // Only return dependencies that committed in the range
+  // (dependency_cutoff, commit_timestamp]. Transactions that committed at or
   // before dependency_cutoff are considered already applied and do not need
   // to be tracked as dependencies.
   util.hlc.Timestamp dependency_cutoff = 4 [(gogoproto.nullable) = false];
@@ -3532,7 +3531,7 @@ message GetTxnDetailsResponse {
   // The KV writes this transaction performed on this range.
   repeated TxnDetailKV writes = 2 [(gogoproto.nullable) = false];
   // UUIDs of transactions that this transaction depends on within the
-  // (dependency_cutoff, commit_timestamp) window.
+  // (dependency_cutoff, commit_timestamp] window.
   repeated bytes dependencies = 3 [
     (gogoproto.customname) = "Dependencies",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"

@@ -69,7 +69,7 @@ func QueryTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	ok, err := storage.MVCCGetProto(
-		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn,
+		ctx, reader, key, hlc.MaxTimestamp, &reply.QueriedTxn,
 		storage.MVCCGetOptions{ReadCategory: fs.BatchEvalReadCategory},
 	)
 	if err != nil {

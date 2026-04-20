@@ -413,7 +413,9 @@ func Run(
 		return Info{}, err
 	}
 
-	// From now on, all keys processed are range-local and inline (zero timestamp).
+	// From now on, all keys processed are range-local. Transaction records use
+	// MVCC timestamps; other local keys (abort span, queue last processed) remain
+	// inline (zero timestamp).
 
 	// Process local range key entries (txn records, queue last processed times).
 	if err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn,
@@ -1235,22 +1237,38 @@ func processLocalKeyRange(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 	gcer PureGCer,
 ) error {
-	b := makeBatchingInlineGCer(gcer, func(err error) {
+	onGCErr := func(err error) {
 		log.KvExec.Warningf(ctx, "failed to GC from local key range: %s", err)
-	})
-	defer b.Flush(ctx)
+	}
+	// Inline batcher for queue-last-processed entries (still inline keys).
+	inlineB := makeBatchingGCer(gcer, onGCErr)
+	defer inlineB.Flush(ctx)
+	// MVCC batcher for transaction records (now MVCC keys with real timestamps).
+	mvccB := makeBatchingGCer(gcer, onGCErr)
+	defer mvccB.Flush(ctx)
 
-	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
+	handleTxnIntents := func(
+		key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction,
+	) error {
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
 		if !txn.Status.IsFinalized() || len(txn.LockSpans) > 0 {
 			return cleanupTxnIntentsAsyncFn(ctx, txn)
 		}
-		b.FlushingAdd(ctx, key)
+		mvccB.FlushingAdd(ctx, key, timestamp)
 		return nil
 	}
 
 	handleOneTransaction := func(kv roachpb.KeyValue) error {
+		// TODO(jeffswenson): ideally we would only keep the most recent
+		// non-tombstone record for a transaction.
+
+		// If the value is a tombstone (deletion), the transaction record was
+		// already finalized and auto-GC'd. We can GC the tombstone directly.
+		if len(kv.Value.RawBytes) == 0 {
+			mvccB.FlushingAdd(ctx, kv.Key, kv.Value.Timestamp)
+			return nil
+		}
 		var txn roachpb.Transaction
 		if err := kv.Value.GetProto(&txn); err != nil {
 			return err
@@ -1275,13 +1293,13 @@ func processLocalKeyRange(
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
-		return handleTxnIntents(kv.Key, &txn)
+		return handleTxnIntents(kv.Key, kv.Value.Timestamp, &txn)
 	}
 
 	handleOneQueueLastProcessed := func(kv roachpb.KeyValue, rangeKey roachpb.RKey) error {
 		if !rangeKey.Equal(desc.StartKey) {
 			// Garbage collect the last processed timestamp if it doesn't match start key.
-			b.FlushingAdd(ctx, kv.Key)
+			inlineB.FlushingAdd(ctx, kv.Key, hlc.Timestamp{})
 		}
 		return nil
 	}
@@ -1306,8 +1324,11 @@ func processLocalKeyRange(
 	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
-	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{},
-		storage.MVCCScanOptions{ReadCategory: fs.MVCCGCReadCategory},
+	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.MaxTimestamp,
+		storage.MVCCScanOptions{
+			ReadCategory: fs.MVCCGCReadCategory,
+			Tombstones:   true,
+		},
 		func(kv roachpb.KeyValue) error {
 			return handleOne(kv)
 		})
@@ -1327,7 +1348,7 @@ func processAbortSpan(
 	info *Info,
 	gcer PureGCer,
 ) error {
-	b := makeBatchingInlineGCer(gcer, func(err error) {
+	b := makeBatchingGCer(gcer, func(err error) {
 		log.KvExec.Warningf(ctx, "unable to GC from abort span: %s", err)
 	})
 	defer b.Flush(ctx)
@@ -1336,7 +1357,7 @@ func processAbortSpan(
 		info.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			info.AbortSpanGCNum++
-			b.FlushingAdd(ctx, key)
+			b.FlushingAdd(ctx, key, hlc.Timestamp{})
 		}
 		return nil
 	})
@@ -1469,10 +1490,11 @@ func processReplicatedRangeTombstones(
 	return b.flushPendingFragments(ctx)
 }
 
-// batchingInlineGCer is a helper to paginate the GC of inline (i.e. zero
-// timestamp keys). After creation, keys are added via FlushingAdd(). A
-// final call to Flush() empties out the buffer when all keys were added.
-type batchingInlineGCer struct {
+// batchingGCer is a helper to paginate GC requests. After creation, keys
+// are added via FlushingAdd(). A final call to Flush() empties out the
+// buffer when all keys were added. For inline (zero-timestamp) keys,
+// callers pass hlc.Timestamp{} as the timestamp.
+type batchingGCer struct {
 	gcer  PureGCer
 	onErr func(error)
 
@@ -1481,12 +1503,12 @@ type batchingInlineGCer struct {
 	gcKeys []kvpb.GCRequest_GCKey
 }
 
-func makeBatchingInlineGCer(gcer PureGCer, onErr func(error)) batchingInlineGCer {
-	return batchingInlineGCer{gcer: gcer, onErr: onErr, max: KeyVersionChunkBytes}
+func makeBatchingGCer(gcer PureGCer, onErr func(error)) batchingGCer {
+	return batchingGCer{gcer: gcer, onErr: onErr, max: KeyVersionChunkBytes}
 }
 
-func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
-	b.gcKeys = append(b.gcKeys, kvpb.GCRequest_GCKey{Key: key})
+func (b *batchingGCer) FlushingAdd(ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp) {
+	b.gcKeys = append(b.gcKeys, kvpb.GCRequest_GCKey{Key: key, Timestamp: timestamp})
 	b.size += len(key)
 	if b.size < b.max {
 		return
@@ -1494,7 +1516,7 @@ func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
 	b.Flush(ctx)
 }
 
-func (b *batchingInlineGCer) Flush(ctx context.Context) {
+func (b *batchingGCer) Flush(ctx context.Context) {
 	err := b.gcer.GC(ctx, b.gcKeys, nil, nil)
 	b.gcKeys = nil
 	b.size = 0

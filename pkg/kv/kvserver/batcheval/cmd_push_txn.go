@@ -142,7 +142,7 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
-	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn,
+	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.MaxTimestamp, &existTxn,
 		storage.MVCCGetOptions{ReadCategory: fs.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, err
@@ -325,7 +325,7 @@ func PushTxn(
 		// in the timestamp cache.
 		if ok {
 			txnRecord := reply.PusheeTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+			if err := storage.MVCCPutProto(ctx, readWriter, key, cArgs.EvalCtx.Clock().Now(), &txnRecord,
 				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
 				return result.Result{}, err
 			}

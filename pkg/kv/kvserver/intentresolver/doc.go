@@ -62,8 +62,8 @@
 //     to determine its final status if not already finalized.
 //  2. Resolve the intents (resolveIntents) by sending
 //     ResolveIntentRequest / ResolveIntentRangeRequest to each range.
-//  3. GC the transaction record (gcTxnRecord) once all intents are
-//     resolved.
+//  3. Delete the transaction record (deleteTxnRecord) once all intents
+//     are resolved.
 //
 // Step 2 is where the bulk of the work happens and where the
 // concurrency limiters described below apply.
@@ -98,10 +98,11 @@
 // leaseholder could starve high-priority work. The callers already
 // limit concurrency (via ir.sem and gcIntentBudget) and have
 // buffered the requests in memory, so there is little benefit in
-// refusing to send them. The GC batcher (gcBatcher, used for
-// GCRequest to clean up txn records) is the exception: GC record
-// cleanup runs outside ir.sem, so gcBatcher uses an in-flight
-// limit of DefaultInFlightBackpressureLimit goroutines, and
+// refusing to send them. The txn record cleanup batcher
+// (txnRecordCleanupBatcher, used for DeleteRequest to remove txn
+// records) is the exception: txn record cleanup runs outside
+// ir.sem, so txnRecordCleanupBatcher uses an in-flight limit of
+// DefaultInFlightBackpressureLimit goroutines, and
 // gcIntentBudget further caps the total in-flight intents across
 // all of them to gcMaxIntentsInFlight.
 //

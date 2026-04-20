@@ -73,9 +73,9 @@ type IntentResolverTestingKnobs struct {
 	// to -1.
 	ForceSyncIntentResolution bool
 
-	// MaxGCBatchSize overrides the maximum number of transaction record gc
-	// requests which can be sent in a single batch.
-	MaxGCBatchSize int
+	// MaxTxnRecordCleanupBatchSize overrides the maximum number of transaction
+	// record cleanup requests which can be sent in a single batch.
+	MaxTxnRecordCleanupBatchSize int
 
 	// MaxIntentResolutionBatchSize overrides the maximum number of intent
 	// resolution requests which can be sent in a single batch.

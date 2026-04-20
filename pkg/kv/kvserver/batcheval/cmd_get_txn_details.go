@@ -19,11 +19,7 @@ func init() {
 }
 
 // GetTxnDetails retrieves a transaction's raw writes and dependencies on a
-// single range. Transaction A depends on B if A's write set overlaps B's write
-// set, or A's read set overlaps B's write set. The server computes dependencies
-// by MVCC-scanning the transaction's spans to find overlapping write
-// timestamps, then translating those timestamps to transaction IDs via a
-// raft-log-derived mapping maintained by the range.
+// single range. See GetTxnDetailsRequest for the full API contract.
 func GetTxnDetails(
 	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {

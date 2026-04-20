@@ -118,6 +118,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		EndKey:   roachpb.RKey(endKey),
 	}
 	as := abortspan.New(desc.RangeID)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
@@ -1569,10 +1570,11 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			batch := db.NewBatch()
 			defer batch.Close()
 
-			// Write the existing transaction record, if necessary.
+			// Write the existing transaction record, if necessary. Use a
+			// timestamp slightly before ts so that EndTxn can overwrite it.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if c.existingTxn != nil {
-				if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, c.existingTxn, storage.MVCCWriteOptions{}); err != nil {
+				if err := storage.MVCCPutProto(ctx, batch, txnKey, ts.Prev(), c.existingTxn, storage.MVCCWriteOptions{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1599,6 +1601,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			_, err := EndTxn(ctx, batch, CommandArgs{
 				EvalCtx: (&MockEvalCtx{
 					Desc:      &desc,
+					Clock:     clock,
 					AbortSpan: as,
 					CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
 						if c.canCreateTxn {
@@ -1630,7 +1633,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				// Assert that the txn record is written as expected.
 				var resTxnRecord roachpb.TransactionRecord
 				if ok, err := storage.MVCCGetProto(
-					ctx, batch, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
+					ctx, batch, txnKey, hlc.MaxTimestamp, &resTxnRecord, storage.MVCCGetOptions{},
 				); err != nil {
 					t.Fatal(err)
 				} else if c.expTxn == nil {
@@ -1653,6 +1656,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
@@ -1695,7 +1699,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		if storeTxnBeforeEndTxn {
 			txnRec := txn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, storage.MVCCWriteOptions{}); err != nil {
+			if err := storage.MVCCPutProto(ctx, batch, txnKey, ts.Prev(), &txnRec, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1709,7 +1713,8 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		var resp kvpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{
 			EvalCtx: (&MockEvalCtx{
-				Desc: &desc,
+				Desc:  &desc,
+				Clock: clock,
 				// We want to inspect the final txn record after EndTxn, to
 				// ascertain that it persists the ignore list.
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{DisableTxnAutoGC: true},
@@ -1744,7 +1749,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// Also verify that the txn record contains the ignore list.
 		var txnRec roachpb.TransactionRecord
-		hasRec, err := storage.MVCCGetProto(ctx, batch, txnKey, hlc.Timestamp{}, &txnRec, storage.MVCCGetOptions{})
+		hasRec, err := storage.MVCCGetProto(ctx, batch, txnKey, hlc.MaxTimestamp, &txnRec, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

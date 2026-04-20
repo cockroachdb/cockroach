@@ -105,7 +105,7 @@ func PrepareUpdateReplicas(
 			missing[update.StoreID()] = struct{}{}
 			continue
 		} else {
-			replicaReport, err := applyReplicaUpdate(ctx, readWriter, update)
+			replicaReport, err := applyReplicaUpdate(ctx, readWriter, update, updateTime)
 			if err != nil {
 				return PrepareStoreReport{}, errors.Wrapf(
 					err,
@@ -137,9 +137,12 @@ func PrepareUpdateReplicas(
 }
 
 func applyReplicaUpdate(
-	ctx context.Context, readWriter storage.ReadWriter, update loqrecoverypb.ReplicaUpdate,
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	update loqrecoverypb.ReplicaUpdate,
+	updateTime time.Time,
 ) (PrepareReplicaReport, error) {
-	clock := hlc.NewClockForTesting(nil)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(updateTime))
 	report := PrepareReplicaReport{
 		Replica: update.NewReplica,
 	}
@@ -258,9 +261,11 @@ func applyReplicaUpdate(
 		report.AbortedTransactionID = res.Intent.Txn.ID
 
 		// A crude form of the intent resolution process: abort the
-		// transaction by deleting its record.
+		// transaction by deleting its record. We use clock.Now() to
+		// guarantee the delete timestamp is above the txn record's MVCC
+		// timestamp (which was written at some prior Clock().Now()).
 		txnKey := keys.TransactionKey(res.Intent.Txn.Key, res.Intent.Txn.ID)
-		if _, _, err := storage.MVCCDelete(ctx, readWriter, txnKey, hlc.Timestamp{}, storage.MVCCWriteOptions{Stats: &ms}); err != nil {
+		if _, _, err := storage.MVCCDelete(ctx, readWriter, txnKey, clock.Now(), storage.MVCCWriteOptions{Stats: &ms}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{

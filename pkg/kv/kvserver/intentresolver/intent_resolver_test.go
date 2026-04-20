@@ -124,7 +124,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// different requests for individual keys and then for spans. This case will
 		// allow the individual key intents to be resolved in one request and for
 		// the span request to be resolved in another. Finally it will succeed on
-		// the GCRequest. This is a positive case and the callback should indicate
+		// the DeleteRequest. This is a positive case and the callback should indicate
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn1,
@@ -183,7 +183,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// different requests for individual keys and then for spans. This case will
 		// allow the individual key intents to be resolved in one request and for
 		// the span request to be resolved in another. Finally it will succeed on
-		// the GCRequest. This is a positive case and the callback should indicate
+		// the DeleteRequest. This is a positive case and the callback should indicate
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn3,
@@ -205,8 +205,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 			expectSucceed: true,
 		},
 		// Txn4 is committed so it should not be pushed. Also it has no intents so
-		// it should only send a GCRequest. The callback should indicate that there
-		// is no push but that the gc has occurred successfully.
+		// it should only send a DeleteRequest. The callback should indicate that
+		// there is no push but that the delete has occurred successfully.
 		{
 			txn:           txn4,
 			intentSpans:   []roachpb.Span{},
@@ -628,7 +628,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		},
 	}
 
-	// We expect to see a ResolveIntent req for each intent and a GC req for
+	// We expect to see a ResolveIntent req for each intent and a Delete req for
 	// each txn. However, because these requests are all async, it's unclear
 	// which order these will be issued in. Handle all orders and record the
 	// GCed transaction records.
@@ -655,9 +655,9 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 				fmt.Sprintf("%s-%s", string(req.Key), string(req.EndKey)))
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ctx, ba)
-		case kvpb.GC:
+		case kvpb.Delete:
 			reqs.Lock()
-			reqs.gced = append(reqs.gced, string(ru.GetGc().Key))
+			reqs.gced = append(reqs.gced, string(ru.GetDelete().Key))
 			reqs.Unlock()
 			return gcSendFunc(t)(ctx, ba)
 		default:
@@ -670,11 +670,11 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 	cfg := Config{
 		Stopper: stopper,
 		Clock:   clock,
-		// Don't let the transaction record GC requests or the intent resolution
+		// Don't let the transaction record cleanup requests or the intent resolution
 		// requests be batched with each other. This would make it harder to
 		// determine how to drain sf.
 		TestingKnobs: kvserverbase.IntentResolverTestingKnobs{
-			MaxGCBatchSize:               1,
+			MaxTxnRecordCleanupBatchSize: 1,
 			MaxIntentResolutionBatchSize: 1,
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -904,7 +904,7 @@ func newIntentResolverWithSendFuncsConcurrentSend(
 		})
 	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSenderFactory, c.Clock, stopper)
 	c.DB = db
-	c.MaxGCBatchWait = time.Nanosecond
+	c.MaxTxnRecordCleanupBatchWait = time.Nanosecond
 	return New(c)
 }
 
@@ -1007,10 +1007,10 @@ func gcSendFunc(t *testing.T) sendFunc {
 	return func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		resp := &kvpb.BatchResponse{}
 		for _, r := range ba.Requests {
-			if _, ok := r.GetInner().(*kvpb.GCRequest); !ok {
-				t.Errorf("Unexpected request type %T, expected GCRequest", r.GetInner())
+			if _, ok := r.GetInner().(*kvpb.DeleteRequest); !ok {
+				t.Errorf("Unexpected request type %T, expected DeleteRequest", r.GetInner())
 			}
-			resp.Add(&kvpb.GCResponse{})
+			resp.Add(&kvpb.DeleteResponse{})
 		}
 		return resp, nil
 	}

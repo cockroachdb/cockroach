@@ -245,6 +245,11 @@ func declareKeysEndTxn(
 // to the args.Commit parameter. Rolling back an already rolled-back txn is ok.
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
 // recent PRs have landed.
+//
+// TODO(jeffswenson): transaction records are now stored as MVCC keys with real
+// timestamps instead of inline keys. This format change needs a cluster version
+// gate for mixed-version safety: old nodes reading at hlc.Timestamp{} will not
+// see MVCC-timestamped records written by new nodes.
 func EndTxn(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
@@ -252,6 +257,7 @@ func EndTxn(
 	h := cArgs.Header
 	ms := cArgs.Stats
 	reply := resp.(*kvpb.EndTxnResponse)
+	now := cArgs.EvalCtx.Clock().Now()
 
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
@@ -282,7 +288,7 @@ func EndTxn(
 		ctx, 2, "checking to see if transaction record already exists for txn: %s", h.Txn,
 	)
 	recordAlreadyExisted, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{
+		ctx, readWriter, key, hlc.MaxTimestamp, &existingTxn, storage.MVCCGetOptions{
 			ReadCategory: fs.BatchEvalReadCategory,
 		},
 	)
@@ -340,7 +346,7 @@ func EndTxn(
 					return result.Result{}, err
 				}
 				if err := updateFinalizedTxn(
-					ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+					ctx, readWriter, cArgs.EvalCtx, ms, key, now, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -444,7 +450,7 @@ func EndTxn(
 		// proceed to release locks or resolve intents.
 		if args.Prepare {
 			reply.Txn.Status = roachpb.PREPARED
-			if err := updatePreparedTxn(ctx, readWriter, ms, key, args, reply.Txn); err != nil {
+			if err := updatePreparedTxn(ctx, readWriter, ms, key, now, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 			return result.Result{}, nil
@@ -465,7 +471,7 @@ func EndTxn(
 
 			reply.Txn.Status = roachpb.STAGING
 			reply.StagingTimestamp = reply.Txn.WriteTimestamp
-			if err := updateStagingTxn(ctx, readWriter, ms, key, args, reply.Txn); err != nil {
+			if err := updateStagingTxn(ctx, readWriter, ms, key, now, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 			return result.Result{}, nil
@@ -538,7 +544,7 @@ func EndTxn(
 		return result.Result{}, err
 	}
 	if err := updateFinalizedTxn(
-		ctx, readWriter, cArgs.EvalCtx, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
+		ctx, readWriter, cArgs.EvalCtx, ms, key, now, args, reply.Txn, recordAlreadyExisted, externalLocks,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -801,6 +807,7 @@ func updatePreparedTxn(
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
+	timestamp hlc.Timestamp,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
@@ -808,7 +815,7 @@ func updatePreparedTxn(
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		ctx, readWriter, key, timestamp, &txnRecord,
 		storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory})
 }
 
@@ -821,6 +828,7 @@ func updateStagingTxn(
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
+	timestamp hlc.Timestamp,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
@@ -828,7 +836,7 @@ func updateStagingTxn(
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		ctx, readWriter, key, timestamp, &txnRecord,
 		storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory})
 }
 
@@ -842,6 +850,7 @@ func updateFinalizedTxn(
 	evalCtx EvalContext,
 	ms *enginepb.MVCCStats,
 	key []byte,
+	timestamp hlc.Timestamp,
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	recordAlreadyExisted bool,
@@ -858,13 +867,13 @@ func updateFinalizedTxn(
 			// BatchRequest writes.
 			return nil
 		}
-		_, _, err := storage.MVCCDelete(ctx, readWriter, key, hlc.Timestamp{}, opts)
+		_, _, err := storage.MVCCDelete(ctx, readWriter, key, timestamp, opts)
 		return err
 	}
 	txn.LockSpans = externalLocks
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, opts)
+	return storage.MVCCPutProto(ctx, readWriter, key, timestamp, &txnRecord, opts)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.

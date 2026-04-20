@@ -58,7 +58,7 @@ func HeartbeatTxn(
 
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{
+		ctx, readWriter, key, hlc.MaxTimestamp, &txn, storage.MVCCGetOptions{
 			ReadCategory: fs.BatchEvalReadCategory,
 		},
 	); err != nil {
@@ -91,7 +91,7 @@ func HeartbeatTxn(
 		// is up for debate.
 		txn.LastHeartbeat.Forward(args.Now)
 		txnRecord := txn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		if err := storage.MVCCPutProto(ctx, readWriter, key, cArgs.EvalCtx.Clock().Now(), &txnRecord,
 			storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: fs.BatchEvalReadCategory}); err != nil {
 			return result.Result{}, err
 		}

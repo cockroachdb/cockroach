@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,7 @@ func TestRecoverTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts := hlc.Timestamp{WallTime: 1}
 	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
@@ -44,13 +46,14 @@ func TestRecoverTxn(t *testing.T) {
 		// Write the transaction record.
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
+		if err := storage.MVCCPutProto(ctx, db, txnKey, ts.Prev(), &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Issue a RecoverTxn request.
 		var resp kvpb.RecoverTxnResponse
 		if _, err := RecoverTxn(ctx, db, CommandArgs{
+			EvalCtx: (&MockEvalCtx{Clock: clock}).EvalContext(),
 			Args: &kvpb.RecoverTxnRequest{
 				RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 				Txn:                 txn.TxnMeta,
@@ -80,7 +83,7 @@ func TestRecoverTxn(t *testing.T) {
 		// Assert that the updated txn record was persisted correctly.
 		var resTxnRecord roachpb.Transaction
 		if _, err := storage.MVCCGetProto(
-			ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
+			ctx, db, txnKey, hlc.MaxTimestamp, &resTxnRecord, storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -97,6 +100,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
@@ -220,13 +224,14 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			// request is evaluated.
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			txnRecord := c.changedTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, db, txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{}); err != nil {
+			if err := storage.MVCCPutProto(ctx, db, txnKey, ts.Prev(), &txnRecord, storage.MVCCWriteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
 			// Issue a RecoverTxn request.
 			var resp kvpb.RecoverTxnResponse
 			_, err := RecoverTxn(ctx, db, CommandArgs{
+				EvalCtx: (&MockEvalCtx{Clock: clock}).EvalContext(),
 				Args: &kvpb.RecoverTxnRequest{
 					RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 					Txn:                 txn.TxnMeta,
@@ -254,7 +259,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 				// Assert that the txn record was not modified.
 				var resTxnRecord roachpb.Transaction
 				if _, err := storage.MVCCGetProto(
-					ctx, db, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
+					ctx, db, txnKey, hlc.MaxTimestamp, &resTxnRecord, storage.MVCCGetOptions{},
 				); err != nil {
 					t.Fatal(err)
 				}
