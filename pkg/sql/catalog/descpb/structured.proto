@@ -1404,7 +1404,12 @@ message TableDescriptor {
   // before new statistics are fully deployed to all queries throughout the
   // cluster.
   optional int64 stats_canary_window = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
-  // Next ID: 73
+
+  // Vectorizer holds the configuration for automatic embedding
+  // generation. When set, a background job generates vector embeddings
+  // for the table's rows and stores them in a companion table.
+  optional cockroach.sql.catalog.catpb.Vectorizer vectorizer = 73;
+  // Next ID: 74
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
