@@ -44,6 +44,16 @@ func TestCategoriseTests(t *testing.T) {
 		require.NotNil(t, err)
 		require.Equal(t, "failed to connect to DB", err.Error())
 	})
+	t.Run("recover from driver panic", func(t *testing.T) {
+		// Simulate the gosnowflake driver panicking on a nil type assertion,
+		// which happens when the context deadline is exceeded during a query.
+		SqlConnectorFunc = func(_, _ string) (*gosql.DB, error) {
+			panic("interface conversion: interface is nil, not gosnowflake.SnowflakeRows")
+		}
+		tds, err := CategoriseTests(context.Background(), nil)
+		require.Nil(t, tds)
+		require.ErrorContains(t, err, "panic during snowflake query")
+	})
 	var mock sqlmock.Sqlmock
 	var db *gosql.DB
 	SqlConnectorFunc = func(driverName, dataSourceName string) (*gosql.DB, error) {

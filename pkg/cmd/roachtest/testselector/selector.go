@@ -91,7 +91,18 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 // 3. the test has not been run for a while
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
 // The tests are sorted by the last run and is used for further test selection criteria. So, the order should not be modified.
-func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
+func CategoriseTests(ctx context.Context, req *SelectTestsReq) (result []*TestDetails, err error) {
+	// The gosnowflake driver has a bug where it panics on a nil type assertion
+	// (interface is nil, not gosnowflake.SnowflakeRows) when the context
+	// deadline is exceeded during QueryContext. Since we can't fix the
+	// third-party driver, we recover here and convert the panic into an error
+	// so that callers can fall back gracefully (e.g., running all tests).
+	defer func() {
+		if r := recover(); r != nil {
+			result = nil
+			err = fmt.Errorf("panic during snowflake query: %v", r)
+		}
+	}()
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
