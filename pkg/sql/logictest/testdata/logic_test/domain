@@ -422,6 +422,21 @@ CREATE DOMAIN d_nested AS d_base_for_nested
 
 subtest end
 
+subtest domain_of_array_and_tuple
+
+# Test that CREATE DOMAIN with an array base type is rejected (#32552).
+statement error pgcode 0A000 unimplemented: domain of arrays and tuples is not yet supported
+CREATE DOMAIN d_array AS INT[]
+
+# Test that CREATE DOMAIN with a tuple base type is rejected (#32552).
+statement ok
+CREATE TYPE my_tuple AS (a INT, b INT)
+
+statement error pgcode 0A000 unimplemented: domain of arrays and tuples is not yet supported
+CREATE DOMAIN d_tuple AS my_tuple
+
+subtest end
+
 subtest domain_drop_syntax
 
 # Test DROP DOMAIN syntax variants.

@@ -1442,6 +1442,9 @@ func MakeDomain(baseType *T, typeOID, arrayTypeOID oid.Oid) *T {
 	it.UDTMetadata = &PersistentUserDefinedTypeMetadata{
 		ArrayTypeOID: arrayTypeOID,
 	}
+	if baseType.Family() == ArrayFamily || baseType.Family() == TupleFamily {
+		panic(errors.AssertionFailedf("cannot make domain of array or tuple"))
+	}
 	return &T{InternalType: it}
 }
 

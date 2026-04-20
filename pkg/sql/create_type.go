@@ -566,6 +566,10 @@ func (p *planner) createDomainWithID(
 	if baseType.TypeMeta.DomainData != nil {
 		return unimplemented.NewWithIssue(165347, "domain of domain is not yet supported")
 	}
+	// Reject domain of arrays and tuples types as well.
+	if baseType.Family() == types.ArrayFamily || baseType.Family() == types.TupleFamily {
+		return unimplemented.NewWithIssue(32552, "domain of arrays and tuples is not yet supported")
+	}
 
 	// Build CHECK constraints. Each expression is validated by substituting
 	// VALUE with a typed null of the base type and type-checking as boolean.
