@@ -109,6 +109,7 @@ func (it *Iterator) Iter(ctx context.Context, r storage.Reader) iter.Seq2[uint64
 
 // IterFrom is similar to Iter, but allows specifying a starting point for the
 // iteration.
+// TODO(ibrahim): Make this function take a WAG index instead of a key.
 func (it *Iterator) IterFrom(
 	ctx context.Context, r storage.Reader, seekKey roachpb.Key,
 ) iter.Seq2[uint64, wagpb.Node] {
