@@ -1075,6 +1075,15 @@ func (*CreateTenant) StatementType() StatementType { return TypeDCL }
 func (*CreateTenant) StatementTag() string { return "CREATE VIRTUAL CLUSTER" }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateTenantAsBranch) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateTenantAsBranch) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateTenantAsBranch) StatementTag() string { return "CREATE VIRTUAL CLUSTER BRANCH" }
+
+// StatementReturnType implements the Statement interface.
 func (*CreateTenantFromReplication) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2701,6 +2710,7 @@ func (n *CreatePolicy) String() string                        { return AsString(
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }
 func (n *CreateTenant) String() string                        { return AsString(n) }
+func (n *CreateTenantAsBranch) String() string                { return AsString(n) }
 func (n *CreateTenantFromReplication) String() string         { return AsString(n) }
 func (n *CreateSchema) String() string                        { return AsString(n) }
 func (n *CreateSequence) String() string                      { return AsString(n) }

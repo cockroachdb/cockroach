@@ -51,10 +51,21 @@ func newDBAdapter(db *kv.DB, st *cluster.Settings) (*dbAdapter, error) {
 			return nil, errors.Errorf("failed to extract a %T from %T",
 				(*kv.CrossRangeTxnWrapperSender)(nil), db.NonTransactionalSender())
 		}
-		distSender, ok = txnWrapperSender.Wrapped().(*kvcoord.DistSender)
-		if !ok {
-			return nil, errors.Errorf("failed to extract a %T from %T",
-				(*kvcoord.DistSender)(nil), txnWrapperSender.Wrapped())
+		// Walk through any wrapping senders (e.g. branch tenant's BranchSender)
+		// to find the underlying DistSender. Rangefeeds operate on raw KV
+		// state below the CoW layer.
+		s := txnWrapperSender.Wrapped()
+		for {
+			if ds, ok := s.(*kvcoord.DistSender); ok {
+				distSender = ds
+				break
+			}
+			u, ok := s.(interface{ Unwrap() kv.Sender })
+			if !ok {
+				return nil, errors.Errorf("failed to extract a %T from %T",
+					(*kvcoord.DistSender)(nil), txnWrapperSender.Wrapped())
+			}
+			s = u.Unwrap()
 		}
 	}
 	return &dbAdapter{

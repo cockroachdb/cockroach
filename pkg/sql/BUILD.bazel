@@ -263,6 +263,7 @@ go_library(
         "telemetry_logging.go",
         "temporary_schema.go",
         "tenant_accessors.go",
+        "tenant_branch.go",
         "tenant_capability.go",
         "tenant_creation.go",
         "tenant_deletion.go",

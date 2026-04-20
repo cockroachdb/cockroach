@@ -110,6 +110,11 @@ type TenantInfo struct {
 	SQLInfo
 }
 
+// IsBranch reports whether this tenant is a branch of another tenant.
+func (m *ProtoInfo) IsBranch() bool {
+	return m.BranchParentID != nil
+}
+
 // ToInfo converts a TenantInfoWithUsage to an TenantInfo.
 func (m *TenantInfoWithUsage) ToInfo() *TenantInfo {
 	return &TenantInfo{

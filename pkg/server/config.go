@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -504,6 +505,12 @@ type SQLConfig struct {
 	// TenantReadOnly indicates if this tenant is read-only (PCR reader tenant).
 	TenantReadOnly bool
 
+	// BranchInfo is set if this tenant is a branch of another tenant. When
+	// non-nil, the SQL pod's KV client wraps DistSender with a BranchSender
+	// that falls through to the parent tenant at BranchTimestamp for keys
+	// the branch has not written. See pkg/kv/kvclient/kvtenant/branch_sender.go.
+	BranchInfo *TenantBranchInfo
+
 	// If set, will to be called at server startup to obtain the tenant id and
 	// locality.
 	DelayedSetTenantID func(context.Context) (roachpb.TenantID, roachpb.Locality, error)
@@ -551,6 +558,14 @@ type SQLConfig struct {
 
 	// LicenseEnforcer is used to enforce license policies.
 	LicenseEnforcer *license.Enforcer
+}
+
+// TenantBranchInfo identifies the parent tenant and fork point of a branch
+// tenant. It is consumed by the SQL pod startup path to wire BranchSender
+// in front of DistSender.
+type TenantBranchInfo struct {
+	ParentID  roachpb.TenantID
+	Timestamp hlc.Timestamp
 }
 
 // LocalKVServerInfo is used to group information about the local KV server
