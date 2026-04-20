@@ -773,8 +773,9 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 		//
 		// Mutations only allow auto-commit if there are no FK checks or cascades.
 
-		if maxRows, ok := b.indexConstraintMaxResults(&scan.ScanPrivate, scan.Relational()); ok {
-			if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= uint64(row.DeleteRangeChunkSize(b.evalCtx.TestingKnobs.ForceProductionValues)) {
+		if card := scan.Relational().Cardinality; !card.IsUnbounded() {
+			deleteRangeChunkSize := row.DeleteRangeChunkSize(b.evalCtx.TestingKnobs.ForceProductionValues)
+			if maxKeys := int(card.Max) * tab.FamilyCount(); maxKeys <= deleteRangeChunkSize {
 				autoCommit = true
 			}
 		}
