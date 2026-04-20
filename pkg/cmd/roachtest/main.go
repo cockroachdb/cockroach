@@ -384,7 +384,37 @@ func updateSpecForSelectiveTests(
 	allTests, err := testselector.CategoriseTests(ctx,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		logFunc("running all tests! error selecting tests: %v\n", err)
+		// Snowflake is unavailable. Instead of running all tests (which risks
+		// timeouts), randomly select a subset using the same percentage that the
+		// selector would use for stable tests. This keeps the run size in the
+		// same ballpark as a normal selective run. Already-skipped tests are
+		// left untouched and don't count toward the selection budget.
+		fallbackPct := roachtestflags.SuccessfulTestsSelectPct
+		logFunc("error selecting tests: %v\n", err)
+		rand.Shuffle(len(specs), func(i, j int) {
+			specs[i], specs[j] = specs[j], specs[i]
+		})
+		eligible := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			eligible++
+		}
+		fallbackCount := int(math.Ceil(float64(eligible) * fallbackPct))
+		selected := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			selected++
+			if selected > fallbackCount {
+				specs[i].Skip = "test selector"
+				specs[i].SkipDetails = "test skipped: selector unavailable, random fallback"
+			}
+		}
+		logFunc("falling back to random selection: %d out of %d eligible tests (%.0f%%)\n",
+			fallbackCount, eligible, fallbackPct*100)
 		return
 	}
 
