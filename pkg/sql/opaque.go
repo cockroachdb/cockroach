@@ -183,6 +183,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateIndex(ctx, n)
 	case *tree.CreatePolicy:
 		return p.CreatePolicy(ctx, n)
+	case *tree.CreateVectorizer:
+		return p.CreateVectorizer(ctx, n)
 	case *tree.CreateSchema:
 		return p.CreateSchema(ctx, n)
 	case *tree.CreateTrigger:
@@ -219,6 +221,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropOwnedBy(ctx)
 	case *tree.DropPolicy:
 		return p.DropPolicy(ctx, n)
+	case *tree.DropVectorizer:
+		return p.DropVectorizer(ctx, n)
 	case *tree.DropRole:
 		return p.DropRole(ctx, n)
 	case *tree.DropSchema:
@@ -398,6 +402,7 @@ func init() {
 		&tree.CreateTenant{},
 		&tree.CreateIndex{},
 		&tree.CreatePolicy{},
+		&tree.CreateVectorizer{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
 		&tree.CreateTrigger{},
@@ -413,6 +418,7 @@ func init() {
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropPolicy{},
+		&tree.DropVectorizer{},
 		&tree.DropRole{},
 		&tree.DropSchema{},
 		&tree.DropSequence{},
