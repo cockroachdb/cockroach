@@ -32,8 +32,8 @@ func Init(onnxLibDir, modelPath, vocabPath string) error {
 	globalEngine.once.Do(func() {
 		if modelPath == "" || vocabPath == "" {
 			globalEngine.err = errors.New(
-				"embedding model or vocabulary path not configured; " +
-					"set --embedding-model and --embedding-vocab flags",
+				"embedding model not available; auto-download may have failed " +
+					"or ONNX Runtime library is not installed",
 			)
 			initErr = globalEngine.err
 			return
@@ -70,9 +70,10 @@ func GetEngine() (*Engine, error) {
 	if globalEngine.err != nil {
 		return nil, pgerror.WithCandidateCode(
 			errors.WithHint(
-				errors.New("embedding engine is not available"),
-				"Ensure the server was started with --embedding-libs, "+
-					"--embedding-model, and --embedding-vocab flags.",
+				errors.Wrap(globalEngine.err, "embedding engine is not available"),
+				"Ensure the ONNX Runtime library is installed (--embedding-libs). "+
+					"The model is downloaded automatically on first use, or set "+
+					"--embedding-model and --embedding-vocab explicitly.",
 			),
 			pgcode.ConfigFile,
 		)
@@ -80,8 +81,9 @@ func GetEngine() (*Engine, error) {
 	return nil, pgerror.WithCandidateCode(
 		errors.WithHint(
 			errors.New("embedding engine is not initialized"),
-			"Ensure the server was started with --embedding-libs, "+
-				"--embedding-model, and --embedding-vocab flags.",
+			"Ensure the ONNX Runtime library is installed (--embedding-libs). "+
+				"The model is downloaded automatically on first use, or set "+
+				"--embedding-model and --embedding-vocab explicitly.",
 		),
 		pgcode.ConfigFile,
 	)

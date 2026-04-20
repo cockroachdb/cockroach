@@ -538,6 +538,9 @@ var startCtx struct {
 	// embeddingVocabPath is the path to the vocabulary file for text
 	// embedding tokenization.
 	embeddingVocabPath string
+	// embeddingCacheDir is the directory for caching downloaded
+	// embedding model files. If empty, derived from the first store.
+	embeddingCacheDir string
 
 	// These configuration handles are flag.Value instances that allow
 	// configuring other variables using either a percentage or a
@@ -577,6 +580,7 @@ func setStartContextDefaults() {
 	startCtx.embeddingLibsDir = ""
 	startCtx.embeddingModelPath = ""
 	startCtx.embeddingVocabPath = ""
+	startCtx.embeddingCacheDir = ""
 	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&goMemLimit, memoryPercentResolver)

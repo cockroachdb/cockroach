@@ -48,8 +48,9 @@ var embeddingBuiltins = map[string]builtinDefinition{
 				return tree.NewDPGVector(vector.T(vec)), nil
 			},
 			Info: "Returns the vector embedding of the input text using the " +
-				"configured ONNX model. The server must be started with " +
-				"--embedding-libs, --embedding-model, and --embedding-vocab flags.",
+				"all-MiniLM-L6-v2 model (384 dimensions). The model is " +
+				"downloaded automatically on first use. Requires the ONNX " +
+				"Runtime library (--embedding-libs).",
 			Volatility: volatility.Stable,
 		},
 	),

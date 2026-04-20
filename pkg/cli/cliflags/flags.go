@@ -1672,6 +1672,13 @@ Path to the ONNX model file for text embedding.`,
 Path to the vocabulary file for text embedding tokenization.`,
 	}
 
+	EmbeddingCacheDir = FlagInfo{
+		Name: "embedding-cache-dir",
+		Description: `
+Directory for caching downloaded embedding model files. If not set,
+defaults to a subdirectory of the first on-disk store.`,
+	}
+
 	Global = FlagInfo{
 		Name: "global",
 		Description: `

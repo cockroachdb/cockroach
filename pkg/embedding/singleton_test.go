@@ -30,7 +30,7 @@ func TestInitMissingPaths(t *testing.T) {
 
 	err := Init("", "", "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "--embedding-model")
+	require.Contains(t, err.Error(), "not available")
 
 	// GetEngine should also return a user-facing error.
 	eng, err := GetEngine()

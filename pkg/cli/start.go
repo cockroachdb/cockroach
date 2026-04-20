@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/embedding"
+	"github.com/cockroachdb/cockroach/pkg/embedding/modelcache"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1552,12 +1553,35 @@ func initGEOS(ctx context.Context) {
 
 // initEmbedding sets up the embedding engine for the embed() SQL builtin.
 // We need to make sure this happens before any queries using embed() are
-// executed.
+// executed. When explicit model/vocab paths are not provided, the default
+// model is automatically downloaded and cached.
 func initEmbedding(ctx context.Context) {
+	modelPath := startCtx.embeddingModelPath
+	vocabPath := startCtx.embeddingVocabPath
+
+	// Auto-download the default model when explicit paths are not provided.
+	if modelPath == "" && vocabPath == "" {
+		cacheDir := startCtx.embeddingCacheDir
+		if cacheDir == "" {
+			cacheDir = defaultEmbeddingCacheDir()
+		}
+		if cacheDir != "" {
+			result, err := modelcache.EnsureModel(ctx, cacheDir)
+			if err != nil {
+				log.Ops.Warningf(ctx,
+					"could not download default embedding model: %v",
+					log.SafeManaged(err))
+			} else {
+				modelPath = result.ModelPath
+				vocabPath = result.VocabPath
+			}
+		}
+	}
+
 	err := embedding.Init(
 		startCtx.embeddingLibsDir,
-		startCtx.embeddingModelPath,
-		startCtx.embeddingVocabPath,
+		modelPath,
+		vocabPath,
 	)
 	if err != nil {
 		log.Ops.Warningf(ctx,
@@ -1566,6 +1590,23 @@ func initEmbedding(ctx context.Context) {
 	} else {
 		log.Ops.Infof(ctx, "embedding engine initialized successfully")
 	}
+}
+
+// defaultEmbeddingCacheDir returns the default cache directory for
+// embedding model files, derived from the first on-disk store. For
+// in-memory stores (e.g. cockroach demo), it falls back to the user's
+// cache directory.
+func defaultEmbeddingCacheDir() string {
+	for _, spec := range serverCfg.Stores.Specs {
+		if spec.InMemory {
+			continue
+		}
+		return filepath.Join(spec.Path, "embedding-cache")
+	}
+	if cacheDir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(cacheDir, "cockroach", "embedding-models")
+	}
+	return ""
 }
 
 // reportReadinessExternally reports when the server has finished initializing
