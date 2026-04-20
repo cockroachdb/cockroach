@@ -124,22 +124,41 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 	testselector.SqlConnectorFunc = func(_, _ string) (*gosql.DB, error) {
 		return db, err
 	}
-	t.Run("expect CategoriseTests to fail which causes fall back to run all tests", func(t *testing.T) {
-		// The failure of the CategoriseTests does not cause any failure. It falls back to run all the tests in the spec
+	t.Run("expect CategoriseTests to fail which causes random fallback selection", func(t *testing.T) {
+		// When CategoriseTests fails, we fall back to randomly selecting a
+		// subset of tests using SuccessfulTestsSelectPct instead of running
+		// everything (which risks timeouts).
 		db, mock, err = sqlmock.New()
 		require.Nil(t, err)
+		savedPct := roachtestflags.SuccessfulTestsSelectPct
+		roachtestflags.SuccessfulTestsSelectPct = 0.35
+		t.Cleanup(func() { roachtestflags.SuccessfulTestsSelectPct = savedPct })
 		specs, _ := getTestSelectionMockData()
 		mock.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnError(fmt.Errorf("failed to prepare"))
 		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
 			t.Logf(format, args...)
 		})
+		// Count eligible (non-pre-skipped) specs and verify the fallback
+		// selected the right number.
+		eligible := 0
+		selected := 0
 		for _, s := range specs {
-			if !strings.Contains(s.Name, "skipped") {
-				require.Empty(t, s.Skip)
-			} else {
-				require.Equal(t, "test spec skip", s.Skip)
+			switch {
+			case s.Skip == "test spec skip":
+				// Already-skipped tests keep their original skip reason.
+				require.Contains(t, s.Name, "skipped")
+			case s.Skip == "":
+				eligible++
+				selected++
+			default:
+				eligible++
+				// Tests skipped by the fallback.
+				require.Equal(t, "test selector", s.Skip)
+				require.Contains(t, s.SkipDetails, "random fallback")
 			}
 		}
+		expectedSelected := int(math.Ceil(float64(eligible) * roachtestflags.SuccessfulTestsSelectPct))
+		require.Equal(t, expectedSelected, selected)
 	})
 	t.Run("expect no failure", func(t *testing.T) {
 		db, mock, err = sqlmock.New()
