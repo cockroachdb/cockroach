@@ -4047,8 +4047,8 @@ row_security                                                     on
 search_path                                                      "$user", public
 serial_normalization                                             rowid
 server_encoding                                                  UTF8
-server_version                                                   13.0.0
-server_version_num                                               130000
+server_version                                                   18.0.0
+server_version_num                                               180000
 show_primary_key_constraint_on_not_visible_columns               on
 sql_safe_updates                                                 off
 ssl                                                              on

@@ -54,9 +54,9 @@ import (
 
 const (
 	// PgServerVersion is the latest version of postgres that we claim to support.
-	PgServerVersion = "13.0.0"
+	PgServerVersion = "18.0.0"
 	// PgServerVersionNum is the latest version of postgres that we claim to support in the numeric format of "server_version_num".
-	PgServerVersionNum = "130000"
+	PgServerVersionNum = "180000"
 	// PgCompatLocale is the locale string we advertise in `LC_*` session
 	// variables. C.UTF-8 is the only locale that is allowed in CREATE DATABASE
 	// at the time of writing.

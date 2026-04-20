@@ -221,8 +221,8 @@ row_security                                                     on             
 search_path                                                      "$user", public     Sets the list of namespaces to search when resolving unqualified names.
 serial_normalization                                             rowid               Controls how `SERIAL` columns are normalized.
 server_encoding                                                  UTF8                Reports the database encoding (always UTF8). This cannot be changed.
-server_version                                                   13.0.0              Reports the server version string.
-server_version_num                                               130000              Reports the server version as an integer.
+server_version                                                   18.0.0              Reports the server version string.
+server_version_num                                               180000              Reports the server version as an integer.
 show_primary_key_constraint_on_not_visible_columns               on                  Controls whether SHOW CONSTRAINTS and pg_catalog.pg_constraint include primary key constraints with only hidden columns.
 sql_safe_updates                                                 off                 When enabled, disallows potentially unsafe SQL statements: `DROP DATABASE` of a non-empty database, `DELETE` and `UPDATE` without a `WHERE` clause (unless a `LIMIT` clause is included), `SELECT ... FOR UPDATE`/`FOR SHARE` without a `WHERE` or `LIMIT` clause, `ALTER TABLE ... DROP COLUMN`, and converting an existing table to `REGIONAL BY ROW` unless a region column has already been added.
 ssl                                                              on                  Controls whether SSL is enabled.
