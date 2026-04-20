@@ -285,13 +285,13 @@ query T colnames
 SHOW server_version
 ----
 server_version
-13.0.0
+18.0.0
 
 query T colnames
 SHOW server_version_num
 ----
 server_version_num
-130000
+180000
 
 query T
 SHOW log_timezone
