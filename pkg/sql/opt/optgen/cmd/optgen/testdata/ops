@@ -134,5 +134,19 @@ func IsEnforcerOp(e Expr) bool {
 	}
 	return false
 }
+
+var opByCamelCase = map[string]Operator{
+	"ColPrivate":      ColPrivateOp,
+	"Project":         ProjectOp,
+	"Projections":     ProjectionsOp,
+	"ProjectionsItem": ProjectionsItemOp,
+	"Sort":            SortOp,
+}
+
+// OperatorByCamelCase returns the Operator for the given CamelCase name.
+func OperatorByCamelCase(name string) (Operator, bool) {
+	op, ok := opByCamelCase[name]
+	return op, ok
+}
 ----
 ----

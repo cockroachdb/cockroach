@@ -34,6 +34,7 @@ func (g *opsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.genOperatorCamelCaseNames()
 	g.genOperatorSyntaxTags()
 	g.genOperatorsByTag()
+	g.genOperatorByCamelCase()
 }
 
 func (g *opsGen) genOperatorEnum() {
@@ -129,6 +130,20 @@ func (g *opsGen) genOperatorsByTag() {
 		fmt.Fprintf(g.w, "  return false\n")
 		fmt.Fprintf(g.w, "}\n\n")
 	}
+}
+
+func (g *opsGen) genOperatorByCamelCase() {
+	fmt.Fprintf(g.w, "var opByCamelCase = map[string]Operator{\n")
+	for _, define := range g.sorted {
+		fmt.Fprintf(g.w, "  %q: %sOp,\n", define.Name, define.Name)
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+
+	fmt.Fprintf(g.w, "// OperatorByCamelCase returns the Operator for the given CamelCase name.\n")
+	fmt.Fprintf(g.w, "func OperatorByCamelCase(name string) (Operator, bool) {\n")
+	fmt.Fprintf(g.w, "  op, ok := opByCamelCase[name]\n")
+	fmt.Fprintf(g.w, "  return op, ok\n")
+	fmt.Fprintf(g.w, "}\n\n")
 }
 
 // sortDefines returns a copy of the given expression definitions, sorted by
