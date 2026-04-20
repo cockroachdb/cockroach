@@ -39,6 +39,26 @@ asin(1.0)
 1.5707963267948966
 
 eval
+asin(1.5)
+----
+error: input is out of range
+
+eval
+asin(-1.5)
+----
+error: input is out of range
+
+eval
+acos(1.5)
+----
+error: input is out of range
+
+eval
+acos(-1.5)
+----
+error: input is out of range
+
+eval
 round(atan(1.0), 15)
 ----
 0.785398163397448
@@ -77,6 +97,26 @@ eval
 asind(1.0)
 ----
 90.0
+
+eval
+asind(1.5)
+----
+error: input is out of range
+
+eval
+asind(-1.5)
+----
+error: input is out of range
+
+eval
+acosd(1.5)
+----
+error: input is out of range
+
+eval
+acosd(-1.5)
+----
+error: input is out of range
 
 eval
 round(atand(1.0), 10)

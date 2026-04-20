@@ -867,6 +867,44 @@ SELECT abs(sin(pi())) < 1e-12
 ----
 true
 
+# Regression test for #168595: asin/acos/asind/acosd should return an error
+# for inputs outside [-1, 1], matching PostgreSQL behavior. Previously they
+# returned NaN, which caused incorrect query results.
+subtest asin_acos_domain_errors
+
+query RR
+SELECT asin(-1.0), asin(1.0)
+----
+-1.5707963267948966  1.5707963267948966
+
+query RR
+SELECT acos(-1.0), acos(1.0)
+----
+3.141592653589793  0
+
+query error input is out of range
+SELECT asin(1.5)
+
+query error input is out of range
+SELECT acos(-1.5)
+
+query error input is out of range
+SELECT asind(2.0)
+
+query error input is out of range
+SELECT acosd(2.0)
+
+# Boundary values: exactly -1 and 1 should succeed.
+query RR
+SELECT asind(-1.0), asind(1.0)
+----
+-90  90
+
+query RR
+SELECT acosd(-1.0), acosd(1.0)
+----
+180  0
+
 subtest standard_float_digits
 
 query RR
@@ -879,10 +917,34 @@ SELECT cot(-0.5), cot(0.5)
 ----
 -1.830487721712452  1.830487721712452
 
-query RRR
-SELECT asin(-0.5), asin(0.5), asin(1.5)
+query RR
+SELECT asin(-0.5), asin(0.5)
 ----
--0.5235987755982989  0.5235987755982989  NaN
+-0.5235987755982989  0.5235987755982989
+
+query error input is out of range
+SELECT asin(1.5)
+
+query error input is out of range
+SELECT acos(1.5)
+
+query error input is out of range
+SELECT asind(1.5)
+
+query error input is out of range
+SELECT acosd(1.5)
+
+query error input is out of range
+SELECT asin(-1.5)
+
+query error input is out of range
+SELECT acos(-1.5)
+
+query error input is out of range
+SELECT asind(-1.5)
+
+query error input is out of range
+SELECT acosd(-1.5)
 
 query RR
 SELECT atan(-0.5), atan(0.5)
@@ -935,10 +997,10 @@ SELECT cot(-0.5), cot(0.5)
 ----
 -1.830487721712452  1.830487721712452
 
-query RRR
-SELECT asin(-0.5), asin(0.5), asin(1.5)
+query RR
+SELECT asin(-0.5), asin(0.5)
 ----
--0.5235987755982989  0.5235987755982989  NaN
+-0.5235987755982989  0.5235987755982989
 
 query RR
 SELECT atan(-0.5), atan(0.5)

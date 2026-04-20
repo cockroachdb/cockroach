@@ -27,9 +27,10 @@ func init() {
 }
 
 var (
-	errAbsOfMinInt64  = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
-	errLogOfNegNumber = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
-	errLogOfZero      = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errAbsOfMinInt64   = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
+	errLogOfNegNumber  = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
+	errLogOfZero       = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errInputOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "input is out of range")
 
 	bigTen = apd.NewBigInt(10)
 )
@@ -72,12 +73,18 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"acos": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
+			if x < -1.0 || x > 1.0 {
+				return nil, errInputOutOfRange
+			}
 			return tree.NewDFloat(tree.DFloat(math.Acos(x))), nil
 		}, "Calculates the inverse cosine of `val`.", volatility.Immutable),
 	),
 
 	"acosd": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
+			if x < -1.0 || x > 1.0 {
+				return nil, errInputOutOfRange
+			}
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Acos(x))), nil
 		}, "Calculates the inverse cosine of `val` with the result in degrees", volatility.Immutable),
 	),
@@ -90,12 +97,18 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"asin": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
+			if x < -1.0 || x > 1.0 {
+				return nil, errInputOutOfRange
+			}
 			return tree.NewDFloat(tree.DFloat(math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val`.", volatility.Immutable),
 	),
 
 	"asind": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
+			if x < -1.0 || x > 1.0 {
+				return nil, errInputOutOfRange
+			}
 			return tree.NewDFloat(tree.DFloat(radToDeg * math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val` with the result in degrees.", volatility.Immutable),
 	),
