@@ -268,6 +268,7 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/normalize",
+        "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/volatility",
