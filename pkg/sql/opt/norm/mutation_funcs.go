@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -96,6 +97,11 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 		// required. Therefore, the partial index PUT and DEL columns cannot be
 		// simplified.
 		//
+		// If a secondary index is being built, then there will be points where
+		// all values will be forced with a Put. As a result, runtime expects mutated
+		// temporary indexes to always have values available for writes during index construction,
+		// even if the mutation does not touch those columns.
+		//
 		// Note that we use the set of index columns where the virtual
 		// columns have been mapped to their source columns. Virtual columns
 		// are never part of the updated columns. Updates to source columns
@@ -103,7 +109,7 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 		predFilters := *pred.(*memo.FiltersExpr)
 		indexAndPredCols := tabMeta.IndexColumnsMapInverted(i)
 		indexAndPredCols.UnionWith(predFilters.OuterCols())
-		if indexAndPredCols.Intersects(updateCols) {
+		if indexAndPredCols.Intersects(updateCols) || cat.IsTemporaryMutationIndex(tabMeta.Table, i) {
 			continue
 		}
 
