@@ -119,6 +119,12 @@ func (e *Engine) Embed(text string) ([]float32, error) {
 	return result, nil
 }
 
+// Tokenizer returns the engine's tokenizer. This is useful for
+// components like the chunker that need token counting.
+func (e *Engine) Tokenizer() *tokenizer.Tokenizer {
+	return e.tokenizer
+}
+
 // EmbedBatch produces normalized embedding vectors for multiple texts.
 // Each inner slice has length Dims().
 func (e *Engine) EmbedBatch(texts []string) ([][]float32, error) {

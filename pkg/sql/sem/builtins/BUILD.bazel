@@ -39,6 +39,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/embedding",
+        "//pkg/embedding/chunker",
         "//pkg/geo",
         "//pkg/geo/geogfn",
         "//pkg/geo/geoindex",

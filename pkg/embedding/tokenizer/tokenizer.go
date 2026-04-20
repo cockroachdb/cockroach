@@ -125,6 +125,13 @@ func (t *Tokenizer) EncodeBatch(
 	return inputIDs, attentionMask, batchSize, seqLen
 }
 
+// TokenCount returns the number of subword tokens the tokenizer would
+// produce for the given text, excluding [CLS], [SEP], and padding.
+// This is useful for chunking decisions without full encoding overhead.
+func (t *Tokenizer) TokenCount(text string) int {
+	return len(t.tokenizeToIDs(text))
+}
+
 // tokenizeToIDs runs pre-tokenization and WordPiece on the input text,
 // returning the raw subword IDs without [CLS], [SEP], or padding.
 func (t *Tokenizer) tokenizeToIDs(text string) []int64 {
