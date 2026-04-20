@@ -79,10 +79,16 @@ type pendingBuffer struct {
 	// maxBuffered is the maximum number of events allowed in the buffer.
 	// addRow blocks when the limit is hit. 0 means unbounded.
 	maxBuffered int
-	// flushing blocks new addRow calls while a Flush is draining.
-	flushing bool
-	closed   bool
-	hasher   hash.Hash32
+	// totalAdded is a monotonically increasing count of all events ever
+	// added via addRow. Used by Flush to determine when all pre-Flush
+	// events have been completed.
+	totalAdded int64
+	// totalCompleted is a monotonically increasing count of all events
+	// ever completed via completeBatch. Flush waits until totalCompleted
+	// reaches the snapshot of totalAdded taken at Flush time.
+	totalCompleted int64
+	closed         bool
+	hasher         hash.Hash32
 }
 
 func newPendingBuffer(maxBuffered int) *pendingBuffer {
@@ -103,20 +109,17 @@ func (pb *pendingBuffer) computeKeyHash(topicName string, key []byte) int {
 }
 
 // addRow adds an event to the buffer and signals waiting workers.
-// Blocks while a Flush is draining or the buffer is full.
+// Blocks only when the buffer is full (backpressure). Does not block
+// during Flush — new events flow in freely while Flush drains prior events.
 func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
-	if (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
-		reason := "flush"
-		if pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered {
-			reason = "buffer_full"
-		}
+	if pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered && !pb.closed {
 		log.VEventf(context.Background(), 1,
-			"no-linger addRow blocking: reason=%s totalEvents=%d maxBuffered=%d inflight=%d heapLen=%d",
-			reason, pb.totalEvents, pb.maxBuffered, pb.totalInflight, pb.keyHeap.Len())
-		for (pb.flushing || (pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered)) && !pb.closed {
+			"no-linger addRow blocking: reason=buffer_full totalEvents=%d maxBuffered=%d inflight=%d heapLen=%d",
+			pb.totalEvents, pb.maxBuffered, pb.totalInflight, pb.keyHeap.Len())
+		for pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered && !pb.closed {
 			pb.cond.Wait()
 		}
 	}
@@ -125,6 +128,7 @@ func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
 	_, exists := pb.keyMessages[h]
 	pb.keyMessages[h] = append(pb.keyMessages[h], e)
 	pb.totalEvents++
+	pb.totalAdded++
 
 	// Only push to heap if this key is new (not already queued or inflight).
 	// Use the event's mvcc timestamp for age-based ordering.
@@ -218,6 +222,7 @@ func (pb *pendingBuffer) completeBatch(batch *pendingBatch) {
 	})
 
 	pb.totalInflight -= len(batch.events)
+	pb.totalCompleted += int64(len(batch.events))
 	pb.cond.Broadcast()
 }
 
@@ -393,9 +398,10 @@ func (s *noLingerSink) EmitRow(
 	return nil
 }
 
-// Flush implements the Sink interface. It blocks new EmitRow calls and
-// waits until all pending and inflight events have been flushed.
-// Workers continue pulling batches during Flush.
+// Flush implements the Sink interface. It waits until all events that
+// were pending at the time of the Flush call have been processed.
+// New EmitRow calls are NOT blocked — events added after Flush is called
+// will be drained by a subsequent Flush.
 func (s *noLingerSink) Flush(ctx context.Context) error {
 	defer s.metrics.recordFlushRequestCallback()()
 
@@ -406,22 +412,21 @@ func (s *noLingerSink) Flush(ctx context.Context) error {
 		return s.termErr
 	}
 
-	// Block new addRow calls while draining.
+	// Snapshot the total number of events added so far. We wait until
+	// totalCompleted catches up to this value, meaning all events that
+	// existed at Flush time have been processed. New events added after
+	// this point are not waited for.
+	target := s.buf.totalAdded
 	pending := s.buf.totalEvents
 	inflight := s.buf.totalInflight
-	s.buf.flushing = true
-	defer func() {
-		s.buf.flushing = false
-		s.buf.cond.Broadcast()
-	}()
 
 	log.VEventf(ctx, 1,
-		"no-linger Flush started: pending=%d inflight=%d", pending, inflight)
+		"no-linger Flush started: target=%d completed=%d pending=%d inflight=%d",
+		target, s.buf.totalCompleted, pending, inflight)
 
 	flushStart := timeutil.Now()
 
-	// Wait until all pending and inflight events are drained.
-	for (s.buf.totalInflight > 0 || s.buf.totalEvents > 0) &&
+	for s.buf.totalCompleted < target &&
 		s.termErr == nil && !s.buf.closed {
 		s.buf.cond.Wait()
 	}
