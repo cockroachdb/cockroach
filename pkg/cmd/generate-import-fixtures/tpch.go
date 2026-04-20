@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -7,8 +7,10 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ColumnType describes the logical type of a TPC-H column. Each output format
@@ -16,11 +18,27 @@ import (
 type ColumnType int
 
 const (
-	Long   ColumnType = iota // SQL INTEGER / BIGINT
-	Double                   // SQL FLOAT / DECIMAL(p,s) approximated as float64
-	String                   // SQL CHAR(n) / VARCHAR(n)
-	Date                     // SQL DATE, kept as "YYYY-MM-DD" string
+	Long   ColumnType = iota + 1 // SQL INTEGER / BIGINT
+	Double                       // SQL FLOAT / DECIMAL(p,s) approximated as float64
+	Text                         // SQL CHAR(n) / VARCHAR(n)
+	Date                         // SQL DATE, parsed as time.Time at ingest and converted per-format at write time
 )
+
+// String returns a human-readable name for the column type.
+func (ct ColumnType) String() string {
+	switch ct {
+	case Long:
+		return "Long"
+	case Double:
+		return "Double"
+	case Text:
+		return "Text"
+	case Date:
+		return "Date"
+	default:
+		return fmt.Sprintf("ColumnType(%d)", int(ct))
+	}
+}
 
 // ColumnDef defines a single column in a TPC-H table.
 type ColumnDef struct {
@@ -43,14 +61,15 @@ func parseDouble(s string) (interface{}, error) {
 	return strconv.ParseFloat(strings.TrimSpace(s), 64)
 }
 
+// parseString strips whitespace padding from dbgen's fixed-width field output.
 func parseString(s string) (interface{}, error) {
 	return strings.TrimSpace(s), nil
 }
 
-// parseDate keeps dates as "YYYY-MM-DD" strings, matching how CRDB imports
-// them from AVRO string fields.
+// parseDate parses a "YYYY-MM-DD" date string into a time.Time. Each output
+// format converts the time.Time to its native representation at write time.
 func parseDate(s string) (interface{}, error) {
-	return strings.TrimSpace(s), nil
+	return time.Parse("2006-01-02", strings.TrimSpace(s))
 }
 
 func longCol(name string) ColumnDef {
@@ -62,7 +81,7 @@ func doubleCol(name string) ColumnDef {
 }
 
 func stringCol(name string) ColumnDef {
-	return ColumnDef{Name: name, Type: String, Parse: parseString}
+	return ColumnDef{Name: name, Type: Text, Parse: parseString}
 }
 
 func dateCol(name string) ColumnDef {
@@ -175,12 +194,13 @@ var tpchTables = map[string]TableDef{
 	},
 }
 
-// allTPCHTables returns the names of all defined TPC-H tables.
+// allTPCHTables returns the names of all defined TPC-H tables in sorted order.
 func allTPCHTables() []string {
 	names := make([]string, 0, len(tpchTables))
 	for name := range tpchTables {
 		names = append(names, name)
 	}
+	slices.Sort(names)
 	return names
 }
 

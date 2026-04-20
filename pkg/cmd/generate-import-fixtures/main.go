@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -89,30 +90,9 @@ func main() {
 		fmt.Printf("processing table: %s\n", tableName)
 
 		for _, s := range shardFiles(tableName) {
-			filePath := filepath.Join(*inputDir, s.fileName)
-
-			f, err := os.Open(filePath)
-			if err != nil {
-				log.Fatalf("opening %s: %v", filePath, err)
-			}
-
-			writer, err := format.NewWriter(tableDef, *outputDir, s.idx)
-			if err != nil {
-				f.Close()
-				log.Fatalf("creating writer for %s shard %d: %v", tableName, s.idx, err)
-			}
-
-			if _, err := processShard(f, tableDef, writer); err != nil {
-				_ = writer.Close()
-				f.Close()
+			if err := processShardFile(*inputDir, *outputDir, tableDef, s, format); err != nil {
 				log.Fatalf("processing %s shard %d: %v", tableName, s.idx, err)
 			}
-
-			if err := writer.Close(); err != nil {
-				f.Close()
-				log.Fatalf("closing writer for %s shard %d: %v", tableName, s.idx, err)
-			}
-			f.Close()
 		}
 	}
 
@@ -124,6 +104,7 @@ func availableFormats() string {
 	for name := range formats {
 		names = append(names, name)
 	}
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
 
@@ -135,6 +116,7 @@ type shardFile struct {
 
 // singleFileTables lists tables where dbgen produces a single unsuffixed file
 // instead of per-shard files (e.g. region.tbl instead of region.tbl.1..8).
+// Output files still use the .1 suffix (e.g. region.parquet.1) for consistency.
 var singleFileTables = map[string]bool{
 	"region": true,
 	"nation": true,
@@ -157,6 +139,31 @@ func shardFiles(tableName string) []shardFile {
 	return shards
 }
 
+// processShardFile opens an input file, creates a format writer, and streams
+// all rows through processShard. File and writer are closed via defer.
+func processShardFile(
+	inputDir, outputDir string, td TableDef, s shardFile, format OutputFormat,
+) (retErr error) {
+	f, err := os.Open(filepath.Join(inputDir, s.fileName))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	writer, err := format.NewWriter(td, outputDir, s.idx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := writer.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
+
+	_, err = processShard(f, td, writer)
+	return err
+}
+
 // processShard reads a pipe-delimited TPC-H file and streams parsed rows to the
 // writer in fixed-size batches. It returns the total number of rows processed.
 func processShard(r io.Reader, table TableDef, writer FormatWriter) (int, error) {
@@ -164,7 +171,7 @@ func processShard(r io.Reader, table TableDef, writer FormatWriter) (int, error)
 	// Increase buffer size for lineitem which can have long lines.
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
-	batch := make([]map[string]interface{}, 0, batchSize)
+	batch := make([][]any, 0, batchSize)
 	lineNum := 0
 	totalRows := 0
 
@@ -184,14 +191,14 @@ func processShard(r io.Reader, table TableDef, writer FormatWriter) (int, error)
 				"line %d: expected %d fields for %s, got %d",
 				lineNum, len(table.Columns), table.Name, len(fields))
 		}
-		row := make(map[string]interface{}, len(table.Columns))
+		row := make([]any, len(table.Columns))
 		for i, col := range table.Columns {
 			val, err := col.Parse(fields[i])
 			if err != nil {
 				return totalRows, fmt.Errorf(
 					"line %d, column %s: %w", lineNum, col.Name, err)
 			}
-			row[col.Name] = val
+			row[i] = val
 		}
 		batch = append(batch, row)
 

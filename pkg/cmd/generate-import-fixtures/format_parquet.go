@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -46,7 +46,7 @@ func buildParquetSchema(table TableDef) (*schema.Schema, error) {
 		case Double:
 			fields[i] = schema.NewFloat64Node(col.Name,
 				parquet.Repetitions.Required, defaultSchemaFieldID)
-		case String:
+		case Text:
 			fields[i], err = schema.NewPrimitiveNodeLogical(col.Name,
 				parquet.Repetitions.Required, schema.StringLogicalType{},
 				parquet.Types.ByteArray, defaultTypeLength, defaultSchemaFieldID)
@@ -55,7 +55,7 @@ func buildParquetSchema(table TableDef) (*schema.Schema, error) {
 				parquet.Repetitions.Required, schema.DateLogicalType{},
 				parquet.Types.Int32, defaultTypeLength, defaultSchemaFieldID)
 		default:
-			return nil, fmt.Errorf("unsupported column type %d for column %s", col.Type, col.Name)
+			return nil, fmt.Errorf("unsupported column type %s for column %s", col.Type, col.Name)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("creating schema node for %s: %w", col.Name, err)
@@ -66,19 +66,6 @@ func buildParquetSchema(table TableDef) (*schema.Schema, error) {
 		return nil, fmt.Errorf("creating schema root: %w", err)
 	}
 	return schema.NewSchema(root), nil
-}
-
-// unixEpoch is the Unix epoch used for converting date strings to days.
-var unixEpoch = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
-
-// dateToDays converts a "YYYY-MM-DD" date string to the number of days since
-// the Unix epoch.
-func dateToDays(dateStr string) (int32, error) {
-	t, err := time.Parse("2006-01-02", dateStr)
-	if err != nil {
-		return 0, fmt.Errorf("parsing date %q: %w", dateStr, err)
-	}
-	return int32(t.Sub(unixEpoch).Hours() / 24), nil
 }
 
 // parquetWriter streams batches of rows to a Parquet file. Each call to
@@ -122,7 +109,7 @@ func (p *parquetFormat) NewWriter(
 }
 
 // WriteBatch writes a batch of rows as a single Parquet row group.
-func (w *parquetWriter) WriteBatch(rows []map[string]interface{}) error {
+func (w *parquetWriter) WriteBatch(rows [][]any) error {
 	rowGroup := w.writer.AppendBufferedRowGroup()
 	numRows := len(rows)
 
@@ -136,7 +123,11 @@ func (w *parquetWriter) WriteBatch(rows []map[string]interface{}) error {
 		case Long:
 			values := make([]int64, numRows)
 			for i, row := range rows {
-				values[i] = row[col.Name].(int64)
+				v, ok := row[colIdx].(int64)
+				if !ok {
+					return fmt.Errorf("column %s row %d: expected int64, got %T", col.Name, i, row[colIdx])
+				}
+				values[i] = v
 			}
 			chunkWriter := cw.(*file.Int64ColumnChunkWriter)
 			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
@@ -145,16 +136,24 @@ func (w *parquetWriter) WriteBatch(rows []map[string]interface{}) error {
 		case Double:
 			values := make([]float64, numRows)
 			for i, row := range rows {
-				values[i] = row[col.Name].(float64)
+				v, ok := row[colIdx].(float64)
+				if !ok {
+					return fmt.Errorf("column %s row %d: expected float64, got %T", col.Name, i, row[colIdx])
+				}
+				values[i] = v
 			}
 			chunkWriter := cw.(*file.Float64ColumnChunkWriter)
 			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing float64 column %s: %w", col.Name, err)
 			}
-		case String:
+		case Text:
 			values := make([]parquet.ByteArray, numRows)
 			for i, row := range rows {
-				values[i] = parquet.ByteArray(row[col.Name].(string))
+				v, ok := row[colIdx].(string)
+				if !ok {
+					return fmt.Errorf("column %s row %d: expected string, got %T", col.Name, i, row[colIdx])
+				}
+				values[i] = parquet.ByteArray(v)
 			}
 			chunkWriter := cw.(*file.ByteArrayColumnChunkWriter)
 			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
@@ -163,16 +162,18 @@ func (w *parquetWriter) WriteBatch(rows []map[string]interface{}) error {
 		case Date:
 			values := make([]int32, numRows)
 			for i, row := range rows {
-				days, err := dateToDays(row[col.Name].(string))
-				if err != nil {
-					return fmt.Errorf("converting date in column %s, row %d: %w", col.Name, i, err)
+				t, ok := row[colIdx].(time.Time)
+				if !ok {
+					return fmt.Errorf("column %s row %d: expected time.Time, got %T", col.Name, i, row[colIdx])
 				}
-				values[i] = days
+				values[i] = int32(t.Unix() / 86400)
 			}
 			chunkWriter := cw.(*file.Int32ColumnChunkWriter)
 			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing date column %s: %w", col.Name, err)
 			}
+		default:
+			return fmt.Errorf("unsupported column type %s for column %s", col.Type, col.Name)
 		}
 	}
 
