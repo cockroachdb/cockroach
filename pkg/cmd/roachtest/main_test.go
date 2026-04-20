@@ -169,6 +169,12 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 			} else if strings.Contains(s.Name, "skipped") {
 				require.Equal(t, "test spec skip", s.Skip, s.Name)
 				require.Equal(t, "test spec skip test", s.SkipDetails, s.Name)
+			} else if strings.Contains(s.Name, "new_test") {
+				// Tests without Snowflake history may be skipped based on random selection
+				if s.Skip != "" {
+					require.Equal(t, "test selector", s.Skip, s.Name)
+					require.Equal(t, "test skipped because it is stable and selective-tests is set.", s.SkipDetails, s.Name)
+				}
 			} else {
 				require.Empty(t, s.Skip, s.Name)
 			}
@@ -180,7 +186,7 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 		}
 	})
 	// We run the randomized tests 100 times for 100 randomly generated tests
-	t.Run("run with randomised data", func(t *testing.T) {
+	t.Run("run with randomized data", func(t *testing.T) {
 		iteration := 0
 		totalIterations := 100
 
@@ -211,7 +217,7 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 				defer wg.Done()
 				dbs, mocks, err := sqlmock.New()
 				require.Nil(t, err)
-				specs, data, rows, toBeSelectedTestsMap := getRandomisedTests(t, totalTestCount)
+				specs, data, rows, toBeSelectedTestsMap := getRandomizedTests(t, totalTestCount)
 				mocks.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery))
 				mocks.ExpectQuery(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnRows(rows)
 				specsLengthBefore := len(specs)
@@ -280,7 +286,7 @@ func getSkippedMessage(testName string) string {
 	return fmt.Sprintf("%s skipped", testName)
 }
 
-// getRandomisedTests returns "totalTests" number of randomised tests.
+// getRandomizedTests returns "totalTests" number of randomized tests.
 // Out of the totalTests,
 // > 0-90% of the tests are added as tests in specs
 // > 10-100% of the tests are added as snowflake returned tests
@@ -291,7 +297,7 @@ func getSkippedMessage(testName string) string {
 // > The rows to be returned by the snowflake as [][]string
 // > The rows as *sqlmock.Rows
 // > The map of tests that will be selected based on the percent criteria
-func getRandomisedTests(
+func getRandomizedTests(
 	t *testing.T, totalTests int,
 ) ([]registry.TestSpec, [][]string, *sqlmock.Rows, map[string]struct{}) {
 	r, _ := randutil.NewTestRand()
@@ -311,13 +317,13 @@ func getRandomisedTests(
 	// marked as "selected=true"
 	commonSuccessTestMap := make(map[string]struct{})
 	for _, tn := range testNames[sfStart:specEnd] {
-		// all the common tests are added first. The tests marked as "selected=true" will be removed later.
+		// All the common tests are added first. The tests marked as "selected=true" will be removed later.
 		commonSuccessTestMap[tn] = struct{}{}
 	}
 	rows := sqlmock.NewRows(testselector.AllRows)
 	// data is created and returned for easier assertions
 	data := make([][]string, len(testForSF))
-	// testSelected is a randomised value which is the number of tests that are marked as "selected=true"
+	// testSelected is a randomized value which is the number of tests that are marked as "selected=true"
 	testSelected := randutil.RandIntInRange(r, 0, int(0.6*float32(len(testForSF))))
 	for i, sfn := range testForSF {
 		selected := "no"
@@ -335,8 +341,8 @@ func getRandomisedTests(
 		}
 		// generate a random duration value
 		duration := randutil.RandIntInRange(r, 0, 10000000)
-		// populate the data
-		data[i] = []string{sfn, selected, strconv.Itoa(duration + 1), lastFailureIsPreempt}
+		// populate the data with first_run timestamp (all tests in mock data have run before)
+		data[i] = []string{sfn, selected, strconv.Itoa(duration + 1), lastFailureIsPreempt, "2024-01-01"}
 		// add the same to the rows
 		rows.FromCSVString(strings.Join(data[i], ","))
 	}
@@ -425,30 +431,30 @@ func getTestSelectionMockData() ([]registry.TestSpec, *sqlmock.Rows) {
 		s.Suites = registry.Suites(registry.Nightly, registry.Weekly)
 	}
 	// data are the rows returned by snowflake. This is a 2-dimensional list of strings represent the rows
-	// and columns that are returned. Each column has values for 4 rows in sequence:
-	// "name", "selected", "avg_duration", "last_failure_is_preempt"
+	// and columns that are returned. Each column has values for 5 rows in sequence:
+	// "name", "selected", "avg_duration", "last_failure_is_preempt", "first_run"
 	data := [][]string{
-		{"t1_selected", "yes", "1", "no"},
-		{"t2_selected_preempted", "yes", "2", "yes"},
-		{"t_skipped_selected", "yes", "3", "no"},
+		{"t1_selected", "yes", "1", "no", "2024-01-01"},
+		{"t2_selected_preempted", "yes", "2", "yes", "2024-01-01"},
+		{"t_skipped_selected", "yes", "3", "no", "2024-01-01"},
 		// tests from here are selected under percent criteria
-		{"t1_success", "no", "4", "no"},
-		{"t2_success", "no", "6", "no"},
-		{"t3_success", "no", "7", "no"},
+		{"t1_success", "no", "4", "no", "2024-01-01"},
+		{"t2_success", "no", "6", "no", "2024-01-01"},
+		{"t3_success", "no", "7", "no", "2024-01-01"},
 		// test is opted out from test selection
-		{"t_opt_out", "no", "8", "no"},
-		{"t4_missing", "no", "9", "no"},
+		{"t_opt_out", "no", "8", "no", "2024-01-01"},
+		{"t4_missing", "no", "9", "no", "2024-01-01"},
 		// tests from here are skipped as these are beyond the percentage criteria
-		{"t5_success_skip_selector", "no", "10", "no"},
-		{"t6_success_skip_selector", "no", "11", "no"},
+		{"t5_success_skip_selector", "no", "10", "no", "2024-01-01"},
+		{"t6_success_skip_selector", "no", "11", "no", "2024-01-01"},
 		// the test is skipped by test selector, but is already skipped in spec
-		{"t_skipped_not_selected", "no", "12", "no"},
-		{"t7_missing", "no", "13", "no"},
-		{"t8_success_skip_selector", "no", "14", "no"},
-		{"t9_missing", "no", "15", "no"},
-		{"t10_success_skip_selector", "no", "16", "no"},
+		{"t_skipped_not_selected", "no", "12", "no", "2024-01-01"},
+		{"t7_missing", "no", "13", "no", "2024-01-01"},
+		{"t8_success_skip_selector", "no", "14", "no", "2024-01-01"},
+		{"t9_missing", "no", "15", "no", "2024-01-01"},
+		{"t10_success_skip_selector", "no", "16", "no", "2024-01-01"},
 		// test is Randomized=true, so, will always be selected even being at the last in the list
-		{"t_randomized", "no", "5", "no"},
+		{"t_randomized", "no", "5", "no", "2024-01-01"},
 	}
 	// rows are the rows that are returned by snowflake. The list of string represents the columns of each row
 	rows := sqlmock.NewRows(testselector.AllRows)

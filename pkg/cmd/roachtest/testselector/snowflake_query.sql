@@ -55,11 +55,14 @@ select
            -- test is never run - we always select
            -- test is not run by test selector in the last run
             -- The test should not be selected by default in this case and should be selected based on the sorted unselected list
-         (last_status='UNKNOWN' and recent_ignore_details!='test selector')
+         (last_status='UNKNOWN' and recent_ignore_details!='test selector') or
+          -- test has never run at all - auto-select to ensure coverage within 2 days
+         first_run is null
          then 'yes' else 'no' end as selected,
   -- average duration - this is set to 0 if the test is never run (total_successful_runs=0)
   case when total_successful_runs > 0 then total_duration/total_successful_runs else 0 end as avg_duration,
   -- indicates the last failure was due to infra flake
   case when recent_details like '%VMs preempted during the test run%' then 'yes' else 'no' end as last_failure_is_preeempt,
+  first_run,
 from test_stats, ts
 order by selected desc, last_run -- selected="yes" appears first. Rest of the tests are sorted by the last run.
