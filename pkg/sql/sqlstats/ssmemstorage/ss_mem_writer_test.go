@@ -99,14 +99,22 @@ func TestContainer_Add(t *testing.T) {
 			nil,
 		)
 
-		// Add some statement stats to the source container
+		// Use a fixed aggregation timestamp for all stats in this test.
+		aggTs := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+		aggInterval := time.Hour
+
+		// Add some statement stats to the source container.
 		mockedStmtKey := stmtKey{
 			fingerprintID: 1,
+			aggregatedTs:  aggTs,
+			aggInterval:   aggInterval,
 		}
 		stmtStats := &sqlstats.RecordedStmtStats{
 			FingerprintID:      1,
 			Query:              "SELECT * FROM test_table",
 			Database:           "test_db",
+			AggregatedTs:       aggTs,
+			AggInterval:        aggInterval,
 			ServiceLatencySec:  0.1,
 			RowsAffected:       10,
 			IdleLatencySec:     0.01,
@@ -125,10 +133,12 @@ func TestContainer_Add(t *testing.T) {
 		}
 		require.NoError(t, src.RecordStatement(ctx, stmtStats))
 
-		// Add some transaction stats to the source container
+		// Add some transaction stats to the source container.
 		txnFingerprintID := appstatspb.TransactionFingerprintID(123)
 		txnStats := &sqlstats.RecordedTxnStats{
 			FingerprintID:  txnFingerprintID,
+			AggregatedTs:   aggTs,
+			AggInterval:    aggInterval,
 			RowsAffected:   10,
 			ServiceLatency: 1,
 			RetryLatency:   2,
@@ -148,10 +158,14 @@ func TestContainer_Add(t *testing.T) {
 		// but decrease any appstatspb.NumericStats averages.
 		emptyStmtStatsKey := stmtKey{
 			fingerprintID: 321,
+			aggregatedTs:  aggTs,
+			aggInterval:   aggInterval,
 		}
 		reducedStmtStats := &sqlstats.RecordedStmtStats{
 			FingerprintID:      appstatspb.StmtFingerprintID(321),
 			Query:              "SELECT * FROM test_table",
+			AggregatedTs:       aggTs,
+			AggInterval:        aggInterval,
 			ServiceLatencySec:  50,
 			RowsAffected:       1000,
 			IdleLatencySec:     10,
@@ -171,6 +185,8 @@ func TestContainer_Add(t *testing.T) {
 		reducedTxnFingerprintID := appstatspb.TransactionFingerprintID(321)
 		reducedTxnStats := &sqlstats.RecordedTxnStats{
 			FingerprintID:  reducedTxnFingerprintID,
+			AggregatedTs:   aggTs,
+			AggInterval:    aggInterval,
 			RowsAffected:   100,
 			ServiceLatency: 500 * time.Millisecond,
 			RetryLatency:   100 * time.Millisecond,
@@ -186,9 +202,13 @@ func TestContainer_Add(t *testing.T) {
 		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnStats))
 		require.NoError(t, src.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			FingerprintID: appstatspb.StmtFingerprintID(321),
+			AggregatedTs:  aggTs,
+			AggInterval:   aggInterval,
 		}))
 		require.NoError(t, src.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 			FingerprintID: reducedTxnFingerprintID,
+			AggregatedTs:  aggTs,
+			AggInterval:   aggInterval,
 		}))
 
 		for i := 0; i < 10; i++ {
@@ -196,8 +216,16 @@ func TestContainer_Add(t *testing.T) {
 			// Check results.
 			verifyStmtStatsMultiple(t, i+1, stmtStats, dest.getStatsForStmtWithKey(mockedStmtKey))
 			verifyStmtStatsReduced(t, i+2, reducedStmtStats, dest.getStatsForStmtWithKey(emptyStmtStatsKey))
-			verifyTxnStatsMultiple(t, i+1, txnStats, dest.getStatsForTxnWithKey(txnFingerprintID))
-			verifyTxnStatsReduced(t, i+2, reducedTxnStats, dest.getStatsForTxnWithKey(reducedTxnStats.FingerprintID))
+			verifyTxnStatsMultiple(t, i+1, txnStats, dest.getStatsForTxnWithKey(txnKey{
+				transactionFingerprintID: txnFingerprintID,
+				aggregatedTs:             aggTs,
+				aggInterval:              aggInterval,
+			}))
+			verifyTxnStatsReduced(t, i+2, reducedTxnStats, dest.getStatsForTxnWithKey(txnKey{
+				transactionFingerprintID: reducedTxnStats.FingerprintID,
+				aggregatedTs:             aggTs,
+				aggInterval:              aggInterval,
+			}))
 		}
 	})
 }
@@ -396,6 +424,96 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	require.Greater(t, memUsedAfterFreeThenRealloc, int64(0), "Expected memory to be allocated after Free")
 
 	container.Clear(ctx)
+}
+
+// TestContainerCrossWindowAggregation verifies that stats recorded with
+// different aggregation timestamps are kept separate in the Container and
+// drained with their respective aggregated_ts values.
+func TestContainerCrossWindowAggregation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	// Set a 1-hour aggregation interval.
+	sqlstats.SQLStatsAggregationInterval.Override(ctx, &st.SV, time.Hour)
+
+	container := New(st,
+		nil, /* uniqueServerCount */
+		testMonitor(ctx, "test-cross-window", st),
+		"test-app",
+		nil, /* knobs */
+	)
+	defer container.Clear(ctx)
+
+	windowA := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	windowB := time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC)
+	fpID := appstatspb.StmtFingerprintID(42)
+	txnFpID := appstatspb.TransactionFingerprintID(99)
+
+	// Record a statement in window A.
+	err := container.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+		FingerprintID:            fpID,
+		Query:                    "SELECT _",
+		AggregatedTs:             windowA,
+		AggInterval:              time.Hour,
+		TransactionFingerprintID: txnFpID,
+	})
+	require.NoError(t, err)
+
+	// Record the same fingerprint in window B.
+	err = container.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+		FingerprintID:            fpID,
+		Query:                    "SELECT _",
+		AggregatedTs:             windowB,
+		AggInterval:              time.Hour,
+		TransactionFingerprintID: txnFpID,
+	})
+	require.NoError(t, err)
+
+	// Record a transaction in window A.
+	err = container.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+		FingerprintID: txnFpID,
+		AggregatedTs:  windowA,
+		AggInterval:   time.Hour,
+		Committed:     true,
+	})
+	require.NoError(t, err)
+
+	// Record the same txn fingerprint in window B.
+	err = container.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+		FingerprintID: txnFpID,
+		AggregatedTs:  windowB,
+		AggInterval:   time.Hour,
+		Committed:     true,
+	})
+	require.NoError(t, err)
+
+	// Drain and verify the stats have separate entries per window.
+	stmtStats, txnStats := container.DrainStats(ctx)
+
+	require.Len(t, stmtStats, 2, "expected 2 statement stats entries (one per window)")
+	require.Len(t, txnStats, 2, "expected 2 transaction stats entries (one per window)")
+
+	stmtWindows := map[time.Time]bool{}
+	for _, s := range stmtStats {
+		stmtWindows[s.AggregatedTs] = true
+		require.Equal(t, time.Hour, s.AggregationInterval)
+		require.Equal(t, fpID, s.ID)
+		require.Equal(t, int64(1), s.Stats.Count, "each window should have count=1")
+	}
+	require.True(t, stmtWindows[windowA], "window A should be present")
+	require.True(t, stmtWindows[windowB], "window B should be present")
+
+	txnWindows := map[time.Time]bool{}
+	for _, tx := range txnStats {
+		txnWindows[tx.AggregatedTs] = true
+		require.Equal(t, time.Hour, tx.AggregationInterval)
+		require.Equal(t, txnFpID, tx.TransactionFingerprintID)
+		require.Equal(t, int64(1), tx.Stats.Count, "each window should have count=1")
+	}
+	require.True(t, txnWindows[windowA], "window A should be present")
+	require.True(t, txnWindows[windowB], "window B should be present")
 }
 
 func generateRandomKey() stmtKey {

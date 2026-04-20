@@ -139,8 +139,10 @@ func statementsLocal(
 	for i, stmt := range stmtStats {
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
-				KeyData: stmt.Key,
-				NodeID:  nodeID,
+				KeyData:             stmt.Key,
+				NodeID:              nodeID,
+				AggregatedTs:        stmt.AggregatedTs,
+				AggregationInterval: stmt.AggregationInterval,
 			},
 			ID:    stmt.ID,
 			Stats: stmt.Stats,

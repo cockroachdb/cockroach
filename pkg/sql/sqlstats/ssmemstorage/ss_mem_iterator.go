@@ -97,8 +97,10 @@ func (s *StmtStatsIterator) Next() bool {
 			PlanHash:                 stmtKey.planHash,
 			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
-		ID:    statementStats.ID,
-		Stats: data,
+		ID:                  statementStats.ID,
+		Stats:               data,
+		AggregatedTs:        stmtKey.aggregatedTs,
+		AggregationInterval: stmtKey.aggInterval,
 	}
 
 	return true
@@ -166,12 +168,12 @@ func (t *TxnStatsIterator) Next() bool {
 		return false
 	}
 
-	txnKey := t.txnKeys[t.idx]
+	key := t.txnKeys[t.idx]
 
 	// We don't want to create the key if it doesn't exist, so it's okay to
 	// pass nil for the statementFingerprintIDs, as they are only set when a key is
 	// constructed.
-	txnStats := t.container.getStatsForTxnWithKey(txnKey)
+	txnStats := t.container.getStatsForTxnWithKey(key)
 
 	// If the key is not found (and we expected to find it), the table must
 	// have been cleared between now and the time we read all the keys. In
@@ -187,7 +189,9 @@ func (t *TxnStatsIterator) Next() bool {
 		StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
 		App:                      t.container.appName,
 		Stats:                    txnStats.mu.data,
-		TransactionFingerprintID: txnKey,
+		TransactionFingerprintID: key.transactionFingerprintID,
+		AggregatedTs:             key.aggregatedTs,
+		AggregationInterval:      key.aggInterval,
 	}
 
 	return true
