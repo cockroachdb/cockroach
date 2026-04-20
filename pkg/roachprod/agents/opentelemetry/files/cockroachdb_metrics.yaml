@@ -1062,6 +1062,7 @@ distsender_rpc_export_sent: distsender.rpc.export.sent
 distsender_rpc_flushlocktable_sent: distsender.rpc.flushlocktable.sent
 distsender_rpc_gc_sent: distsender.rpc.gc.sent
 distsender_rpc_get_sent: distsender.rpc.get.sent
+distsender_rpc_gettxndetails_sent: distsender.rpc.gettxndetails.sent
 distsender_rpc_heartbeattxn_sent: distsender.rpc.heartbeattxn.sent
 distsender_rpc_increment_sent: distsender.rpc.increment.sent
 distsender_rpc_isspanempty_sent: distsender.rpc.isspanempty.sent
@@ -2241,6 +2242,7 @@ rpc_method_export_recv: rpc.method.export.recv
 rpc_method_flushlocktable_recv: rpc.method.flushlocktable.recv
 rpc_method_gc_recv: rpc.method.gc.recv
 rpc_method_get_recv: rpc.method.get.recv
+rpc_method_gettxndetails_recv: rpc.method.gettxndetails.recv
 rpc_method_heartbeattxn_recv: rpc.method.heartbeattxn.recv
 rpc_method_increment_recv: rpc.method.increment.recv
 rpc_method_isspanempty_recv: rpc.method.isspanempty.recv

@@ -156,6 +156,21 @@ func (mr *MockRPCInternalClientMockRecorder) MuxRangeFeed(arg0 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MuxRangeFeed", reflect.TypeOf((*MockRPCInternalClient)(nil).MuxRangeFeed), arg0)
 }
 
+// MuxTxnFeed mocks base method.
+func (m *MockRPCInternalClient) MuxTxnFeed(arg0 context.Context) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MuxTxnFeed", arg0)
+	ret0, _ := ret[0].(kvpb.RPCInternal_MuxTxnFeedClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MuxTxnFeed indicates an expected call of MuxTxnFeed.
+func (mr *MockRPCInternalClientMockRecorder) MuxTxnFeed(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MuxTxnFeed", reflect.TypeOf((*MockRPCInternalClient)(nil).MuxTxnFeed), arg0)
+}
+
 // RangeLookup mocks base method.
 func (m *MockRPCInternalClient) RangeLookup(arg0 context.Context, arg1 *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error) {
 	m.ctrl.T.Helper()

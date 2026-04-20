@@ -2579,6 +2579,7 @@ message RequestUnion {
     LinkExternalSSTableRequest link_external_sstable = 57;
     ExciseRequest excise = 58;
     FlushLockTableRequest flush_lock_table = 59;
+    GetTxnDetailsRequest get_txn_details = 60;
   }
   reserved 8, 15, 23, 25, 26, 27, 31, 34, 49, 52;
 }
@@ -2635,6 +2636,7 @@ message ResponseUnion {
     LinkExternalSSTableResponse link_external_sstable = 57;
     ExciseResponse excise = 58;
     FlushLockTableResponse flush_lock_table = 59;
+    GetTxnDetailsResponse get_txn_details = 60;
   }
   reserved 8, 15, 23, 25, 26, 27, 28, 31, 34, 49, 52;
 }
@@ -3405,6 +3407,151 @@ message MuxRangeFeedEvent {
   int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
 }
 
+// TxnFeedRequest establishes a streaming feed of committed transaction records
+// whose anchor keys fall within the specified span. Unlike RangeFeed which is
+// sharded by data key span, TxnFeed is sharded by transaction anchor key span:
+// the events describe transactions whose records live in the specified range,
+// but whose write sets may span arbitrary key ranges.
+//
+// The start timestamp is exclusive: only transactions that committed strictly
+// after Header.Timestamp will be emitted.
+message TxnFeedRequest {
+  Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The span of transaction anchor keys to watch. This determines which
+  // transaction records are monitored, not which data keys are covered.
+  Span anchor_span = 2 [(gogoproto.nullable) = false];
+  // StreamID is set by the client to identify this stream in a multiplexed
+  // connection, mirroring the MuxRangeFeed pattern.
+  int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
+  // CloseStream is set by the client to indicate that the server should close
+  // the stream with the specified StreamID. When set, only StreamID must be
+  // set; other fields are ignored.
+  bool close_stream = 4;
+  // AdmissionHeader is used at the start of the stream for the initial
+  // catch-up scan of committed transaction records.
+  AdmissionHeader admission_header = 5 [(gogoproto.nullable) = false];
+}
+
+// TxnFeedCommitted is a TxnFeedEvent variant emitted when a transaction record
+// is observed in the COMMITTED state. It carries the transaction's identity,
+// commit timestamp, and read/write span footprint so that consumers know which
+// ranges to call GetTxnDetails on.
+message TxnFeedCommitted {
+  // The transaction's unique ID.
+  bytes txn_id = 1 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  // The anchor key where this transaction's record is stored.
+  bytes anchor_key = 2 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"
+  ];
+  // The MVCC timestamp at which the transaction committed.
+  util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
+  // The key spans the transaction read.
+  repeated Span read_spans = 4 [(gogoproto.nullable) = false];
+  // The key spans the transaction wrote.
+  repeated Span write_spans = 5 [(gogoproto.nullable) = false];
+}
+
+// TxnFeedCheckpoint is a TxnFeedEvent variant representing the guarantee that
+// no more TxnFeedCommitted events for transactions with anchor keys in the
+// specified span and commit timestamps at or before the resolved timestamp
+// will be emitted.
+message TxnFeedCheckpoint {
+  Span anchor_span = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp resolved_ts = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ResolvedTS"
+  ];
+}
+
+// TxnFeedError is a TxnFeedEvent variant indicating that an unrecoverable
+// error occurred during TxnFeed processing. It is always the final event on
+// the stream before the stream is torn down.
+message TxnFeedError {
+  kv.kvpb.Error error = 1 [(gogoproto.nullable) = false];
+}
+
+// TxnFeedEvent is a union of all event types emitted on a TxnFeed stream.
+message TxnFeedEvent {
+  option (gogoproto.onlyone) = true;
+
+  TxnFeedCommitted  committed  = 1;
+  TxnFeedCheckpoint checkpoint = 2;
+  TxnFeedError      error      = 3;
+}
+
+// MuxTxnFeedEvent wraps a TxnFeedEvent with routing metadata for multiplexed
+// streams, following the MuxRangeFeedEvent pattern.
+message MuxTxnFeedEvent {
+  TxnFeedEvent event = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 range_id = 2 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
+}
+
+// GetTxnDetailsRequest retrieves a transaction's raw writes and dependencies on
+// a single range. Transaction A depends on B if A's write set overlaps B's
+// write set, or A's read set overlaps B's write set. The server computes
+// dependencies by MVCC-scanning the transaction's spans to find overlapping
+// write timestamps, then translating those timestamps to transaction IDs via a
+// raft-log-derived mapping maintained by the range.
+//
+// Batching across ranges is handled by the KV layer's generic BatchRequest.
+message GetTxnDetailsRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The transaction to look up.
+  bytes txn_id = 2 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  // The transaction's commit timestamp.
+  util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
+  // Only return dependencies that committed in the exclusive range
+  // (dependency_cutoff, commit_timestamp). Transactions that committed at or
+  // before dependency_cutoff are considered already applied and do not need
+  // to be tracked as dependencies.
+  util.hlc.Timestamp dependency_cutoff = 4 [(gogoproto.nullable) = false];
+  // The requesting transaction's read spans, pre-clipped to the target range.
+  // Used to find read-write conflicts against other transactions' writes.
+  repeated Span read_spans = 5 [(gogoproto.nullable) = false];
+  // The requesting transaction's write spans, pre-clipped to the target range.
+  // Used to find write-write conflicts against other transactions' writes.
+  repeated Span write_spans = 6 [(gogoproto.nullable) = false];
+}
+
+// GetTxnDetailsResponse returns a transaction's writes and dependencies on the
+// target range.
+message GetTxnDetailsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The KV writes this transaction performed on this range.
+  repeated TxnDetailKV writes = 2 [(gogoproto.nullable) = false];
+  // UUIDs of transactions that this transaction depends on within the
+  // (dependency_cutoff, commit_timestamp) window.
+  repeated bytes dependencies = 3 [
+    (gogoproto.customname) = "Dependencies",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  // The MVCC timestamp up to which dependencies have been fully enumerated.
+  // The dependencies list contains all transactions that committed in
+  // (event_horizon, commit_timestamp] on this range. There may be
+  // additional dependent transactions older than event_horizon; all
+  // transactions with timestamps at or before event_horizon must be
+  // assumed to be dependencies of this transaction.
+  util.hlc.Timestamp event_horizon = 4 [(gogoproto.nullable) = false];
+}
+
+// TxnDetailKV represents a single KV write within a transaction on a range.
+message TxnDetailKV {
+  KeyValue key_value = 1 [(gogoproto.nullable) = false];
+  Value prev_value = 2 [(gogoproto.nullable) = false];
+}
+
 // ResetQuorumRequest makes a range that is unavailable due to lost quorum
 // available again, at the cost of losing all of the data in the range. Any
 // existing replica, even one residing on the target node, will irrevocably
@@ -3806,6 +3953,13 @@ service RangeFeed {
   rpc MuxRangeFeed (stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
 }
 
+// TxnFeed service implemented by nodes for streaming committed transaction
+// records. Unlike RangeFeed which is sharded by data key span, TxnFeed is
+// sharded by transaction anchor key span.
+service TxnFeed {
+  rpc MuxTxnFeed (stream TxnFeedRequest) returns (stream MuxTxnFeedEvent) {}
+}
+
 // QuorumRecovery offers RPC to reset the quorum for the given range on the target
 // node.
 service QuorumRecovery {
@@ -3824,6 +3978,7 @@ service Internal {
 
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent)       {}
+  rpc MuxTxnFeed         (stream TxnFeedRequest)    returns (stream MuxTxnFeedEvent)         {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 

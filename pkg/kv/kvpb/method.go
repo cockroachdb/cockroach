@@ -172,6 +172,10 @@ const (
 	// in-memory lock table to the replicated lock table.
 	FlushLockTable
 
+	// GetTxnDetails retrieves a transaction's raw writes and dependencies
+	// on a single range.
+	GetTxnDetails
+
 	// MaxMethod is the maximum method.
 	MaxMethod Method = iota - 1
 	// NumMethods represents the total number of API methods.

@@ -2300,6 +2300,11 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	return n.muxRangeFeed(muxStream)
 }
 
+// MuxTxnFeed implements the roachpb.InternalServer interface.
+func (n *Node) MuxTxnFeed(stream kvpb.Internal_MuxTxnFeedServer) error {
+	return errors.New("MuxTxnFeed not yet implemented")
+}
+
 func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {
 	lockedMuxStream := &lockedMuxStream{
 		wrapped: muxStream,

@@ -3409,6 +3409,18 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: distsender.rpc.gettxndetails.sent
+      exported_name: distsender_rpc_gettxndetails_sent
+      description: |-
+        Number of GetTxnDetails requests processed.
+
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: distsender.rpc.heartbeattxn.sent
       exported_name: distsender_rpc_heartbeattxn_sent
       description: |-
@@ -20720,6 +20732,15 @@ layers:
     - name: rpc.method.get.recv
       exported_name: rpc_method_get_recv
       description: Number of Get requests processed
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
+    - name: rpc.method.gettxndetails.recv
+      exported_name: rpc_method_gettxndetails_recv
+      description: Number of GetTxnDetails requests processed
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT

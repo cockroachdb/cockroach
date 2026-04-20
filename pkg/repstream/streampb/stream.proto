@@ -271,6 +271,70 @@ message StreamEvent {
   int64 emit_unix_nanos = 4;
 }
 
+// TransactionEvent represents a committed transaction for consumption by the
+// transactional mode LDR pipeline. It captures the transaction's identity and
+// the set of KV mutations that constitute its write set, along with
+// dependencies on other recent transactions.
+//
+// This message is the wire-format representation of a replicated transaction,
+// transmitted from the source cluster's producer to the destination cluster's
+// consumer. The write_set contains raw KV pairs encoded using the source table
+// descriptors; decoding into destination-table datums happens at the consumer
+// after deserialization.
+message TransactionEvent {
+  // The transaction's unique ID on the source cluster.
+  bytes txn_id = 1 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  // The MVCC timestamp at which this transaction committed on the source
+  // cluster.
+  util.hlc.Timestamp commit_timestamp = 2 [(gogoproto.nullable) = false];
+  // The key where the transaction record lives on the source cluster.
+  bytes anchor_key = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"
+  ];
+  // The KV mutations that this transaction performed, using the existing
+  // StreamEvent.KV format for compatibility with the row decoder.
+  repeated StreamEvent.KV write_set = 4 [(gogoproto.nullable) = false];
+  // Transactions that this transaction depends on. Transaction A depends on
+  // B if A's write set overlaps B's write set, or A's read set overlaps B's
+  // write set. Populated from GetTxnDetails results.
+  repeated TransactionDependency dependencies = 5 [(gogoproto.nullable) = false];
+  // The MVCC timestamp up to which dependencies have been fully enumerated.
+  // The dependencies list contains all transactions that committed in
+  // (event_horizon, commit_timestamp]. There may be additional dependent
+  // transactions older than event_horizon; all transactions with timestamps
+  // at or before event_horizon must be assumed to be dependencies of this
+  // transaction.
+  //
+  // Invariant: event_horizon must be strictly less than the checkpoint
+  // timestamp. A TransactionEvent whose event_horizon is at or beyond the
+  // checkpoint would allow the consumer to advance past transactions it
+  // has not yet seen.
+  util.hlc.Timestamp event_horizon = 6 [(gogoproto.nullable) = false];
+}
+
+// TransactionDependency identifies a single transaction that another
+// transaction depends on.
+message TransactionDependency {
+  bytes txn_id = 1 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+// TransactionCheckpoint represents a resolved timestamp for a set of anchor
+// key spans in the transactional LDR stream. All transactions with anchor keys
+// in the covered spans and commit timestamps at or before the resolved
+// timestamp have been emitted.
+message TransactionCheckpoint {
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 1
+    [(gogoproto.nullable) = false];
+}
+
 message StreamReplicationStatus {
   enum StreamStatus {
     // Stream is running. Consumers should continue to heartbeat.

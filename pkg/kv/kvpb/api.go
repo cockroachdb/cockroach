@@ -990,6 +990,9 @@ func (*IsSpanEmptyRequest) Method() Method { return IsSpanEmpty }
 // Method implements the Request interface.
 func (*FlushLockTableRequest) Method() Method { return FlushLockTable }
 
+// Method implements the Request interface.
+func (*GetTxnDetailsRequest) Method() Method { return GetTxnDetails }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -1284,6 +1287,12 @@ func (r *FlushLockTableRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (r *GetTxnDetailsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
 // ShallowCopy implements the Response interface.
 func (gr *GetResponse) ShallowCopy() Response {
 	shallowCopy := *gr
@@ -1572,6 +1581,12 @@ func (r *IsSpanEmptyResponse) ShallowCopy() Response {
 
 // ShallowCopy implements the Response interface.
 func (r *FlushLockTableResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *GetTxnDetailsResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -2109,6 +2124,7 @@ func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 func (*FlushLockTableRequest) flags() flag {
 	return isWrite | isRange | isAlone | isUnsplittable
 }
+func (*GetTxnDetailsRequest) flags() flag { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
