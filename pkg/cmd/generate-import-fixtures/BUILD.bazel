@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "generate-import-fixtures_lib",
@@ -24,4 +24,20 @@ go_binary(
     name = "generate-import-fixtures",
     embed = [":generate-import-fixtures_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "generate-import-fixtures_test",
+    srcs = [
+        "format_avro_test.go",
+        "format_parquet_test.go",
+        "main_test.go",
+        "tpch_test.go",
+    ],
+    embed = [":generate-import-fixtures_lib"],
+    deps = [
+        "@com_github_apache_arrow_go_v11//parquet/file",
+        "@com_github_linkedin_goavro_v2//:goavro",
+        "@com_github_stretchr_testify//require",
+    ],
 )
