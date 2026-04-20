@@ -1855,6 +1855,10 @@ func (s *Smither) makeOrderByWithAllCols(refs colRefs) (_ tree.OrderBy, ok bool)
 	}
 	var ob tree.OrderBy
 	for _, ref := range refs {
+		// Skip system columns (crdb_internal_mvcc_timestamp, tableoid, etc.).
+		if colinfo.IsSystemColumnName(string(ref.item.ColumnName)) {
+			continue
+		}
 		if !s.isOrderable(ref.typ) {
 			return nil, false
 		}
