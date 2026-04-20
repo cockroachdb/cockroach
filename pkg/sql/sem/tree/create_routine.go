@@ -245,7 +245,7 @@ func (node *CreateRoutine) Doc(p *PrettyCfg) pretty.Doc {
 			}
 			// Render the body to find a dollar-quote tag that doesn't
 			// collide with nested dollar quotes (e.g. from DO blocks).
-			fmtCtx := NewFmtCtx(p.FmtFlagsWithDefaults())
+			fmtCtx := p.NewFmtCtx()
 			for _, stmt := range stmts {
 				fmtCtx.FormatNode(stmt)
 			}
@@ -259,13 +259,14 @@ func (node *CreateRoutine) Doc(p *PrettyCfg) pretty.Doc {
 		}
 	} else if isPLpgSQL && ParsePLpgSQLForDoc != nil {
 		if parsed := ParsePLpgSQLForDoc(string(funcBody)); parsed != nil {
+			bodyCfg := p.WithInPLpgSQL()
 			// Use the formatted output to pick a dollar-quote tag that
 			// doesn't collide with nested dollar quotes (e.g. DO blocks).
-			bodyStr := AsStringWithFlags(parsed, p.FmtFlagsWithDefaults())
+			bodyStr := bodyCfg.AsString(parsed)
 			tag := "$" + DollarQuoteDelimiter(bodyStr) + "$"
 			bodyDoc = pretty.Fold(pretty.Concat,
 				pretty.ConcatSpace(pretty.Keyword("AS"), pretty.Text(tag)),
-				pretty.NestT(pretty.Concat(pretty.HardLine, p.Doc(parsed))),
+				pretty.NestT(pretty.Concat(pretty.HardLine, bodyCfg.Doc(parsed))),
 				pretty.HardLine,
 				pretty.Text(tag))
 		}
