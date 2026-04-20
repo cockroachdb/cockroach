@@ -214,8 +214,8 @@ SHOW application_name;
 <tr><td><code>search_path</code></td><td>Sets the list of namespaces to search when resolving unqualified names.</td><td><code>"$user", public</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>serial_normalization</code></td><td>Controls how `SERIAL` columns are normalized.</td><td><code>rowid</code></td><td>No</td><td><code>sql.defaults.serial_normalization</code></td></tr>
 <tr><td><code>server_encoding</code></td><td>Reports the database encoding (always UTF8). This cannot be changed.</td><td><code>UTF8</code></td><td>Yes</td><td>-</td></tr>
-<tr><td><code>server_version</code></td><td>Reports the server version string.</td><td><code>13.0.0</code></td><td>Yes</td><td>-</td></tr>
-<tr><td><code>server_version_num</code></td><td>Reports the server version as an integer.</td><td><code>130000</code></td><td>Yes</td><td>-</td></tr>
+<tr><td><code>server_version</code></td><td>Reports the server version string.</td><td><code>18.0.0</code></td><td>Yes</td><td>-</td></tr>
+<tr><td><code>server_version_num</code></td><td>Reports the server version as an integer.</td><td><code>180000</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>session_id</code></td><td>The unique identifier for the current session.</td><td><code>-</code></td><td>Yes</td><td>-</td></tr>
 <tr><td><code>show_primary_key_constraint_on_not_visible_columns</code></td><td>Controls whether SHOW CONSTRAINTS and pg_catalog.pg_constraint include primary key constraints with only hidden columns.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>sql_safe_updates</code></td><td>When enabled, disallows potentially unsafe SQL statements: `DROP DATABASE` of a non-empty database, `DELETE` and `UPDATE` without a `WHERE` clause (unless a `LIMIT` clause is included), `SELECT ... FOR UPDATE`/`FOR SHARE` without a `WHERE` or `LIMIT` clause, `ALTER TABLE ... DROP COLUMN`, and converting an existing table to `REGIONAL BY ROW` unless a region column has already been added.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
