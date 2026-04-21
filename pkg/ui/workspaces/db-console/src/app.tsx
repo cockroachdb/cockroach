@@ -64,6 +64,7 @@ import ClusterExplorerPage from "src/views/explorer/explorer";
 import HotRangesPage from "src/views/hotRanges/index";
 import JobDetails from "src/views/jobs/jobDetails";
 import JobsPage from "src/views/jobs/jobsPage";
+import JobsManagerPage from "src/views/jobsManager";
 import KeyVisualizerPage from "src/views/keyVisualizer";
 import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 import Certificates from "src/views/reports/containers/certificates";
@@ -110,7 +111,7 @@ import ActiveTransactionDetails from "./views/transactions/activeTransactionDeta
 // Map of feature slugs to their React components. Each feature PR adds its
 // entry here.
 const featureComponents: Record<string, React.ComponentType> = {
-  // "jobs-manager": JobsManagerPage,
+  "jobs-manager": JobsManagerPage,
 };
 
 function FeatureRoute(): React.ReactElement {
