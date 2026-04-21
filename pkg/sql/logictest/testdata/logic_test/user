@@ -434,8 +434,9 @@ SELECT username, options, member_of FROM [SHOW USERS WITH SOURCE = 'ldap:ldap.ex
 ----
 username  options  member_of
 
-# Clean up the provisioning source.
+# Clean up: drop testuser2 since we cannot ALTER PROVISIONSRC on a
+# provisioned user (setting it to NULL is also blocked).
 statement ok
-ALTER USER testuser2 PROVISIONSRC NULL
+DROP USER testuser2
 
 subtest end
