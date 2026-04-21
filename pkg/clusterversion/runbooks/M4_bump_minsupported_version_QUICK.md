@@ -241,7 +241,7 @@ Edit `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` (line 
 ### Step 3: Delete Test Directories
 
 ```bash
-rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
+rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 ```
@@ -251,7 +251,7 @@ rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 ```bash
 # Remove from dedicated directive lines
 find pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/ \
+     pkg/sql/logictest/testdata/logic_test/ \
      -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
   sed -i '' \
     -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
@@ -262,7 +262,7 @@ done
 
 # Remove from multi-config lines
 find pkg/sql/logictest/testdata/logic_test/ \
-     pkg/ccl/logictestccl/testdata/logic_test/ \
+     pkg/sql/logictest/testdata/logic_test/ \
      -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
   sed -i '' \
     -e '/^onlyif config/s/ local-mixed-25\.2//g' \
@@ -272,7 +272,7 @@ done
 
 # Remove empty LogicTest directives (if any)
 sed -i '' '/^# LogicTest:$/d' pkg/sql/logictest/testdata/logic_test/* \
-          pkg/ccl/logictestccl/testdata/logic_test/* 2>/dev/null || true
+          pkg/sql/logictest/testdata/logic_test/* 2>/dev/null || true
 ```
 
 **⚠️ IMPORTANT:** After sed, manually check files with `onlyif` directives - you may need to remove guarded statements. See full runbook for details.

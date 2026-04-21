@@ -490,7 +490,7 @@ const PreviousRelease Key = V25_4
 cockroach_predecessor_version(
     name = "cockroach_predecessor_version",
     visibility = [
-        "//pkg/ccl/logictestccl:__subpackages__",
+        "//pkg/sql/logictest:__subpackages__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.2:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",  # Add this line
@@ -612,8 +612,8 @@ If you prefer to do everything in one PR:
 5. `pkg/cli/testdata/declarative-rules/deprules` - May be regenerated
 6. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` - Generated
 7. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` - Generated
-8. `pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.4/BUILD.bazel` - Generated
-9. `pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.4/generated_test.go` - Generated
+8. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` - Generated
+9. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` - Generated
 
 **Note:** Additional test expectation files may need updates based on CI test results.
 

@@ -306,7 +306,7 @@ const PreviousRelease Key = V25_4
 cockroach_predecessor_version(
     name = "cockroach_predecessor_version",
     visibility = [
-        "//pkg/ccl/logictestccl:__subpackages__",
+        "//pkg/sql/logictest:__subpackages__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.2:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",  # Add

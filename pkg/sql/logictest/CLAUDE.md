@@ -1,8 +1,7 @@
 # LogicTest Framework
 
 This directory contains CockroachDB's primary end-to-end SQL testing infrastructure.
-Test files are in `testdata/logic_test/`. CCL-specific tests are in
-`pkg/ccl/logictestccl/testdata/logic_test/`.
+All test files (including enterprise/CCL features) are in `testdata/logic_test/`.
 
 ## Running Tests
 
@@ -20,9 +19,6 @@ Running with `--config=local` is usually the quickest way to run a test.
 # Run with specific config
 ./dev testlogic base --config=local
 ./dev testlogic base --config=fakedist
-
-# Run CCL tests (enterprise features)
-./dev testlogic ccl --files='_tmp'
 
 # Useful flags
 ./dev testlogic base --files='_tmp' -v              # Verbose output
@@ -173,8 +169,8 @@ INSERT INTO t VALUES (...)
 | `local-vec-off` | Vectorization disabled |
 | `fakedist` | 3 nodes with fake span resolver |
 | `5node` | 5-node cluster |
-| `3node-tenant` | Runs as SQL tenant (CCL only) |
-| `local-read-committed` | READ COMMITTED isolation (CCL) |
+| `3node-tenant` | Runs as SQL tenant |
+| `local-read-committed` | READ COMMITTED isolation |
 | `local-mixed-25.4` | Mixed-version testing |
 
 ### Config Sets
@@ -184,24 +180,7 @@ Use these instead of listing individual configs:
 - `default-configs` - Standard set of configs
 - `5node-default-configs` - 5-node configs
 - `3node-tenant-default-configs` - Tenant configs
-- `enterprise-configs` - CCL-only configs
-
-## CCL Tests
-
-Tests requiring CCL features (multi-region, tenants, enterprise isolation levels) go in:
-
-```
-pkg/ccl/logictestccl/testdata/logic_test/
-```
-
-Run with:
-
-```bash
-./dev testlogic ccl --files='my_test'
-```
-
-CCL-only configs include: `3node-tenant`, `3node-tenant-multiregion`,
-`local-read-committed`, `local-repeatable-read`, `multiregion-9node-3region-3azs`.
+- `enterprise-configs` - Enterprise configs
 
 ## Mixed-Version Testing with cockroach-go-testserver
 
@@ -246,10 +225,6 @@ vim pkg/sql/logictest/testdata/logic_test/_tmp
 
 # Run it
 ./dev testlogic base --config=local --files='_tmp'
-
-# For CCL features
-vim pkg/ccl/logictestccl/testdata/logic_test/_tmp
-./dev testlogic ccl --config=local --files='_tmp'
 ```
 
 ## Key Files

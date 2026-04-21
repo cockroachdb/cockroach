@@ -534,7 +534,7 @@ These are straightforward test output updates that happen because version number
 **Common files:**
 - `pkg/sql/logictest/testdata/logic_test/upgrade`
 - `pkg/sql/logictest/testdata/logic_test/crdb_internal`
-- `pkg/ccl/logictestccl/testdata/logic_test/crdb_internal_tenant`
+- `pkg/sql/logictest/testdata/logic_test/crdb_internal_tenant`
 
 **Changes needed:**
 ```diff
@@ -581,7 +581,7 @@ sed -i '' 's/^25\.4$/26.1/' <file>
 
 **Test to verify:**
 ```bash
-./dev test pkg/sql/logictest --filter='TestReadCommittedLogic/crdb_internal_catalog'
+./dev test pkg/sql/logictest --filter='TestLogic/crdb_internal_catalog' --config=local-read-committed
 ```
 
 ##### C. Bootstrap Schema Hash Mismatches

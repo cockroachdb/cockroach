@@ -36,7 +36,7 @@ done
 
 for config in local multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-    //pkg/ccl/logictestccl/tests/$config/... \
+    //pkg/sql/logictest/tests/$config/... \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
