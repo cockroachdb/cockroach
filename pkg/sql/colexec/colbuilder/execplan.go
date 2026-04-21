@@ -336,6 +336,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		}
 	case core.IngestStopped != nil:
 		return errCoreNotWorthWrapping
+	case core.Revlog != nil:
+		return errCoreNotWorthWrapping
 	case core.LogicalReplicationWriter != nil:
 		return errCoreNotWorthWrapping
 	case core.LogicalReplicationOfflineScan != nil:
