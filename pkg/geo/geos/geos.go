@@ -11,10 +11,13 @@ package geos
 
 import (
 	"fmt"
+	"maps"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"unsafe"
 
@@ -246,6 +249,26 @@ func goToCSlice(b []byte) C.CR_GEOS_Slice {
 	}
 }
 
+// validateFloat64Params guards against any of the float64 parameters being NaN
+// or Inf.
+func validateFloat64Params(funcName string, params map[string]float64) error {
+	names := slices.Collect(maps.Keys(params))
+	slices.Sort(names)
+
+	for _, name := range names {
+		value := params[name]
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"%s: parameter %s must be a finite value",
+				funcName,
+				name,
+			)
+		}
+	}
+	return nil
+}
+
 // cStringToUnsafeGoBytes convert a CR_GEOS_String to a Go
 // byte slice that refer to the underlying C memory.
 func cStringToUnsafeGoBytes(s C.CR_GEOS_String) []byte {
@@ -330,6 +353,12 @@ type BufferParams struct {
 
 // Buffer buffers the given geometry by the given distance and params.
 func Buffer(ewkb geopb.EWKB, params BufferParams, distance float64) (geopb.EWKB, error) {
+	if err := validateFloat64Params("Buffer", map[string]float64{
+		"distance":   distance,
+		"mitreLimit": params.MitreLimit,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -488,6 +517,11 @@ func ConvexHull(ewkb geopb.EWKB) (geopb.EWKB, error) {
 
 // Simplify returns an EWKB which returns the simplified EWKB.
 func Simplify(ewkb geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	if err := validateFloat64Params("Simplify", map[string]float64{
+		"tolerance": tolerance,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -504,6 +538,11 @@ func Simplify(ewkb geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
 // TopologyPreserveSimplify returns an EWKB which returns the simplified EWKB
 // with the topology preserved.
 func TopologyPreserveSimplify(ewkb geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	if err := validateFloat64Params("TopologyPreserveSimplify", map[string]float64{
+		"tolerance": tolerance,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -590,6 +629,11 @@ func SymDifference(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
 // not appropriate as it combines all the LineString present in (MULTI)LineString,
 // considering all the corner points of LineString overlaps each other.
 func InterpolateLine(ewkb geopb.EWKB, distance float64) (geopb.EWKB, error) {
+	if err := validateFloat64Params("InterpolateLine", map[string]float64{
+		"distance": distance,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -646,6 +690,14 @@ func MinimumClearanceLine(ewkb geopb.EWKB) (geopb.EWKB, error) {
 func ClipByRect(
 	ewkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.EWKB, error) {
+	if err := validateFloat64Params("ClipByRect", map[string]float64{
+		"xMin": xMin,
+		"yMin": yMin,
+		"xMax": xMax,
+		"yMax": yMax,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -856,6 +908,11 @@ func FrechetDistance(a, b geopb.EWKB) (float64, error) {
 
 // FrechetDistanceDensify returns the Frechet distance between the geometries.
 func FrechetDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, error) {
+	if err := validateFloat64Params("FrechetDistanceDensify", map[string]float64{
+		"densifyFrac": densifyFrac,
+	}); err != nil {
+		return 0, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return 0, err
@@ -886,6 +943,11 @@ func HausdorffDistance(a, b geopb.EWKB) (float64, error) {
 
 // HausdorffDistanceDensify returns the Hausdorff distance between the geometries.
 func HausdorffDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, error) {
+	if err := validateFloat64Params("HausdorffDistanceDensify", map[string]float64{
+		"densifyFrac": densifyFrac,
+	}); err != nil {
+		return 0, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return 0, err
@@ -901,6 +963,11 @@ func HausdorffDistanceDensify(a, b geopb.EWKB, densifyFrac float64) (float64, er
 
 // EqualsExact returns whether two geometry objects are equal with some epsilon
 func EqualsExact(lhs, rhs geopb.EWKB, epsilon float64) (bool, error) {
+	if err := validateFloat64Params("EqualsExact", map[string]float64{
+		"epsilon": epsilon,
+	}); err != nil {
+		return false, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
@@ -1075,6 +1142,11 @@ func Node(a geopb.EWKB) (geopb.EWKB, error) {
 
 // VoronoiDiagram Computes the Voronoi Diagram from the vertices of the supplied EWKBs.
 func VoronoiDiagram(a, env geopb.EWKB, tolerance float64, onlyEdges bool) (geopb.EWKB, error) {
+	if err := validateFloat64Params("VoronoiDiagram", map[string]float64{
+		"tolerance": tolerance,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
@@ -1111,6 +1183,11 @@ func MinimumRotatedRectangle(ewkb geopb.EWKB) (geopb.EWKB, error) {
 // EWKB. Tolerance is used to control where snapping is performed.
 // If no snapping occurs then the input geometry is returned unchanged.
 func Snap(input, target geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	if err := validateFloat64Params("Snap", map[string]float64{
+		"tolerance": tolerance,
+	}); err != nil {
+		return nil, err
+	}
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
