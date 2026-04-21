@@ -96,14 +96,21 @@ func New(src tickSource, live rangefeed.DB, opts Options) *DB {
 // catch-up read from startFrom up to (close to) now. Returns nil on
 // success; otherwise returns an error identifying the failure.
 //
+// The check has two parts:
+//
+//  1. Contiguity. The yielded ticks must form a chain starting at or
+//     before startFrom (no gap at the front) and with no holes between
+//     adjacent ticks. A hole is reported as "(prev.TickEnd, next.TickStart]".
+//  2. Freshness. The freshest tick's TickEnd must be within
+//     opts.FreshnessBudget of now. Without this check, a producer that
+//     stopped writing hours ago would silently pass pre-flight, then
+//     the drain loop would spin until its max-iteration guard
+//     eventually fired — a slow, opaque failure for what is
+//     structurally diagnosable up front.
+//
 // "now" is a parameter (not read from a clock) so tests can drive
 // staleness scenarios deterministically and so the caller controls
 // what "the present" means in the surrounding RangeFeed call.
-//
-// Currently checks contiguity only: the yielded ticks must form a
-// chain starting at or before startFrom and with no holes between
-// adjacent ticks. The freshness-budget half (asserting the freshest
-// tick is within opts.FreshnessBudget of now) is the next commit.
 func (d *DB) checkCoverage(ctx context.Context, startFrom, now hlc.Timestamp) error {
 	prevEnd := startFrom
 	any := false
@@ -128,6 +135,13 @@ func (d *DB) checkCoverage(ctx context.Context, startFrom, now hlc.Timestamp) er
 		return errors.Newf(
 			"revlog missing coverage for window (%s, %s]",
 			startFrom, now,
+		)
+	}
+	residual := now.WallTime - prevEnd.WallTime
+	if residual > d.opts.FreshnessBudget.Nanoseconds() {
+		return errors.Newf(
+			"revlog freshest tick %s is %s behind now (%s); exceeds budget %s",
+			prevEnd, time.Duration(residual), now, d.opts.FreshnessBudget,
 		)
 	}
 	return nil
