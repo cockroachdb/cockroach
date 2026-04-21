@@ -459,6 +459,13 @@ func (n noopIndexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
 	return nil
 }
 
+// ShouldSkipSplitForSmallTable implements the scexec.IndexSpanSplitter interface.
+func (n noopIndexSpanSplitter) ShouldSkipSplitForSmallTable(
+	ctx context.Context, table catalog.TableDescriptor,
+) bool {
+	return false
+}
+
 type noopMerger struct{}
 
 var _ scexec.Merger = (*noopMerger)(nil)

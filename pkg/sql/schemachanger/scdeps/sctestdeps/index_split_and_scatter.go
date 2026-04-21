@@ -28,3 +28,10 @@ func (s *indexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
 ) error {
 	return nil
 }
+
+// ShouldSkipSplitForSmallTable implements the scexec.IndexSpanSplitter interface.
+func (s *indexSpanSplitter) ShouldSkipSplitForSmallTable(
+	_ context.Context, _ catalog.TableDescriptor,
+) bool {
+	return false
+}

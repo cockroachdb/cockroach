@@ -385,7 +385,6 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			})
 			defer tc.Stopper().Stop(ctx)
 			s := tc.ApplicationLayer(0)
-			tenantSettings := s.ClusterSettings()
 			conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 
 			{
@@ -427,12 +426,9 @@ SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 			_, err = conn.ExecContext(ctx, `TRUNCATE a`)
 			assert.NoError(t, err)
 
-			// We subtract 1 from the original n ranges because the first range
-			// can't be migrated to the new keyspace, as its prefix doesn't
-			// include an index ID. The declarative schema changer will create
-			// split point count per-index.
-			expRanges := origNRanges + min((testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
-				&tenantSettings.SV)*2)), origNRanges-1)
+			// Since the table is too small, we don't expect additional split points
+			// created during the truncate.
+			expRanges := origNRanges
 
 			testutils.SucceedsSoon(t, func() error {
 				row := conn.QueryRowContext(ctx, `

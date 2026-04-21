@@ -266,7 +266,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-<before:/Table/XX>  …
+<before:/Table/XX>  <after:/Max>
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
@@ -403,10 +403,10 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX regional_by_row_table@primary WITH DETAILS]
 ORDER BY 1
 ----
-start_key           end_key               replicas  lease_holder
-<before:/Table/XX>  …/"\x80"/0            {1}       1
-…/"\x80"/0          …/"\xc0"/0            {4}       4
-…/"\xc0"/0          <after:/Table/XX/5>  {7}       7
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/"\x80"/0    {1}       1
+…/"\x80"/0          …/"\xc0"/0    {4}       4
+…/"\xc0"/0          <after:/Max>  {7}       7
 
 statement ok
 SET locality_optimized_partitioned_index_scan = false
@@ -651,10 +651,10 @@ ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX child@primary WITH DETAILS]
 ----
-start_key              end_key       replicas  lease_holder
-<before:/Table/110/6>  …/"\x80"/0    {1}       1
-…/"\x80"/0             …/"\xc0"/0    {4}       4
-…/"\xc0"/0             <after:/Max>  {7}       7
+start_key                       end_key       replicas  lease_holder
+<before:/Table/110/1/"\xc0"/0>  …/"\x80"/0    {1}       1
+…/"\x80"/0                      …/"\xc0"/0    {4}       4
+…/"\xc0"/0                      <after:/Max>  {7}       7
 
 statement ok
 SET locality_optimized_partitioned_index_scan = false
