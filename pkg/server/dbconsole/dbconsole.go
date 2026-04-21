@@ -90,6 +90,8 @@ func (api *ApiV2DBConsole) Handler() http.Handler {
 	mux.HandleFunc("/nodes", api.GetNodes)
 	mux.HandleFunc("/features", api.ListFeatures)
 	mux.HandleFunc("/features/", api.handleFeatureToggle)
+	mux.HandleFunc("/jobs-manager/jobs", api.GetJobsManagerJobs)
+	mux.HandleFunc("/jobs-manager/jobs/", api.HandleJobsManagerControl)
 	return mux
 }
 

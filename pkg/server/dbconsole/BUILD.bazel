@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "dbconsole.go",
         "features.go",
+        "jobs_manager.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/dbconsole",
     visibility = ["//visibility:public"],
@@ -17,6 +18,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
     ],
 )
