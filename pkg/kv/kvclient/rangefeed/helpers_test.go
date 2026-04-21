@@ -21,11 +21,8 @@ var NewFactoryWithDB = newFactory
 // KVDB forwards the definition of DB to tests.
 type KVDB = DB
 
-// ScanConfig forwards the definition of scanConfig to tests.
-type ScanConfig = scanConfig
-
-// ScanWithOptions is exposed for testing in order to call Scan with scanConfig
-// extracted from the specified list of options.
+// ScanWithOptions is exposed for testing in order to call Scan with the
+// ScanConfig extracted from the specified list of options.
 func (dbc *dbAdapter) ScanWithOptions(
 	ctx context.Context,
 	spans []roachpb.Span,
@@ -35,5 +32,5 @@ func (dbc *dbAdapter) ScanWithOptions(
 ) error {
 	var c config
 	initConfig(&c, opts)
-	return dbc.Scan(ctx, spans, asOf, rowFn, nil, c.scanConfig)
+	return dbc.Scan(ctx, spans, asOf, rowFn, nil, c.ScanConfig)
 }

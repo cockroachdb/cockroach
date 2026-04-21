@@ -108,7 +108,7 @@ func (dbc *dbAdapter) Scan(
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
 	rowsFn func([]kvpb.RangeFeedValue),
-	cfg scanConfig,
+	cfg ScanConfig,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("expected at least 1 span, got none")

@@ -23,7 +23,7 @@ type Option interface {
 }
 
 type config struct {
-	scanConfig
+	ScanConfig
 	retryOptions       retry.Options
 	onInitialScanDone  OnInitialScanDone
 	withInitialScan    bool
@@ -52,7 +52,11 @@ type config struct {
 	extraPProfLabels      []string
 }
 
-type scanConfig struct {
+// ScanConfig holds the parameters for the initial scan portion of a
+// rangefeed. It is part of the rangefeed.DB.Scan contract and is exported
+// so that external implementations of DB (e.g. a revlog-backed adapter)
+// can satisfy the interface.
+type ScanConfig struct {
 	// scanParallelism controls the number of concurrent scan requests
 	// that can be issued.  If unspecified, only 1 scan request at a time is issued.
 	scanParallelism func() int

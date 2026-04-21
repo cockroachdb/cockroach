@@ -73,7 +73,7 @@ type DB interface {
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
 		rowsFn func([]kvpb.RangeFeedValue),
-		cfg scanConfig,
+		cfg ScanConfig,
 	) error
 }
 
@@ -340,7 +340,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 	// each event to the caller's individual event handlers.
 	rangefeedOpts = append(rangefeedOpts, kvcoord.WithBulkDelivery())
 
-	if f.scanConfig.overSystemTable {
+	if f.ScanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
 	}
 	if f.withDiff {
