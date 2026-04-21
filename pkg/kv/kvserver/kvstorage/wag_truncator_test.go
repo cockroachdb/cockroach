@@ -132,6 +132,7 @@ func TestTruncateAppliedOnly(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
@@ -282,6 +283,7 @@ func TestTruncateAndClearRaftState(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	r2 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 2}
@@ -350,6 +352,7 @@ func TestTruncateAppliedNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
 	sl := MakeStateLoader(r1.RangeID)
 
@@ -399,6 +402,7 @@ func TestWAGTruncatorBackground(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 	e := makeTestEngines()
 	defer e.Close()
 	stopper := stop.NewStopper()
@@ -504,6 +508,7 @@ func TestTruncateBatching(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 			wagTruncatorBatchSize.Override(ctx, &st.SV, tc.batch)
 			e := makeTestEngines()
 			defer e.Close()
@@ -525,6 +530,96 @@ func TestTruncateBatching(t *testing.T) {
 			require.Equal(t, len(tc.wantRemaining) != len(wagNodeIndices), truncated)
 			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
 			require.Equal(t, tc.wantTrunc, truncator.truncIndex.Load())
+		})
+	}
+}
+
+// TestMaybeAdvanceAllowedIndex verifies that maybeAdvanceAllowedIndex applies
+// the suffix retention setting.
+func TestMaybeAdvanceAllowedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		last             uint64
+		retain           int64
+		truncIndex       uint64
+		allowedIndex     uint64
+		wantAllowedIndex uint64
+	}{
+		{retain: 0, last: 10, wantAllowedIndex: 10},
+		{retain: 3, last: 10, wantAllowedIndex: 7},
+		{retain: 10, last: 10, wantAllowedIndex: 0},
+		// allowedIndex is always >= truncIndex.
+		{retain: 10, allowedIndex: 5, truncIndex: 4, last: 10, wantAllowedIndex: 5},
+		{retain: 100, last: 10, wantAllowedIndex: 0},
+		// allowedIndex doesn't regress.
+		{retain: 100, allowedIndex: 9, last: 10, wantAllowedIndex: 9},
+	} {
+		t.Run("", func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			wagSuffixRetentionCount.Override(ctx, &st.SV, tc.retain)
+			var seq wag.Seq
+			for i := uint64(0); i < tc.last; i++ {
+				seq.Next()
+			}
+			truncator := WAGTruncator{st: st, seq: &seq}
+			truncator.truncIndex.Store(tc.truncIndex)
+			truncator.allowedIndex = tc.allowedIndex
+			truncator.maybeAdvanceAllowedIndex()
+			require.Equal(t, tc.wantAllowedIndex, truncator.allowedIndex)
+			// INVARIANT: truncIndex ≤ allowedIndex ≤ seq.Load().
+			require.GreaterOrEqual(t, truncator.allowedIndex, tc.truncIndex)
+			require.LessOrEqual(t, truncator.allowedIndex, seq.Load())
+		})
+	}
+}
+
+// TestTruncateBatchSuffixRetention verifies that truncateBatch refuses to
+// delete WAG nodes that the suffix retention setting requires preserving.
+//
+// WAG layout: indices [5, 10, 11, 12, 13], all with applied raft events.
+func TestTruncateBatchSuffixRetention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+	wagNodeIndices := []uint64{5, 10, 11, 12, 13}
+	raftIndices := []kvpb.RaftIndex{1, 2, 3, 4, 5}
+	for _, tc := range []struct {
+		retain           int64
+		wantRemaining    []uint64
+		wantAllowedIndex uint64
+	}{
+		{retain: 0, wantRemaining: nil, wantAllowedIndex: 13},
+		{retain: 2, wantRemaining: []uint64{12, 13}, wantAllowedIndex: 11},
+		{retain: 4, wantRemaining: []uint64{10, 11, 12, 13}, wantAllowedIndex: 9},
+		// The retention policy isn't accurate when there are gaps.
+		{retain: 6, wantRemaining: []uint64{10, 11, 12, 13}, wantAllowedIndex: 7},
+		{retain: 9, wantRemaining: []uint64{5, 10, 11, 12, 13}, wantAllowedIndex: 4},
+		{retain: 100, wantRemaining: []uint64{5, 10, 11, 12, 13}, wantAllowedIndex: 0},
+	} {
+		t.Run("", func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettings()
+			wagSuffixRetentionCount.Override(ctx, &st.SV, tc.retain)
+			e := makeTestEngines()
+			defer e.Close()
+			e.writeWAGNodesAt(t, wagNodeIndices, raftIndices, r1)
+			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+			truncator.initIndex = 11
+			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 100}))
+			require.NoError(t, e.stateEngine.Flush())
+			stateReader := e.StateEngine().NewReader(storage.GuaranteedDurability)
+			defer stateReader.Close()
+
+			_, err := truncator.truncateBatch(ctx, stateReader)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantRemaining, e.listWAGNodes(t))
+			require.Equal(t, tc.wantAllowedIndex, truncator.allowedIndex)
 		})
 	}
 }
