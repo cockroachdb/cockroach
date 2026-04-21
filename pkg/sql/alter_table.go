@@ -1135,21 +1135,6 @@ func applyColumnMutation(
 		col.ColumnDesc().ComputeExpr = nil
 
 	case *tree.AlterTableAddIdentity:
-		// Reject the PG18 SEQUENCE NAME clause in the legacy schema changer:
-		// it is only wired up in the declarative schema changer.
-		var qualSeqOpts tree.SequenceOptions
-		switch q := (t.Qualification).(type) {
-		case *tree.GeneratedAlwaysAsIdentity:
-			qualSeqOpts = q.SeqOptions
-		case *tree.GeneratedByDefAsIdentity:
-			qualSeqOpts = q.SeqOptions
-		}
-		for _, opt := range qualSeqOpts {
-			if opt.Name == tree.SeqOptName {
-				return pgerror.New(pgcode.FeatureNotSupported,
-					"ALTER TABLE ... ADD GENERATED ... AS IDENTITY (SEQUENCE NAME ...) requires the declarative schema changer")
-			}
-		}
 		if typ := col.GetType(); typ == nil || typ.InternalType.Family != types.IntFamily {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
