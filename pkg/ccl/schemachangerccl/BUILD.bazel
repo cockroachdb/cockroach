@@ -15,6 +15,7 @@ go_library(
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/clusterversion",
         "//pkg/jobs",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
