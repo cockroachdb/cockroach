@@ -104,18 +104,23 @@ CREATE TABLE alter_add_family (id INT PRIMARY KEY);
 statement error ALLOW_COMMIT_TIMESTAMP cannot be the only column in family
 ALTER TABLE alter_add_family ADD COLUMN ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP CREATE FAMILY f_ts;
 
-# The following ALTER paths are intentionally not yet covered:
-#
-#   - DROP COLUMN that would leave the ACT column alone in its family.
-#   - ALTER PRIMARY KEY USING COLUMNS (ts).
-#   - ALTER TABLE ADD COLUMN ... AS (extract(epoch FROM ts)) STORED followed
-#     by CREATE INDEX on the derived column.
-#
-# All three transition the descriptor through intermediate states. The
-# current validation fires inside ValidateSelf, which the declarative
-# schema changer invokes on every descriptor write -- including transient
-# states -- so a violating step either causes the job to loop trying to
-# revert (DROP COLUMN, ALTER PRIMARY KEY) or trips on a synthetic internal
-# CHECK constraint that the planner emits for STORED computed columns.
-# Catching these at DDL build time (via scbuild) and teaching the CHECK
-# rule to ignore synthetic constraints is tracked as future work.
+subtest alter_add_computed_then_index
+
+statement disable-cf-mutator ok
+CREATE TABLE alter_computed (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP
+);
+
+statement ok
+ALTER TABLE alter_computed ADD COLUMN derived FLOAT AS (extract(epoch FROM ts)) STORED;
+
+statement error ALLOW_COMMIT_TIMESTAMP is referenced by computed column .* which is a key column of index
+CREATE INDEX ON alter_computed (derived);
+
+# DROP COLUMN that would orphan an ACT column in its family, and
+# ALTER PRIMARY KEY USING COLUMNS (ts), are intentionally not yet
+# covered. Both transition the descriptor through intermediate states
+# that ValidateSelf rejects, which sends the declarative schema changer
+# into a revert loop. Catching them at DDL build time (in scbuildstmt)
+# is tracked as future work.

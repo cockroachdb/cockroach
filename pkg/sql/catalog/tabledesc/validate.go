@@ -6,6 +6,8 @@
 package tabledesc
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1570,6 +1572,16 @@ func (desc *wrapper) validateCheckConstraints(
 	return nil
 }
 
+// isPlaceholderConstraintName reports whether name matches the placeholder
+// pattern that ConstraintNamePlaceholder produces. The declarative schema
+// changer parks synthetic transient CHECKs (e.g. the one that ADD COLUMN ...
+// STORED uses to validate the computed expression during backfill) under a
+// placeholder name and never renames them.
+func isPlaceholderConstraintName(name string) bool {
+	return strings.HasPrefix(name, "crdb_internal_constraint_") &&
+		strings.HasSuffix(name, "_name_placeholder")
+}
+
 // validateAllowCommitTimestamp rejects descriptor states that put a column
 // declared with ALLOW_COMMIT_TIMESTAMP into a context where the
 // PENDING_COMMIT_TIMESTAMP() sentinel cannot be handled correctly. The rules:
@@ -1644,7 +1656,18 @@ func (desc *wrapper) validateAllowCommitTimestamp() error {
 				col.GetName(), idx.GetName())
 		}
 
+		// Skip transient synthetic CHECKs that the declarative schema changer
+		// emits during ADD COLUMN ... STORED backfills to validate the
+		// computed expression. They never escape their placeholder name
+		// (they're discarded once the backfill completes rather than being
+		// renamed), so matching on the placeholder pattern is a reliable
+		// signal that the CHECK is internal scaffolding rather than a
+		// user-visible constraint.
 		for _, ck := range desc.CheckConstraints() {
+			// TODO(arul): this is hacky.
+			if isPlaceholderConstraintName(ck.GetName()) {
+				continue
+			}
 			if ck.CollectReferencedColumnIDs().Contains(col.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnDefinition,
 					"column %q declared with ALLOW_COMMIT_TIMESTAMP cannot be referenced by CHECK constraint %q",
