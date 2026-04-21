@@ -487,7 +487,7 @@ func TestAutoTraceInAutoRunStatements(t *testing.T) {
 	if !strings.HasPrefix(out, strings.Join(stmt, " ")+"\n?column?\nhello") {
 		t.Errorf("output does not start with statement result")
 	}
-	if !strings.Contains(out, "SPAN START") {
+	if !strings.Contains(out, "=== operation:") {
 		t.Errorf("output does not contain trace")
 	}
 }

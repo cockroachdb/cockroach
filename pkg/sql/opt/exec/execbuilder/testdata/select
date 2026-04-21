@@ -21,36 +21,44 @@ SET tracing = off; RESET vectorize
 # how many commands we ran in the session.
 query ITT
 SELECT
-  span, regexp_replace(message, 'pos:[0-9]*', 'pos:?'), operation
+  span,
+  CASE WHEN message LIKE '=== operation:%'
+    THEN regexp_replace(
+      regexp_replace(message, ' statement:.*?( _| $)', '\1'),
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit):\S*| hostssl:\S*',
+      '', 'g')
+    ELSE regexp_replace(message, 'pos:[0-9]*', 'pos:?')
+  END,
+  operation
 FROM [SHOW TRACE FOR SESSION]
-WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
+WHERE message LIKE '%=== operation:%' OR message LIKE '%pos%executing%';
 ----
-0   === SPAN START: session recording ===                session recording
-1   === SPAN START: session tracing ===                  session tracing
-1   [Open pos:?] executing Sync                          session tracing
-2   === SPAN START: commit sql txn ===                   commit sql txn
-0   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
-3   === SPAN START: sql txn ===                          sql txn
-3   [Open pos:?] executing ExecStmt: SELECT 1            sql txn
-4   === SPAN START: sql query ===                        sql query
-5   === SPAN START: optimizer ===                        optimizer
-6   === SPAN START: consuming rows ===                   consuming rows
-7   === SPAN START: flow ===                             flow
-8   === SPAN START: values ===                           values
-3   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
-9   === SPAN START: sql query ===                        sql query
-10  === SPAN START: commit sql txn ===                   commit sql txn
-0   [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
-11  === SPAN START: sql txn ===                          sql txn
-11  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
-12  === SPAN START: sql query ===                        sql query
-13  === SPAN START: optimizer ===                        optimizer
-14  === SPAN START: consuming rows ===                   consuming rows
-15  === SPAN START: flow ===                             flow
-16  === SPAN START: values ===                           values
-17  === SPAN START: commit sql txn ===                   commit sql txn
-0   [NoTxn pos:?] executing Sync                         session recording
-0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
+0   === operation:session recording _unfinished:1 _verbose:1  session recording
+1   === operation:session tracing _verbose:1                  session tracing
+1   [Open pos:?] executing Sync                               session tracing
+2   === operation:commit sql txn _verbose:1                   commit sql txn
+0   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION       session recording
+3   === operation:sql txn _verbose:1                          sql txn
+3   [Open pos:?] executing ExecStmt: SELECT 1                 sql txn
+4   === operation:sql query _verbose:1 statement:SELECT 1     sql query
+5   === operation:optimizer _verbose:1                        optimizer
+6   === operation:consuming rows _verbose:1                   consuming rows
+7   === operation:flow _verbose:1                             flow
+8   === operation:values _verbose:1                           values
+3   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION       sql txn
+9   === operation:sql query _verbose:1 statement:COMMIT       sql query
+10  === operation:commit sql txn _verbose:1                   commit sql txn
+0   [NoTxn pos:?] executing ExecStmt: SELECT 2                session recording
+11  === operation:sql txn _verbose:1                          sql txn
+11  [Open pos:?] executing ExecStmt: SELECT 2                 sql txn
+12  === operation:sql query _verbose:1 statement:SELECT 2     sql query
+13  === operation:optimizer _verbose:1                        optimizer
+14  === operation:consuming rows _verbose:1                   consuming rows
+15  === operation:flow _verbose:1                             flow
+16  === operation:values _verbose:1                           values
+17  === operation:commit sql txn _verbose:1                   commit sql txn
+0   [NoTxn pos:?] executing Sync                              session recording
+0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off       session recording
 
 statement ok
 CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
@@ -1940,16 +1948,23 @@ SELECT id FROM system.namespace WHERE name='a'
 # was improperly configured to add a limit to the ScanRequest batch.
 # See #30943 for more details.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION]
+SELECT CASE WHEN message LIKE '=== operation:%'
+    THEN regexp_replace(
+      message,
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit):\S*| hostssl:\S*',
+      '', 'g')
+    ELSE message
+  END
+FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
-      message = '=== SPAN START: kv.DistSender: sending partial batch ==='
+      message LIKE '=== operation:kv.DistSender: sending partial batch%'
 ----
 querying next range at /Table/127/1/0/0
 querying next range at /Table/127/1/10/0
 querying next range at /Table/127/1/0/0
 querying next range at /Table/127/1/10/0
 querying next range at /Table/127/1/0/0
-=== SPAN START: kv.DistSender: sending partial batch ===
+=== operation:kv.DistSender: sending partial batch _verbose:1
 querying next range at /Table/127/1/10/0
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
