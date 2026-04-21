@@ -2027,12 +2027,19 @@ func (sc *systemTableContents) settingsHandler(
 // to compare the restored contents of scheduled_jobs with the
 // original contents, they will have already diverged.
 //
+// schedule_expr is also sentinelized because some schedules (e.g.
+// schema telemetry) have their cron expression derived from the
+// cluster ID via MaybeRewriteCronExpr. If a node restarts after a
+// cluster restore (e.g. due to failure injection), the controller
+// re-derives the expression using the new cluster ID, causing a
+// mismatch with the backed-up value. See #167514.
+//
 // Note that this same race was also identified in unit tests (see #100094).
 func (sc *systemTableContents) scheduledJobsHandler(
 	values []interface{}, columns []string,
 ) ([]interface{}, error) {
 	return newSystemTableRow(sc.table, values, columns).
-		WithSentinelIfExists("next_run", "schedule_details", "schedule_state").
+		WithSentinelIfExists("next_run", "schedule_details", "schedule_state", "schedule_expr").
 		// Skip row-level TTL jobs to avoid false-positives, as they are reinserted
 		// with new scheduled job IDs on restore.
 		Matches("executor_type", tree.ScheduledRowLevelTTLExecutor.InternalName()).
