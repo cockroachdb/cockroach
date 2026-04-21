@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
@@ -41,10 +43,21 @@ var wagSuffixRetentionCount = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var wagRetentionThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.wag.truncator_retention_threshold",
+	"duration a WAG node can be retained for before it is eligible for truncation. "+
+		"It is only meaningful if `kv.wag.truncator_suffix_retention.count` is > 0. "+
+		"(0 disables age-based retention threshold)",
+	6*time.Hour,
+)
+
 // WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
 type WAGTruncatorTestingKnobs struct {
 	// AfterTruncationCallback is called after each truncation attempt.
 	AfterTruncationCallback func()
+	// AfterAgeTickCallback is called after each tick of the age-retention timer.
+	AfterAgeTickCallback func()
 }
 
 // WAGTruncator truncates applied WAG nodes and clears their associated raft
@@ -90,13 +103,25 @@ func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTrunca
 }
 
 // Start launches the background goroutine that performs WAG truncation.
-// TODO(ibrahim): Pair the suffix retention setting with a time threshold after
-// which retained WAG nodes are automatically truncated to prevent having WAG
-// nodes for a long time.
+//
+// TODO(ibrahim): React to runtime changes to kv.wag.min_preserved_age via
+// SetOnChange so users don't have to wait for the next tick.
 func (t *WAGTruncator) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "wag-truncation", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
+
+		// prevTickIndex is the last WAG index observed at the previous tick of
+		// the age-retention timer. On each subsequent tick we advance allowedIndex
+		// up to this value, ensuring that if nodes were retained for longer than
+		// the age threshold, they can get truncated.
+		var prevTickIndex uint64
+		var ageTimer timeutil.Timer
+		defer ageTimer.Stop()
+		if d := wagRetentionThreshold.Get(&t.st.SV); d > 0 {
+			ageTimer.Reset(d)
+		}
+
 		for {
 			select {
 			case <-t.wakeCh:
@@ -105,6 +130,23 @@ func (t *WAGTruncator) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				if cb := t.knobs.AfterTruncationCallback; cb != nil {
 					cb()
+				}
+
+			case <-ageTimer.C:
+				t.allowedIndex = max(t.allowedIndex, prevTickIndex)
+				prevTickIndex = t.seq.Load()
+				if cb := t.knobs.AfterAgeTickCallback; cb != nil {
+					cb()
+				}
+
+				// Now that we might have advanced allowedIndex, signal to issue a new
+				// truncation attempt.
+				select {
+				case t.wakeCh <- struct{}{}:
+				default:
+				}
+				if d := wagRetentionThreshold.Get(&t.st.SV); d > 0 {
+					ageTimer.Reset(d)
 				}
 			case <-ctx.Done():
 				return
