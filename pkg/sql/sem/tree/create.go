@@ -1747,6 +1747,23 @@ func (node *CreateSequence) Format(ctx *FmtCtx) {
 // SequenceOptions represents a list of sequence options.
 type SequenceOptions []SequenceOption
 
+// ExtractIdentitySeqName returns the explicit sequence name supplied via the
+// PG18 SEQUENCE NAME clause (if any) and a copy of the option list with that
+// entry removed. The SEQUENCE NAME entry is metadata about how to name the
+// sequence and never makes it into the persisted sequence options.
+func (s SequenceOptions) ExtractIdentitySeqName() (*TableName, SequenceOptions) {
+	var explicit *TableName
+	remaining := make(SequenceOptions, 0, len(s))
+	for _, opt := range s {
+		if opt.Name == SeqOptName {
+			explicit = opt.NameVal
+			continue
+		}
+		remaining = append(remaining, opt)
+	}
+	return explicit, remaining
+}
+
 // Format implements the NodeFormatter interface.
 func (node *SequenceOptions) Format(ctx *FmtCtx) {
 	for i := range *node {
@@ -1825,6 +1842,10 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			default:
 				ctx.FormatNode(option.ColumnItemVal)
 			}
+		case SeqOptName:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			ctx.FormatNode(option.NameVal)
 		default:
 			panic(errors.AssertionFailedf("unexpected SequenceOption: %v", option))
 		}
@@ -1841,6 +1862,12 @@ type SequenceOption struct {
 	IntVal *int64
 
 	ColumnItemVal *ColumnItem
+
+	// NameVal carries the explicit sequence name supplied by the
+	// PG18 SEQUENCE NAME clause when this option appears on a
+	// GENERATED AS IDENTITY column. It is meaningless in other
+	// contexts.
+	NameVal *TableName
 }
 
 // Names of options on CREATE SEQUENCE.
@@ -1857,6 +1884,10 @@ const (
 	SeqOptStart        = "START"
 	SeqOptRestart      = "RESTART"
 	SeqOptVirtual      = "VIRTUAL"
+	// SeqOptName is the PG18 "SEQUENCE NAME <name>" option for
+	// identity columns. It is only valid inside the parenthesized
+	// option list of GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY.
+	SeqOptName = "SEQUENCE NAME"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs

@@ -12350,6 +12350,13 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
 
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
+| SEQUENCE NAME db_object_name {
+                                 /* SKIP DOC */
+                                 // SEQUENCE NAME is only valid as a GENERATED AS IDENTITY option;
+                                 // the BNF docs for CREATE/ALTER SEQUENCE shouldn't advertise it.
+                                 name := $3.unresolvedObjectName().ToTableName()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptName, NameVal: &name}
+                               }
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
@@ -19203,6 +19210,7 @@ unreserved_keyword:
 | MULTIPOLYGONM
 | MULTIPOLYGONZ
 | MULTIPOLYGONZM
+| NAME
 | NAMES
 | NAN
 | NEVER
@@ -19784,6 +19792,7 @@ bare_label_keywords:
 | MULTIPOLYGONM
 | MULTIPOLYGONZ
 | MULTIPOLYGONZM
+| NAME
 | NAMES
 | NAN
 | NATURAL
