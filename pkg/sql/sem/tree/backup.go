@@ -43,6 +43,14 @@ type BackupOptions struct {
 	ExecutionLocality               Expr
 	UpdatesClusterMonitoringMetrics Expr
 	Strict                          bool
+	// RevisionStream is set when the BACKUP was invoked with the
+	// `WITH REVISION STREAM` option, requesting that a continuous
+	// backup (revlog) job be established for the destination if one
+	// does not already exist. The option takes no value; presence
+	// means true. (The user-facing keyword is `STREAM` rather than
+	// `LOG` to avoid introducing a new unreserved keyword; the
+	// internal subsystem is still named `revlog`.)
+	RevisionStream bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -302,6 +310,10 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("strict storage locality")
 	}
+	if o.RevisionStream {
+		maybeAddSep()
+		ctx.WriteString("revision stream")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -363,6 +375,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	} else {
 		o.Strict = other.Strict
 	}
+	if o.RevisionStream {
+		if other.RevisionStream {
+			return errors.New("revision stream option specified multiple times")
+		}
+	} else {
+		o.RevisionStream = other.RevisionStream
+	}
 	return nil
 }
 
@@ -376,7 +395,8 @@ func (o BackupOptions) IsDefault() bool {
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics &&
-		o.Strict == options.Strict
+		o.Strict == options.Strict &&
+		o.RevisionStream == options.RevisionStream
 }
 
 // Format implements the NodeFormatter interface.

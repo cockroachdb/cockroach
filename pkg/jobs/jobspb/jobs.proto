@@ -506,7 +506,22 @@ message BackupDetails {
   // with locality tag X.
   bool strict_locality_filtering = 28;
 
-  // NEXT ID: 29;
+  // CreateRevlogJob is set on a regular BACKUP that was invoked with
+  // `WITH REVISION STREAM`. During execution the BACKUP resumer performs a
+  // create-or-noop dance that establishes a sibling revlog (continuous
+  // backup) job for this destination if one does not already exist. See
+  // the "Job creation" subsection of the continuous backup RFC
+  // (docs/RFCS/20260420_continuous_backup.md) for details.
+  bool create_revlog_job = 29;
+
+  // RevLogJob is set on the sibling job created by the `CreateRevlogJob`
+  // dance. The BACKUP resumer keys off this flag at the top of Resume to
+  // dispatch to the revlog execution path instead of the normal
+  // incremental-backup path. The job remains a BACKUP job in the job
+  // table; this is just a flag on its details.
+  bool rev_log_job = 30;
+
+  // NEXT ID: 31;
 }
 
 message BackupProgress {
