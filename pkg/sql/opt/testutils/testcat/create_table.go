@@ -873,7 +873,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		computedExpr = &s
 	}
 
-	if def.GeneratedIdentity.SeqOptions != nil {
+	if len(def.GeneratedIdentity.SeqOptions) > 0 {
 		s := serializeGeneratedAsIdentitySequenceOption(&def.GeneratedIdentity.SeqOptions)
 		generatedAsIdentitySequenceOption = &s
 	}
