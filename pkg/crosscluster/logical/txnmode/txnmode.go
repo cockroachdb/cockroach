@@ -155,7 +155,13 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 	const applierID ldrdecoder.ApplierID = 1
 	allIDs := []ldrdecoder.ApplierID{applierID}
 	applierEvents := make(chan txnapply.ApplierEvent)
-	applier, err := txnapply.NewApplier(ctx, applierID, writers, txnapply.NewDependencyTracker(allIDs), allIDs)
+	depCtx, depCancel := context.WithCancel(ctx)
+	depResolver, depCleanup := txnapply.NewTestDependencyTrackerClient(depCtx, allIDs)
+	defer func() {
+		depCancel()
+		_ = depCleanup()
+	}()
+	applier, err := txnapply.NewApplier(ctx, applierID, writers, depResolver, allIDs)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")
 	}

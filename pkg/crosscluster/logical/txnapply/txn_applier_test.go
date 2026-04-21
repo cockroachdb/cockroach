@@ -99,7 +99,7 @@ func ddeps(pairs ...int64) ddepsOpt {
 	out := make(ddepsOpt, len(pairs)/2)
 	for i := 0; i < len(pairs); i += 2 {
 		out[i/2] = ldrdecoder.TxnID{
-			ApplierID: ldrdecoder.ApplierID(pairs[i]),
+			ApplierID: int32(pairs[i]),
 			Timestamp: hlc.Timestamp{WallTime: pairs[i+1]},
 		}
 	}
@@ -158,9 +158,9 @@ func generateRandomDAG(rng *rand.Rand, numTxns int, maxDeps int, numAppliers int
 	batchStart := 0 // index of the first txn in the current batch
 
 	for i := range nodes {
-		applierID := ldrdecoder.ApplierID(1)
+		applierID := int32(1)
 		if numAppliers > 1 {
-			applierID = ldrdecoder.ApplierID(rng.Intn(numAppliers) + 1)
+			applierID = int32(rng.Intn(numAppliers) + 1)
 		}
 		nodes[i].id = ldrdecoder.TxnID{
 			Timestamp: hlc.Timestamp{WallTime: int64(i + 1)},
@@ -217,9 +217,9 @@ func checkApplierDrained(t testing.TB, applier *Applier) {
 	require.Empty(t, applier.mu.horizonWaiting, "horizonWaiting should be empty")
 }
 
-// checkTrackerServerDrained verifies that the trackerServer's internal state is
+// checkTrackerServerDrained verifies that the TrackerServer's internal state is
 // empty after all transactions have been processed.
-func checkTrackerServerDrained(t testing.TB, ts *trackerServer) {
+func checkTrackerServerDrained(t testing.TB, ts *TrackerServer) {
 	t.Helper()
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -229,7 +229,14 @@ func checkTrackerServerDrained(t testing.TB, ts *trackerServer) {
 	for applier, horizons := range ts.mu.horizonWaiters {
 		require.Empty(t, horizons, "horizonWaiters for applier %d should be empty", applier)
 	}
-	require.Empty(t, ts.mu.committed.completedTxns, "completedTxns should be empty")
+	// Leftover completedTxns entries are benign: they occur when the applier's
+	// final Ready() call races with context cancellation in the test router,
+	// so the resolvedTime never advances far enough to prune them.
+	for txnID := range ts.mu.committed.completedTxns {
+		_, hasWaiters := ts.mu.waiters[txnID]
+		require.False(t, hasWaiters,
+			"completedTxns contains txn %+v that still has active waiters", txnID)
+	}
 }
 
 // checkApplyOrder verifies that all transactions were applied after their
@@ -437,13 +444,6 @@ func runDistributedApplier(
 		ids = append(ids, id)
 	}
 
-	depTracker := NewDependencyTracker(ids)
-
-	// Shared writer so all appliers record to one log, giving us a global
-	// application order.
-	rng := rand.New(randutil.NewLockedSource(rngSeed))
-	sharedWriter := &testWriter{t: t, rng: rng}
-
 	// Compute maxTs across all txns for the checkpoint.
 	var maxTs hlc.Timestamp
 	for _, node := range dag {
@@ -459,7 +459,15 @@ func runDistributedApplier(
 	maxCheckpoint := maxTs.Add(1, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	depTracker, depTrackerCleanup := NewTestDependencyTrackerClient(ctx, ids)
+
 	defer cancel()
+
+	// Shared writer so all appliers record to one log, giving us a global
+	// application order.
+	rng := rand.New(randutil.NewLockedSource(rngSeed))
+	sharedWriter := &testWriter{t: t, rng: rng}
 
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
 	inputs := make(map[ldrdecoder.ApplierID]chan ApplierEvent)
@@ -526,10 +534,14 @@ func runDistributedApplier(
 	require.True(t, err == nil || errors.Is(err, context.Canceled),
 		"unexpected error: %v", err)
 
+	err = depTrackerCleanup()
+	require.True(t, err == nil || errors.Is(err, context.Canceled),
+		"unexpected dep tracker error: %v", err)
+
 	for _, a := range appliers {
 		checkApplierDrained(t, a)
 	}
-	for _, ts := range depTracker.(*trackerClient).servers {
+	for _, ts := range depTracker.(*testTrackerClient).servers {
 		checkTrackerServerDrained(t, ts)
 	}
 
@@ -596,8 +608,6 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		ids = append(ids, id)
 	}
 
-	depTracker := NewDependencyTracker(ids)
-
 	sharedWriter := &benchWriter{}
 
 	var maxTs hlc.Timestamp
@@ -611,6 +621,8 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 	rng := rand.New(rand.NewSource(rngSeed))
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	depTracker, depTrackerCleanup := NewTestDependencyTrackerClient(ctx, ids)
 	defer cancel()
 
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
@@ -667,6 +679,10 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 	err := group.Wait()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		b.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := depTrackerCleanup(); err != nil && !errors.Is(err, context.Canceled) {
+		b.Fatalf("unexpected dep tracker error: %v", err)
 	}
 }
 

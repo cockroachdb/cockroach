@@ -72,7 +72,7 @@ type Checkpoint struct{ Timestamp hlc.Timestamp }
 // timestamp order.
 type Applier struct {
 	id          ldrdecoder.ApplierID
-	depResolver DependencyResolver
+	depResolver DependencyResolverClient
 
 	mu struct {
 		syncutil.Mutex
@@ -120,7 +120,7 @@ func NewApplier(
 	ctx context.Context,
 	id ldrdecoder.ApplierID,
 	writers []txnwriter.TransactionWriter,
-	depResolver DependencyResolver,
+	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
 ) (_ *Applier, retErr error) {
 	defer func() {

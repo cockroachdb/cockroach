@@ -6,7 +6,10 @@
 package txnapply
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -16,10 +19,13 @@ import (
 type DependencyUpdate struct {
 	TxnID        ldrdecoder.TxnID
 	ResolvedTime hlc.Timestamp
+	// TargetApplierID identifies the applier that should receive this update,
+	// distinct from TxnID.ApplierID which identifies the txn owner.
+	TargetApplierID ldrdecoder.ApplierID
 }
 
-// DependencyResolver coordinates cross-applier transaction dependencies.
-type DependencyResolver interface {
+// DependencyResolverClient coordinates cross-applier transaction dependencies.
+type DependencyResolverClient interface {
 	// Wait registers that the calling applier is waiting on the given txns
 	// (owned by other appliers) to complete.
 	Wait(waitingID ldrdecoder.ApplierID, txns []ldrdecoder.TxnID)
@@ -39,10 +45,10 @@ type DependencyResolver interface {
 	Receive(applier ldrdecoder.ApplierID) <-chan DependencyUpdate
 }
 
-// trackerServer holds the dependency tracking state for a single applier. It
+// TrackerServer holds the dependency tracking state for a single applier. It
 // stores the txns that this applier owns (and that other appliers may be
 // waiting on), along with the set of waiters to notify when txns complete.
-type trackerServer struct {
+type TrackerServer struct {
 	mu struct {
 		syncutil.Mutex
 
@@ -61,10 +67,19 @@ type trackerServer struct {
 	}
 }
 
-// maybeAddWaiter registers a waiter for the given txn unless the txn is
+// NewTrackerServer creates a TrackerServer for use in a dependency resolver
+// processor.
+func NewTrackerServer() *TrackerServer {
+	s := &TrackerServer{}
+	s.mu.waiters = make(map[ldrdecoder.TxnID][]ldrdecoder.ApplierID)
+	s.mu.committed = makeCommittedSet()
+	return s
+}
+
+// MaybeAddWaiter registers a waiter for the given txn unless the txn is
 // already resolved (at or below the resolvedTime, or in completedTxns). Returns
 // whether the txn is already resolved and the current resolvedTime.
-func (inst *trackerServer) maybeAddWaiter(
+func (inst *TrackerServer) MaybeAddWaiter(
 	txn ldrdecoder.TxnID, waiter ldrdecoder.ApplierID,
 ) (bool, hlc.Timestamp) {
 	inst.mu.Lock()
@@ -77,7 +92,9 @@ func (inst *trackerServer) maybeAddWaiter(
 	return false, hlc.Timestamp{}
 }
 
-func (inst *trackerServer) waitHorizon(
+// WaitHorizon registers a horizon wait for the given applier. Returns whether
+// the horizon is already satisfied and the current resolvedTime.
+func (inst *TrackerServer) WaitHorizon(
 	waitingID ldrdecoder.ApplierID, txnHorizon hlc.Timestamp,
 ) (alreadyResolved bool, resolvedTime hlc.Timestamp) {
 	inst.mu.Lock()
@@ -93,10 +110,10 @@ func (inst *trackerServer) waitHorizon(
 	return false, hlc.Timestamp{}
 }
 
-// ready records the completion of a txn and returns a map of updates to send
+// Ready records the completion of a txn and returns a map of updates to send
 // to waiting appliers. The caller is responsible for delivering the updates
 // over the appropriate channels.
-func (inst *trackerServer) ready(
+func (inst *TrackerServer) Ready(
 	txn ldrdecoder.TxnID, resolvedTime hlc.Timestamp,
 ) map[ldrdecoder.ApplierID]DependencyUpdate {
 	inst.mu.Lock()
@@ -108,12 +125,14 @@ func (inst *trackerServer) ready(
 	waitingAppliers := inst.mu.waiters[txn]
 	delete(inst.mu.waiters, txn)
 
-	update := DependencyUpdate{TxnID: txn, ResolvedTime: resolvedTime}
-
 	updates := make(map[ldrdecoder.ApplierID]DependencyUpdate, len(waitingAppliers))
 
 	for _, applierID := range waitingAppliers {
-		updates[applierID] = update
+		updates[applierID] = DependencyUpdate{
+			TxnID:           txn,
+			ResolvedTime:    resolvedTime,
+			TargetApplierID: applierID,
+		}
 	}
 
 	// Notify horizon waiters whose required horizon is satisfied by the
@@ -126,97 +145,162 @@ func (inst *trackerServer) ready(
 		heap.Pop(&inst.mu.horizonWaiters)
 		waiterID := top.txnID.ApplierID
 		if _, ok := updates[waiterID]; !ok {
-			updates[waiterID] = update
+			updates[waiterID] = DependencyUpdate{
+				TxnID:           txn,
+				ResolvedTime:    resolvedTime,
+				TargetApplierID: waiterID,
+			}
 		}
 	}
 
 	return updates
 }
 
-// trackerClient is a DependencyResolver that tracks cross-applier dependencies
-// and notifies waiting appliers via buffered channels when dependencies are
-// resolved.
-//
-// This prototype models the future distql flow we'll use for the distributed
-// applier: each applier processor will be able to communicate with each
-// applier's associated dependency tracker processor. In this prototype, the
-// trackerClient simply queries each tracker server via a map, and the tracker
-// client directly sends updates to the applier via the inbox channels. In the
-// distsql flow, the trackerClient will send Ready RPCs to an appliers
-// dependency tracker processor which will forward updates to the applier
-// processor.
-type trackerClient struct {
-	servers map[ldrdecoder.ApplierID]*trackerServer
-
-	// inboxes holds one buffered channel per applier for receiving
-	// DependencyUpdates. Populated at construction and never modified.
-	//
-	// TODO(msbutler): if these channels fill up, it could block Ready() leading
-	// to deadlock. In the productionized version, Ready will never be blocking,
-	// so we'll probably store some ring buffer of ready transactions on the
-	// tracker processor. Then, each processor will have some Run method that will
-	// watch the buffer state and send data to applier channels.
-	inboxes map[ldrdecoder.ApplierID]chan DependencyUpdate
+// DepResolverEvent is a message sent from a DistDepResolverClient (running in
+// the applier processor) to the dep resolver processor. The applier processor
+// serializes these as DistSQL rows routed by the target applier ID. The Event
+// field carries one of the four dep resolver event types defined in
+// txnpb.LDRDepResolverEvent.
+type DepResolverEvent struct {
+	// TargetApplierID is the applier whose dep resolver should process this
+	// event. Used as the routing key for BY_RANGE output.
+	TargetApplierID ldrdecoder.ApplierID
+	Event           txnpb.LDRDepResolverEvent
 }
 
-// NewDependencyTracker creates a DependencyResolver for the given set of
-// applier IDs.
-func NewDependencyTracker(appliers []ldrdecoder.ApplierID) DependencyResolver {
-	inboxes := make(map[ldrdecoder.ApplierID]chan DependencyUpdate, len(appliers))
-	for _, id := range appliers {
-		// TODO(msbutler): the only reason this buffer has 1000 slots is to ensure
-		// the random dag test doesn't deadlock. This will be replaced by a ring
-		// buffer in a future PR.
-		inboxes[id] = make(chan DependencyUpdate, 1000)
-	}
+// DistDepResolverClient implements DependencyResolverClient for use in the
+// DistSQL applier processor. It routes Wait/WaitHorizon/Ready requests through
+// a channel that the applier processor's Next() drains as DistSQL rows, and
+// receives DependencyUpdates via a loopback backchannel from the co-located
+// dep resolver processor.
+//
+// When the backchannel delivers an update for a remote applier, the client
+// re-sends it through the output channel so it reaches the correct dep
+// resolver, which then backchannels it to the correct applier.
+type DistDepResolverClient struct {
+	localApplierID ldrdecoder.ApplierID
 
-	instances := make(map[ldrdecoder.ApplierID]*trackerServer, len(appliers))
-	for _, id := range appliers {
-		inst := &trackerServer{}
-		inst.mu.waiters = make(map[ldrdecoder.TxnID][]ldrdecoder.ApplierID)
-		inst.mu.committed = makeCommittedSet()
-		instances[id] = inst
-	}
+	// outCh sends events to the applier processor's Next(), which
+	// serializes and routes them to the correct dep resolver processor.
+	outCh chan DepResolverEvent
 
-	return &trackerClient{servers: instances, inboxes: inboxes}
+	// receiveCh delivers DependencyUpdates for the local applier. This is
+	// the channel returned by Receive().
+	receiveCh chan DependencyUpdate
 }
 
-// Wait implements DependencyResolver.
-//
-// TODO(msbutler): consider passing the waiting applier A's resolvedTime here, which
-// would allow the depending applier B to cache the resolvedTime timestamp,
-// potentially avoiding a WaitHorizon from B to A.
-func (d *trackerClient) Wait(waiter ldrdecoder.ApplierID, txns []ldrdecoder.TxnID) {
+var _ DependencyResolverClient = (*DistDepResolverClient)(nil)
+
+// NewDistDepResolverClient creates a DistDepResolverClient for the given
+// applier.
+func NewDistDepResolverClient(localApplierID ldrdecoder.ApplierID) *DistDepResolverClient {
+	return &DistDepResolverClient{
+		localApplierID: localApplierID,
+
+		// TODO(msbutler): we should not be using buffered channels here. Probably
+		// should use channels with length 1 and a ring buffer.
+		outCh:     make(chan DepResolverEvent, 1000),
+		receiveCh: make(chan DependencyUpdate, 1000),
+	}
+}
+
+// OutCh returns the channel from which the router (DistSQL Next() or test
+// router) reads dep resolver events produced by this client.
+func (c *DistDepResolverClient) OutCh() <-chan DepResolverEvent { return c.outCh }
+
+// Wait implements DependencyResolverClient.
+func (c *DistDepResolverClient) Wait(waitingID ldrdecoder.ApplierID, txns []ldrdecoder.TxnID) {
+	grouped := make(map[ldrdecoder.ApplierID][]ldrdecoder.TxnID)
 	for _, txn := range txns {
-		resolved, resolvedTime := d.servers[txn.ApplierID].maybeAddWaiter(txn, waiter)
-		if resolved {
-			d.inboxes[waiter] <- DependencyUpdate{TxnID: txn, ResolvedTime: resolvedTime}
+		grouped[txn.ApplierID] = append(grouped[txn.ApplierID], txn)
+	}
+	for targetID, txnGroup := range grouped {
+		c.outCh <- DepResolverEvent{
+			TargetApplierID: targetID,
+			Event: txnpb.LDRDepResolverEvent{
+				Type: txnpb.DEP_RESOLVER_EVENT_WAIT,
+				Wait: txnpb.DepResolverWait{
+					WaitingID: waitingID,
+					WaitTxns:  txnGroup,
+				},
+			},
 		}
 	}
 }
 
-// WaitHorizon implements DependencyResolver.
-func (d *trackerClient) WaitHorizon(
-	applierID, dependID ldrdecoder.ApplierID, txnHorizon hlc.Timestamp,
+// WaitHorizon implements DependencyResolverClient.
+func (c *DistDepResolverClient) WaitHorizon(
+	waitingID, dependID ldrdecoder.ApplierID, txnHorizon hlc.Timestamp,
 ) {
-	resolved, resolvedTime := d.servers[dependID].waitHorizon(applierID, txnHorizon)
-	if resolved {
-		d.inboxes[applierID] <- DependencyUpdate{
-			TxnID:        ldrdecoder.TxnID{ApplierID: dependID},
-			ResolvedTime: resolvedTime,
+	c.outCh <- DepResolverEvent{
+		TargetApplierID: dependID,
+		Event: txnpb.LDRDepResolverEvent{
+			Type: txnpb.DEP_RESOLVER_EVENT_WAIT_HORIZON,
+			WaitHorizon: txnpb.DepResolverWaitHorizon{
+				WaitingID:  waitingID,
+				DependID:   dependID,
+				TxnHorizon: txnHorizon,
+			},
+		},
+	}
+}
+
+// Ready implements DependencyResolverClient.
+func (c *DistDepResolverClient) Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Timestamp) {
+	c.outCh <- DepResolverEvent{
+		TargetApplierID: txn.ApplierID,
+		Event: txnpb.LDRDepResolverEvent{
+			Type: txnpb.DEP_RESOLVER_EVENT_READY,
+			Ready: txnpb.DepResolverReady{
+				ReadyTxn:     txn,
+				ResolvedTime: resolvedTime,
+			},
+		},
+	}
+}
+
+// Receive implements DependencyResolverClient.
+func (c *DistDepResolverClient) Receive(_ ldrdecoder.ApplierID) <-chan DependencyUpdate {
+	return c.receiveCh
+}
+
+// RunBackchannelForwarder reads DependencyUpdates from the loopback
+// backchannel. Updates for the local applier are pushed to receiveCh; updates
+// for remote appliers are forwarded through outCh so they reach the correct
+// dep resolver processor via DistSQL routing.
+func (c *DistDepResolverClient) RunBackchannelForwarder(
+	ctx context.Context, loopbackUpdateCh <-chan DependencyUpdate,
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case update, ok := <-loopbackUpdateCh:
+			if !ok {
+				return nil
+			}
+			if update.TargetApplierID == c.localApplierID {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case c.receiveCh <- update:
+				}
+			} else {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case c.outCh <- DepResolverEvent{
+					TargetApplierID: update.TargetApplierID,
+					Event: txnpb.LDRDepResolverEvent{
+						Type: txnpb.DEP_RESOLVER_EVENT_FORWARD_UPDATE,
+						ForwardUpdate: txnpb.DepResolverForwardUpdate{
+							TxnID:        update.TxnID,
+							ResolvedTime: update.ResolvedTime,
+						},
+					},
+				}:
+				}
+			}
 		}
 	}
-}
-
-// Ready implements DependencyResolver.
-func (d *trackerClient) Ready(txn ldrdecoder.TxnID, resolvedTime hlc.Timestamp) {
-	updates := d.servers[txn.ApplierID].ready(txn, resolvedTime)
-	for applierID, update := range updates {
-		d.inboxes[applierID] <- update
-	}
-}
-
-// Receive implements DependencyResolver.
-func (d *trackerClient) Receive(applier ldrdecoder.ApplierID) <-chan DependencyUpdate {
-	return d.inboxes[applier]
 }

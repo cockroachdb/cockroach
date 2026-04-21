@@ -19,6 +19,7 @@ PROTOBUF_SRCS = [
     "//pkg/clusterversion:clusterversion_go_proto",
     "//pkg/config/zonepb:zonepb_go_proto",
     "//pkg/config:config_go_proto",
+    "//pkg/crosscluster/logical/txnpb:txnpb_go_proto",
     "//pkg/geo/geopb:geopb_go_proto",
     "//pkg/geo/mvt:mvt_go_proto",
     "//pkg/gossip:gossip_go_proto",

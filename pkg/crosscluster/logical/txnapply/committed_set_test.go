@@ -16,7 +16,7 @@ import (
 func txnID(wall int64, applier int32) ldrdecoder.TxnID {
 	return ldrdecoder.TxnID{
 		Timestamp: hlc.Timestamp{WallTime: wall},
-		ApplierID: ldrdecoder.ApplierID(applier),
+		ApplierID: applier,
 	}
 }
 

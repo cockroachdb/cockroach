@@ -16,6 +16,7 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/crosscluster/logical/sqlwriter",
+        "//pkg/crosscluster/logical/txnpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/repstream/streampb",
