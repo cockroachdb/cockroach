@@ -143,11 +143,22 @@ func (p *planner) sequenceDependencyError(
 	return nil
 }
 
+// ownedSequenceDropContext indicates which DDL is asking whether sequences
+// owned by a column can be removed. The error returned when the check fails
+// is tailored to the operation, matching PostgreSQL's wording.
+type ownedSequenceDropContext int
+
+const (
+	dropContextTable ownedSequenceDropContext = iota
+	dropContextColumn
+	dropContextIdentity
+)
+
 func (p *planner) canRemoveAllTableOwnedSequences(
 	ctx context.Context, desc *tabledesc.Mutable, behavior tree.DropBehavior,
 ) error {
 	for _, col := range desc.PublicColumns() {
-		err := p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, false /* isColumnDrop */)
+		err := p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, dropContextTable)
 		if err != nil {
 			return err
 		}
@@ -158,7 +169,13 @@ func (p *planner) canRemoveAllTableOwnedSequences(
 func (p *planner) canRemoveAllColumnOwnedSequences(
 	ctx context.Context, desc *tabledesc.Mutable, col catalog.Column, behavior tree.DropBehavior,
 ) error {
-	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, true /* isColumnDrop */)
+	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, dropContextColumn)
+}
+
+func (p *planner) canRemoveAllIdentityOwnedSequences(
+	ctx context.Context, desc *tabledesc.Mutable, col catalog.Column, behavior tree.DropBehavior,
+) error {
+	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, dropContextIdentity)
 }
 
 func (p *planner) canRemoveOwnedSequencesImpl(
@@ -166,7 +183,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 	desc *tabledesc.Mutable,
 	col catalog.Column,
 	behavior tree.DropBehavior,
-	isColumnDrop bool,
+	dropCtx ownedSequenceDropContext,
 ) error {
 	for i := 0; i < col.NumOwnsSequences(); i++ {
 		sequenceID := col.GetOwnsSequenceID(i)
@@ -198,7 +215,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 
 		if multipleIterationErr == nil && firstDep.ID == desc.ID {
 			// This sequence is depended on only by columns in the table of interest.
-			if !isColumnDrop {
+			if dropCtx == dropContextTable {
 				// Either we're dropping the whole table and thereby also anything
 				// that might depend on this sequence, making it safe to remove...
 				continue
@@ -215,26 +232,33 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 		if behavior == tree.DropCascade {
 			continue
 		}
-		// If Cascade is not enabled, and more than 1 columns depend on it, and the
-		if isColumnDrop {
-			columnName := tree.Name(col.GetName())
-			tableName := tree.Name(desc.Name)
-			seqName := tree.Name(seqDesc.GetName())
+		// Cascade is not enabled and the sequence is depended on by something
+		// other than the column (or table) being dropped. The error wording is
+		// chosen to match PostgreSQL.
+		switch dropCtx {
+		case dropContextColumn:
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop column %s of table %s because other objects depend on it",
+				col.GetName(), desc.Name,
+			)
+		case dropContextIdentity:
 			return errors.WithDetailf(
 				pgerror.Newf(
 					pgcode.DependentObjectsStillExist,
 					"cannot drop sequence %s because other objects depend on it",
-					tree.ErrString(&seqName),
+					seqDesc.GetName(),
 				),
 				"sequence is owned by column %s of relation %s",
-				tree.ErrString(&columnName), tree.ErrString(&tableName),
+				col.GetName(), desc.Name,
+			)
+		default:
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop table %s because other objects depend on it",
+				desc.Name,
 			)
 		}
-		return pgerror.Newf(
-			pgcode.DependentObjectsStillExist,
-			"cannot drop table %s because other objects depend on it",
-			desc.Name,
-		)
 	}
 	return nil
 }
