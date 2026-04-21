@@ -8,6 +8,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
+import { useFeatures } from "src/hooks/useFeatures";
 import "./navigation-bar.scss";
 
 interface RouteParam {
@@ -66,8 +67,18 @@ function Sidebar(): React.ReactElement {
     },
   ];
 
+  const { features } = useFeatures();
+  const featureRoutes: RouteParam[] = (features ?? [])
+    .filter(f => f.enabled)
+    .map(f => ({
+      path: f.route_path,
+      text: f.title,
+      activeFor: [f.route_path],
+    }));
+  const allRoutes = [...routes, ...featureRoutes];
+
   const isActiveNavigationItem = (path: string): boolean => {
-    const { activeFor, ignoreFor = [] } = routes.find(
+    const { activeFor, ignoreFor = [] } = allRoutes.find(
       route => route.path === path,
     );
     return [...activeFor, path].some(p => {
@@ -79,7 +90,7 @@ function Sidebar(): React.ReactElement {
     });
   };
 
-  const navigationItems = routes
+  const navigationItems = allRoutes
     .filter(route => !route.isHidden)
     .map(({ path, text }, idx) => (
       <SideNavigation.Item isActive={isActiveNavigationItem(path)} key={idx}>
