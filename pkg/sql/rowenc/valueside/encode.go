@@ -128,6 +128,11 @@ func EncodeWithScratch(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), scratch, nil
 	case *tree.DVoid:
 		return encoding.EncodeVoidValue(appendTo, uint32(colID)), scratch, nil
+	case *tree.DPendingCommitTimestamp:
+		// PENDING_COMMIT_TIMESTAMP() is encoded as a bare value tag with no
+		// payload. Intent resolution rewrites it into a Time-encoded value
+		// once the txn's commit timestamp is known.
+		return encoding.EncodeCommitTimestampValue(appendTo, uint32(colID)), scratch, nil
 	default:
 		if buildutil.CrdbTestBuild {
 			return nil, nil, errors.AssertionFailedf("unable to encode table value: %T", t)

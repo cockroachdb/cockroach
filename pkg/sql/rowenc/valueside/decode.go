@@ -35,6 +35,13 @@ func Decode(
 	if typ == encoding.Null {
 		return tree.DNull, b[dataOffset:], nil
 	}
+	// CommitTimestamp is the unresolved PENDING_COMMIT_TIMESTAMP() marker.
+	// The actual timestamp is filled in by intent resolution at commit time;
+	// any read that observes the marker is a same-txn read-your-own-write
+	// and gets NULL back, since the real value isn't yet known.
+	if typ == encoding.CommitTimestamp {
+		return tree.DNull, b[dataOffset:], nil
+	}
 	// Bool is special because the value is stored in the value tag.
 	if valType.Family() != types.BoolFamily {
 		b = b[dataOffset:]

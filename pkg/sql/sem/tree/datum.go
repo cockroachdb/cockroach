@@ -5174,6 +5174,86 @@ func (d *DVoid) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DPendingCommitTimestamp is a marker datum produced by the
+// PENDING_COMMIT_TIMESTAMP() builtin. It carries no value: the actual
+// timestamp is filled in during intent resolution by the KV layer once the
+// transaction's commit timestamp is known. Within the writing transaction
+// it round-trips through value-side encoding as a CommitTimestamp tag and
+// decodes back as NULL (since the real value isn't yet observable).
+type DPendingCommitTimestamp struct{}
+
+// DPendingCommitTimestampDatum is the singleton DPendingCommitTimestamp
+// returned by the pending_commit_timestamp() builtin.
+var DPendingCommitTimestampDatum Datum = &DPendingCommitTimestamp{}
+
+// ResolvedType implements the TypedExpr interface.
+//
+// PENDING_COMMIT_TIMESTAMP() is reported as TIMESTAMPTZ. The marker is
+// only ever stored into TIMESTAMP/TIMESTAMPTZ columns (DDL validation in
+// commit 2 enforces this), and the post-resolution value is decoded as
+// the column's declared type.
+func (*DPendingCommitTimestamp) ResolvedType() *types.T {
+	return types.TimestampTZ
+}
+
+// Compare implements the Datum interface. Two pending markers are equal;
+// comparison against any concrete datum is unsupported because the real
+// value isn't known yet.
+func (d *DPendingCommitTimestamp) Compare(
+	ctx context.Context, cmpCtx CompareContext, other Datum,
+) (int, error) {
+	if other == DNull {
+		return 1, nil
+	}
+	if _, ok := cmpCtx.UnwrapDatum(ctx, other).(*DPendingCommitTimestamp); !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return 0, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DPendingCommitTimestamp) Prev(_ context.Context, _ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DPendingCommitTimestamp) Next(_ context.Context, _ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DPendingCommitTimestamp) IsMax(_ context.Context, _ CompareContext) bool { return false }
+
+// IsMin implements the Datum interface.
+func (d *DPendingCommitTimestamp) IsMin(_ context.Context, _ CompareContext) bool { return false }
+
+// Max implements the Datum interface.
+func (d *DPendingCommitTimestamp) Max(_ context.Context, _ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DPendingCommitTimestamp) Min(_ context.Context, _ CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DPendingCommitTimestamp) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface. The marker has no concrete
+// value, so we render it as the function call that produced it. This is
+// what shows up if a caller stringifies the datum directly (e.g. EXPLAIN
+// or test diagnostics); storage paths intercept the datum before format
+// runs.
+func (*DPendingCommitTimestamp) Format(ctx *FmtCtx) {
+	ctx.WriteString("pending_commit_timestamp()")
+}
+
+// Size implements the Datum interface.
+func (d *DPendingCommitTimestamp) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DEnum represents an ENUM value.
 type DEnum struct {
 	// EnumType is the hydrated type of this enum.

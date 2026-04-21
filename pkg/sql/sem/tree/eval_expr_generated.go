@@ -282,6 +282,11 @@ func (node *DVoid) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 }
 
 // Eval is part of the TypedExpr interface.
+func (node *DPendingCommitTimestamp) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node *DefaultVal) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return v.EvalDefaultVal(ctx, node)
 }

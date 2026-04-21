@@ -1908,6 +1908,11 @@ const (
 	PGVector           Type = 44
 	LTree              Type = 45
 	LTreeDesc          Type = 46
+	// CommitTimestamp is a value-encoding-only marker tag with no payload
+	// bytes. It is written by the row encoder when a column receives the
+	// PENDING_COMMIT_TIMESTAMP() builtin and is later replaced with a Time
+	// tag (carrying the txn's commit timestamp) during intent resolution.
+	CommitTimestamp Type = 47
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2839,6 +2844,14 @@ func EncodeVoidValue(appendTo []byte, colIDDelta uint32) []byte {
 	return EncodeValueTag(appendTo, colIDDelta, Void)
 }
 
+// EncodeCommitTimestampValue encodes a PENDING_COMMIT_TIMESTAMP() marker as
+// a bare value tag (CommitTimestamp type) with no data payload. Intent
+// resolution rewrites the marker into a Time-encoded value carrying the
+// txn's commit timestamp.
+func EncodeCommitTimestampValue(appendTo []byte, colIDDelta uint32) []byte {
+	return EncodeValueTag(appendTo, colIDDelta, CommitTimestamp)
+}
+
 // EncodeBox2DValue encodes a geopb.BoundingBox with its value tag, appends it to
 // the supplied buffer and returns the final buffer.
 func EncodeBox2DValue(appendTo []byte, colIDDelta uint32, b geopb.BoundingBox) ([]byte, error) {
@@ -3424,6 +3437,8 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset, nil
 	case Void:
 		return dataOffset, nil
+	case CommitTimestamp:
+		return dataOffset, nil
 	case True, False:
 		return dataOffset, nil
 	case Int:
@@ -3575,6 +3590,9 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, t.UTC().Format(time.RFC3339Nano), nil
+	case CommitTimestamp:
+		b = b[dataOffset:]
+		return b, "PENDING_COMMIT_TIMESTAMP", nil
 	case TimeTZ:
 		var t timetz.TimeTZ
 		b, t, err = DecodeTimeTZValue(b)

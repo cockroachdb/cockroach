@@ -3017,3 +3017,50 @@ func BenchmarkDecodeDurationValue(b *testing.B) {
 		}
 	}
 }
+
+// TestEncodeCommitTimestampValue exercises the marker encoding emitted for
+// PENDING_COMMIT_TIMESTAMP(): a value tag with no payload bytes that
+// roundtrips through DecodeValueTag and PeekValueLength.
+func TestEncodeCommitTimestampValue(t *testing.T) {
+	for _, colID := range []uint32{0, 1, 17, 1024, NoColumnID} {
+		t.Run(fmt.Sprintf("colID=%d", colID), func(t *testing.T) {
+			buf := EncodeCommitTimestampValue(nil, colID)
+
+			typeOffset, dataOffset, gotColID, typ, err := DecodeValueTag(buf)
+			require.NoError(t, err)
+			require.Equal(t, CommitTimestamp, typ)
+			if colID != NoColumnID {
+				require.Equal(t, colID, gotColID)
+			}
+			// The marker has no payload, so the tag occupies the entire
+			// encoded buffer.
+			require.Equal(t, len(buf), dataOffset)
+
+			gotTypeOffset, length, err := PeekValueLength(buf)
+			require.NoError(t, err)
+			require.Equal(t, typeOffset, gotTypeOffset)
+			require.Equal(t, len(buf), length)
+
+			// Tail roundtrip: the marker should be skippable so a follower
+			// value can be decoded without confusion.
+			tail := EncodeIntValue(append([]byte(nil), buf...), 1, 42)
+			_, peekedLen, err := PeekValueLength(tail)
+			require.NoError(t, err)
+			require.Equal(t, len(buf), peekedLen)
+			rest, gotInt, err := DecodeIntValue(tail[peekedLen:])
+			require.NoError(t, err)
+			require.Equal(t, int64(42), gotInt)
+			require.Empty(t, rest)
+		})
+	}
+}
+
+// TestPrettyPrintCommitTimestampValueEncoded verifies that the marker has a
+// human-readable rendering for use in debug output.
+func TestPrettyPrintCommitTimestampValueEncoded(t *testing.T) {
+	buf := EncodeCommitTimestampValue(nil, 5)
+	rest, s, err := PrettyPrintValueEncoded(buf)
+	require.NoError(t, err)
+	require.Equal(t, "PENDING_COMMIT_TIMESTAMP", s)
+	require.Empty(t, rest)
+}

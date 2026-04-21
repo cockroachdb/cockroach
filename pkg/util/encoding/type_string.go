@@ -61,6 +61,7 @@ func _() {
 	_ = x[PGVector-44]
 	_ = x[LTree-45]
 	_ = x[LTreeDesc-46]
+	_ = x[CommitTimestamp-47]
 }
 
 func (i Type) String() string {
@@ -159,6 +160,8 @@ func (i Type) String() string {
 		return "LTree"
 	case LTreeDesc:
 		return "LTreeDesc"
+	case CommitTimestamp:
+		return "CommitTimestamp"
 	default:
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
