@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
     ],
 )
 

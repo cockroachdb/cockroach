@@ -130,3 +130,45 @@ func TestListFeatures(t *testing.T) {
 	require.Equal(t, "test_b", result.Features[1].Name)
 	require.False(t, result.Features[1].Enabled)
 }
+
+func TestHandleFeatureToggle(t *testing.T) {
+	withTestFeatures(t, testFeatureA)
+
+	t.Run("unknown feature returns 404", func(t *testing.T) {
+		req := httptest.NewRequest(
+			"POST", "/features/nonexistent/enable", nil,
+		)
+		w := httptest.NewRecorder()
+		api := &ApiV2DBConsole{}
+		api.handleFeatureToggle(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("invalid action returns 404", func(t *testing.T) {
+		req := httptest.NewRequest(
+			"POST", "/features/test_a/invalid", nil,
+		)
+		w := httptest.NewRecorder()
+		api := &ApiV2DBConsole{}
+		api.handleFeatureToggle(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("wrong method returns 405", func(t *testing.T) {
+		req := httptest.NewRequest(
+			"GET", "/features/test_a/enable", nil,
+		)
+		w := httptest.NewRecorder()
+		api := &ApiV2DBConsole{}
+		api.handleFeatureToggle(w, req)
+		require.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	})
+
+	t.Run("malformed path returns 404", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/features/", nil)
+		w := httptest.NewRecorder()
+		api := &ApiV2DBConsole{}
+		api.handleFeatureToggle(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+}

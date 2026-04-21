@@ -7,10 +7,15 @@ package dbconsole
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Feature represents a feature-flagged DB Console page. Each feature gets a
@@ -110,4 +115,63 @@ func (api *ApiV2DBConsole) ListFeatures(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, result)
+}
+
+// handleFeatureToggle handles POST /features/{name}/enable and
+// POST /features/{name}/disable. It parses the feature name and action from
+// the URL path and executes SET CLUSTER SETTING via InternalDB.
+func (api *ApiV2DBConsole) handleFeatureToggle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Path is /features/{name}/{action} after StripPrefix.
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "features" {
+		http.NotFound(w, r)
+		return
+	}
+	name := parts[1]
+	action := parts[2]
+
+	f := LookupFeature(name)
+	if f == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var enabled bool
+	switch action {
+	case "enable":
+		enabled = true
+	case "disable":
+		enabled = false
+	default:
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
+
+	settingKey := string(f.Setting.InternalKey())
+	value := "false"
+	if enabled {
+		value = "true"
+	}
+	stmt := fmt.Sprintf(
+		"SET CLUSTER SETTING \"%s\" = %s", settingKey, value,
+	)
+	ie := api.InternalDB.Executor()
+	_, err := ie.ExecEx(
+		ctx, "toggle-feature-flag", nil,
+		sessiondata.NodeUserSessionDataOverride, stmt,
+	)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
