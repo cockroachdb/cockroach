@@ -112,6 +112,12 @@ kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
+obs.ash.buffer_size	integer	1000000	number of ASH samples to retain in memory	system-visible
+obs.ash.enabled	boolean	false	enable active session history sampling	system-visible
+obs.ash.log_interval	duration	10m0s	interval between periodic ASH top-N workload summary logs; also used as the lookback window for ASH reports written by the env sampler profiler	system-visible
+obs.ash.log_top_n	integer	10	maximum number of entries in periodic ASH workload summary, ranked by sample count descending	system-visible
+obs.ash.response_limit	integer	10000	maximum number of ASH samples returned per node in fan-out responses	application
+obs.ash.sample_interval	duration	1s	interval between ASH samples	system-visible
 obs.metrics_scrape.default_visibility	enumeration	all	controls the default metric visibility level for the metrics scrape endpoints [internal = -1, all = 0, support = 1, essential = 2]	application
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
