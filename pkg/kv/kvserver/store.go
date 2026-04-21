@@ -3838,6 +3838,18 @@ func (s *Store) ComputeMetricsPeriodically(
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
 		log.Storage.Infof(ctx, "Pebble metrics:\n%s", m.Metrics)
+		// Log cumulative batch commit stats. These are useful for diagnosing
+		// commit pipeline stalls that fall below Pebble's per-operation
+		// DiskSlow threshold but compound across serialized batches. In
+		// healthy operation, mean commit-wait per batch (delta commit-wait /
+		// delta count between intervals) should be under 50ms. Values above
+		// 1s suggest WAL sync latency issues; sustained values above 5s
+		// indicate the commit pipeline is stalled. See #168664 for a case
+		// where this data would have identified the root cause.
+		log.Storage.Infof(ctx, "batch commit stats: count=%d %s total=%s",
+			m.BatchCommitStats.Count,
+			m.BatchCommitStats.BatchCommitStats,
+			m.BatchCommitStats.TotalDuration)
 	}
 	// Periodically emit a store stats structured event to the TELEMETRY channel,
 	// if reporting is enabled. These events are intended to be emitted at low
