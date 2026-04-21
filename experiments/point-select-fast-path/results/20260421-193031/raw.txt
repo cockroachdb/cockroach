@@ -1,0 +1,38 @@
+/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment/bin/dev-versions/dev.122 not found, building...
+Starting local Bazel server and connecting to it...
+Computing main repo mapping: 
+Computing main repo mapping: 
+Computing main repo mapping: 
+Computing main repo mapping: 
+Computing main repo mapping: 
+Computing main repo mapping: 
+Loading: 
+Loading: 2 packages loaded
+Analyzing: target //pkg/cmd/dev:dev (3 packages loaded, 0 targets configured)
+Analyzing: target //pkg/cmd/dev:dev (3 packages loaded, 0 targets configured)
+
+Analyzing: target //pkg/cmd/dev:dev (67 packages loaded, 357 targets configured)
+
+Analyzing: target //pkg/cmd/dev:dev (71 packages loaded, 6132 targets configured)
+
+Analyzing: target //pkg/cmd/dev:dev (118 packages loaded, 7675 targets configured)
+
+Analyzing: target //pkg/cmd/dev:dev (124 packages loaded, 8037 targets configured)
+
+Analyzing: target //pkg/cmd/dev:dev (124 packages loaded, 8037 targets configured)
+
+INFO: Analyzed target //pkg/cmd/dev:dev (289 packages loaded, 8886 targets configured).
+[7 / 25] [Prepa] GoToolchainBinaryBuild external/go_sdk/builder [for tool]
+[7 / 25] GoToolchainBinaryBuild external/go_sdk/builder [for tool]; 1s linux-sandbox
+[7 / 25] GoToolchainBinaryBuild external/go_sdk/builder [for tool]; 11s linux-sandbox
+[8 / 25] [Prepa] Creating symlink bazel-out/k8-opt-exec-ST-a828a81199fe/bin/external/go_sdk/pack_reset/pack.exe [for tool]
+[10 / 25] GoStdlib external/io_bazel_rules_go/stdlib_/pkg; 1s linux-sandbox
+[11 / 25] [Prepa] GoCompilePkg external/com_github_alessio_shellescape/shellescape.a ... (8 actions, 0 running)
+INFO: Found 1 target...
+Target //pkg/cmd/dev:dev up-to-date:
+  _bazel/bin/pkg/cmd/dev/dev_/dev
+INFO: Elapsed time: 52.146s, Critical Path: 28.03s
+INFO: 25 processes: 7 internal, 18 linux-sandbox.
+INFO: Build completed successfully, 25 total actions
+INFO: Invocation ID: 851a2d85-4d78-476a-bef2-995c24421592
+ERROR: please run `dev doctor` to refresh dev status, then try again
