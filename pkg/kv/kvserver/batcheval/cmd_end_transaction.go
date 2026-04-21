@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -605,6 +606,19 @@ func EndTxn(
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
 		}
+
+		// Emit a CommitTxnOp for the TxnFeed processor. This is attached to
+		// the ReplicatedEvalResult and delivered via Raft to all replicas.
+		if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			txnResult.Replicated.CommitTxnOps = &kvserverpb.CommitTxnOps{
+				Ops: []kvserverpb.CommitTxnOp{{
+					TxnID:           reply.Txn.ID,
+					AnchorKey:       reply.Txn.Key,
+					CommitTimestamp: reply.Txn.WriteTimestamp,
+					WriteSpans:      args.LockSpans,
+				}},
+			}
+		}
 	}
 
 	return txnResult, nil
@@ -860,6 +874,25 @@ func updateFinalizedTxn(
 	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.KvExec.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
+		}
+		// When TxnFeed is enabled and the transaction is COMMITTED, write the
+		// COMMITTED record before issuing the MVCCDelete. The auto-GC still
+		// happens — the record is immediately tombstoned — but the MVCC history
+		// preserves the COMMITTED version for catch-up scans.
+		if txn.Status == roachpb.COMMITTED &&
+			txnfeed.Enabled.Get(&evalCtx.ClusterSettings().SV) {
+			txn.LockSpans = args.LockSpans
+			txn.InFlightWrites = nil
+			txnRecord := txn.AsRecord()
+			if err := storage.MVCCPutProto(
+				ctx, readWriter, key, timestamp, &txnRecord, opts,
+			); err != nil {
+				return err
+			}
+			// Tombstone at a new clock reading to ensure the delete has a
+			// distinct HLC timestamp from the put.
+			_, _, err := storage.MVCCDelete(ctx, readWriter, key, evalCtx.Clock().Now(), opts)
+			return err
 		}
 		if !recordAlreadyExisted {
 			// Nothing to delete, so there's no use writing a deletion tombstone. This

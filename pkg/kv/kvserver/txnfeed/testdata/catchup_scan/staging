@@ -1,0 +1,21 @@
+# A STAGING transaction record should not be emitted. STAGING means the
+# transaction's commit is not yet finalized — it may still be aborted.
+put-txn-record anchor=b mvcc-ts=10 commit-ts=8 status=STAGING id=txn1 lock-spans=b-c
+----
+
+catchup-scan start-ts=5
+----
+<no events>
+
+# The transaction is finalized: a COMMITTED record is written on top, then
+# intent resolution tombstones it. The scan should walk through the tombstone
+# and the STAGING record to find the COMMITTED version underneath.
+put-txn-record anchor=b mvcc-ts=12 commit-ts=8 status=COMMITTED id=txn1 lock-spans=b-c
+----
+
+del-txn-record anchor=b mvcc-ts=15 id=txn1
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-c]

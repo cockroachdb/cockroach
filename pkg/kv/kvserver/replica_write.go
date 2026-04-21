@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -617,6 +620,51 @@ func (r *Replica) evaluate1PC(
 			return onePCResult{
 				success: onePCFailed,
 				pErr:    kvpb.NewError(err),
+			}
+		}
+
+		// When TxnFeed is enabled, 1PC transactions need a COMMITTED record
+		// so that catch-up scans can find them. Without this, 1PC
+		// transactions would never write a transaction record, making them
+		// invisible to catch-up scans that replay committed records from
+		// MVCC history. The record is immediately tombstoned, matching the
+		// auto-GC pattern used by updateFinalizedTxn in EndTxn.
+		if txnfeed.Enabled.Get(&r.ClusterSettings().SV) {
+			txnRecord := clonedTxn.AsRecord()
+			txnRecord.LockSpans = etArg.LockSpans
+			key := keys.TransactionKey(clonedTxn.Key, clonedTxn.ID)
+			writeOpts := storage.MVCCWriteOptions{
+				Stats: ms, Category: fs.BatchEvalReadCategory,
+			}
+			if err := storage.MVCCPutProto(
+				ctx, batch, key, clonedTxn.WriteTimestamp, &txnRecord, writeOpts,
+			); err != nil {
+				return onePCResult{
+					success: onePCFailed,
+					pErr:    kvpb.NewError(errors.Wrap(err, "writing 1PC txn record for txnfeed")),
+				}
+			}
+			// Tombstone the record using a new clock reading so the
+			// delete has a distinct HLC timestamp from the put. The
+			// MVCC history preserves the COMMITTED version for
+			// catch-up scans.
+			if _, _, err := storage.MVCCDelete(
+				ctx, batch, key, r.Clock().Now(), writeOpts,
+			); err != nil {
+				return onePCResult{
+					success: onePCFailed,
+					pErr:    kvpb.NewError(errors.Wrap(err, "tombstoning 1PC txn record for txnfeed")),
+				}
+			}
+			// Emit a CommitTxnOp for the TxnFeed processor.
+			res.Replicated.CommitTxnOps = &kvserverpb.CommitTxnOps{
+				Ops: []kvserverpb.CommitTxnOp{{
+					TxnID:           clonedTxn.ID,
+					AnchorKey:       clonedTxn.Key,
+					CommitTimestamp: clonedTxn.WriteTimestamp,
+					MVCCTimestamp:   clonedTxn.WriteTimestamp,
+					WriteSpans:      etArg.LockSpans,
+				}},
 			}
 		}
 	}

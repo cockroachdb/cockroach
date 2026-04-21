@@ -791,6 +791,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	r.disconnectRangefeedWithReason(
 		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 	)
+	// Similarly, disconnect TxnFeed registrations on snapshot application.
+	r.disconnectTxnFeedWithErr(
+		kvpb.NewError(kvpb.NewTxnFeedRetryError(kvpb.TxnFeedRetryError_REASON_RAFT_SNAPSHOT)))
 
 	// Update the replica's cached byte thresholds. This is a no-op if the system
 	// config is not available, in which case we rely on the next gossip update

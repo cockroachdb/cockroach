@@ -32,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -2233,6 +2235,22 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return s.wrapped.Send(e)
 }
 
+// lockedMuxTxnFeedStream serializes sends on a MuxTxnFeed gRPC stream.
+type lockedMuxTxnFeedStream struct {
+	wrapped kvpb.RPCInternal_MuxTxnFeedStream
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedMuxTxnFeedStream) Send(e *kvpb.MuxTxnFeedEvent) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.wrapped.Send(e)
+}
+
+// SendIsThreadSafe is a no-op declaration method implementing
+// txnfeed.ServerStreamSender.
+func (s *lockedMuxTxnFeedStream) SendIsThreadSafe() {}
+
 // perConsumerLimiter is a ConcurrentRequestLimiter for a given mux rangefeed
 // consumer. It is stored in the Node as long as there are active MuxRangeFeed
 // requests the related ConsumerID.
@@ -2302,7 +2320,52 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 // MuxTxnFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxTxnFeed(stream kvpb.Internal_MuxTxnFeedServer) error {
-	return errors.New("MuxTxnFeed not yet implemented")
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	defer cancel()
+
+	sender := &lockedMuxTxnFeedStream{wrapped: stream}
+	sm := txnfeed.NewStreamManager(
+		txnfeed.NewBufferedSender(sender, kvserverbase.DefaultRangefeedEventCap*2))
+
+	if err := sm.Start(ctx, n.stopper); err != nil {
+		return err
+	}
+	defer sm.Stop(ctx)
+
+	for {
+		select {
+		case err := <-sm.Error():
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-n.stopper.ShouldQuiesce():
+			return stop.ErrUnavailable
+		default:
+		}
+
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+
+		if req.CloseStream {
+			sm.DisconnectStream(req.StreamID, kvpb.NewError(
+				kvpb.NewTxnFeedRetryError(kvpb.TxnFeedRetryError_REASON_TXNFEED_CLOSED)))
+			continue
+		}
+
+		streamCtx := logtags.AddTag(ctx, "r", req.RangeID)
+		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
+
+		streamSink := sm.NewStream(req.StreamID, req.RangeID)
+
+		sm.RegisteringStream(req.StreamID)
+		if disconnector, err := n.stores.TxnFeed(streamCtx, req, streamSink); err != nil {
+			streamSink.SendError(kvpb.NewError(err))
+		} else {
+			sm.AddStream(req.StreamID, disconnector)
+		}
+	}
 }
 
 func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {

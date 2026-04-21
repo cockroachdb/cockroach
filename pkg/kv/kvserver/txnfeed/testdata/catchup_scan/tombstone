@@ -1,0 +1,17 @@
+# Committed record with a tombstone on top. The catchup scan should walk
+# through the tombstone and find the committed record underneath.
+put-txn-record anchor=b mvcc-ts=10 commit-ts=8 status=COMMITTED id=txn1 lock-spans=b-c
+----
+
+del-txn-record anchor=b mvcc-ts=15 id=txn1
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-c]
+
+# If startTS is after the commit timestamp, the record is not emitted even
+# though the tombstone's MVCC timestamp is above startTS.
+catchup-scan start-ts=9
+----
+<no events>

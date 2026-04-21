@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -3337,6 +3338,23 @@ func (s *Store) RangeFeed(
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
 	return repl.RangeFeed(streamCtx, args, stream, pacer, perConsumerCatchupLimiter)
+}
+
+// TxnFeed registers a TxnFeed stream on the specified range.
+func (s *Store) TxnFeed(
+	ctx context.Context, args *kvpb.TxnFeedRequest, stream txnfeed.Stream,
+) (txnfeed.Disconnector, error) {
+	if err := verifyKeys(args.AnchorSpan.Key, args.AnchorSpan.EndKey, true); err != nil {
+		return nil, err
+	}
+	repl, err := s.GetReplica(args.RangeID)
+	if err != nil {
+		return nil, err
+	}
+	if !repl.IsInitialized() {
+		return nil, kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
+	}
+	return repl.TxnFeed(ctx, args, stream)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for

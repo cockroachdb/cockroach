@@ -77,6 +77,7 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	// Command index that specified DoTimelyApplicationToAllReplicas is the
 	// same, the state machine will have the same state.
 	allowlist.DoTimelyApplicationToAllReplicas = false
+	allowlist.CommitTxnOps = nil
 	return allowlist.IsZero()
 }
 

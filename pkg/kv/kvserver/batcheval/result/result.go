@@ -412,6 +412,16 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.DoTimelyApplicationToAllReplicas = false
 
+	if q.Replicated.CommitTxnOps != nil {
+		if p.Replicated.CommitTxnOps == nil {
+			p.Replicated.CommitTxnOps = q.Replicated.CommitTxnOps
+		} else {
+			p.Replicated.CommitTxnOps.Ops = append(
+				p.Replicated.CommitTxnOps.Ops, q.Replicated.CommitTxnOps.Ops...)
+		}
+	}
+	q.Replicated.CommitTxnOps = nil
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {

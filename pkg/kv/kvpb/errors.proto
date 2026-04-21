@@ -661,6 +661,27 @@ message RangeFeedRetryError {
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
 
+// A TxnFeedRetryError indicates that a txnfeed was disconnected, often because
+// of a range lifecycle event, and can be retried.
+message TxnFeedRetryError {
+  // Reason specifies what caused the error.
+  enum Reason {
+    // The replica was removed from its store.
+    REASON_REPLICA_REMOVED = 0;
+    // The range was split in two.
+    REASON_RANGE_SPLIT = 1;
+    // The range was merged into another.
+    REASON_RANGE_MERGED = 2;
+    // A Raft snapshot applied on the replica.
+    REASON_RAFT_SNAPSHOT = 3;
+    // The txnfeed was closed.
+    REASON_TXNFEED_CLOSED = 4;
+    // The range was manually split in two.
+    REASON_MANUAL_RANGE_SPLIT = 5;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+}
+
 // A IndeterminateCommitError indicates that a transaction was encountered with
 // a STAGING status. In this state, it is unclear by observing the transaction
 // record alone whether the transaction should be committed or aborted. To make

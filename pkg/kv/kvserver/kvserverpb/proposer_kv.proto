@@ -291,6 +291,14 @@ message ReplicatedEvalResult {
   // replicated range-id local key.
   bool do_timely_application_to_all_replicas = 29;
 
+  // CommitTxnOps contains committed transaction metadata emitted during
+  // EndTxn or 1PC evaluation. These are replicated through Raft so that
+  // all replicas can feed TxnFeed processors. Unlike the LogicalOpLog
+  // (which filters out local keys), these ops are explicitly constructed
+  // for transaction record commits. A wrapper message is used so that
+  // the ReplicatedEvalResult struct remains comparable via ==.
+  CommitTxnOps commit_txn_ops = 31;
+
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }
 
@@ -309,6 +317,40 @@ message WriteBatch {
 // compared with the == operator.
 message LogicalOpLog {
   repeated storage.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
+}
+
+// CommitTxnOps is a list of committed transaction operations. A wrapper
+// message is used so that the absence of the field can be distinguished from
+// an empty list, and so the containing struct remains comparable via ==.
+message CommitTxnOps {
+  repeated CommitTxnOp ops = 1 [(gogoproto.nullable) = false];
+}
+
+// CommitTxnOp is emitted when a transaction record transitions to COMMITTED.
+// It carries the metadata needed by TxnFeed consumers. It is included in the
+// ReplicatedEvalResult so that all replicas can feed their TxnFeed processors.
+message CommitTxnOp {
+  // The transaction's unique ID.
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false
+  ];
+  // The anchor key where this transaction's record is stored.
+  bytes anchor_key = 2 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"
+  ];
+  // The MVCC timestamp at which the transaction committed.
+  util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
+  // TODO(jeffswenson): LockSpans are not exactly write spans — they include
+  // all spans where locks were acquired, which may be condensed and may not
+  // perfectly reflect the actual write footprint. Evaluate whether a more
+  // precise write span representation is needed.
+  repeated roachpb.Span write_spans = 4 [(gogoproto.nullable) = false];
+  // TODO(jeffswenson): read_spans are not yet tracked as part of the commit.
+  // They will be populated once read span tracking through EndTxn is
+  // implemented.
+  repeated roachpb.Span read_spans = 5 [(gogoproto.nullable) = false];
 }
 
 // RaftCommand is the message written to the raft log. It contains some metadata

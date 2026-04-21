@@ -49,6 +49,7 @@ func _() {
 	_ = x[ReplicaUnavailableErrType-46]
 	_ = x[ProxyFailedErrType-47]
 	_ = x[ExclusionViolationErrType-48]
+	_ = x[TxnFeedRetryErrType-49]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -127,6 +128,8 @@ func (i ErrorDetailType) String() string {
 		return "ProxyFailedErrType"
 	case ExclusionViolationErrType:
 		return "ExclusionViolationErrType"
+	case TxnFeedRetryErrType:
+		return "TxnFeedRetryErrType"
 	case CommunicationErrType:
 		return "CommunicationErrType"
 	case InternalErrType:

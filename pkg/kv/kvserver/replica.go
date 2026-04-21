@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1059,6 +1060,15 @@ type Replica struct {
 		//
 		// Requires Replica.rangefeedMu be held when mutating the pointer.
 		opFilter *rangefeed.Filter
+	}
+
+	// txnFeedMu holds the TxnFeed processor for this replica. It follows
+	// the same locking discipline as rangefeedMu: the pointer is mutated
+	// under txnFeedMu, but events and closed timestamp updates are
+	// delivered under raftMu.
+	txnFeedMu struct {
+		syncutil.RWMutex
+		proc *txnfeed.Processor
 	}
 
 	// Throttle how often we offer this Replica to the split and merge queues.

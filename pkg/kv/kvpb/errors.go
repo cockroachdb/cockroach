@@ -300,6 +300,7 @@ const (
 	ReplicaUnavailableErrType               ErrorDetailType = 46
 	ProxyFailedErrType                      ErrorDetailType = 47
 	ExclusionViolationErrType               ErrorDetailType = 48
+	TxnFeedRetryErrType                     ErrorDetailType = 49
 
 	// When adding new error types, don't forget to update NumErrors below.
 
@@ -310,7 +311,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 49
+	NumErrors int = 50
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -1436,6 +1437,29 @@ func (e *RangeFeedRetryError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &RangeFeedRetryError{}
+
+// NewTxnFeedRetryError initializes a new TxnFeedRetryError.
+func NewTxnFeedRetryError(reason TxnFeedRetryError_Reason) *TxnFeedRetryError {
+	return &TxnFeedRetryError{
+		Reason: reason,
+	}
+}
+
+func (e *TxnFeedRetryError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *TxnFeedRetryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("retry txnfeed (%s)", redact.Safe(e.Reason))
+	return nil
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *TxnFeedRetryError) Type() ErrorDetailType {
+	return TxnFeedRetryErrType
+}
+
+var _ ErrorDetailInterface = &TxnFeedRetryError{}
 
 // NewIndeterminateCommitError initializes a new IndeterminateCommitError.
 func NewIndeterminateCommitError(txn roachpb.Transaction) *IndeterminateCommitError {

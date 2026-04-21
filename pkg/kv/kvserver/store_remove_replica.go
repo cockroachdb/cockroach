@@ -178,6 +178,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	rep.disconnectRangefeedWithReason(
 		kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 	)
+	rep.disconnectTxnFeedWithErr(
+		kvpb.NewError(kvpb.NewTxnFeedRetryError(kvpb.TxnFeedRetryError_REASON_REPLICA_REMOVED)))
 
 	// Mark the replica as destroyed and (optionally) destroy the on-disk data
 	// while not holding Store.mu. This is safe because we're holding

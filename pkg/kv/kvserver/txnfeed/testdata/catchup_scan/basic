@@ -1,0 +1,46 @@
+# Basic committed transaction after startTS.
+put-txn-record anchor=b mvcc-ts=10 commit-ts=8 status=COMMITTED id=txn1 lock-spans=b-d
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-d]
+
+# Committed transaction at startTS boundary (commit-ts == start-ts) is excluded.
+catchup-scan start-ts=8
+----
+<no events>
+
+# Committed transaction before startTS is excluded.
+catchup-scan start-ts=9
+----
+<no events>
+
+# Aborted transaction is not emitted.
+put-txn-record anchor=c mvcc-ts=15 commit-ts=12 status=ABORTED id=txn2
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-d]
+
+# Pending transaction is not emitted.
+put-txn-record anchor=d mvcc-ts=20 commit-ts=18 status=PENDING id=txn3
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-d]
+
+# Multiple committed transactions: only those after startTS are emitted.
+put-txn-record anchor=e mvcc-ts=25 commit-ts=22 status=COMMITTED id=txn4 lock-spans=e-f,g-h
+----
+
+catchup-scan start-ts=5
+----
+committed anchor=b commit-ts=8 write-spans=[b-d]
+committed anchor=e commit-ts=22 write-spans=[e-f,g-h]
+
+catchup-scan start-ts=10
+----
+committed anchor=e commit-ts=22 write-spans=[e-f,g-h]

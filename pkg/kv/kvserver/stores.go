@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -217,6 +218,22 @@ func (ls *Stores) RangeFeed(
 	}
 
 	return store.RangeFeed(streamCtx, args, stream, perConsumerCatchupLimiter)
+}
+
+// TxnFeed registers a TxnFeed stream on the specified range and store.
+func (ls *Stores) TxnFeed(
+	ctx context.Context, args *kvpb.TxnFeedRequest, stream txnfeed.Stream,
+) (txnfeed.Disconnector, error) {
+	if args.RangeID == 0 {
+		log.KvDistribution.Fatal(ctx, "txnfeed request missing range ID")
+	} else if args.Replica.StoreID == 0 {
+		log.KvDistribution.Fatal(ctx, "txnfeed request missing store ID")
+	}
+	store, err := ls.GetStore(args.Replica.StoreID)
+	if err != nil {
+		return nil, err
+	}
+	return store.TxnFeed(ctx, args, stream)
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read

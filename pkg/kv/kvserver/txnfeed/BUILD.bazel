@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnfeed",
+    srcs = [
+        "buffered_sender.go",
+        "catchup_scan.go",
+        "event_queue.go",
+        "processor.go",
+        "settings.go",
+        "stream.go",
+        "stream_manager.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/util/buildutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "txnfeed_test",
+    srcs = ["catchup_scan_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":txnfeed"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

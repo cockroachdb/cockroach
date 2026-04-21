@@ -355,6 +355,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
 		}
 		b.r.disconnectRangefeedWithReason(reason)
+		txnFeedReason := kvpb.TxnFeedRetryError_REASON_RANGE_SPLIT
+		if res.Split.SplitTrigger.ManualSplit {
+			txnFeedReason = kvpb.TxnFeedRetryError_REASON_MANUAL_RANGE_SPLIT
+		}
+		b.r.disconnectTxnFeedWithErr(
+			kvpb.NewError(kvpb.NewTxnFeedRetryError(txnFeedReason)))
 	}
 
 	if merge := res.Merge; merge != nil {
@@ -409,6 +415,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.disconnectRangefeedWithReason(
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 		)
+		txnFeedMergeErr := kvpb.NewError(
+			kvpb.NewTxnFeedRetryError(kvpb.TxnFeedRetryError_REASON_RANGE_MERGED))
+		b.r.disconnectTxnFeedWithErr(txnFeedMergeErr)
+		rhsRepl.disconnectTxnFeedWithErr(txnFeedMergeErr)
 	}
 
 	if res.State != nil && res.State.GCThreshold != nil {
@@ -489,6 +499,11 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch.State())
 	} else if ops != nil {
 		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
+	}
+
+	// Deliver committed transaction events to the TxnFeed processor.
+	if ops := cmd.Cmd.ReplicatedEvalResult.CommitTxnOps; ops != nil {
+		b.r.handleCommitTxnOpsRaftMuLocked(ctx, ops)
 	}
 
 	return nil
@@ -699,6 +714,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	r.mu.Unlock()
 	if closedTimestampUpdated {
 		r.handleClosedTimestampUpdateRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
+		r.forwardClosedTSForTxnFeedRaftMuLocked(ctx, b.state.RaftClosedTimestamp)
 	}
 
 	// Record the stats delta in the StoreMetrics.
