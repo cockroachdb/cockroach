@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -179,10 +180,10 @@ func runOneTLP(
 	}
 }
 
-// runMutationsStatement runs a random INSERT, UPDATE, or DELETE statement that
-// potentially modifies the state of the database.
+// runMutationStatement runs a random INSERT, UPDATE, DELETE, or DDL statement
+// that potentially modifies the state of the database.
 func runMutationStatement(
-	t task.Tasker, conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
+	t test.Test, conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
 ) {
 	// Ignore panics from Generate.
 	defer func() {
@@ -191,7 +192,10 @@ func runMutationStatement(
 		}
 	}()
 
-	stmt := smither.Generate()
+	stmt, stmtType := smither.GenerateWithTag()
+	if stmtType == tree.TypeDDL {
+		defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+	}
 
 	// Ignore timeouts.
 	var err error

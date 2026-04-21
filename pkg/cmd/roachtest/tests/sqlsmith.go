@@ -185,8 +185,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}()
 
+					var stmtType tree.StatementType
 					for {
-						stmt = smither.Generate()
+						stmt, stmtType = smither.GenerateWithTag()
 						if stmt == "" {
 							// If an empty statement is generated, then ignore it.
 							done <- errors.Newf("Empty statement returned by generate")
@@ -195,6 +196,12 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						if !expectedToTimeout(t, stmt) {
 							break
 						}
+					}
+
+					// DDL statements can take longer than the normal
+					// statement timeout, so temporarily increase it.
+					if stmtType == tree.TypeDDL {
+						defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 					}
 
 					// TODO(yuzefovich): investigate why using the context with
