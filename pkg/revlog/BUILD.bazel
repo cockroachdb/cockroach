@@ -1,8 +1,48 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "revlog",
-    srcs = ["doc.go"],
+    srcs = [
+        "encoding.go",
+        "framing.go",
+        "paths.go",
+        "reader.go",
+        "revlog.go",
+        "tick_writer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/revlog",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/revlog/revlogpb",
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/ioctx",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
+        "@com_github_cockroachdb_pebble//sstable",
+    ],
+)
+
+go_test(
+    name = "revlog_test",
+    srcs = [
+        "framing_test.go",
+        "revlog_test.go",
+    ],
+    embed = [":revlog"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/nodelocal",
+        "//pkg/revlog/revlogpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
 )
