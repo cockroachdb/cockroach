@@ -2908,10 +2908,16 @@ months and years, use the timestamptz subtraction operator.`,
 			},
 			Info: `Returns a placeholder for the transaction's commit timestamp.
 
-When written into a column declared with ALLOW_COMMIT_TIMESTAMP, the marker
-is replaced with the txn's actual commit timestamp during intent resolution.
-Reading the column from within the writing txn returns NULL because the
-real value isn't known until the txn commits.`,
+The marker is only legal as the right-hand side of an assignment to a column
+declared with ALLOW_COMMIT_TIMESTAMP, e.g. inside INSERT ... VALUES or
+UPDATE ... SET. Calling it from any other context (bare SELECT, WHERE, CHECK
+constraints, computed columns, etc.) raises an error at type-check time
+because the marker has no concrete value until the txn commits.
+
+When written into an ALLOW_COMMIT_TIMESTAMP column, the marker is replaced
+with the txn's actual commit timestamp during intent resolution. Reading the
+column from within the writing txn returns NULL because the real value isn't
+known until the txn commits.`,
 			Volatility: volatility.Volatile,
 		},
 	),

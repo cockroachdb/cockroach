@@ -202,6 +202,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, colRefs *opt.Co
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
 	mb.b.semaCtx.Properties.Require("UPDATE SET", tree.RejectSpecial)
+	// pending_commit_timestamp() is permitted on the right-hand side of an
+	// assignment because that's the one place where it carries meaning. The
+	// flag is restored above by Restore.
+	mb.b.semaCtx.Properties.AllowPendingCommitTimestamp = true
 
 	// UPDATE input columns are accessible to SET expressions.
 	inScope := mb.outScope

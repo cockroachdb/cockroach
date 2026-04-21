@@ -107,3 +107,76 @@ CREATE TABLE allow_shared_family (
 
 statement ok
 DROP TABLE allow_shared_family;
+
+subtest pending_commit_timestamp_context
+
+# pending_commit_timestamp() is only legal as the RHS of an assignment to an
+# ALLOW_COMMIT_TIMESTAMP column. Outside of that, it must be rejected at
+# type-check time so that the marker datum never reaches downstream consumers
+# (vectorized engine, distsql encoding, optimizer folds, etc.) that assume a
+# TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ.
+#
+# The per-column ALLOW_COMMIT_TIMESTAMP check happens later, at write time;
+# these cases just exercise the type-check rejection.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_tab (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT pending_commit_timestamp();
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT * FROM pct_tab WHERE ts = pending_commit_timestamp();
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT pending_commit_timestamp() FROM pct_tab;
+
+# DEFAULT expressions, computed columns, CHECK constraints, and partial-index
+# predicates all type-check the expression outside the write-side context, so
+# they should hit the same rejection.
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_default (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ DEFAULT pending_commit_timestamp()
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_computed (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ AS (pending_commit_timestamp()) STORED
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_check (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ,
+  CHECK (ts < pending_commit_timestamp())
+);
+
+# Write-side contexts (INSERT VALUES, UPDATE SET, UPSERT VALUES, UPSERT DO
+# UPDATE SET) must let the call through. We only exercise type-check + plan
+# acceptance via EXPLAIN here: actual execution would require teaching the
+# vectorized colfetcher about the zero-payload marker (it decodes raw KV
+# bytes directly and doesn't go through valueside.Decode), which is out of
+# scope for this commit. A bare INSERT against an empty table doesn't read
+# any existing rows, so it's safe to actually run.
+
+statement ok
+INSERT INTO pct_tab (id, ts) VALUES (1, pending_commit_timestamp());
+
+statement ok
+EXPLAIN UPDATE pct_tab SET ts = pending_commit_timestamp() WHERE id = 1;
+
+statement ok
+EXPLAIN UPSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp());
+
+statement ok
+EXPLAIN INSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp())
+ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
+
+statement ok
+DROP TABLE pct_tab;

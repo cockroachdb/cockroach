@@ -115,6 +115,17 @@ type SemaProperties struct {
 	// "re-type-checking" that occurs for a RECORD-returning routine, for which
 	// the return type is not known until the routine body is built.
 	RoutineUseResolvedType bool
+
+	// AllowPendingCommitTimestamp permits the pending_commit_timestamp()
+	// builtin to appear in the current scope. It defaults to false because the
+	// marker only has meaning as a value being written into a column declared
+	// with ALLOW_COMMIT_TIMESTAMP; outside of that, both reads (the marker has
+	// no concrete value yet) and most expression contexts (CHECK, computed
+	// columns, indexes, etc.) are nonsensical. The flag is flipped on by the
+	// optbuilder for the right-hand sides of INSERT/UPSERT VALUES and
+	// UPDATE/UPSERT SET assignments. Per-column validation against
+	// ALLOW_COMMIT_TIMESTAMP happens later, at write time.
+	AllowPendingCommitTimestamp bool
 }
 
 type semaRequirements struct {
@@ -1085,12 +1096,59 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	return pgerror.Newf(code, "%s functions are not allowed in %s", cat, context)
 }
 
+// isPendingCommitTimestampBuiltin returns true if def names the
+// pg_catalog.pending_commit_timestamp() builtin. The name check alone isn't
+// sufficient because user-defined functions can shadow builtins; we additionally
+// require at least one overload from the pg_catalog schema so that a UDF named
+// pending_commit_timestamp in a user schema isn't subject to the write-context
+// restriction.
+func isPendingCommitTimestampBuiltin(def *ResolvedFunctionDefinition) bool {
+	if def == nil || def.Name != "pending_commit_timestamp" {
+		return false
+	}
+	for _, o := range def.Overloads {
+		if o.Schema == "pg_catalog" && o.Type == BuiltinRoutine {
+			return true
+		}
+	}
+	return false
+}
+
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
 func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionDefinition) error {
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil
+	}
+
+	// pending_commit_timestamp() is only meaningful as a value being written to
+	// an ALLOW_COMMIT_TIMESTAMP column. Calling it from any other context (bare
+	// SELECT, WHERE, computed columns, CHECK constraints, etc.) would just
+	// surface the marker datum, which violates the type-system invariant that a
+	// TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ and crashes
+	// downstream consumers (the vectorized engine, distsql encoding, optimizer
+	// folds, etc.). The optbuilder opts in to the write-side contexts where the
+	// marker is well-defined; everywhere else we fail fast at type-check time.
+	//
+	// TODO(arul): this rejection is broader than the spec strictly requires.
+	// Read-your-own-writes inside the writing txn legitimately needs to observe
+	// the marker (decoded as NULL), but the vectorized colfetcher in
+	// pkg/sql/colfetcher decodes raw KV bytes directly and doesn't go through
+	// valueside.Decode, so it crashes on the zero-payload marker. Once the
+	// colfetcher (and any other parallel decoders, e.g. distsql flow encoders)
+	// learn about encoding.CommitTimestamp, this rejection can be relaxed:
+	//   - bare SELECT pending_commit_timestamp() should still error (the
+	//     marker has no concrete value to surface to the client),
+	//   - same-txn reads of an ALLOW_COMMIT_TIMESTAMP column that holds the
+	//     unresolved marker should return NULL,
+	//   - per-column ALLOW_COMMIT_TIMESTAMP validation should move to the
+	//     row-writer / optbuilder so we can give a precise error when the
+	//     marker is written to a column that doesn't allow it.
+	if !sc.Properties.AllowPendingCommitTimestamp && isPendingCommitTimestampBuiltin(def) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"pending_commit_timestamp() can only be used as the value being written "+
+				"to a column declared with ALLOW_COMMIT_TIMESTAMP")
 	}
 
 	// TODO(Chengxiong): Consider doing this check when we narrow down to an
