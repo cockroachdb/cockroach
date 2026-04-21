@@ -4466,6 +4466,63 @@ SELECT * FROM t_add_generated ORDER BY a
 22  14  NULL  22  1
 23  17  NULL  23  1
 
+subtest add_identity_sequence_name_create
+
+# CREATE TABLE form with SEQUENCE NAME runs through the legacy CREATE TABLE
+# code path under both schema changers.
+statement ok
+CREATE TABLE t_seqname_create (id INT GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME my_create_seq))
+
+query I
+SELECT nextval('my_create_seq')
+----
+1
+
+statement ok
+INSERT INTO t_seqname_create DEFAULT VALUES
+
+query I
+SELECT id FROM t_seqname_create
+----
+2
+
+# SEQUENCE NAME is not allowed in CREATE SEQUENCE / ALTER SEQUENCE.
+statement error pq: SEQUENCE NAME is only valid for identity columns
+CREATE SEQUENCE bad_seq SEQUENCE NAME other_name
+
+statement ok
+CREATE SEQUENCE plain_seq
+
+statement error pq: SEQUENCE NAME is only valid for identity columns
+ALTER SEQUENCE plain_seq SEQUENCE NAME another_name
+
+statement ok
+DROP TABLE t_seqname_create
+
+statement ok
+DROP SEQUENCE plain_seq
+
+subtest end
+
+subtest add_identity_sequence_name_legacy
+
+# Under the legacy schema changer, ALTER TABLE ... ADD GENERATED ... AS IDENTITY
+# (SEQUENCE NAME ...) errors out and the user must use the declarative schema
+# changer.
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE TABLE t_seqname_legacy (a INT NOT NULL, FAMILY (a))
+
+onlyif config local-legacy-schema-changer
+statement error pq: ALTER TABLE \.\.\. ADD GENERATED \.\.\. AS IDENTITY \(SEQUENCE NAME \.\.\.\) requires the declarative schema changer
+ALTER TABLE t_seqname_legacy ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY (SEQUENCE NAME nope)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP TABLE t_seqname_legacy
+
+subtest end
+
 statement ok
 CREATE TABLE t_set_generated (
   a int GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),

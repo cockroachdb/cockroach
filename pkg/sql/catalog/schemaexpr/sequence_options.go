@@ -193,6 +193,8 @@ func AssignSequenceOptions(
 			restartVal = option.IntVal
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
+		case tree.SeqOptName:
+			return errors.New("SEQUENCE NAME is only valid for identity columns")
 		}
 	}
 
