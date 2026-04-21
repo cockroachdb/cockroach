@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -632,27 +633,45 @@ func verifyDataAvailable(ctx context.Context, t test.Test, conn *gosql.DB, table
 func verifyReplicaConfinement(
 	ctx context.Context, t test.Test, conn *gosql.DB, topo superRegionTopology, table string,
 ) {
-	rows, err := conn.QueryContext(ctx,
-		fmt.Sprintf(
-			`SELECT range_id, replicas FROM [SHOW RANGES FROM TABLE %s WITH DETAILS]`,
-			table,
-		),
-	)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	for rows.Next() {
-		var rangeID int
-		var replicas pq.Int64Array
-		require.NoError(t, rows.Scan(&rangeID, &replicas))
-
-		for _, nodeID := range replicas {
-			region := topo.nodeRegion[int(nodeID)]
-			require.True(t, topo.superRegionMembers[region],
-				"range r%d has replica on n%d in region %s which is outside super region",
-				rangeID, nodeID, region)
-		}
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     15 * time.Second,
+		MaxRetries:     30,
 	}
-	require.NoError(t, rows.Err())
+	var lastValidationErr error
+	t.L().Printf("verifying replica confinement for %s", table)
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		lastValidationErr = func() error {
+			rows, err := conn.QueryContext(ctx,
+				fmt.Sprintf(
+					`SELECT range_id, replicas FROM [SHOW RANGES FROM TABLE %s WITH DETAILS]`,
+					table,
+				),
+			)
+			require.NoError(t, err)
+			defer rows.Close()
+
+			for rows.Next() {
+				var rangeID int
+				var replicas pq.Int64Array
+				require.NoError(t, rows.Scan(&rangeID, &replicas))
+
+				for _, nodeID := range replicas {
+					region := topo.nodeRegion[int(nodeID)]
+					if !topo.superRegionMembers[region] {
+						return errors.Newf("range r%d has replica on n%d in region %s which is outside super region",
+							rangeID, nodeID, region)
+					}
+				}
+			}
+			require.NoError(t, rows.Err())
+			return nil
+		}()
+		if lastValidationErr == nil {
+			break
+		}
+		t.L().Printf("waiting for replica confinement for %s (retrying): %v", table, lastValidationErr)
+	}
+	require.NoError(t, lastValidationErr, "timed out verifying replica confinement for %s", table)
 	t.L().Printf("verified all replicas for %s are within super region", table)
 }
