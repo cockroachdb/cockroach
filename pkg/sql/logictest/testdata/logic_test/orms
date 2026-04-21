@@ -501,5 +501,5 @@ WHERE
   )
 ORDER BY attnum;
 ----
-nspname  relname               typname  basetypname  attname  description  collname  attisdropped  attidentity  attgenerated  attcompression  formatted_typname  formatted_basetypname  typtype  elemtypname  nullable  default                                                  seqtype  seqstart  seqmin  seqmax               seqincrement  seqcycle  seqcache
-public   efcore_identity_test  int8     NULL         id       NULL         NULL      false         d            ·             ·               bigint             NULL                   b        NULL         false     nextval('public.efcore_identity_test_id_seq'::regclass)  bigint   1         1       9223372036854775807  1             false     1
+nspname  relname               typname  basetypname  attname  description  collname  attisdropped  attidentity  attgenerated  attcompression  formatted_typname  formatted_basetypname  typtype  elemtypname  nullable  default  seqtype  seqstart  seqmin  seqmax               seqincrement  seqcycle  seqcache
+public   efcore_identity_test  int8     NULL         id       NULL         NULL      false         d            ·             ·               bigint             NULL                   b        NULL         false     NULL     bigint   1         1       9223372036854775807  1             false     1

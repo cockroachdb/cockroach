@@ -485,8 +485,12 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					collationSchema = pgCatalogNameDString
 					collationName = tree.NewDString(locale)
 				}
+				// Identity columns must not report a column_default; the
+				// implicit nextval default is replaced by the identity
+				// property, which is reported in identity_generation,
+				// identity_start, and identity_increment instead.
 				colDefault := tree.DNull
-				if column.HasDefault() {
+				if column.HasDefault() && !column.IsGeneratedAsIdentity() {
 					colExpr, err := schemaexpr.FormatExprForDisplay(
 						ctx, table, column.GetDefaultExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtParsableNumerics,
 					)

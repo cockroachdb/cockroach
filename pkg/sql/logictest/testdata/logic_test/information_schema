@@ -1987,10 +1987,10 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'add_generated_as_identity'
 ORDER BY column_name
 ----
-column_name  is_identity  identity_generation  is_nullable  column_default                                               identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
-a            YES          ALWAYS               NO           nextval('public.add_generated_as_identity_a_seq'::REGCLASS)  10              2                   9223372036854775807  1                 NULL
-b            YES          BY DEFAULT           NO           nextval('public.add_generated_as_identity_b_seq'::REGCLASS)  10              2                   9223372036854775807  1                 NULL
-rowid        NO           ·                    NO           unique_rowid()                                               NULL            NULL                NULL                 NULL              NULL
+column_name  is_identity  identity_generation  is_nullable  column_default  identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           NULL            10              2                   9223372036854775807  1                 NULL
+b            YES          BY DEFAULT           NO           NULL            10              2                   9223372036854775807  1                 NULL
+rowid        NO           ·                    NO           unique_rowid()  NULL            NULL                NULL                 NULL              NULL
 
 statement ok
 CREATE TABLE set_generated_as_identity (
@@ -2010,10 +2010,10 @@ FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'set_generated_as_identity'
 ORDER BY column_name
 ----
-column_name  is_identity  identity_generation  is_nullable  column_default                                               identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
-a            YES          BY DEFAULT           NO           nextval('public.set_generated_as_identity_a_seq'::REGCLASS)  10              1                   9223372036854775807  1                 NULL
-b            YES          ALWAYS               NO           nextval('public.set_generated_as_identity_b_seq'::REGCLASS)  10              1                   9223372036854775807  1                 NULL
-rowid        NO           ·                    NO           unique_rowid()                                               NULL            NULL                NULL                 NULL              NULL
+column_name  is_identity  identity_generation  is_nullable  column_default  identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          BY DEFAULT           NO           NULL            10              1                   9223372036854775807  1                 NULL
+b            YES          ALWAYS               NO           NULL            10              1                   9223372036854775807  1                 NULL
+rowid        NO           ·                    NO           unique_rowid()  NULL            NULL                NULL                 NULL              NULL
 
 statement ok
 CREATE TABLE drop_generated_as_identity (a INT GENERATED ALWAYS AS IDENTITY (START WITH 10)) WITH (schema_locked=false)
@@ -2047,8 +2047,8 @@ query TTTTTTTTTT colnames
 SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
 ----
-column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
-a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               1                   9223372036854775807  1                 NULL
+column_name  is_identity  identity_generation  is_nullable  column_default  identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           NULL            2               1                   9223372036854775807  1                 NULL
 
 query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
@@ -2069,8 +2069,8 @@ query TTTTTTTTTT colnames
 SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
 ----
-column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
-a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               2                   9223372036854775807  1                 NULL
+column_name  is_identity  identity_generation  is_nullable  column_default  identity_start  identity_increment  identity_maximum     identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           NULL            2               2                   9223372036854775807  1                 NULL
 
 query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
@@ -2085,8 +2085,8 @@ query TTTTTTTTTT colnames
 SELECT column_name, is_identity, identity_generation, is_nullable, column_default, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle
 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'alter_opts_generated_as_identity' AND column_name = 'a'
 ----
-column_name  is_identity  identity_generation  is_nullable  column_default                                                      identity_start  identity_increment  identity_maximum  identity_minimum  identity_cycle
-a            YES          ALWAYS               NO           nextval('public.alter_opts_generated_as_identity_a_seq'::REGCLASS)  2               2                   40                1                 NULL
+column_name  is_identity  identity_generation  is_nullable  column_default  identity_start  identity_increment  identity_maximum  identity_minimum  identity_cycle
+a            YES          ALWAYS               NO           NULL            2               2                   40                1                 NULL
 
 query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences WHERE sequence_name = 'alter_opts_generated_as_identity_a_seq'
