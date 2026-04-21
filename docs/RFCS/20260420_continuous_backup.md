@@ -842,13 +842,121 @@ on-disk staging area.
 
 ### Design
 
-#### (TODO — per-component session)
+#### Plug-in seam
 
-Phase-1 (log replay) ↔ phase-2 (live KV) wiring and exact handoff
-criterion (lag threshold? caught-up signal from the log?); overlap
-policy at the seam; coverage-gap handling and fallback policy;
-schema / system-table event flow through the wrapper; knob shape
-for the PTS opt-out (per-job CREATE-time option vs. cluster
-setting vs. both); wiring at the `Manager.Protect` call sites in
-CDC (`pkg/ccl/changefeedccl/`), LDR (`pkg/crosscluster/logical/`),
-and PCR (`pkg/crosscluster/physical/`).
+The wrapper is a new implementation of the existing
+`rangefeed.DB` interface (`pkg/kv/kvclient/rangefeed/rangefeed.go`),
+which today has a single concrete implementation (`dbAdapter`,
+backed by `kvcoord.DistSender.RangeFeed`). The new implementation
+wraps both a `*revlog.LogReader` and a live `rangefeed.DB`, and
+routes phase-1 (catch-up) reads through the log and phase-2
+(live tail) reads through the wrapped live DB.
+
+`Factory`, `RangeFeed`, and the callback / option API are
+unchanged — consumers see the same `OnValue` /
+`OnCheckpoint` / frontier semantics regardless of which `DB`
+backs the factory. Wiring is per-consumer: a CDC/LDR/PCR job
+that asserts log coverage constructs a factory backed by the
+wrapper; others continue using the kv-only factory.
+
+The wrapper lives in a subpackage
+(`pkg/kv/kvclient/rangefeed/revlogfeed`) so that
+`pkg/kv/kvclient/rangefeed` itself does not take a dependency on
+`pkg/revlog` (which transitively pulls `pkg/cloud`).
+
+#### Iterative drain → tick-boundary cutover
+
+Phase 1 (log replay) and phase 2 (live KV) are joined at a
+**tick boundary** `T*` — concretely, `T* = tick.EndTime` for some
+recent closed tick observed in the `LogReader`. The cutover
+sequence:
+
+```
+cur := consumer.startTS
+for {
+    T := freshestClosedTick(LogReader)  // re-read each iteration
+    drainRevlog(cur, T)                 // emit RangeFeedValue + per-tick Checkpoint
+    cur = T
+    if now() - T <= handoffThreshold {  // default 20 min
+        break
+    }
+    // Otherwise: log production happened during drain, so the
+    // residual window has new ticks. Loop and drain those too.
+    // Each iteration shrinks the residual as long as drain
+    // throughput exceeds log production throughput.
+}
+openLiveRF(startAfter = cur)
+forward live RF events to consumer
+```
+
+**Why a tick boundary at the cutover avoids both gaps and
+duplicates.** A revlog tick at `T*` covers events with
+`mvcc_ts ∈ (prev_tick.EndTime, T*]`. The live RF subscription
+opened with `startAfter=T*` delivers events with
+`mvcc_ts > T*`. The two sets are disjoint and exhaustive — no
+overlap, no gap.
+
+**Why iterate instead of single-shot.** The naive shape — pick
+`T*` once at startup, open the live RF immediately at
+`startAfter=T*`, drain revlog up to `T*` in parallel — has two
+failure modes when the consumer is far behind:
+
+1. The live RF's `startAfter` is fixed at the `T*` chosen at
+   startup. If the live RF transient-fails (range split, lease
+   move) hours into the drain, it resumes from that now-stale
+   `T*`, which may have aged past KV's GC threshold.
+2. The live RF's event channel grows unboundedly while waiting
+   for the drain to complete.
+
+Iterating means the live RF is opened only after the residual
+window is bounded by `handoffThreshold`. Its `startAfter` is
+always recent (≤ threshold old) at the moment of opening.
+
+**Termination and the can't-keep-up case.** The loop terminates
+as long as drain throughput exceeds log production throughput. A
+max-iteration / max-elapsed-time guard returns a structured
+error rather than spinning. Falling outside the threshold is a
+real signal: either the log is producing faster than this node
+can drain, or the configured threshold is too tight. Surfacing
+it lets the operator decide (raise the threshold, fall back to
+PTS, or scale the consumer).
+
+**Threshold default.** 20 min. Generous enough that the live RF
+catch-up scan stays well inside KV's GC window (default
+`gc.ttlseconds = 25h`); tight enough that a transient live-RF
+restart still resumes from a non-GC'd point.
+
+#### Coverage-gap policy
+
+If the `LogReader` does not have ticks covering
+`[consumer.startTS, T*]` for the requested spans, the wrapper
+returns a structured error at `RangeFeed` start that names the
+missing time window. The wrapper does **not** silently fall back
+to a KV catch-up: the consumer opted in to the wrapper precisely
+because it asserts the log will be there, and silent fallback
+would defeat the PTS-opt-out promise that motivated the opt-in.
+
+Per-job fallback policy (hard fail vs. fall back to a kv-only
+factory) is the consumer's responsibility, decided at the
+`NewFactory` call site.
+
+Per-span partial coverage (some requested spans covered, others
+not — e.g. a newly-added table) is deferred; v1 requires uniform
+coverage across the full request.
+
+#### Deferred / out of scope here
+
+- **Initial scan over revlog.** The current `WithInitialScan`
+  option runs `Scan` at the requested timestamp against KV.
+  Serving initial-scan from the log would require a base
+  snapshot in the log format, which the producer does not
+  write today. For now, `Scan` calls fall through to the
+  wrapped live `DB`. A future format extension (snapshot tier)
+  could remove this dependency.
+- **Consumer wiring.** Each of CDC, LDR, PCR gets its own
+  follow-up to add an opt-in option (e.g. a changefeed
+  `WITH log_backed_catchup` or equivalent) and to construct
+  the wrapper-backed factory at the appropriate call sites.
+- **PTS opt-out plumbing.** Per the "PTS opt-out" constraint
+  above, this is a per-consumer concern — landing it requires
+  the consumer wiring above. Out of scope here.
