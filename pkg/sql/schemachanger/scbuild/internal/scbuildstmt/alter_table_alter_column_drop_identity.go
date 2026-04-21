@@ -72,7 +72,7 @@ func alterTableDropIdentity(
 	// and SequenceOwner of the column we're dropping identity from. Anything
 	// else means another column references nextval(<seq>), and the legacy
 	// canRemoveAllColumnOwnedSequences check would have rejected the drop.
-	checkOwnedSequenceHasNoExternalDeps(b, tn, t.Column, columnID, sequenceOwner.SequenceID)
+	checkOwnedSequenceHasNoExternalDeps(b, tn, t.Column, tbl.TableID, columnID, sequenceOwner.SequenceID)
 
 	// Drop the identity element. This may be nil for descriptors created
 	// before V26_1, where the identity property was stored on the Column
@@ -111,17 +111,18 @@ func checkOwnedSequenceHasNoExternalDeps(
 	b BuildCtx,
 	tn *tree.TableName,
 	columnName tree.Name,
+	tableID catid.DescID,
 	columnID catid.ColumnID,
 	sequenceID catid.DescID,
 ) {
 	undroppedBackrefs(b, sequenceID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch elem := e.(type) {
 		case *scpb.SequenceOwner:
-			if elem.ColumnID == columnID {
+			if elem.TableID == tableID && elem.ColumnID == columnID {
 				return
 			}
 		case *scpb.ColumnDefaultExpression:
-			if elem.ColumnID == columnID {
+			if elem.TableID == tableID && elem.ColumnID == columnID {
 				return
 			}
 		}

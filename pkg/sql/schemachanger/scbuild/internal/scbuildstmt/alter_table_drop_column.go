@@ -323,7 +323,8 @@ func dropColumn(
 	undroppedSeqBackrefsToCheck.ForEach(func(seqID descpb.ID) {
 		if udr := undroppedBackrefs(b, seqID); !udr.IsEmpty() {
 			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"cannot drop column %s because other objects depend on it", cn.Name))
+				"cannot drop column %s of table %s because other objects depend on it",
+				cn.Name, tn.Object()))
 		}
 	})
 	if _, _, ct := scpb.FindColumnType(colElts); !ct.IsVirtual {
