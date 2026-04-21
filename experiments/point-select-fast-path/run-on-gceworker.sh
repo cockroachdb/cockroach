@@ -206,16 +206,18 @@ case "${cmd}" in
     ensure_running
 
     # Forward known env vars our scripts read. Each is quoted so values
-    # with whitespace survive the round-trip through ssh.
+    # with whitespace survive the round-trip through ssh. Uses
+    # `printf %q` instead of bash 4.4+ ${var@Q} so the script works on
+    # the system bash on macOS (which is still 3.2).
     env_prefix=""
-    for v in POINT_SELECT_FAST_PATH BENCH_FILTER BENCH_TIME BENCH_COUNT TEST_CPU; do
+    for v in POINT_SELECT_FAST_PATH POINT_SELECT_NODES POINT_SELECT_SPLITS BENCH_FILTER BENCH_TIME BENCH_COUNT TEST_CPU; do
       if [[ -n "${!v:-}" ]]; then
-        env_prefix+="${v}=${!v@Q} "
+        env_prefix+="${v}=$(printf %q "${!v}") "
       fi
     done
 
     args=()
-    for a in "$@"; do args+=("${a@Q}"); done
+    for a in "$@"; do args+=("$(printf %q "${a}")"); done
 
     echo "==> running ${env_prefix}experiments/point-select-fast-path/${script} ${args[*]:-} on ${NAME}"
     ssh_exec "cd ${REMOTE_DIR} && ${env_prefix}experiments/point-select-fast-path/${script} ${args[*]:-}"

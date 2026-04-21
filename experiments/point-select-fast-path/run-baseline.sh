@@ -62,6 +62,8 @@ mkdir -p "${RUN_DIR}"
   echo "bench_count:  ${BENCH_COUNT}"
   echo "test_cpu:     ${TEST_CPU} (GOMAXPROCS for in-process server)"
   echo "bench_filter: ${BENCH_FILTER}"
+  echo "nodes:        ${POINT_SELECT_NODES:-1} (POINT_SELECT_NODES)"
+  echo "splits:       ${POINT_SELECT_SPLITS:-(default)} (POINT_SELECT_SPLITS)"
 } > "${RUN_DIR}/env.txt"
 
 cd "${REPO_ROOT}"

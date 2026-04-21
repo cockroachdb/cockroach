@@ -443,56 +443,107 @@ a useful finding to report.
 
 ---
 
-## Results so far (macOS, single-node in-process)
+## Headline results (Linux gceworker, single-node, GOMAXPROCS=24)
 
-Captured 2026-04-20. All numbers from
-`experiments/point-select-fast-path/results/`. Placeholder fast path
-disabled in both variants so the slow path represents an
-"unspecialized" SQL pipeline.
+Captured 2026-04-21. Single-node in-process test cluster on
+`gceworker-matt` (n2-custom-24-32768, 24 vCPUs). Optimizer placeholder
+fast path disabled in both variants so the slow path represents an
+"unspecialized" SQL pipeline; the variant additionally enables our
+hardcoded `sql.fast_path.point_select.enabled` setting.
 
-### Latency at fixed concurrency (medians of 5+ runs)
+### Latency at fixed concurrency (medians of 5 runs)
 
 | metric | baseline | fast path | delta |
 |---|---:|---:|---:|
-| p50 @ conc=1 | 100 µs | 88 µs | **−12%** |
-| p99 @ conc=1 | 133 µs | 105 µs | **−21%** |
-| p99 @ conc=8 | 345 µs | 254 µs | **−26%** |
-| p99 @ conc=16 | 621 µs | 420 µs | **−32%** |
-| p99 @ conc=128 | 4.9 ms | 3.4 ms | **−31%** |
+| p50 @ conc=1 | 260 µs | **168 µs** | **−35%** |
+| p99 @ conc=1 | 390 µs | 282 µs | **−28%** |
+| p99 @ conc=32 | 928 µs | 599 µs | **−36%** |
+| p99 @ conc=64 | 2.35 ms | 1.51 ms | **−36%** |
 
-### Max QPS at p99 budget
+### Max QPS at p99 budget — *the* table for the writeup
 
-| budget | baseline | fast path | delta |
+| p99 budget | baseline | fast path | delta |
 |---:|---:|---:|---:|
-| 200 µs | 9.8K  | 11.4K | +16% |
-| 500 µs | 49.5K | 53.3K | +7.6% |
-| 1 ms   | 51.3K | 53.3K | +4% |
+| 500 µs | 30K | **68K** | **+124%** |
+| 1 ms   | 81K | **119K** | **+48%** |
+| 2 ms   | 81K | **120K** | **+48%** |
 
-### Profile validation (conc=8, fast path on)
+### Per-vCPU efficiency
+
+24-vCPU host, single-node in-process, point-SELECT prepared statement,
+saturation throughput at p99 ≤ 2 ms:
+
+- **Baseline:** 81K / 24 = ~3.4K QPS / vCPU
+- **Fast path:** 120K / 24 = ~5.0K QPS / vCPU
+- **+47% per vCPU.**
+
+### Profile validation (conc=64, fast path on)
 
 The bypass is structurally correct:
-`execPointSelectFastPath` cumulative ≈ `kv.(*Txn).Send` cumulative
-(both ~1.7% of total CPU samples). The optimizer / dispatch /
-distSQL frames have disappeared from the top of the profile.
+`execPointSelectFastPath` cumulative ≈ `kv.(*Txn).Send` cumulative.
+The optimizer / dispatchToExecutionEngine / distSQL frames are absent
+from the top of the profile entirely. Where the slow path's
+mutex-contention profile shows ~45% of contention under
+`dispatchToExecutionEngine`, the fast path has 0% there — it just
+skips that code.
 
-### What's left on the table
+---
 
-CPU samples on macOS at saturation:
+## Methodology notes (things that misled us along the way)
 
-| layer | share |
-|---|---:|
-| syscall.rawsyscalln | ~76% |
-| runtime/scheduler   | ~17% |
-| application code    | ~7%  |
-| └── KV stack       | ~2%  |
-| └── pgwire + connExecutor (post-fast-path) | ~5% |
+These are documented because they shaped which numbers ended up in the
+headline table — and because re-running someone else's measurement
+without knowing about them would lead to the same wrong conclusions.
 
-The fast path has already collapsed the SQL-stack sliver from
-its baseline ~0.3% to essentially zero (visible only as the KV
-call). Further latency wins on this hardware require attacking the
-syscall floor — pgwire pipelining, batched responses, or
-shared-memory transport. Phase 5 (Linux) tells us how much of that
-floor is OS-specific vs fundamental.
+### macOS is a poor host for this experiment
+
+Initial sweeps on an M3 Pro laptop showed only +4-7% QPS-at-budget and
++25-30% p99. CPU profiling at saturation showed ~76% of samples in
+`syscall.rawsyscalln` and `runtime.kevent` — macOS's TCP and kqueue
+syscalls are noticeably more expensive than Linux's, and were eating
+the SQL-stack savings. On the Linux gceworker the syscall share drops
+substantially and the fast path's win shows up clearly.
+
+### GOMAXPROCS hides the answer
+
+`./dev bench` defaults to `GOMAXPROCS=1`. We initially overrode to 8
+to roughly match an M3 Pro. On a 24-vCPU host that throttles 16/24
+cores out of contention by definition. Lifting `GOMAXPROCS` to match
+the host's vCPU count more than doubled saturation throughput in both
+baseline and variant:
+
+| metric | TEST_CPU=8 | TEST_CPU=24 |
+|---|---:|---:|
+| Baseline conc=64 QPS | 37K | 81K |
+| Fast-path conc=64 QPS | 59K | 120K |
+
+A mutex-contention profile we ran at TEST_CPU=8 made it look like
+gRPC adapter and rangecache locks were the throughput ceiling. They
+weren't — the runtime parallelism cap was. The contention shows up
+because there are only 8 Ps to spend wait-time on, not because those
+locks would gate scaling on 24 cores. We built multi-node + table
+splits in case that turned out to be the real ceiling; on Linux at
+GOMAXPROCS=24 we no longer need that infrastructure for the headline
+answer, but it remains in place (env vars `POINT_SELECT_NODES` and
+`POINT_SELECT_SPLITS`) for follow-up validation.
+
+### Compared to "what production does today"
+
+The baseline disables the optimizer's existing `placeholder_fast_path`,
+which already collapses re-optimization for this exact query shape into
+a no-op via a cached "ideal generic" plan. So the +47% per-vCPU number
+is "fast path vs the unspecialized SQL pipeline," not "fast path vs
+current production behavior on this exact query." For queries the
+placeholder fast path doesn't recognize (any non-PK-equality shape — most
+of OLTP), production is closer to the unspecialized baseline, which is
+why we picked it as the comparison point.
+
+A direct measurement against placeholder-fast-path-on would show a
+smaller number; we chose not to gate the report on that re-run because
+(a) the macOS data we did capture both ways suggested the
+placeholder fast path is worth ~3-5% on this query shape, and (b) the
+bigger story is "what could a universal fast path achieve for the
+common case," which is what the unspecialized baseline measures.
 
 ---
 
@@ -500,11 +551,41 @@ floor is OS-specific vs fundamental.
 
 A short writeup with:
 
-1. Baseline p99 (and p50, p99.9) at concurrency 1, 8, 16, 32, 64, 128.
-2. Fast-path p99 at the same concurrency points, plus the delta.
-3. CPU-time breakdown by layer for both runs (the cost-distribution from
-   Phase 2, recomputed in Phase 4) — i.e. "of the X µs we cut, Y came from
-   the optimizer, Z from row.Fetcher setup, etc."
-4. A frank assessment of which of those wins are realistically capturable
-   by an "engine upgrade" project vs. which are inherent to keeping
-   correctness/observability/protocol guarantees.
+1. **The headline:** at a 1ms p99 budget, a hardcoded fast path lifts
+   point-select throughput from 81K to 119K QPS on a 24-vCPU
+   single-node setup — **+48%** total throughput, **+47%** per vCPU.
+   At a 500µs budget the gap widens to **+124%**.
+2. **Per-op latency:** at single-client (no contention), the fast
+   path drops p50 from 260µs to 168µs — a **35% reduction**. This is
+   the per-op ceiling on what a "lighter SQL execution engine" could
+   buy, since it represents the case with no queueing or contention
+   to mask the savings.
+3. **What's measured:** the bypass goes from `connExecutor`
+   straight to `kv.Txn.Get`, skipping the optimizer / exec-builder /
+   DistSQL planner / row.Fetcher entirely. Profile validation
+   confirms `execPointSelectFastPath` time is ~entirely the KV call.
+4. **What this tells us about the upper bound:** for point-select
+   workloads, the SQL pipeline costs ~90µs per op (260 → 168) of
+   wall-time on this hardware. A real "engine upgrade" project
+   would need to deliver a chunk of those 90µs against a much wider
+   query shape — feasibility of that is the next question, not
+   answered by this experiment.
+5. **Caveats** documented in the methodology section above
+   (macOS confound, GOMAXPROCS confound, comparison-point choice).
+
+### Initial macOS data (kept for the record)
+
+These were the first numbers captured (M3 Pro, GOMAXPROCS=8, single-node
+in-process). They underestimate the fast-path win because of the host
+choice; included here so the methodology section above has something
+concrete to refer to.
+
+| metric | baseline | fast path | delta |
+|---|---:|---:|---:|
+| p50 @ conc=1 | 100 µs | 88 µs | −12% |
+| p99 @ conc=1 | 133 µs | 105 µs | −21% |
+| p99 @ conc=8 | 345 µs | 254 µs | −26% |
+| p99 @ conc=16 | 621 µs | 420 µs | −32% |
+| p99 @ conc=128 | 4.9 ms | 3.4 ms | −31% |
+| max QPS @ p99 ≤ 500 µs | 49.5K | 53.3K | +7.6% |
+| max QPS @ p99 ≤ 1 ms | 51.3K | 53.3K | +4% |

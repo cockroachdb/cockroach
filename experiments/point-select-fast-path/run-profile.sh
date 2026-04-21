@@ -78,6 +78,8 @@ mkdir -p "${RUN_DIR}"
   echo "bench_time:   ${BENCH_TIME}"
   echo "test_cpu:     ${TEST_CPU} (GOMAXPROCS for in-process server)"
   echo "bench_filter: ${BENCH_FILTER}"
+  echo "nodes:        ${POINT_SELECT_NODES:-1} (POINT_SELECT_NODES)"
+  echo "splits:       ${POINT_SELECT_SPLITS:-(default)} (POINT_SELECT_SPLITS)"
 } > "${RUN_DIR}/env.txt"
 
 cd "${REPO_ROOT}"
@@ -87,30 +89,36 @@ cd "${REPO_ROOT}"
 # afterwards.
 CPU_OUT="${REPO_ROOT}/cpu.prof"
 MEM_OUT="${REPO_ROOT}/mem.prof"
-rm -f "${CPU_OUT}" "${MEM_OUT}"
+MUTEX_OUT="${REPO_ROOT}/mutex.prof"
+BLOCK_OUT="${REPO_ROOT}/block.prof"
+rm -f "${CPU_OUT}" "${MEM_OUT}" "${MUTEX_OUT}" "${BLOCK_OUT}"
 
+# Mutex and block profiles answer "where are goroutines getting stuck
+# waiting on each other?" — exactly the question raised by the htop
+# pattern of pinned-and-idle cores at high concurrency. The Go test
+# framework auto-enables mutex sampling (fraction 1) and block
+# sampling (rate 1ns) when these flags are passed.
 ./dev bench pkg/sql/tests:tests_test \
   --filter="${BENCH_FILTER}" \
   --bench-time="${BENCH_TIME}" \
   --count=1 \
   --bench-mem=false \
-  --test-args="-test.cpu ${TEST_CPU} -test.cpuprofile=cpu.prof -test.memprofile=mem.prof" \
+  --test-args="-test.cpu ${TEST_CPU} -test.cpuprofile=cpu.prof -test.memprofile=mem.prof -test.mutexprofile=mutex.prof -test.blockprofile=block.prof" \
   ${fp_env} \
   2>&1 | tee "${RUN_DIR}/raw.txt"
 
-if [[ -f "${CPU_OUT}" ]]; then
-  mv "${CPU_OUT}" "${RUN_DIR}/cpu.prof"
-else
-  echo "WARNING: ${CPU_OUT} not found — cpu profile likely was not written" >&2
-fi
-if [[ -f "${MEM_OUT}" ]]; then
-  mv "${MEM_OUT}" "${RUN_DIR}/mem.prof"
-else
-  echo "WARNING: ${MEM_OUT} not found — mem profile likely was not written" >&2
-fi
+for pair in "${CPU_OUT}:cpu.prof" "${MEM_OUT}:mem.prof" "${MUTEX_OUT}:mutex.prof" "${BLOCK_OUT}:block.prof"; do
+  src="${pair%%:*}"; name="${pair##*:}"
+  if [[ -f "${src}" ]]; then
+    mv "${src}" "${RUN_DIR}/${name}"
+  else
+    echo "WARNING: ${src} not found — ${name} likely was not written" >&2
+  fi
+done
 
 echo
 echo "==> Results in: ${RUN_DIR}"
 echo "==> Inspect:"
 echo "      go tool pprof -http=:8080 ${RUN_DIR}/cpu.prof"
-echo "      go tool pprof -top ${RUN_DIR}/cpu.prof | head -30"
+echo "      go tool pprof -top ${RUN_DIR}/mutex.prof | head -30"
+echo "      go tool pprof -top ${RUN_DIR}/block.prof | head -30"
