@@ -153,6 +153,8 @@ func NewBuiltinFunctionOperator(
 		return newFNV64Op(argumentCols, outputIdx, input, hash), nil
 	case tree.DatumsToBytes:
 		return newDatumsToBytesOp(allocator, columnTypes, argumentCols, outputIdx, input), nil
+	case tree.PendingCommitTimestamp:
+		return newPendingCommitTimestampOp(outputIdx, input), nil
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),

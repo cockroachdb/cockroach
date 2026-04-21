@@ -2897,8 +2897,9 @@ months and years, use the timestamptz subtraction operator.`,
 			Category: builtinconstants.CategoryDateAndTime,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Types:                 tree.ParamTypes{},
+			ReturnType:            tree.FixedReturnType(types.TimestampTZ),
+			SpecializedVecBuiltin: tree.PendingCommitTimestamp,
 			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
 				// Return a marker datum. The actual commit timestamp isn't
 				// known yet; the row writer detects the marker and arranges

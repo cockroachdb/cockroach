@@ -158,32 +158,43 @@ CREATE TABLE pct_check (
 );
 
 # Write-side contexts (INSERT VALUES, UPDATE SET, UPSERT VALUES, UPSERT DO
-# UPDATE SET) must let the call through. INSERT VALUES is the only one we
-# can actually execute today: the literal flows straight from the values
-# expression into the row encoder, which special-cases the marker datum and
-# emits the zero-payload encoding.CommitTimestamp tag.
-#
-# UPDATE/UPSERT plans run the assignment expression through a projection
-# operator. The vectorized engine eagerly evaluates pending_commit_timestamp()
-# and tries to convert the resulting *DPendingCommitTimestamp into a
-# TIMESTAMPTZ vector slot, which crashes the datum→vec conversion. Plumbing
-# the marker through the projection layer (or making it
-# non-vectorizable / forcing a row-engine fallback for these cases) is its
-# own piece of work, so we only exercise type-check + plan acceptance via
-# EXPLAIN here.
+# UPDATE SET) must let the call through. Each path resolves the marker datum
+# differently:
+#   - INSERT VALUES feeds the literal straight into the row inserter, which
+#     special-cases the marker.
+#   - UPDATE plans the assignment as a vectorized projection that goes
+#     through colexecbuiltins.pendingCommitTimestampOp -- it sets the
+#     per-Vec marker flag, and the materializer's vec→datum conversion
+#     substitutes the marker datum back in before the row updater sees it.
+#   - UPSERT VALUES and INSERT...ON CONFLICT DO UPDATE evaluate the marker
+#     in row mode and bounce through the columnarizer; EncDatumRowToColVecs
+#     recognizes the marker datum and sets the same per-Vec flag, with
+#     identical materializer-side behavior.
 
 statement ok
 INSERT INTO pct_tab (id, ts) VALUES (1, pending_commit_timestamp());
 
 statement ok
-EXPLAIN UPDATE pct_tab SET ts = pending_commit_timestamp() WHERE id = 1;
+UPDATE pct_tab SET ts = pending_commit_timestamp() WHERE id = 1;
 
 statement ok
-EXPLAIN UPSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp());
+UPSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp());
 
 statement ok
-EXPLAIN INSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp())
+INSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp())
 ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
+
+# All four write paths above must have produced a real TIMESTAMPTZ value
+# (not a NULL placeholder for the marker datum) for ts.
+query II
+SELECT count(*), count(ts) FROM pct_tab;
+----
+2  2
+
+query B
+SELECT bool_and(ts > '2024-01-01'::TIMESTAMPTZ) FROM pct_tab;
+----
+true
 
 statement ok
 DROP TABLE pct_tab;

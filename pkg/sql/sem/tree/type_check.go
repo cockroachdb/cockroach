@@ -1140,19 +1140,7 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 	// marker is well-defined (assignments to ALLOW_COMMIT_TIMESTAMP columns);
 	// everywhere else we fail fast at type-check time.
 	//
-	// TODO(arul): UPDATE and UPSERT plan the assignment as a projection over
-	// the scan, and the vectorized projection operator eagerly evaluates
-	// pending_commit_timestamp() and tries to convert the resulting
-	// *DPendingCommitTimestamp into a TIMESTAMPTZ vector slot, which crashes
-	// because the datum→vec conversion in colconv asserts *DTimestampTZ.
-	// Plumbing the marker through the datum→vec → vec→KV pipeline (or marking
-	// the builtin as non-vectorizable so these cases fall back to the row
-	// engine) is its own piece of work; INSERT VALUES happens to work today
-	// because the input plan doesn't go through that conversion and the
-	// inserter itself is the row inserter (the vectorized inserter is
-	// COPY-only).
-	//
-	// TODO(arul): this rejection is also still broader than the spec strictly
+	// TODO(arul): this rejection is still broader than the spec strictly
 	// requires. We could narrow it to only reject when the call appears in a
 	// position the row-writer can't see (i.e. anywhere other than a direct
 	// assignment expression in INSERT/UPDATE/UPSERT), and move per-column

@@ -282,6 +282,10 @@ func ColVecToDatumAndDeselect(
 	if length == 0 {
 		return
 	}
+	if col.AllPendingCommitTimestamp() {
+		fillPendingCommitTimestamp(converted, length)
+		return
+	}
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
@@ -1203,6 +1207,19 @@ func ColVecToDatum(
 	converted []tree.Datum, col *coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
+		return
+	}
+	if col.AllPendingCommitTimestamp() {
+		// "Densely" populated when sel is nil; otherwise the marker datum
+		// can safely be written at every index since downstream consumers
+		// will only look at sel-selected positions.
+		if sel != nil {
+			for _, idx := range sel[:length] {
+				converted[idx] = tree.DPendingCommitTimestampDatum
+			}
+		} else {
+			fillPendingCommitTimestamp(converted, length)
+		}
 		return
 	}
 	var jsonScratch []json.JSONEncoded
@@ -2995,6 +3012,15 @@ func ColVecToDatum(
 			vecToDatum_false_false_false_return_5:
 			}
 		}
+	}
+}
+
+// fillPendingCommitTimestamp populates the first `length` slots of
+// `converted` with the pending_commit_timestamp() marker datum. Used when
+// the source Vec has its AllPendingCommitTimestamp flag set.
+func fillPendingCommitTimestamp(converted []tree.Datum, length int) {
+	for i := range length {
+		converted[i] = tree.DPendingCommitTimestampDatum
 	}
 }
 
