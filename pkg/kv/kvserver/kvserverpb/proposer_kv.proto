@@ -342,14 +342,15 @@ message CommitTxnOp {
   ];
   // The MVCC timestamp at which the transaction committed.
   util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
-  // TODO(jeffswenson): LockSpans are not exactly write spans — they include
-  // all spans where locks were acquired, which may be condensed and may not
-  // perfectly reflect the actual write footprint. Evaluate whether a more
-  // precise write span representation is needed.
+  // The key spans where the transaction acquired locks. These are derived from
+  // EndTxnRequest.LockSpans and may be condensed. They include all spans where
+  // locks were acquired (both intent writes and locking reads like SELECT FOR
+  // UPDATE), so they are a superset of the actual write footprint.
   repeated roachpb.Span write_spans = 4 [(gogoproto.nullable) = false];
-  // TODO(jeffswenson): read_spans are not yet tracked as part of the commit.
-  // They will be populated once read span tracking through EndTxn is
-  // implemented.
+  // The key spans that the transaction read. Populated from
+  // EndTxnRequest.ReadSpans, which the client-side txnFeedReadTracker
+  // accumulates during transaction execution. Like write_spans, these may be
+  // condensed if the read footprint exceeded a size threshold.
   repeated roachpb.Span read_spans = 5 [(gogoproto.nullable) = false];
 }
 

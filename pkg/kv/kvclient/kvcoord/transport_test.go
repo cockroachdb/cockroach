@@ -327,3 +327,9 @@ func (n *mockInternalClient) GetRangeDescriptors(
 ) (kvpb.RPCInternal_GetRangeDescriptorsClient, error) {
 	return nil, fmt.Errorf("unsupported GetRangeDescriptors call")
 }
+
+func (m *mockInternalClient) MuxTxnFeed(
+	context.Context,
+) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	return nil, fmt.Errorf("unsupported MuxTxnFeed call")
+}

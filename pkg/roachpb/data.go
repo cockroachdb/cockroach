@@ -1638,6 +1638,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.LockSpans = t.LockSpans
 	tr.InFlightWrites = t.InFlightWrites
 	tr.IgnoredSeqNums = t.IgnoredSeqNums
+	tr.ReadSpans = t.ReadSpans
 	return tr
 }
 
@@ -1652,6 +1653,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.LockSpans = tr.LockSpans
 	t.InFlightWrites = tr.InFlightWrites
 	t.IgnoredSeqNums = tr.IgnoredSeqNums
+	t.ReadSpans = tr.ReadSpans
 	return t
 }
 

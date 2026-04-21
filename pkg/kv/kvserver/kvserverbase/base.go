@@ -22,6 +22,19 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// TxnFeedEnabled controls whether TxnFeed is active. It gates the TxnFeed
+// streaming RPC, the emission of CommitTxnOp events through Raft, and the
+// writing of committed transaction records to MVCC history for catch-up scans.
+//
+// This setting lives in kvserverbase (rather than the txnfeed package) so that
+// it can be checked from kvcoord without pulling in pkg/storage transitively.
+var TxnFeedEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.txnfeed.enabled",
+	"if set, the TxnFeed streaming RPC for committed transaction records is enabled",
+	true,
+)
+
 // LeaseQueueEnabled is a setting that controls whether the lease queue
 // is enabled.
 var LeaseQueueEnabled = settings.RegisterBoolSetting(

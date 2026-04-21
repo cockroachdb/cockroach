@@ -1020,6 +1020,16 @@ message EndTxnRequest {
   // The field is used to support the XA two-phase commit protocol.
   bool prepare = 12;
 
+  // Set of spans that the transaction has read. Populated by the client when
+  // kv.txnfeed.enabled is true so that the server can include them in
+  // CommitTxnOp events for TxnFeed consumers. Like lock_spans, these may be
+  // condensed to cover aggregate spans if the read footprint exceeded a size
+  // threshold.
+  //
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
+  repeated Span read_spans = 13 [(gogoproto.nullable) = false];
+
   reserved 7, 8, 10;
 }
 
@@ -3450,6 +3460,7 @@ message TxnFeedCommitted {
   // The MVCC timestamp at which the transaction committed.
   util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
   // The key spans that the transaction read.
+  // TODO(jeffswenson): We don't currently track read spans for distsql queries.
   repeated Span read_spans = 4 [(gogoproto.nullable) = false];
   // The key spans that the transaction wrote.
   repeated Span write_spans = 5 [(gogoproto.nullable) = false];

@@ -100,32 +100,59 @@ func (s *txnFeedStream) maxCheckpointTS() hlc.Timestamp {
 	return maxTS
 }
 
-// run1PCTxn executes a 1PC transaction that puts a single key in the given
-// span and returns the transaction ID.
-func run1PCTxn(t *testing.T, ctx context.Context, db *kv.DB, key roachpb.Key) uuid.UUID {
+// txnResult captures the transaction ID and the keys that were read during the
+// transaction.
+type txnResult struct {
+	txnID    uuid.UUID
+	readKeys []roachpb.Key
+}
+
+// run1PCTxn executes a 1PC transaction that reads a key and puts a single key
+// in the given span.
+func run1PCTxn(
+	t *testing.T, ctx context.Context, db *kv.DB, readKey, writeKey roachpb.Key,
+) txnResult {
 	t.Helper()
-	var txnID uuid.UUID
+	// Pre-populate the read key so the Get returns a value.
+	require.NoError(t, db.Put(ctx, readKey, "pre-existing"))
+
+	var result txnResult
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txnID = txn.ID()
+		result.txnID = txn.ID()
+		// Perform a read.
+		_, err := txn.Get(ctx, readKey)
+		if err != nil {
+			return err
+		}
 		b := txn.NewBatch()
-		b.Put(key, "1pc-value")
+		b.Put(writeKey, "1pc-value")
 		return txn.CommitInBatch(ctx, b)
 	})
 	require.NoError(t, err)
-	return txnID
+	result.readKeys = []roachpb.Key{readKey}
+	return result
 }
 
-// run2PCTxn executes a 2PC transaction that puts keys in two different ranges
-// and returns the transaction ID. The two keys must be in different ranges to
-// force the 2PC path.
-func run2PCTxn(t *testing.T, ctx context.Context, db *kv.DB, key1, key2 roachpb.Key) uuid.UUID {
+// run2PCTxn executes a 2PC transaction that reads a key and puts keys in two
+// different ranges. The two write keys must be in different ranges to force the
+// 2PC path.
+func run2PCTxn(
+	t *testing.T, ctx context.Context, db *kv.DB, readKey, writeKey1, writeKey2 roachpb.Key,
+) txnResult {
 	t.Helper()
+	// Pre-populate the read key so the Get returns a value.
+	require.NoError(t, db.Put(ctx, readKey, "pre-existing"))
+
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	txnID := txn.ID()
-	require.NoError(t, txn.Put(ctx, key1, "2pc-value-1"))
-	require.NoError(t, txn.Put(ctx, key2, "2pc-value-2"))
+	result := txnResult{txnID: txn.ID()}
+	// Perform a read.
+	_, err := txn.Get(ctx, readKey)
+	require.NoError(t, err)
+	require.NoError(t, txn.Put(ctx, writeKey1, "2pc-value-1"))
+	require.NoError(t, txn.Put(ctx, writeKey2, "2pc-value-2"))
 	require.NoError(t, txn.Commit(ctx))
-	return txnID
+	result.readKeys = []roachpb.Key{readKey}
+	return result
 }
 
 // registerTxnFeed registers a txnfeed on the store for the given range and
@@ -163,10 +190,13 @@ func TestTxnFeed(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	txnfeed.Enabled.Override(ctx, &settings.SV, true)
 
+	// TODO(txnfeed): Enable test tenants once the txnFeedReadTracker interceptor
+	// correctly propagates the TxnFeedEnabled setting across tenant boundaries.
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -191,9 +221,12 @@ func TestTxnFeed(t *testing.T) {
 	feedSpan := roachpb.Span{Key: scratchKey, EndKey: midKey}
 	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
 
-	key1PC := append(scratchKey.Clone(), '1')      // in [scratchKey, midKey)
-	key2PCLocal := append(scratchKey.Clone(), '2') // in [scratchKey, midKey)
-	key2PCRemote := append(midKey.Clone(), 'r')    // in second range
+	// Read and write keys for the 1PC transaction.
+	readKey1PC := append(scratchKey.Clone(), '0')       // in [scratchKey, midKey)
+	writeKey1PC := append(scratchKey.Clone(), '1')      // in [scratchKey, midKey)
+	readKey2PC := append(scratchKey.Clone(), '3')       // in [scratchKey, midKey)
+	writeKey2PCLocal := append(scratchKey.Clone(), '2') // in [scratchKey, midKey)
+	writeKey2PCRemote := append(midKey.Clone(), 'r')    // in second range
 
 	t.Run("live", func(t *testing.T) {
 		// Register the feed before writing so events arrive via Raft apply.
@@ -201,11 +234,11 @@ func TestTxnFeed(t *testing.T) {
 		stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
 		defer disconnector.Disconnect(nil)
 
-		txn1PCID := run1PCTxn(t, ctx, db, key1PC)
-		txn2PCID := run2PCTxn(t, ctx, db, key2PCLocal, key2PCRemote)
+		txn1PC := run1PCTxn(t, ctx, db, readKey1PC, writeKey1PC)
+		txn2PC := run2PCTxn(t, ctx, db, readKey2PC, writeKey2PCLocal, writeKey2PCRemote)
 		afterWriteTS := db.Clock().Now()
 
-		awaitAndVerifyTxnFeedEvents(t, stream, feedSpan, afterWriteTS, txn1PCID, txn2PCID)
+		awaitAndVerifyTxnFeedEvents(t, stream, feedSpan, afterWriteTS, txn1PC, txn2PC)
 	})
 
 	t.Run("catchup", func(t *testing.T) {
@@ -213,12 +246,14 @@ func TestTxnFeed(t *testing.T) {
 		cursorTS := db.Clock().Now()
 
 		// Use different keys so we don't pick up events from the "live" subtest.
-		key1PC := append(scratchKey.Clone(), 'c')
-		key2PCLocal := append(scratchKey.Clone(), 'd')
-		key2PCRemote := append(midKey.Clone(), 'e')
+		readKey1PC := append(scratchKey.Clone(), 'a')
+		writeKey1PC := append(scratchKey.Clone(), 'b')
+		readKey2PC := append(scratchKey.Clone(), 'f')
+		writeKey2PCLocal := append(scratchKey.Clone(), 'g')
+		writeKey2PCRemote := append(midKey.Clone(), 'h')
 
-		txn1PCID := run1PCTxn(t, ctx, db, key1PC)
-		txn2PCID := run2PCTxn(t, ctx, db, key2PCLocal, key2PCRemote)
+		txn1PC := run1PCTxn(t, ctx, db, readKey1PC, writeKey1PC)
+		txn2PC := run2PCTxn(t, ctx, db, readKey2PC, writeKey2PCLocal, writeKey2PCRemote)
 		afterWriteTS := db.Clock().Now()
 
 		// Register the feed AFTER writes with a cursor before the writes. The
@@ -227,35 +262,35 @@ func TestTxnFeed(t *testing.T) {
 		stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, cursorTS)
 		defer disconnector.Disconnect(nil)
 
-		awaitAndVerifyTxnFeedEvents(t, stream, feedSpan, afterWriteTS, txn1PCID, txn2PCID)
+		awaitAndVerifyTxnFeedEvents(t, stream, feedSpan, afterWriteTS, txn1PC, txn2PC)
 	})
 }
 
 // awaitAndVerifyTxnFeedEvents waits for both 1PC and 2PC committed events to
-// appear on the stream, then verifies anchor keys and write spans.
+// appear on the stream, then verifies anchor keys, write spans, and read spans.
 func awaitAndVerifyTxnFeedEvents(
 	t *testing.T,
 	stream *txnFeedStream,
 	feedSpan roachpb.Span,
 	afterWriteTS hlc.Timestamp,
-	txn1PCID, txn2PCID uuid.UUID,
+	txn1PC, txn2PC txnResult,
 ) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		ids := stream.committedTxnIDs()
-		_, has1PC := ids[txn1PCID]
-		_, has2PC := ids[txn2PCID]
+		_, has1PC := ids[txn1PC.txnID]
+		_, has2PC := ids[txn2PC.txnID]
 		if has1PC && has2PC {
 			return nil
 		}
 		if ts := stream.maxCheckpointTS(); afterWriteTS.Less(ts) || afterWriteTS.Equal(ts) {
 			if !has1PC {
 				t.Fatalf("checkpoint at %s >= afterWriteTS %s but missing 1PC txn %s",
-					ts, afterWriteTS, txn1PCID)
+					ts, afterWriteTS, txn1PC.txnID)
 			}
 			if !has2PC {
 				t.Fatalf("checkpoint at %s >= afterWriteTS %s but missing 2PC txn %s",
-					ts, afterWriteTS, txn2PCID)
+					ts, afterWriteTS, txn2PC.txnID)
 			}
 		}
 		return &missingTxnFeedEventsError{has1PC: has1PC, has2PC: has2PC}
@@ -267,14 +302,48 @@ func awaitAndVerifyTxnFeedEvents(
 		}
 		c := ev.Committed
 		switch c.TxnID {
-		case txn1PCID:
-			require.True(t, feedSpan.ContainsKey(c.AnchorKey),
-				"1PC anchor key %s outside feed span %s", c.AnchorKey, feedSpan)
-			require.NotEmpty(t, c.WriteSpans, "1PC txn should have write spans")
-		case txn2PCID:
-			require.True(t, feedSpan.ContainsKey(c.AnchorKey),
-				"2PC anchor key %s outside feed span %s", c.AnchorKey, feedSpan)
-			require.NotEmpty(t, c.WriteSpans, "2PC txn should have write spans")
+		case txn1PC.txnID:
+			verifyCommittedEvent(t, c, feedSpan, txn1PC, "1PC")
+		case txn2PC.txnID:
+			verifyCommittedEvent(t, c, feedSpan, txn2PC, "2PC")
+		}
+	}
+}
+
+// verifyCommittedEvent checks that a committed event has correct anchor key,
+// write spans, and read spans. Read spans must contain all read keys and must
+// not exceed the feed span.
+func verifyCommittedEvent(
+	t *testing.T, c *kvpb.TxnFeedCommitted, feedSpan roachpb.Span, result txnResult, label string,
+) {
+	t.Helper()
+	require.True(t, feedSpan.ContainsKey(c.AnchorKey),
+		"%s anchor key %s outside feed span %s", label, c.AnchorKey, feedSpan)
+	require.NotEmpty(t, c.WriteSpans, "%s txn should have write spans", label)
+	require.NotEmpty(t, c.ReadSpans, "%s txn should have read spans", label)
+
+	// Verify each read key is contained within the reported read spans.
+	for _, readKey := range result.readKeys {
+		contained := false
+		for _, rs := range c.ReadSpans {
+			if rs.Contains(roachpb.Span{Key: readKey}) {
+				contained = true
+				break
+			}
+		}
+		require.True(t, contained,
+			"%s read key %s not contained in any read span %v", label, readKey, c.ReadSpans)
+	}
+
+	// Verify read spans don't exceed the feed span (which represents the range
+	// boundary for the first range).
+	for _, rs := range c.ReadSpans {
+		require.True(t, feedSpan.ContainsKey(rs.Key),
+			"%s read span start %s outside feed span %s", label, rs.Key, feedSpan)
+		if len(rs.EndKey) > 0 {
+			// EndKey is exclusive, so it can equal feedSpan.EndKey.
+			require.True(t, rs.EndKey.Compare(feedSpan.EndKey) <= 0,
+				"%s read span end %s exceeds feed span end %s", label, rs.EndKey, feedSpan.EndKey)
 		}
 	}
 }

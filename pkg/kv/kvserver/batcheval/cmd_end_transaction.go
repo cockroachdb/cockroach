@@ -616,6 +616,7 @@ func EndTxn(
 					AnchorKey:       reply.Txn.Key,
 					CommitTimestamp: reply.Txn.WriteTimestamp,
 					WriteSpans:      args.LockSpans,
+					ReadSpans:       args.ReadSpans,
 				}},
 			}
 		}
@@ -826,6 +827,7 @@ func updatePreparedTxn(
 	txn *roachpb.Transaction,
 ) error {
 	txn.LockSpans = args.LockSpans
+	txn.ReadSpans = args.ReadSpans
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(
@@ -847,6 +849,7 @@ func updateStagingTxn(
 	txn *roachpb.Transaction,
 ) error {
 	txn.LockSpans = args.LockSpans
+	txn.ReadSpans = args.ReadSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(
@@ -882,6 +885,7 @@ func updateFinalizedTxn(
 		if txn.Status == roachpb.COMMITTED &&
 			txnfeed.Enabled.Get(&evalCtx.ClusterSettings().SV) {
 			txn.LockSpans = args.LockSpans
+			txn.ReadSpans = args.ReadSpans
 			txn.InFlightWrites = nil
 			txnRecord := txn.AsRecord()
 			if err := storage.MVCCPutProto(
@@ -904,6 +908,7 @@ func updateFinalizedTxn(
 		return err
 	}
 	txn.LockSpans = externalLocks
+	txn.ReadSpans = args.ReadSpans
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
 	return storage.MVCCPutProto(ctx, readWriter, key, timestamp, &txnRecord, opts)

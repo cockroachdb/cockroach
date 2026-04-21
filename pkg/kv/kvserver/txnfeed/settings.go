@@ -5,15 +5,9 @@
 
 package txnfeed
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 
-// Enabled controls whether TxnFeed is active. It gates the TxnFeed
-// streaming RPC, the emission of CommitTxnOp events through Raft, and
-// the writing of committed transaction records to MVCC history for
-// catch-up scans.
-var Enabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.txnfeed.enabled",
-	"if set, the TxnFeed streaming RPC for committed transaction records is enabled",
-	false,
-)
+// Enabled is an alias for kvserverbase.TxnFeedEnabled, kept here for
+// convenience so that callers within kvserver can continue to use
+// txnfeed.Enabled without changing their import paths.
+var Enabled = kvserverbase.TxnFeedEnabled

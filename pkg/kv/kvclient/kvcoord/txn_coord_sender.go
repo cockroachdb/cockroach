@@ -162,11 +162,12 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [7]txnInterceptor
+		arr [8]txnInterceptor
 		txnHeartbeater
 		txnSeqNumAllocator
 		txnWriteBuffer
 		txnPipeliner
+		txnFeedReadTracker
 		txnCommitter
 		txnSpanRefresher
 		txnMetricRecorder
@@ -299,6 +300,13 @@ func newRootTxnCoordSender(
 		// never generate transaction retry errors that could be avoided
 		// with a refresh.
 		&tcs.interceptorAlloc.txnPipeliner,
+		// The txnfeed read tracker sits above the committer so that it can
+		// attach accumulated read spans to the EndTxnRequest before the
+		// committer processes it. It tracks read spans independently for
+		// TxnFeed consumers and condenses them when the memory budget is
+		// exceeded. The committer forwards read spans to the async explicit
+		// commit for parallel commit transactions.
+		&tcs.interceptorAlloc.txnFeedReadTracker,
 		// The committer sits above the span refresher because it will
 		// never generate transaction retry errors that could be avoided
 		// with a refresh. However, it may re-issue parts of "successful"
@@ -342,6 +350,10 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		txnMetrics:               &tc.metrics,
 		condensedIntentsEveryN:   &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
 		inflightOverBudgetEveryN: &tc.TxnCoordSenderFactory.inflightOverBudgetEveryN,
+	}
+	tc.interceptorAlloc.txnFeedReadTracker = txnFeedReadTracker{
+		st:    tcf.st,
+		riGen: riGen,
 	}
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:      tcf.st,

@@ -632,6 +632,7 @@ func (r *Replica) evaluate1PC(
 		if txnfeed.Enabled.Get(&r.ClusterSettings().SV) {
 			txnRecord := clonedTxn.AsRecord()
 			txnRecord.LockSpans = etArg.LockSpans
+			txnRecord.ReadSpans = etArg.ReadSpans
 			key := keys.TransactionKey(clonedTxn.Key, clonedTxn.ID)
 			writeOpts := storage.MVCCWriteOptions{
 				Stats: ms, Category: fs.BatchEvalReadCategory,
@@ -662,8 +663,8 @@ func (r *Replica) evaluate1PC(
 					TxnID:           clonedTxn.ID,
 					AnchorKey:       clonedTxn.Key,
 					CommitTimestamp: clonedTxn.WriteTimestamp,
-					MVCCTimestamp:   clonedTxn.WriteTimestamp,
 					WriteSpans:      etArg.LockSpans,
+					ReadSpans:       etArg.ReadSpans,
 				}},
 			}
 		}

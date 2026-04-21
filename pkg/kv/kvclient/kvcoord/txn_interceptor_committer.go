@@ -251,7 +251,7 @@ func (tc *txnCommitter) SendLocked(
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
 	mergedLockSpans, _ := mergeIntoSpans(et.LockSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans, et.ReadSpans)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -490,7 +490,7 @@ func (tc *txnCommitter) retryTxnCommitAfterFailedParallelCommit(
 // written) to explicitly committed (COMMITTED status). It does so by sending a
 // second EndTxnRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
-	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span,
+	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span, readSpans []roachpb.Span,
 ) {
 	// TODO(nvanbenschoten): consider adding tracing for this request.
 	// TODO(nvanbenschoten): add a timeout to this request.
@@ -508,7 +508,7 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 	work := func(ctx context.Context) {
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
-		if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans); err != nil {
+		if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, readSpans); err != nil {
 			log.Dev.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 		}
 	}
@@ -527,7 +527,11 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 }
 
 func makeTxnCommitExplicitLocked(
-	ctx context.Context, s lockedSender, txn *roachpb.Transaction, lockSpans []roachpb.Span,
+	ctx context.Context,
+	s lockedSender,
+	txn *roachpb.Transaction,
+	lockSpans []roachpb.Span,
+	readSpans []roachpb.Span,
 ) error {
 	// Clone the txn to prevent data races.
 	txn = txn.Clone()
@@ -538,6 +542,7 @@ func makeTxnCommitExplicitLocked(
 	et := kvpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.LockSpans = lockSpans
+	et.ReadSpans = readSpans
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)

@@ -122,6 +122,7 @@ func CatchUpScan(
 				AnchorKey:       txn.Key,
 				CommitTimestamp: txn.WriteTimestamp,
 				WriteSpans:      txn.LockSpans,
+				ReadSpans:       txn.ReadSpans,
 			},
 		}); err != nil {
 			return err

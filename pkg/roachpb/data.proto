@@ -507,6 +507,17 @@ message Transaction {
   // choose which writes are exported on a per-transaction basis.
   bool omit_in_rangefeeds = 20;
 
+  // Set of spans that the transaction has read. Populated by the client-side
+  // txnFeedReadTracker when kv.txnfeed.enabled is true. These spans are
+  // persisted in the transaction record so that TxnFeed catch-up scans can
+  // reconstruct CommitTxnOp events with read span information. Like
+  // lock_spans, these may be condensed to cover aggregate spans if the read
+  // footprint exceeded a size threshold.
+  //
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
+  repeated Span read_spans = 21 [(gogoproto.nullable) = false];
+
   reserved 3, 6, 9, 12, 13, 14;
 }
 
@@ -533,6 +544,7 @@ message TransactionRecord {
   repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+  repeated Span read_spans = 21 [(gogoproto.nullable) = false];
 
   // Fields on Transaction that are not present in a transaction record.
   reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
