@@ -568,6 +568,10 @@ type ColumnTableDef struct {
 		Create      bool
 		IfNotExists bool
 	}
+	// AllowCommitTimestamp is set when the column declaration carries the
+	// ALLOW_COMMIT_TIMESTAMP qualification, which opts the column into being
+	// writable with the PENDING_COMMIT_TIMESTAMP() sentinel.
+	AllowCommitTimestamp bool
 }
 
 // ColumnTableDefCheckExpr represents a check constraint on a column definition
@@ -756,6 +760,8 @@ func NewColumnTableDef(
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
+		case AllowCommitTimestampConstraint:
+			d.AllowCommitTimestamp = true
 		default:
 			return nil, errors.AssertionFailedf("unexpected column qualification: %T", c)
 		}
@@ -933,6 +939,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.Family.Name)
 		}
 	}
+	if node.AllowCommitTimestamp {
+		ctx.WriteString(" ALLOW_COMMIT_TIMESTAMP")
+	}
 }
 
 func (node *ColumnTableDef) formatColumnType(ctx *FmtCtx) {
@@ -990,6 +999,7 @@ func (*ColumnFKConstraint) columnQualification()         {}
 func (*ColumnFamilyConstraint) columnQualification()     {}
 func (*GeneratedAlwaysAsIdentity) columnQualification()  {}
 func (*GeneratedByDefAsIdentity) columnQualification()   {}
+func (AllowCommitTimestampConstraint) columnQualification() {}
 
 // ColumnCollation represents a COLLATE clause for a column.
 type ColumnCollation string
@@ -1066,6 +1076,11 @@ type ColumnFamilyConstraint struct {
 	Create      bool
 	IfNotExists bool
 }
+
+// AllowCommitTimestampConstraint represents the ALLOW_COMMIT_TIMESTAMP
+// qualification, which opts a column into being writable with the
+// PENDING_COMMIT_TIMESTAMP() sentinel.
+type AllowCommitTimestampConstraint struct{}
 
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.

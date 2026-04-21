@@ -1010,7 +1010,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
-%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
+%token <str> ALL ALLOW_COMMIT_TIMESTAMP ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
 %token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIDIRECTIONAL BIGINT BIGSERIAL BINARY BIT
@@ -11855,6 +11855,10 @@ col_qualification_elem:
   {
     $$.val = &tree.GeneratedByDefAsIdentity{}
   }
+| ALLOW_COMMIT_TIMESTAMP
+  {
+    $$.val = tree.AllowCommitTimestampConstraint{}
+  }
 
 opt_without_index:
   WITHOUT INDEX
@@ -19547,6 +19551,7 @@ bare_label_keywords:
 | AFTER
 | AGGREGATE
 | ALL
+| ALLOW_COMMIT_TIMESTAMP
 | ALTER
 | ALWAYS
 | ANALYSE
@@ -20291,6 +20296,7 @@ type_func_name_crdb_extra_keyword:
 // user queries using column label without `AS`.
 reserved_keyword:
   ALL
+| ALLOW_COMMIT_TIMESTAMP
 | ANALYSE
 | ANALYZE
 | AND
