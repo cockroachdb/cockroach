@@ -784,7 +784,7 @@ func (p *parallelImporter) importWorker(
 	var rowNum int64
 	timestamp := timestampAfterEpoch(importCtx.walltime)
 
-	conv.CompletedRowFn = func() int64 {
+	conv.ResumePosFn = func() int64 {
 		m := emittedRowLowWatermark(workerID, rowNum, minEmitted)
 		return m
 	}

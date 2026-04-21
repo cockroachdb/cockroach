@@ -594,10 +594,10 @@ func TestImportProgressTracker(t *testing.T) {
 	require.Equal(t, base.SQLInstanceID(7), prog.NodeID)
 
 	// Record some KV batches.
-	tracker.recordKVBatch(row.KVBatch{Source: 2, LastRow: 100, Progress: 0.5})
-	tracker.recordKVBatch(row.KVBatch{Source: 5, LastRow: 200, Progress: 0.8})
+	tracker.recordKVBatch(row.KVBatch{Source: 2, ResumePos: 100, Progress: 0.5})
+	tracker.recordKVBatch(row.KVBatch{Source: 5, ResumePos: 200, Progress: 0.8})
 
-	// Simulate the PK sink flushing (copies unflushedRows into its slot).
+	// Simulate the PK sink flushing (copies unflushedPos into its slot).
 	// The index sink has not flushed but has buffered data (empty=false),
 	// so it holds back the resume position.
 	pkSink.empty = true

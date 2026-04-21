@@ -209,8 +209,9 @@ func GenerateInsertRow(
 type KVBatch struct {
 	// Source is where the row data in the batch came from.
 	Source int32
-	// LastRow is the index of the last converted row in source in this batch.
-	LastRow int64
+	// ResumePos is an opaque position used to resume an import from where it
+	// left off. Its meaning is format-dependent (e.g. row index, batch index).
+	ResumePos int64
 	// Progress represents the fraction of the input that generated this row.
 	Progress float32
 	// KVs is the actual converted KV data.
@@ -249,10 +250,10 @@ type DatumRowConverter struct {
 	computedIVarContainer     schemaexpr.RowIndexedVarContainer
 	partialIndexIVarContainer schemaexpr.RowIndexedVarContainer
 
-	// FractionFn is used to set the progress header in KVBatches.
-	CompletedRowFn func() int64
-	FractionFn     func() float32
-	kvInserter     KVInserter
+	// ResumePosFn is used to set the resume position header in KVBatches.
+	ResumePosFn func() int64
+	FractionFn  func() float32
+	kvInserter  KVInserter
 
 	db *kv.DB
 }
@@ -666,8 +667,8 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	if c.FractionFn != nil {
 		c.KvBatch.Progress = c.FractionFn()
 	}
-	if c.CompletedRowFn != nil {
-		c.KvBatch.LastRow = c.CompletedRowFn()
+	if c.ResumePosFn != nil {
+		c.KvBatch.ResumePos = c.ResumePosFn()
 	}
 	select {
 	case c.KvCh <- c.KvBatch:

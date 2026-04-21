@@ -528,17 +528,17 @@ func ingestKvs(
 }
 
 // importProgressTracker centralizes progress tracking for import processors.
-// It tracks per-file row positions and completion fractions, accumulates
+// It tracks per-file resume positions and completion fractions, accumulates
 // BulkOpSummary deltas from sink flushes, and collects SST manifests for
 // the distributed merge path. Each registered BulkSink installs an OnFlush
-// callback that updates flushedRows and accumulates summaries under the lock.
+// callback that updates flushedPos and accumulates summaries under the lock.
 // SST manifests are collected separately in formatProgress rather than in the
 // OnFlush callback, so that they are paired with an up-to-date resume
 // position.
 //
-// Resume position is reported as the minimum flushed row across all sinks
-// for each file, since a file can only be skipped on resume if all sinks
-// have flushed its data.
+// Resume position is reported as the minimum flushed position across all
+// sinks for each file, since a file can only be skipped on resume if all
+// sinks have flushed its data.
 type importProgressTracker struct {
 	syncutil.Mutex
 
@@ -546,11 +546,10 @@ type importProgressTracker struct {
 	// IsEmpty() at progress reporting time.
 	sinks []bulksst.BulkSink
 
-	// flushedRows tracks the last flushed row position per file for each
-	// registered sink. flushedRows[sinkIdx][fileOffset] is the row position
-	// that sink has confirmed flushing for that file. Updated by OnFlush
-	// callbacks.
-	flushedRows [][]int64
+	// flushedPos tracks the last flushed resume position per file for each
+	// registered sink. flushedPos[sinkIdx][fileOffset] is the position that
+	// sink has confirmed flushing for that file. Updated by OnFlush callbacks.
+	flushedPos [][]int64
 
 	// summary accumulates BulkOpSummary deltas since the last call to
 	// formatProgress. Reset after each progress report.
@@ -571,9 +570,9 @@ type importProgressTracker struct {
 	// slot indices in the per-file tracking slices.
 	offsets map[int32]int
 
-	// unflushedRows tracks the most recent row position written (but not
+	// unflushedPos tracks the most recent resume position written (but not
 	// necessarily flushed) per file slot. Updated by recordKVBatch.
-	unflushedRows []int64
+	unflushedPos []int64
 
 	// unflushedFraction tracks the completion fraction per file slot
 	// as of the most recent KV batch. Updated by recordKVBatch.
@@ -584,7 +583,7 @@ func newImportProgressTracker(
 	flowCtx *execinfra.FlowCtx, spec *execinfrapb.ReadImportDataSpec,
 ) *importProgressTracker {
 	var ipt importProgressTracker
-	ipt.flushedRows = make([][]int64, 0, 2)
+	ipt.flushedPos = make([][]int64, 0, 2)
 	ipt.nodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
 	ipt.offsets = make(map[int32]int, len(spec.Uri))
 
@@ -595,7 +594,7 @@ func newImportProgressTracker(
 		off++
 	}
 
-	ipt.unflushedRows = make([]int64, len(spec.Uri))
+	ipt.unflushedPos = make([]int64, len(spec.Uri))
 	ipt.unflushedFraction = make([]float32, len(spec.Uri))
 
 	return &ipt
@@ -606,13 +605,13 @@ func (ipt *importProgressTracker) registerSink(sink bulksst.BulkSink) {
 	defer ipt.Unlock()
 
 	ipt.sinks = append(ipt.sinks, sink)
-	thisSinksFlushedRows := make([]int64, len(ipt.unflushedRows))
-	ipt.flushedRows = append(ipt.flushedRows, thisSinksFlushedRows)
+	thisSinksFlushedPos := make([]int64, len(ipt.unflushedPos))
+	ipt.flushedPos = append(ipt.flushedPos, thisSinksFlushedPos)
 	sink.SetOnFlush(func(summary kvpb.BulkOpSummary) {
 		ipt.Lock()
 		defer ipt.Unlock()
 
-		copy(thisSinksFlushedRows, ipt.unflushedRows)
+		copy(thisSinksFlushedPos, ipt.unflushedPos)
 		ipt.summary.Add(summary)
 		ipt.totalSummary.Add(summary)
 	})
@@ -632,10 +631,10 @@ func (ipt *importProgressTracker) formatProgress() (
 	for file, offset := range ipt.offsets {
 		// Report the resume position of the least advanced sink. If a sink's
 		// buffer is empty, it has no un-flushed data and should not hold back
-		// the resume position, so we use the current unflushedRows instead.
-		prog.ResumePos[file] = ipt.flushedRowsForSink(0, offset)
-		for s := 1; s < len(ipt.flushedRows); s++ {
-			if pos := ipt.flushedRowsForSink(s, offset); prog.ResumePos[file] > pos {
+		// the resume position, so we use the current unflushedPos instead.
+		prog.ResumePos[file] = ipt.flushedPosForSink(0, offset)
+		for s := 1; s < len(ipt.flushedPos); s++ {
+			if pos := ipt.flushedPosForSink(s, offset); prog.ResumePos[file] > pos {
 				prog.ResumePos[file] = pos
 			}
 		}
@@ -651,7 +650,7 @@ func (ipt *importProgressTracker) formatProgress() (
 	// than in the OnFlush callback so that they are paired with an
 	// up-to-date ResumePos. The OnFlush callback fires during auto-flush
 	// which can occur mid-batch before recordKVBatch has updated
-	// unflushedRows, so collecting manifests there would associate them
+	// unflushedPos, so collecting manifests there would associate them
 	// with a stale position.
 	for _, s := range ipt.sinks {
 		ipt.manifests = append(ipt.manifests, s.ConsumeFlushManifests()...)
@@ -670,15 +669,15 @@ func (ipt *importProgressTracker) formatProgress() (
 	return prog, nil
 }
 
-// flushedRowsForSink returns the flushed row position for the given sink and
+// flushedPosForSink returns the flushed resume position for the given sink and
 // file offset. If the sink's buffer is currently empty, it returns the current
-// unflushedRows position instead, since an empty sink has no un-persisted data
-// that could be lost on retry. Must be called with ipt.Mutex held.
-func (ipt *importProgressTracker) flushedRowsForSink(sinkIdx, offset int) int64 {
+// unflushedPos instead, since an empty sink has no un-persisted data that could
+// be lost on retry. Must be called with ipt.Mutex held.
+func (ipt *importProgressTracker) flushedPosForSink(sinkIdx, offset int) int64 {
 	if ipt.sinks[sinkIdx].IsEmpty() {
-		return ipt.unflushedRows[offset]
+		return ipt.unflushedPos[offset]
 	}
-	return ipt.flushedRows[sinkIdx][offset]
+	return ipt.flushedPos[sinkIdx][offset]
 }
 
 func (ipt *importProgressTracker) recordKVBatch(batch row.KVBatch) {
@@ -689,7 +688,7 @@ func (ipt *importProgressTracker) recordKVBatch(batch row.KVBatch) {
 	if !ok {
 		panic(fmt.Sprintf("Unknown source %d!", batch.Source))
 	}
-	ipt.unflushedRows[offset] = batch.LastRow
+	ipt.unflushedPos[offset] = batch.ResumePos
 	ipt.unflushedFraction[offset] = batch.Progress
 }
 
