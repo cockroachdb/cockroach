@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "revlogfeed",
@@ -14,5 +14,21 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/span",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "revlogfeed_test",
+    srcs = [
+        "fake_tick_source_test.go",
+        "revlogfeed_test.go",
+    ],
+    embed = [":revlogfeed"],
+    deps = [
+        "//pkg/revlog",
+        "//pkg/revlog/revlogpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )

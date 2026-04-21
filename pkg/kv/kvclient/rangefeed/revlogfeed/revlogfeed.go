@@ -76,6 +76,19 @@ func New(src tickSource, live rangefeed.DB, opts Options) *DB {
 	return &DB{src: src, live: live, opts: opts}
 }
 
+// checkCoverage verifies that the configured tickSource has contiguous
+// coverage of the window (startFrom, end]. Returns nil if coverage is
+// complete; otherwise returns an error identifying the missing window.
+//
+// Coverage is contiguous when:
+//   - the first overlapping tick has TickStart <= startFrom (no gap at
+//     the front), and
+//   - each subsequent tick has TickStart <= previous.TickEnd (no gap
+//     between adjacent ticks).
+func (d *DB) checkCoverage(ctx context.Context, startFrom, end hlc.Timestamp) error {
+	return errors.AssertionFailedf("revlogfeed.DB.checkCoverage: not implemented")
+}
+
 // RangeFeed implements rangefeed.DB.
 func (d *DB) RangeFeed(
 	ctx context.Context,
