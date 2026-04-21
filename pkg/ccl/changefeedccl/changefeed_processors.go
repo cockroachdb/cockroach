@@ -555,10 +555,16 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		})
 	}
 
+	execCfg := ca.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if ca.knobs.OverrideExecCfg != nil {
+		execCfg = ca.knobs.OverrideExecCfg(execCfg)
+	}
+
 	return kvfeed.Config{
 		Writer:               buf,
 		Settings:             cfg.Settings,
 		DB:                   cfg.DB.KV(),
+		RangeFeedFactory:     execCfg.RangeFeedFactory,
 		Codec:                cfg.Codec,
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
@@ -571,7 +577,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		WithDiff:             filters.WithDiff,
 		WithFiltering:        filters.WithFiltering,
 		WithFrontierQuantize: changefeedbase.Quantize.Get(&cfg.Settings.SV),
-		WithBulkDelivery:     changefeedbase.BulkDelivery.Get(&cfg.Settings.SV),
 		NeedsInitialScan:     needsInitialScan,
 		SchemaChangeEvents:   schemaChange.EventClass,
 		SchemaChangePolicy:   schemaChange.Policy,
