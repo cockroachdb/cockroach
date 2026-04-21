@@ -414,6 +414,10 @@ func registerFastRestorePerf(r registry.Registry) {
 					rd := makeRestoreDriver(ctx, t, c, sp.restoreSpecs)
 					rd.prepareCluster(ctx)
 
+					dut, err := roachtestutil.NewDiskUsageTracker(rd.c, t.L())
+					require.NoError(t, err)
+					startDu := dut.GetDiskUsage(ctx, rd.c.All())
+
 					db, err := rd.c.ConnE(ctx, t.L(), rd.c.Node(1)[0])
 					require.NoError(t, err)
 					defer db.Close()
@@ -437,6 +441,12 @@ func registerFastRestorePerf(r registry.Registry) {
 
 					restoreDuration := restoreEndTime.Sub(restoreStartTime)
 					t.L().Printf("Fast restore completed in %s", restoreDuration)
+
+					endDu := dut.GetDiskUsage(ctx, rd.c.All())
+					throughput := float64(endDu-startDu) / (float64(sp.hardware.nodes) * restoreDuration.Seconds())
+					t.L().Printf("Usage %d, Nodes %d, Duration %f; Throughput: %f MB/s/node",
+						endDu-startDu, sp.hardware.nodes, restoreDuration.Seconds(), throughput)
+					uploadRestoreSummaryStats(ctx, t, c, restoreDuration.Seconds(), throughput)
 				},
 			})
 		}
