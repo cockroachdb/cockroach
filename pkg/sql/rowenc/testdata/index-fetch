@@ -42,7 +42,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -54,19 +55,22 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 2,
       "name": "b",
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 3,
       "name": "c",
       "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -99,7 +103,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -111,7 +116,8 @@ columns:
       "column_id": 2,
       "name": "b",
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -144,7 +150,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -155,7 +162,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -167,13 +175,15 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 2,
       "name": "b",
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -206,7 +216,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -217,7 +228,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -229,13 +241,15 @@ columns:
       "column_id": 2,
       "name": "b",
       "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 4,
       "name": "d",
       "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 16\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -270,7 +284,8 @@ columns:
         "column_id": 3,
         "name": "c",
         "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": true,
@@ -281,7 +296,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 1,
       "is_composite": false,
@@ -292,7 +308,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -304,13 +321,15 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 3,
       "name": "c",
       "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -344,7 +363,8 @@ columns:
         "column_id": 3,
         "name": "c",
         "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": true,
@@ -355,7 +375,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -366,7 +387,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -378,19 +400,22 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 3,
       "name": "c",
       "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 4,
       "name": "d",
       "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 16\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -455,7 +480,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -467,7 +493,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -509,7 +536,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -520,7 +548,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -532,7 +561,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -574,7 +604,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -585,7 +616,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -597,7 +629,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -639,7 +672,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 25\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -650,7 +684,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -662,7 +697,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -704,7 +740,8 @@ columns:
         "column_id": 3,
         "name": "c",
         "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": true,
@@ -715,7 +752,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -727,7 +765,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -769,7 +808,8 @@ columns:
         "column_id": 3,
         "name": "c",
         "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 1700\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": true,
@@ -780,7 +820,8 @@ columns:
         "column_id": 1,
         "name": "a",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -792,7 +833,8 @@ columns:
       "column_id": 1,
       "name": "a",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -836,7 +878,8 @@ columns:
         "column_id": 3,
         "name": "j",
         "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 705\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -847,7 +890,8 @@ columns:
         "column_id": 1,
         "name": "k",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -859,13 +903,15 @@ columns:
       "column_id": 3,
       "name": "j",
       "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 705\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 1,
       "name": "k",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }
@@ -899,7 +945,8 @@ columns:
         "column_id": 2,
         "name": "b",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -910,7 +957,8 @@ columns:
         "column_id": 3,
         "name": "j",
         "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 705\ntime_precision_is_set: false\n",
-        "is_non_nullable": false
+        "is_non_nullable": false,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -921,7 +969,8 @@ columns:
         "column_id": 1,
         "name": "k",
         "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-        "is_non_nullable": true
+        "is_non_nullable": true,
+        "allow_commit_timestamp": false
       },
       "direction": 0,
       "is_composite": false,
@@ -933,19 +982,22 @@ columns:
       "column_id": 3,
       "name": "j",
       "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\noid: 705\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 2,
       "name": "b",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": false
+      "is_non_nullable": false,
+      "allow_commit_timestamp": false
     },
     {
       "column_id": 1,
       "name": "k",
       "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\noid: 20\ntime_precision_is_set: false\n",
-      "is_non_nullable": true
+      "is_non_nullable": true,
+      "allow_commit_timestamp": false
     }
   ]
 }

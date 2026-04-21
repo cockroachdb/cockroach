@@ -393,6 +393,13 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	}
 
 	for idx := range args.Spec.FetchedColumns {
+		// ALLOW_COMMIT_TIMESTAMP columns require MVCC timestamp decoding so
+		// that PENDING_COMMIT_TIMESTAMP() markers stored in the value can be
+		// resolved against the version timestamp at decode time (see
+		// rowenc.DecodeValueBytesWithMVCCTimestamp).
+		if args.Spec.FetchedColumns[idx].AllowCommitTimestamp {
+			rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+		}
 		colID := args.Spec.FetchedColumns[idx].ColumnID
 		table.colIdxMap.Set(colID, idx)
 		if colinfo.IsColIDSystemColumn(colID) {
@@ -1019,7 +1026,7 @@ func (rf *Fetcher) processKV(
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = rf.processValueBytes(table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueBytes(table, tupleBytes, prettyKey, kv.Value.Timestamp)
 		default:
 			var familyID uint64
 			_, familyID, err = encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
@@ -1098,7 +1105,7 @@ func (rf *Fetcher) processKV(
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = rf.processValueBytes(table, valueBytes, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueBytes(table, valueBytes, prettyKey, kv.Value.Timestamp)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
@@ -1151,8 +1158,16 @@ func (rf *Fetcher) processValueSingle(
 	return prettyKey, prettyValue, nil
 }
 
+// processValueBytes decodes the value bytes from a single KV into the
+// destination table.row. mvccTimestamp is the version timestamp of the value
+// being decoded; it's used to resolve PENDING_COMMIT_TIMESTAMP() markers (see
+// rowenc.DecodeValueBytesWithMVCCTimestamp) for ALLOW_COMMIT_TIMESTAMP
+// columns into the txn's commit timestamp at read time.
 func (rf *Fetcher) processValueBytes(
-	table *tableInfo, valueBytes []byte, prettyKeyPrefix string,
+	table *tableInfo,
+	valueBytes []byte,
+	prettyKeyPrefix string,
+	mvccTimestamp hlc.Timestamp,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if rf.args.TraceKV {
@@ -1162,7 +1177,10 @@ func (rf *Fetcher) processValueBytes(
 		rf.prettyValueBuf.Reset()
 	}
 	neededCols := rf.table.neededValueCols - rf.valueColsFound
-	colOrds, err := rowenc.DecodeValueBytes(table.colIdxMap, valueBytes, neededCols, table.row)
+	colOrds, err := rowenc.DecodeValueBytesWithMVCCTimestamp(
+		table.colIdxMap, valueBytes, neededCols, table.row,
+		table.spec.FetchedColumns, mvccTimestamp,
+	)
 	if err != nil {
 		return "", "", err
 	}

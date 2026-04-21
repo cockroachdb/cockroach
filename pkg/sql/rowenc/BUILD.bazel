@@ -39,6 +39,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/deduplicate",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/json",
         "//pkg/util/mon",

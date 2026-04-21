@@ -91,10 +91,11 @@ func InitIndexFetchSpec(
 			typ = index.InvertedColumnKeyType()
 		}
 		s.FetchedColumns[i] = fetchpb.IndexFetchSpec_Column{
-			Name:          col.GetName(),
-			ColumnID:      colID,
-			Type:          typ,
-			IsNonNullable: !col.IsNullable() && col.Public(),
+			Name:                 col.GetName(),
+			ColumnID:             colID,
+			Type:                 typ,
+			IsNonNullable:        !col.IsNullable() && col.Public(),
+			AllowCommitTimestamp: col.AllowCommitTimestamp(),
 		}
 	}
 

@@ -1124,27 +1124,40 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionD
 
 	// pending_commit_timestamp() is only meaningful as a value being written to
 	// an ALLOW_COMMIT_TIMESTAMP column. Calling it from any other context (bare
-	// SELECT, WHERE, computed columns, CHECK constraints, etc.) would just
-	// surface the marker datum, which violates the type-system invariant that a
-	// TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ and crashes
-	// downstream consumers (the vectorized engine, distsql encoding, optimizer
-	// folds, etc.). The optbuilder opts in to the write-side contexts where the
-	// marker is well-defined; everywhere else we fail fast at type-check time.
+	// SELECT, WHERE, computed columns, CHECK constraints, etc.) would surface
+	// the marker datum to expression evaluation, which violates the type-system
+	// invariant that a TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ
+	// and crashes downstream consumers (eval, optimizer folds, distsql wire
+	// encoding for projection results, etc.).
 	//
-	// TODO(arul): this rejection is broader than the spec strictly requires.
-	// Read-your-own-writes inside the writing txn legitimately needs to observe
-	// the marker (decoded as NULL), but the vectorized colfetcher in
-	// pkg/sql/colfetcher decodes raw KV bytes directly and doesn't go through
-	// valueside.Decode, so it crashes on the zero-payload marker. Once the
-	// colfetcher (and any other parallel decoders, e.g. distsql flow encoders)
-	// learn about encoding.CommitTimestamp, this rejection can be relaxed:
-	//   - bare SELECT pending_commit_timestamp() should still error (the
-	//     marker has no concrete value to surface to the client),
-	//   - same-txn reads of an ALLOW_COMMIT_TIMESTAMP column that holds the
-	//     unresolved marker should return NULL,
-	//   - per-column ALLOW_COMMIT_TIMESTAMP validation should move to the
-	//     row-writer / optbuilder so we can give a precise error when the
-	//     marker is written to a column that doesn't allow it.
+	// The substitution that turns the marker into a concrete timestamp lives in
+	// the storage→SQL decode path (valueside.DecodeWithMVCCTimestamp +
+	// colencoding.DecodeTableValueToCol), where the MVCC version timestamp is
+	// in scope. That path covers SELECTs of ALLOW_COMMIT_TIMESTAMP columns in
+	// both the row engine and the vectorized engine, but it doesn't help
+	// expressions that synthesize the marker themselves via a call to the
+	// builtin. The optbuilder opts in to the write-side contexts where the
+	// marker is well-defined (assignments to ALLOW_COMMIT_TIMESTAMP columns);
+	// everywhere else we fail fast at type-check time.
+	//
+	// TODO(arul): UPDATE and UPSERT plan the assignment as a projection over
+	// the scan, and the vectorized projection operator eagerly evaluates
+	// pending_commit_timestamp() and tries to convert the resulting
+	// *DPendingCommitTimestamp into a TIMESTAMPTZ vector slot, which crashes
+	// because the datum→vec conversion in colconv asserts *DTimestampTZ.
+	// Plumbing the marker through the datum→vec → vec→KV pipeline (or marking
+	// the builtin as non-vectorizable so these cases fall back to the row
+	// engine) is its own piece of work; INSERT VALUES happens to work today
+	// because the input plan doesn't go through that conversion and the
+	// inserter itself is the row inserter (the vectorized inserter is
+	// COPY-only).
+	//
+	// TODO(arul): this rejection is also still broader than the spec strictly
+	// requires. We could narrow it to only reject when the call appears in a
+	// position the row-writer can't see (i.e. anywhere other than a direct
+	// assignment expression in INSERT/UPDATE/UPSERT), and move per-column
+	// ALLOW_COMMIT_TIMESTAMP validation into the row-writer / optbuilder so
+	// we get a precise error when the marker is written to a non-ACT column.
 	if !sc.Properties.AllowPendingCommitTimestamp && isPendingCommitTimestampBuiltin(def) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"pending_commit_timestamp() can only be used as the value being written "+

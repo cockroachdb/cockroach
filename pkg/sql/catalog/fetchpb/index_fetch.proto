@@ -36,6 +36,13 @@ message IndexFetchSpec {
     // encounter a NULL value for this column (i.e. the column is non-nullable
     // and not a mutation column).
     optional bool is_non_nullable = 4 [(gogoproto.nullable) = false];
+
+    // AllowCommitTimestamp indicates that the column was declared with the
+    // ALLOW_COMMIT_TIMESTAMP qualification. The fetcher uses this signal to
+    // opt into MVCC timestamp decoding so that PENDING_COMMIT_TIMESTAMP()
+    // markers stored in the value can be resolved against the version
+    // timestamp at decode time.
+    optional bool allow_commit_timestamp = 5 [(gogoproto.nullable) = false];
   }
 
   // KeyColumn describes a column that is encoded using the key encoding.

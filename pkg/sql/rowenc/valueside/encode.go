@@ -130,8 +130,10 @@ func EncodeWithScratch(
 		return encoding.EncodeVoidValue(appendTo, uint32(colID)), scratch, nil
 	case *tree.DPendingCommitTimestamp:
 		// PENDING_COMMIT_TIMESTAMP() is encoded as a bare value tag with no
-		// payload. Intent resolution rewrites it into a Time-encoded value
-		// once the txn's commit timestamp is known.
+		// payload. The concrete timestamp is supplied at decode time from the
+		// MVCC version timestamp of the value being read (after intent
+		// resolution that's the writer's commit timestamp); see
+		// DecodeWithMVCCTimestamp.
 		return encoding.EncodeCommitTimestampValue(appendTo, uint32(colID)), scratch, nil
 	default:
 		if buildutil.CrdbTestBuild {

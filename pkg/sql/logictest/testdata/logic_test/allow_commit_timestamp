@@ -158,12 +158,19 @@ CREATE TABLE pct_check (
 );
 
 # Write-side contexts (INSERT VALUES, UPDATE SET, UPSERT VALUES, UPSERT DO
-# UPDATE SET) must let the call through. We only exercise type-check + plan
-# acceptance via EXPLAIN here: actual execution would require teaching the
-# vectorized colfetcher about the zero-payload marker (it decodes raw KV
-# bytes directly and doesn't go through valueside.Decode), which is out of
-# scope for this commit. A bare INSERT against an empty table doesn't read
-# any existing rows, so it's safe to actually run.
+# UPDATE SET) must let the call through. INSERT VALUES is the only one we
+# can actually execute today: the literal flows straight from the values
+# expression into the row encoder, which special-cases the marker datum and
+# emits the zero-payload encoding.CommitTimestamp tag.
+#
+# UPDATE/UPSERT plans run the assignment expression through a projection
+# operator. The vectorized engine eagerly evaluates pending_commit_timestamp()
+# and tries to convert the resulting *DPendingCommitTimestamp into a
+# TIMESTAMPTZ vector slot, which crashes the datum→vec conversion. Plumbing
+# the marker through the projection layer (or making it
+# non-vectorizable / forcing a row-engine fallback for these cases) is its
+# own piece of work, so we only exercise type-check + plan acceptance via
+# EXPLAIN here.
 
 statement ok
 INSERT INTO pct_tab (id, ts) VALUES (1, pending_commit_timestamp());
@@ -180,3 +187,75 @@ ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
 
 statement ok
 DROP TABLE pct_tab;
+
+subtest sql_decode_substitution
+
+# When the fetcher decodes a row whose value carries one or more
+# PENDING_COMMIT_TIMESTAMP() markers, the decoder substitutes the MVCC
+# version timestamp (which, after intent resolution, is the writer's commit
+# timestamp). All ALLOW_COMMIT_TIMESTAMP columns in the same row resolve to
+# the *same* timestamp, since they share a value-encoded tuple stored under
+# one version key. The substitution happens identically in the row engine
+# (via valueside.DecodeWithMVCCTimestamp) and the vectorized engine (via
+# colencoding.DecodeTableValueToCol), and we exercise both paths below.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_two_cols (
+  id INT PRIMARY KEY,
+  data STRING,
+  ts1 TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP,
+  ts2 TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP
+);
+
+statement ok
+INSERT INTO pct_two_cols (id, data, ts1, ts2)
+VALUES (1, 'a', pending_commit_timestamp(), pending_commit_timestamp());
+
+# Insert a second row to make sure each row resolves independently to its
+# own commit timestamp.
+statement ok
+INSERT INTO pct_two_cols (id, data, ts1, ts2)
+VALUES (2, 'b', pending_commit_timestamp(), pending_commit_timestamp());
+
+# Read back through the vectorized engine (default), which routes through
+# the colfetcher → colencoding.DecodeTableValueToCol substitution.
+query BBB rowsort
+SELECT
+  ts1 IS NOT NULL,
+  ts1 = ts2,
+  ts1 > '2024-01-01'::TIMESTAMPTZ
+FROM pct_two_cols
+ORDER BY id;
+----
+true  true  true
+true  true  true
+
+# Read back through the row engine, which routes through the row fetcher →
+# valueside.DecodeWithMVCCTimestamp substitution. Same answer.
+statement ok
+SET vectorize = off;
+
+query BBB rowsort
+SELECT
+  ts1 IS NOT NULL,
+  ts1 = ts2,
+  ts1 > '2024-01-01'::TIMESTAMPTZ
+FROM pct_two_cols
+ORDER BY id;
+----
+true  true  true
+true  true  true
+
+statement ok
+RESET vectorize;
+
+# Different rows resolve to different commit timestamps (separate INSERT
+# statements run in separate txns).
+query B
+SELECT (SELECT ts1 FROM pct_two_cols WHERE id = 1)
+     < (SELECT ts1 FROM pct_two_cols WHERE id = 2);
+----
+true
+
+statement ok
+DROP TABLE pct_two_cols;

@@ -1910,8 +1910,9 @@ const (
 	LTreeDesc          Type = 46
 	// CommitTimestamp is a value-encoding-only marker tag with no payload
 	// bytes. It is written by the row encoder when a column receives the
-	// PENDING_COMMIT_TIMESTAMP() builtin and is later replaced with a Time
-	// tag (carrying the txn's commit timestamp) during intent resolution.
+	// PENDING_COMMIT_TIMESTAMP() builtin and is resolved at SQL decode time
+	// by substituting the MVCC version timestamp of the value being read
+	// (which, post intent resolution, is the writer's commit timestamp).
 	CommitTimestamp Type = 47
 )
 
