@@ -144,7 +144,7 @@ func MakeColumnDefDescs(
 		// GeneratedAsIdentitySequenceOption is used to populate the sequence options for the column information schema.
 		// An empty string will populate default values and null will generate null values.
 		s := ""
-		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
+		if genSeqOpt := d.GeneratedIdentity.SeqOptions; len(genSeqOpt) > 0 {
 			// Override GeneratedAsIdentitySequenceOption default values with specified SeqOptions.
 			s = tree.Serialize(&d.GeneratedIdentity.SeqOptions)
 		}
