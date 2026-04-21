@@ -7,8 +7,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/vectorizer"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // Vectorizer option names.
@@ -187,6 +191,14 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		return errors.Wrap(err, "resolving companion table descriptor")
 	}
 
+	// Create the scheduled job for periodic embedding generation.
+	sj, err := createVectorizerSchedule(
+		ctx, p, n.tableDesc, scheduleCron,
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating vectorizer schedule")
+	}
+
 	// Set the Vectorizer config on the source table descriptor.
 	n.tableDesc.Vectorizer = &catpb.Vectorizer{
 		SourceColumns:    sourceColumns,
@@ -195,6 +207,7 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		Model:            model,
 		ScheduleCron:     scheduleCron,
 		BatchSize:        batchSize,
+		ScheduleID:       sj.ScheduleID(),
 	}
 
 	return p.writeSchemaChange(
@@ -206,3 +219,43 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 func (n *createVectorizerNode) Next(runParams) (bool, error) { return false, nil }
 func (n *createVectorizerNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *createVectorizerNode) Close(context.Context)        {}
+
+// createVectorizerSchedule creates a scheduled job that periodically spawns
+// a vectorizer job to process pending rows.
+func createVectorizerSchedule(
+	ctx context.Context, p *planner, tblDesc *tabledesc.Mutable, cronExpr string,
+) (*jobs.ScheduledJob, error) {
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	sj := jobs.NewScheduledJob(env)
+	sj.SetScheduleLabel(
+		fmt.Sprintf("vectorizer-%s-%d", tblDesc.GetName(), tblDesc.GetID()),
+	)
+	sj.SetOwner(p.User())
+	sj.SetScheduleDetails(jobspb.ScheduleDetails{
+		Wait:                   jobspb.ScheduleDetails_SKIP,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              p.ExecCfg().NodeInfo.LogicalClusterID(),
+		CreationClusterVersion: p.ExecCfg().Settings.Version.ActiveVersion(ctx),
+	})
+	if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
+		return nil, err
+	}
+
+	args := &catpb.ScheduledVectorizerArgs{
+		TableID: tblDesc.GetID(),
+	}
+	anyArgs, err := pbtypes.MarshalAny(args)
+	if err != nil {
+		return nil, err
+	}
+	sj.SetExecutionDetails(
+		tree.ScheduledVectorizerExecutor.InternalName(),
+		jobspb.ExecutionArguments{Args: anyArgs},
+	)
+
+	storage := jobs.ScheduledJobTxn(p.InternalSQLTxn())
+	if err := storage.Create(ctx, sj); err != nil {
+		return nil, err
+	}
+	return sj, nil
+}

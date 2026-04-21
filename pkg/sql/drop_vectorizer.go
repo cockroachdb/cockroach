@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -97,6 +98,21 @@ func (n *dropVectorizerNode) startExec(params runParams) error {
 		dropTableSQL,
 	); err != nil {
 		return errors.Wrap(err, "dropping companion embeddings table")
+	}
+
+	// Delete the vectorizer schedule if one exists.
+	if schedID := n.tableDesc.Vectorizer.ScheduleID; schedID != 0 {
+		storage := jobs.ScheduledJobTxn(p.InternalSQLTxn())
+		env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+		if err := storage.DeleteByID(
+			ctx, env, schedID,
+		); err != nil {
+			// Log but don't fail — the schedule may already be gone.
+			params.p.BufferClientNotice(ctx, errors.WithHintf(
+				errors.Newf("could not delete vectorizer schedule %d", schedID),
+				"manually delete with: DROP SCHEDULE %d", schedID,
+			))
+		}
 	}
 
 	// Clear the Vectorizer config from the source table descriptor.

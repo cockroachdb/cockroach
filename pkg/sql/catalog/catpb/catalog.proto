@@ -106,6 +106,16 @@ message ScheduledRowLevelTTLArgs {
   ];
 }
 
+// ScheduledVectorizerArgs represents the arguments for a vectorizer
+// scheduled job.
+message ScheduledVectorizerArgs {
+  optional uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID",
+    (gogoproto.nullable) = false
+  ];
+}
+
 // PartitioningDescriptor represents the partitioning of an index into spans
 // of keys addressable by a zone config. The key encoding is unchanged. Each
 // partition may optionally be itself divided into further partitions, called

@@ -2720,6 +2720,8 @@ GO_TARGETS = [
     "//pkg/sql/vecindex/vecstore:vecstore_test",
     "//pkg/sql/vecindex:vecindex",
     "//pkg/sql/vecindex:vecindex_test",
+    "//pkg/sql/vectorizer/vectorizerjob:vectorizerjob",
+    "//pkg/sql/vectorizer/vectorizerschedule:vectorizerschedule",
     "//pkg/sql/vectorizer:vectorizer",
     "//pkg/sql/vectorizer:vectorizer_test",
     "//pkg/sql/vtable:vtable",
