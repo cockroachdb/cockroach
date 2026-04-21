@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vectorizer"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -33,6 +34,7 @@ const (
 	vectorizerOptTemplate  = "template"
 	vectorizerOptSchedule  = "schedule"
 	vectorizerOptBatchSize = "batch_size"
+	vectorizerOptLoading   = "loading"
 )
 
 var vectorizerOptionValidation = exprutil.KVOptionValidationMap{
@@ -40,6 +42,7 @@ var vectorizerOptionValidation = exprutil.KVOptionValidationMap{
 	vectorizerOptTemplate:  exprutil.KVStringOptRequireValue,
 	vectorizerOptSchedule:  exprutil.KVStringOptRequireValue,
 	vectorizerOptBatchSize: exprutil.KVStringOptRequireValue,
+	vectorizerOptLoading:   exprutil.KVStringOptRequireValue,
 }
 
 type createVectorizerNode struct {
@@ -137,6 +140,29 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		}
 	}
 
+	loadingMode := "column" // default: embed text directly from column values
+	if v, ok := optMap[vectorizerOptLoading]; ok {
+		switch v {
+		case "column", "uri":
+			loadingMode = v
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"invalid loading mode %q: must be 'column' or 'uri'", v)
+		}
+	}
+	if loadingMode == "uri" && len(n.n.Columns) != 1 {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"URI loading mode requires exactly one column, got %d", len(n.n.Columns))
+	}
+	if loadingMode == "uri" {
+		col := catalog.FindColumnByTreeName(n.tableDesc, n.n.Columns[0])
+		if col.GetType().Family() != types.StringFamily {
+			return pgerror.Newf(pgcode.DatatypeMismatch,
+				"URI loading mode requires a STRING column, got %s",
+				col.GetType().SQLString())
+		}
+	}
+
 	// Collect source column names.
 	sourceColumns := make([]string, len(n.n.Columns))
 	for i, c := range n.n.Columns {
@@ -208,6 +234,7 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		ScheduleCron:     scheduleCron,
 		BatchSize:        batchSize,
 		ScheduleID:       sj.ScheduleID(),
+		LoadingMode:      loadingMode,
 	}
 
 	return p.writeSchemaChange(

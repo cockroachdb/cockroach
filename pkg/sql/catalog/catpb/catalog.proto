@@ -249,6 +249,13 @@ message Vectorizer {
 
   // BatchSize is the number of rows to embed per job invocation.
   optional int64 batch_size = 7 [(gogoproto.nullable) = false];
+
+  // LoadingMode controls how source column content is interpreted.
+  // "column" (default): embed text directly from column values.
+  // "uri": treat column values as URIs, fetch file content via
+  // cloud storage (S3, GCS, HTTP, etc.), auto-detect the content
+  // type, extract text, then embed.
+  optional string loading_mode = 8 [(gogoproto.nullable) = false];
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

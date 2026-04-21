@@ -107,6 +107,7 @@ go_library(
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/sql/vectorizer/content",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
