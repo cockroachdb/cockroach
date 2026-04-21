@@ -36,6 +36,7 @@ var Enabled = settings.RegisterBoolSetting(
 	"obs.ash.enabled",
 	"enable active session history sampling",
 	false,
+	settings.WithPublic,
 )
 
 // enabled caches the value of the obs.ash.enabled cluster setting so
@@ -51,6 +52,7 @@ var SampleInterval = settings.RegisterDurationSetting(
 	"interval between ASH samples",
 	time.Second,
 	settings.PositiveDuration,
+	settings.WithPublic,
 )
 
 // BufferSize controls the maximum number of ASH samples retained in
@@ -62,6 +64,7 @@ var BufferSize = settings.RegisterIntSetting(
 	"number of ASH samples to retain in memory",
 	1_000_000,
 	settings.PositiveInt,
+	settings.WithPublic,
 )
 
 // LogInterval controls how often the top-N workload summary is
@@ -80,6 +83,7 @@ var LogInterval = settings.RegisterDurationSetting(
 		"by the env sampler profiler",
 	10*time.Minute,
 	settings.PositiveDuration,
+	settings.WithPublic,
 )
 
 // LogTopN controls the maximum number of workload entries included
@@ -92,6 +96,7 @@ var LogTopN = settings.RegisterIntSetting(
 		"ranked by sample count descending",
 	10,
 	settings.PositiveInt,
+	settings.WithPublic,
 )
 
 // AppNameResolverFn fetches app name ID-to-string mappings from a
