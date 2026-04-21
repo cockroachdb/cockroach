@@ -30,6 +30,7 @@ Column :  GeneratedAsIdentityType
 Column :  GeneratedAsIdentitySequenceOption
 Column :  PgAttributeNum
 Column :  IsSystemColumn
+Column :  AllowCommitTimestamp
 
 object ColumnComment
 

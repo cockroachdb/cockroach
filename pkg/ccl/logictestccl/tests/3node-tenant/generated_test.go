@@ -144,6 +144,13 @@ func TestTenantLogic_allow_commit_timestamp(
 	runLogicTest(t, "allow_commit_timestamp")
 }
 
+func TestTenantLogic_allow_commit_timestamp_disallowed_ddl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "allow_commit_timestamp_disallowed_ddl")
+}
+
 func TestTenantLogic_alter_column_type(
 	t *testing.T,
 ) {

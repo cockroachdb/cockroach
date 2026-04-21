@@ -1,8 +1,8 @@
 # LogicTest: !local-mixed-25.4
 
-# Covers the ALLOW_COMMIT_TIMESTAMP column qualification. This file just
-# exercises persistence and SHOW CREATE TABLE roundtripping; the full
-# validation matrix is covered by descriptor-level tests.
+# Covers the ALLOW_COMMIT_TIMESTAMP column qualification: persistence and
+# SHOW CREATE TABLE roundtripping. The DDL rejection matrix lives in
+# allow_commit_timestamp_disallowed_ddl.
 
 subtest create_table_roundtrip
 
@@ -92,3 +92,18 @@ no_opt_tab  CREATE TABLE public.no_opt_tab (
               ts TIMESTAMP NULL,
               CONSTRAINT no_opt_tab_pkey PRIMARY KEY (id ASC)
             ) WITH (schema_locked = true);
+
+subtest allow_in_shared_family
+
+# Sanity check: a non-sole column in a shared family is fine.
+
+statement ok
+CREATE TABLE allow_shared_family (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  data STRING,
+  FAMILY f (id, ts, data)
+);
+
+statement ok
+DROP TABLE allow_shared_family;

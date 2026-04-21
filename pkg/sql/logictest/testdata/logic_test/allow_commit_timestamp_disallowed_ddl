@@ -1,0 +1,121 @@
+# LogicTest: !local-mixed-25.4
+
+# DDL rejection matrix for ALLOW_COMMIT_TIMESTAMP. The roundtrip / persistence
+# tests live in the allow_commit_timestamp file.
+#
+# Most subtests below pin column families explicitly so the column-family
+# mutator does not split `ts` into its own family and trip the
+# "sole-in-family" rule before the rule under test gets a chance to fire.
+
+subtest reject_non_timestamp_type
+
+statement error ALLOW_COMMIT_TIMESTAMP must have type TIMESTAMP or TIMESTAMPTZ
+CREATE TABLE reject_int (id INT PRIMARY KEY, ts INT ALLOW_COMMIT_TIMESTAMP);
+
+statement error ALLOW_COMMIT_TIMESTAMP must have type TIMESTAMP or TIMESTAMPTZ
+CREATE TABLE reject_string (id INT PRIMARY KEY, ts STRING ALLOW_COMMIT_TIMESTAMP);
+
+subtest reject_primary_key
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be part of the primary key
+CREATE TABLE reject_pk (
+  id TIMESTAMPTZ PRIMARY KEY ALLOW_COMMIT_TIMESTAMP
+);
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be part of the primary key
+CREATE TABLE reject_pk_inline (
+  ts TIMESTAMP NOT NULL ALLOW_COMMIT_TIMESTAMP,
+  other INT,
+  PRIMARY KEY (ts),
+  FAMILY f (ts, other)
+);
+
+subtest reject_secondary_index_key
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be a key column of index
+CREATE TABLE reject_sec_idx (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  INDEX (ts),
+  FAMILY f (id, ts)
+);
+
+statement disable-cf-mutator ok
+CREATE TABLE idx_later (id INT PRIMARY KEY, ts TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP);
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be a key column of index
+CREATE INDEX ON idx_later (ts);
+
+subtest reject_check_constraint
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be referenced by CHECK constraint
+CREATE TABLE reject_chk (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  CHECK (ts IS NOT NULL),
+  FAMILY f (id, ts)
+);
+
+statement disable-cf-mutator ok
+CREATE TABLE chk_later (id INT PRIMARY KEY, ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP);
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be referenced by CHECK constraint
+ALTER TABLE chk_later ADD CONSTRAINT ts_not_null CHECK (ts IS NOT NULL);
+
+subtest reject_computed_feeding_index
+
+statement error ALLOW_COMMIT_TIMESTAMP is referenced by computed column .* which is a key column of index
+CREATE TABLE reject_computed_idx (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  derived FLOAT AS (extract(epoch FROM ts)) STORED,
+  INDEX (derived),
+  FAMILY f (id, ts, derived)
+);
+
+# Expression indexes are desugared into a hidden inaccessible computed
+# column; the validation fires via that computed column.
+statement error ALLOW_COMMIT_TIMESTAMP is referenced by computed column .* which is a key column of index
+CREATE TABLE reject_expr_idx (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  INDEX ((extract(epoch FROM ts))),
+  FAMILY f (id, ts)
+);
+
+subtest reject_sole_in_family
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be the only column in family
+CREATE TABLE reject_family (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  FAMILY f_id (id),
+  FAMILY f_ts (ts)
+);
+
+# The remaining subtest covers validation reached via ALTER TABLE
+# ADD COLUMN.
+
+subtest alter_add_column_into_own_family
+
+statement disable-cf-mutator ok
+CREATE TABLE alter_add_family (id INT PRIMARY KEY);
+
+statement error ALLOW_COMMIT_TIMESTAMP cannot be the only column in family
+ALTER TABLE alter_add_family ADD COLUMN ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP CREATE FAMILY f_ts;
+
+# The following ALTER paths are intentionally not yet covered:
+#
+#   - DROP COLUMN that would leave the ACT column alone in its family.
+#   - ALTER PRIMARY KEY USING COLUMNS (ts).
+#   - ALTER TABLE ADD COLUMN ... AS (extract(epoch FROM ts)) STORED followed
+#     by CREATE INDEX on the derived column.
+#
+# All three transition the descriptor through intermediate states. The
+# current validation fires inside ValidateSelf, which the declarative
+# schema changer invokes on every descriptor write -- including transient
+# states -- so a violating step either causes the job to loop trying to
+# revert (DROP COLUMN, ALTER PRIMARY KEY) or trips on a synthetic internal
+# CHECK constraint that the planner emits for STORED computed columns.
+# Catching these at DDL build time (via scbuild) and teaching the CHECK
+# rule to ignore synthetic constraints is tracked as future work.
