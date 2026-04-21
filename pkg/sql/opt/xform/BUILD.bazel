@@ -28,6 +28,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
