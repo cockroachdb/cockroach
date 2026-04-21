@@ -205,6 +205,14 @@ var TestingPrettyCfg = prettyCfg
 
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
+	stmt, _ := s.GenerateWithTag()
+	return stmt
+}
+
+// GenerateWithTag returns a random SQL string along with the statement's
+// StatementType (e.g. TypeDDL, TypeDML). Callers can use the type to
+// adjust behavior, for example increasing the statement timeout for DDL.
+func (s *Smither) GenerateWithTag() (string, tree.StatementType) {
 	i := 0
 	for {
 		stmt, ok := s.makeStmt()
@@ -228,7 +236,7 @@ func (s *Smither) Generate() string {
 			// Use simple printing if pretty-printing fails.
 			p = tree.AsStringWithFlags(stmt, fl)
 		}
-		return p
+		return p, stmt.StatementType()
 	}
 }
 
