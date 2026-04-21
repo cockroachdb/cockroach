@@ -12,6 +12,7 @@ package revlogfeed
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -23,6 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
+
+// tickSource is the subset of *revlog.LogReader that the wrapper
+// depends on. It exists so tests can supply a fake without standing up
+// real external storage. *revlog.LogReader satisfies it directly; in
+// production the constructor is called with one.
+type tickSource interface {
+	Ticks(ctx context.Context, start, end hlc.Timestamp) iter.Seq2[revlog.Tick, error]
+}
 
 // defaultHandoffThreshold is the residual catch-up window below which
 // the wrapper opens the live KV rangefeed. Chosen to leave comfortable
@@ -42,14 +51,14 @@ type Options struct {
 // revlog and then delegates to a live KV rangefeed for the tail.
 //
 // Lifecycle: each call to RangeFeed (or RangeFeedFromFrontier) drains
-// closed ticks from lr that fall in (consumer.startFrom, T*] and emits
+// closed ticks from src that fall in (consumer.startFrom, T*] and emits
 // them on eventC as RangeFeedValue + per-tick RangeFeedCheckpoint, then
 // invokes live.RangeFeed with startFrom = T* to deliver the live tail.
 //
 // Coverage gaps are surfaced as a hard error before any events are
 // emitted; this package never silently falls back to live KV.
 type DB struct {
-	lr   *revlog.LogReader
+	src  tickSource
 	live rangefeed.DB
 	opts Options
 }
@@ -58,12 +67,13 @@ var _ rangefeed.DB = (*DB)(nil)
 
 // New constructs a revlog-backed rangefeed.DB. live is the underlying
 // live KV adapter (typically the one returned by rangefeed.NewFactory)
-// and is used for the tail phase after revlog drain completes.
-func New(lr *revlog.LogReader, live rangefeed.DB, opts Options) *DB {
+// and is used for the tail phase after revlog drain completes. src is
+// typically a *revlog.LogReader.
+func New(src tickSource, live rangefeed.DB, opts Options) *DB {
 	if opts.HandoffThreshold == 0 {
 		opts.HandoffThreshold = defaultHandoffThreshold
 	}
-	return &DB{lr: lr, live: live, opts: opts}
+	return &DB{src: src, live: live, opts: opts}
 }
 
 // RangeFeed implements rangefeed.DB.
