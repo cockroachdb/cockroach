@@ -7,36 +7,21 @@ package ldrdecoder
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 // ApplierID identifies which applier owns a transaction. Used to partition
 // transactions across parallel appliers and coordinate cross-applier
 // dependencies.
-type ApplierID int32
+type ApplierID = int32
 
 // TxnID uniquely identifies a transaction. Comparison methods (Less, LessEq)
 // delegate to the underlying Timestamp, so TxnIDs are ordered by timestamp.
-type TxnID struct {
-	Timestamp hlc.Timestamp
-	ApplierID ApplierID
-}
-
-func (t TxnID) Less(s TxnID) bool { return t.Timestamp.Less(s.Timestamp) }
-
-func (t TxnID) LessEq(s TxnID) bool { return t.Timestamp.LessEq(s.Timestamp) }
-
-func (t TxnID) IsSet() bool { return t.Timestamp.IsSet() }
-
-func (t TxnID) String() string {
-	return fmt.Sprintf("(%d,%d)", t.ApplierID, t.Timestamp.WallTime)
-}
+type TxnID = streampb.LDRTxnID
 
 type Transaction struct {
 	TxnID    TxnID

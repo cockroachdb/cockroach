@@ -45,6 +45,7 @@ go_library(
     name = "streampb",
     srcs = [
         "empty.go",
+        "ldr_txn_id.go",
         "streamid.go",
     ],
     embed = [":streampb_go_proto"],
