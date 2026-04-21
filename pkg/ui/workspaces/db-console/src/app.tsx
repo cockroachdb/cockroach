@@ -17,12 +17,13 @@ import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
 import React from "react";
 import { Provider, ReactReduxContext } from "react-redux";
-import { Redirect, Route, Switch } from "react-router-dom";
+import { Redirect, Route, Switch, useParams } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
 import { SWRConfig } from "swr";
 
 import { TimezoneProvider } from "src/contexts/timezoneProvider";
+import { useFeatures } from "src/hooks/useFeatures";
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
@@ -105,6 +106,33 @@ import ActiveTransactionDetails from "./views/transactions/activeTransactionDeta
 //
 // Serial numeric values, such as NodeIDs or Descriptor IDs, are not PII and do
 // not need to be redacted.
+
+// Map of feature slugs to their React components. Each feature PR adds its
+// entry here.
+const featureComponents: Record<string, React.ComponentType> = {
+  // "jobs-manager": JobsManagerPage,
+};
+
+function FeatureRoute(): React.ReactElement {
+  const { slug } = useParams<{ slug: string }>();
+  const { features, isLoading } = useFeatures();
+
+  const Component = featureComponents[slug];
+  if (!Component) {
+    return <Redirect to="/" />;
+  }
+
+  const feature = features.find(f => f.route_path === `/feature/${slug}`);
+  if (!isLoading && (!feature || !feature.enabled)) {
+    return <Redirect to="/" />;
+  }
+
+  if (isLoading) {
+    return null;
+  }
+
+  return <Component />;
+}
 
 export interface AppProps {
   history: History;
@@ -527,6 +555,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           <Redirect from="/cluster/events" to="/events" />
 
                           <Redirect exact from="/nodes" to="/overview/list" />
+
+                          {/* feature-flagged pages */}
+                          <Route
+                            path="/feature/:slug"
+                            component={FeatureRoute}
+                          />
 
                           {/* 404 */}
                           <Route path="*" component={NotFound} />
