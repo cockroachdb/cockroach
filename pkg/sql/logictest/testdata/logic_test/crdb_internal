@@ -79,6 +79,7 @@ SELECT * FROM crdb_internal.pg_catalog_table_is_implemented
 ----
 name                             implemented
 pg_aggregate                     false
+pg_aios                          true
 pg_am                            false
 pg_amop                          true
 pg_amproc                        true
@@ -88,6 +89,7 @@ pg_auth_members                  false
 pg_authid                        false
 pg_available_extension_versions  true
 pg_available_extensions          true
+pg_backend_memory_contexts       true
 pg_cast                          false
 pg_class                         false
 pg_collation                     false
@@ -109,6 +111,7 @@ pg_foreign_server                true
 pg_foreign_table                 true
 pg_group                         true
 pg_hba_file_rules                true
+pg_ident_file_mappings           true
 pg_index                         false
 pg_indexes                       false
 pg_inherits                      true
@@ -122,6 +125,7 @@ pg_namespace                     false
 pg_opclass                       true
 pg_operator                      false
 pg_opfamily                      true
+pg_parameter_acl                 true
 pg_partitioned_table             true
 pg_policies                      false
 pg_policy                        false
@@ -129,6 +133,7 @@ pg_prepared_statements           false
 pg_prepared_xacts                false
 pg_proc                          false
 pg_publication                   true
+pg_publication_namespace         true
 pg_publication_rel               true
 pg_publication_tables            true
 pg_range                         true
@@ -147,29 +152,37 @@ pg_shadow                        false
 pg_shdepend                      false
 pg_shdescription                 false
 pg_shmem_allocations             true
+pg_shmem_allocations_numa        true
 pg_shseclabel                    true
 pg_stat_activity                 true
 pg_stat_all_indexes              true
 pg_stat_all_tables               true
 pg_stat_archiver                 true
 pg_stat_bgwriter                 true
+pg_stat_checkpointer             true
 pg_stat_database                 true
 pg_stat_database_conflicts       true
 pg_stat_gssapi                   true
+pg_stat_io                       true
 pg_stat_progress_analyze         true
 pg_stat_progress_basebackup      true
 pg_stat_progress_cluster         true
+pg_stat_progress_copy            true
 pg_stat_progress_create_index    true
 pg_stat_progress_vacuum          true
+pg_stat_recovery_prefetch        true
 pg_stat_replication              true
+pg_stat_replication_slots        true
 pg_stat_slru                     true
 pg_stat_ssl                      true
 pg_stat_subscription             true
+pg_stat_subscription_stats       true
 pg_stat_sys_indexes              true
 pg_stat_sys_tables               true
 pg_stat_user_functions           true
 pg_stat_user_indexes             true
 pg_stat_user_tables              true
+pg_stat_wal                      true
 pg_stat_wal_receiver             true
 pg_stat_xact_all_tables          true
 pg_stat_xact_sys_tables          true
@@ -189,6 +202,7 @@ pg_statistic_ext                 false
 pg_statistic_ext_data            true
 pg_stats                         true
 pg_stats_ext                     true
+pg_stats_ext_exprs               true
 pg_subscription                  true
 pg_subscription_rel              true
 pg_tables                        false
@@ -207,6 +221,7 @@ pg_user                          false
 pg_user_mapping                  true
 pg_user_mappings                 true
 pg_views                         false
+pg_wait_events                   true
 
 # Verify that table names are not double escaped.
 
