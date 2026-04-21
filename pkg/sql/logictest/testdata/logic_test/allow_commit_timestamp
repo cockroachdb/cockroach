@@ -1,0 +1,94 @@
+# LogicTest: !local-mixed-25.4
+
+# Covers the ALLOW_COMMIT_TIMESTAMP column qualification. This file just
+# exercises persistence and SHOW CREATE TABLE roundtripping; the full
+# validation matrix is covered by descriptor-level tests.
+
+subtest create_table_roundtrip
+
+statement disable-cf-mutator ok
+CREATE TABLE commit_ts_tab (
+  id INT PRIMARY KEY,
+  data STRING,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE commit_ts_tab
+----
+commit_ts_tab  CREATE TABLE public.commit_ts_tab (
+                 id INT8 NOT NULL,
+                 data STRING NULL,
+                 ts TIMESTAMP NULL ALLOW_COMMIT_TIMESTAMP,
+                 CONSTRAINT commit_ts_tab_pkey PRIMARY KEY (id ASC)
+               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE commit_ts_tab
+----
+commit_ts_tab  CREATE TABLE public.commit_ts_tab (
+                 id INT8 NOT NULL,
+                 data STRING NULL,
+                 ts TIMESTAMP NULL ALLOW_COMMIT_TIMESTAMP,
+                 CONSTRAINT commit_ts_tab_pkey PRIMARY KEY (id ASC)
+               ) WITH (schema_locked = true);
+
+subtest add_column_roundtrip
+
+statement disable-cf-mutator ok
+CREATE TABLE add_col_tab (id INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE add_col_tab ADD COLUMN ts TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP;
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE add_col_tab
+----
+add_col_tab  CREATE TABLE public.add_col_tab (
+               id INT8 NOT NULL,
+               ts TIMESTAMPTZ NULL ALLOW_COMMIT_TIMESTAMP,
+               CONSTRAINT add_col_tab_pkey PRIMARY KEY (id ASC)
+             );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE add_col_tab
+----
+add_col_tab  CREATE TABLE public.add_col_tab (
+               id INT8 NOT NULL,
+               ts TIMESTAMPTZ NULL ALLOW_COMMIT_TIMESTAMP,
+               CONSTRAINT add_col_tab_pkey PRIMARY KEY (id ASC)
+             ) WITH (schema_locked = true);
+
+subtest no_option
+
+# Without the qualification, SHOW CREATE must not emit the keyword.
+
+statement disable-cf-mutator ok
+CREATE TABLE no_opt_tab (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE no_opt_tab
+----
+no_opt_tab  CREATE TABLE public.no_opt_tab (
+              id INT8 NOT NULL,
+              ts TIMESTAMP NULL,
+              CONSTRAINT no_opt_tab_pkey PRIMARY KEY (id ASC)
+            );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE no_opt_tab
+----
+no_opt_tab  CREATE TABLE public.no_opt_tab (
+              id INT8 NOT NULL,
+              ts TIMESTAMP NULL,
+              CONSTRAINT no_opt_tab_pkey PRIMARY KEY (id ASC)
+            ) WITH (schema_locked = true);

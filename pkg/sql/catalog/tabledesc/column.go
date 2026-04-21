@@ -162,6 +162,12 @@ func (w column) IsInaccessible() bool {
 	return w.desc.Inaccessible
 }
 
+// AllowCommitTimestamp returns true iff the column was declared with the
+// ALLOW_COMMIT_TIMESTAMP qualification.
+func (w column) AllowCommitTimestamp() bool {
+	return w.desc.AllowCommitTimestamp
+}
+
 // IsExpressionIndexColumn returns true iff the column is an an inaccessible
 // virtual computed column that represents an expression in an expression index.
 func (w column) IsExpressionIndexColumn() bool {

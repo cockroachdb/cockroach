@@ -116,9 +116,10 @@ func alterTableAddColumn(
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
-			TableID:        tbl.TableID,
-			ColumnID:       desc.ID,
-			IsInaccessible: desc.Inaccessible,
+			TableID:              tbl.TableID,
+			ColumnID:             desc.ID,
+			IsInaccessible:       desc.Inaccessible,
+			AllowCommitTimestamp: desc.AllowCommitTimestamp,
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,

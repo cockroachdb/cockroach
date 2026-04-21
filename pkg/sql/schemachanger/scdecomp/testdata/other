@@ -235,6 +235,7 @@ BackReferencedIDs:
   - 113
 ElementState:
 - Column:
+    allowCommitTimestamp: false
     columnId: 1
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -245,6 +246,7 @@ ElementState:
     tableId: 112
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -255,6 +257,7 @@ ElementState:
     tableId: 112
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -265,6 +268,7 @@ ElementState:
     tableId: 112
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -275,6 +279,7 @@ ElementState:
     tableId: 112
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -502,6 +507,7 @@ v2
 BackReferencedIDs:
 ElementState:
 - Column:
+    allowCommitTimestamp: false
     columnId: 1
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -512,6 +518,7 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 2
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -522,6 +529,7 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -532,6 +540,7 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -542,6 +551,7 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -552,6 +562,7 @@ ElementState:
     tableId: 113
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0

@@ -147,6 +147,9 @@ func FormatColumnForDisplay(
 			f.WriteString(") STORED")
 		}
 	}
+	if col.AllowCommitTimestamp() {
+		f.WriteString(" ALLOW_COMMIT_TIMESTAMP")
+	}
 	return f.CloseAndGetString(), nil
 }
 
