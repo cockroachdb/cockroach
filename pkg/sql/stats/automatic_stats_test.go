@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -1429,6 +1430,6 @@ func TestAddMisestimateRandomized(t *testing.T) {
 			indexInfo: id,
 			Spans:     new,
 		})
-		require.Equal(t, dedupAndMerge(append(old, new...)), r.misestimateSpans[id])
+		require.Equal(t, dedupAndMerge(append(slices.Clone(old), new...)), r.misestimateSpans[id])
 	}
 }
