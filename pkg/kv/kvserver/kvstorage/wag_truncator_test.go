@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -588,6 +589,7 @@ func TestTruncateBatchSuffixRetention(t *testing.T) {
 	sl := MakeStateLoader(r1.RangeID)
 	wagNodeIndices := []uint64{5, 10, 11, 12, 13}
 	raftIndices := []kvpb.RaftIndex{1, 2, 3, 4, 5}
+	initIndex := uint64(11)
 	for _, tc := range []struct {
 		retain           int64
 		wantRemaining    []uint64
@@ -608,7 +610,7 @@ func TestTruncateBatchSuffixRetention(t *testing.T) {
 			defer e.Close()
 			e.writeWAGNodesAt(t, wagNodeIndices, raftIndices, r1)
 			truncator := NewWAGTruncator(st, e.Engines, &e.seq)
-			truncator.initIndex = 11
+			truncator.initIndex = initIndex
 			require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
 			require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
 				&kvserverpb.RangeAppliedState{RaftAppliedIndex: 100}))
@@ -622,6 +624,85 @@ func TestTruncateBatchSuffixRetention(t *testing.T) {
 			require.Equal(t, tc.wantAllowedIndex, truncator.allowedIndex)
 		})
 	}
+}
+
+// TestWAGTruncatorAgeRetention verifies that the age-retention timer running
+// advances allowedIndex up to the largest WAG index observed at the previous
+// tick.
+func TestWAGTruncatorAgeRetention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Use a small interval so the test completes quickly. The exact value
+	// doesn't matter for correctness because the test paces ticks via an
+	// unbuffered callback channel.
+	wagRetentionThreshold.Override(ctx, &st.SV, time.Millisecond)
+	wagSuffixRetentionCount.Override(ctx, &st.SV, 100) // retain all WAG nodes
+	r1 := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+	sl := MakeStateLoader(r1.RangeID)
+	wagNodeIndices := []uint64{1, 2, 3, 4, 5}
+	raftIndices := []kvpb.RaftIndex{1, 2, 3, 4, 5}
+	e := makeTestEngines()
+	defer e.Close()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	e.writeWAGNodesAt(t, wagNodeIndices, raftIndices, r1)
+	// Make every WAG event durably applied so canApplyWAGNode returns
+	// !apply; otherwise truncateBatch breaks out of its loop on the first
+	// node and nothing gets deleted regardless of allowedIndex.
+	require.NoError(t, sl.SetRaftReplicaID(ctx, e.StateEngine(), r1.ReplicaID))
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 5}))
+	require.NoError(t, e.StateEngine().Flush())
+
+	truncator := NewWAGTruncator(st, e.Engines, &e.seq)
+	ageReached, ageRelease := make(chan struct{}), make(chan struct{})
+	truncator.knobs = WAGTruncatorTestingKnobs{
+		AfterAgeTickCallback: func() {
+			// We need to stop the goroutine in two phases to coordinate the test.
+			ageReached <- struct{}{}
+			ageRelease <- struct{}{}
+		},
+	}
+	require.NoError(t, truncator.Start(ctx, stopper))
+
+	// First tick is a no-op.
+	<-ageReached
+	require.Equal(t, uint64(0), truncator.allowedIndex)
+	// On the next tick, allowedIndex should be set to 5. Therefore, we expect
+	// all WAG nodes to be truncated except the ones added before next tick.
+	e.writeWAGNode(t, wagpb.Event{Addr: wagpb.MakeAddr(r1, 6), Type: wagpb.EventApply})
+	require.NoError(t, sl.SetRangeAppliedState(ctx, e.StateEngine(),
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: 6}))
+	<-ageRelease
+
+	// On the second tick, we expect allowedIndex to advance to 5, but no nodes
+	// should have been truncated yet.
+	<-ageReached
+	require.Equal(t, uint64(5), truncator.allowedIndex)
+	require.Equal(t, []uint64{1, 2, 3, 4, 5, 6}, e.listWAGNodes(t))
+
+	// We set AfterTruncationCallback to capture the next truncation run. However,
+	// we need to clear AfterAgeTickCallback because after we release the second
+	// tick, there is a test-race where both the t.wakeCh and the t.ageTickCh can
+	// have events. Waiting on one them in the test while the other one gets
+	// called causes the test to get stuck.
+	truncReached, truncRelease := make(chan struct{}), make(chan struct{})
+	truncator.knobs = WAGTruncatorTestingKnobs{
+		AfterTruncationCallback: func() {
+			truncReached <- struct{}{}
+			truncRelease <- struct{}{}
+		},
+	}
+	<-ageRelease
+
+	// At this point, the previous tick should signal for truncation.
+	<-truncReached
+	require.Equal(t, []uint64{6}, e.listWAGNodes(t))
+	// Clear the callbacks to allow the env to shutdown cleanly.
+	truncator.knobs = WAGTruncatorTestingKnobs{}
+	<-truncRelease
 }
 
 // BenchmarkWAGTruncation measures the cost of truncating WAG nodes at different
