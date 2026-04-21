@@ -92,6 +92,7 @@ proto_library(
         "processors_sql.proto",
         "processors_table_stats.proto",
         "processors_ttl.proto",
+        "processors_txn_ldr.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],

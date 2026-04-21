@@ -356,6 +356,12 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		return errCoreNotWorthWrapping
 	case core.RevlogLocalMerge != nil:
 		return errCoreNotWorthWrapping
+	case core.TxnLdrCoordinator != nil:
+		return errCoreNotWorthWrapping
+	case core.TxnLdrApplier != nil:
+		return errCoreNotWorthWrapping
+	case core.TxnLdrDepResolver != nil:
+		return errCoreNotWorthWrapping
 	default:
 		err := errors.AssertionFailedf("unexpected processor core %q", core)
 		if buildutil.CrdbTestBuild {
