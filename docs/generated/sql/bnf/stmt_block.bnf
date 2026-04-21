@@ -1024,7 +1024,7 @@ show_survival_goal_stmt ::=
 	| 'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE' database_name
 
 show_roles_stmt ::=
-	'SHOW' 'ROLES'
+	'SHOW' 'ROLES' opt_with_show_users_options opt_limit_clause
 
 show_savepoint_stmt ::=
 	'SHOW' 'SAVEPOINT' 'STATUS'
@@ -1066,7 +1066,7 @@ show_transfer_stmt ::=
 	| 'SHOW' 'TRANSFER' 'STATE'
 
 show_users_stmt ::=
-	'SHOW' 'USERS'
+	'SHOW' 'USERS' opt_with_show_users_options opt_limit_clause
 
 show_default_session_variables_for_role_stmt ::=
 	'SHOW' 'DEFAULT' 'SESSION' 'VARIABLES' 'FOR' role_or_group_or_user role_spec
@@ -2308,6 +2308,10 @@ statements_or_queries ::=
 opt_show_ranges_options ::=
 	'WITH' show_ranges_options
 
+opt_with_show_users_options ::=
+	'WITH' show_users_options_list
+	| 
+
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -3242,6 +3246,9 @@ show_job_options ::=
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'ZONE' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' | ',' 'ZONE' ) )*
 
+show_users_options_list ::=
+	( show_users_option ) ( ( ',' show_users_option ) )*
+
 partition ::=
 	'PARTITION' partition_name
 
@@ -3854,6 +3861,10 @@ show_backup_options ::=
 
 schema_wildcard ::=
 	wildcard_pattern
+
+show_users_option ::=
+	'SOURCE' '=' a_expr
+	| 'LAST' 'LOGIN' 'BEFORE' a_expr
 
 show_hints_options ::=
 	'DETAILS'
