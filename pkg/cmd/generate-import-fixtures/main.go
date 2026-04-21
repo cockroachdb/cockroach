@@ -33,7 +33,8 @@ import (
 const batchSize = 10000
 
 var formats = map[string]OutputFormat{
-	"avro": &avroFormat{},
+	"avro":    &avroFormat{},
+	"parquet": &parquetFormat{},
 }
 
 func main() {

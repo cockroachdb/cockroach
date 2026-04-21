@@ -5,12 +5,19 @@ go_library(
     srcs = [
         "format.go",
         "format_avro.go",
+        "format_parquet.go",
         "main.go",
         "tpch.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-import-fixtures",
     visibility = ["//visibility:private"],
-    deps = ["@com_github_linkedin_goavro_v2//:goavro"],
+    deps = [
+        "@com_github_apache_arrow_go_v11//parquet",
+        "@com_github_apache_arrow_go_v11//parquet/compress",
+        "@com_github_apache_arrow_go_v11//parquet/file",
+        "@com_github_apache_arrow_go_v11//parquet/schema",
+        "@com_github_linkedin_goavro_v2//:goavro",
+    ],
 )
 
 go_binary(
@@ -23,11 +30,13 @@ go_test(
     name = "generate-import-fixtures_test",
     srcs = [
         "format_avro_test.go",
+        "format_parquet_test.go",
         "main_test.go",
         "tpch_test.go",
     ],
     embed = [":generate-import-fixtures_lib"],
     deps = [
+        "@com_github_apache_arrow_go_v11//parquet/file",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_stretchr_testify//require",
     ],
