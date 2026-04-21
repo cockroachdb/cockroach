@@ -270,3 +270,42 @@ true
 
 statement ok
 DROP TABLE pct_two_cols;
+
+subtest timestamp_column
+
+# pending_commit_timestamp() advertises TIMESTAMPTZ as its return type, but
+# ALLOW_COMMIT_TIMESTAMP is also valid on TIMESTAMP columns. The marker
+# datum is type-oblivious -- valueside.DecodeWithMVCCTimestamp substitutes
+# the right Go type based on the column's declared type at decode time --
+# so all four write paths (INSERT VALUES, UPDATE, UPSERT, INSERT...ON
+# CONFLICT) need to flow the marker through the implicit TIMESTAMPTZ ->
+# TIMESTAMP assignment cast and the EncDatum type check without losing it.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_ts (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP
+);
+
+statement ok
+INSERT INTO pct_ts (id, ts) VALUES (1, pending_commit_timestamp());
+
+statement ok
+UPDATE pct_ts SET ts = pending_commit_timestamp() WHERE id = 1;
+
+statement ok
+UPSERT INTO pct_ts (id, ts) VALUES (2, pending_commit_timestamp());
+
+statement ok
+INSERT INTO pct_ts (id, ts) VALUES (2, pending_commit_timestamp())
+ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
+
+# The decoder must resolve the marker into a TIMESTAMP (not TIMESTAMPTZ)
+# datum, matching the column's declared type.
+query TB
+SELECT pg_typeof(ts), bool_and(ts > '2024-01-01'::TIMESTAMP) FROM pct_ts GROUP BY pg_typeof(ts);
+----
+timestamp without time zone  true
+
+statement ok
+DROP TABLE pct_ts;

@@ -870,6 +870,15 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
 			return d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), roundTo)
+		case *tree.DPendingCommitTimestamp:
+			// The marker is type-oblivious: it carries no value and gets
+			// substituted with the column's declared type at decode time
+			// (see valueside.DecodeWithMVCCTimestamp). The
+			// pending_commit_timestamp() builtin advertises TIMESTAMPTZ as
+			// its return type, but ALLOW_COMMIT_TIMESTAMP is also valid on
+			// TIMESTAMP columns -- pass the marker through so the assignment
+			// cast doesn't drop it on the floor.
+			return d, nil
 		}
 
 	case types.TimestampTZFamily:
@@ -896,6 +905,13 @@ func performCastWithoutPrecisionTruncation(
 			return tree.MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
 		case *tree.DTimestampTZ:
 			return d.Round(roundTo)
+		case *tree.DPendingCommitTimestamp:
+			// See the TimestampFamily branch above. The marker passes
+			// through cast unchanged, even though the cast is a no-op for
+			// TIMESTAMPTZ -> TIMESTAMPTZ; we keep it explicit so a future
+			// reader doesn't have to chase down why the otherwise
+			// uncategorized datum reaches PerformCast.
+			return d, nil
 		}
 
 	case types.IntervalFamily:
