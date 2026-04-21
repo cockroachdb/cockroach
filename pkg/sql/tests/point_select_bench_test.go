@@ -12,6 +12,8 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,6 +40,22 @@ import (
 // empty) leaves the fast path off, matching the unspecialized
 // baseline.
 const pointSelectFastPathEnvVar = "POINT_SELECT_FAST_PATH"
+
+// pointSelectNodesEnvVar controls how many nodes the in-process test
+// cluster uses (default 1). Multi-node setups expose a more realistic
+// KV layer: per-range cache entries and per-peer gRPC adapters are
+// shared across fewer goroutines, which reduces the lock contention
+// that dominated the single-node profile we captured first. Use 3 to
+// approximate a small production cluster.
+const pointSelectNodesEnvVar = "POINT_SELECT_NODES"
+
+// pointSelectSplitsEnvVar controls how many ranges the kv table is
+// split into before the run. With multiple nodes, splits are what
+// allow leases (and therefore KV work) to distribute across nodes —
+// a single range stays on one leaseholder no matter how many nodes
+// exist. Defaults to nodes*16 when nodes > 1, or 0 (no splits) when
+// nodes = 1.
+const pointSelectSplitsEnvVar = "POINT_SELECT_SPLITS"
 
 // BenchmarkPointSelect measures end-to-end p50/p99 latency of a prepared
 // point-SELECT against a primary key, swept across several concurrency
@@ -66,18 +84,25 @@ const (
 // up gradually.
 var pointSelectConcurrencies = []int{1, 8, 16, 32, 64, 128}
 
-// pointSelectDriver owns the in-process server, populated kv table, and
-// pgx URL used to mint client connections. Reused across all concurrency
-// sub-benchmarks within a single -count iteration.
+// pointSelectDriver owns the in-process test cluster, populated kv
+// table, and per-node pgx URLs used to mint client connections.
+// Reused across all concurrency sub-benchmarks within a single -count
+// iteration. When the cluster has more than one node, client
+// connections are distributed round-robin across `pgURLs` so the
+// pgwire-side load (gateway connExecutor goroutines, pgwire socket
+// dispatch) is also spread across nodes, not just KV.
 type pointSelectDriver struct {
 	ctx     context.Context
-	pgURL   url.URL
+	pgURLs  []url.URL
 	cleanup func()
 }
 
-// newPointSelectDriver starts a single-node test cluster, creates the
-// `kv (k INT PRIMARY KEY, v BYTES)` table (matching the schema used by
-// pkg/workload/kv), and pre-populates it with pointSelectTotalRows rows.
+// newPointSelectDriver starts an in-process test cluster (size
+// controlled by POINT_SELECT_NODES, default 1), creates the
+// `kv (k INT PRIMARY KEY, v BYTES)` table, pre-populates it with
+// pointSelectTotalRows rows, and (when the cluster has more than one
+// node) splits the table into POINT_SELECT_SPLITS ranges and
+// scatters them so leases distribute across nodes.
 //
 // The cluster is started with Insecure: true so pgwire connections skip
 // TLS. We profiled the secure variant first and found that ~75% of
@@ -88,6 +113,19 @@ type pointSelectDriver struct {
 func newPointSelectDriver(b *testing.B) *pointSelectDriver {
 	b.Helper()
 	ctx := context.Background()
+
+	nodes := pointSelectIntFromEnv(pointSelectNodesEnvVar, 1)
+	if nodes < 1 {
+		b.Fatalf("POINT_SELECT_NODES must be >= 1, got %d", nodes)
+	}
+	defaultSplits := 0
+	if nodes > 1 {
+		defaultSplits = nodes * 16
+	}
+	splits := pointSelectIntFromEnv(pointSelectSplitsEnvVar, defaultSplits)
+	if splits < 0 {
+		b.Fatalf("POINT_SELECT_SPLITS must be >= 0, got %d", splits)
+	}
 
 	st := cluster.MakeTestingClusterSettings()
 	disableBackgroundWork(st)
@@ -106,7 +144,7 @@ func newPointSelectDriver(b *testing.B) *pointSelectDriver {
 	if pointSelectFastPathEnabledFromEnv() {
 		sql.PointSelectFastPathEnabled.Override(ctx, &st.SV, true)
 	}
-	tc := serverutils.StartCluster(b, 1 /* nodes */, base.TestClusterArgs{
+	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings:  st,
 			Insecure:  true,
@@ -126,17 +164,31 @@ func newPointSelectDriver(b *testing.B) *pointSelectDriver {
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Prevents lease-rebalance noise across short-lived
-					// benchmark runs.
+					// benchmark runs. SCATTER below explicitly redistributes
+					// leases at setup time.
 					DisableLeaseQueue: true,
 				},
 			},
 		},
 	})
-	tc.Server(0).SQLServer().(*sql.Server).GetExecutorConfig().LicenseEnforcer.Disable(ctx)
+	for i := 0; i < nodes; i++ {
+		tc.Server(i).SQLServer().(*sql.Server).GetExecutorConfig().LicenseEnforcer.Disable(ctx)
+	}
+	if nodes > 1 {
+		if err := tc.WaitForFullReplication(); err != nil {
+			b.Fatalf("wait for full replication: %v", err)
+		}
+	}
 
-	pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName("defaultdb"))
+	// Capture pgURLs for every node. The setup work below uses node 0;
+	// the benchmark distributes client connections across all nodes.
+	pgURLs := make([]url.URL, nodes)
+	cleanupURLFns := make([]func(), nodes)
+	for i := 0; i < nodes; i++ {
+		pgURLs[i], cleanupURLFns[i] = tc.ApplicationLayer(i).PGUrl(b, serverutils.DBName("defaultdb"))
+	}
 
-	setupConn, err := pgx.Connect(ctx, pgURL.String())
+	setupConn, err := pgx.Connect(ctx, pgURLs[0].String())
 	if err != nil {
 		b.Fatalf("connect for setup: %v", err)
 	}
@@ -158,14 +210,55 @@ func newPointSelectDriver(b *testing.B) *pointSelectDriver {
 		b.Fatalf("analyze: %v", err)
 	}
 
+	if splits > 0 {
+		// Split at evenly-spaced points across the populated key range.
+		// We aim for `splits` split points, which produces splits+1
+		// ranges. SCATTER then redistributes those ranges' leases.
+		var sb strings.Builder
+		sb.WriteString(`ALTER TABLE kv SPLIT AT VALUES `)
+		for i := 0; i < splits; i++ {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			// Evenly-spaced split point. With pointSelectTotalRows=100k
+			// and splits=48, this yields split points at 2040, 4081, ...
+			point := int64((i + 1) * pointSelectTotalRows / (splits + 1))
+			fmt.Fprintf(&sb, "(%d)", point)
+		}
+		if _, err := setupConn.Exec(ctx, sb.String()); err != nil {
+			b.Fatalf("split: %v", err)
+		}
+		if _, err := setupConn.Exec(ctx, `ALTER TABLE kv SCATTER`); err != nil {
+			b.Fatalf("scatter: %v", err)
+		}
+	}
+
 	return &pointSelectDriver{
-		ctx:   ctx,
-		pgURL: pgURL,
+		ctx:    ctx,
+		pgURLs: pgURLs,
 		cleanup: func() {
-			cleanupURL()
+			for _, fn := range cleanupURLFns {
+				fn()
+			}
 			tc.Stopper().Stop(ctx)
 		},
 	}
+}
+
+// pointSelectIntFromEnv reads a positive integer env var, returning
+// `def` if unset/empty. Aborts via panic (caught by b.Fatal in callers
+// indirectly) on a non-numeric value, since silently defaulting on a
+// typo would invalidate experiment results.
+func pointSelectIntFromEnv(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		panic(fmt.Sprintf("env var %s: cannot parse %q as int: %v", name, v, err))
+	}
+	return n
 }
 
 // pointSelectFastPathEnabledFromEnv parses the POINT_SELECT_FAST_PATH
@@ -193,8 +286,12 @@ type pointSelectClient struct {
 	stmtName string
 }
 
-func (d *pointSelectDriver) newClient() (*pointSelectClient, error) {
-	conn, err := pgx.Connect(d.ctx, d.pgURL.String())
+// newClient mints a connection to one of the cluster's nodes, chosen
+// round-robin by `idx`. Distributing across gateways spreads the
+// pgwire-side load when the cluster has more than one node.
+func (d *pointSelectDriver) newClient(idx int) (*pointSelectClient, error) {
+	pgURL := d.pgURLs[idx%len(d.pgURLs)]
+	conn, err := pgx.Connect(d.ctx, pgURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +348,7 @@ func BenchmarkPointSelect(b *testing.B) {
 func runPointSelectBench(b *testing.B, d *pointSelectDriver, concurrency int) {
 	clients := make([]*pointSelectClient, concurrency)
 	for i := range clients {
-		c, err := d.newClient()
+		c, err := d.newClient(i)
 		if err != nil {
 			b.Fatalf("new client %d: %v", i, err)
 		}
