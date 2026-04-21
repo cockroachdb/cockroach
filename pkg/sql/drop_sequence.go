@@ -216,6 +216,20 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			continue
 		}
 		// If Cascade is not enabled, and more than 1 columns depend on it, and the
+		if isColumnDrop {
+			columnName := tree.Name(col.GetName())
+			tableName := tree.Name(desc.Name)
+			seqName := tree.Name(seqDesc.GetName())
+			return errors.WithDetailf(
+				pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot drop sequence %s because other objects depend on it",
+					tree.ErrString(&seqName),
+				),
+				"sequence is owned by column %s of relation %s",
+				tree.ErrString(&columnName), tree.ErrString(&tableName),
+			)
+		}
 		return pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
 			"cannot drop table %s because other objects depend on it",

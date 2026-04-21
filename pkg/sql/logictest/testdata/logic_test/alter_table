@@ -4882,7 +4882,7 @@ INSERT INTO t_identity_drop (a) VALUES (3);
 statement ok
 CREATE TABLE t_identity_drop_dependency(id INT PRIMARY KEY DEFAULT nextval('public.t_identity_drop_b_seq'));
 
-statement error pgcode 2BP01 pq: cannot drop table t_identity_drop because other objects depend on it
+statement error pgcode 2BP01 pq: cannot drop sequence t_identity_drop_b_seq because other objects depend on it
 ALTER TABLE t_identity_drop ALTER COLUMN b DROP IDENTITY;
 
 let $old_serial_normalization
