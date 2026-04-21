@@ -239,6 +239,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
 		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
 		catconstants.CrdbInternalClusterActiveSessionHistoryTableID: crdbInternalClusterActiveSessionHistoryTable,
+		catconstants.CrdbInternalVectorizerStatusTableID:            crdbInternalVectorizerStatusTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -10019,4 +10020,108 @@ CREATE VIEW crdb_internal.cluster_inspect_errors AS
 		{Name: "crdb_internal_expiration", Typ: types.TimestampTZ},
 	},
 	comment: `wrapper over system.inspect_errors`,
+}
+
+// crdbInternalVectorizerStatusTable exposes the vectorizer configuration for
+// tables that have an active vectorizer. One row per table with a vectorizer.
+var crdbInternalVectorizerStatusTable = virtualSchemaTable{
+	comment: `vectorizer configuration and status for tables with active vectorizers`,
+	schema: `
+CREATE TABLE crdb_internal.vectorizer_status (
+  table_id          INT NOT NULL,
+  database_name     STRING NOT NULL,
+  schema_name       STRING NOT NULL,
+  table_name        STRING NOT NULL,
+  source_columns    STRING[] NOT NULL,
+  template          STRING NOT NULL,
+  model             STRING NOT NULL,
+  embedding_table_id INT NOT NULL,
+  schedule_id       INT NOT NULL,
+  schedule_cron     STRING NOT NULL,
+  batch_size        INT NOT NULL
+)`,
+	populate: func(
+		ctx context.Context,
+		p *planner,
+		dbContext catalog.DatabaseDescriptor,
+		addRow func(...tree.Datum) error,
+	) error {
+		all, err := p.Descriptors().GetAllDescriptors(
+			ctx, p.txn,
+			descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
+		if err != nil {
+			return err
+		}
+		descriptors := all.OrderedDescriptors()
+
+		// Build lookup maps for database and schema names.
+		dbNames := make(map[descpb.ID]string)
+		scNames := make(map[descpb.ID]string)
+		scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
+		for _, desc := range descriptors {
+			if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
+				dbNames[dbDesc.GetID()] = dbDesc.GetName()
+			}
+			if scDesc, ok := desc.(catalog.SchemaDescriptor); ok {
+				scNames[scDesc.GetID()] = scDesc.GetName()
+			}
+		}
+
+		for _, desc := range descriptors {
+			table, isTable := desc.(catalog.TableDescriptor)
+			if !isTable {
+				continue
+			}
+			v := table.TableDesc().Vectorizer
+			if v == nil {
+				continue
+			}
+
+			// Check privileges.
+			if ok, err := p.HasAnyPrivilege(ctx, table); err != nil {
+				return err
+			} else if !ok {
+				continue
+			}
+
+			// If filtering by database context, skip tables not in this db.
+			if dbContext != nil && table.GetParentID() != dbContext.GetID() {
+				continue
+			}
+
+			dbName := dbNames[table.GetParentID()]
+			if dbName == "" {
+				dbName = fmt.Sprintf("[%d]", table.GetParentID())
+			}
+			schemaName := scNames[table.GetParentSchemaID()]
+			if schemaName == "" {
+				schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+			}
+
+			// Build source_columns array.
+			srcCols := tree.NewDArray(types.String)
+			for _, col := range v.SourceColumns {
+				if err := srcCols.Append(tree.NewDString(col)); err != nil {
+					return err
+				}
+			}
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(table.GetID())),      // table_id
+				tree.NewDString(dbName),                     // database_name
+				tree.NewDString(schemaName),                 // schema_name
+				tree.NewDString(table.GetName()),            // table_name
+				srcCols,                                     // source_columns
+				tree.NewDString(v.Template),                 // template
+				tree.NewDString(v.Model),                    // model
+				tree.NewDInt(tree.DInt(v.EmbeddingTableID)), // embedding_table_id
+				tree.NewDInt(tree.DInt(v.ScheduleID)),       // schedule_id
+				tree.NewDString(v.ScheduleCron),             // schedule_cron
+				tree.NewDInt(tree.DInt(v.BatchSize)),        // batch_size
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
 }

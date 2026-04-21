@@ -106,6 +106,16 @@ message ScheduledRowLevelTTLArgs {
   ];
 }
 
+// ScheduledVectorizerArgs represents the arguments for a vectorizer
+// scheduled job.
+message ScheduledVectorizerArgs {
+  optional uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID",
+    (gogoproto.nullable) = false
+  ];
+}
+
 // PartitioningDescriptor represents the partitioning of an index into spans
 // of keys addressable by a zone config. The key encoding is unchanged. Each
 // partition may optionally be itself divided into further partitions, called
@@ -195,6 +205,50 @@ message RowLevelTTL {
   // DisableChangefeedReplication disables changefeed replication for the
   // deletes performed by the TTL job.
   optional bool disable_changefeed_replication = 13 [(gogoproto.nullable) = false];
+}
+
+// Vectorizer represents the configuration for automatic embedding
+// generation on a table. When a vectorizer is configured, a background
+// job periodically scans for new or updated rows and generates vector
+// embeddings using an in-process ONNX model. The embeddings are stored
+// in a companion table and can be used for semantic search.
+message Vectorizer {
+  option (gogoproto.equal) = true;
+
+  // SourceColumns lists the column names whose text content is
+  // concatenated and embedded.
+  repeated string source_columns = 1;
+
+  // Template defines how source columns are combined into text for
+  // embedding. Column references use $column_name syntax, e.g.
+  // "$title: $body". If empty, columns are joined with newlines.
+  optional string template = 2 [(gogoproto.nullable) = false];
+
+  // EmbeddingTableID is the descriptor ID of the companion table that
+  // stores the generated embeddings.
+  optional uint32 embedding_table_id = 3 [
+    (gogoproto.customname) = "EmbeddingTableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID",
+    (gogoproto.nullable) = false
+  ];
+
+  // ScheduleID is the ID of the scheduled job that triggers periodic
+  // embedding generation.
+  optional int64 schedule_id = 4 [
+    (gogoproto.customname) = "ScheduleID",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "ScheduleID"
+  ];
+
+  // Model is the name of the embedding model, e.g. "all-MiniLM-L6-v2".
+  optional string model = 5 [(gogoproto.nullable) = false];
+
+  // ScheduleCron is the cron expression controlling how often the
+  // embedding job runs. Default: "@every 5m".
+  optional string schedule_cron = 6 [(gogoproto.nullable) = false];
+
+  // BatchSize is the number of rows to embed per job invocation.
+  optional int64 batch_size = 7 [(gogoproto.nullable) = false];
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

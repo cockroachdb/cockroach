@@ -1,0 +1,23 @@
+parse
+CREATE VECTORIZER ON documents USING COLUMN (title, body)
+----
+CREATE VECTORIZER ON documents USING COLUMN (title, body)
+CREATE VECTORIZER ON documents USING COLUMN (title, body) -- fully parenthesized
+CREATE VECTORIZER ON documents USING COLUMN (title, body) -- literals removed
+CREATE VECTORIZER ON _ USING COLUMN (_, _) -- identifiers removed
+
+parse
+CREATE VECTORIZER ON mydb.public.documents USING COLUMN (title, body) WITH model = 'all-MiniLM-L6-v2'
+----
+CREATE VECTORIZER ON mydb.public.documents USING COLUMN (title, body) WITH model = 'all-MiniLM-L6-v2'
+CREATE VECTORIZER ON mydb.public.documents USING COLUMN (title, body) WITH model = ('all-MiniLM-L6-v2') -- fully parenthesized
+CREATE VECTORIZER ON mydb.public.documents USING COLUMN (title, body) WITH model = '_' -- literals removed
+CREATE VECTORIZER ON _._._ USING COLUMN (_, _) WITH _ = 'all-MiniLM-L6-v2' -- identifiers removed
+
+parse
+CREATE VECTORIZER ON documents USING COLUMN (content) WITH model = 'all-MiniLM-L6-v2', schedule = '@every 5m', batch_size = '64'
+----
+CREATE VECTORIZER ON documents USING COLUMN (content) WITH model = 'all-MiniLM-L6-v2', schedule = '@every 5m', batch_size = '64'
+CREATE VECTORIZER ON documents USING COLUMN (content) WITH model = ('all-MiniLM-L6-v2'), schedule = ('@every 5m'), batch_size = ('64') -- fully parenthesized
+CREATE VECTORIZER ON documents USING COLUMN (content) WITH model = '_', schedule = '_', batch_size = '_' -- literals removed
+CREATE VECTORIZER ON _ USING COLUMN (_) WITH _ = 'all-MiniLM-L6-v2', _ = '@every 5m', _ = '64' -- identifiers removed

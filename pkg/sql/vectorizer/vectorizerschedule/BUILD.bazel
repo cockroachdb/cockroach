@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vectorizerschedule",
+    srcs = ["vectorizerschedule.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vectorizer/vectorizerschedule",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/scheduledjobs",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/metric",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//types",
+    ],
+)

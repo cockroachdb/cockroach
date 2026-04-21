@@ -1,0 +1,15 @@
+parse
+DROP VECTORIZER ON documents
+----
+DROP VECTORIZER ON documents
+DROP VECTORIZER ON documents -- fully parenthesized
+DROP VECTORIZER ON documents -- literals removed
+DROP VECTORIZER ON _ -- identifiers removed
+
+parse
+DROP VECTORIZER IF EXISTS ON mydb.public.documents
+----
+DROP VECTORIZER IF EXISTS ON mydb.public.documents
+DROP VECTORIZER IF EXISTS ON mydb.public.documents -- fully parenthesized
+DROP VECTORIZER IF EXISTS ON mydb.public.documents -- literals removed
+DROP VECTORIZER IF EXISTS ON _._._ -- identifiers removed

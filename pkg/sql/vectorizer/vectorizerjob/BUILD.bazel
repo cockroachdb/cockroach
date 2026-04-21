@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vectorizerjob",
+    srcs = ["vectorizerjob.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vectorizer/vectorizerjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/embedding",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

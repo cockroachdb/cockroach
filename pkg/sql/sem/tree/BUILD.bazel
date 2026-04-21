@@ -127,6 +127,7 @@ go_library(
         "values.go",
         "var_expr.go",
         "var_name.go",
+        "vectorizer.go",
         "walk.go",
         "with.go",
         "zone.go",

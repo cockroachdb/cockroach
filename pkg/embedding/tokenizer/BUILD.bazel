@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tokenizer",
+    srcs = [
+        "pretokenizer.go",
+        "tokenizer.go",
+        "vocab.go",
+        "wordpiece.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/embedding/tokenizer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_text//unicode/norm",
+    ],
+)
+
+go_test(
+    name = "tokenizer_test",
+    size = "small",
+    srcs = [
+        "pretokenizer_test.go",
+        "tokenizer_test.go",
+        "vocab_test.go",
+        "wordpiece_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":tokenizer"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+    ],
+)

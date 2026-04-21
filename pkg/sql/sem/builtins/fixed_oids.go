@@ -2905,6 +2905,8 @@ var builtinOidsArray = []string{
 	2950: `pg_get_statisticsobjdef(statobj_oid: oid) -> string`,
 	2951: `crdb_internal.zone_config_for_key(key: bytes) -> jsonb`,
 	2952: `crdb_internal.zone_config_span_end(key: bytes) -> bytes`,
+	2953: `embed(text: string) -> vector`,
+	2954: `embed_chunks(text: string) -> tuple{int AS chunk_seq, string AS chunk, vector AS embedding}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

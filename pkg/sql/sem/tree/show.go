@@ -1559,6 +1559,10 @@ const (
 	// ScheduledChangefeedExecutor is an executor responsible for
 	// the execution of the scheduled changefeeds.
 	ScheduledChangefeedExecutor
+
+	// ScheduledVectorizerExecutor is an executor responsible for
+	// generating embeddings for vectorizer-enabled tables.
+	ScheduledVectorizerExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
@@ -1568,6 +1572,7 @@ var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
 	ScheduledRowLevelTTLExecutor:        "scheduled-row-level-ttl-executor",
 	ScheduledSchemaTelemetryExecutor:    "scheduled-schema-telemetry-executor",
 	ScheduledChangefeedExecutor:         "scheduled-changefeed-executor",
+	ScheduledVectorizerExecutor:         "scheduled-vectorizer-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -1589,6 +1594,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 		return "SCHEMA TELEMETRY"
 	case ScheduledChangefeedExecutor:
 		return "CHANGEFEED"
+	case ScheduledVectorizerExecutor:
+		return "VECTORIZER"
 	}
 	return "unsupported-executor"
 }

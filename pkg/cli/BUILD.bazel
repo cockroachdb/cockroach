@@ -149,6 +149,8 @@ go_library(
         "//pkg/cloud/userfile",
         "//pkg/clusterversion",
         "//pkg/docs",
+        "//pkg/embedding",
+        "//pkg/embedding/modelcache",
         "//pkg/geo/geos",
         "//pkg/gossip",
         "//pkg/internal/codeowners",

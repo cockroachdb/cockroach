@@ -101,6 +101,7 @@ const (
 	CreateSequenceTag      = "CREATE SEQUENCE"
 	CreateDatabaseTag      = "CREATE DATABASE"
 	CreatePolicyTag        = "CREATE POLICY"
+	CreateVectorizerTag    = "CREATE VECTORIZER"
 	CommentOnColumnTag     = "COMMENT ON COLUMN"
 	CommentOnConstraintTag = "COMMENT ON CONSTRAINT"
 	CommentOnDatabaseTag   = "COMMENT ON DATABASE"
@@ -111,6 +112,7 @@ const (
 	DropDatabaseTag        = "DROP DATABASE"
 	DropFunctionTag        = "DROP FUNCTION"
 	DropPolicyTag          = "DROP POLICY"
+	DropVectorizerTag      = "DROP VECTORIZER"
 	DropProcedureTag       = "DROP PROCEDURE"
 	DropTriggerTag         = "DROP TRIGGER"
 	DropIndexTag           = "DROP INDEX"
@@ -1143,6 +1145,17 @@ func (*CreatePolicy) StatementTag() string { return CreatePolicyTag }
 func (*CreatePolicy) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*CreateVectorizer) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateVectorizer) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateVectorizer) StatementTag() string { return CreateVectorizerTag }
+
+func (*CreateVectorizer) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (n *CreateSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1290,6 +1303,17 @@ func (*DropPolicy) StatementType() StatementType { return TypeDDL }
 func (*DropPolicy) StatementTag() string { return DropPolicyTag }
 
 func (*DropPolicy) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
+func (*DropVectorizer) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropVectorizer) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropVectorizer) StatementTag() string { return DropVectorizerTag }
+
+func (*DropVectorizer) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
 func (*DropTable) StatementReturnType() StatementReturnType { return DDL }
@@ -2709,6 +2733,7 @@ func (n *CreateTrigger) String() string                       { return AsString(
 func (n *CreateIndex) String() string                         { return AsString(n) }
 func (n *CreateLogicalReplicationStream) String() string      { return AsString(n) }
 func (n *CreatePolicy) String() string                        { return AsString(n) }
+func (n *CreateVectorizer) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }
 func (n *CreateTenant) String() string                        { return AsString(n) }
@@ -2723,6 +2748,7 @@ func (n *DeclareCursor) String() string                       { return AsString(
 func (n *DoBlock) String() string                             { return AsString(n) }
 func (n *DropDatabase) String() string                        { return AsString(n) }
 func (n *DropPolicy) String() string                          { return AsString(n) }
+func (n *DropVectorizer) String() string                      { return AsString(n) }
 func (n *DropRoutine) String() string                         { return AsString(n) }
 func (n *DropTrigger) String() string                         { return AsString(n) }
 func (n *DropIndex) String() string                           { return AsString(n) }

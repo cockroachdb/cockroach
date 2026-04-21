@@ -1654,6 +1654,31 @@ other tools.`,
 The location where all libraries for spatial operations is located.`,
 	}
 
+	EmbeddingLibsDir = FlagInfo{
+		Name: "embedding-libs",
+		Description: `
+The location of the ONNX Runtime library for embedding operations.`,
+	}
+
+	EmbeddingModelPath = FlagInfo{
+		Name: "embedding-model",
+		Description: `
+Path to the ONNX model file for text embedding.`,
+	}
+
+	EmbeddingVocabPath = FlagInfo{
+		Name: "embedding-vocab",
+		Description: `
+Path to the vocabulary file for text embedding tokenization.`,
+	}
+
+	EmbeddingCacheDir = FlagInfo{
+		Name: "embedding-cache-dir",
+		Description: `
+Directory for caching downloaded embedding model files. If not set,
+defaults to a subdirectory of the first on-disk store.`,
+	}
+
 	Global = FlagInfo{
 		Name: "global",
 		Description: `

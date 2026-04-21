@@ -529,6 +529,19 @@ var startCtx struct {
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
 
+	// embeddingLibsDir is the location of the ONNX Runtime library for
+	// embedding operations.
+	embeddingLibsDir string
+	// embeddingModelPath is the path to the ONNX model file for text
+	// embedding.
+	embeddingModelPath string
+	// embeddingVocabPath is the path to the vocabulary file for text
+	// embedding tokenization.
+	embeddingVocabPath string
+	// embeddingCacheDir is the directory for caching downloaded
+	// embedding model files. If empty, derived from the first store.
+	embeddingCacheDir string
+
 	// These configuration handles are flag.Value instances that allow
 	// configuring other variables using either a percentage or a
 	// humanized size value.
@@ -564,6 +577,10 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.embeddingLibsDir = ""
+	startCtx.embeddingModelPath = ""
+	startCtx.embeddingVocabPath = ""
+	startCtx.embeddingCacheDir = ""
 	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 	startCtx.goMemLimitValue = makeBytesOrPercentageValue(&goMemLimit, memoryPercentResolver)

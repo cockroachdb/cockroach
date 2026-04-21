@@ -37,6 +37,7 @@ const (
 	CategoryCast                = "Cast"
 	CategoryCrypto              = "Cryptographic"
 	CategoryDateAndTime         = "Date and time"
+	CategoryEmbedding           = "Embedding"
 	CategoryEnum                = "Enum"
 	CategoryFullTextSearch      = "Full Text Search"
 	CategoryGenerator           = "Set-returning"

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "vectorizer",
+    srcs = ["companion.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vectorizer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+    ],
+)
+
+go_test(
+    name = "vectorizer_test",
+    size = "small",
+    srcs = ["companion_test.go"],
+    embed = [":vectorizer"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "@com_github_stretchr_testify//require",
+    ],
+)

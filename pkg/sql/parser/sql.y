@@ -1113,7 +1113,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> UNBOUNDED UNCOMMITTED UNIDIRECTIONAL UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VECTORIZER VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
 %token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
 %token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
@@ -1327,6 +1327,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> create_proc_stmt
 %type <tree.Statement> create_trigger_stmt
 %type <tree.Statement> create_policy_stmt
+%type <tree.Statement> create_vectorizer_stmt
 
 %type <tree.Statement> check_stmt
 %type <tree.Statement> check_external_connection_stmt
@@ -1358,6 +1359,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
 %type <tree.Statement> drop_policy_stmt
+%type <tree.Statement> drop_vectorizer_stmt
 %type <tree.Statement> drop_proc_stmt
 %type <tree.Statement> drop_trigger_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
@@ -5287,6 +5289,52 @@ create_policy_stmt:
   }
  | CREATE POLICY error // SHOW HELP: CREATE POLICY
 
+// %Help: CREATE VECTORIZER - create an automatic embedding generator on a table
+// %Category: DDL
+// %Text:
+// CREATE VECTORIZER ON <table_name>
+//   USING COLUMN ( <col1> [, <col2>, ...] )
+//   [ WITH <option> = <value> [, ...] ]
+//
+// Options:
+//   model = <string>         Embedding model name (default: all-MiniLM-L6-v2)
+//   template = <string>      Column combination template (default: columns joined with newline)
+//   schedule = <string>      Cron expression for job frequency (default: @every 5m)
+//   batch_size = <int>       Rows per job invocation (default: 64)
+// %SeeAlso: DROP VECTORIZER
+create_vectorizer_stmt:
+  CREATE VECTORIZER ON table_name USING COLUMN '(' name_list ')' opt_with_options
+  {
+    $$.val = &tree.CreateVectorizer{
+      TableName: $4.unresolvedObjectName(),
+      Columns: $8.nameList(),
+      Options: $10.kvOptions(),
+    }
+  }
+| CREATE VECTORIZER error // SHOW HELP: CREATE VECTORIZER
+
+// %Help: DROP VECTORIZER - remove an automatic embedding generator from a table
+// %Category: DDL
+// %Text:
+// DROP VECTORIZER [ IF EXISTS ] ON <table_name>
+// %SeeAlso: CREATE VECTORIZER
+drop_vectorizer_stmt:
+  DROP VECTORIZER ON table_name
+  {
+    $$.val = &tree.DropVectorizer{
+      TableName: $4.unresolvedObjectName(),
+      IfExists: false,
+    }
+  }
+| DROP VECTORIZER IF EXISTS ON table_name
+  {
+    $$.val = &tree.DropVectorizer{
+      TableName: $6.unresolvedObjectName(),
+      IfExists: true,
+    }
+  }
+| DROP VECTORIZER error // SHOW HELP: DROP VECTORIZER
+
 // %Help: DROP POLICY - remove an existing row-level security policy from a table
 // %Category: DDL
 // %Text:
@@ -6281,7 +6329,8 @@ create_ddl_stmt:
 | create_func_stmt     // EXTEND WITH HELP: CREATE FUNCTION
 | create_proc_stmt     // EXTEND WITH HELP: CREATE PROCEDURE
 | create_trigger_stmt  // EXTEND WITH HELP: CREATE TRIGGER
-| create_policy_stmt   // EXTEND WITH HELP: CREATE POLICY
+| create_policy_stmt       // EXTEND WITH HELP: CREATE POLICY
+| create_vectorizer_stmt   // EXTEND WITH HELP: CREATE VECTORIZER
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -6701,7 +6750,8 @@ drop_ddl_stmt:
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
 | drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
 | drop_trigger_stmt  // EXTEND WITH HELP: DROP TRIGGER
-| drop_policy_stmt   // EXTEND WITH HELP: DROP POLICY
+| drop_policy_stmt       // EXTEND WITH HELP: DROP POLICY
+| drop_vectorizer_stmt   // EXTEND WITH HELP: DROP VECTORIZER
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -19502,6 +19552,7 @@ unreserved_keyword:
 | VALUE
 | VARIABLES
 | VARYING
+| VECTORIZER
 | VERIFY_BACKUP_TABLE_DATA
 | VIEW
 | VIEWACTIVITY
@@ -20126,6 +20177,7 @@ bare_label_keywords:
 | VARIABLES
 | VARIADIC
 | VECTOR
+| VECTORIZER
 | VERIFY_BACKUP_TABLE_DATA
 | VIEW
 | VIEWACTIVITY

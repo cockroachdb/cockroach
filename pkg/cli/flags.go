@@ -549,6 +549,10 @@ func init() {
 
 		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingLibsDir, cliflags.EmbeddingLibsDir)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingModelPath, cliflags.EmbeddingModelPath)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingVocabPath, cliflags.EmbeddingVocabPath)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingCacheDir, cliflags.EmbeddingCacheDir)
 
 		// Enable/disable various external storage endpoints.
 		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -1004,6 +1008,10 @@ func init() {
 		// variables from startCtx, this is one case where we afford
 		// sharing a variable between both.
 		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingLibsDir, cliflags.EmbeddingLibsDir)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingModelPath, cliflags.EmbeddingModelPath)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingVocabPath, cliflags.EmbeddingVocabPath)
+		cliflagcfg.StringFlag(f, &startCtx.embeddingCacheDir, cliflags.EmbeddingCacheDir)
 
 		cliflagcfg.IntFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
