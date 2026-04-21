@@ -45,6 +45,19 @@ type Options struct {
 	// draining revlog and opens the live KV rangefeed. Zero means use
 	// defaultHandoffThreshold.
 	HandoffThreshold time.Duration
+
+	// FreshnessBudget is the maximum allowed gap between the freshest
+	// closed tick the source advertises and "now" at the moment of
+	// pre-flight. If the gap exceeds it, RangeFeed fails fast rather
+	// than entering a drain loop that would spin until its
+	// max-iteration guard. Settable per-call so tests can drive
+	// staleness scenarios deterministically.
+	//
+	// TODO(aerin): pick a principled default. For now, fall back to
+	// HandoffThreshold; the two answer related questions ("is the log
+	// keeping up?") and using the same value avoids surprising
+	// asymmetry between pre-flight and the drain loop.
+	FreshnessBudget time.Duration
 }
 
 // DB is a rangefeed.DB implementation that serves catch-up reads from a
@@ -73,31 +86,32 @@ func New(src tickSource, live rangefeed.DB, opts Options) *DB {
 	if opts.HandoffThreshold == 0 {
 		opts.HandoffThreshold = defaultHandoffThreshold
 	}
+	if opts.FreshnessBudget == 0 {
+		opts.FreshnessBudget = opts.HandoffThreshold
+	}
 	return &DB{src: src, live: live, opts: opts}
 }
 
-// checkCoverage verifies that the configured tickSource has contiguous
-// coverage of the window (startFrom, end]. Returns nil if coverage is
-// complete; otherwise returns an error identifying the missing window.
+// checkCoverage verifies that the configured tickSource can serve a
+// catch-up read from startFrom up to (close to) now. Returns nil on
+// success; otherwise returns an error identifying the failure.
 //
-// Coverage is contiguous when:
-//   - the first overlapping tick has TickStart <= startFrom (no gap at
-//     the front), and
-//   - each subsequent tick has TickStart <= previous.TickEnd (no gap
-//     between adjacent ticks).
+// "now" is a parameter (not read from a clock) so tests can drive
+// staleness scenarios deterministically and so the caller controls
+// what "the present" means in the surrounding RangeFeed call.
 //
-// We don't try to verify coverage all the way out to end here: there
-// will always be some residual window between the freshest closed tick
-// and end (the producer is still writing), and that residual is what
-// the live KV rangefeed handles after cutover.
-func (d *DB) checkCoverage(ctx context.Context, startFrom, end hlc.Timestamp) error {
+// Currently checks contiguity only: the yielded ticks must form a
+// chain starting at or before startFrom and with no holes between
+// adjacent ticks. The freshness-budget half (asserting the freshest
+// tick is within opts.FreshnessBudget of now) is the next commit.
+func (d *DB) checkCoverage(ctx context.Context, startFrom, now hlc.Timestamp) error {
 	prevEnd := startFrom
 	any := false
-	for tick, err := range d.src.Ticks(ctx, startFrom, end) {
+	for tick, err := range d.src.Ticks(ctx, startFrom, now) {
 		if err != nil {
 			return errors.Wrap(err, "enumerating revlog ticks")
 		}
-		if tick.Manifest.TickStart.Less(prevEnd) || tick.Manifest.TickStart.Equal(prevEnd) {
+		if tick.Manifest.TickStart.LessEq(prevEnd) {
 			// Contiguous with the previous tick (or covers startFrom on
 			// the first iteration). Advance the cursor.
 			prevEnd = tick.Manifest.TickEnd
@@ -113,7 +127,7 @@ func (d *DB) checkCoverage(ctx context.Context, startFrom, end hlc.Timestamp) er
 	if !any {
 		return errors.Newf(
 			"revlog missing coverage for window (%s, %s]",
-			startFrom, end,
+			startFrom, now,
 		)
 	}
 	return nil
