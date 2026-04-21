@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/oidcauth"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/dbconsole"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -277,6 +278,21 @@ func (s *httpServer) setupRoutes(
 	}
 	s.mux.Handle(debug.Endpoint, handleDebugAuthenticated)
 	s.mux.Handle(inspectz.URLPrefix, handleInspectzAuthenticated)
+
+	// DB Console BFF endpoints.
+	dbconsoleAPI := &dbconsole.ApiV2DBConsole{
+		InternalDB: execCfg.InternalDB,
+		Settings:   s.cfg.Settings,
+	}
+	var dbconsoleHandler http.Handler = http.StripPrefix(
+		"/api/v2/dbconsole", dbconsoleAPI.Handler(),
+	)
+	if !s.cfg.InsecureWebAccess() {
+		dbconsoleHandler = authserver.NewMux(
+			authnServer, dbconsoleHandler, false, /* allowAnonymous */
+		)
+	}
+	s.mux.Handle("/api/v2/dbconsole/", dbconsoleHandler)
 
 	log.Event(ctx, "added http endpoints")
 

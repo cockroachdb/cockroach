@@ -82,6 +82,17 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// Handler returns an http.Handler that routes requests to the appropriate
+// BFF endpoint. The caller should wrap this with http.StripPrefix to strip
+// the /api/v2/dbconsole prefix before dispatching.
+func (api *ApiV2DBConsole) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", api.GetNodes)
+	mux.HandleFunc("/features", api.ListFeatures)
+	mux.HandleFunc("/features/", api.handleFeatureToggle)
+	return mux
+}
+
 // GetNodes returns node information for the cluster overview page.
 // @Summary Get cluster nodes
 // @Description Returns status information for all nodes in the cluster.
