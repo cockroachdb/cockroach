@@ -15,12 +15,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// setupParentChildReplication creates source and destination databases with
+// parent/child tables and starts a transactional LDR stream between them.
+func setupParentChildReplication(
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	sysRunner *sqlutils.SQLRunner,
+	appRunner *sqlutils.SQLRunner,
+) (sourceDB, destDB *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, appRunner)
+
+	appRunner.Exec(t, "CREATE DATABASE source_db")
+	appRunner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB = sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB = sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
+		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)")
+		// TODO(jeffswenson): add fk support to lock derivation then uncomment this.
+		// db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
+	}
+
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (parent, child) ON $1 INTO TABLES (parent, child) WITH MODE = 'transactional'",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	return sourceDB, destDB, jobID
+}
 
 func TestTxnModeSmoketest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -39,32 +74,8 @@ func TestTxnModeSmoketest(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 	runner := sqlutils.MakeSQLRunner(conn)
-
-	// Configure low latency replication settings
 	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
-
-	// Create source and destination databases
-	runner.Exec(t, "CREATE DATABASE source_db")
-	runner.Exec(t, "CREATE DATABASE dest_db")
-
-	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
-	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
-
-	for _, db := range [](*sqlutils.SQLRunner){sourceDB, destDB} {
-		db.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
-		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)")
-		// TODO(jeffswenson): add fk support to lock derivation then uncomment this.
-		// db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
-	}
-
-	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
-
-	var jobID jobspb.JobID
-	destDB.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (parent, child) ON $1 INTO TABLES (parent, child) WITH MODE = 'transactional'",
-		sourceURL.String(),
-	).Scan(&jobID)
+	sourceDB, destDB, jobID := setupParentChildReplication(t, s, sysRunner, runner)
 
 	// Insert parent and children. Lock derivation must order inserts so that
 	// the parent row is written before the child rows.
@@ -437,4 +448,107 @@ func TestTxnModeCreateLogicallyReplicated(t *testing.T) {
 		{"3", "101", "100.00"},
 		{"4", "102", "200.00"},
 	})
+}
+
+func TestTxnModePauseResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sourceDB, destDB, jobID := setupParentChildReplication(t, s, sysRunner, runner)
+
+	// Insert initial data and wait for replication to reach steady state.
+	sourceDB.Exec(t, "INSERT INTO parent (id) VALUES (1); INSERT INTO child (id, parent_id) VALUES (1, 1), (2, 1)")
+
+	now := s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{
+		{"1", "1"},
+		{"2", "1"},
+	})
+
+	// Pause the replication stream.
+	destDB.Exec(t, "PAUSE JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, destDB, jobID)
+
+	// Insert more data while paused.
+	sourceDB.Exec(t, "INSERT INTO parent (id) VALUES (2); INSERT INTO child (id, parent_id) VALUES (3, 2), (4, 2)")
+
+	// Resume and wait for the new data to replicate.
+	destDB.Exec(t, "RESUME JOB $1", jobID)
+
+	now = s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{
+		{"1"},
+		{"2"},
+	})
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{
+		{"1", "1"},
+		{"2", "1"},
+		{"3", "2"},
+		{"4", "2"},
+	})
+}
+
+func TestTxnModeMultiNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t, "multinode test gets bogged down by admission control")
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	cluster := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	})
+	defer cluster.Stopper().Stop(ctx)
+
+	s := cluster.Server(0).ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(cluster.Conns[0])
+	sysRunner := sqlutils.MakeSQLRunner(cluster.SystemLayer(0).SQLConn(t))
+	sourceDB, destDB, jobID := setupParentChildReplication(t, s, sysRunner, runner)
+
+	// Insert parent and children. Lock derivation must order inserts so that
+	// the parent row is written before the child rows.
+	sourceDB.Exec(t, "INSERT INTO parent (id) VALUES (1); INSERT INTO child (id, parent_id) VALUES (1, 1), (2, 1), (3, 1)")
+
+	now := s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{
+		{"1", "1"},
+		{"2", "1"},
+		{"3", "1"},
+	})
+
+	// Delete children and parent. Lock derivation must order deletes so that
+	// child rows are removed before the parent row.
+	sourceDB.Exec(t, "DELETE FROM child WHERE parent_id = 1; DELETE FROM parent WHERE id = 1")
+
+	now = s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{})
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{})
 }

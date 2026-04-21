@@ -834,6 +834,18 @@ func (m *RevlogLocalMergeSpec) summary() (string, []string) {
 	return "RevlogLocalMerge", []string{fmt.Sprintf("%d ticks", len(m.Ticks))}
 }
 
+func (m *TxnLDRCoordinatorSpec) summary() (string, []string) {
+	return "TxnLDRCoordinator", nil
+}
+
+func (m *TxnLDRApplierSpec) summary() (string, []string) {
+	return "TxnLDRApplier", nil
+}
+
+func (m *TxnLDRDepResolverSpec) summary() (string, []string) {
+	return "TxnLDRDepResolver", nil
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

@@ -21,6 +21,7 @@ import "sql/execinfrapb/processors_ttl.proto";
 import "sql/execinfrapb/processors_inspect.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
+import "sql/execinfrapb/processors_txn_ldr.proto";
 import "sql/execinfrapb/processors_export.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
 import "sql/types/types.proto";
@@ -140,9 +141,12 @@ message ProcessorCoreUnion {
   optional IngestFileSpec ingestFile = 54;
   optional RevlogSpec revlog = 55;
   optional RevlogLocalMergeSpec revlogLocalMerge = 56;
+  optional TxnLDRCoordinatorSpec txnLdrCoordinator = 57;
+  optional TxnLDRApplierSpec txnLdrApplier = 58;
+  optional TxnLDRDepResolverSpec txnLdrDepResolver = 59;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 57.
+  // NEXT ID: 60.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just

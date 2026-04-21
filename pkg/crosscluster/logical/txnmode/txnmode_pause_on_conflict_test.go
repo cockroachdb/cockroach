@@ -90,8 +90,8 @@ func TestTxnModePauseOnConflict(t *testing.T) {
 	sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
 	conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
 	require.NoError(t, err)
-	progress := jobutils.GetJobProgress(t, destDB, jobID)
-	replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
+	require.NoError(t, err)
 	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 }
 
@@ -166,7 +166,7 @@ func TestTxnModePauseOnEarliestConflict(t *testing.T) {
 	sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 2").Scan(&conflictMVCCDec)
 	conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
 	require.NoError(t, err)
-	progress := jobutils.GetJobProgress(t, destDB, jobID)
-	replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	replicatedTime, err := ldrtestutils.GetReplicatedTime(t, destDB, jobID)
+	require.NoError(t, err)
 	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 }
