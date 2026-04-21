@@ -2931,6 +2931,11 @@ var builtinOidsArray = []string{
 	2976: `log10(val: int) -> decimal`,
 	2977: `gcd(a: decimal, b: decimal) -> decimal`,
 	2978: `lcm(a: decimal, b: decimal) -> decimal`,
+	2979: `crdb_internal.revlog_show_ticks(collection: string) -> tuple{timestamptz AS tick_end, bool AS closed, int AS key_count, int AS logical_bytes, int AS sst_bytes}`,
+	2980: `crdb_internal.revlog_show_ticks(collection: string, start: timestamptz, end: timestamptz) -> tuple{timestamptz AS tick_end, bool AS closed, int AS key_count, int AS logical_bytes, int AS sst_bytes}`,
+	2981: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz) -> tuple{string AS key, timestamptz AS mvcc_ts, string AS value, string AS prev_value}`,
+	2982: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz, start_key: bytes, end_key: bytes) -> tuple{string AS key, timestamptz AS mvcc_ts, string AS value, string AS prev_value}`,
+	2983: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz, raw_values: bool) -> tuple{string AS key, timestamptz AS mvcc_ts, bytes AS value, bytes AS prev_value}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
