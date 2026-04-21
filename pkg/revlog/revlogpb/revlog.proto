@@ -1,0 +1,95 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// On-disk and on-the-wire types for the revision log. The format is
+// specified in pkg/revlog/revlog-format.md; comments here describe
+// only what each field carries, not how the bytes are laid out or
+// why — see the format spec for that.
+
+syntax = "proto3";
+package cockroach.revlog.revlogpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/revlog/revlogpb";
+
+import "gogoproto/gogo.proto";
+import "kv/kvpb/api.proto";
+import "util/hlc/timestamp.proto";
+
+// Manifest is the close marker for one tick (revlog-format.md §4).
+message Manifest {
+  option (gogoproto.equal) = true;
+
+  // tick_start, tick_end define the tick's coverage interval
+  // (tick_start, tick_end]. Both are always set.
+  util.hlc.Timestamp tick_start = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp tick_end   = 2 [(gogoproto.nullable) = false];
+
+  // files lists the data files contributed to the tick. Read order
+  // is governed by File.flush_order (revlog-format.md §8).
+  repeated File files = 3 [(gogoproto.nullable) = false];
+
+  // stats is the per-tick rollup of File-level stats (best-effort,
+  // monitoring only — not required for read correctness).
+  Stats stats = 4 [(gogoproto.nullable) = false];
+}
+
+// Stats summarizes the size of a unit of revlog output. Attached
+// to FlushedFile (per-flush, producer-reported) and to Manifest
+// (per-tick, coordinator-rolled-up). Best-effort: 0 may mean "no
+// events" or, for sst_bytes specifically, "size not measured".
+message Stats {
+  option (gogoproto.equal) = true;
+
+  // key_count is the number of (user_key, mvcc_ts) entries written.
+  int64 key_count = 1;
+
+  // logical_bytes is sum(len(user_key) + len(value) + len(prev_value)).
+  int64 logical_bytes = 2;
+
+  // sst_bytes is the on-disk size of the produced SSTable(s);
+  // 0 means unmeasured.
+  int64 sst_bytes = 3;
+}
+
+// File identifies one data file in a tick. The on-disk path is
+// reconstructed by the reader from (tick-end, file_id) — see
+// revlog-format.md §3.
+message File {
+  option (gogoproto.equal) = true;
+
+  int64 file_id     = 1 [(gogoproto.customname) = "FileID"];
+  int32 flush_order = 2;
+}
+
+// Flush is the producer→coordinator message: data files just
+// durably written plus rangefeed checkpoints observed since the
+// previous Flush. The two are paired because every reported
+// checkpoint's covered events are, by construction, in the
+// reported files.
+message Flush {
+  repeated FlushedFile                            files       = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.roachpb.RangeFeedCheckpoint  checkpoints = 2 [(gogoproto.nullable) = false];
+}
+
+// FlushedFile pairs one data file with its tick and the producer's
+// per-file Stats. The coordinator rolls Stats into Manifest.Stats;
+// per-file Stats are not retained in the manifest.
+message FlushedFile {
+  util.hlc.Timestamp tick_end = 1 [(gogoproto.nullable) = false];
+  File               file     = 2 [(gogoproto.nullable) = false];
+  Stats              stats    = 3 [(gogoproto.nullable) = false];
+}
+
+// ValueFrame is the SSTable value payload (revlog-format.md §6).
+// (user_key, mvcc_ts) live in the SSTable key, not here.
+message ValueFrame {
+  option (gogoproto.equal) = true;
+
+  // value is the row's new value as raw roachpb.Value bytes.
+  bytes value = 1;
+
+  // prev_value is the row's prior value for WithDiff producers;
+  // empty for inserts or non-WithDiff producers.
+  bytes prev_value = 2;
+}
