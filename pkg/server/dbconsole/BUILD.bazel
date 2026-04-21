@@ -15,6 +15,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/isql",
     ],
 )

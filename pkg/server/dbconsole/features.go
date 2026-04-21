@@ -72,3 +72,42 @@ func requireFeatureEnabled(
 	}
 	return true
 }
+
+// FeatureInfo is the JSON representation of a feature for the API response.
+type FeatureInfo struct {
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	RoutePath   string `json:"route_path"`
+	Enabled     bool   `json:"enabled"`
+}
+
+// FeaturesResponse is the response body for GET /features.
+type FeaturesResponse struct {
+	Features []FeatureInfo `json:"features"`
+}
+
+// ListFeatures returns all registered features with their current
+// enabled/disabled state.
+func (api *ApiV2DBConsole) ListFeatures(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ctx := r.Context()
+	sv := &api.Settings.SV
+
+	result := FeaturesResponse{
+		Features: make([]FeatureInfo, 0, len(features)),
+	}
+	for _, f := range features {
+		result.Features = append(result.Features, FeatureInfo{
+			Name:        f.Name,
+			Title:       f.Title,
+			Description: f.Description,
+			RoutePath:   f.RoutePath,
+			Enabled:     f.Setting.Get(sv),
+		})
+	}
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, result)
+}

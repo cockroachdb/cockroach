@@ -103,3 +103,30 @@ func TestRequireFeatureEnabled(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
 }
+
+func TestListFeatures(t *testing.T) {
+	withTestFeatures(t, testFeatureA, testFeatureB)
+	st := cluster.MakeTestingClusterSettings()
+
+	ctx := context.Background()
+	testFeatureA.Setting.Override(ctx, &st.SV, true)
+
+	api := &ApiV2DBConsole{Settings: st}
+	req := httptest.NewRequest("GET", "/features", nil)
+	w := httptest.NewRecorder()
+	api.ListFeatures(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var result FeaturesResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	require.Len(t, result.Features, 2)
+
+	require.Equal(t, "test_a", result.Features[0].Name)
+	require.Equal(t, "Test test_a", result.Features[0].Title)
+	require.Equal(t, "/feature/test_a", result.Features[0].RoutePath)
+	require.True(t, result.Features[0].Enabled)
+
+	require.Equal(t, "test_b", result.Features[1].Name)
+	require.False(t, result.Features[1].Enabled)
+}

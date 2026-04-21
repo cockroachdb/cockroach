@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 )
 
@@ -42,6 +43,7 @@ type ApiV2DBConsole struct {
 	Status     StatusAPI
 	Admin      AdminAPI
 	InternalDB isql.DB
+	Settings   *cluster.Settings
 }
 
 // NodeInfo contains summarized node information for the UI.
