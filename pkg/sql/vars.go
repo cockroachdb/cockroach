@@ -851,6 +851,27 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_split_and_scatter_backfill`: {
+		Description:        sessionVarDescriptions["enable_split_and_scatter_backfill"],
+		ClusterSettingName: "sql.defaults.split_and_scatter_backfill.enabled",
+		GetStringVal:       makePostgresBoolGetStringValFn(`enable_split_and_scatter_backfill`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_split_and_scatter_backfill", s)
+			if err != nil {
+				return err
+			}
+			m.SetSplitAndScatterBackfillEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SplitAndScatterBackfillEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(splitAndScatterBackfillClusterDefault.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_zigzag_join`: {
 		Description:        sessionVarDescriptions["enable_zigzag_join"],
 		ClusterSettingName: "sql.defaults.zigzag_join.enabled",

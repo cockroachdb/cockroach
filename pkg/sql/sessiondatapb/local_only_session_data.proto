@@ -817,6 +817,10 @@ message LocalOnlySessionData {
   // a scan during query optimization. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
 
+  // SplitAndScatterBackfillEnabled controls whether the schema changer
+  // creates split and scatter operations during index backfills.
+  bool split_and_scatter_backfill_enabled = 208;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

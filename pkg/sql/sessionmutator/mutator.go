@@ -1206,3 +1206,7 @@ func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
 func (m *SessionDataMutator) SetBufferedWritesImplicitTxnsEnabled(val bool) {
 	m.Data.BufferedWritesImplicitTxnsEnabled = val
 }
+
+func (m *SessionDataMutator) SetSplitAndScatterBackfillEnabled(val bool) {
+	m.Data.SplitAndScatterBackfillEnabled = val
+}

@@ -714,7 +714,24 @@ func (d *execDeps) Validator() scexec.Validator {
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (d *execDeps) IndexSpanSplitter() scexec.IndexSpanSplitter {
+	if d.sessionData != nil && !d.sessionData.SplitAndScatterBackfillEnabled {
+		return &noopIndexSpanSplitter{}
+	}
 	return d.spanSplitter
+}
+
+type noopIndexSpanSplitter struct{}
+
+func (noopIndexSpanSplitter) MaybeSplitIndexSpans(
+	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index, _ catalog.Index,
+) error {
+	return nil
+}
+
+func (noopIndexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
+	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
+) error {
+	return nil
 }
 
 // TransactionalJobRegistry implements the scexec.Dependencies interface.
