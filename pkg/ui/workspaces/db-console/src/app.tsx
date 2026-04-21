@@ -70,6 +70,7 @@ import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
 import DiagnosticsHistoryPage from "src/views/reports/containers/diagnosticsHistoryPage";
 import EnqueueRange from "src/views/reports/containers/enqueueRange";
+import FeatureFlagsPage from "src/views/featureFlags";
 import HotRanges from "src/views/reports/containers/hotranges";
 import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
@@ -348,6 +349,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                           {/* debug pages */}
                           <Route exact path="/debug" component={Debug} />
+                          <Route
+                            exact
+                            path="/debug/feature-flags"
+                            component={FeatureFlagsPage}
+                          />
                           <Route
                             path="/debug/tracez"
                             component={SnapshotRouter}
