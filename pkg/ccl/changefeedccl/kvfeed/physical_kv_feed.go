@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -34,97 +36,17 @@ type rangeFeedConfig struct {
 	WithDiff             bool
 	WithFiltering        bool
 	WithFrontierQuantize time.Duration
-	WithBulkDelivery     bool
 	ConsumerID           int64
-	RangeObserver        kvcoord.RangeObserver
 	Knobs                TestingKnobs
 	Timers               *timers.ScopedTimers
 }
 
-// rangefeedFactory is a function that creates and runs a rangefeed.
-type rangefeedFactory func(
-	ctx context.Context,
-	spans []kvcoord.SpanTimePair,
-	eventCh chan<- kvcoord.RangeFeedMessage,
-	opts ...kvcoord.RangeFeedOption,
-) error
-
-// rangefeed tracks a running rangefeed and facilitates conversion from
-// kvcoord.RangeFeedMessage's to kvevent.Event's.
-type rangefeed struct {
-	// memBuf is the buffer that converted kvevent.Event's will be written to.
-	memBuf kvevent.Writer
-	cfg    rangeFeedConfig
-	// eventCh is a receive-only channel corresponding to the send-only channel
-	// that the rangefeed uses to send event messages to.
-	eventCh <-chan kvcoord.RangeFeedMessage
-	knobs   TestingKnobs
-	st      *timers.ScopedTimers
-}
-
-// Run implements the physicalFeedFactory interface.
-func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.physical_kv_feed.run")
-	defer sp.Finish()
-
-	// To avoid blocking raft, RangeFeed puts all entries in a server side
-	// buffer. But to keep things simple, it's a small fixed-sized buffer. This
-	// means we need to ingest everything we get back as quickly as possible, so
-	// we throw it in a buffer here to pick up the slack between RangeFeed and
-	// the sink.
-	//
-	// TODO(dan): Right now, there are two buffers in the changefeed flow when
-	// using RangeFeeds, one here and the usual one between the KVFeed and the
-	// rest of the changefeed (the latter of which is implemented with an
-	// unbuffered channel, and so doesn't actually buffer). Ideally, we'd have
-	// one, but the structure of the KVFeed code right now makes this hard.
-	// Specifically, when a schema change happens, we need a barrier where we
-	// flush out every change before the schema change timestamp before we start
-	// emitting any changes from after the schema change. The KVFeed's
-	// `SchemaFeed` is responsible for detecting and enforcing these , but the
-	// after-KVFeed buffer doesn't have access to any of this state. A cleanup is
-	// in order.
-	eventCh := make(chan kvcoord.RangeFeedMessage, 128)
-	feed := rangefeed{
-		memBuf:  sink,
-		cfg:     cfg,
-		eventCh: eventCh,
-		knobs:   cfg.Knobs,
-		st:      cfg.Timers,
-	}
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(feed.addEventsToBuffer)
-
-	// Bulk delivery is an optimization that decreases rangefeed overhead during
-	// catchup scans. It results in the emission of BulkEvents instead of
-	// individual events where possible.
-	var rfOpts []kvcoord.RangeFeedOption
-	if cfg.WithBulkDelivery {
-		rfOpts = append(rfOpts, kvcoord.WithBulkDelivery())
-	}
-	if cfg.WithDiff {
-		rfOpts = append(rfOpts, kvcoord.WithDiff())
-	}
-	if cfg.WithFiltering {
-		rfOpts = append(rfOpts, kvcoord.WithFiltering())
-	}
-	if cfg.RangeObserver != nil {
-		rfOpts = append(rfOpts, kvcoord.WithRangeObserver(cfg.RangeObserver))
-	}
-	if cfg.ConsumerID != 0 {
-		rfOpts = append(rfOpts, kvcoord.WithConsumerID(cfg.ConsumerID))
-	}
-	if len(cfg.Knobs.RangefeedOptions) != 0 {
-		rfOpts = append(rfOpts, cfg.Knobs.RangefeedOptions...)
-	}
-
-	g.GoCtx(func(ctx context.Context) error {
-		if cfg.Knobs.OnRangeFeedStart != nil {
-			cfg.Knobs.OnRangeFeedStart(cfg.Spans)
-		}
-		return p(ctx, cfg.Spans, eventCh, rfOpts...)
-	})
-	return g.Wait()
+// rangefeedClientFactory implements physicalFeedFactory using the high-level
+// rangefeed.Factory client with callback-based event processing. The Factory
+// handles automatic retries on transient errors, so callers only see permanent
+// failures.
+type rangefeedClientFactory struct {
+	factory *rangefeed.Factory
 }
 
 // quantizeTS returns a new timestamp with the walltime rounded down to the
@@ -140,91 +62,168 @@ func quantizeTS(ts hlc.Timestamp, granularity time.Duration) hlc.Timestamp {
 	}
 }
 
-func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedEvent) error {
-	switch t := e.GetValue().(type) {
-	case *kvpb.RangeFeedValue:
-		if p.cfg.Knobs.OnRangeFeedValue != nil {
-			if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
-				return err
-			}
-		}
-		timer := p.st.RangefeedBufferValue.Start()
-		if err := p.memBuf.Add(
-			ctx, kvevent.MakeKVEvent(e),
-		); err != nil {
+func spansFromPairs(pairs []kvcoord.SpanTimePair) []roachpb.Span {
+	spans := make([]roachpb.Span, len(pairs))
+	for i, p := range pairs {
+		spans[i] = p.Span
+	}
+	return spans
+}
+
+// Run implements the physicalFeedFactory interface.
+func (f *rangefeedClientFactory) Run(
+	ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.physical_kv_feed.run")
+	defer sp.Finish()
+
+	frontier, err := span.MakeFrontier(spansFromPairs(cfg.Spans)...)
+	if err != nil {
+		return err
+	}
+	for _, stp := range cfg.Spans {
+		if _, err := frontier.Forward(stp.Span, stp.StartAfter); err != nil {
+			frontier.Release()
 			return err
 		}
-		timer.End()
-	case *kvpb.RangeFeedCheckpoint:
-		ev := e.ShallowCopy()
-		ev.Checkpoint.ResolvedTS = quantizeTS(ev.Checkpoint.ResolvedTS, p.cfg.WithFrontierQuantize)
-		if resolvedTs := ev.Checkpoint.ResolvedTS; !resolvedTs.IsEmpty() && resolvedTs.Less(p.cfg.Frontier) {
-			// RangeFeed happily forwards any closed timestamps it receives as
-			// soon as there are no outstanding intents under them.
-			// Changefeeds don't care about these at all, so throw them out.
-			return nil
+	}
+
+	// setErr records the first error reported from any callback and cancels
+	// ctx so the rangefeed shuts down. errCh is buffered so the first sender
+	// never blocks; subsequent senders drop their error (the first one wins).
+	// The trailing select on this function reads from errCh so we can return
+	// the original cause rather than ctx.Err()'s generic "context canceled".
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	errCh := make(chan error, 1)
+	setErr := func(err error) {
+		if err == nil {
+			return
 		}
-		if p.knobs.ShouldSkipCheckpoint != nil && p.knobs.ShouldSkipCheckpoint(t) {
-			return nil
+		select {
+		case errCh <- err:
+		default:
 		}
-		timer := p.st.RangefeedBufferCheckpoint.Start()
-		if err := p.memBuf.Add(
-			ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
-		); err != nil {
-			return err
-		}
-		timer.End()
-	case *kvpb.RangeFeedSSTable:
-		// For now, we just error on SST ingestion, since we currently don't
-		// expect SST ingestion into spans with active changefeeds.
-		return errors.Errorf("unexpected SST ingestion: %v", t)
-	case *kvpb.RangeFeedBulkEvents:
-		// TODO(#138346): We can handle these more gracefully once we
-		// migrate to the new rangefeed client. Until then, this is
-		// still an improvement over not using these.
-		for _, e := range t.Events {
-			if err := p.handleRangefeedEvent(ctx, e); err != nil {
-				return err
+		cancel(err)
+	}
+
+	onValue := func(ctx context.Context, value *kvpb.RangeFeedValue) {
+		if cfg.Knobs.OnRangeFeedValue != nil {
+			if err := cfg.Knobs.OnRangeFeedValue(); err != nil {
+				setErr(err)
+				return
 			}
 		}
-	case *kvpb.RangeFeedDeleteRange:
-		// For now, we just ignore on MVCC range tombstones. These are currently
-		// only expected to be used by schema GC and IMPORT INTO, and such spans
-		// should not have active changefeeds across them, at least at the times
-		// of interest. A case where one will show up in a changefeed is when
-		// the primary index changes while we're watching it and then the old
-		// primary index is dropped. In this case, we'll get a schema event to
-		// restart into the new primary index, but the DeleteRange may come
-		// through before the schema event.
+		timer := cfg.Timers.RangefeedBufferValue.Start()
+		ev := &kvpb.RangeFeedEvent{Val: value}
+		if err := sink.Add(ctx, kvevent.MakeKVEvent(ev)); err != nil {
+			setErr(err)
+			return
+		}
+		timer.End()
+	}
+
+	onCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+		// The Factory quantizes internally for its own frontier but passes
+		// original timestamps to callbacks, so we must re-quantize here.
+		resolvedTS := quantizeTS(checkpoint.ResolvedTS, cfg.WithFrontierQuantize)
+		if !resolvedTS.IsEmpty() && resolvedTS.Less(cfg.Frontier) {
+			return
+		}
+		if cfg.Knobs.ShouldSkipCheckpoint != nil && cfg.Knobs.ShouldSkipCheckpoint(checkpoint) {
+			return
+		}
+		timer := cfg.Timers.RangefeedBufferCheckpoint.Start()
+		ev := &kvpb.RangeFeedEvent{
+			Checkpoint: &kvpb.RangeFeedCheckpoint{
+				Span:       checkpoint.Span,
+				ResolvedTS: resolvedTS,
+			},
+		}
+		if err := sink.Add(ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE)); err != nil {
+			setErr(err)
+			return
+		}
+		timer.End()
+	}
+
+	opts := []rangefeed.Option{
+		rangefeed.WithDiff(cfg.WithDiff),
+		rangefeed.WithFiltering(cfg.WithFiltering),
+		rangefeed.WithFrontierQuantized(cfg.WithFrontierQuantize),
+		rangefeed.WithConsumerID(cfg.ConsumerID),
+		rangefeed.WithOnCheckpoint(onCheckpoint),
+		// We do not expect SST ingestion into spans with active changefeeds.
+		// If one occurs, treat it as a permanent error rather than letting the
+		// rangefeed client silently retry on the assertion failure it would
+		// otherwise raise.
+		rangefeed.WithOnSSTable(func(
+			ctx context.Context, sst *kvpb.RangeFeedSSTable, _ roachpb.Span,
+		) {
+			setErr(errors.AssertionFailedf("unexpected SST ingestion: %v", sst))
+		}),
+		// We ignore MVCC range tombstones. These are currently only expected to
+		// be used by schema GC and IMPORT INTO, and such spans should not have
+		// active changefeeds across them, at least at the times of interest. A
+		// case where one will show up in a changefeed is when the primary index
+		// changes while we're watching it and then the old primary index is
+		// dropped. In this case, we'll get a schema event to restart into the
+		// new primary index, but the DeleteRange may come through before the
+		// schema event.
+		//
+		// Without an OnDeleteRange handler the rangefeed client treats these
+		// events as an assertion failure, so register an explicit no-op.
 		//
 		// TODO(erikgrinaker): Write an end-to-end test which verifies that an
 		// IMPORT INTO which gets rolled back using MVCC range tombstones will
 		// not be visible to a changefeed, neither when it was started before
 		// the import or when resuming from a timestamp before the import. The
-		// table decriptor should be marked as offline during the import, and
+		// table descriptor should be marked as offline during the import, and
 		// catchup scans should detect that this happened and prevent reading
 		// anything in that timespan. See:
 		// https://github.com/cockroachdb/cockroach/issues/70433
-		return nil
-	default:
-		return errors.Errorf("unexpected RangeFeedEvent variant %v", t)
+		rangefeed.WithOnDeleteRange(func(
+			ctx context.Context, value *kvpb.RangeFeedDeleteRange,
+		) {
+		}),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			setErr(err)
+		}),
 	}
-	return nil
-}
 
-// addEventsToBuffer consumes rangefeed events from `p.eventCh`, transforms
-// them to kvevent.Event's, and pushes them into `p.memBuf`.
-func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.physical_kv_feed.add_events_to_buffer")
-	defer sp.Finish()
+	if cfg.Knobs.OnRangeFeedStart != nil {
+		cfg.Knobs.OnRangeFeedStart(cfg.Spans)
+	}
 
-	for {
+	// TODO(aerfrei): rangefeed.Factory.New takes an initialTimestamp, but it
+	// is only consulted by RangeFeed.Start (resumeWithFrontier=false).
+	// StartFromFrontier reads per-span timestamps from the frontier and
+	// ignores it. We pass an empty timestamp to make that explicit at the
+	// callsite, but the underlying API would be cleaner if initialTimestamp
+	// lived on Start instead of New, or if New had two variants matching the
+	// two start methods.
+	rf := f.factory.New("changefeed", hlc.Timestamp{}, onValue, opts...)
+	if err := rf.StartFromFrontier(ctx, frontier); err != nil {
+		frontier.Release()
+		return err
+	}
+	// Close blocks until the rangefeed goroutine exits; releasing the
+	// frontier first would invalidate it underneath an in-flight callback.
+	defer func() {
+		rf.Close()
+		frontier.Release()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		// Prefer the causal error from errCh if setErr triggered the
+		// cancellation, since ctx.Err() would only say "context canceled".
 		select {
-		case e := <-p.eventCh:
-			if err := p.handleRangefeedEvent(ctx, e.RangeFeedEvent); err != nil {
-				return err
-			}
-		case <-ctx.Done():
+		case err := <-errCh:
+			return err
+		default:
 			return ctx.Err()
 		}
 	}

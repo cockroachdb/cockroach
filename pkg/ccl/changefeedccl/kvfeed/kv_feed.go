@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -45,6 +46,7 @@ type MonitoringConfig struct {
 type Config struct {
 	Settings           *cluster.Settings
 	DB                 *kv.DB
+	RangeFeedFactory   *rangefeed.Factory
 	Codec              keys.SQLCodec
 	Clock              *hlc.Clock
 	Spans              []roachpb.Span
@@ -82,11 +84,6 @@ type Config struct {
 	// server, where if true, the server respects the OmitInRangefeeds flag and
 	// enables filtering out any transactional writes with that flag set to true.
 	WithFiltering bool
-
-	// WithBulkDelivery is propagated via the RangefeedRequest to the rangefeed
-	// server, where if true, the server will deliver rangefeed events in bulk
-	// during catchup scans.
-	WithBulkDelivery bool
 
 	// WithFrontierQuantize specifies the resolved timestamp quantization
 	// granularity. If non-zero, resolved timestamps from rangefeed checkpoint
@@ -137,12 +134,7 @@ func Run(ctx context.Context, cfg Config) (retErr error) {
 			onBackfillRangeCallback: cfg.MonitoringCfg.OnBackfillRangeCallback,
 		}
 	}
-	var pff physicalFeedFactory
-	{
-		sender := cfg.DB.NonTransactionalSender()
-		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-		pff = rangefeedFactory(distSender.RangeFeed)
-	}
+	pff := &rangefeedClientFactory{factory: cfg.RangeFeedFactory}
 
 	bf := func() kvevent.Buffer {
 		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, &cfg.Metrics.RangefeedBufferMetrics)
@@ -152,7 +144,7 @@ func Run(ctx context.Context, cfg Config) (retErr error) {
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering, cfg.WithBulkDelivery,
+		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
 		cfg.WithFrontierQuantize,
 		cfg.ConsumerID,
 		cfg.InitialHighWater, cfg.InitialSpanTimePairs, cfg.EndTime,
@@ -222,7 +214,6 @@ type kvFeed struct {
 	withDiff             bool
 	withFiltering        bool
 	withInitialBackfill  bool
-	withBulkDelivery     bool
 	consumerID           int64
 	initialHighWater     hlc.Timestamp
 	initialSpanTimePairs []kvcoord.SpanTimePair
@@ -231,7 +222,6 @@ type kvFeed struct {
 	codec                keys.SQLCodec
 
 	onBackfillCallback func() func()
-	rangeObserver      kvcoord.RangeObserver
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -252,7 +242,7 @@ func newKVFeed(
 	spans []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff, withFiltering, withBulkDelivery bool,
+	withInitialBackfill, withDiff, withFiltering bool,
 	withFrontierQuantize time.Duration,
 	consumerID int64,
 	initialHighWater hlc.Timestamp,
@@ -275,7 +265,6 @@ func newKVFeed(
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
 		withFrontierQuantize: withFrontierQuantize,
-		withBulkDelivery:     withBulkDelivery,
 		consumerID:           consumerID,
 		initialHighWater:     initialHighWater,
 		endTime:              endTime,
@@ -579,11 +568,9 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		WithDiff:             f.withDiff,
 		WithFiltering:        f.withFiltering,
 		WithFrontierQuantize: f.withFrontierQuantize,
-		WithBulkDelivery:     f.withBulkDelivery,
 		ConsumerID:           f.consumerID,
 		Knobs:                f.knobs,
 		Timers:               f.timers,
-		RangeObserver:        f.rangeObserver,
 	}
 
 	// The following two synchronous calls works as follows:
