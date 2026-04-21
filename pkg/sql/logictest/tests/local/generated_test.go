@@ -531,6 +531,13 @@ func TestLogic_crdb_internal_default_privileges(
 	runLogicTest(t, "crdb_internal_default_privileges")
 }
 
+func TestLogic_crdb_internal_tsdb(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_tsdb")
+}
+
 func TestLogic_create_as(
 	t *testing.T,
 ) {

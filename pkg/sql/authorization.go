@@ -989,11 +989,17 @@ func (p *planner) objectIsUnsafe(ctx context.Context, privilegeObject privilege.
 		return true
 	}
 
-	// Unsupported crdb_internal tables are considered unsafe.
+	// Unsupported crdb_internal tables are considered unsafe, unless they
+	// gate themselves with their own privilege check (see
+	// PrivilegeGatedCRDBInternalTables).
 	if d.GetParentSchemaID() == catconstants.CrdbInternalID {
-		if _, ok := SupportedCRDBInternalTables[d.GetName()]; !ok {
-			return true
+		if _, ok := SupportedCRDBInternalTables[d.GetName()]; ok {
+			return false
 		}
+		if _, ok := PrivilegeGatedCRDBInternalTables[d.GetName()]; ok {
+			return false
+		}
+		return true
 	}
 
 	return false

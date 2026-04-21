@@ -3280,6 +3280,43 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"tsround": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "input", Typ: types.TimestampTZ},
+				{Name: "bucket", Typ: types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestampTZ(args[0])
+				bucket := tree.MustBeDInterval(args[1])
+				bucketNanos, err := fixedIntervalNanos(bucket.Duration)
+				if err != nil {
+					return nil, err
+				}
+				// Truncate the unix-nanosecond representation to the bucket
+				// boundary using Go's floored division so that pre-epoch
+				// timestamps round towards negative infinity, matching
+				// date_trunc semantics.
+				inputNanos := ts.UnixNano()
+				rem := inputNanos % bucketNanos
+				if rem < 0 {
+					rem += bucketNanos
+				}
+				truncated := time.Unix(0, inputNanos-rem).UTC()
+				return tree.MakeDTimestampTZ(truncated, time.Microsecond)
+			},
+			Info: "Truncates `input` to the nearest multiple of `bucket` at or " +
+				"below it, returning the resulting timestamp in UTC. Buckets " +
+				"containing month or year components are rejected because " +
+				"their length is calendar-dependent; only buckets composed of " +
+				"days, hours, minutes, seconds, and sub-second units are " +
+				"supported. Useful for downsampling time series in GROUP BY.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	"row_to_json": makeBuiltin(jsonProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "row", Typ: types.AnyTuple}},
@@ -12516,6 +12553,34 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 		}
 	}
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
+}
+
+// fixedIntervalNanos converts an interval consisting only of fixed-length
+// components (days, hours, minutes, seconds, and sub-second units) into a
+// total number of nanoseconds. Intervals with month or year components are
+// rejected because their length depends on the surrounding calendar
+// position. Days are treated as exactly 24 hours, mirroring the assumption
+// that pkg/ts makes for time-series bucketing.
+func fixedIntervalNanos(d duration.Duration) (int64, error) {
+	if d.Months != 0 {
+		return 0, pgerror.New(pgcode.InvalidParameterValue,
+			"tsround bucket cannot contain month or year components")
+	}
+	const nanosPerDay = int64(24 * time.Hour)
+	total := d.Days*nanosPerDay + d.Nanos()
+	if total <= 0 {
+		return 0, pgerror.New(pgcode.InvalidParameterValue,
+			"tsround bucket must be positive")
+	}
+	// The result is constructed via MakeDTimestampTZ with microsecond
+	// precision, which rounds to the nearest microsecond and could move
+	// the truncated value past the input for sub-microsecond buckets.
+	// Reject those rather than break the floor invariant.
+	if total < int64(time.Microsecond) {
+		return 0, pgerror.New(pgcode.InvalidParameterValue,
+			"tsround bucket must be at least 1 microsecond")
+	}
+	return total, nil
 }
 
 func truncateInterval(fromInterval *tree.DInterval, timeSpan string) (*tree.DInterval, error) {

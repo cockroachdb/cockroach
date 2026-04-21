@@ -1,0 +1,147 @@
+# LogicTest: local
+
+# Schema sanity: the table is exposed under crdb_internal with the
+# expected columns and the (name, timestamp) virtual index.
+query TT
+SELECT column_name, data_type
+  FROM [SHOW COLUMNS FROM crdb_internal.tsdb]
+ ORDER BY column_name
+----
+name       STRING
+source     STRING
+timestamp  TIMESTAMPTZ
+value      FLOAT8
+
+# Permission: a non-admin without VIEWCLUSTERMETADATA cannot read the table.
+user testuser
+
+statement error user testuser does not have VIEWCLUSTERMETADATA system privilege
+SELECT * FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+user root
+
+# Constraint: queries without a name filter are rejected, because an
+# unconstrained scan would have to walk the entire TSDB key space.
+statement error crdb_internal.tsdb requires a name filter
+SELECT * FROM crdb_internal.tsdb LIMIT 1
+
+# A name + timestamp range query is accepted. Whether any datapoints are
+# returned depends on whether the test cluster has had time to write any
+# samples for the requested metric, so we just assert that the query runs
+# without error and returns rows of the expected shape.
+statement ok
+SELECT name, timestamp, value, source
+  FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+# Downsampling via tsround() + GROUP BY composes with the table.
+statement ok
+SELECT source, tsround(timestamp, INTERVAL '1 minute') AS bucket, max(value)
+  FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+ GROUP BY 1, 2
+ ORDER BY 1, 2
+
+# An IN list on name fans out to one TSDB lookup per metric. The query
+# must complete without error; the cluster may or may not have produced
+# datapoints by this point in the test run, so we don't assert row
+# counts.
+statement ok
+SELECT name, timestamp, value, source
+  FROM crdb_internal.tsdb
+ WHERE name IN ('cr.node.sql.select.count', 'cr.node.sql.insert.count')
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+# Range constraints over name are not supported. The error may surface
+# either at the table level (if the optimizer falls back to a full scan)
+# or at the index pushdown level (if the optimizer keeps the index but
+# sees a non-equality span).
+statement error crdb_internal.tsdb (requires a name filter|name filter must be an equality)
+SELECT * FROM crdb_internal.tsdb
+ WHERE name > 'cr.node.a' AND name < 'cr.node.z'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+# A query for an unknown metric returns zero rows rather than an error.
+query I
+SELECT count(*) FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.does.not.exist'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+----
+0
+
+# A window entirely in the future returns zero rows cleanly: the end of
+# the requested range is clamped to "now" before being dispatched to the
+# TSDB layer, so startNanos > endNanos and the per-source query is
+# skipped.
+query I
+SELECT count(*) FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() + INTERVAL '100 years'
+                     AND now() + INTERVAL '101 years'
+----
+0
+
+# A window straddling now() is fine — the past portion has data, the
+# future portion is silently dropped by the TSDB.
+statement ok
+SELECT * FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() - INTERVAL '5 minutes'
+                     AND now() + INTERVAL '5 minutes'
+
+# Per-store metrics use a TSDB source identifier that is either the
+# store ID (e.g. "1") or "<nodeID>-<storeID>", depending on the metric
+# family. The source column carries the value verbatim, so the query
+# runs without error regardless of whether the test cluster has produced
+# any datapoints by this point.
+statement ok
+SELECT name, timestamp, value, source
+  FROM crdb_internal.tsdb
+ WHERE name = 'cr.store.livebytes'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+# Granting VIEWCLUSTERMETADATA unblocks the table for a non-admin.
+statement ok
+GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser
+
+user testuser
+
+statement ok
+SELECT name, timestamp, value, source
+  FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERMETADATA FROM testuser
+
+# PREPARE/EXECUTE: prepared statements work the same as direct queries.
+# The table opts out of the unsafe_internals gate (its own VIEWCLUSTERMETADATA
+# privilege check is the access control), so neither path trips the gate.
+statement ok
+PREPARE tsdb_by_name AS
+  SELECT count(*) FROM crdb_internal.tsdb
+   WHERE name = $1
+     AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+
+query I
+EXECUTE tsdb_by_name('cr.node.does.not.exist')
+----
+0
+
+statement ok
+EXECUTE tsdb_by_name('cr.node.sql.select.count')
+
+# A query with no timestamp predicate is rejected with a clear error,
+# because an unconstrained timestamp span would either scan the entire
+# retained history or produce a malformed KV Scan.
+statement error crdb_internal.tsdb requires a timestamp filter
+SELECT * FROM crdb_internal.tsdb
+ WHERE name = 'cr.node.sql.select.count'
+ LIMIT 1

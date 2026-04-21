@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"sort"
@@ -63,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -239,6 +241,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
 		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
 		catconstants.CrdbInternalClusterActiveSessionHistoryTableID: crdbInternalClusterActiveSessionHistoryTable,
+		catconstants.CrdbInternalTsdbTableID:                        crdbInternalTsdbTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -268,6 +271,19 @@ var SupportedCRDBInternalTables = map[string]struct{}{
 // Note that this map is currently unused but serves to document which vtables
 // are expected to be used in production setting.
 var _ = SupportedCRDBInternalTables
+
+// PrivilegeGatedCRDBInternalTables lists crdb_internal tables that are
+// considered safe for direct external access because they perform their
+// own privilege check (e.g., VIEWCLUSTERMETADATA) inside their populate
+// function. Such tables are exempt from the allow_unsafe_internals
+// session-variable gate; the privilege check IS the access control.
+//
+// Unlike SupportedCRDBInternalTables (which is locked for legacy
+// reasons), new tables that gate themselves with a privilege check may
+// be added here.
+var PrivilegeGatedCRDBInternalTables = map[string]struct{}{
+	`tsdb`: {},
+}
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	comment: `detailed identification strings (RAM, local node only)`,
@@ -10008,6 +10024,191 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 
 		return nil
 	},
+}
+
+// crdb_internal.tsdb exposes the in-cluster time-series database (TSDB)
+// as a SQL-queryable virtual table. Each row is a single datapoint for a
+// (metric, source) pair at a particular timestamp.
+//
+// The table is intended to be queried with WHERE name = '<metric>' and a
+// timestamp range. The (name, timestamp) virtual index is wired through
+// populateFromConstraint and pushes both predicates down to the TSDB so
+// that we never enumerate the entire metrics history. Queries without a
+// metric name filter are rejected to avoid unbounded scans.
+//
+// The source column carries the TSDB source identifier verbatim. For
+// per-node metrics this is the node ID as a string ("1", "2", ...); for
+// per-store metrics it can be either the store ID or "<nodeID>-<storeID>",
+// depending on the metric family. Callers who need typed access should
+// parse the column themselves.
+//
+// Downsampling is expressed in plain SQL via the tsround() builtin and
+// GROUP BY, e.g.:
+//
+//	SELECT source, tsround(timestamp, INTERVAL '1 minute'), max(value)
+//	  FROM crdb_internal.tsdb
+//	 WHERE name = 'cr.node.sql.select.count'
+//	   AND timestamp BETWEEN now() - INTERVAL '1 hour' AND now()
+//	 GROUP BY 1, 2 ORDER BY 1, 2;
+var crdbInternalTsdbTable = virtualSchemaTable{
+	comment: `time-series datapoints from the in-cluster TSDB (system tenant or this tenant's own metrics)`,
+	schema: `
+CREATE TABLE crdb_internal.tsdb (
+  name      STRING NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
+  value     FLOAT NOT NULL,
+  source    STRING NOT NULL,
+  INDEX (name, timestamp)
+)`,
+	indexes: []virtualIndex{
+		{
+			populateFromConstraint: populateCrdbInternalTsdbFromConstraint,
+		},
+	},
+	populate: func(
+		ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, _ func(...tree.Datum) error,
+	) error {
+		// We require callers to constrain by metric name so that the
+		// virtual index is chosen and populateFromConstraint runs. An
+		// unconstrained scan would have no way to enumerate metrics
+		// without first walking the entire TSDB key space.
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb requires a name filter, e.g. WHERE name = 'cr.node.sql.select.count'")
+	},
+}
+
+// populateCrdbInternalTsdbFromConstraint serves the (name, timestamp)
+// virtual index. It expects each constraint span to constrain the metric
+// name to a single value, optionally with a timestamp range as a
+// secondary span dimension. Spans that do not pin name to a single value
+// are rejected, mirroring the table-level "name filter required" rule.
+func populateCrdbInternalTsdbFromConstraint(
+	ctx context.Context,
+	p *planner,
+	_ catalog.DatabaseDescriptor,
+	idxConstraint *constraint.Constraint,
+	addRow func(...tree.Datum) error,
+) error {
+	if err := p.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
+		return err
+	}
+	querier := p.ExecCfg().TimeSeriesQuerier
+	if querier == nil {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb is not available on this server")
+	}
+	if idxConstraint == nil || idxConstraint.IsContradiction() || idxConstraint.IsUnconstrained() {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb requires a name filter, e.g. WHERE name = 'cr.node.sql.select.count'")
+	}
+
+	evalCtx := p.EvalContext()
+	// Clamp the end of every span to "now" so a window that lies entirely
+	// in the future returns zero rows rather than surfacing the TSDB's
+	// "cannot query time series in the future" InvalidArgument error.
+	nowNanos := timeutil.Now().UnixNano()
+	for i, n := 0, idxConstraint.Spans.Count(); i < n; i++ {
+		span := idxConstraint.Spans.Get(i)
+		metricName, startNanos, endNanos, err := tsdbSpanToQuery(ctx, evalCtx, span)
+		if err != nil {
+			return err
+		}
+		if endNanos > nowNanos {
+			endNanos = nowNanos
+		}
+		if startNanos > endNanos {
+			continue
+		}
+		rows, err := querier.QueryTimeSeries(ctx, TimeSeriesQuery{
+			MetricName: metricName,
+			StartNanos: startNanos,
+			EndNanos:   endNanos,
+		})
+		if err != nil {
+			return errors.Wrapf(err, "querying tsdb metric %q", metricName)
+		}
+		for _, row := range rows {
+			ts, err := tree.MakeDTimestampTZ(timeutil.Unix(0, row.TimestampNanos), time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				tree.NewDString(metricName),
+				ts,
+				tree.NewDFloat(tree.DFloat(row.Value)),
+				tree.NewDString(row.Source),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// tsdbSpanToQuery extracts a (metric name, start nanos, end nanos) tuple
+// from one constraint span over (name, timestamp). Both name and
+// timestamp must be constrained: name must pin to a single value, and
+// timestamp must have at least one bound. Unbounded timestamp scans are
+// rejected because they would produce an invalid KV Scan downstream.
+func tsdbSpanToQuery(
+	ctx context.Context, evalCtx *eval.Context, span *constraint.Span,
+) (metric string, startNanos, endNanos int64, _ error) {
+	startKey, endKey := span.StartKey(), span.EndKey()
+	if startKey.Length() == 0 || endKey.Length() == 0 {
+		return "", 0, 0, pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb requires a name filter")
+	}
+	startName, ok := startKey.Value(0).(*tree.DString)
+	if !ok {
+		return "", 0, 0, pgerror.Newf(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb name must be a string, got %s", startKey.Value(0).ResolvedType())
+	}
+	endName, ok := endKey.Value(0).(*tree.DString)
+	if !ok {
+		return "", 0, 0, pgerror.Newf(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb name must be a string, got %s", endKey.Value(0).ResolvedType())
+	}
+	if cmp, err := startName.Compare(ctx, evalCtx, endName); err != nil {
+		return "", 0, 0, err
+	} else if cmp != 0 {
+		return "", 0, 0, pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb name filter must be an equality (single value or IN list)")
+	}
+	if startKey.Length() < 2 && endKey.Length() < 2 {
+		return "", 0, 0, pgerror.New(pgcode.FeatureNotSupported,
+			"crdb_internal.tsdb requires a timestamp filter, e.g. timestamp BETWEEN now() - INTERVAL '1 hour' AND now()")
+	}
+
+	// One side may still be open; use a sentinel that the caller will
+	// clamp. The lower sentinel is 0 (the Unix epoch) rather than
+	// math.MinInt64 so that the resulting KV Scan span is always valid.
+	startNanos = 0
+	endNanos = math.MaxInt64
+	if startKey.Length() >= 2 {
+		ts, ok := startKey.Value(1).(*tree.DTimestampTZ)
+		if !ok {
+			return "", 0, 0, pgerror.Newf(pgcode.FeatureNotSupported,
+				"crdb_internal.tsdb timestamp must be TIMESTAMPTZ, got %s", startKey.Value(1).ResolvedType())
+		}
+		startNanos = ts.UnixNano()
+		if span.StartBoundary() == constraint.ExcludeBoundary {
+			startNanos++
+		}
+	}
+	if endKey.Length() >= 2 {
+		ts, ok := endKey.Value(1).(*tree.DTimestampTZ)
+		if !ok {
+			return "", 0, 0, pgerror.Newf(pgcode.FeatureNotSupported,
+				"crdb_internal.tsdb timestamp must be TIMESTAMPTZ, got %s", endKey.Value(1).ResolvedType())
+		}
+		endNanos = ts.UnixNano()
+		if span.EndBoundary() == constraint.ExcludeBoundary {
+			endNanos--
+		}
+	}
+	return string(*startName), startNanos, endNanos, nil
 }
 
 // crdb_internal.cluster_inspect_errors is a view to give permission to

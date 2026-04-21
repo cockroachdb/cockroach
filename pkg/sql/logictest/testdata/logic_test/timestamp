@@ -829,3 +829,106 @@ SELECT '-infinity'::timestamp + '1 second'::interval, '-infinity'::timestamp - '
 -infinity -infinity
 
 subtest end
+
+subtest tsround
+
+statement ok
+SET TIME ZONE 'UTC'
+
+# tsround floors a timestamptz to the nearest multiple of bucket below it.
+query TTT
+SELECT
+  tsround('2026-04-20 12:34:56.789'::timestamptz, '1 minute'::interval),
+  tsround('2026-04-20 12:34:56.789'::timestamptz, '1 hour'::interval),
+  tsround('2026-04-20 12:34:56.789'::timestamptz, '15 seconds'::interval)
+----
+2026-04-20 12:34:00 +0000 UTC  2026-04-20 12:00:00 +0000 UTC  2026-04-20 12:34:45 +0000 UTC
+
+# A bucket exactly at the boundary returns the input.
+query T
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, '1 hour'::interval)
+----
+2026-04-20 12:00:00 +0000 UTC
+
+# Day-sized buckets treat days as exactly 24 hours.
+query T
+SELECT tsround('2026-04-20 06:00:00'::timestamptz, '1 day'::interval)
+----
+2026-04-20 00:00:00 +0000 UTC
+
+# Pre-epoch timestamps round towards negative infinity.
+query T
+SELECT tsround('1969-12-31 23:59:00'::timestamptz, '1 hour'::interval)
+----
+1969-12-31 23:00:00 +0000 UTC
+
+# Buckets containing month or year components are rejected because their
+# length depends on the calendar.
+statement error tsround bucket cannot contain month or year components
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, '1 month'::interval)
+
+statement error tsround bucket cannot contain month or year components
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, '1 year'::interval)
+
+# Zero or negative buckets are rejected.
+statement error tsround bucket must be positive
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, '0 seconds'::interval)
+
+statement error tsround bucket must be positive
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, '-1 minute'::interval)
+
+# Mixed-unit buckets are summed as fixed-length nanoseconds (1 day = 24h
+# always; total here is 26h). Pinning the input near the epoch makes the
+# bucket boundaries trivially verifiable: bucket #1 starts at epoch+26h,
+# i.e. 1970-01-02 02:00:00 UTC.
+query T
+SELECT tsround('1970-01-02 02:00:01'::timestamptz, INTERVAL '1 day 2 hours')
+----
+1970-01-02 02:00:00 +0000 UTC
+
+query T
+SELECT tsround('1970-01-02 02:00:00'::timestamptz, INTERVAL '1 day 2 hours')
+----
+1970-01-02 02:00:00 +0000 UTC
+
+# Sub-microsecond intervals are accepted up to 1 microsecond. The result
+# is exposed at microsecond precision on a microsecond-aligned input.
+query T
+SELECT tsround('2026-04-20 12:34:56.123456'::timestamptz, INTERVAL '1 microsecond')
+----
+2026-04-20 12:34:56.123456 +0000 UTC
+
+# Far-future timestamps round cleanly with a small bucket — guards
+# against accidental overflow in the int64 unix-nano arithmetic.
+query T
+SELECT tsround('2200-04-20 12:34:56'::timestamptz, INTERVAL '1 hour')
+----
+2200-04-20 12:00:00 +0000 UTC
+
+# Pre-epoch input with a multi-hour bucket rounds toward negative
+# infinity (matches date_trunc semantics).
+query T
+SELECT tsround('1969-06-15 14:30:00'::timestamptz, INTERVAL '6 hours')
+----
+1969-06-15 12:00:00 +0000 UTC
+
+# NULL propagates through both arguments rather than producing an error.
+query T
+SELECT tsround(NULL::timestamptz, INTERVAL '1 minute')
+----
+NULL
+
+query T
+SELECT tsround('2026-04-20 12:00:00'::timestamptz, NULL::interval)
+----
+NULL
+
+# Input timestamps in non-UTC offsets are normalised before bucketing;
+# the displayed result is still in the session timezone (UTC here), but
+# the underlying instant is the floored UTC value.
+query T
+SELECT tsround('2026-04-20 12:34:56-08:00'::timestamptz, INTERVAL '1 hour')
+----
+2026-04-20 20:00:00 +0000 UTC
+
+subtest end

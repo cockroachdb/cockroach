@@ -2650,8 +2650,19 @@ func newOptVirtualTable(
 		numCols:      ot.ColumnCount(),
 	}
 
+	// Look up whether each non-primary index supports range constraints by
+	// consulting the virtual schema definition. Indexes that opt into
+	// populateFromConstraint accept multi-column and range predicates, while
+	// the legacy single-key populate variant must remain restricted to
+	// single-column indexes.
+	var schemaHolder *VirtualSchemaHolder
+	if oc.planner != nil {
+		schemaHolder, _ = oc.planner.extendedEvalCtx.VirtualSchemas.(*VirtualSchemaHolder)
+	}
 	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
-		if idx.NumKeyColumns() > 1 {
+		supportsRange := schemaHolder != nil &&
+			schemaHolder.VirtualIndexSupportsRangeConstraints(ot.desc.GetID(), idx.GetID())
+		if idx.NumKeyColumns() > 1 && !supportsRange {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
@@ -2660,7 +2671,8 @@ func newOptVirtualTable(
 			idx:          idx,
 			indexOrdinal: idx.Ordinal(),
 			// The virtual indexes don't return the bogus PK key?
-			numCols: ot.ColumnCount(),
+			numCols:                  ot.ColumnCount(),
+			supportsRangeConstraints: supportsRange,
 		}
 	}
 
@@ -2934,6 +2946,12 @@ type optVirtualIndex struct {
 	numCols int
 
 	indexOrdinal int
+
+	// supportsRangeConstraints mirrors whether the underlying virtual schema
+	// index defines a populateFromConstraint variant. When true, the optimizer
+	// and EXPLAIN code skip the single-key fallback paths and pass the full
+	// *constraint.Constraint through to the populator.
+	supportsRangeConstraints bool
 }
 
 // ID is part of the cat.Index interface.

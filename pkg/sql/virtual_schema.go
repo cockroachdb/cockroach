@@ -89,6 +89,8 @@ type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
 	// unwrappedConstraint is unwrapped and never tree.DNull.
+	//
+	// Exactly one of populate and populateFromConstraint must be set.
 	populate func(
 		ctx context.Context,
 		unwrappedConstraint tree.Datum,
@@ -96,6 +98,27 @@ type virtualIndex struct {
 		db catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
+
+	// populateFromConstraint is an alternative to populate that receives the
+	// full *constraint.Constraint rather than a single unwrapped equality
+	// datum. This enables virtual indexes to handle range predicates (e.g.
+	// timestamp >= X AND timestamp <= Y) and multi-column index constraints,
+	// neither of which populate can express.
+	//
+	// When populateFromConstraint is set, the optimizer will choose the
+	// virtual index even when the constraint contains range spans (skipping
+	// the HasSingleKey fast path); execution dispatches to this function
+	// once with the entire constraint, rather than once per single-key span.
+	//
+	// Implementations are responsible for validating the shape of the
+	// constraint (e.g. that required columns are present and unique).
+	populateFromConstraint func(
+		ctx context.Context,
+		p *planner,
+		db catalog.DatabaseDescriptor,
+		idxConstraint *constraint.Constraint,
+		addRow func(...tree.Datum) error,
+	) error
 
 	// incomplete is true if the virtual index isn't able to satisfy all constraints.
 	// For example, the pg_class table contains both indexes and tables. Tables
@@ -257,8 +280,15 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	}
 
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {
+		// Composite virtual indexes are only supported when the matching
+		// virtualIndex opts in via populateFromConstraint, which receives
+		// the full *constraint.Constraint and so can interpret keys
+		// beyond the first column.
 		if index.NumKeyColumns() > 1 {
-			panic("we don't know how to deal with virtual composite indexes yet")
+			vIdx := t.getIndex(index.GetID())
+			if vIdx == nil || vIdx.populateFromConstraint == nil {
+				panic("we don't know how to deal with virtual composite indexes yet")
+			}
 		}
 		idx := index.IndexDescDeepCopy()
 		idx.StoreColumnNames, idx.StoreColumnIDs = nil, nil
@@ -299,6 +329,10 @@ func (t virtualSchemaTable) isUnimplemented() bool {
 // virtual index is supported when we have only single key constraints, and are
 // not using a partial index, and therefore do not need to fallback on an
 // undefined populate function.
+//
+// Indexes that define populateFromConstraint receive the full
+// *constraint.Constraint and can handle range predicates, so the
+// HasSingleKey check is skipped for them.
 func (t virtualSchemaTable) preferIndexOverGenerator(
 	ctx context.Context, p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
 ) bool {
@@ -313,6 +347,10 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 	virtualIdx := t.getIndex(index.GetID())
 	if virtualIdx.incomplete {
 		return false
+	}
+
+	if virtualIdx.populateFromConstraint != nil {
+		return true
 	}
 
 	for i := 0; i < idxConstraint.Spans.Count(); i++ {
@@ -330,6 +368,11 @@ func maybeAdjustVirtualIndexScanForExplain(
 ) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
 	idx, ok := index.(*optVirtualIndex)
 	if !ok {
+		return index, params, extraAttribute
+	}
+	// Indexes that opt into populateFromConstraint handle the entire
+	// constraint themselves, so the single-key fallback below does not apply.
+	if idx.supportsRangeConstraints {
 		return index, params, extraAttribute
 	}
 	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
@@ -474,6 +517,33 @@ func (vs *VirtualSchemaHolder) GetVirtualObjectByID(id descpb.ID) (catalog.Virtu
 		return nil, false
 	}
 	return entry, true
+}
+
+// VirtualIndexSupportsRangeConstraints returns true if the virtual index
+// identified by tableID and indexID is defined with a populateFromConstraint
+// variant. Such indexes accept the full *constraint.Constraint and can serve
+// queries with range or multi-column predicates without falling back to a
+// full table scan.
+//
+// Returns false for unknown table/index IDs, the primary index (ID 1), and
+// any index defined with the legacy single-key populate function.
+func (vs *VirtualSchemaHolder) VirtualIndexSupportsRangeConstraints(
+	tableID descpb.ID, indexID descpb.IndexID,
+) bool {
+	entry, ok := vs.defsByID[tableID]
+	if !ok {
+		return false
+	}
+	table, ok := entry.virtualDef.(virtualSchemaTable)
+	if !ok {
+		return false
+	}
+	// Index ID 1 is the synthesized primary index; secondary virtual indexes
+	// occupy positions 0..len(table.indexes)-1 keyed off (indexID - 2).
+	if indexID < 2 || int(indexID-2) >= len(table.indexes) {
+		return false
+	}
+	return table.indexes[indexID-2].populateFromConstraint != nil
 }
 
 // Visit makes VirtualSchemaHolder implement catalog.VirtualSchemas.
@@ -812,6 +882,18 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				}
 				return pusher.pushRow(datums...)
 			}
+		}
+
+		// If the virtual index defines populateFromConstraint, dispatch the
+		// entire constraint to it in one call. This is how multi-column and
+		// range-bearing virtual indexes expose their full constraint to the
+		// underlying data source (e.g., the TSDB virtual index pushes a
+		// metric_name equality and a timestamp range together).
+		virtualIdx := def.getIndex(index.GetID())
+		if virtualIdx.populateFromConstraint != nil {
+			return virtualIdx.populateFromConstraint(
+				ctx, p, dbDesc, idxConstraint, addRowIfPassesFilter(idxConstraint),
+			)
 		}
 
 		// We have a virtual index with a constraint. Run the constrained
