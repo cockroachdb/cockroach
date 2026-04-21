@@ -132,9 +132,17 @@ func TestCanaryStatsDelayDelete(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
+	// Disable automatic stats collection to prevent it from racing with
+	// manual ANALYZE calls. The auto refresher would create __auto__ stats
+	// and delete the test's manually-created stats, breaking assertions.
+	_, err := sqlDB.Exec(
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
+	)
+	require.NoError(t, err)
+
 	// Verify that sql_stats_canary_window is rejected before upgrading
 	// to V26_2.
-	_, err := sqlDB.Exec(
+	_, err = sqlDB.Exec(
 		`CREATE TABLE t_canary (k INT PRIMARY KEY) WITH (sql_stats_canary_window = '15s')`,
 	)
 	require.Error(t, err)
