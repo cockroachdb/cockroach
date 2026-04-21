@@ -85,8 +85,38 @@ func New(src tickSource, live rangefeed.DB, opts Options) *DB {
 //     the front), and
 //   - each subsequent tick has TickStart <= previous.TickEnd (no gap
 //     between adjacent ticks).
+//
+// We don't try to verify coverage all the way out to end here: there
+// will always be some residual window between the freshest closed tick
+// and end (the producer is still writing), and that residual is what
+// the live KV rangefeed handles after cutover.
 func (d *DB) checkCoverage(ctx context.Context, startFrom, end hlc.Timestamp) error {
-	return errors.AssertionFailedf("revlogfeed.DB.checkCoverage: not implemented")
+	prevEnd := startFrom
+	any := false
+	for tick, err := range d.src.Ticks(ctx, startFrom, end) {
+		if err != nil {
+			return errors.Wrap(err, "enumerating revlog ticks")
+		}
+		if tick.Manifest.TickStart.Less(prevEnd) || tick.Manifest.TickStart.Equal(prevEnd) {
+			// Contiguous with the previous tick (or covers startFrom on
+			// the first iteration). Advance the cursor.
+			prevEnd = tick.Manifest.TickEnd
+			any = true
+			continue
+		}
+		// Gap: previous tick ended at prevEnd, next begins later.
+		return errors.Newf(
+			"revlog missing coverage for window (%s, %s]",
+			prevEnd, tick.Manifest.TickStart,
+		)
+	}
+	if !any {
+		return errors.Newf(
+			"revlog missing coverage for window (%s, %s]",
+			startFrom, end,
+		)
+	}
+	return nil
 }
 
 // RangeFeed implements rangefeed.DB.
