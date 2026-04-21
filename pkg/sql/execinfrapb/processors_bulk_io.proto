@@ -213,6 +213,23 @@ message IngestStoppedSpec {
   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
 }
 
+message RevlogSpec {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
+  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
+  // spans this producer processor covers.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  // start_hlc is the lower bound of the log: the rangefeed
+  // subscription is started after this HLC, and tick_start of the
+  // first manifest equals start_hlc.
+  optional util.hlc.Timestamp start_hlc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "StartHLC"];
+  // dest is the cloud storage URI where data files and manifests
+  // are written.
+  optional string dest = 4 [(gogoproto.nullable) = false];
+  // tick_width_nanos is the wall-clock-aligned tick width, in
+  // nanoseconds.
+  optional int64 tick_width_nanos = 5 [(gogoproto.nullable) = false];
+}
+
 // StreamIngestionPartitionSpec contains information about a partition and how
 // to connect to it.
 message StreamIngestionPartitionSpec {
