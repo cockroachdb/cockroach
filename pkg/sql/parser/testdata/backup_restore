@@ -756,6 +756,15 @@ BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision_history = true, detached) -- 
 BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision_history = true, detached) -- passwords exposed
 
 parse
+BACKUP TABLE foo INTO 'bar' WITH revision stream
+----
+BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision stream) -- normalized!
+BACKUP TABLE (foo) INTO ('*****') WITH OPTIONS (revision stream) -- fully parenthesized
+BACKUP TABLE foo INTO '_' WITH OPTIONS (revision stream) -- literals removed
+BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision stream) -- identifiers removed
+BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision stream) -- passwords exposed
+
+parse
 BACKUP TABLE foo INTO 'bar' WITH revision_history = $1, detached, execution locality = $2
 ----
 BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision_history = $1, detached, execution locality = $2) -- normalized!

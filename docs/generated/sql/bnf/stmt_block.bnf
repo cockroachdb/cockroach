@@ -2746,6 +2746,7 @@ backup_options ::=
 	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
 	| 'STRICT' 'STORAGE' 'LOCALITY'
+	| 'REVISION' 'STREAM'
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst

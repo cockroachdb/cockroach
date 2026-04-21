@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -75,6 +76,7 @@ func resolveOptionsForBackupJobDescription(
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
 		Strict:                          opts.Strict,
+		RevisionStream:                  opts.RevisionStream,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -399,6 +401,13 @@ func backupPlanHook(
 
 	detached := backupStmt.Options.Detached == tree.DBoolTrue
 
+	// REVISION STREAM is a prototype (continuous backup / revlog
+	// sibling job); refuse it on release builds until it has matured.
+	if backupStmt.Options.RevisionStream && build.IsRelease() {
+		return nil, nil, false, pgerror.New(pgcode.FeatureNotSupported,
+			"BACKUP ... WITH REVISION STREAM is a prototype and is not enabled in release builds")
+	}
+
 	exprEval := p.ExprEvaluator("BACKUP")
 
 	var err error
@@ -588,6 +597,7 @@ func backupPlanHook(
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
 			StrictLocalityFiltering:         backupStmt.Options.Strict,
+			CreateRevlogJob:                 backupStmt.Options.RevisionStream,
 		}
 		if backupStmt.CreatedByInfo != nil {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()

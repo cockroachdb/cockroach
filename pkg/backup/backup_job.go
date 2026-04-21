@@ -642,6 +642,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	p := execCtx.(sql.JobExecContext)
 	initialDetails := b.job.Details().(jobspb.BackupDetails)
+
 	if err := maybeRelocateJobExecution(
 		ctx, b.job.ID(), p, initialDetails.ExecutionLocality, "BACKUP",
 	); err != nil {
@@ -662,6 +663,16 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if initialDetails.Compact {
 		return b.ResumeCompaction(ctx, initialDetails, p, &kmsEnv)
 	}
+
+	// If this job was created as a sibling of a regular BACKUP via the
+	// `WITH REVISION STREAM` create-or-noop dance (see
+	// maybeCreateRevlogSiblingJob), dispatch to the revlog execution
+	// path. The sibling inherits the parent's URI / CollectionURI /
+	// EndTime, which are what the revlog writer needs.
+	if initialDetails.RevLogJob {
+		return runRevlogJob(ctx, p, b.job.ID(), initialDetails)
+	}
+
 	// Resolve the backup destination. We can skip this step if we
 	// have already resolved and persisted the destination either
 	// during a previous resumption of this job.
@@ -771,6 +782,36 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return errors.Wrapf(err, "make storage")
 	}
 	defer defaultStore.Close()
+
+	// If this BACKUP was invoked with `WITH REVISION STREAM`, perform the
+	// create-or-noop dance for a sibling revlog (continuous backup)
+	// job. This runs in addition to the normal BACKUP work below — the
+	// sibling job runs the revlog writer, this job remains a regular
+	// BACKUP. See the "Job creation" subsection of
+	// docs/RFCS/20260420_continuous_backup.md.
+	//
+	// The marker file lives at the *collection* root (alongside log/),
+	// not under the per-backup directory, so we open a collection-
+	// rooted store for the dance rather than reusing defaultStore
+	// (which is rooted at details.URI, the timestamped backup path).
+	if details.CreateRevlogJob {
+		collectionConf, err := cloud.ExternalStorageConfFromURI(details.CollectionURI, p.User())
+		if err != nil {
+			return errors.Wrap(err, "configuring collection storage for revlog marker")
+		}
+		collectionStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, collectionConf)
+		if err != nil {
+			return errors.Wrap(err, "opening collection storage for revlog marker")
+		}
+		err = maybeCreateRevlogSiblingJob(
+			ctx, collectionStore, details, b.job.Payload().Description,
+			p.User(), p.ExecCfg().JobRegistry, p.ExecCfg().InternalDB,
+		)
+		_ = collectionStore.Close()
+		if err != nil {
+			return errors.Wrap(err, "establishing revlog sibling job")
+		}
+	}
 
 	// EncryptionInfo is non-nil only when new encryption information has been
 	// generated during BACKUP planning.
