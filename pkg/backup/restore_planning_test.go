@@ -751,7 +751,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			for rows.Next() {
 				var id string
 				var unused any
-				require.NoError(t, rows.Scan(&id, &unused, &unused))
+				require.NoError(t, rows.Scan(&id, &unused))
 				ids = append([]string{id}, ids...)
 			}
 			backupIDsByColl[coll] = ids

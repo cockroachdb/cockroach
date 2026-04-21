@@ -1381,10 +1381,13 @@ func showBackupsInCollectionTypeCheck(
 	}
 
 	if p.SessionData().UseBackupsWithIDs {
+		header := showBackupsWithIDsHeader
 		if backup.Options.Debug {
-			return true, showBackupsWithIDsDebugHeader, nil
+			header = showBackupsWithIDsDebugHeader
+		} else if backup.Options.RevisionStartTime {
+			header = showBackupsWithIDsRevisionHeader
 		}
-		return true, showBackupsWithIDsHeader, nil
+		return true, header, nil
 	}
 	return true, showBackupsInCollectionHeader, nil
 }
@@ -1394,6 +1397,11 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 }
 
 var showBackupsWithIDsHeader = colinfo.ResultColumns{
+	{Name: "id", Typ: types.String},
+	{Name: "backup_time", Typ: types.TimestampTZ},
+}
+
+var showBackupsWithIDsRevisionHeader = colinfo.ResultColumns{
 	{Name: "id", Typ: types.String},
 	{Name: "backup_time", Typ: types.TimestampTZ},
 	{Name: "revision_start_time", Typ: types.TimestampTZ},
@@ -1466,6 +1474,7 @@ func showBackupsInCollectionPlanHook(
 
 	useIDs := p.SessionData().UseBackupsWithIDs
 	debug := showStmt.Options.Debug
+	revisionStartTime := showStmt.Options.RevisionStartTime
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
@@ -1481,7 +1490,7 @@ func showBackupsInCollectionPlanHook(
 			if err != nil {
 				return err
 			}
-			openIndex := showStmt.Options.RevisionStartTime || debug
+			openIndex := revisionStartTime || debug
 			res, exceededMax, err := backupinfo.ListRestorableBackups(
 				ctx, store, newerThan, olderThan, maxCount, openIndex,
 			)
@@ -1505,16 +1514,19 @@ func showBackupsInCollectionPlanHook(
 				if err != nil {
 					return err
 				}
-				revStartTime := tree.DNull
-				if i.OpenedIndex() && i.MVCCFilter(ctx, p.ExecCfg().SV()) == backuppb.MVCCFilter_All {
-					revStartTime, err = tree.MakeDTimestampTZ(
-						timeutil.Unix(0, i.RevisionStartTime(ctx, p.ExecCfg().SV()).WallTime), time.Second,
-					)
-					if err != nil {
-						return err
+				row := tree.Datums{tree.NewDString(i.ID), backupTime}
+				if revisionStartTime || debug {
+					revStartTime := tree.DNull
+					if i.OpenedIndex() && i.MVCCFilter(ctx, p.ExecCfg().SV()) == backuppb.MVCCFilter_All {
+						revStartTime, err = tree.MakeDTimestampTZ(
+							timeutil.Unix(0, i.RevisionStartTime(ctx, p.ExecCfg().SV()).WallTime), time.Second,
+						)
+						if err != nil {
+							return err
+						}
 					}
+					row = append(row, revStartTime)
 				}
-				row := tree.Datums{tree.NewDString(i.ID), backupTime, revStartTime}
 				if debug {
 					sv := p.ExecCfg().SV()
 					startTime := tree.DNull
@@ -1555,6 +1567,8 @@ func showBackupsInCollectionPlanHook(
 		header = showBackupsWithIDsHeader
 		if debug {
 			header = showBackupsWithIDsDebugHeader
+		} else if revisionStartTime {
+			header = showBackupsWithIDsRevisionHeader
 		}
 	}
 	return fn, header, false, nil
