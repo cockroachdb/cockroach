@@ -1,0 +1,342 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package tests_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math/rand"
+	"net/url"
+	"os"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/codahale/hdrhistogram"
+	"github.com/jackc/pgx/v5"
+)
+
+// pointSelectFastPathEnvVar enables the experimental
+// sql.fast_path.point_select.enabled cluster setting in the benchmark
+// when set to a truthy value (1, true, on, yes — any non-empty value
+// other than 0/false/off/no). Default behavior (env var unset or
+// empty) leaves the fast path off, matching the unspecialized
+// baseline.
+const pointSelectFastPathEnvVar = "POINT_SELECT_FAST_PATH"
+
+// BenchmarkPointSelect measures end-to-end p50/p99 latency of a prepared
+// point-SELECT against a primary key, swept across several concurrency
+// levels.
+//
+// This is the baseline for the SQL-processing-overhead experiment in
+// experiments/point-select-fast-path/. Each sub-benchmark spawns the
+// requested number of pgx clients, each holding its own prepared
+// statement, and records per-op latency into an hdrhistogram. The merged
+// histogram's p50 and p99 are reported as Go benchmark metrics named
+// `p50_us` and `p99_us`.
+//
+// The cluster is single-node, in-process, with the same test knobs the
+// sysbench microbench uses (see newTestCluster) so the results are as
+// isolated from network/Raft/lease-queue noise as practical.
+const (
+	pointSelectTotalRows  = 100_000
+	pointSelectStmt       = `SELECT v FROM kv WHERE k = $1`
+	pointSelectWarmupOps  = 1000
+	pointSelectMinLatency = 1_000          // 1 µs in ns
+	pointSelectMaxLatency = 10_000_000_000 // 10 s in ns
+)
+
+// pointSelectConcurrencies is the concurrency sweep. Held constant across
+// runs so results are comparable. Order is ascending so warm caches build
+// up gradually.
+var pointSelectConcurrencies = []int{1, 8, 16, 32, 64, 128}
+
+// pointSelectDriver owns the in-process server, populated kv table, and
+// pgx URL used to mint client connections. Reused across all concurrency
+// sub-benchmarks within a single -count iteration.
+type pointSelectDriver struct {
+	ctx     context.Context
+	pgURL   url.URL
+	cleanup func()
+}
+
+// newPointSelectDriver starts a single-node test cluster, creates the
+// `kv (k INT PRIMARY KEY, v BYTES)` table (matching the schema used by
+// pkg/workload/kv), and pre-populates it with pointSelectTotalRows rows.
+//
+// The cluster is started with Insecure: true so pgwire connections skip
+// TLS. We profiled the secure variant first and found that ~75% of
+// CPU samples landed in syscall/TLS code at saturation, drowning out
+// the SQL-stack work this experiment is meant to measure. TLS overhead
+// is a real but separate workstream; for the SQL-overhead experiment
+// we want the cleaner signal.
+func newPointSelectDriver(b *testing.B) *pointSelectDriver {
+	b.Helper()
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	disableBackgroundWork(st)
+	// Disable the optimizer's placeholder fast path so the baseline
+	// reflects the cost of running the full optimizer + execbuilder on
+	// each prepared-statement execute. We are estimating the upper-bound
+	// benefit of a hypothetical universal fast path; comparing against
+	// today's already-specialized point-select path would understate that
+	// upper bound, since the existing fast path already collapses
+	// re-optimization for this exact query shape into a no-op. See
+	// experiments/point-select-fast-path/PLAN.md for context.
+	xform.PlaceholderFastPathEnabled.Override(ctx, &st.SV, false)
+	// Enable the experimental hardcoded fast path when requested via env
+	// var. The variant run is what the experiment compares against the
+	// (above) unspecialized baseline.
+	if pointSelectFastPathEnabledFromEnv() {
+		sql.PointSelectFastPathEnabled.Override(ctx, &st.SV, true)
+	}
+	tc := serverutils.StartCluster(b, 1 /* nodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings:  st,
+			Insecure:  true,
+			CacheSize: 2 * 1024 * 1024 * 1024,
+			Knobs: base.TestingKnobs{
+				// Enable the local-RPC fast path so in-process KV calls
+				// don't pay full TCP serialization. Same setup as the
+				// sysbench microbench (newTestCluster with
+				// localRPCFastPath=true).
+				DialerKnobs: nodedialer.DialerTestingKnobs{
+					TestingNoLocalClientOptimization: false,
+				},
+				Server: &server.TestingKnobs{
+					ContextTestingKnobs: rpc.ContextTestingKnobs{
+						NoLoopbackDialer: false,
+					},
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// Prevents lease-rebalance noise across short-lived
+					// benchmark runs.
+					DisableLeaseQueue: true,
+				},
+			},
+		},
+	})
+	tc.Server(0).SQLServer().(*sql.Server).GetExecutorConfig().LicenseEnforcer.Disable(ctx)
+
+	pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName("defaultdb"))
+
+	setupConn, err := pgx.Connect(ctx, pgURL.String())
+	if err != nil {
+		b.Fatalf("connect for setup: %v", err)
+	}
+	defer func() { _ = setupConn.Close(ctx) }()
+
+	if _, err := setupConn.Exec(ctx, `CREATE TABLE kv (k INT8 PRIMARY KEY, v BYTES)`); err != nil {
+		b.Fatalf("create table: %v", err)
+	}
+
+	// Populate via COPY for speed. Values are uniform 16-byte payloads so
+	// pgwire row-encoding cost is the same on every read.
+	rows := pgx.CopyFromSlice(pointSelectTotalRows, func(i int) ([]any, error) {
+		return []any{int64(i), []byte(fmt.Sprintf("v-%013d", i))}, nil
+	})
+	if _, err := setupConn.CopyFrom(ctx, pgx.Identifier{"kv"}, []string{"k", "v"}, rows); err != nil {
+		b.Fatalf("populate: %v", err)
+	}
+	if _, err := setupConn.Exec(ctx, `ANALYZE kv`); err != nil {
+		b.Fatalf("analyze: %v", err)
+	}
+
+	return &pointSelectDriver{
+		ctx:   ctx,
+		pgURL: pgURL,
+		cleanup: func() {
+			cleanupURL()
+			tc.Stopper().Stop(ctx)
+		},
+	}
+}
+
+// pointSelectFastPathEnabledFromEnv parses the POINT_SELECT_FAST_PATH
+// env var. Returns true for "1", "true", "on", "yes" (case-insensitive);
+// false for empty/"0"/"false"/"off"/"no". Any other value also returns
+// false — strict because misconfiguration silently flipping the wrong
+// way would invalidate experiment results.
+func pointSelectFastPathEnabledFromEnv() bool {
+	v := os.Getenv(pointSelectFastPathEnvVar)
+	switch v {
+	case "", "0", "false", "off", "no", "False", "FALSE", "Off", "OFF", "No", "NO":
+		return false
+	case "1", "true", "on", "yes", "True", "TRUE", "On", "ON", "Yes", "YES":
+		return true
+	default:
+		return false
+	}
+}
+
+// pointSelectClient wraps one pgx connection with the prepared
+// SELECT. Owned by exactly one goroutine for the duration of a run.
+type pointSelectClient struct {
+	ctx      context.Context
+	conn     *pgx.Conn
+	stmtName string
+}
+
+func (d *pointSelectDriver) newClient() (*pointSelectClient, error) {
+	conn, err := pgx.Connect(d.ctx, d.pgURL.String())
+	if err != nil {
+		return nil, err
+	}
+	sd, err := conn.Prepare(d.ctx, "ps", pointSelectStmt)
+	if err != nil {
+		_ = conn.Close(d.ctx)
+		return nil, err
+	}
+	return &pointSelectClient{ctx: d.ctx, conn: conn, stmtName: sd.Name}, nil
+}
+
+func (c *pointSelectClient) close() {
+	_ = c.conn.Close(c.ctx)
+}
+
+// pointSelect issues one prepared SELECT and discards the value bytes.
+// Returns an error if the row is missing (which indicates a bug in the
+// driver, not a normal outcome).
+func (c *pointSelectClient) pointSelect(k int64) error {
+	var v []byte
+	err := c.conn.QueryRow(c.ctx, c.stmtName, k).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("row not found")
+	}
+	return err
+}
+
+func BenchmarkPointSelect(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	// One driver per outer benchmark invocation: cluster boot + populate
+	// is expensive (~seconds), and reads do not mutate state, so we share
+	// it across all concurrency sub-benchmarks.
+	var driver *pointSelectDriver
+	b.Cleanup(func() {
+		if driver != nil {
+			driver.cleanup()
+		}
+	})
+
+	for _, conc := range pointSelectConcurrencies {
+		b.Run(fmt.Sprintf("conc=%d", conc), func(b *testing.B) {
+			if driver == nil {
+				driver = newPointSelectDriver(b)
+			}
+			runPointSelectBench(b, driver, conc)
+		})
+	}
+}
+
+// runPointSelectBench creates `concurrency` clients, runs a fixed warmup
+// per goroutine, then runs b.N ops total split across the goroutines and
+// reports merged p50/p99 latency.
+func runPointSelectBench(b *testing.B, d *pointSelectDriver, concurrency int) {
+	clients := make([]*pointSelectClient, concurrency)
+	for i := range clients {
+		c, err := d.newClient()
+		if err != nil {
+			b.Fatalf("new client %d: %v", i, err)
+		}
+		clients[i] = c
+	}
+	defer func() {
+		for _, c := range clients {
+			c.close()
+		}
+	}()
+
+	// Warm up: each goroutine runs a fixed number of ops so the prepared
+	// statement reaches its generic plan, descriptor leases are cached,
+	// and the connection-side type-info round trips are done. Untimed.
+	runPointSelectOps(b, clients, pointSelectWarmupOps*concurrency, false /* timed */)
+
+	b.ResetTimer()
+	runPointSelectOps(b, clients, b.N, true /* timed */)
+	b.StopTimer()
+}
+
+// runPointSelectOps splits totalOps across the given client goroutines.
+// When timed is true, per-op latency is recorded into per-goroutine
+// histograms which are merged at the end and reported as p50_us and
+// p99_us via b.ReportMetric.
+func runPointSelectOps(b *testing.B, clients []*pointSelectClient, totalOps int, timed bool) {
+	if totalOps <= 0 {
+		return
+	}
+
+	var (
+		merged   *hdrhistogram.Histogram
+		mergedMu sync.Mutex
+	)
+	if timed {
+		merged = hdrhistogram.New(pointSelectMinLatency, pointSelectMaxLatency, 3)
+	}
+
+	var firstErrOnce sync.Once
+	var firstErr error
+	recordErr := func(err error) {
+		firstErrOnce.Do(func() { firstErr = err })
+	}
+
+	var remaining atomic.Int64
+	remaining.Store(int64(totalOps))
+
+	var wg sync.WaitGroup
+	for i, c := range clients {
+		wg.Add(1)
+		go func(c *pointSelectClient, seed int64) {
+			defer wg.Done()
+			rng := rand.New(rand.NewSource(seed))
+			var local *hdrhistogram.Histogram
+			if timed {
+				local = hdrhistogram.New(pointSelectMinLatency, pointSelectMaxLatency, 3)
+			}
+			for remaining.Add(-1) >= 0 {
+				k := int64(rng.Intn(pointSelectTotalRows))
+				start := time.Now()
+				if err := c.pointSelect(k); err != nil {
+					recordErr(err)
+					return
+				}
+				if timed {
+					_ = local.RecordValue(time.Since(start).Nanoseconds())
+				}
+			}
+			if timed {
+				mergedMu.Lock()
+				merged.Merge(local)
+				mergedMu.Unlock()
+			}
+		}(c, int64(i)+1)
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		b.Fatalf("query error: %v", firstErr)
+	}
+
+	if timed {
+		// Report in microseconds for readability; ns is too noisy in
+		// `go test -bench` output.
+		b.ReportMetric(float64(merged.ValueAtQuantile(50))/1000.0, "p50_us")
+		b.ReportMetric(float64(merged.ValueAtQuantile(99))/1000.0, "p99_us")
+	}
+}
