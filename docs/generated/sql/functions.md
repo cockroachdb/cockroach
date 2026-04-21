@@ -3658,6 +3658,14 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="oidvectortypes"></a><code>oidvectortypes(vector: oidvector) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a comma seperated string of type names from an oidvector.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_advisory_xact_lock"></a><code>pg_advisory_xact_lock(key1: int4, key2: int4) &rarr; void</code></td><td><span class="funcdesc"><p>Acquires an exclusive transaction-level advisory lock, waiting if necessary. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_advisory_xact_lock"></a><code>pg_advisory_xact_lock(key: <a href="int.html">int</a>) &rarr; void</code></td><td><span class="funcdesc"><p>Acquires an exclusive transaction-level advisory lock, waiting if necessary. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_advisory_xact_lock_shared"></a><code>pg_advisory_xact_lock_shared(key1: int4, key2: int4) &rarr; void</code></td><td><span class="funcdesc"><p>Acquires a shared transaction-level advisory lock, waiting if necessary. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_advisory_xact_lock_shared"></a><code>pg_advisory_xact_lock_shared(key: <a href="int.html">int</a>) &rarr; void</code></td><td><span class="funcdesc"><p>Acquires a shared transaction-level advisory lock, waiting if necessary. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
@@ -3723,6 +3731,14 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_trigger_depth"></a><code>pg_trigger_depth() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current nesting level of PostgreSQL triggers (0 if not called, directly or indirectly, from inside a trigger).</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_try_advisory_xact_lock"></a><code>pg_try_advisory_xact_lock(key1: int4, key2: int4) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Acquires an exclusive transaction-level advisory lock if available. Returns true if the lock was acquired, false if it was not. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_try_advisory_xact_lock"></a><code>pg_try_advisory_xact_lock(key: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Acquires an exclusive transaction-level advisory lock if available. Returns true if the lock was acquired, false if it was not. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_try_advisory_xact_lock_shared"></a><code>pg_try_advisory_xact_lock_shared(key1: int4, key2: int4) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Acquires a shared transaction-level advisory lock if available. Returns true if the lock was acquired, false if it was not. The lock is released automatically at the end of the current transaction.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="pg_try_advisory_xact_lock_shared"></a><code>pg_try_advisory_xact_lock_shared(key: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Acquires a shared transaction-level advisory lock if available. Returns true if the lock was acquired, false if it was not. The lock is released automatically at the end of the current transaction.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>

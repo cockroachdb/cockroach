@@ -384,6 +384,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigbounds",
+        "//pkg/sql/advisorylock",
         "//pkg/sql/appstatspb",
         "//pkg/sql/auditlogging",
         "//pkg/sql/auditlogging/auditevents",

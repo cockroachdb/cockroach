@@ -114,6 +114,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
+func TestReadCommittedLogic_advisory_lock(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "advisory_lock")
+}
+
 func TestReadCommittedLogic_aggregate(
 	t *testing.T,
 ) {
