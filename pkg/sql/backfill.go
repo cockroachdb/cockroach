@@ -2333,11 +2333,25 @@ func (sc *SchemaChanger) backfillIndexes(
 	writeAtRequestTimestamp := len(temporaryIndexes) != 0
 	log.Dev.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
-	// Split off a new range for each new index span.
-	expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	for _, span := range addingSpans {
-		if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
+	// Split off a new range for each new index span, unless the table is
+	// small enough to fit in a single range.
+	skipSplit := false
+	if err := sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+		if err != nil {
 			return err
+		}
+		skipSplit = sc.execCfg.IndexSpanSplitter.ShouldSkipSplitForSmallTable(ctx, tableDesc)
+		return nil
+	}, metadataOnlyTxn); err != nil {
+		return err
+	}
+	if !skipSplit {
+		expirationTime := sc.db.KV().Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		for _, span := range addingSpans {
+			if err := sc.db.KV().AdminSplit(ctx, span.Key, expirationTime); err != nil {
+				return err
+			}
 		}
 	}
 

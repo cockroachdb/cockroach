@@ -268,6 +268,11 @@ type IndexSpanSplitter interface {
 	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
 	// across hash-sharded index boundaries if applicable.
 	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// ShouldSkipSplitForSmallTable returns true if the table's estimated size
+	// fits within a single range, meaning index boundary splits should be
+	// skipped to avoid range count bloat on small tables.
+	ShouldSkipSplitForSmallTable(ctx context.Context, table catalog.TableDescriptor) bool
 }
 
 // BackfillProgress tracks the progress for a Backfill.

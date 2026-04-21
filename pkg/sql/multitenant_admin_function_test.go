@@ -312,6 +312,12 @@ func (tc testCase) runTest(
 
 	systemDB := testServer.SystemLayer().SQLConn(t)
 
+	// Disable the small-table size check so index backfills always create
+	// splits, matching the expectations of these admin-function tests.
+	if _, err := systemDB.Exec("SET CLUSTER SETTING schemachanger.backfiller.skip_splits_for_small_tables.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,
 		clusterSettings ...*settings.BoolSetting,
@@ -322,6 +328,7 @@ func (tc testCase) runTest(
 			},
 		)
 		st := s.ClusterSettings()
+		sql.SkipBackfillSplitsForSmallTables.Override(ctx, &st.SV, false)
 		// StartTenant enables a couple of settings by default, but we want
 		// precise control of what's enabled, so we first disable the settings
 		// we care about and then apply the overrides the caller asked for.
