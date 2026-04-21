@@ -37,6 +37,11 @@ const (
 	JWTAuthUserinfoGroupKeySettingName = baseJWTAuthSettingName + "userinfo_group_key"
 )
 
+// maxJSONPointerSegments bounds the traversal depth of a JSON Pointer
+// used in the identity claim setting. Only cluster admins can set this
+// value, but a limit catches configuration mistakes early.
+const maxJSONPointerSegments = 10
+
 // Validator for group claim settings
 var (
 	// allowed: letters, digits, underscore, dot, dash
@@ -47,8 +52,11 @@ var (
 var JWTAuthClaim = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	JWTAuthClaimSettingName,
-	"sets the JWT claim that is parsed to get the username",
+	"sets the JWT claim that is parsed to get the username; may be a simple "+
+		"claim name (e.g. email) or a JSON Pointer per RFC 6901 (e.g. "+
+		"/kubernetes.io/serviceaccount/uid)",
 	"",
+	settings.WithValidateString(validateJWTAuthClaim),
 	settings.WithReportable(true),
 	settings.WithPublic,
 )
@@ -328,6 +336,36 @@ func validateJWTAuthIssuerCACert(values *settings.Values, s string) error {
 		if ok := x509.NewCertPool().AppendCertsFromPEM([]byte(s)); !ok {
 			return errors.Newf("JWT authentication issuer custom CA certificate not valid")
 		}
+	}
+	return nil
+}
+
+func validateJWTAuthClaim(_ *settings.Values, s string) error {
+	// Empty is the default (falls back to "sub").
+	if s == "" {
+		return nil
+	}
+	// Simple claim name — no further validation needed.
+	if !strings.HasPrefix(s, "/") {
+		return nil
+	}
+	// JSON Pointer (RFC 6901). Must have at least one segment, no empty
+	// segments, and a bounded number of segments.
+	segments := strings.Split(s[1:], "/")
+	// strings.Split always returns at least one element, so a bare "/"
+	// produces [""] which the empty-segment check below catches.
+	for _, seg := range segments {
+		if seg == "" {
+			return errors.Newf(
+				"JWT authentication: JSON Pointer %q contains an empty segment", s,
+			)
+		}
+	}
+	if len(segments) > maxJSONPointerSegments {
+		return errors.Newf(
+			"JWT authentication: JSON Pointer %q exceeds maximum depth of %d segments",
+			s, maxJSONPointerSegments,
+		)
 	}
 	return nil
 }

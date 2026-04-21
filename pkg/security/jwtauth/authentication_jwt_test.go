@@ -1224,3 +1224,340 @@ func TestGetHTTPResponseNon2xx(t *testing.T) {
 	require.Contains(t, errors.FlattenDetails(err), "403 Forbidden")
 	require.Contains(t, errors.FlattenDetails(err), "boom")
 }
+
+func TestLookupIdentityClaimByJSONPointer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Build a token with a mix of flat and nested claims for the test cases.
+	tok := makeTokenWithClaims(t, map[string]any{
+		jwt.SubjectKey: username1,
+		jwt.IssuerKey:  issuer1,
+		"email":        "alice@example.com",
+		"count":        42,
+		"user": map[string]any{
+			"name": "alice",
+			"profile": map[string]any{
+				"role": "admin",
+			},
+		},
+		"roles": []any{"viewer", "editor", "admin"},
+		"nested_arr": map[string]any{
+			"items": []any{
+				map[string]any{"id": "first"},
+				map[string]any{"id": "second"},
+			},
+		},
+		// Keys with characters that require RFC 6901 escaping.
+		"a/b":   "slash-value",
+		"a~c":   "tilde-value",
+		"~0":    "literal-tilde-zero",
+		"~1":    "literal-tilde-one",
+		"empty": "",
+	})
+
+	type testCase struct {
+		name      string
+		pointer   string
+		wantValue interface{}
+		wantOK    bool
+		wantErr   bool
+	}
+
+	// ── Simple claim names use token.Get directly (production path) ──
+	t.Run("simple_claim_found", func(t *testing.T) {
+		v, ok := tok.Get("email")
+		require.True(t, ok)
+		require.Equal(t, "alice@example.com", v)
+	})
+	t.Run("simple_claim_standard_field", func(t *testing.T) {
+		v, ok := tok.Get("sub")
+		require.True(t, ok)
+		require.Equal(t, username1, v)
+	})
+	t.Run("simple_claim_integer", func(t *testing.T) {
+		v, ok := tok.Get("count")
+		require.True(t, ok)
+		require.Equal(t, 42, v)
+	})
+	t.Run("simple_claim_empty_string", func(t *testing.T) {
+		v, ok := tok.Get("empty")
+		require.True(t, ok)
+		require.Equal(t, "", v)
+	})
+	t.Run("simple_claim_missing", func(t *testing.T) {
+		_, ok := tok.Get("nonexistent")
+		require.False(t, ok)
+	})
+
+	cases := []testCase{
+		// ── JSON Pointers ──
+		{
+			name:      "pointer_shallow",
+			pointer:   "/email",
+			wantValue: "alice@example.com",
+			wantOK:    true,
+		},
+		{
+			name:      "pointer_nested_one_level",
+			pointer:   "/user/name",
+			wantValue: "alice",
+			wantOK:    true,
+		},
+		{
+			name:      "pointer_nested_two_levels",
+			pointer:   "/user/profile/role",
+			wantValue: "admin",
+			wantOK:    true,
+		},
+		{
+			name:    "pointer_missing_leaf",
+			pointer: "/user/missing",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:    "pointer_missing_intermediate",
+			pointer: "/nonexistent/deep/path",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:    "pointer_non_object_intermediate",
+			pointer: "/email/something",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			// RFC 6901: "~1" decodes to "/", so this looks up the key "a/b".
+			name:      "pointer_rfc6901_escaped_slash",
+			pointer:   "/a~1b",
+			wantValue: "slash-value",
+			wantOK:    true,
+		},
+		{
+			// RFC 6901: "~0" decodes to "~", so this looks up the key "a~c".
+			name:      "pointer_rfc6901_escaped_tilde",
+			pointer:   "/a~0c",
+			wantValue: "tilde-value",
+			wantOK:    true,
+		},
+		{
+			// Key is literally "~0": encode "~" → "~0", "0" stays → "~00".
+			name:      "pointer_rfc6901_literal_tilde_zero",
+			pointer:   "/~00",
+			wantValue: "literal-tilde-zero",
+			wantOK:    true,
+		},
+		{
+			// Key is literally "~1": encode "~" → "~0", "1" stays → "~01".
+			name:      "pointer_rfc6901_literal_tilde_one",
+			pointer:   "/~01",
+			wantValue: "literal-tilde-one",
+			wantOK:    true,
+		},
+
+		// ── Case (c): JSON arrays (RFC 6901 §4) ──
+		{
+			name:      "array_first_element",
+			pointer:   "/roles/0",
+			wantValue: "viewer",
+			wantOK:    true,
+		},
+		{
+			name:      "array_last_element",
+			pointer:   "/roles/2",
+			wantValue: "admin",
+			wantOK:    true,
+		},
+		{
+			name:    "array_index_out_of_bounds",
+			pointer: "/roles/5",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:    "array_index_negative",
+			pointer: "/roles/-",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:    "array_index_non_numeric",
+			pointer: "/roles/abc",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:    "array_index_leading_zero",
+			pointer: "/roles/01",
+			wantOK:  false,
+			wantErr: true,
+		},
+		{
+			name:      "array_nested_map_inside_array",
+			pointer:   "/nested_arr/items/1/id",
+			wantValue: "second",
+			wantOK:    true,
+		},
+	}
+
+	// Dedicated test for Kubernetes ServiceAccount tokens, the primary
+	// motivation for JSON Pointer support. The serviceaccount UID lives at
+	// /kubernetes.io/serviceaccount/uid inside the token.
+	k8sTok := makeTokenWithClaims(t, map[string]any{
+		jwt.AudienceKey: []string{"cockroachdb"},
+		jwt.IssuerKey:   "https://my-issuer/...",
+		jwt.SubjectKey:  "system:serviceaccount:my-namespace:my-service-account",
+		"kubernetes.io": map[string]any{
+			"namespace": "my-namespace",
+			"node": map[string]any{
+				"name": "ip-10-176-16-155.eu-central-1.compute.internal",
+				"uid":  "6c9b214a-b6d8-43f9-b1e0-0e15b6126eda",
+			},
+			"pod": map[string]any{
+				"name": "my-workload-54b8897d8-88wzg",
+				"uid":  "c33ed74a-738c-499a-96d1-0bfdb68fee91",
+			},
+			"serviceaccount": map[string]any{
+				"name": "my-service-account",
+				"uid":  "136f6af7-4e5a-4891-b778-992ad1674b02",
+			},
+			"warnafter": 1772700468,
+		},
+	})
+	k8sCases := []testCase{
+		{
+			name:      "k8s_serviceaccount_uid",
+			pointer:   "/kubernetes.io/serviceaccount/uid",
+			wantValue: "136f6af7-4e5a-4891-b778-992ad1674b02",
+			wantOK:    true,
+		},
+		{
+			name:      "k8s_serviceaccount_name",
+			pointer:   "/kubernetes.io/serviceaccount/name",
+			wantValue: "my-service-account",
+			wantOK:    true,
+		},
+		{
+			name:      "k8s_pod_uid",
+			pointer:   "/kubernetes.io/pod/uid",
+			wantValue: "c33ed74a-738c-499a-96d1-0bfdb68fee91",
+			wantOK:    true,
+		},
+		{
+			name:      "k8s_namespace",
+			pointer:   "/kubernetes.io/namespace",
+			wantValue: "my-namespace",
+			wantOK:    true,
+		},
+		{
+			name:    "k8s_missing_nested_key",
+			pointer: "/kubernetes.io/serviceaccount/nonexistent",
+			wantOK:  false,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			value, ok, err := lookupIdentityClaimByJSONPointer(tok, mustParseClaimSegments(tc.pointer))
+			if tc.wantErr {
+				require.Error(t, err)
+				require.False(t, ok)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				require.Equal(t, tc.wantValue, value)
+			}
+		})
+	}
+
+	for _, tc := range k8sCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			value, ok, err := lookupIdentityClaimByJSONPointer(k8sTok, mustParseClaimSegments(tc.pointer))
+			if tc.wantErr {
+				require.Error(t, err)
+				require.False(t, ok)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				require.Equal(t, tc.wantValue, value)
+			}
+		})
+	}
+}
+
+func TestLookupIdentityClaim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tok := makeTokenWithClaims(t, map[string]any{
+		jwt.SubjectKey: username1,
+		jwt.IssuerKey:  issuer1,
+		"email":        "alice@example.com",
+		"user": map[string]any{
+			"name": "nested-alice",
+		},
+	})
+
+	t.Run("simple_claim_found", func(t *testing.T) {
+		auth := &jwtAuthenticator{}
+		auth.mu.conf.claim = "email"
+		auth.mu.conf.claimSegments = mustParseClaimSegments("email") // nil
+
+		v, ok, err := auth.lookupIdentityClaim(tok)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, "alice@example.com", v)
+	})
+
+	t.Run("simple_claim_missing", func(t *testing.T) {
+		auth := &jwtAuthenticator{}
+		auth.mu.conf.claim = "nonexistent"
+		auth.mu.conf.claimSegments = mustParseClaimSegments("nonexistent") // nil
+
+		_, ok, err := auth.lookupIdentityClaim(tok)
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
+
+	t.Run("json_pointer_found", func(t *testing.T) {
+		auth := &jwtAuthenticator{}
+		auth.mu.conf.claim = "/user/name"
+		auth.mu.conf.claimSegments = mustParseClaimSegments("/user/name")
+
+		v, ok, err := auth.lookupIdentityClaim(tok)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, "nested-alice", v)
+	})
+
+	t.Run("json_pointer_missing", func(t *testing.T) {
+		auth := &jwtAuthenticator{}
+		auth.mu.conf.claim = "/user/missing"
+		auth.mu.conf.claimSegments = mustParseClaimSegments("/user/missing")
+
+		_, ok, err := auth.lookupIdentityClaim(tok)
+		require.Error(t, err)
+		require.False(t, ok)
+		require.ErrorContains(t, err, "JWT authentication: failed to extract claim")
+	})
+
+	t.Run("json_pointer_non_traversable", func(t *testing.T) {
+		auth := &jwtAuthenticator{}
+		auth.mu.conf.claim = "/email/deep"
+		auth.mu.conf.claimSegments = mustParseClaimSegments("/email/deep")
+
+		_, ok, err := auth.lookupIdentityClaim(tok)
+		require.Error(t, err)
+		require.False(t, ok)
+		require.ErrorContains(t, err, "JWT authentication: failed to extract claim")
+	})
+}
