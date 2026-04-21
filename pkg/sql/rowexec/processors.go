@@ -460,6 +460,33 @@ func NewProcessor(
 		}
 		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile)
 	}
+	if core.TxnLdrCoordinator != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRCoordinatorProcessor == nil {
+			return nil, errors.New("TxnLDRCoordinator processor unimplemented")
+		}
+		return NewTxnLDRCoordinatorProcessor(ctx, flowCtx, processorID, *core.TxnLdrCoordinator, post)
+	}
+	if core.TxnLdrApplier != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRApplierProcessor == nil {
+			return nil, errors.New("TxnLDRApplier processor unimplemented")
+		}
+		return NewTxnLDRApplierProcessor(ctx, flowCtx, processorID, *core.TxnLdrApplier, post, inputs[0])
+	}
+	if core.TxnLdrDepResolver != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRDepResolverProcessor == nil {
+			return nil, errors.New("TxnLDRDepResolver processor unimplemented")
+		}
+		return NewTxnLDRDepResolverProcessor(ctx, flowCtx, processorID, *core.TxnLdrDepResolver, post, inputs[0])
+	}
 
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
@@ -532,3 +559,32 @@ var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.F
 var NewCompactBackupsProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CompactBackupsSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec) (execinfra.Processor, error)
+
+// NewTxnLDRCoordinatorProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRCoordinatorProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRCoordinatorSpec,
+	*execinfrapb.PostProcessSpec,
+) (execinfra.Processor, error)
+
+// NewTxnLDRApplierProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRApplierProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRApplierSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)
+
+// NewTxnLDRDepResolverProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRDepResolverProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRDepResolverSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)

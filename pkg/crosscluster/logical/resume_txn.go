@@ -10,7 +10,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // resumeTransactionalLdr runs the transactional LDR ingestion loop.
@@ -37,12 +43,45 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 		return err
 	}
 
+	planner := MakeLogicalReplicationPlanner(jobExecCtx, r.job, client)
+	sourcePlan, err := planner.GetSourcePlan(ctx)
+	if err != nil {
+		return err
+	}
+
 	// TODO(jeffswenson): checkpoint partition URIs via
 	// r.checkpointPartitionURIs once plan generation is added.
 
+	// Build the DistSQL physical plan before starting concurrent work.
+	flowPlan, planCtx, err := txnmode.PlanTxnReplication(ctx, r.job, jobExecCtx, sourcePlan)
+	if err != nil {
+		return errors.Wrap(err, "building DistSQL plan")
+	}
+
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
 	heartbeatInterval := func() time.Duration {
 		return heartbeatFrequency.Get(&jobExecCtx.ExecCfg().Settings.SV)
 	}
-	coordinator := txnmode.NewTxnLdrCoordinator(jobExecCtx, r.job, client, heartbeatInterval)
-	return coordinator.Resume(ctx)
+	heartbeatSender := streamclient.NewHeartbeatSender(
+		ctx,
+		client,
+		streampb.StreamID(payload.StreamID),
+		heartbeatInterval,
+	)
+	defer func() {
+		_ = heartbeatSender.Stop()
+	}()
+
+	runFlow := func(ctx context.Context) error {
+		return txnmode.RunDistSQLFlow(
+			ctx, jobExecCtx, flowPlan, planCtx,
+			r.job, heartbeatSender.FrontierUpdates,
+		)
+	}
+	startHeartbeat := func(ctx context.Context) error {
+		heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
+		return heartbeatSender.Wait()
+	}
+
+	return ctxgroup.GoAndWait(ctx, runFlow, startHeartbeat)
 }

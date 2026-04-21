@@ -1,0 +1,115 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+//
+// Processor definitions for transactional logical data replication (LDR) DistSQL flows.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+import "sql/catalog/descpb/structured.proto";
+import "sql/execinfrapb/processors_bulk_io.proto";
+
+// TxnLDRCoordinatorSpec is the specification for the single pinned processor
+// (stage 1) in the transactional LDR DistSQL flow. It subscribes to the source
+// cluster's rangefeed, decodes KV events into transactions, synthesizes locks,
+// schedules dependencies, hydrates ApplierIDs via the range cache, and routes
+// scheduled transactions to downstream applier processors via a BY_RANGE
+// output router.
+message TxnLDRCoordinatorSpec {
+  optional int64 job_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
+  ];
+
+  optional uint64 stream_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "StreamID"
+  ];
+
+  // The timestamp to resume replication from.
+  optional util.hlc.Timestamp replicated_time = 3 [(gogoproto.nullable) = false];
+
+  // All applier IDs participating in the flow. Each applier ID is the SQL
+  // instance ID where the applier runs, cast to ldrdecoder.ApplierID in Go.
+  repeated int32 applier_ids = 4;
+
+  // PartitionSpecs contains connection info for each source partition.
+  // The processor creates clients and subscriptions from these specs.
+  repeated StreamIngestionPartitionSpec partition_specs = 5 [(gogoproto.nullable) = false];
+
+  // TableMetadataByDestID maps destination table IDs to source table descriptors.
+  // Used to build table mappings for the decoder and lock synthesizer.
+  map<int32, cockroach.sql.sqlbase.TableDescriptor> table_metadata_by_dest_id = 6 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TableMetadataByDestID"
+  ];
+
+  // TypeDescriptors contains all user-defined types referenced by the source tables.
+  // Used to hydrate types in source descriptors via MakeCrossClusterTypeResolver.
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 7;
+
+  // NEXT ID: 8.
+}
+
+// TxnLDRApplierSpec is the specification for a distributed applier processor
+// (stage 2) in the transactional LDR DistSQL flow. Each applier processor is
+// pinned to a leaseholder node and wraps the existing Applier with parallel
+// TransactionWriters. It receives scheduled transactions from the coordinator
+// via its DistSQL input, and sends Wait/WaitHorizon/Ready requests to
+// downstream dep resolver processors via a BY_RANGE output router.
+message TxnLDRApplierSpec {
+  // ApplierID for this processor (cast to ldrdecoder.ApplierID in Go).
+  optional int32 applier_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ApplierID"
+  ];
+
+  // All applier IDs participating in the flow.
+  repeated int32 all_applier_ids = 2;
+
+  optional int64 job_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
+  ];
+
+  // TableMetadataByDestID maps destination table IDs to source table descriptors.
+  // Used by the applier to construct a TxnDecoder for re-decoding raw KV bytes.
+  map<int32, cockroach.sql.sqlbase.TableDescriptor> table_metadata_by_dest_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TableMetadataByDestID"
+  ];
+
+  // TypeDescriptors contains all user-defined types referenced by source tables.
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 5;
+
+  // NEXT ID: 6.
+}
+
+// TxnLDRDepResolverSpec is the specification for a dependency resolver processor
+// (stage 3) in the transactional LDR DistSQL flow. Each dep resolver is
+// co-located with an applier processor and wraps a TrackerServer. It receives
+// Wait/WaitHorizon/Ready requests from applier processors via its DistSQL
+// input and sends DependencyUpdates back to the co-located applier via a
+// loopback backchannel.
+message TxnLDRDepResolverSpec {
+  // ApplierID for the co-located applier (cast to ldrdecoder.ApplierID in Go).
+  optional int32 applier_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ApplierID"
+  ];
+
+  // All applier IDs participating in the flow.
+  repeated int32 all_applier_ids = 2;
+
+  // NEXT ID: 3.
+}
