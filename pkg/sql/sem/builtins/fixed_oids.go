@@ -2935,6 +2935,11 @@ var builtinOidsArray = []string{
 	2980: `st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 	2981: `st_3ddistance(geometry_a: geometry, geometry_b: geometry) -> float`,
 	2982: `_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2983: `crdb_internal.revlog_show_ticks(collection: string) -> tuple{timestamptz AS tick_end, bool AS closed, int AS key_count, int AS logical_bytes, int AS sst_bytes}`,
+	2984: `crdb_internal.revlog_show_ticks(collection: string, start: timestamptz, end: timestamptz) -> tuple{timestamptz AS tick_end, bool AS closed, int AS key_count, int AS logical_bytes, int AS sst_bytes}`,
+	2985: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz) -> tuple{string AS key, timestamptz AS mvcc_ts, string AS value, string AS prev_value}`,
+	2986: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz, start_key: bytes, end_key: bytes) -> tuple{string AS key, timestamptz AS mvcc_ts, string AS value, string AS prev_value}`,
+	2987: `crdb_internal.revlog_show_changes(collection: string, tick_time: timestamptz, raw_values: bool) -> tuple{string AS key, timestamptz AS mvcc_ts, bytes AS value, bytes AS prev_value}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
