@@ -402,8 +402,6 @@
 /pkg/blobs/                  @cockroachdb/disaster-recovery
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/gssapiccl/          @cockroachdb/product-security
-#!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
-#!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 #!/pkg/ccl/serverccl/        @cockroachdb/unowned

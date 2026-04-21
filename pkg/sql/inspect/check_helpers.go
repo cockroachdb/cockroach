@@ -494,9 +494,9 @@ func isTesting() bool {
 // isRegionalByRow checks whether a table is regional by row or if it's a mock
 // RBR table run under test.
 //
-// Mocked RBR tables (in unit and base logic tests) allow for duplicated values
-// in unique columns whereas the genuine articles (in CCL logic tests) are
-// blocked by the uniqueness constraints. Single-node mock RBR tables are used
+// Mocked RBR tables (in unit and single-node logic tests) allow for duplicated
+// values in unique columns whereas the genuine articles (in multi-node logic
+// tests) are blocked by the uniqueness constraints. Single-node mock RBR tables are used
 // to test the duplicated uniques case; multi-node RBR tables are used to test
 // the unduplicated case.
 func isRegionalByRow(table catalog.TableDescriptor) bool {

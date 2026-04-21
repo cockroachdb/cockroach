@@ -33,13 +33,13 @@ const (
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	testLogicCmd := &cobra.Command{
-		Use:     "testlogic {,base,ccl,opt,sqlite,sqliteccl}",
+		Use:     "testlogic {,base,opt,sqlite}",
 		Aliases: []string{"logictest"},
 		Short:   "Run logic tests",
 		Long:    "Run logic tests.",
 		Example: `
 	dev testlogic
-	dev testlogic ccl opt
+	dev testlogic base opt
 	dev testlogic --files=fk --subtests='20042|20045' --config=local`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -97,7 +97,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		ignoreCache = true
 	}
 
-	validChoices := []string{"base", "ccl", "opt", "sqlite", "sqliteccl"}
+	validChoices := []string{"base", "opt", "sqlite"}
 	if len(choices) == 0 {
 		// Default to all targets if --bigtest, else all non-sqlite targets.
 		if bigtest {
@@ -143,17 +143,11 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		case "base":
 			testsDir = "//pkg/sql/logictest/tests"
 			hasNonSqlite = true
-		case "ccl":
-			testsDir = "//pkg/ccl/logictestccl/tests"
-			hasNonSqlite = true
 		case "opt":
 			testsDir = "//pkg/sql/opt/exec/execbuilder/tests"
 			hasNonSqlite = true
 		case "sqlite":
 			testsDir = "//pkg/sql/sqlitelogictest/tests"
-			bigtest = true
-		case "sqliteccl":
-			testsDir = "//pkg/ccl/sqlitelogictestccl/tests"
 			bigtest = true
 		}
 		// Keep track of the relative path to the root of the tests directory
@@ -189,12 +183,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 			dir := filepath.Join(filepath.Dir(baseTestsDir), "testdata")
 			args = append(args, writeablePathArg(dir))
-			if choice == "ccl" {
-				// The ccl logictest target shares the testdata directory with the base
-				// logictest target -- make an allowance explicitly for that.
-				args = append(args, writeablePathArg("pkg/sql/logictest"))
-				args = append(args, writeablePathArg("pkg/sql/opt/exec/execbuilder/testdata/"))
-			}
 		}
 	}
 
@@ -299,7 +287,7 @@ func (d *dev) shouldGenerateLogicTests(ctx context.Context) bool {
 	if base == "" {
 		return true
 	}
-	changedFiles, _ := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "pkg/sql/logictest/logictestbase/** ", "pkg/sql/logictest/testdata/**", "pkg/sql/sqlitelogictest/BUILD.bazel", "pkg/sql/sqlitelogictest/sqlitelogictest.go", "pkg/ccl/logictestccl/testdata/**", "pkg/sql/opt/exec/execbuilder/testdata/**")
+	changedFiles, _ := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "pkg/sql/logictest/logictestbase/** ", "pkg/sql/logictest/testdata/**", "pkg/sql/sqlitelogictest/BUILD.bazel", "pkg/sql/sqlitelogictest/sqlitelogictest.go", "pkg/sql/opt/exec/execbuilder/testdata/**")
 	return strings.TrimSpace(string(changedFiles)) != ""
 }
 
