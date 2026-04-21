@@ -48,7 +48,7 @@ type SQLStatusServer interface {
 	TenantServiceStatus(context.Context, *TenantServiceStatusRequest) (*TenantServiceStatusResponse, error)
 	UpdateTableMetadataCache(context.Context, *UpdateTableMetadataCacheRequest) (*UpdateTableMetadataCacheResponse, error)
 	GetUpdateTableMetadataCacheSignal() chan struct{}
-	DrainSqlStats(context.Context, *DrainSqlStatsRequest) (*DrainStatsResponse, error)
+	DrainSqlStatsStream(req *DrainSqlStatsRequest, stream RPCStatus_DrainSqlStatsStream) error
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -135,7 +136,13 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 
 	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, sqlConn, len(tcs))
 
-	statusServer := s.StatusServer().(serverpb.StatusServer)
+	// The full serverpb.StatusServer is no longer satisfied by
+	// *statusServer (the streaming DrainSqlStats lives behind a
+	// gRPC/DRPC adapter). This test only needs the Diagnostics method,
+	// so cast to a minimal interface that statusServer still satisfies.
+	statusServer := s.StatusServer().(interface {
+		Diagnostics(context.Context, *serverpb.DiagnosticsRequest) (*diagnosticspb.DiagnosticReport, error)
+	})
 	sqlServer := s.SQLServer().(*sql.Server)
 	sqlServer.GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
 	testutils.SucceedsSoon(t, func() error {

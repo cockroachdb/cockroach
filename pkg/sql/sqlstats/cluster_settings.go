@@ -149,6 +149,19 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// DrainSqlStatsChunkSize controls how many statement or transaction stats
+// the source side of DrainSqlStats batches into one stream chunk. Larger
+// chunks amortize per-message overhead but raise per-chunk memory and risk
+// nearing the gRPC max-message-size limit; the default is sized so each
+// chunk stays well under that limit even with large StatementStatistics
+// values.
+var DrainSqlStatsChunkSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.drain.chunk_size",
+	"number of statement/transaction stats per DrainSqlStats stream chunk",
+	1000,
+	settings.PositiveInt)
+
 // SQLStatsAggregationInterval is the cluster setting that controls the
 // aggregation interval for SQL execution statistics. Stats are bucketed
 // into windows of this duration at record time.
