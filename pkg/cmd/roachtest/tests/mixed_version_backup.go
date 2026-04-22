@@ -1848,6 +1848,26 @@ func (mvb *mixedVersionBackup) waitForDBs(
 	return nil
 }
 
+func (mvb *mixedVersionBackup) configureGCPolicies(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
+		return err
+	}
+	u, err := mvb.CommonTestUtils(ctx, h)
+	if err != nil {
+		return err
+	}
+	// The bank workload is an update-heavy workload, which means that by the end
+	// of the test, full revision history backups will be slowed significantly due
+	// to the amount of MVCC history. We set a shorter GC TTL for the bank
+	// database to bound the full backup durations.
+	const bankTTLSeconds = uint64(2 * time.Hour / time.Second)
+	return u.Exec(
+		ctx, rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
+	)
+}
+
 // maybeTakePreviousVersionBackup creates a backup collection (full +
 // incremental), and is supposed to be called before any nodes are
 // upgraded. This ensures that we are able to restore this backup
@@ -3075,6 +3095,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, workloadSeed, numWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
+			mvt.OnStartup("configure gc policies", backupTest.configureGCPolicies)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
 			mvt.OnStartup("maybe set custom cluster settings", backupTest.setClusterSettings)
 
