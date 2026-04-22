@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -156,12 +157,39 @@ type cpuTimeTokenFiller struct {
 	closeCh    chan struct{}
 	// Used only in unit tests.
 	tickCh *chan struct{}
+	// activeMode is the cpuTimeTokenMode after the most recent
+	// resetInterval. Written by the filler goroutine, read by
+	// GetKVWorkQueue via cpuTimeTokenGrantCoordinator.
+	//
+	// On a mode transition, resetInterval coordinates several state
+	// changes so they take effect together at the interval boundary:
+	//  1. strategy (cpuTimeTokenAllocator.strategy) - swapped to the new
+	//     modeStrategy, which controls target computation and burst
+	//     bucket refill routing.
+	//  2. refill rates and granter buckets - the delta between old and
+	//     new rates is applied to the granter, so token levels converge
+	//     to the new mode within one interval.
+	//  3. WorkQueue.useResourceGroup - set via configureQueue, which
+	//     switches group ID derivation between TenantID (serverless)
+	//     and Priority (resource manager).
+	//  4. activeMode (this field) - stored last, after refill and queue
+	//     configuration are complete, so that GetKVWorkQueue routes to
+	//     the correct queue only after the queues are ready.
+	//
+	// TODO(wenyihu6): All four steps can be simplified once
+	// serverless mode is mapped to a single WorkQueue with resource
+	// groups. Serverless tenants would just be resource groups with
+	// specific configs (e.g. system tenant = maxCPU group), so the
+	// rmStrategy handles both modes and the strategy swap (step 1),
+	// queue config toggle (step 3), and routing via activeMode
+	// (step 4) all become unnecessary.
+	activeMode atomic.Int64
 }
 
 func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 	// The token buckets should start full. The first call to resetInterval will
 	// fill the buckets.
-	f.allocator.resetInterval(ctx)
+	f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
 
 	ticker := f.timeSource.NewTicker(timePerTick)
 	intervalStart := f.timeSource.Now()
@@ -203,7 +231,7 @@ func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 						f.allocator.allocateTokens(1)
 					}
 					intervalStart = t
-					f.allocator.resetInterval(ctx)
+					f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
 					remainingTicks = int64(time.Second / timePerTick)
 				} else {
 					remainingSinceIntervalStart := time.Second - elapsedSinceIntervalStart
@@ -236,7 +264,7 @@ func (f *cpuTimeTokenFiller) close() {
 // cpuTimeTokenAllocatorI abstracts cpuTimeTokenAllocator for testing.
 type cpuTimeTokenAllocatorI interface {
 	allocateTokens(expectedRemainingTicksInInterval int64)
-	resetInterval(context.Context)
+	resetInterval(context.Context) cpuTimeTokenMode
 }
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
@@ -260,7 +288,8 @@ type cpuTimeTokenAllocator struct {
 	metrics  *cpuTimeTokenMetrics
 	// strategy is only accessed by the filler goroutine (via
 	// allocateTokens and resetInterval), so no synchronization is
-	// needed.
+	// needed. Contrast with filler.activeMode, which is atomic because
+	// GetKVWorkQueue reads it from arbitrary goroutines.
 	strategy modeStrategy
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
@@ -480,8 +509,21 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 }
 
 // resetInterval recomputes refill rates and applies the delta to the
-// granter and burst buckets.
-func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
+// granter and burst buckets. If the mode cluster setting has changed,
+// the strategy is swapped before computing targets.
+func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
+	// Check for mode transition. a.strategy is only accessed by the
+	// filler goroutine, so we can update it immediately. offMode is
+	// skipped because it is not a real strategy - the constructor
+	// defaults offMode to serverlessMode, and GetKVWorkQueue handles
+	// the off case before reaching activeMode routing.
+	modeChanged := false
+	newMode := cpuTimeTokenACMode.Get(&a.settings.SV)
+	if newMode != offMode && newMode != a.strategy.mode() {
+		a.strategy = a.newStrategy(newMode)
+		modeChanged = true
+	}
+
 	burstDelta := KVCPUTimeUtilBurstDelta.Get(&a.settings.SV)
 	targets := a.strategy.computeTargets(&a.settings.SV, burstDelta)
 	newRefillRates := a.model.fit(ctx, targets)
@@ -495,6 +537,8 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// TODO(josh): This is missing logic to prevent token counts from becoming
 	// negative. Also, the above comment needs to be beefed up.
 	// https://github.com/cockroachdb/cockroach/issues/158539
+	// TODO(wenyihu6): we should do something here for per group burst bucket as
+	// well
 	var deltaRefillRates tokenCounts
 	for tier := range newRefillRates {
 		for qual := range newRefillRates[tier] {
@@ -519,11 +563,26 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 			a.allocated[wc][kind] = 0
 		}
 	}
+
+	// Apply queue configuration after refill is complete, so admission
+	// behavior only changes once tokens are in place. The returned mode
+	// is stored into filler.activeMode by the caller, which is what
+	// GetKVWorkQueue reads to route work. If activeMode were updated
+	// before tokens and queue config, callers could route work into a
+	// CTT queue that has stale token levels or wrong group derivation
+	// (e.g. TenantID instead of Priority), breaking fair-sharing until
+	// the next interval.
+	if modeChanged {
+		a.configureQueue()
+	}
+	return a.strategy.mode()
 }
 
-// newStrategy constructs the modeStrategy for the given mode. Queue
-// side effects are not applied here; resetInterval applies them
-// after the refill is complete.
+// newStrategy constructs the modeStrategy for the given mode.
+// offMode is not a valid argument - callers must guard against it
+// (resetInterval skips the swap, the constructor maps off to
+// serverless). Queue side effects are not applied here;
+// resetInterval applies them after the refill is complete.
 //
 // No explicit bucket reset is needed on mode switch. The granter's
 // tier-1 buckets stay alive across transitions, and the delta
@@ -555,10 +614,10 @@ func (a *cpuTimeTokenAllocator) configureQueue() {
 	a.queues[0].setUseResourceGroup(a.strategy.mode() == resourceManagerMode)
 }
 
-// refillGranter increments per-bucket refill metrics, then delegates to
-// granter.refill. Positive toAdd values are tracked as tokens added;
-// negative values (which occur when refill rates decrease between
-// intervals) are tracked as tokens removed.
+// refillGranter increments per-bucket refill metrics, then delegates
+// to granter.refill. Positive toAdd values are tracked as tokens
+// added; negative values (which occur when refill rates decrease
+// between intervals) are tracked as tokens removed.
 func refillGranter(
 	granter *cpuTimeTokenGranter,
 	metrics *cpuTimeTokenMetrics,
