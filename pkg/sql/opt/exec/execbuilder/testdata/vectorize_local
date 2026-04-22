@@ -258,7 +258,7 @@ query T rowsort
 SELECT DISTINCT CASE WHEN message LIKE '=== operation:%'
     THEN regexp_replace(
       message,
-      ' (gid|node|client|user|txn|cockroach\.\w+|implicit):\S*| hostssl:\S*',
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit|_unfinished):\S*| hostssl:\S*',
       '', 'g')
     ELSE message
   END
