@@ -1068,7 +1068,8 @@ type Replica struct {
 	// delivered under raftMu.
 	txnFeedMu struct {
 		syncutil.RWMutex
-		proc *txnfeed.Processor
+		proc        *txnfeed.Processor
+		commitIndex *txnfeed.CommitIndex
 	}
 
 	// Throttle how often we offer this Replica to the split and merge queues.

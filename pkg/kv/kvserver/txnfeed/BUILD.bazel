@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "buffered_sender.go",
         "catchup_scan.go",
+        "commit_index.go",
         "event_queue.go",
         "processor.go",
         "resolved_timestamp.go",
@@ -40,6 +41,7 @@ go_test(
     name = "txnfeed_test",
     srcs = [
         "catchup_scan_test.go",
+        "commit_index_test.go",
         "processor_test.go",
         "resolved_timestamp_test.go",
     ],

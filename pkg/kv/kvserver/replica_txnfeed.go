@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -145,4 +146,65 @@ func (r *Replica) disconnectTxnFeedWithErr(pErr *kvpb.Error) {
 		r.txnFeedMu.proc.StopWithErr(pErr)
 		r.txnFeedMu.proc = nil
 	}
+}
+
+// recordCommitTimestampsRaftMuLocked populates the CommitIndex from two
+// sources during Raft command application:
+//
+//   - MVCCCommitIntentOp in the LogicalOpLog — fired during intent resolution
+//     on every range where a 2PC transaction wrote.
+//   - CommitTxnOps in the ReplicatedEvalResult — fired for 1PC transactions
+//     that bypass intent resolution entirely (writes go in as plain values).
+//
+// Together these cover both commit paths.
+func (r *Replica) recordCommitTimestampsRaftMuLocked(
+	ctx context.Context, logOps *kvserverpb.LogicalOpLog, commitOps *kvserverpb.CommitTxnOps,
+) {
+	if logOps == nil && commitOps == nil {
+		return
+	}
+	if !txnfeed.Enabled.Get(&r.ClusterSettings().SV) {
+		return
+	}
+	idx := r.getOrCreateCommitIndexRaftMuLocked()
+	if logOps != nil {
+		for i := range logOps.Ops {
+			t, ok := logOps.Ops[i].GetValue().(*enginepb.MVCCCommitIntentOp)
+			if !ok {
+				continue
+			}
+			idx.Record(t.Timestamp, t.TxnID)
+		}
+	}
+	if commitOps != nil {
+		for i := range commitOps.Ops {
+			op := &commitOps.Ops[i]
+			idx.Record(op.CommitTimestamp, op.TxnID)
+		}
+	}
+}
+
+// getOrCreateCommitIndexRaftMuLocked returns the CommitIndex, creating it
+// lazily on first use.
+func (r *Replica) getOrCreateCommitIndexRaftMuLocked() *txnfeed.CommitIndex {
+	r.txnFeedMu.RLock()
+	idx := r.txnFeedMu.commitIndex
+	r.txnFeedMu.RUnlock()
+	if idx != nil {
+		return idx
+	}
+	r.txnFeedMu.Lock()
+	defer r.txnFeedMu.Unlock()
+	if r.txnFeedMu.commitIndex == nil {
+		r.txnFeedMu.commitIndex = txnfeed.NewCommitIndex()
+	}
+	return r.txnFeedMu.commitIndex
+}
+
+// GetCommitIndex returns the CommitIndex for this replica, or nil if none
+// exists yet.
+func (r *Replica) GetCommitIndex() *txnfeed.CommitIndex {
+	r.txnFeedMu.RLock()
+	defer r.txnFeedMu.RUnlock()
+	return r.txnFeedMu.commitIndex
 }

@@ -506,6 +506,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		b.r.handleTxnFeedOpsRaftMuLocked(ctx, ops)
 	}
 
+	// Record commit timestamps for read dependency tracking.
+	b.r.recordCommitTimestampsRaftMuLocked(
+		ctx, cmd.Cmd.LogicalOpLog, cmd.Cmd.ReplicatedEvalResult.CommitTxnOps)
+
 	return nil
 }
 

@@ -583,6 +583,117 @@ func verifyWriteSet(t *testing.T, writes []kvpb.TxnDetailKV, expected []expected
 	}
 }
 
+// TestCommitIndexPopulation verifies that the CommitIndex is populated during
+// Raft application for both 1PC and 2PC transaction commit paths.
+func TestCommitIndexPopulation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	db := ts.DB()
+
+	scratchKey := tc.ScratchRange(t)
+	midKey := append(scratchKey.Clone(), 'm')
+	tc.SplitRangeOrFatal(t, midKey)
+
+	t.Run("1PC", func(t *testing.T) {
+		key := append(scratchKey.Clone(), '1')
+		var txnID uuid.UUID
+		var commitTS hlc.Timestamp
+		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txnID = txn.ID()
+			b := txn.NewBatch()
+			b.Put(key, "one-phase")
+			return txn.CommitInBatch(ctx, b)
+		})
+		require.NoError(t, err)
+
+		// Read the committed value to discover its MVCC timestamp.
+		kv, err := db.Get(ctx, key)
+		require.NoError(t, err)
+		commitTS = kv.Value.Timestamp
+
+		repl := store.LookupReplica(roachpb.RKey(scratchKey))
+		testutils.SucceedsSoon(t, func() error {
+			idx := repl.GetCommitIndex()
+			if idx == nil {
+				return errors.New("commit index not yet created")
+			}
+			ids, ok := idx.Lookup(commitTS)
+			if !ok {
+				return errors.Newf("no entry for ts %s", commitTS)
+			}
+			for _, id := range ids {
+				if id == txnID {
+					return nil
+				}
+			}
+			return errors.Newf("txn %s not found at ts %s", txnID, commitTS)
+		})
+	})
+
+	t.Run("2PC", func(t *testing.T) {
+		key1 := append(scratchKey.Clone(), '2')
+		key2 := append(midKey.Clone(), '2')
+		txn := kv.NewTxn(ctx, db, 0)
+		txnID := txn.ID()
+		require.NoError(t, txn.Put(ctx, key1, "two-phase-1"))
+		require.NoError(t, txn.Put(ctx, key2, "two-phase-2"))
+		require.NoError(t, txn.Commit(ctx))
+
+		// Read committed values to get the MVCC timestamp.
+		kv1, err := db.Get(ctx, key1)
+		require.NoError(t, err)
+		commitTS := kv1.Value.Timestamp
+
+		// Verify the commit index on both ranges.
+		repl1 := store.LookupReplica(roachpb.RKey(scratchKey))
+		repl2 := store.LookupReplica(roachpb.RKey(midKey))
+
+		for _, tc := range []struct {
+			name string
+			repl *kvserver.Replica
+		}{
+			{"range1", repl1},
+			{"range2", repl2},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				testutils.SucceedsSoon(t, func() error {
+					idx := tc.repl.GetCommitIndex()
+					if idx == nil {
+						return errors.New("commit index not yet created")
+					}
+					ids, ok := idx.Lookup(commitTS)
+					if !ok {
+						return errors.Newf("no entry for ts %s", commitTS)
+					}
+					for _, id := range ids {
+						if id == txnID {
+							return nil
+						}
+					}
+					return errors.Newf("txn %s not found at ts %s", txnID, commitTS)
+				})
+			})
+		}
+	})
+}
+
 type missingTxnFeedEventsError struct {
 	has1PC, has2PC bool
 }
