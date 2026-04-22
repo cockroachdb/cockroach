@@ -55,6 +55,15 @@ type alterPrimaryKeySpec struct {
 	Sharded       *tree.ShardedIndexDef
 	Name          tree.Name
 	StorageParams tree.StorageParams
+
+	// PkConstraintExplicitlyDropped is true when the user dropped the existing
+	// primary key constraint by name in the same statement (e.g.
+	// `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY KEY (...)`). In that
+	// case alterPrimaryKey must not preserve the old PK as a unique secondary
+	// index — the user explicitly asked for the uniqueness constraint to go
+	// away. Only set by the ADD CONSTRAINT entry point; ALTER PRIMARY KEY
+	// leaves it false.
+	PkConstraintExplicitlyDropped bool
 }
 
 func alterPrimaryKey(
@@ -790,6 +799,7 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 ) {
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		t.PkConstraintExplicitlyDropped,
 	) {
 		return
 	}
@@ -943,6 +953,9 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 
 // We only recreate the old primary key of the table as a unique secondary
 // index if:
+//   - The user did not explicitly drop the old PK constraint in the same
+//     statement (e.g. `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY
+//     KEY (...)`).
 //   - The table has a primary key (no DROP PRIMARY KEY statements have
 //     been executed).
 //   - The primary key is not the default rowid primary key.
@@ -956,7 +969,11 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	tbl *scpb.Table,
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
+	pkConstraintExplicitlyDropped bool,
 ) bool {
+	if pkConstraintExplicitlyDropped {
+		return false
+	}
 	// A function that retrieves all KEY columns of this index.
 	// If excludeShardedCol, sharded column is excluded, if any.
 	keyColumnIDsAndDirsOfIndex := func(
