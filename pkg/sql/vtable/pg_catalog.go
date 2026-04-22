@@ -50,7 +50,7 @@ CREATE TABLE pg_catalog.pg_am (
 	amcanreturn OID,
 	amcostestimate OID,
 	amoptions OID,
-	amhandler OID,
+	amhandler REGPROC,
 	amtype "char"
 )`
 
@@ -268,7 +268,7 @@ CREATE TABLE pg_catalog.pg_conversion (
 	conowner OID,
 	conforencoding INT4,
 	contoencoding INT4,
-	conproc OID,
+	conproc REGPROC,
 	condefault BOOL
 )`
 
@@ -362,7 +362,7 @@ CREATE TABLE pg_catalog.pg_enum (
   oid OID,
   enumtypid OID,
   enumsortorder FLOAT4,
-  enumlabel STRING
+  enumlabel NAME
 )`
 
 // PGCatalogEventTrigger describes the schema of the pg_catalog.pg_event_trigger
@@ -389,8 +389,8 @@ CREATE TABLE pg_catalog.pg_extension (
   extnamespace OID,
   extrelocatable BOOL,
   extversion STRING,
-  extconfig STRING,
-  extcondition STRING
+  extconfig OID[],
+  extcondition STRING[]
 )`
 
 // PGCatalogForeignDataWrapper describes the schema of the
@@ -576,9 +576,9 @@ CREATE TABLE pg_catalog.pg_operator (
 	oprresult OID,
 	oprcom OID,
 	oprnegate OID,
-	oprcode OID,
-	oprrest OID,
-	oprjoin OID
+	oprcode REGPROC,
+	oprrest REGPROC,
+	oprjoin REGPROC
 )`
 
 // PGCatalogPreparedXacts describes the schema of the
@@ -658,8 +658,8 @@ CREATE TABLE pg_catalog.pg_range (
 	rngmultitypid OID,
 	rngsubopc OID,
 	rngcollation OID,
-	rngcanonical OID,
-	rngsubdiff OID
+	rngcanonical REGPROC,
+	rngsubdiff REGPROC
 )`
 
 // PGCatalogRewrite describes the schema of the pg_catalog.pg_rewrite table.
@@ -739,7 +739,7 @@ CREATE TABLE pg_catalog.pg_settings (
     source STRING,
     min_val STRING,
     max_val STRING,
-    enumvals STRING,
+    enumvals STRING[],
     boot_val STRING,
     reset_val STRING,
     sourcefile STRING,
@@ -884,14 +884,14 @@ const PGCatalogStatActivity = `
 CREATE TABLE pg_catalog.pg_stat_activity (
 	datid OID,
 	datname NAME,
-	pid INTEGER,
+	pid INT4,
 	leader_pid INT4,
 	usesysid OID,
 	usename NAME,
 	application_name TEXT,
 	client_addr INET,
 	client_hostname TEXT,
-	client_port INTEGER,
+	client_port INT4,
 	backend_start TIMESTAMPTZ,
 	xact_start TIMESTAMPTZ,
 	query_start TIMESTAMPTZ,
@@ -913,7 +913,7 @@ const PGCatalogSecurityLabel = `
 CREATE TABLE pg_catalog.pg_seclabel (
 	objoid OID,
 	classoid OID,
-	objsubid INTEGER,
+	objsubid INT4,
 	provider TEXT,
 	label TEXT
 )`
