@@ -222,7 +222,7 @@ func TestIndexForDisplay(t *testing.T) {
 			partition:   "",
 			displayMode: IndexDisplayDefOnly,
 			expected:    "INDEX baz (a ASC, b DESC) STORING (c)",
-			pgExpected:  "INDEX baz USING btree (a ASC, b DESC) STORING (c)",
+			pgExpected:  "INDEX baz USING btree (a ASC, b DESC) INCLUDE (c)",
 		},
 		{
 			index:       storingIndex,
@@ -230,7 +230,7 @@ func TestIndexForDisplay(t *testing.T) {
 			partition:   "",
 			displayMode: IndexDisplayShowCreate,
 			expected:    "CREATE INDEX baz ON foo.public.bar (a ASC, b DESC) STORING (c)",
-			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) STORING (c)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) INCLUDE (c)",
 		},
 		{
 			index:       partialIndex,
@@ -304,7 +304,7 @@ func TestIndexForDisplay(t *testing.T) {
 			partition:   "",
 			displayMode: IndexDisplayDefOnly,
 			expected:    "INDEX baz (a DESC) USING HASH STORING (c) WITH (bucket_count=8)",
-			pgExpected:  "INDEX baz USING btree (a DESC) USING HASH STORING (c) WITH (bucket_count=8)",
+			pgExpected:  "INDEX baz USING btree (a DESC) USING HASH INCLUDE (c) WITH (bucket_count=8)",
 		},
 		{
 			index:       shardedStoringIndex,
@@ -312,7 +312,7 @@ func TestIndexForDisplay(t *testing.T) {
 			partition:   "",
 			displayMode: IndexDisplayShowCreate,
 			expected:    "CREATE INDEX baz ON foo.public.bar (a DESC) USING HASH STORING (c) WITH (bucket_count=8)",
-			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH STORING (c) WITH (bucket_count=8)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH INCLUDE (c) WITH (bucket_count=8)",
 		},
 		{
 			index:       vectorIndex,

@@ -1135,7 +1135,7 @@ crdb_oid    tablename  indexname          indexdef
 5181036     t1_n_seq   primary            CREATE INDEX "primary" ON public.t1_n_seq USING btree (value ASC)
 2955071325  t2         t2_pkey            CREATE UNIQUE INDEX t2_pkey ON public.t2 USING btree (rowid ASC)
 2955071326  t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON public.t2 USING btree (t1_id ASC)
-2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON public.t3 USING btree (a ASC, b DESC) STORING (c)
+2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON public.t3 USING btree (a ASC, b DESC) INCLUDE (c)
 2695335054  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON public.t3 USING btree (rowid ASC)
 3214807592  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON public.t4 USING btree (rowid ASC)
 1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON public.t5 USING btree (rowid ASC)
