@@ -359,7 +359,7 @@ SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled 
 				s := ds.tc.ApplicationLayer(idx)
 				cache := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 				tablePrefix := keys.MustAddr(s.Codec().TablePrefix(tableID))
-				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
+				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LEAD_FOR_GLOBAL_READS)
 				if err != nil {
 					return err.Error()
 				}
