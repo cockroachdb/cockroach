@@ -446,7 +446,7 @@ func registerFastRestorePerf(r registry.Registry) {
 					throughput := float64(endDu-startDu) / (float64(sp.hardware.nodes) * restoreDuration.Seconds())
 					t.L().Printf("Usage %d, Nodes %d, Duration %f; Throughput: %f MB/s/node",
 						endDu-startDu, sp.hardware.nodes, restoreDuration.Seconds(), throughput)
-					uploadRestoreSummaryStats(ctx, t, c, restoreDuration.Seconds(), throughput)
+					uploadRestoreSummaryStats(t, c, restoreDuration.Seconds(), throughput)
 				},
 			})
 		}
