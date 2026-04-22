@@ -121,7 +121,7 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 			// Check that the cache was indeed populated.
 			cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 			entry, err := cache.TestingGetCached(
-				context.Background(), tablePrefix, false /* inverted */, roachpb.LAG_BY_CLUSTER_SETTING,
+				context.Background(), tablePrefix, false /* inverted */, roachpb.LEAD_FOR_GLOBAL_READS,
 			)
 			require.NoError(t, err)
 			require.False(t, entry.Lease.Empty())
