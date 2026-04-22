@@ -4920,9 +4920,22 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	for _, f := range triggerPolicyDeps {
+		functionDepsMap[f["func_oid"].(int64)] = struct{}{}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -5017,9 +5030,22 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	for _, f := range triggerPolicyDeps {
+		functionDepsMap[f["func_oid"].(int64)] = struct{}{}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -5834,6 +5860,8 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.UndefinedObject, condition: true},
 		{code: pgcode.InvalidParameterValue, condition: true},
 		{code: pgcode.InvalidTextRepresentation, condition: true},
+		{code: pgcode.InvalidSchemaName, condition: true},
+		{code: pgcode.InvalidFunctionDefinition, condition: true},
 	})
 
 	return opStmt, nil
