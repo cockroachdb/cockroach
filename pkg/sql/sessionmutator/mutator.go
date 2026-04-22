@@ -587,6 +587,10 @@ func (m *SessionDataMutator) SetOptSplitScanLimit(val int32) {
 	m.Data.OptSplitScanLimit = val
 }
 
+func (m *SessionDataMutator) SetOptimizerSpanLimit(val int32) {
+	m.Data.OptimizerSpanLimit = val
+}
+
 func (m *SessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.Data.EnableStreamReplication = val
 }
