@@ -141,12 +141,15 @@ func collectWrites(
 
 		reply.Writes = append(reply.Writes, detail)
 
-		// If NextIgnoringTime landed on an older version of the same key,
-		// skip to the next user key. Otherwise the iterator is already
-		// positioned on a different key (or is exhausted) and we can
-		// continue directly.
+		// After NextIgnoringTime, the iterator is in "ignoring time" mode.
+		// We must re-enter time-bounded iteration without skipping keys.
 		if onSameKey {
+			// Still on the same user key; skip remaining versions.
 			iter.NextKey()
+		} else if ok {
+			// On a different key. Re-seek at the user key to re-apply
+			// time bounds from the current position without advancing.
+			iter.SeekGE(storage.MVCCKey{Key: iter.UnsafeKey().Key})
 		}
 	}
 	return nil
