@@ -1352,14 +1352,12 @@ func EncodePrimaryIndex(
 	return EncodePrimaryIndexWithKeyPrefix(tableDesc, index, keyPrefix, colMap, values, includeEmpty)
 }
 
-// EncodePrimaryIndexWithKeyPrefix constructs a list of k/v pairs for a
-// row encoded as a primary index, using the provided key prefix specific to
-// that index. This function mirrors the encoding logic in
-// prepareInsertOrUpdateBatch in pkg/sql/row/writer.go. It is somewhat
-// duplicated here due to the different arguments that
-// prepareOrInsertUpdateBatch needs and uses to generate the k/v's for the row
-// it inserts. includeEmpty controls whether or not k/v's with empty values
-// should be returned. It returns indexEntries in family sorted order.
+// EncodePrimaryIndexWithKeyPrefix constructs a list of k/v pairs for a row
+// encoded as a primary index, using the provided key prefix specific to
+// that index. The per-family value encoding is delegated to
+// PrimaryIndexEncoder; this function adds the per-row index key, the
+// family key suffixes, and the includeEmpty handling that decides whether
+// empty non-zero families show up in the output.
 func EncodePrimaryIndexWithKeyPrefix(
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
@@ -1376,74 +1374,41 @@ func EncodePrimaryIndexWithKeyPrefix(
 		return nil, MakeNullPKError(tableDesc, index, colMap, values)
 	}
 
-	storedColumns := getStoredColumnsForPrimaryIndex(index, colMap)
-	keyColumns := index.CollectKeyColumnIDs()
-
-	var entryValue []byte
+	encoder := MakePrimaryIndexEncoder(tableDesc, index)
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
-	var columnsToEncode []ValueEncodedColumn
+	var entryValueBuf []byte
 	var called bool
 	if err := tableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if !called {
 			called = true
 		} else {
 			indexKey = indexKey[:len(indexKey):len(indexKey)]
-			entryValue = entryValue[:0]
-			columnsToEncode = columnsToEncode[:0]
 		}
-		familyKey := keys.MakeFamilyKey(indexKey, uint32(family.ID))
-		// The decoders expect that column family 0 is encoded with a TUPLE value tag, so we
-		// don't want to use the untagged value encoding.
-		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-			// Single column value families which are not stored or key columns can be skipped,
-			// these may exist temporarily while adding a column. For key columns composite keys may
-			// be stored at the same time.
-			if skipColumn, _ := SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID,
-				values[colMap.GetDefault(family.DefaultColumnID)],
-				keyColumns,
-				storedColumns); skipColumn {
-				return nil
-			}
-			datum := findColumnValue(family.DefaultColumnID, colMap, values)
-			// We want to include this column if its value is non-null or
-			// we were requested to include all of the columns.
-			if datum != tree.DNull || includeEmpty {
-				col, err := catalog.MustFindColumnByID(tableDesc, family.DefaultColumnID)
-				if err != nil {
-					return err
-				}
-				value, err := valueside.MarshalLegacy(col.GetType(), datum)
-				if err != nil {
-					return err
-				}
-				indexEntries = append(indexEntries, IndexEntry{Key: familyKey, Value: value, Family: family.ID})
-			}
-			return nil
-		}
-
-		for _, colID := range family.ColumnIDs {
-			if storedColumns.Contains(colID) {
-				columnsToEncode = append(columnsToEncode, ValueEncodedColumn{ColID: colID})
-				continue
-			}
-			if cdatum, ok := values[colMap.GetDefault(colID)].(tree.CompositeDatum); ok {
-				if cdatum.IsComposite() {
-					columnsToEncode = append(columnsToEncode, ValueEncodedColumn{ColID: colID, IsComposite: true})
-					continue
-				}
-			}
-		}
-		sort.Sort(ByID(columnsToEncode))
-		entryValue, err = writeColumnValues(entryValue, colMap, values, columnsToEncode)
+		var res PrimaryIndexFamilyValue
+		res, entryValueBuf, err = encoder.EncodeFamily(family, colMap, values, entryValueBuf)
 		if err != nil {
 			return err
 		}
-		if family.ID != 0 && len(entryValue) == 0 && !includeEmpty {
+		if res.Skipped {
 			return nil
 		}
-		entry := IndexEntry{Key: familyKey, Family: family.ID}
-		entry.Value.SetTuple(entryValue)
-		indexEntries = append(indexEntries, entry)
+		familyKey := keys.MakeFamilyKey(indexKey, uint32(family.ID))
+		if !res.Value.IsPresent() {
+			// Empty family value. Family 0 always emits a TUPLE sentinel
+			// inside EncodeFamily, so reaching here for family 0 is
+			// impossible. For non-zero families, only emit when the
+			// caller asked to see empty entries (e.g. for delete).
+			if !includeEmpty {
+				return nil
+			}
+			entry := IndexEntry{Key: familyKey, Family: family.ID}
+			entry.Value.SetTuple(nil)
+			indexEntries = append(indexEntries, entry)
+			return nil
+		}
+		indexEntries = append(indexEntries, IndexEntry{
+			Key: familyKey, Value: res.Value, Family: family.ID,
+		})
 		return nil
 	}); err != nil {
 		return nil, err
@@ -1456,41 +1421,6 @@ func EncodePrimaryIndexWithKeyPrefix(
 	}
 
 	return indexEntries, nil
-}
-
-// getStoredColumnsForPrimaryIndex computes the set of columns stored in this
-// primary index's value for encoding. Note that EncodePrimaryIndex will utilize
-// this set to construct the value, but will augment this with the set of
-// key columns which are composite encoded; this is just the set of columns
-// stored in the primary index value which are not featured in the index key
-// whatsoever.
-//
-// colMap is expected to include all columns in the table.
-func getStoredColumnsForPrimaryIndex(
-	index catalog.Index, colMap catalog.TableColMap,
-) catalog.TableColSet {
-
-	// It should be rare to never that we come across an index which is encoded
-	// as a primary index but with a version older than this version.
-	// Nevertheless, for safety, we assume at that version that the stored
-	// columns set is not populated, and instead we defer to the colMap to
-	// compute the complete set before subtracting the key columns.
-	if index.GetVersion() < descpb.PrimaryIndexWithStoredColumnsVersion {
-		var allColumn catalog.TableColSet
-		colMap.ForEach(func(colID descpb.ColumnID, _ int) {
-			allColumn.Add(colID)
-		})
-		return allColumn.Difference(index.CollectKeyColumnIDs())
-	}
-
-	// Note that the definition of Primary according to the catalog.Index method
-	// is that the index is installed as the primary index of the table, not
-	// that it has a primary index encoding. We must call the appropriate
-	// method based on this distinction to get the desired set of columns.
-	if !index.Primary() {
-		return index.CollectSecondaryStoredColumnIDs()
-	}
-	return index.CollectPrimaryStoredColumnIDs()
 }
 
 // MakeNullPKError generates an error when the value for a primary key column is
