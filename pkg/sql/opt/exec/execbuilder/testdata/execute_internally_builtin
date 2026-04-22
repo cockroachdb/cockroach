@@ -205,16 +205,16 @@ GRANT admin TO testuser
 
 user testuser
 
-# Ensure that changing the user via the override isn't possible.
+# Ensure that the user can be changed via the UserProto override.
 query T
 SELECT crdb_internal.execute_internally('SELECT session_user;');
 ----
 testuser
 
 query T
-SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=root');
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'UserProto=root');
 ----
-testuser
+root
 
 user root
 
@@ -224,9 +224,9 @@ SELECT crdb_internal.execute_internally('SELECT session_user;');
 root
 
 query T
-SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=testuser');
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'UserProto=testuser');
 ----
-root
+testuser
 
 statement ok
 SELECT crdb_internal.execute_internally('EXPLAIN ANALYZE SELECT 1;');
