@@ -2162,3 +2162,37 @@ SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
 ----
 PRIMARY KEY (rowid ASC)
 CHECK ((parse_time('abc'::text) = parse_time('abc'::text)))
+
+subtest experimental_strftime_year_padding
+
+# Regression test for #45884: %Y must zero-pad to at least 4 digits, matching
+# POSIX/glibc/BSD strftime and Postgres's to_char(YYYY).
+query TTTTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0099-06-15 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0999-12-31 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('10001-01-01 00:00:00'::timestamp, '%Y-%m-%d')
+----
+0001-01-01  0099-06-15  0999-12-31  2024-01-02  10001-01-01
+
+# %y should still print only the last two digits, zero-padded.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('2024-01-01 00:00:00'::timestamp, '%y')
+----
+01  99  24
+
+# %C%y should keep producing the same output it did before the fix.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%C%y-%m-%d')
+----
+0001-01-01  0099-01-01  2024-01-02
+
+subtest end

@@ -595,8 +595,8 @@ github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b h1:JbkTu68NpiczWOaciC2QSy33RFEnnq6H2pz7viQp0rc=
 github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b/go.mod h1:oapRqABg5KA/TaAikQH53fpP5nvCe9sftYmYV/F/yVE=
-github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5 h1:4QYwXM6EoXgx2UtS/Wj+eDbyaMUL5FJKkRHY12IyCVE=
-github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5/go.mod h1:YwcT2H2HmJAB99Vw5DGYlFy9675kkRocXWlWMzy84ik=
+github.com/cockroachdb/strtime v0.0.0-20260422145425-b760b890ce68 h1:evIjPzHn88VK54H1V/CPCvFvGBMoojvRYBmsJmg96CY=
+github.com/cockroachdb/strtime v0.0.0-20260422145425-b760b890ce68/go.mod h1:YwcT2H2HmJAB99Vw5DGYlFy9675kkRocXWlWMzy84ik=
 github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b h1:VXvSNzmr8hMj8XTuY0PT9Ane9qZGul/p67vGYwl9BFI=
 github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847 h1:c7yLgqcm/3c9lYtpWeVD9NYqA9cKsKHdpQM62PHtTUM=
