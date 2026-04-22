@@ -25,7 +25,7 @@ func MakeClusterConstructor(
 	f func(testing.TB, base.TestingKnobs) (_, _ *gosql.DB, cleanup func()),
 ) ClusterConstructor {
 	return func(t testing.TB, measureRoundtrips bool) *Cluster {
-		c := &Cluster{}
+		c := &Cluster{measuresRoundtrips: measureRoundtrips}
 		beforePlan := func(trace tracingpb.Recording, stmt string) {
 			c.stmtToKVBatchRequests.Store(stmt, &trace)
 		}
@@ -44,6 +44,7 @@ func MakeClusterConstructor(
 type Cluster struct {
 	stmtToKVBatchRequests syncutil.Map[string, tracingpb.Recording]
 	cleanup               func()
+	measuresRoundtrips    bool
 
 	// adminSQLConn should be the default connection for tests. It specifies a
 	// user with admin privileges.
