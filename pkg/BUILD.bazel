@@ -1901,6 +1901,7 @@ GO_TARGETS = [
     "//pkg/repstream:repstream",
     "//pkg/revert:revert",
     "//pkg/revert:revert_test",
+    "//pkg/revlog:revlog",
     "//pkg/roachpb:roachpb",
     "//pkg/roachpb:roachpb_test",
     "//pkg/roachprod/agents/fluentbit:fluentbit",
