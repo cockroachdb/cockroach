@@ -85,6 +85,14 @@ ALTER TYPE names RENAME VALUE 'james' TO 'johnny'
 statement error jim is not an existing enum value
 ALTER TYPE names RENAME VALUE 'jim' TO 'jimmy'
 
+# When oldVal doesn't exist and newVal does, report the missing old value first.
+statement error nonexistent is not an existing enum value
+ALTER TYPE names RENAME VALUE 'nonexistent' TO 'johnny'
+
+# Renaming a value to itself errors.
+statement error enum value james already exists
+ALTER TYPE names RENAME VALUE 'james' TO 'james'
+
 statement ok
 ALTER TYPE names RENAME VALUE 'james' to 'jimmy'
 
