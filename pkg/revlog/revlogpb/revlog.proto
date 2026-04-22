@@ -78,6 +78,25 @@ message FlushedFile {
   Stats              stats    = 3 [(gogoproto.nullable) = false];
 }
 
+// OpenTicks is the persisted blob of in-flight tick file lists —
+// the data files PUT for ticks whose close marker has not yet been
+// written. The coordinator persists this alongside its frontier
+// (see jobfrontier) so a resumed coordinator can include
+// pre-restart files in the eventual close marker.
+//
+// Stats are not persisted: per-tick Stats in the manifest are
+// best-effort/monitoring-only (revlog-format.md §4) and are
+// re-rolled imprecisely on resume from whatever the new producers
+// contribute.
+message OpenTicks {
+  repeated OpenTick ticks = 1 [(gogoproto.nullable) = false];
+}
+
+message OpenTick {
+  util.hlc.Timestamp tick_end = 1 [(gogoproto.nullable) = false];
+  repeated File      files    = 2 [(gogoproto.nullable) = false];
+}
+
 // ValueFrame is the SSTable value payload.
 // (user_key, mvcc_ts) live in the SSTable key, not here.
 message ValueFrame {

@@ -27,6 +27,40 @@ type FileIDSource interface {
 	Next() int64
 }
 
+// SpanResume is the per-span start the producer should initialize
+// its rangefeed subscription and frontier at on resume. See
+// ResumeState.
+type SpanResume struct {
+	Span     roachpb.Span
+	Resolved hlc.Timestamp
+}
+
+// ResumeState is the per-producer slice of the prior incarnation's
+// persisted checkpoint. Populated by the gateway from the
+// rehydrated TickManager state and the span partition assigned to
+// this producer; passed into NewProducer (and used by the
+// rangefeed-startup path) so the new producer picks up where the
+// prior one left off.
+//
+// Zero value (nil slices, nil map) means "first run / no prior
+// state": the producer subscribes its rangefeed at startHLC,
+// initializes its frontier to startHLC for every span, and starts
+// every per-tick flushorder counter at 0.
+type ResumeState struct {
+	// SpanResumes is the per-span resume position. Spans assigned
+	// to the producer but absent from this slice start at
+	// startHLC (e.g. a span newly added by a coverage change
+	// since the last checkpoint).
+	SpanResumes []SpanResume
+
+	// StartingFlushOrders is the per-tick starting flushorder.
+	// Ticks not listed start at 0. The values are
+	// max(prior incarnation's flushorder for the tick) + 1, so
+	// the first new file for a resumed tick sits strictly after
+	// every prior file.
+	StartingFlushOrders map[hlc.Timestamp]int32
+}
+
 // TickSink is the producer's output side. After each round of work,
 // the producer calls Flush exactly once with two pieces of info:
 // any data files that were just durably written (each tagged with
@@ -76,6 +110,13 @@ type Producer struct {
 	// same frontier is idempotent.
 	flushedThrough hlc.Timestamp
 
+	// startingFlushOrders is the per-tick starting flushorder
+	// counter populated from ResumeState. flushTick consumes the
+	// entry for a tick when it writes a file there; subsequent
+	// (intra-tick) flushes for the same tick increment from the
+	// consumed value.
+	startingFlushOrders map[hlc.Timestamp]int32
+
 	// pendingFiles and pendingCheckpoints accumulate between
 	// Flushes. Both are reset on each call to sink.Flush.
 	pendingFiles       []revlogpb.FlushedFile
@@ -99,9 +140,14 @@ type bufferedEvent struct {
 
 // NewProducer constructs a Producer. spans must be non-empty;
 // tickWidth must be positive; sink must be non-nil. The producer's
-// internal frontier is initialized at startHLC, so the first
-// closeable tick is the one whose tick_end is the smallest boundary
-// > startHLC.
+// internal frontier is initialized at startHLC for every span;
+// resume.SpanResumes (if any) override the per-span init for spans
+// with persisted progress, and resume.StartingFlushOrders seeds
+// per-tick flushorder counters so files PUT after a restart sit at
+// flushorder strictly above any prior incarnation's contribution.
+//
+// The first closeable tick is the one whose tick_end is the
+// smallest boundary > min(startHLC, all SpanResumes.Resolved).
 func NewProducer(
 	es cloud.ExternalStorage,
 	spans []roachpb.Span,
@@ -109,6 +155,7 @@ func NewProducer(
 	tickWidth time.Duration,
 	fileIDs FileIDSource,
 	sink TickSink,
+	resume ResumeState,
 ) (*Producer, error) {
 	if len(spans) == 0 {
 		return nil, errors.AssertionFailedf("revlogjob: NewProducer requires at least one span")
@@ -125,15 +172,27 @@ func NewProducer(
 	if err != nil {
 		return nil, errors.Wrap(err, "creating span frontier")
 	}
+	for _, sr := range resume.SpanResumes {
+		if _, err := f.Forward(sr.Span, sr.Resolved); err != nil {
+			return nil, errors.Wrapf(err,
+				"resuming frontier for span %s at %s", sr.Span, sr.Resolved)
+		}
+	}
+	// flushedThrough = min over the per-span starts ensures the
+	// initial close loop doesn't iterate through tick boundaries
+	// the producer's rangefeed can't emit events for. With no
+	// resume info, this equals startHLC.
+	flushedThrough := f.Frontier()
 	return &Producer{
-		es:             es,
-		tickWidth:      tickWidth,
-		startHLC:       startHLC,
-		fileIDs:        fileIDs,
-		sink:           sink,
-		frontier:       f,
-		open:           make(map[hlc.Timestamp]*tickBuffer),
-		flushedThrough: startHLC,
+		es:                  es,
+		tickWidth:           tickWidth,
+		startHLC:            startHLC,
+		fileIDs:             fileIDs,
+		sink:                sink,
+		frontier:            f,
+		open:                make(map[hlc.Timestamp]*tickBuffer),
+		flushedThrough:      flushedThrough,
+		startingFlushOrders: resume.StartingFlushOrders,
 	}, nil
 }
 
@@ -237,7 +296,14 @@ func (p *Producer) flushTick(ctx context.Context, tickEnd hlc.Timestamp) error {
 	}
 	buf.events = deduped
 
-	tw, err := revlog.NewTickWriter(ctx, p.es, tickEnd, p.fileIDs.Next(), 0 /* flushOrder */)
+	flushOrder := p.startingFlushOrders[tickEnd]
+	// Consume so an intra-tick second flush (TODO) increments from
+	// here; today we only flush each tick once per producer
+	// session, but consuming makes the resume invariant explicit.
+	if p.startingFlushOrders != nil {
+		delete(p.startingFlushOrders, tickEnd)
+	}
+	tw, err := revlog.NewTickWriter(ctx, p.es, tickEnd, p.fileIDs.Next(), flushOrder)
 	if err != nil {
 		return errors.Wrapf(err, "opening tick writer for %s", tickEnd)
 	}
