@@ -63,6 +63,21 @@ func TestCanApply(t *testing.T) {
 		// Current replica — compare raft indices, with special handling for
 		// Destroy/Subsume which always need applying.
 		{
+			name:        "create already applied",
+			event:       event(3, 0, wagpb.EventCreate),
+			state:       persistedRangeState{mark: replicaMark(3, 0)},
+			shouldApply: false,
+		}, {
+			name:        "init on uninitialized replica",
+			event:       event(3, 10, wagpb.EventInit),
+			state:       persistedRangeState{mark: replicaMark(3, 0)},
+			shouldApply: true,
+		}, {
+			name:        "destroy on uninitialized replica",
+			event:       event(3, 0, wagpb.EventDestroy),
+			state:       persistedRangeState{mark: replicaMark(3, 0)},
+			shouldApply: true, shouldCatchUp: 0,
+		}, {
 			name:        "apply below applied index",
 			event:       event(3, 49, wagpb.EventApply),
 			state:       persistedRangeState{mark: replicaMark(3, 0), appliedIndex: 50},
@@ -186,6 +201,8 @@ func TestCanApplyWAGNode(t *testing.T) {
 			name: "multi-event split, needs apply with per-range catch-ups",
 			states: map[roachpb.RangeID]persistedRangeState{
 				1: {mark: replicaMark(3, 0), appliedIndex: 99},
+				// RHS was created (EventCreate applied) but not yet initialized.
+				2: {mark: replicaMark(1, 0)},
 			},
 			node: wagpb.Node{Events: []wagpb.Event{
 				// EventSplit for LHS (catch-up to index 99).
@@ -210,6 +227,8 @@ func TestCanApplyWAGNode(t *testing.T) {
 			name: "multi-event disagreement returns error",
 			states: map[roachpb.RangeID]persistedRangeState{
 				1: {mark: replicaMark(3, 0), appliedIndex: 100},
+				// RHS was created (EventCreate applied) but not yet initialized.
+				2: {mark: replicaMark(1, 0)},
 			},
 			// LHS already applied but RHS not yet — should not happen.
 			node: wagpb.Node{Events: []wagpb.Event{
@@ -292,6 +311,14 @@ func TestReplayWAG(t *testing.T) {
 		defer eng.Close()
 		var seq wag.Seq
 		bf := MakeBatchFactory(&eng, &seq)
+
+		// Establish the replica in the state engine as initialized. In practice,
+		// EventCreate and EventInit would have done this; here we pre-write the
+		// mark and applied index so that EventApply nodes target an initialized
+		// replica.
+		writePersistedRangeState(t, StateRW(eng.StateEngine()), 1, persistedRangeState{
+			mark: replicaMark(1, 0), appliedIndex: 9,
+		})
 
 		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 10}, wagpb.EventApply, "key1", "val1")
 		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 11}, wagpb.EventApply, "key2", "val2")
