@@ -42,6 +42,7 @@ go_test(
     name = "ash_test",
     srcs = [
         "aggregate_test.go",
+        "bench_test.go",
         "buffer_test.go",
         "report_test.go",
         "sampler_test.go",
