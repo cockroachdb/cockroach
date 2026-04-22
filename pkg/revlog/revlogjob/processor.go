@@ -143,8 +143,10 @@ func (p *proc) run(ctx context.Context) error {
 
 	sink := newMetaSink(p.progCh)
 	tickWidth := time.Duration(p.spec.TickWidthNanos)
+	resume := resumeFromSpec(p.spec)
 	producer, err := NewProducer(es, p.spec.Spans, p.spec.StartHLC, tickWidth,
-		nodeFileIDs{instanceID: unique.ProcessUniqueID(p.FlowCtx.NodeID.SQLInstanceID())}, sink)
+		nodeFileIDs{instanceID: unique.ProcessUniqueID(p.FlowCtx.NodeID.SQLInstanceID())},
+		sink, resume)
 	if err != nil {
 		return errors.Wrap(err, "constructing producer")
 	}
@@ -152,8 +154,19 @@ func (p *proc) run(ctx context.Context) error {
 	eventsCh := make(chan rangefeedEvent, 1024)
 	errCh := make(chan error, 1)
 
+	// Open the rangefeed at the lowest persisted resume timestamp
+	// across this producer's spans (or StartHLC on first run). The
+	// rangefeed's catchup scan will redeliver events between this
+	// point and any per-span persisted positions; the producer's
+	// per-span frontier (initialized from resume.SpanResumes) and
+	// the manager's monotonic frontier dedupe correctly.
+	//
+	// TODO(dt): open one rangefeed per (start_ts) group of spans
+	// to skip the redelivery for spans whose persisted ts is above
+	// the slowest's.
+	rfStart := rangefeedStart(p.spec, resume)
 	rf, err := startRangeFeed(ctx, cfg.RangeFeedFactory, "revlog",
-		p.spec.Spans, p.spec.StartHLC, eventsCh, errCh)
+		p.spec.Spans, rfStart, eventsCh, errCh)
 	if err != nil {
 		return err
 	}

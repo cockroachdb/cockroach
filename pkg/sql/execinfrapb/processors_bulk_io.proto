@@ -228,6 +228,38 @@ message RevlogSpec {
   // tick_width_nanos is the wall-clock-aligned tick width, in
   // nanoseconds.
   optional int64 tick_width_nanos = 5 [(gogoproto.nullable) = false];
+  // resume_starts gives per-span rangefeed start times for the
+  // producer to subscribe at. On first run this is empty and the
+  // producer uses start_hlc for every span. On resume it carries
+  // the prior incarnation's persisted frontier, sliced to this
+  // producer's assigned spans, so the rangefeed only redelivers
+  // events the manager hasn't already accounted for. Spans
+  // assigned to this producer but absent from resume_starts fall
+  // back to start_hlc (e.g. a span newly added by a coverage
+  // change since the last checkpoint).
+  repeated RevlogResumeSpan resume_starts = 6 [(gogoproto.nullable) = false];
+  // tick_starting_flush_orders gives the per-tick starting
+  // flushorder counter for ticks the prior incarnation already
+  // contributed files to. The producer's first new file for each
+  // listed tick lands at this flushorder (== max(prior) + 1
+  // computed at the gateway from the persisted open-tick file
+  // lists), so per-key ordering survives the resume boundary
+  // even if span partitioning has changed.
+  repeated RevlogTickResume tick_starting_flush_orders = 7 [(gogoproto.nullable) = false];
+}
+
+// RevlogResumeSpan pairs a span with the resolved timestamp the
+// producer should resume the rangefeed subscription at.
+message RevlogResumeSpan {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp resolved = 2 [(gogoproto.nullable) = false];
+}
+
+// RevlogTickResume pairs a tick end with the producer's starting
+// flushorder for that tick.
+message RevlogTickResume {
+  optional util.hlc.Timestamp tick_end = 1 [(gogoproto.nullable) = false];
+  optional int32 starting_flush_order = 2 [(gogoproto.nullable) = false];
 }
 
 // StreamIngestionPartitionSpec contains information about a partition and how
