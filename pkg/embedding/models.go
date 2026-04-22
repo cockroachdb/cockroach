@@ -11,6 +11,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Modality is a bitmask indicating which input types a model supports.
+type Modality int
+
+const (
+	// ModalityText indicates the model can embed text inputs.
+	ModalityText Modality = 1 << iota
+	// ModalityImage indicates the model can embed image inputs.
+	ModalityImage
+)
+
 // ModelInfo describes an embedding model's static metadata.
 type ModelInfo struct {
 	// Dims is the output embedding dimension.
@@ -20,11 +30,27 @@ type ModelInfo struct {
 	Provider string
 	// MaxTokens is the model's maximum input token limit.
 	MaxTokens int
+	// Modalities indicates which input types the model supports.
+	// Zero value is treated as ModalityText for backward compatibility.
+	Modalities Modality
 }
 
 // IsLocal returns true if the model runs locally (no provider prefix).
 func (m ModelInfo) IsLocal() bool {
 	return m.Provider == ""
+}
+
+// SupportsText returns true if the model can embed text inputs.
+func (m ModelInfo) SupportsText() bool {
+	if m.Modalities == 0 {
+		return true // default to text for backward compatibility
+	}
+	return m.Modalities&ModalityText != 0
+}
+
+// SupportsImage returns true if the model can embed image inputs.
+func (m ModelInfo) SupportsImage() bool {
+	return m.Modalities&ModalityImage != 0
 }
 
 // modelRegistry maps model specification strings to their metadata.
@@ -63,6 +89,14 @@ var modelRegistry = map[string]ModelInfo{
 		Dims:      768,
 		Provider:  "google",
 		MaxTokens: 2048,
+	},
+
+	// Google Vertex AI multimodal models.
+	"google/multimodalembedding@001": {
+		Dims:       1408,
+		Provider:   "google",
+		MaxTokens:  32,
+		Modalities: ModalityText | ModalityImage,
 	},
 }
 

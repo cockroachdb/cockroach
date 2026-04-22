@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -55,6 +56,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var model string
 	var connectionName string
 	var loadingMode string
+	var inputType catpb.VectorizerInputType
 	var batchSize int64
 	var companionTableName tree.TableName
 	var sourceTableName tree.TableName
@@ -80,6 +82,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		model = vectorizerCfg.Model
 		connectionName = vectorizerCfg.ConnectionName
 		loadingMode = vectorizerCfg.LoadingMode
+		inputType = vectorizerCfg.InputType
 		batchSize = vectorizerCfg.BatchSize
 		if batchSize <= 0 {
 			batchSize = 64
@@ -194,7 +197,8 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		inserted, err := embedAndInsertRows(
 			ctx, execCfg, embedder, missingRows,
 			numPKCols, pkColNames, sourceColumns, tmpl,
-			companionTableName, loadingMode, false, /* isUpdate */
+			companionTableName, loadingMode, inputType,
+			false, /* isUpdate */
 		)
 		if err != nil {
 			return err
@@ -245,7 +249,8 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		updated, err := embedAndInsertRows(
 			ctx, execCfg, embedder, staleRows,
 			numPKCols, pkColNames, sourceColumns, tmpl,
-			companionTableName, loadingMode, true, /* isUpdate */
+			companionTableName, loadingMode, inputType,
+			true, /* isUpdate */
 		)
 		if err != nil {
 			return err
@@ -319,6 +324,10 @@ func resolveEmbedder(
 // When loadingMode is "uri", the source column value is treated as a
 // cloud storage URI. The file is fetched, its text is extracted, and
 // the extracted text is embedded instead of the raw column value.
+//
+// When inputType is VECTORIZER_INPUT_IMAGE, the source column values
+// are treated as raw image bytes and embedded using the ImageEmbedder
+// interface. No chunking or template processing is applied to images.
 func embedAndInsertRows(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -330,26 +339,52 @@ func embedAndInsertRows(
 	tmpl string,
 	companionTableName tree.TableName,
 	loadingMode string,
+	inputType catpb.VectorizerInputType,
 	isUpdate bool,
 ) (int64, error) {
-	texts := make([]string, len(rows))
-	for i, row := range rows {
-		if loadingMode == "uri" {
-			uri := string(tree.MustBeDString(row[numPKCols]))
-			text, err := readURIContent(ctx, execCfg, uri)
-			if err != nil {
-				return 0, errors.Wrapf(err,
-					"vectorizer: reading URI for row %d", i)
-			}
-			texts[i] = text
-		} else {
-			texts[i] = buildTextFromRow(row, numPKCols, sourceColumns, tmpl)
-		}
-	}
+	var embeddings [][]float32
+	// For image inputs, chunk text is left empty since images are
+	// embedded whole.
+	chunkTexts := make([]string, len(rows))
 
-	embeddings, err := embedder.EmbedBatch(ctx, texts)
-	if err != nil {
-		return 0, errors.Wrap(err, "vectorizer: generating embeddings")
+	if inputType == catpb.VectorizerInputType_VECTORIZER_INPUT_IMAGE {
+		imgEmbedder, ok := embedder.(embedding.ImageEmbedder)
+		if !ok {
+			return 0, errors.New(
+				"vectorizer: model does not implement image embedding")
+		}
+		images := make([][]byte, len(rows))
+		for i, row := range rows {
+			images[i] = []byte(tree.MustBeDBytes(row[numPKCols]))
+		}
+		var err error
+		embeddings, err = imgEmbedder.EmbedImageBatch(ctx, images)
+		if err != nil {
+			return 0, errors.Wrap(err, "vectorizer: generating image embeddings")
+		}
+	} else {
+		texts := make([]string, len(rows))
+		for i, row := range rows {
+			if loadingMode == "uri" {
+				uri := string(tree.MustBeDString(row[numPKCols]))
+				text, err := readURIContent(ctx, execCfg, uri)
+				if err != nil {
+					return 0, errors.Wrapf(err,
+						"vectorizer: reading URI for row %d", i)
+				}
+				texts[i] = text
+			} else {
+				texts[i] = buildTextFromRow(
+					row, numPKCols, sourceColumns, tmpl,
+				)
+			}
+		}
+		var err error
+		embeddings, err = embedder.EmbedBatch(ctx, texts)
+		if err != nil {
+			return 0, errors.Wrap(err, "vectorizer: generating embeddings")
+		}
+		chunkTexts = texts
 	}
 
 	var count int64
@@ -374,7 +409,7 @@ func embedAndInsertRows(
 			fmt.Sprintf("$%d", argIdx+2),
 			"now()",
 		)
-		args = append(args, 0, texts[i], vectorToSQL(embeddings[i]))
+		args = append(args, 0, chunkTexts[i], vectorToSQL(embeddings[i]))
 
 		var conflictClause string
 		if isUpdate {

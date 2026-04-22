@@ -134,6 +134,54 @@ var embeddingBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"embed_image": makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "image", Typ: types.Bytes},
+				{Name: "model", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.PGVector),
+			Fn: func(
+				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				imageBytes := []byte(tree.MustBeDBytes(args[0]))
+				modelSpec := string(tree.MustBeDString(args[1]))
+
+				info, err := embedding.LookupModel(modelSpec)
+				if err != nil {
+					return nil, err
+				}
+				if !info.SupportsImage() {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"model %q does not support image embeddings",
+						modelSpec)
+				}
+
+				embedder, err := resolveEmbedder(ctx, evalCtx, modelSpec)
+				if err != nil {
+					return nil, err
+				}
+				imgEmbedder, ok := embedder.(embedding.ImageEmbedder)
+				if !ok {
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"model %q does not implement image embedding",
+						modelSpec)
+				}
+
+				vec, err := imgEmbedder.EmbedImage(ctx, imageBytes)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDPGVector(vector.T(vec)), nil
+			},
+			Info: "Returns the vector embedding of the input image using the " +
+				"specified multimodal model. Requires a model that supports " +
+				"image embeddings (e.g., 'google/multimodalembedding@001') " +
+				"and a matching external connection.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"read_uri": makeBuiltin(
 		tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{

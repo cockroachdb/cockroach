@@ -10,6 +10,7 @@ package google
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +40,9 @@ var retryOpts = retry.Options{
 }
 
 // Client implements embedding.Embedder by calling the Google Vertex
-// AI embeddings API. It is safe for concurrent use after construction.
+// AI embeddings API. For multimodal models (multimodalembedding@001),
+// it also implements embedding.ImageEmbedder, allowing both text and
+// images to be embedded into the same vector space.
 //
 // Supports two auth modes: a static access token (for testing, expires
 // in 1 hour) or a service account key (auto-refreshes tokens).
@@ -48,16 +51,18 @@ type Client struct {
 	tokenSrc    *tokenSource // auto-refreshing, used if non-nil
 	model       string
 	dims        int
+	multimodal  bool // true for models that support image input
 	endpoint    string
 	httpClient  *httputil.Client
 }
 
 // NewClient creates a Client using a static access token.
-func NewClient(accessToken, project, region, model string, dims int) *Client {
+func NewClient(accessToken, project, region, model string, dims int, multimodal bool) *Client {
 	return &Client{
 		accessToken: accessToken,
 		model:       model,
 		dims:        dims,
+		multimodal:  multimodal,
 		endpoint:    predictEndpoint(region, project, model),
 		httpClient: httputil.NewClient(
 			httputil.WithClientTimeout(defaultTimeout),
@@ -68,7 +73,7 @@ func NewClient(accessToken, project, region, model string, dims int) *Client {
 // NewClientWithServiceAccount creates a Client that auto-refreshes
 // access tokens using a service account key.
 func NewClientWithServiceAccount(
-	saKey ServiceAccountKey, project, region, model string, dims int,
+	saKey ServiceAccountKey, project, region, model string, dims int, multimodal bool,
 ) *Client {
 	httpClient := httputil.NewClient(
 		httputil.WithClientTimeout(defaultTimeout),
@@ -77,6 +82,7 @@ func NewClientWithServiceAccount(
 		tokenSrc:   newTokenSource(saKey, httpClient),
 		model:      model,
 		dims:       dims,
+		multimodal: multimodal,
 		endpoint:   predictEndpoint(region, project, model),
 		httpClient: httpClient,
 	}
@@ -111,17 +117,77 @@ func (c *Client) EmbedBatch(ctx context.Context, texts []string) ([][]float32, e
 		return nil, nil
 	}
 
-	instances := make([]instance, len(texts))
-	for i, t := range texts {
-		instances[i] = instance{Content: t}
+	var bodyBytes []byte
+	var err error
+	if c.multimodal {
+		// Multimodal models use {"text": "..."} instead of
+		// {"content": "..."}.
+		instances := make([]mmInstance, len(texts))
+		for i, t := range texts {
+			instances[i] = mmInstance{Text: t}
+		}
+		bodyBytes, err = json.Marshal(
+			mmPredictRequest{Instances: instances},
+		)
+	} else {
+		instances := make([]instance, len(texts))
+		for i, t := range texts {
+			instances[i] = instance{Content: t}
+		}
+		bodyBytes, err = json.Marshal(
+			predictRequest{Instances: instances},
+		)
 	}
-	reqBody := predictRequest{Instances: instances}
-	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling predict request")
 	}
 
+	return c.doPredictBatch(ctx, bodyBytes, len(texts))
+}
+
+// EmbedImage produces a normalized embedding vector for a single
+// image by calling the Vertex AI multimodal embedding endpoint.
+func (c *Client) EmbedImage(ctx context.Context, image []byte) ([]float32, error) {
+	vecs, err := c.EmbedImageBatch(ctx, [][]byte{image})
+	if err != nil {
+		return nil, err
+	}
+	return vecs[0], nil
+}
+
+// EmbedImageBatch produces normalized embedding vectors for multiple
+// images by calling the Vertex AI multimodal embedding endpoint. Each
+// image is base64-encoded and sent as a separate instance.
+func (c *Client) EmbedImageBatch(ctx context.Context, images [][]byte) ([][]float32, error) {
+	if len(images) == 0 {
+		return nil, nil
+	}
+
+	instances := make([]mmInstance, len(images))
+	for i, img := range images {
+		instances[i] = mmInstance{
+			Image: &mmImage{
+				BytesBase64Encoded: base64.StdEncoding.EncodeToString(img),
+			},
+		}
+	}
+	bodyBytes, err := json.Marshal(
+		mmPredictRequest{Instances: instances},
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling predict request")
+	}
+
+	return c.doPredictBatch(ctx, bodyBytes, len(images))
+}
+
+// doPredictBatch sends a predict request and extracts embedding
+// vectors from the response. It handles retry and response
+// validation. Works for both text and image predictions — multimodal
+// responses use textEmbedding for text and imageEmbedding for images.
+func (c *Client) doPredictBatch(ctx context.Context, bodyBytes []byte, n int) ([][]float32, error) {
 	var resp predictResponse
+	var err error
 	retries := retry.StartWithCtx(ctx, retryOpts)
 	for retries.Next() {
 		resp, err = c.doRequest(ctx, bodyBytes)
@@ -136,15 +202,29 @@ func (c *Client) EmbedBatch(ctx context.Context, texts []string) ([][]float32, e
 		return nil, err
 	}
 
-	if len(resp.Predictions) != len(texts) {
+	if len(resp.Predictions) != n {
 		return nil, errors.Newf(
 			"vertex: expected %d predictions, got %d",
-			len(texts), len(resp.Predictions),
+			n, len(resp.Predictions),
 		)
 	}
-	result := make([][]float32, len(texts))
+	result := make([][]float32, n)
 	for i, p := range resp.Predictions {
-		result[i] = p.Embeddings.Values
+		// Multimodal models return separate textEmbedding and
+		// imageEmbedding fields. Text-only models return
+		// embeddings.values. Pick whichever is populated.
+		switch {
+		case len(p.ImageEmbedding) > 0:
+			result[i] = p.ImageEmbedding
+		case len(p.TextEmbedding) > 0:
+			result[i] = p.TextEmbedding
+		case len(p.Embeddings.Values) > 0:
+			result[i] = p.Embeddings.Values
+		default:
+			return nil, errors.Newf(
+				"vertex: empty embedding in prediction %d", i,
+			)
+		}
 	}
 	return result, nil
 }
@@ -261,6 +341,8 @@ func RegionFromHost(host string) string {
 
 // Request and response types matching the Vertex AI predict API.
 
+// Text-only embedding models (text-embedding-004, etc.)
+
 type predictRequest struct {
 	Instances []instance `json:"instances"`
 }
@@ -269,12 +351,34 @@ type instance struct {
 	Content string `json:"content"`
 }
 
+// Multimodal embedding models (multimodalembedding@001)
+
+type mmPredictRequest struct {
+	Instances []mmInstance `json:"instances"`
+}
+
+type mmInstance struct {
+	Text  string   `json:"text,omitempty"`
+	Image *mmImage `json:"image,omitempty"`
+}
+
+type mmImage struct {
+	BytesBase64Encoded string `json:"bytesBase64Encoded"`
+}
+
+// Shared response types — the prediction struct carries fields for
+// both text-only and multimodal response formats.
+
 type predictResponse struct {
 	Predictions []prediction `json:"predictions"`
 }
 
 type prediction struct {
+	// Text-only models return embeddings.values.
 	Embeddings embeddingResult `json:"embeddings"`
+	// Multimodal models return separate fields.
+	TextEmbedding  []float32 `json:"textEmbedding"`
+	ImageEmbedding []float32 `json:"imageEmbedding"`
 }
 
 type embeddingResult struct {

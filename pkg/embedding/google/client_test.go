@@ -41,7 +41,7 @@ func TestEmbed(t *testing.T) {
 	))
 	defer server.Close()
 
-	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768)
+	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768, false)
 	c.endpoint = server.URL
 
 	vec, err := c.Embed(context.Background(), "hello world")
@@ -71,7 +71,7 @@ func TestEmbedBatch(t *testing.T) {
 	))
 	defer server.Close()
 
-	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768)
+	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768, false)
 	c.endpoint = server.URL
 
 	vecs, err := c.EmbedBatch(context.Background(), []string{"a", "b", "c"})
@@ -83,7 +83,7 @@ func TestEmbedBatch(t *testing.T) {
 }
 
 func TestEmbedBatchEmpty(t *testing.T) {
-	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768)
+	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768, false)
 	vecs, err := c.EmbedBatch(context.Background(), nil)
 	require.NoError(t, err)
 	require.Nil(t, vecs)
@@ -113,7 +113,7 @@ func TestHTTPErrorClassification(t *testing.T) {
 			))
 			defer server.Close()
 
-			c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768)
+			c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768, false)
 			c.endpoint = server.URL
 
 			_, err := c.Embed(context.Background(), "hello")
@@ -149,7 +149,7 @@ func TestContextCancellation(t *testing.T) {
 	))
 	defer server.Close()
 
-	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768)
+	c := NewClient("test-token", "test-project", "us-east1", "text-embedding-004", 768, false)
 	c.endpoint = server.URL
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -157,4 +157,66 @@ func TestContextCancellation(t *testing.T) {
 
 	_, err := c.Embed(ctx, "hello")
 	require.Error(t, err)
+}
+
+func TestMultimodalTextEmbed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			var raw map[string]interface{}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			instances := raw["instances"].([]interface{})
+			inst := instances[0].(map[string]interface{})
+			// Multimodal text uses "text" field, not "content".
+			require.Equal(t, "hello world", inst["text"])
+			require.Nil(t, inst["image"])
+
+			resp := predictResponse{
+				Predictions: []prediction{
+					{TextEmbedding: make([]float32, 1408)},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
+		},
+	))
+	defer server.Close()
+
+	c := NewClient("test-token", "test-project", "us-east1", "multimodalembedding@001", 1408, true)
+	c.endpoint = server.URL
+
+	vec, err := c.Embed(context.Background(), "hello world")
+	require.NoError(t, err)
+	require.Len(t, vec, 1408)
+}
+
+func TestMultimodalImageEmbed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			var raw map[string]interface{}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			instances := raw["instances"].([]interface{})
+			inst := instances[0].(map[string]interface{})
+			// Image input should have "image" field with base64.
+			imgObj := inst["image"].(map[string]interface{})
+			require.NotEmpty(t, imgObj["bytesBase64Encoded"])
+			require.Nil(t, inst["text"])
+
+			resp := predictResponse{
+				Predictions: []prediction{
+					{ImageEmbedding: make([]float32, 1408)},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
+		},
+	))
+	defer server.Close()
+
+	c := NewClient("test-token", "test-project", "us-east1", "multimodalembedding@001", 1408, true)
+	c.endpoint = server.URL
+
+	fakeImage := []byte("fake-png-data")
+	vec, err := c.EmbedImage(context.Background(), fakeImage)
+	require.NoError(t, err)
+	require.Len(t, vec, 1408)
 }

@@ -193,6 +193,41 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 	}
 	dims := info.Dims
 
+	// Determine input type by inspecting source column types. If all
+	// columns are BYTES, this is an image vectorizer. Mixed types are
+	// not allowed.
+	inputType := catpb.VectorizerInputType_VECTORIZER_INPUT_TEXT
+	var hasBytesCol, hasNonBytesCol bool
+	for _, colName := range n.n.Columns {
+		col := catalog.FindColumnByTreeName(n.tableDesc, colName)
+		if col.GetType().Family() == types.BytesFamily {
+			hasBytesCol = true
+		} else {
+			hasNonBytesCol = true
+		}
+	}
+	if hasBytesCol && hasNonBytesCol {
+		return pgerror.Newf(pgcode.DatatypeMismatch,
+			"cannot mix BYTES and non-BYTES columns in a vectorizer")
+	}
+	if hasBytesCol {
+		inputType = catpb.VectorizerInputType_VECTORIZER_INPUT_IMAGE
+		if !info.SupportsImage() {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"model %q does not support image embeddings; "+
+					"BYTES columns require a multimodal model like "+
+					"'google/multimodalembedding@001'", model)
+		}
+		if tmpl != "" {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"template option is not supported for image vectorizers")
+		}
+		if loadingMode == "uri" {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"URI loading mode is not supported for image vectorizers")
+		}
+	}
+
 	// For remote models, validate that the external connection exists.
 	var connectionName string
 	provider, _ := embedding.ParseModelSpec(model)
@@ -263,6 +298,7 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		ScheduleID:       sj.ScheduleID(),
 		LoadingMode:      loadingMode,
 		ConnectionName:   connectionName,
+		InputType:        inputType,
 	}
 
 	return p.writeSchemaChange(

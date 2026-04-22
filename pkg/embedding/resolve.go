@@ -57,6 +57,8 @@ func ResolveRemoteEmbedder(modelSpec, connURI string) (Embedder, error) {
 			)
 		}
 
+		multimodal := info.SupportsImage()
+
 		// Service account credentials (auto-refreshing tokens).
 		if creds := u.Query().Get("credentials"); creds != "" {
 			saKey, err := google.ParseServiceAccountKey(creds)
@@ -75,6 +77,7 @@ func ResolveRemoteEmbedder(modelSpec, connURI string) (Embedder, error) {
 			}
 			return google.NewClientWithServiceAccount(
 				saKey, project, region, modelName, info.Dims,
+				multimodal,
 			), nil
 		}
 
@@ -94,6 +97,7 @@ func ResolveRemoteEmbedder(modelSpec, connURI string) (Embedder, error) {
 		}
 		return google.NewClient(
 			accessToken, project, region, modelName, info.Dims,
+			multimodal,
 		), nil
 
 	default:
