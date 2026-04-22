@@ -50,7 +50,11 @@ func (r *Replica) TxnFeed(
 	// Ensure we have a TxnFeed processor for this range.
 	p := r.getTxnFeedProcessorRaftMuLocked()
 	if p == nil {
-		p = r.initTxnFeedProcessorRaftMuLocked()
+		var err error
+		p, err = r.initTxnFeedProcessorRaftMuLocked()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Create a catch-up snapshot under raftMu. Register closes the snapshot
@@ -62,16 +66,21 @@ func (r *Replica) TxnFeed(
 }
 
 // initTxnFeedProcessorRaftMuLocked creates a new TxnFeed processor for this
-// replica and stores it. Must be called under raftMu.
-func (r *Replica) initTxnFeedProcessorRaftMuLocked() *txnfeed.Processor {
+// replica, registers it with the scheduler, and stores it. Must be called
+// under raftMu.
+func (r *Replica) initTxnFeedProcessorRaftMuLocked() (*txnfeed.Processor, error) {
 	desc := r.Desc()
 	p := txnfeed.NewProcessor(txnfeed.Config{
 		AmbientContext: r.AmbientContext,
 		Span:           desc.RSpan(),
 		Stopper:        r.store.stopper,
+		Scheduler:      r.store.getRangefeedScheduler(),
 	})
+	if err := p.Start(); err != nil {
+		return nil, err
+	}
 	r.setTxnFeedProcessor(p)
-	return p
+	return p, nil
 }
 
 // getTxnFeedProcessorRaftMuLocked returns the current TxnFeed processor, or
