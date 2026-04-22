@@ -3850,7 +3850,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3872,7 +3872,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3887,7 +3887,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 					if _, err := conn.ExecContext(ctx, sql); err != nil {
 						if isCancellationError(err) {
-							return nil
+							return err
 						}
 						panic(err)
 					}
@@ -3904,7 +3904,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
 					if isCancellationError(err) {
-						return nil
+						return err
 					}
 					panic(err)
 				}
@@ -3916,7 +3916,9 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 		grp.GoCtx(createThreads)
 		grp.GoCtx(readThreads)
 		grp.GoCtx(modifyThreads)
-		require.NoError(t, grp.Wait())
+		if err := grp.Wait(); err != nil && !isCancellationError(err) {
+			t.Fatalf("unexpected error from ctxgroup: %v", err)
+		}
 	})
 }
 
