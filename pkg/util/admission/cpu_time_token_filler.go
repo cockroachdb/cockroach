@@ -7,7 +7,6 @@ package admission
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -246,6 +245,9 @@ var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 // responsibility of cpuTimeTokenAllocator is to gradually allocate tokens
 // every interval, while respecting the bucket capacities. The computation
 // of the rate of tokens to add every interval is left to cpuTimeModel.
+//
+// Mode-specific behavior (target computation and burst bucket refill)
+// is delegated to a modeStrategy, which is swapped on mode transitions.
 type cpuTimeTokenAllocator struct {
 	granter *cpuTimeTokenGranter
 	// queues holds references to WorkQueues for each resource tier. Used to
@@ -255,6 +257,10 @@ type cpuTimeTokenAllocator struct {
 	settings *cluster.Settings
 	model    cpuTimeModel
 	metrics  *cpuTimeTokenMetrics
+	// strategy is only accessed by the filler goroutine (via
+	// allocateTokens and resetInterval), so no synchronization is
+	// needed.
+	strategy modeStrategy
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -263,6 +269,64 @@ type cpuTimeTokenAllocator struct {
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
 	allocated tokenCounts
+}
+
+// modeStrategy encapsulates the mode-specific behavior of the
+// cpuTimeTokenAllocator. serverlessStrategy implements it for
+// Serverless mode; rmStrategy will be added for resource manager mode.
+type modeStrategy interface {
+	mode() cpuTimeTokenMode
+	// computeTargets reads mode-specific cluster settings and returns
+	// the target utilizations for model fitting.
+	computeTargets(sv *settings.Values) targetUtilizations
+	// refillBurst refills per-tenant burst buckets. tokens is the
+	// per-tick allocation (from allocateTokens) or per-interval delta
+	// (from resetInterval). refillRates is the current refill rates.
+	refillBurst(tokens tokenCounts, refillRates rates)
+}
+
+// serverlessStrategy implements modeStrategy for Serverless mode,
+// which uses 2 WorkQueues (systemTenant, appTenant) with per-tier
+// utilization targets. Each tier's burst bucket gets noBurst/4 of
+// that tier's allocation and rate.
+type serverlessStrategy struct {
+	queues [numResourceTiers]workQueueIForAllocator
+}
+
+func (s *serverlessStrategy) mode() cpuTimeTokenMode {
+	return serverlessMode
+}
+
+func (s *serverlessStrategy) computeTargets(sv *settings.Values) targetUtilizations {
+	if numResourceTiers != 2 || numBurstQualifications != 2 {
+		panic(errors.AssertionFailedf(
+			"computeTargets requires numResourceTiers=2 and "+
+				"numBurstQualifications=2 but got %d, %d",
+			numResourceTiers, numBurstQualifications))
+	}
+	// Compute target utilizations from cluster settings. The noBurst targets are
+	// configurable by cluster settings. A canBurst target adds a delta to the
+	// corresponding noBurst target, and the delta is also configurable by a
+	// cluster setting. The code here is not general with respect to
+	// numResourceTiers & numBurstQualifications. This isn't necessary for the
+	// Serverless use case on which we will first introduce CPU time token AC.
+	burstDelta := KVCPUTimeUtilBurstDelta.Get(sv)
+	var targets targetUtilizations
+	appTarget := KVCPUTimeAppUtilGoal.Get(sv)
+	targets[appTenant][noBurst] = appTarget
+	targets[appTenant][canBurst] = appTarget + burstDelta
+	systemTarget := KVCPUTimeSystemUtilGoal.Get(sv)
+	targets[systemTenant][noBurst] = systemTarget
+	targets[systemTenant][canBurst] = systemTarget + burstDelta
+	return targets
+}
+
+func (s *serverlessStrategy) refillBurst(tokens tokenCounts, refillRates rates) {
+	for tier := range s.queues {
+		toAdd := tokens[tier][noBurst] / 4
+		burstCapacity := refillRates[tier][noBurst] / 4
+		s.queues[tier].refillBurstBuckets(toAdd, burstCapacity)
+	}
 }
 
 // rates stores a token count per second, for example, the refill
@@ -410,35 +474,13 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// default values, this implies that an application tenant can burst,
 	// if they are using roughly less than 20% of the CPU on a CRDB node
 	// (0.8 * 0.25 = 0.2).
-	for resourceTier := range numResourceTiers {
-		toAdd := allocations[resourceTier][noBurst] / 4
-		burstCapacity := a.refillRates[resourceTier][noBurst] / 4
-		a.queues[resourceTier].refillBurstBuckets(toAdd, burstCapacity)
-	}
+	a.strategy.refillBurst(allocations, a.refillRates)
 }
 
-// resetInterval is called to signal the beginning of a new interval.
-// allocateTokens adds the desired number of tokens every interval.
+// resetInterval recomputes refill rates and applies the delta to the
+// granter and burst buckets.
 func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
-	// Compute target utilizations from cluster settings. The noBurst targets are
-	// configurable by cluster settings. A canBurst target adds a delta to the
-	// corresponding noBurst target, and the delta is also configurable by a
-	// cluster setting. The code here is not general with respect to
-	// numResourceTiers & numBurstQualifications. This isn't necessary for the
-	// Serverless use case on which we will first introduce CPU time token AC.
-	var targets targetUtilizations
-	if numResourceTiers != 2 || numBurstQualifications != 2 {
-		panic(fmt.Sprintf(
-			"resetInterval requires that numResourceTiers = 2 and numBurstQualifications = 2 but got %d, %d", numResourceTiers, numBurstQualifications))
-	}
-	burstDelta := KVCPUTimeUtilBurstDelta.Get(&a.settings.SV)
-	appTarget := KVCPUTimeAppUtilGoal.Get(&a.settings.SV)
-	targets[appTenant][noBurst] = appTarget
-	targets[appTenant][canBurst] = appTarget + burstDelta
-	systemTarget := KVCPUTimeSystemUtilGoal.Get(&a.settings.SV)
-	targets[systemTenant][noBurst] = systemTarget
-	targets[systemTenant][canBurst] = systemTarget + burstDelta
-
+	targets := a.strategy.computeTargets(&a.settings.SV)
 	newRefillRates := a.model.fit(ctx, targets)
 
 	// deltaRefillRates is the difference in tokens to add per interval (1s)
@@ -465,13 +507,8 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	refillGranter(a.granter, a.metrics, deltaRefillRates,
 		bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
-
 	// Apply the delta to the per-group burst buckets also.
-	for resourceTier := range numResourceTiers {
-		toAdd := deltaRefillRates[resourceTier][noBurst] / 4
-		burstCapacity := bucketCapacities[resourceTier][noBurst] / 4
-		a.queues[resourceTier].refillBurstBuckets(toAdd, burstCapacity)
-	}
+	a.strategy.refillBurst(deltaRefillRates, a.refillRates)
 
 	// Reset allocated.
 	for wc := range a.allocated {
@@ -479,6 +516,40 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 			a.allocated[wc][kind] = 0
 		}
 	}
+}
+
+// newStrategy constructs the modeStrategy for the given mode. Queue
+// side effects are not applied here; resetInterval applies them
+// after the refill is complete.
+//
+// No explicit bucket reset is needed on mode switch. The granter's
+// tier-1 buckets stay alive across transitions, and the delta
+// mechanism in resetInterval (deltaRefillRates) adjusts all bucket
+// token counts to converge to the new mode's rates within one
+// interval (1s). In-flight work in queue[1] during a serverless-to-RM
+// switch may stall (no new refill routed there), but will time out
+// via the WorkQueue's normal deadline handling.
+func (a *cpuTimeTokenAllocator) newStrategy(mode cpuTimeTokenMode) modeStrategy {
+	switch mode {
+	case offMode:
+		panic(errors.AssertionFailedf("offMode is not a valid strategy; callers must guard against it"))
+	case serverlessMode:
+		return &serverlessStrategy{queues: a.queues}
+	case resourceManagerMode:
+		// TODO(wenyihu6): implement this
+		panic(errors.AssertionFailedf("resourceManagerMode not implemented yet"))
+	default:
+		panic(errors.AssertionFailedf("unknown cpuTimeTokenMode: %d", mode))
+	}
+}
+
+// configureQueue applies mode-specific settings to the WorkQueue.
+// Called at the end of resetInterval after refill is complete.
+//
+// TODO(wenyihu6): This will become unnecessary once serverless
+// tenants are modeled as resource groups in a single WorkQueue.
+func (a *cpuTimeTokenAllocator) configureQueue() {
+	a.queues[0].setUseResourceGroup(a.strategy.mode() == resourceManagerMode)
 }
 
 // refillGranter increments per-bucket refill metrics, then delegates to
@@ -506,10 +577,11 @@ func refillGranter(
 	granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
 }
 
-// workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
-// to enable unit testing.
+// workQueueIForAllocator abstracts the burst bucket refill methods in
+// WorkQueue, to enable unit testing.
 type workQueueIForAllocator interface {
 	refillBurstBuckets(toAdd int64, capacity int64)
+	setUseResourceGroup(enabled bool)
 }
 
 // cpuTimeModel abstracts cpuTimeLinearModel for testing.
