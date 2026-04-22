@@ -72,6 +72,16 @@ func HeartbeatTxn(
 		if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, &txn); err != nil {
 			return result.Result{}, err
 		}
+
+		// Bump the transaction's WriteTimestamp above the closed timestamp
+		// to ensure the TxnFeed resolved timestamp never needs to regress
+		// when a new transaction record appears. Unlike EndTxn, HeartbeatTxn
+		// silently bumps rather than returning an error because heartbeats
+		// bypass the span refresher interceptor.
+		closedTS := cArgs.EvalCtx.GetClosedTimestampOlderThanStorageSnapshot()
+		if !closedTS.IsEmpty() {
+			txn.WriteTimestamp.Forward(closedTS.Next())
+		}
 	}
 
 	// If the transaction is pending, take the opportunity to determine the

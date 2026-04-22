@@ -176,9 +176,10 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	testCases := []struct {
 		name string
 		// Replica state.
-		existingTxn    *roachpb.TransactionRecord
-		canCreateTxn   bool
-		minTxnCommitTS hlc.Timestamp
+		existingTxn     *roachpb.TransactionRecord
+		canCreateTxn    bool
+		minTxnCommitTS  hlc.Timestamp
+		closedTimestamp hlc.Timestamp
 		// Request state.
 		headerTxn      *roachpb.Transaction
 		commit         bool
@@ -565,6 +566,89 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				record.WriteTimestamp.Forward(ts2)
 				return &record
 			}(),
+		},
+		{
+			// The closed timestamp is above the transaction's write timestamp.
+			// A commit should be rejected with a WriteTooOldError so the
+			// coordinator can refresh reads and retry above the closed timestamp.
+			name: "record missing, can create, try commit below closed timestamp",
+			// Replica state.
+			existingTxn:     nil,
+			canCreateTxn:    true,
+			closedTimestamp: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expError: "WriteTooOldError",
+			validateError: func(t *testing.T, err error) {
+				var wtoErr *kvpb.WriteTooOldError
+				require.ErrorAs(t, err, &wtoErr)
+				require.Equal(t, ts, wtoErr.Timestamp)
+				require.Equal(t, ts2.Next(), wtoErr.ActualTimestamp)
+			},
+		},
+		{
+			// Same as above, but for a parallel commit (staging).
+			name: "record missing, can create, try stage below closed timestamp",
+			// Replica state.
+			existingTxn:     nil,
+			canCreateTxn:    true,
+			closedTimestamp: ts2,
+			// Request state.
+			headerTxn:      headerTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "WriteTooOldError",
+			validateError: func(t *testing.T, err error) {
+				var wtoErr *kvpb.WriteTooOldError
+				require.ErrorAs(t, err, &wtoErr)
+				require.Equal(t, ts, wtoErr.Timestamp)
+				require.Equal(t, ts2.Next(), wtoErr.ActualTimestamp)
+			},
+		},
+		{
+			// A rollback below the closed timestamp should succeed. Aborted
+			// records don't affect the TxnFeed resolved timestamp.
+			name: "record missing, can create, try rollback below closed timestamp",
+			// Replica state.
+			existingTxn:     nil,
+			closedTimestamp: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    false,
+			// Expected result.
+			expTxn: abortedRecord,
+		},
+		{
+			// The transaction's write timestamp is above the closed timestamp.
+			// The commit should succeed normally.
+			name: "record missing, can create, try commit above closed timestamp",
+			// Replica state.
+			existingTxn:     nil,
+			canCreateTxn:    true,
+			closedTimestamp: hlc.Timestamp{WallTime: 0, Logical: 1},
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: committedRecord,
+		},
+		{
+			// The closed timestamp check only applies when creating a new
+			// record. If the record already exists (e.g., created by a
+			// heartbeat), the commit should succeed regardless of the closed
+			// timestamp.
+			name: "record pending, try commit below closed timestamp",
+			// Replica state.
+			existingTxn:     pendingRecord,
+			closedTimestamp: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: committedRecord,
 		},
 		{
 			// Standard case where a transaction is rolled back. The record
@@ -1597,12 +1681,15 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			if !c.noLockSpans {
 				req.LockSpans = intents
 			}
+			st := cluster.MakeTestingClusterSettings()
 			var resp kvpb.EndTxnResponse
 			_, err := EndTxn(ctx, batch, CommandArgs{
 				EvalCtx: (&MockEvalCtx{
-					Desc:      &desc,
-					Clock:     clock,
-					AbortSpan: as,
+					Desc:            &desc,
+					Clock:           clock,
+					AbortSpan:       as,
+					ClusterSettings: st,
+					ClosedTimestamp: c.closedTimestamp,
 					CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
 						if c.canCreateTxn {
 							return true, 0

@@ -2012,7 +2012,9 @@ func (rsr *ReverseScanRequest) flags() flag {
 
 // EndTxn updates the timestamp cache to prevent replays.
 // Replays for the same transaction key and timestamp must retry on EndTxn.
-func (*EndTxnRequest) flags() flag              { return isWrite | isTxn | isAlone | updatesTSCache }
+func (*EndTxnRequest) flags() flag {
+	return isWrite | isTxn | isAlone | updatesTSCache | requiresClosedTSOlderThanStorageSnapshot
+}
 func (*AdminSplitRequest) flags() flag          { return isAdmin | isAlone }
 func (*AdminUnsplitRequest) flags() flag        { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() flag          { return isAdmin | isAlone }
@@ -2035,7 +2037,9 @@ func (gcr *GCRequest) flags() flag {
 
 // HeartbeatTxn updates the timestamp cache with transaction records,
 // to avoid checking for them on disk when considering 1PC evaluation.
-func (*HeartbeatTxnRequest) flags() flag { return isWrite | isTxn | updatesTSCache }
+func (*HeartbeatTxnRequest) flags() flag {
+	return isWrite | isTxn | updatesTSCache | requiresClosedTSOlderThanStorageSnapshot
+}
 
 // PushTxnRequest updates different marker keys in the timestamp cache when
 // pushing a transaction's timestamp and when aborting a transaction.

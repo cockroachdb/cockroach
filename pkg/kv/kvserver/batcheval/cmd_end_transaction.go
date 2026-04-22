@@ -309,6 +309,18 @@ func EndTxn(
 				log.VEventf(ctx, 2, "cannot create transaction record: %v", err)
 				return result.Result{}, err
 			}
+
+			// Transaction records must not be created at or below the closed
+			// timestamp — doing so would require the TxnFeed resolved
+			// timestamp to regress. Return a WriteTooOldError so the
+			// transaction coordinator can refresh reads and retry at a higher
+			// timestamp.
+			closedTS := cArgs.EvalCtx.GetClosedTimestampOlderThanStorageSnapshot()
+			if !closedTS.IsEmpty() && reply.Txn.WriteTimestamp.LessEq(closedTS) {
+				return result.Result{}, kvpb.NewWriteTooOldError(
+					reply.Txn.WriteTimestamp, closedTS.Next(), reply.Txn.Key,
+				)
+			}
 		}
 	} else {
 		log.VEventf(ctx, 2, "existing transaction record found: %s", existingTxn)

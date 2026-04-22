@@ -371,6 +371,22 @@ func TestFlagCombinations(t *testing.T) {
 	}
 }
 
+// TestRequiresClosedTSOlderThanStorageSnapshotFlag verifies that request types
+// whose evaluation calls GetClosedTimestampOlderThanStorageSnapshot set the
+// requiresClosedTSOlderThanStorageSnapshot flag. Without this flag, the closed
+// timestamp is elided during eval context creation and the call panics.
+func TestRequiresClosedTSOlderThanStorageSnapshotFlag(t *testing.T) {
+	for _, req := range []Request{
+		&QueryResolvedTimestampRequest{},
+		&EndTxnRequest{},
+		&HeartbeatTxnRequest{},
+	} {
+		name := reflect.TypeOf(req).Elem().Name()
+		require.NotZero(t, req.flags()&requiresClosedTSOlderThanStorageSnapshot,
+			"%s must have requiresClosedTSOlderThanStorageSnapshot flag", name)
+	}
+}
+
 func TestGetValidate(t *testing.T) {
 	t.Run("ExpectExclusionSinceOnNonLockingGet", func(t *testing.T) {
 		getReq := &GetRequest{ExpectExclusionSince: hlc.Timestamp{WallTime: 1}}
