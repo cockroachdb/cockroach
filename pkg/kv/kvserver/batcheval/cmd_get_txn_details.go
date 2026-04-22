@@ -6,12 +6,15 @@
 package batcheval
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
@@ -23,7 +26,121 @@ func init() {
 func GetTxnDetails(
 	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	_ = cArgs.Args.(*kvpb.GetTxnDetailsRequest)
-	_ = resp.(*kvpb.GetTxnDetailsResponse)
-	return result.Result{}, errors.New("GetTxnDetails not yet implemented")
+	args := cArgs.Args.(*kvpb.GetTxnDetailsRequest)
+	reply := resp.(*kvpb.GetTxnDetailsResponse)
+
+	for i := range args.WriteSpans {
+		if err := collectWrites(ctx, reader, &args.WriteSpans[i], args.CommitTimestamp, reply); err != nil {
+			return result.Result{}, err
+		}
+	}
+	return result.Result{}, nil
+}
+
+// collectWrites scans a single span for MVCC values written at exactly
+// commitTS and appends TxnDetailKV entries to the response. For each write
+// found, it also retrieves the previous value by stepping to the next older
+// MVCC version using NextIgnoringTime.
+func collectWrites(
+	ctx context.Context,
+	reader storage.Reader,
+	span *roachpb.Span,
+	commitTS hlc.Timestamp,
+	reply *kvpb.GetTxnDetailsResponse,
+) error {
+	startKey := span.Key
+	endKey := span.EndKey
+	if len(endKey) == 0 {
+		endKey = startKey.Next()
+	}
+
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
+		KeyTypes:     storage.IterKeyTypePointsOnly,
+		StartKey:     startKey,
+		EndKey:       endKey,
+		StartTime:    commitTS.Prev(),
+		EndTime:      commitTS,
+		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyIgnore,
+		ReadCategory: fs.BatchEvalReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: startKey})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		key := iter.UnsafeKey()
+		if !key.IsValue() {
+			iter.Next()
+			continue
+		}
+
+		valRaw, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		mvccVal, err := storage.DecodeMVCCValue(valRaw)
+		if err != nil {
+			return err
+		}
+
+		// Clone the key and value before advancing the iterator, since
+		// UnsafeKey/UnsafeValue share the iterator's internal buffer.
+		clonedKey := key.Key.Clone()
+		var kv roachpb.KeyValue
+		kv.Key = clonedKey
+		if !mvccVal.IsTombstone() {
+			kv.Value.RawBytes = append([]byte(nil), mvccVal.Value.RawBytes...)
+			kv.Value.Timestamp = key.Timestamp
+		}
+
+		detail := kvpb.TxnDetailKV{KeyValue: kv}
+
+		// Step to the next MVCC version to get the previous value. We use
+		// NextIgnoringTime since the previous version is outside our time
+		// bounds.
+		iter.NextIgnoringTime()
+		if ok, err = iter.Valid(); err != nil {
+			return err
+		}
+		onSameKey := false
+		if ok {
+			prevKey := iter.UnsafeKey()
+			if prevKey.IsValue() && bytes.Equal(prevKey.Key, clonedKey) {
+				onSameKey = true
+				prevRaw, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				prevMVCC, err := storage.DecodeMVCCValue(prevRaw)
+				if err != nil {
+					return err
+				}
+				if !prevMVCC.IsTombstone() {
+					detail.PrevValue.RawBytes = append([]byte(nil), prevMVCC.Value.RawBytes...)
+					detail.PrevValue.Timestamp = prevKey.Timestamp
+				}
+			}
+		}
+
+		reply.Writes = append(reply.Writes, detail)
+
+		// If NextIgnoringTime landed on an older version of the same key,
+		// skip to the next user key. Otherwise the iterator is already
+		// positioned on a different key (or is exhausted) and we can
+		// continue directly.
+		if onSameKey {
+			iter.NextKey()
+		}
+	}
+	return nil
 }

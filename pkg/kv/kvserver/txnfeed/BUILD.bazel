@@ -19,7 +19,6 @@ go_library(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
-        "//pkg/settings",
         "//pkg/storage",
         "//pkg/storage/fs",
         "//pkg/util/buildutil",

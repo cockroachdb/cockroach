@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -346,6 +347,132 @@ func verifyCommittedEvent(
 				"%s read span end %s exceeds feed span end %s", label, rs.EndKey, feedSpan.EndKey)
 		}
 	}
+}
+
+// TestGetTxnDetailsWriteSet verifies that GetTxnDetails returns the correct
+// write set for a committed transaction, including previous values.
+func TestGetTxnDetailsWriteSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.ServerConn(0).Exec(
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+	require.NoError(t, err)
+
+	ts := tc.Server(0)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	db := ts.DB()
+
+	scratchKey := tc.ScratchRange(t)
+	feedSpan := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
+
+	// Pre-populate keys that the transaction will overwrite and delete.
+	overwriteKey := append(scratchKey.Clone(), 'b')
+	deleteKey := append(scratchKey.Clone(), 'c')
+	require.NoError(t, db.Put(ctx, overwriteKey, "old-value"))
+	require.NoError(t, db.Put(ctx, deleteKey, "doomed-value"))
+
+	// Register a txn feed so we can capture the commit event.
+	startTS := db.Clock().Now()
+	stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
+	defer disconnector.Disconnect(nil)
+
+	// Run a transaction that creates, overwrites, and deletes keys.
+	newKey := append(scratchKey.Clone(), 'a')
+	var txnID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnID = txn.ID()
+		if err := txn.Put(ctx, newKey, "new-value"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, overwriteKey, "updated-value"); err != nil {
+			return err
+		}
+		_, err := txn.Del(ctx, deleteKey)
+		return err
+	})
+	require.NoError(t, err)
+
+	// Wait for the committed event to appear on the feed.
+	var committed *kvpb.TxnFeedCommitted
+	testutils.SucceedsSoon(t, func() error {
+		for _, ev := range stream.events() {
+			if ev.Committed != nil && ev.Committed.TxnID == txnID {
+				committed = ev.Committed
+				return nil
+			}
+		}
+		return errors.New("waiting for committed event")
+	})
+
+	// Send GetTxnDetailsRequest using the write spans from the feed event.
+	desc := store.LookupReplica(roachpb.RKey(scratchKey)).Desc()
+	resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(),
+		&kvpb.GetTxnDetailsRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    desc.StartKey.AsRawKey(),
+				EndKey: desc.EndKey.AsRawKey(),
+			},
+			TxnID:           committed.TxnID,
+			CommitTimestamp: committed.CommitTimestamp,
+			WriteSpans:      committed.WriteSpans,
+		})
+	require.Nil(t, pErr)
+	details := resp.(*kvpb.GetTxnDetailsResponse)
+
+	// Build a map of key -> TxnDetailKV for easy lookup.
+	writesByKey := make(map[string]kvpb.TxnDetailKV, len(details.Writes))
+	for _, w := range details.Writes {
+		writesByKey[string(w.KeyValue.Key)] = w
+	}
+
+	require.Len(t, details.Writes, 3, "expected writes for new, overwrite, and delete keys")
+
+	// New key: value present, no prev_value.
+	w, ok := writesByKey[string(newKey)]
+	require.True(t, ok, "missing write for new key")
+	v, err := w.KeyValue.Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "new-value", string(v))
+	require.False(t, w.PrevValue.IsPresent(), "new key should have no prev_value")
+
+	// Overwritten key: value present, prev_value is "old-value".
+	w, ok = writesByKey[string(overwriteKey)]
+	require.True(t, ok, "missing write for overwritten key")
+	v, err = w.KeyValue.Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "updated-value", string(v))
+	require.True(t, w.PrevValue.IsPresent(), "overwritten key should have prev_value")
+	pv, err := w.PrevValue.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "old-value", string(pv))
+
+	// Deleted key: tombstone (empty RawBytes), prev_value is "doomed-value".
+	w, ok = writesByKey[string(deleteKey)]
+	require.True(t, ok, "missing write for deleted key")
+	require.Len(t, w.KeyValue.Value.RawBytes, 0, "deleted key should have empty value")
+	require.True(t, w.PrevValue.IsPresent(), "deleted key should have prev_value")
+	pv, err = w.PrevValue.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "doomed-value", string(pv))
 }
 
 type missingTxnFeedEventsError struct {
