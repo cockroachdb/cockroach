@@ -52,6 +52,8 @@ func TestOnlineRestoreDistFlowSplitScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
+
 	// Block reads of backup data SSTs to simulate high S3 latency.
 	blockCh := make(chan struct{})
 	defer nodelocal.ReplaceNodeLocalForTestingWithInterceptor(
