@@ -174,7 +174,9 @@ func runIndexConsistencyCheckTestCases(t *testing.T, testCases []indexConsistenc
 					InspectIssueLogger: issueLogger,
 					OnCheckComplete: func(check interface{}) error {
 						if rowCountCheck, ok := check.(inspectCheckRowCount); ok {
-							issueLogger.recordRowCount(rowCountCheck.RowCount())
+							if rc := rowCountCheck.RowCount(); rc != nil {
+								issueLogger.recordRowCount(*rc)
+							}
 						}
 						return nil
 					},
