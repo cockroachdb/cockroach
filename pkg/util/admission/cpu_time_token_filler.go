@@ -346,13 +346,11 @@ func computeMinimums(r rates) minimums {
 	return m
 }
 
-// allocateTokens allocates tokens to a cpuTimeTokenGranter. allocateTokens
-// adds the desired number of tokens every interval, while respecting the bucket
-// capacities. allocateTokens adds tokens evenly among the expected remaining
-// ticks in the interval.
-// INVARIANT: remainingTicks >= 1.
-// TODO(josh): Expand to cover group-specific token buckets too.
-func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
+// allocateTokensFn distributes refillRates across remaining ticks in
+// the interval, returning the per-tick allocations. Extracted as a
+// standalone function so it can be reused by future strategy
+// implementations (e.g. resource manager mode).
+func allocateTokensFn(refillRates rates, allocated *tokenCounts, remainingTicks int64) tokenCounts {
 	allocateFunc := func(total int64, allocated int64, remainingTicks int64) (toAllocate int64) {
 		remainingTokens := total - allocated
 		// ceil(a / b) == (a + b - 1) / b, when using integer division.
@@ -368,18 +366,29 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 		return toAllocate
 	}
 
-	// a.refillRates must be added every 1s, but allocateTokens is called more than once
-	// every 1s (typically). The amount we need to allocate this call to allocateTokens
-	// is stored in allocations.
+	// refillRates must be added every 1s, but allocateTokens is called more
+	// than once every 1s (typically). The amount we need to allocate this call
+	// to allocateTokens is stored in allocations.
 	var allocations tokenCounts
-	for wc := range a.refillRates {
-		for kind := range a.refillRates[wc] {
+	for wc := range refillRates {
+		for kind := range refillRates[wc] {
 			toAllocate := allocateFunc(
-				a.refillRates[wc][kind], a.allocated[wc][kind], expectedRemainingTicksInInterval)
-			a.allocated[wc][kind] += toAllocate
+				refillRates[wc][kind], allocated[wc][kind], remainingTicks)
+			allocated[wc][kind] += toAllocate
 			allocations[wc][kind] = toAllocate
 		}
 	}
+	return allocations
+}
+
+// allocateTokens allocates tokens to a cpuTimeTokenGranter. allocateTokens
+// adds the desired number of tokens every interval, while respecting the bucket
+// capacities. allocateTokens adds tokens evenly among the expected remaining
+// ticks in the interval.
+// INVARIANT: remainingTicks >= 1.
+// TODO(josh): Expand to cover group-specific token buckets too.
+func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
+	allocations := allocateTokensFn(a.refillRates, &a.allocated, expectedRemainingTicksInInterval)
 	// Each bucket has a max capacity. The max capacity for each bucket is
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
@@ -390,7 +399,8 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	bucketMinimums := computeMinimums(a.refillRates)
 	// Metrics don't need higher fidelity than one update per second. For example,
 	// in CC, we scrape metrics once every 10s.
-	a.refill(allocations, bucketCapacities, bucketMinimums, false /* updateMetrics */)
+	refillGranter(a.granter, a.metrics, allocations,
+		bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
 	// Refill per-group burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -452,7 +462,8 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	bucketMinimums := computeMinimums(newRefillRates)
 	// Metrics don't need higher fidelity than one update per second. For example,
 	// in CC, we scrape metrics once every 10s.
-	a.refill(deltaRefillRates, bucketCapacities, bucketMinimums, true /* updateMetrics */)
+	refillGranter(a.granter, a.metrics, deltaRefillRates,
+		bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-group burst buckets also.
@@ -470,24 +481,29 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	}
 }
 
-// refill increments per-bucket refill metrics, then delegates to
+// refillGranter increments per-bucket refill metrics, then delegates to
 // granter.refill. Positive toAdd values are tracked as tokens added;
 // negative values (which occur when refill rates decrease between
 // intervals) are tracked as tokens removed.
-func (a *cpuTimeTokenAllocator) refill(
-	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums, updateMetrics bool,
+func refillGranter(
+	granter *cpuTimeTokenGranter,
+	metrics *cpuTimeTokenMetrics,
+	toAdd tokenCounts,
+	bucketCapacities capacities,
+	bucketMinimums minimums,
+	updateMetrics bool,
 ) {
 	for tier := range toAdd {
 		for qual := range toAdd[tier] {
 			idx := perBucketIdx(resourceTier(tier), burstQualification(qual))
 			if v := toAdd[tier][qual]; v > 0 {
-				a.metrics.RefillAdded[idx].Inc(v)
+				metrics.RefillAdded[idx].Inc(v)
 			} else if v < 0 {
-				a.metrics.RefillRemoved[idx].Inc(-v)
+				metrics.RefillRemoved[idx].Inc(-v)
 			}
 		}
 	}
-	a.granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
+	granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
 }
 
 // workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
