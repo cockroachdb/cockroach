@@ -51,7 +51,15 @@ import (
 //   - startHLC, dest, and tickWidth come from the caller. A real
 //     backup-job resumer would derive these from BackupDetails
 //     (TODO).
-//   - No persistence / resumption (TODO).
+//   - On resume, each producer's RevlogSpec carries the persisted
+//     per-span frontier (sliced to its partition) and the
+//     per-tick starting flushorder (max(prior) + 1) so the new
+//     incarnation picks up where the old left off without
+//     duplicating per-tick file work or violating per-key
+//     ordering. The rangefeed itself starts at the lowest
+//     persisted span ts; redelivery between that point and any
+//     higher per-span ts is wasted work — see the open
+//     "one rangefeed per ts-group" TODO in processor.go.
 func Run(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -91,13 +99,27 @@ func Run(
 		return err
 	}
 
-	// Load the job record so the progress-updater goroutine (started
-	// below) can call Job.Update to publish HighWater. A failure to
-	// load is fatal — without a job row to update, the writer would
-	// run blind to operators and resume.
+	// Load the job record so the PTS manager (below) can persist
+	// the PTS record's UUID onto BackupDetails. Job state itself
+	// (frontier, open-tick file lists, high-water) goes through
+	// jobPersister, not Job.Update.
 	job, err := execCtx.ExecCfg().JobRegistry.LoadJob(ctx, jobID)
 	if err != nil {
 		return errors.Wrapf(err, "loading revlog job %d", jobID)
+	}
+
+	persister := newJobPersister(jobID, execCtx.ExecCfg().InternalDB)
+	loaded, found, err := persister.Load(ctx)
+	if err != nil {
+		return errors.Wrap(err, "loading revlogjob checkpoint")
+	}
+	if found {
+		log.Dev.Infof(ctx,
+			"revlogjob: resuming from checkpoint (high-water %s, %d open ticks)",
+			loaded.HighWater, len(loaded.OpenTicks))
+		if err := manager.Rehydrate(loaded); err != nil {
+			return errors.Wrap(err, "rehydrating revlogjob state")
+		}
 	}
 
 	// Install the v1 self-managed PTS record before any writer-side
@@ -116,23 +138,23 @@ func Run(
 	}
 	manager.SetAfterFrontierAdvance(pts.advance)
 
-	// Start the periodic progress-updater. It runs for the duration
-	// of the DistSQL flow and exits when progressCtx is cancelled
+	// Start the periodic checkpoint loop. It runs for the duration
+	// of the DistSQL flow and exits when checkpointCtx is cancelled
 	// either by the deferred cleanup below or by parent ctx
 	// cancellation (job pause / cancel / fail). It only reads from
-	// manager (via LastClosed); it never mutates flow state, so
-	// it's safe to run concurrently with the DistSQL flow.
-	progressCtx, cancelProgress := context.WithCancel(ctx)
-	progressDone := make(chan struct{})
+	// manager (via Snapshot); it never mutates flow state, so it's
+	// safe to run concurrently with the DistSQL flow.
+	checkpointCtx, cancelCheckpoint := context.WithCancel(ctx)
+	checkpointDone := make(chan struct{})
 	go func() {
-		defer close(progressDone)
-		if err := runProgressUpdater(progressCtx, job, manager); err != nil {
-			log.Dev.Warningf(ctx, "revlogjob: progress updater exited with error: %v", err)
+		defer close(checkpointDone)
+		if err := runCheckpointer(checkpointCtx, persister, manager); err != nil {
+			log.Dev.Warningf(ctx, "revlogjob: checkpointer exited with error: %v", err)
 		}
 	}()
 	defer func() {
-		cancelProgress()
-		<-progressDone
+		cancelCheckpoint()
+		<-checkpointDone
 	}()
 
 	dsp := execCtx.DistSQLPlanner()
@@ -157,17 +179,29 @@ func Run(
 			"revlogjob.Run: span partitioning yielded no producers for %d spans", len(spans))
 	}
 
+	// Snapshot the (possibly rehydrated) manager state once so each
+	// producer's per-partition resume slice is computed against the
+	// same picture: a producer joining a new partition should see
+	// the same StartingFlushOrders the others see, and the same
+	// per-span resumes for any overlap with its assigned spans.
+	resumeBase, err := manager.Snapshot()
+	if err != nil {
+		return errors.Wrap(err, "snapshotting manager for producer resume")
+	}
+
 	plan := planCtx.NewPhysicalPlan()
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(partitions))
 	for i, part := range partitions {
-		corePlacement[i].SQLInstanceID = part.SQLInstanceID
-		corePlacement[i].Core.Revlog = &execinfrapb.RevlogSpec{
+		spec := &execinfrapb.RevlogSpec{
 			JobID:          jobID,
 			Spans:          part.Spans,
 			StartHLC:       startHLC,
 			Dest:           dest,
 			TickWidthNanos: int64(tickWidth),
 		}
+		resumeToSpec(spec, ResumeStateForPartition(resumeBase, part.Spans))
+		corePlacement[i].SQLInstanceID = part.SQLInstanceID
+		corePlacement[i].Core.Revlog = spec
 	}
 	plan.AddNoInputStage(
 		corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{},

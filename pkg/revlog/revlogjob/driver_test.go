@@ -53,7 +53,8 @@ func newTestDriver(
 	t.Helper()
 	es := newTestStorage(t)
 	t.Cleanup(func() { es.Close() })
-	d, err := revlogjob.NewDriver(es, []roachpb.Span{allSpan}, startHLC, testTickWidth, &seqFileIDs{})
+	d, err := revlogjob.NewDriver(es, []roachpb.Span{allSpan}, startHLC, testTickWidth,
+		&seqFileIDs{}, revlogjob.ResumeState{})
 	require.NoError(t, err)
 	return d, es
 }
