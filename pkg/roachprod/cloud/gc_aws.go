@@ -132,21 +132,6 @@ func getUsersWithMFAEnabled(IAMClient *iam.Client, users []iamtypes.User) (map[s
 	return usersWithMFAEnabled, nil
 }
 
-func getRegions() ([]ec2types.Region, error) {
-	// Pass empty string as region to use default region (no preferred region for this call).
-	EC2Client, err := getEC2Client("")
-	if err != nil {
-		return nil, err
-	}
-	input := ec2.DescribeRegionsInput{}
-	// DescribeRegions returns all regions enabled for the AWS account.
-	resp, err := EC2Client.DescribeRegions(context.TODO(), &input)
-	if err != nil {
-		return nil, errors.Wrap(err, "getRegions: failed to describe regions")
-	}
-	return resp.Regions, nil
-}
-
 func getTagsValues(tags []ec2types.Tag) (string, string) {
 	IAMUserName := ""
 	createdAt := ""
@@ -223,8 +208,18 @@ func deleteKeyPair(EC2Client *ec2.Client, keyPairName string) error {
 	return nil
 }
 
-// gcAWSKeyPairs tags keypairs created by roachprod with IAMUserName and CreatedAt if untagged and
-// deletes keypairs created by previous users/employees (TeamCity keypairs are deleted after 10 days).
+// gcAWSKeyPairs tags keypairs created by roachprod with IAMUserName and
+// CreatedAt if untagged and deletes keypairs created by previous
+// users/employees (TeamCity keypairs are deleted after 10 days).
+//
+// The set of regions iterated here is the same set ConfigSSH and ListCloud
+// use: roachprod's embedded AWS config (vm/aws/config.json). Iterating the
+// account-enabled region set instead would visit regions where roachprod
+// never imported keys, including opt-in regions that may be unreachable from
+// the cronjob's network (e.g. me-south-1). Per-region failures are still
+// accumulated and the loop continues, so a transient failure in one
+// configured region does not prevent the rest -- or the caller's
+// success-only Dead Man's Snitch ping -- from running.
 func gcAWSKeyPairs(l *logger.Logger, dryrun bool) error {
 	timestamp := timeutil.Now()
 
@@ -250,75 +245,101 @@ func gcAWSKeyPairs(l *logger.Logger, dryrun bool) error {
 	if err != nil {
 		return err
 	}
-	regions, err := getRegions()
+
+	provider, ok := vm.Providers[rochprodaws.ProviderName].(*rochprodaws.Provider)
+	if !ok {
+		return errors.New("gcAWSKeyPairs: AWS provider not registered")
+	}
+	regions := provider.ConfiguredRegions()
+
+	var combinedErr error
+	for _, region := range regions {
+		l.Printf("%s", region)
+		if err := gcAWSKeyPairsInRegion(
+			l, region, timestamp, dryrun,
+			usersWithActiveAccessKey, usersWithMFAEnabled, usersWithConsoleAccess,
+		); err != nil {
+			l.Errorf("gcAWSKeyPairs: region %s: %v", region, err)
+			combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "region %s", region))
+		}
+	}
+	return combinedErr
+}
+
+// gcAWSKeyPairsInRegion processes key pairs in a single region. Per-key
+// failures (tagging or deletion) are accumulated and the loop continues so
+// that one bad key does not prevent the rest of the region from being
+// processed. A failure to enumerate keys (e.g. an unreachable EC2 endpoint)
+// returns early, since there is nothing to iterate.
+func gcAWSKeyPairsInRegion(
+	l *logger.Logger,
+	region string,
+	timestamp time.Time,
+	dryrun bool,
+	usersWithActiveAccessKey, usersWithMFAEnabled, usersWithConsoleAccess map[string]bool,
+) error {
+	EC2Client, err := getEC2Client(region)
 	if err != nil {
 		return err
 	}
-	for _, region := range regions {
-		l.Printf("%s", *region.RegionName)
-		EC2Client, err := getEC2Client(*region.RegionName)
-		if err != nil {
-			return err
-		}
-		keyPairs, err := getKeyPairs(EC2Client)
-		if err != nil {
-			return err
-		}
-		for _, keyPair := range keyPairs {
+	keyPairs, err := getKeyPairs(EC2Client)
+	if err != nil {
+		return err
+	}
 
-			IAMUserName := getIAMUserNameFromKeyname(*keyPair.KeyName)
-			if IAMUserName == "" {
-				// keypair wasn't created by roachprod
-				continue
-			}
-			createdAt, err := tagKeyPairIfUntagged(l, EC2Client, keyPair, IAMUserName, timestamp, dryrun)
+	var combinedErr error
+	for _, keyPair := range keyPairs {
+		IAMUserName := getIAMUserNameFromKeyname(*keyPair.KeyName)
+		if IAMUserName == "" {
+			// keypair wasn't created by roachprod
+			continue
+		}
+		createdAt, err := tagKeyPairIfUntagged(l, EC2Client, keyPair, IAMUserName, timestamp, dryrun)
+		if err != nil {
+			combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "key %s", *keyPair.KeyName))
+			continue
+		}
+
+		// teamcity-runner keys should only be deleted 10 days after creation
+		if IAMUserName == "teamcity-runner" {
+			createdAtTimestamp, err := time.Parse(time.RFC3339, createdAt)
 			if err != nil {
-				return err
-			}
-
-			// teamcity-runner keys should only be deleted 10 days after creation
-			if IAMUserName == "teamcity-runner" {
-				createdAtTimestamp, err := time.Parse(time.RFC3339, createdAt)
-				if err != nil {
-					return err
-				}
-				// 10 days = 240 hours
-				if timestamp.Sub(createdAtTimestamp).Hours() >= 240 {
-					l.Printf("Deleting %s because it is a teamcity-runner key created at %s.\n",
-						*keyPair.KeyName, createdAtTimestamp)
-					if !dryrun {
-						err := deleteKeyPair(EC2Client, *keyPair.KeyName)
-						if err != nil {
-							return err
-						}
-					}
-				}
+				combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "key %s", *keyPair.KeyName))
 				continue
 			}
-
-			// Delete key if user has console access without MFA".
-			if usersWithConsoleAccess[IAMUserName] && !usersWithMFAEnabled[IAMUserName] {
-				l.Printf("Deleting %s because %s has console access but MFA disabled.\n", *keyPair.KeyName, IAMUserName)
+			// 10 days = 240 hours
+			if timestamp.Sub(createdAtTimestamp).Hours() >= 240 {
+				l.Printf("Deleting %s because it is a teamcity-runner key created at %s.\n",
+					*keyPair.KeyName, createdAtTimestamp)
 				if !dryrun {
-					err := deleteKeyPair(EC2Client, *keyPair.KeyName)
-					if err != nil {
-						return err
+					if err := deleteKeyPair(EC2Client, *keyPair.KeyName); err != nil {
+						combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "key %s", *keyPair.KeyName))
 					}
 				}
-				// Delete key if user doesn't have an active access key.
-			} else if !usersWithActiveAccessKey[IAMUserName] {
-				l.Printf("Deleting %s because %s does not have an active access key.\n",
-					*keyPair.KeyName, IAMUserName)
-				if !dryrun {
-					err := deleteKeyPair(EC2Client, *keyPair.KeyName)
-					if err != nil {
-						return err
-					}
+			}
+			continue
+		}
+
+		// Delete key if user has console access without MFA.
+		if usersWithConsoleAccess[IAMUserName] && !usersWithMFAEnabled[IAMUserName] {
+			l.Printf("Deleting %s because %s has console access but MFA disabled.\n", *keyPair.KeyName, IAMUserName)
+			if !dryrun {
+				if err := deleteKeyPair(EC2Client, *keyPair.KeyName); err != nil {
+					combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "key %s", *keyPair.KeyName))
+				}
+			}
+			// Delete key if user doesn't have an active access key.
+		} else if !usersWithActiveAccessKey[IAMUserName] {
+			l.Printf("Deleting %s because %s does not have an active access key.\n",
+				*keyPair.KeyName, IAMUserName)
+			if !dryrun {
+				if err := deleteKeyPair(EC2Client, *keyPair.KeyName); err != nil {
+					combinedErr = errors.CombineErrors(combinedErr, errors.Wrapf(err, "key %s", *keyPair.KeyName))
 				}
 			}
 		}
 	}
-	return nil
+	return combinedErr
 }
 
 // gc garbage-collects expired clusters, unused SSH key pairs in a

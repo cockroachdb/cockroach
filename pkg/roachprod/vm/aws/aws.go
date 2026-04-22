@@ -726,6 +726,17 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	return g.Wait()
 }
 
+// ConfiguredRegions returns the names of the AWS regions that roachprod is
+// configured to operate in (i.e. those declared in the embedded config where
+// SSH keys, AMIs and security groups are provisioned). This is the
+// authoritative region list for maintenance tasks that should only touch
+// resources roachprod actually creates -- in particular GC of imported SSH
+// key pairs, which must not iterate every account-enabled region (e.g.
+// opt-in regions that may be unreachable from the cronjob's network).
+func (p *Provider) ConfiguredRegions() []string {
+	return p.Config.regionNames()
+}
+
 // editLabels is a helper that adds or removes labels from the given VMs.
 func (p *Provider) editLabels(
 	l *logger.Logger, vms vm.List, labels map[string]string, remove bool,
