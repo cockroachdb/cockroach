@@ -209,6 +209,11 @@ func (a admissionControlMode) getSettings() map[string]string {
 // sustained degradation, striking a balance between spurious test failures
 // caused e.g. by infrastructure hiccups and learning about significant
 // slowdowns proactively with a full set of artifacts in place.
+//
+// A ratio of ~1.0 means no measurable latency change. The test fails if
+// any of the computed ratios exceeds the corresponding value in the fields
+// below.
+//
 // Regardless of whether a particular run fails due to the impact thresholds
 // below, it will show up on roachperf.
 type acceptableImpact struct {
@@ -225,9 +230,6 @@ type acceptableImpact struct {
 	// dropping the worst 5% of seconds, the boundary value is 5ms.
 	// Perturbation ticks have p99s [10ms 20ms 8ms ...]; after dropping the
 	// worst 5%, the boundary is 25ms. Ratio = 25/5 = 5.0.
-	//
-	// A ratio of ~1.0 means no measurable latency change. The test fails if
-	// the ratio exceeds this value.
 	maxP99Impact float64
 
 	// maxP50Impact is the maximum allowed p50 (median) latency impact ratio.
@@ -254,9 +256,6 @@ type acceptableImpact struct {
 	// Perturbation ticks have [400 500 450 ...]; after dropping the worst
 	// 5%, the boundary is 380. Ratio = 850/380 ≈ 2.2, meaning throughput
 	// dropped to ~45% of baseline.
-	//
-	// A ratio of ~1.0 means no measurable throughput change. The test fails
-	// if the ratio exceeds this value.
 	maxThroughputImpact float64
 }
 
@@ -842,7 +841,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// Collect perf artifacts before failing so that roachperf still gets
 		// the data for this run.
 		artifactsutil.CollectPerfArtifacts(ctx, t, c)
-		require.True(t, false, strings.Join(failures, "\n"))
+		require.Fail(t, strings.Join(failures, "\n"))
 	}
 	// TODO(baptist): Look at the time for token return in actual tests to
 	// determine if this can be lowered further.
