@@ -1144,6 +1144,200 @@ func encodeVectorIndexKey(
 	return key, err
 }
 
+// PrimaryIndexFamilyValue is the result of encoding one column family of a
+// primary-index row.
+//
+// Two pieces of state are reported separately:
+//
+//   - Value: the encoded family value, or the zero value when the family
+//     produced no encoded columns. Callers decide whether absence requires
+//     a delete (overwrite/CPut paths), a sentinel emission (family 0), or
+//     no entry at all (pure encoders that omit empty families).
+//
+//   - Skipped: true when the family has no work to do — either the family's
+//     only column is absent from the input column map, or the column is
+//     already encoded in the index key and is not composite. Distinguished
+//     from "Value not present" because callers must NOT issue a delete in
+//     this case.
+type PrimaryIndexFamilyValue struct {
+	Value   roachpb.Value
+	Skipped bool
+}
+
+// PrimaryIndexEncoder encodes per-family values of a row that uses primary-
+// index encoding (the actual primary index, or a covering secondary index
+// — anything with PrimaryIndexEncoding). It caches state derived from the
+// table descriptor and index (key column set, stored column set, per-family
+// sorted column IDs) so that callers can reuse a single encoder across
+// every row and every family of an encoding session.
+//
+// PrimaryIndexEncoder is the canonical place where the per-family value
+// encoding rules live. Three independent implementations of these rules
+// previously existed in row.prepareInsertOrUpdateBatch,
+// row.Deleter.encodeValueForPrimaryIndexFamily, and
+// rowenc.EncodePrimaryIndexWithKeyPrefix; all three now route through
+// EncodeFamily.
+type PrimaryIndexEncoder struct {
+	desc       catalog.TableDescriptor
+	keyCols    catalog.TableColSet
+	storedCols catalog.TableColSet
+	// hasStoredCols is false only for indexes encoded with a version
+	// older than PrimaryIndexWithStoredColumnsVersion (essentially never
+	// seen in practice). For those, the stored column set is derived
+	// per-call from the input colMap; see effectiveStoredCols.
+	hasStoredCols      bool
+	sortedFamilyColIDs map[descpb.FamilyID][]descpb.ColumnID
+}
+
+// MakePrimaryIndexEncoder returns an encoder for the given primary-encoded
+// index of desc. The index is typically desc.GetPrimaryIndex(), but it may
+// also be a covering secondary index (any index with PrimaryIndexEncoding).
+func MakePrimaryIndexEncoder(
+	desc catalog.TableDescriptor, index catalog.Index,
+) PrimaryIndexEncoder {
+	e := PrimaryIndexEncoder{
+		desc:    desc,
+		keyCols: index.CollectKeyColumnIDs(),
+	}
+	if index.GetVersion() >= descpb.PrimaryIndexWithStoredColumnsVersion {
+		if index.Primary() {
+			e.storedCols = index.CollectPrimaryStoredColumnIDs()
+		} else {
+			e.storedCols = index.CollectSecondaryStoredColumnIDs()
+		}
+		e.hasStoredCols = true
+	}
+	e.sortedFamilyColIDs = make(map[descpb.FamilyID][]descpb.ColumnID, desc.NumFamilies())
+	_ = desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		ids := append([]descpb.ColumnID{}, family.ColumnIDs...)
+		sort.Sort(descpb.ColumnIDs(ids))
+		e.sortedFamilyColIDs[family.ID] = ids
+		return nil
+	})
+	return e
+}
+
+// SkipColumn reports whether the value at colID does not need to be encoded
+// in the primary-index value. Composite datums in the key are reported as
+// not-skipped; see SkipColumnNotInPrimaryIndexValue for full semantics.
+//
+// colMap is used only when the primary index is encoded with a version
+// older than PrimaryIndexWithStoredColumnsVersion; pass an empty map
+// otherwise.
+func (e *PrimaryIndexEncoder) SkipColumn(
+	colID descpb.ColumnID, value tree.Datum, colMap catalog.TableColMap,
+) (skip, couldBeComposite bool) {
+	return SkipColumnNotInPrimaryIndexValue(colID, value, e.keyCols, e.effectiveStoredCols(colMap))
+}
+
+// SortedFamilyColumnIDs returns the precomputed sorted column IDs for
+// family famID, or (nil, false) if no such family exists.
+func (e *PrimaryIndexEncoder) SortedFamilyColumnIDs(
+	famID descpb.FamilyID,
+) ([]descpb.ColumnID, bool) {
+	ids, ok := e.sortedFamilyColIDs[famID]
+	return ids, ok
+}
+
+// effectiveStoredCols returns the precomputed stored column set when
+// available, falling back to a colMap-derived computation for ancient
+// primary index versions.
+func (e *PrimaryIndexEncoder) effectiveStoredCols(colMap catalog.TableColMap) catalog.TableColSet {
+	if e.hasStoredCols {
+		return e.storedCols
+	}
+	var all catalog.TableColSet
+	colMap.ForEach(func(colID descpb.ColumnID, _ int) {
+		all.Add(colID)
+	})
+	return all.Difference(e.keyCols)
+}
+
+// EncodeFamily encodes the value for one column family of one row of the
+// primary index.
+//
+// colMap maps column ID to position in values. buf is reused as scratch
+// for the multi-column tuple encoding; the returned buf may have grown to
+// accommodate this call's encoding and should be passed back to the next
+// call to amortize allocations. The returned PrimaryIndexFamilyValue's
+// Value, when present, owns its own RawBytes (deep-copied via SetTuple or
+// MarshalLegacy) and does not alias buf, so the caller is free to mutate
+// buf afterward.
+//
+// The function does NOT compute the family's KV key; callers append the
+// family suffix to the index key themselves via keys.MakeFamilyKey.
+func (e *PrimaryIndexEncoder) EncodeFamily(
+	family *descpb.ColumnFamilyDescriptor,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+	buf []byte,
+) (PrimaryIndexFamilyValue, []byte, error) {
+	storedCols := e.effectiveStoredCols(colMap)
+
+	// Single-default-column family storage optimization: encode the lone
+	// column directly using legacy value encoding rather than the tuple
+	// encoding. Family 0 is excluded because its decoder expects a TUPLE
+	// tag (it carries the row sentinel and composite primary key data).
+	if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
+		idx, ok := colMap.Get(family.DefaultColumnID)
+		if !ok {
+			return PrimaryIndexFamilyValue{Skipped: true}, buf, nil
+		}
+		skip, couldBeComposite := SkipColumnNotInPrimaryIndexValue(
+			family.DefaultColumnID, values[idx], e.keyCols, storedCols,
+		)
+		if skip && !couldBeComposite {
+			return PrimaryIndexFamilyValue{Skipped: true}, buf, nil
+		}
+		if skip {
+			// The column is in the key but is composite, so a previous KV
+			// may have been written for this family. Return an empty Value;
+			// overwrite-mode callers must issue a delete to clear it.
+			return PrimaryIndexFamilyValue{}, buf, nil
+		}
+		col, err := catalog.MustFindColumnByID(e.desc, family.DefaultColumnID)
+		if err != nil {
+			return PrimaryIndexFamilyValue{}, buf, err
+		}
+		marshaled, err := valueside.MarshalLegacy(col.GetType(), values[idx])
+		if err != nil {
+			return PrimaryIndexFamilyValue{}, buf, err
+		}
+		return PrimaryIndexFamilyValue{Value: marshaled}, buf, nil
+	}
+
+	// Multi-column family (or the empty placeholder for family 0). Tuple-
+	// encode the columns in sorted-ID order with delta-compressed column
+	// IDs, matching the format expected by valueside decoders.
+	buf = buf[:0]
+	var lastColID descpb.ColumnID
+	for _, colID := range e.sortedFamilyColIDs[family.ID] {
+		idx, ok := colMap.Get(colID)
+		if !ok || values[idx] == tree.DNull {
+			continue
+		}
+		if skip, _ := SkipColumnNotInPrimaryIndexValue(colID, values[idx], e.keyCols, storedCols); skip {
+			continue
+		}
+		if lastColID > colID {
+			return PrimaryIndexFamilyValue{}, buf,
+				errors.AssertionFailedf("cannot write column id %d after %d", colID, lastColID)
+		}
+		colIDDelta := valueside.MakeColumnIDDelta(lastColID, colID)
+		lastColID = colID
+		var err error
+		buf, err = valueside.Encode(buf, colIDDelta, values[idx])
+		if err != nil {
+			return PrimaryIndexFamilyValue{}, buf, err
+		}
+	}
+	var res PrimaryIndexFamilyValue
+	if family.ID == 0 || len(buf) > 0 {
+		res.Value.SetTuple(buf)
+	}
+	return res, buf, nil
+}
+
 // EncodePrimaryIndex constructs the key prefix for the primary index and
 // delegates the rest of the encoding to EncodePrimaryIndexWithKeyPrefix.
 func EncodePrimaryIndex(
