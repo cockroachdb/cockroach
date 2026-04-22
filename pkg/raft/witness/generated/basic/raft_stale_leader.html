@@ -5,41 +5,42 @@
 <title>Witness Test: testdata/basic/raft_stale_leader.txt</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
-h1 { font-size: 14px; color: #7f8c8d; margin-bottom: 12px; font-weight: normal; }
-h1 a { color: #7f8c8d; text-decoration: none; }
+body { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 13px; background: #fafafa; color: #222; padding: 20px; }
+h1 { font-size: 14px; color: #888; margin-bottom: 12px; font-weight: normal; }
+h1 a { color: #888; text-decoration: none; }
 h1 a:hover { text-decoration: underline; }
 .nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.nav button { background: #2d2d44; border: 1px solid #444; color: #ccc; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
-.nav button:hover { background: #3d3d54; }
-.nav button:disabled { opacity: 0.3; cursor: default; }
-.step-info { color: #aaa; }
-.command { color: #82aaff; font-weight: bold; }
-.comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
+.nav button { background: #fff; border: 1px solid #ccc; color: #333; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-family: inherit; }
+.nav button:hover { background: #eef; }
+.nav button:disabled { opacity: 0.4; cursor: default; }
+.step-info { color: #666; }
+.command { color: #1f6feb; font-weight: bold; }
+.comment { color: #2a7a3a; margin-bottom: 12px; white-space: pre-wrap; }
 .board { margin-bottom: 16px; }
 .row { display: flex; align-items: center; padding: 6px 0; gap: 12px; min-height: 38px; }
-.row.down { opacity: 0.4; }
-.row.down .label::after { content: ' \00D7'; color: #d63838; font-weight: bold; }
-.row.leader .label::after { content: ' \2655'; color: #ffd700; }
-.row.stale-leader .label::after { content: ' \2655'; color: #d63838; }
-.row .label { width: 80px; flex-shrink: 0; color: #82aaff; font-weight: bold; }
-.row .label.witness { color: #b388eb; }
+.row.down { opacity: 0.45; }
+.row.down .label::after { content: ' \00D7'; color: #c0392b; font-weight: bold; }
+.row.leader .label::after { content: ' \2655'; color: #c89400; }
+.row.stale-leader .label::after { content: ' \2655'; color: #c0392b; }
+.row .label { width: 80px; flex-shrink: 0; color: #1f6feb; font-weight: bold; }
+.row .label.witness { color: #7d4ec9; }
 .row .log { display: flex; gap: 2px; flex-shrink: 0; }
-.row .state { margin-left: auto; color: #aaa; text-align: right; }
+.row .state { margin-left: auto; color: #555; text-align: right; }
 .row .state .item { display: inline-block; margin: 0 4px; }
-.row .state .sep { color: #555; }
-.row .state .item.changed { color: #ffd700; background: rgba(255,215,0,0.12); padding: 1px 5px; border-radius: 2px; }
+.row .state .sep { color: #bbb; }
+.row .state .item.changed { background: #fff4b8; padding: 1px 5px; border-radius: 2px; }
 .row .state .key { color: #888; }
-.row .state .val { color: #e0e0e0; }
-.row .state .item.changed .key, .row .state .item.changed .val { color: #ffd700; }
+.row .state .val { color: #222; }
+.row .state .item.changed .key { color: #8a6d00; }
+.row .state .item.changed .val { color: #5c4900; font-weight: 600; }
 .cell { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
-        border-radius: 3px; font-size: 12px; font-weight: 400; color: #fff;
-        border: 1px solid rgba(255,255,255,0.08); }
-.cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #ffd700; }
-.cell.empty { background: transparent; color: #444; border: 1px dashed #333; }
+        border-radius: 3px; font-size: 12px; font-weight: 400; color: #222;
+        border: 1px solid rgba(0,0,0,0.12); }
+.cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #d4a800; }
+.cell.empty { background: transparent; color: #bbb; border: 1px dashed #ccc; }
 .cell.synthetic { font-style: italic; }
-.output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
-.output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
+.output { background: #f4f4f4; border: 1px solid #ddd; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #2c2c2c; margin-top: 8px; }
+.output-label { color: #888; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -86,13 +87,14 @@ function computeState(upTo) {
 
 
 
+
 function termBg(t) {
-  if (!t || t === '-') return '#2a2a3e';
+  if (!t || t === '-') return '#e8e8ec';
   let ord = 0;
   if (t.length === 1 && t >= 'a' && t <= 'z') ord = t.charCodeAt(0) - 97;
   else ord = parseInt(t, 10) || 0;
   const hue = (ord * 53) % 360;
-  return 'hsl(' + hue + ', 55%, 38%)';
+  return 'hsl(' + hue + ', 65%, 75%)';
 }
 
 function termOrd(t) {
