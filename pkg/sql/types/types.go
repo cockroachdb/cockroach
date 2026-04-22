@@ -1614,6 +1614,13 @@ func (t *T) WithoutTypeModifiers() *T {
 		// Enums have no type modifiers.
 		return t
 	}
+	// Domain types share their base type's Family, so check for them before
+	// looking up the OID in OidToType. Domain OIDs are user defined and do not
+	// exist in OidToType, and domains do not have independent type modifiers to
+	// strip beyond the base type information already baked into the type.
+	if t.UserDefined() && t.TypeMeta.DomainData != nil {
+		return t
+	}
 
 	// For types that can be a collated string, we copy the type and set the width
 	// to 0 rather than returning the default OidToType type so that we retain the

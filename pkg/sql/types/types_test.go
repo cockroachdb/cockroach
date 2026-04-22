@@ -1014,6 +1014,16 @@ func TestSQLStandardName(t *testing.T) {
 }
 
 func TestWithoutTypeModifiers(t *testing.T) {
+	const userDefinedOID = oidext.CockroachPredefinedOIDMax + 700
+	domain := MakeDomain(MakeString(2), userDefinedOID, userDefinedOID+1)
+	domain.TypeMeta = UserDefinedTypeMetadata{
+		Name: &UserDefinedTypeName{Name: "d"},
+		DomainData: &DomainMetadata{
+			BaseType: MakeString(2),
+		},
+	}
+	domainArray := MakeArray(domain)
+
 	testCases := []struct {
 		t        *T
 		expected *T
@@ -1037,6 +1047,8 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{MakeInterval(IntervalTypeMetadata{Precision: 3, PrecisionIsSet: true}),
 			Interval},
 		{MakeArray(MakeDecimal(5, 1)), DecimalArray},
+		{domain, domain},
+		{domainArray, domainArray},
 		{MakeTuple([]*T{MakeString(2), Time, MakeDecimal(5, 1)}),
 			MakeTuple([]*T{String, Time, Decimal})},
 		{MakeGeography(geopb.ShapeType_Point, 3857), Geography},
