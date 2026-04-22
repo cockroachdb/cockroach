@@ -10,7 +10,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
 
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/spf13/cobra"
 )
 
@@ -144,14 +148,19 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	}
 
 	ctx := cmd.Context()
-	env := os.Environ()
-	envvar := "COCKROACH_BAZEL_CHECK_FAST=1"
-	d.log.Printf("export %s", envvar)
-	env = append(env, envvar)
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
 	}
+
+	if err := d.runCrlfmt(ctx, workspace); err != nil {
+		return err
+	}
+
+	env := os.Environ()
+	envvar := "COCKROACH_BAZEL_CHECK_FAST=1"
+	d.log.Printf("export %s", envvar)
+	env = append(env, envvar)
 	return d.exec.CommandContextWithEnv(ctx, env, filepath.Join(workspace, "build", "bazelutil", "check.sh"))
 }
 
@@ -448,4 +457,66 @@ func (d *dev) generateHTTPSchema(cmd *cobra.Command) error {
 	d.log.Printf("  - %s", openapiFile)
 	d.log.Printf("  - %s", apiTypesFile)
 	return nil
+}
+
+// crlfmtIgnorePattern matches generated files that should be excluded from
+// crlfmt formatting. Kept in sync with the lint test in lint_test.go.
+const crlfmtIgnorePattern = `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$|^sql/pgrepl/pgreplparser/pgrepl\.go$|^sql/plpgsql/parser/plpgsql\.go$|^util/jsonpath/parser/jsonpath\.go$`
+
+const crlfmtTarget = "@com_github_cockroachdb_crlfmt//:crlfmt"
+
+func (d *dev) runCrlfmt(ctx context.Context, workspace string) error {
+	// Collect modified tracked .go files and new untracked .go files.
+	modifiedOut, err := d.exec.CommandContextSilent(
+		ctx, "git", "diff", "--name-only", "--", "*.go",
+	)
+	if err != nil {
+		return fmt.Errorf("listing modified go files: %w", err)
+	}
+	untrackedOut, err := d.exec.CommandContextSilent(
+		ctx, "git", "ls-files", "--others", "--exclude-standard", "--", "*.go",
+	)
+	if err != nil {
+		return fmt.Errorf("listing untracked go files: %w", err)
+	}
+
+	seen := make(map[string]struct{})
+	var files []string
+	ignoreRe := regexp.MustCompile(crlfmtIgnorePattern)
+	for _, raw := range [][]byte{modifiedOut, untrackedOut} {
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if _, ok := seen[line]; ok {
+				continue
+			}
+			seen[line] = struct{}{}
+			if ignoreRe.MatchString(line) {
+				continue
+			}
+			files = append(files, filepath.Join(workspace, line))
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	if err := d.exec.CommandContextInheritingStdStreams(
+		ctx, "bazel", "build", crlfmtTarget,
+	); err != nil {
+		return fmt.Errorf("building crlfmt: %w", err)
+	}
+	bazelBin, err := d.getBazelBin(ctx, []string{})
+	if err != nil {
+		return err
+	}
+	crlfmtBin := filepath.Join(
+		bazelBin,
+		bazelutil.OutputOfBinaryRule(crlfmtTarget, runtime.GOOS == "windows"),
+	)
+
+	args := append([]string{"-w", "-tab", "2"}, files...)
+	return d.exec.CommandContextInheritingStdStreams(ctx, crlfmtBin, args...)
 }
