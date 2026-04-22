@@ -16,28 +16,30 @@ h1 a:hover { text-decoration: underline; }
 .step-info { color: #aaa; }
 .command { color: #82aaff; font-weight: bold; }
 .comment { color: #6a9955; margin-bottom: 12px; white-space: pre-wrap; }
-.arena { position: relative; width: 100%; margin-bottom: 16px; }
-.card { background: #16213e; border: 1px solid #333; border-radius: 10px; padding: 12px; width: 180px; position: absolute; }
-.card.down { opacity: 0.4; }
-.card.down::after { content: '\00D7'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; color: rgba(220,50,50,0.35); pointer-events: none; line-height: 1; }
-.card.leader::before { content: '\2655'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 100px; color: rgba(255,215,0,0.18); pointer-events: none; line-height: 1; }
-.card.stale-leader::before { content: '\2655'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 100px; color: rgba(220,50,50,0.22); pointer-events: none; line-height: 1; }
-.card h2 { font-size: 13px; color: #82aaff; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
-.card .field { display: flex; justify-content: space-between; padding: 2px 0; }
-.card .field .key { color: #888; }
-.card .field .val { color: #e0e0e0; }
-.card .field.changed .val { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 4px; border-radius: 2px; }
-.log-entries { color: #e0e0e0; word-break: break-all; }
-.log-entry { display: inline; }
-.log-entry.changed { color: #ffd700; background: rgba(255,215,0,0.1); padding: 0 2px; border-radius: 2px; }
+.board { margin-bottom: 16px; }
+.row { display: flex; align-items: center; padding: 6px 0; gap: 12px; min-height: 38px; }
+.row.down { opacity: 0.4; }
+.row.down .label::after { content: ' \00D7'; color: #d63838; font-weight: bold; }
+.row.leader .label::after { content: ' \2655'; color: #ffd700; }
+.row.stale-leader .label::after { content: ' \2655'; color: #d63838; }
+.row .label { width: 80px; flex-shrink: 0; color: #82aaff; font-weight: bold; }
+.row .label.witness { color: #b388eb; }
+.row .log { display: flex; gap: 2px; flex-shrink: 0; }
+.row .state { margin-left: auto; color: #aaa; text-align: right; }
+.row .state .item { display: inline-block; margin: 0 4px; }
+.row .state .sep { color: #555; }
+.row .state .item.changed { color: #ffd700; background: rgba(255,215,0,0.12); padding: 1px 5px; border-radius: 2px; }
+.row .state .key { color: #888; }
+.row .state .val { color: #e0e0e0; }
+.row .state .item.changed .key, .row .state .item.changed .val { color: #ffd700; }
+.cell { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+        border-radius: 3px; font-size: 12px; font-weight: 400; color: #fff;
+        border: 1px solid rgba(255,255,255,0.08); }
+.cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #ffd700; }
+.cell.empty { background: transparent; color: #444; border: 1px dashed #333; }
+.cell.synthetic { font-style: italic; }
 .output { background: #0d1117; border: 1px solid #333; border-radius: 4px; padding: 10px; white-space: pre-wrap; color: #c9d1d9; margin-top: 8px; }
 .output-label { color: #666; font-size: 11px; margin-top: 12px; margin-bottom: 4px; }
-.msg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
-.msg-arc { fill: none; stroke-width: 2; }
-.msg-arc.req { stroke: #5a9; }
-.msg-arc.resp { stroke: #a75; }
-.msg-arc.dropped { stroke: #666; stroke-dasharray: 4 3; }
-.msg-label { font-size: 10px; fill: #aaa; dominant-baseline: central; }
 </style>
 </head>
 <body>
@@ -48,8 +50,7 @@ const TRACE = {"testFile":"testdata/scenario/commit_using_witness_5x.txt","steps
 
 let currentStep = 0;
 
-const CARD_W = 180;
-const CARD_H = 180;
+const MAX_CELLS = 10;
 
 function computeState(upTo) {
   const state = { voters: {}, witness: null };
@@ -85,212 +86,13 @@ function computeState(upTo) {
 
 
 
-
-function semicircleLayout(voterIds, hasWitness) {
-  const n = voterIds.length + (hasWitness ? 1 : 0);
-  if (n === 0) return [];
-
-  
-  const arenaW = Math.max(n * (CARD_W + 220), 600);
-  const radius = (arenaW - CARD_W) / 2;
-  const cx = arenaW / 2;
-  const cy = radius + CARD_H / 2;
-
-  if (n === 1) {
-    
-    const id = hasWitness ? 'w' : voterIds[0];
-    return { positions: [{ id, x: cx - CARD_W / 2, y: 0 }], arenaW, arenaH: CARD_H + 20 };
-  }
-
-  
-  const slots = [];
-  for (let i = 0; i < n; i++) {
-    slots.push(Math.PI * (1 - i / (n - 1)));
-  }
-
-  
-  const ids = [...voterIds];
-  if (hasWitness) {
-    
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i <= ids.length; i++) {
-      const angle = slots[i];
-      const dist = Math.abs(angle - Math.PI / 2);
-      if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-    }
-    ids.splice(bestIdx, 0, 'w');
-  }
-
-  const positions = [];
-  let minY = Infinity;
-  for (let i = 0; i < n; i++) {
-    const angle = slots[i];
-    const x = cx + radius * Math.cos(angle) - CARD_W / 2;
-    const y = cy - radius * Math.sin(angle) - CARD_H / 2;
-    if (y < minY) minY = y;
-    positions.push({ id: ids[i], x, y });
-  }
-
-  
-  for (const p of positions) p.y -= minY;
-  const arenaH = cy - minY + CARD_H / 2 + 10;
-
-  return { positions, arenaW, arenaH };
-}
-
-
-
-
-
-
-
-function renderMessageArcs(messages, posMap, arenaW, arenaH) {
-  if (!messages || messages.length === 0) return '';
-
-  
-  const pairs = [];
-  for (let i = 0; i + 1 < messages.length; i += 2) {
-    pairs.push({ req: messages[i], resp: messages[i + 1] });
-  }
-
-  
-  const pairKey = (a, b) => a < b ? a + '-' + b : b + '-' + a;
-  const countPerPair = {};
-  const indexPerPair = {};
-  for (const p of pairs) {
-    const k = pairKey(p.req.from, p.req.to);
-    countPerPair[k] = (countPerPair[k] || 0) + 1;
-  }
-
-  let arcs = '';
-
-  for (const p of pairs) {
-    const k = pairKey(p.req.from, p.req.to);
-    indexPerPair[k] = (indexPerPair[k] || 0);
-    const pairIdx = indexPerPair[k]++;
-
-    const fromPos = posMap[p.req.from];
-    const toPos = posMap[p.req.to];
-    if (!fromPos || !toPos) continue;
-
-    
-    const baseSag = 35;
-    const sagStep = 25;
-    const sag = baseSag + pairIdx * sagStep;
-
-    
-    const reqDropped = p.resp.dropped;
-    arcs += makeArc(fromPos, toPos, sag, p.req.label,
-      'req' + (reqDropped ? ' dropped' : ''), reqDropped ? '#666' : '#5a9');
-
-    
-    if (!p.resp.dropped) {
-      arcs += makeArc(toPos, fromPos, -sag * 0.7, p.resp.label,
-        'resp', '#a75');
-    }
-  }
-
-  return '<svg class="msg-svg" width="' + arenaW + '" height="' + arenaH + '">' +
-    arcs + '</svg>';
-}
-
-
-
-
-
-function makeArc(from, to, sag, label, cls, color) {
-  const mx = (from.x + to.x) / 2;
-  const my = (from.y + to.y) / 2;
-
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len < 1) return '';
-
-  
-  
-  let px = -dy / len;
-  let py = dx / len;
-  
-  if (py > 0) { px = -px; py = -py; }
-
-  const qx = mx + px * sag;
-  const qy = my + py * sag;
-
-  
-  const shortenPx = 40;
-  const t0 = shortenPx / len;
-  const t1 = 1 - t0;
-  const sx = from.x + dx * t0;
-  const sy = from.y + dy * t0;
-  const ex = from.x + dx * t1;
-  const ey = from.y + dy * t1;
-
-  const path = 'M' + sx + ',' + sy + ' Q' + qx + ',' + qy + ' ' + ex + ',' + ey;
-
-  
-  const midX = 0.25 * sx + 0.5 * qx + 0.25 * ex;
-  const midY = 0.25 * sy + 0.5 * qy + 0.25 * ey;
-
-  
-  const tmx = ex - sx;
-  const tmy = ey - sy;
-  const tmLen = Math.sqrt(tmx * tmx + tmy * tmy);
-  const tux = tmLen > 0 ? tmx / tmLen : 1;
-  const tuy = tmLen > 0 ? tmy / tmLen : 0;
-
-  
-  const arrowLen = 7;
-  const arrowW = 4;
-  const ax1 = midX - tux * arrowLen + tuy * arrowW;
-  const ay1 = midY - tuy * arrowLen - tux * arrowW;
-  const ax2 = midX - tux * arrowLen - tuy * arrowW;
-  const ay2 = midY - tuy * arrowLen + tux * arrowW;
-
-  
-  let angleDeg = Math.atan2(tmy, tmx) * 180 / Math.PI;
-  if (angleDeg > 90) angleDeg -= 180;
-  if (angleDeg < -90) angleDeg += 180;
-
-  
-  const offsetDist = sag > 0 ? -8 : 12;
-  const angleRad = angleDeg * Math.PI / 180;
-  const olx = midX + Math.sin(angleRad) * offsetDist;
-  const oly = midY - Math.cos(angleRad) * offsetDist;
-
-  return '<path class="msg-arc ' + cls + '" d="' + path + '"/>' +
-    '<polygon points="' + midX + ',' + midY + ' ' + ax1 + ',' + ay1 + ' ' + ax2 + ',' + ay2 + '" fill="' + color + '"/>' +
-    '<text class="msg-label" x="' + olx + '" y="' + oly + '" ' +
-    'text-anchor="middle" ' +
-    'transform="rotate(' + angleDeg + ' ' + olx + ' ' + oly + ')">' +
-    escHtmlAttr(label) + '</text>';
-}
-
-function escHtmlAttr(s) {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function isChanged(step, replicaId, field) {
-  if (replicaId === 'w') {
-    if (!step.witness) return false;
-    if (field === 'down') return step.witness.down !== undefined;
-    if (field.startsWith('vote.')) return step.witness.vote && step.witness.vote[field.slice(5)] !== undefined;
-    if (field.startsWith('acked.')) return step.witness.acked && step.witness.acked[field.slice(6)] !== undefined;
-    return false;
-  }
-  return step.voters && step.voters[replicaId] && step.voters[replicaId][field] !== undefined;
-}
-
-function fmtLog(log, prevLog) {
-  if (!log || log.length === 0) return '(empty)';
-  return log.map((e, i) => {
-    const txt = e.term + e.index;
-    const prev = prevLog && prevLog[i];
-    const changed = !prev || prev.term !== e.term || prev.index !== e.index;
-    return '<span class="log-entry' + (changed ? ' changed' : '') + '">' + txt + '</span>';
-  }).join(' ');
+function termBg(t) {
+  if (!t || t === '-') return '#2a2a3e';
+  let ord = 0;
+  if (t.length === 1 && t >= 'a' && t <= 'z') ord = t.charCodeAt(0) - 97;
+  else ord = parseInt(t, 10) || 0;
+  const hue = (ord * 53) % 360;
+  return 'hsl(' + hue + ', 55%, 38%)';
 }
 
 function termOrd(t) {
@@ -299,49 +101,169 @@ function termOrd(t) {
   return parseInt(t, 10) || 0;
 }
 
-function fmtLogMark(lm) {
-  if (!lm) return '-';
-  return lm.term + lm.index;
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
 }
 
-function renderVoterCard(id, voter, step, x, y, allVoters, prevVoter) {
-  const f = (key, val) => {
-    const cls = isChanged(step, id, key) ? ' changed' : '';
-    return '<div class="field' + cls + '"><span class="key">' + key + '</span><span class="val">' + val + '</span></div>';
-  };
-  let cls = '';
-  if (voter.down) cls += ' down';
-  if (voter.leader) {
-    const stale = Object.values(allVoters).some(v => v !== voter && termOrd(v.term) > termOrd(voter.term));
-    cls += stale ? ' stale-leader' : ' leader';
+
+
+function renderVoterLog(log, prevLog, initial) {
+  let html = '<div class="log">';
+  if (!log || log.length === 0) {
+    html += '<div class="cell empty">·</div>';
+  } else {
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      const prev = prevLog && prevLog[i];
+      const changed = !initial && (!prev || prev.term !== e.term || prev.index !== e.index);
+      const cls = 'cell' + (changed ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + termBg(e.term) + '">' +
+        escHtml(e.index) + '</div>';
+    }
   }
-  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
-  const prevLog = prevVoter ? prevVoter.log : null;
-  let html = '<div class="card' + cls + '" style="' + style + '"><h2>' + id + '</h2>';
-  html += '<div class="field"><span class="key">log</span><span class="log-entries">' + fmtLog(voter.log, prevLog) + '</span></div>';
-  html += f('term', voter.term || '-');
-  html += f('votedFor', voter.votedFor || '-');
-  html += f('committed', voter.committed || 0);
-  if (voter.witnessEngaged) html += f('witnessEngaged', 'yes');
   html += '</div>';
   return html;
 }
 
-function renderWitnessCard(witness, step, x, y) {
-  if (!witness) return '';
-  const f = (field, val) => {
-    const cls = isChanged(step, 'w', field) ? ' changed' : '';
-    return '<div class="field' + cls + '"><span class="key">' + field.split('.')[1] + '</span><span class="val">' + val + '</span></div>';
+
+
+
+
+
+
+
+function renderWitnessLog(witness, prevWitness, initial) {
+  const hi = witness && witness.acked && witness.acked.hi;
+  const engaged = witness && witness.acked && witness.acked.engaged;
+  const term = hi ? hi.term : null;
+  const idx = hi ? parseInt(hi.index, 10) : 0;
+
+  const prevHi = prevWitness && prevWitness.acked && prevWitness.acked.hi;
+  const prevEngaged = prevWitness && prevWitness.acked && prevWitness.acked.engaged;
+  const prevTerm = prevHi ? prevHi.term : null;
+  const prevIdx = prevHi ? parseInt(prevHi.index, 10) : 0;
+
+  
+  const cellChanged = (i) => {
+    if (initial) return false;
+    if (term !== prevTerm) return true; 
+    if (engaged && !prevEngaged) {
+      
+      return i > prevIdx;
+    }
+    if (!engaged && prevEngaged) return true; 
+    return i > prevIdx;
   };
-  const downCls = witness.down ? ' down' : '';
-  const style = 'left:' + x + 'px;top:' + y + 'px;height:' + CARD_H + 'px';
-  let html = '<div class="card' + downCls + '" style="' + style + '"><h2>w (witness)</h2>';
-  html += '<div style="color:#666;font-size:11px;margin-bottom:4px">vote</div>';
-  html += f('vote.term', witness.vote.term || '-');
-  html += f('vote.votedFor', witness.vote.votedFor || '-');
-  html += '<div style="color:#666;font-size:11px;margin-top:6px;margin-bottom:4px">acked</div>';
-  html += f('acked.hi', witness.acked.hi ? fmtLogMark(witness.acked.hi) : '-');
-  html += f('acked.engaged', witness.acked.engaged ? 'yes' : 'no');
+
+  let html = '<div class="log">';
+  if (!hi && !engaged) {
+    html += '<div class="cell empty">·</div></div>';
+    return html;
+  }
+  const bg = termBg(term);
+  if (engaged) {
+    for (let i = 1; i <= 8; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + i + '</div>';
+    }
+    const tailCls = (!initial && engaged && !prevEngaged) ? ' changed' : '';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">…</div>';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">∞</div>';
+  } else {
+    for (let i = 1; i <= idx; i++) {
+      const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + i + '</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+
+function voterStateItems(id, voter, step) {
+  const items = [];
+  const push = (key, val, changed) => items.push({ key, val, changed });
+  push('term', voter.term || '-', isVoterChanged(step, id, 'term'));
+  if (voter.votedFor && voter.votedFor !== '-') {
+    push('votedFor', voter.votedFor, isVoterChanged(step, id, 'votedFor'));
+  } else if (isVoterChanged(step, id, 'votedFor')) {
+    push('votedFor', '-', true);
+  }
+  if ((voter.committed || 0) > 0 || isVoterChanged(step, id, 'committed')) {
+    push('committed', voter.committed || 0, isVoterChanged(step, id, 'committed'));
+  }
+  if (voter.witnessEngaged) {
+    push('witnessEngaged', 'yes', isVoterChanged(step, id, 'witnessEngaged'));
+  } else if (isVoterChanged(step, id, 'witnessEngaged')) {
+    push('witnessEngaged', 'no', true);
+  }
+  return items;
+}
+
+function witnessStateItems(witness, step) {
+  const items = [];
+  const initial = currentStep === 0;
+  const voteTermChanged = !initial && step.witness && step.witness.vote && step.witness.vote.term !== undefined;
+  const voteForChanged = !initial && step.witness && step.witness.vote && step.witness.vote.votedFor !== undefined;
+  const hiChanged = !initial && step.witness && step.witness.acked && step.witness.acked.hi !== undefined;
+  const engagedChanged = !initial && step.witness && step.witness.acked && step.witness.acked.engaged !== undefined;
+
+  items.push({
+    key: 'voteTerm', val: witness.vote.term || '-', changed: !!voteTermChanged,
+  });
+  items.push({
+    key: 'votedFor', val: witness.vote.votedFor || '-', changed: !!voteForChanged,
+  });
+  if (witness.acked.hi) {
+    items.push({
+      key: 'hi', val: witness.acked.hi.term + witness.acked.hi.index, changed: !!hiChanged,
+    });
+  }
+  items.push({
+    key: 'engaged', val: witness.acked.engaged ? 'yes' : 'no', changed: !!engagedChanged,
+  });
+  return items;
+}
+
+function fmtStateItems(items) {
+  return items.map(it => {
+    const cls = 'item' + (it.changed ? ' changed' : '');
+    return '<span class="' + cls + '"><span class="key">' + escHtml(it.key) + '=</span>' +
+      '<span class="val">' + escHtml(it.val) + '</span></span>';
+  }).join('<span class="sep">,</span>');
+}
+
+function isVoterChanged(step, id, field) {
+  if (currentStep === 0) return false; 
+  return step.voters && step.voters[id] && step.voters[id][field] !== undefined;
+}
+
+function renderVoterRow(id, voter, step, prevVoter, allVoters) {
+  let cls = 'row';
+  if (voter.down) cls += ' down';
+  if (voter.leader) {
+    const stale = Object.values(allVoters).some(
+      v => v !== voter && termOrd(v.term) > termOrd(voter.term)
+    );
+    cls += stale ? ' stale-leader' : ' leader';
+  }
+  let html = '<div class="' + cls + '" data-id="' + id + '">';
+  html += '<div class="label">' + escHtml(id) + '</div>';
+  html += renderVoterLog(voter.log, prevVoter ? prevVoter.log : null, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(voterStateItems(id, voter, step)) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderWitnessRow(witness, step, prevWitness) {
+  let cls = 'row';
+  if (witness.down) cls += ' down';
+  let html = '<div class="' + cls + '" data-id="w">';
+  html += '<div class="label witness">w</div>';
+  html += renderWitnessLog(witness, prevWitness, currentStep === 0);
+  html += '<div class="state">' + fmtStateItems(witnessStateItems(witness, step)) + '</div>';
   html += '</div>';
   return html;
 }
@@ -362,26 +284,14 @@ function render() {
   html += '</div>';
 
   
+  html += '<div class="board">';
   const voterIds = Object.keys(state.voters).sort();
-  const hasWitness = state.witness !== null;
-  const { positions, arenaW, arenaH } = semicircleLayout(voterIds, hasWitness);
-
-  
-  const posMap = {};
-  for (const p of positions) {
-    posMap[p.id] = { x: p.x + CARD_W / 2, y: p.y + CARD_H / 2 };
+  for (const id of voterIds) {
+    const prev = prevState && prevState.voters[id];
+    html += renderVoterRow(id, state.voters[id], step, prev, state.voters);
   }
-
-  html += '<div class="arena" style="width:' + arenaW + 'px;height:' + arenaH + 'px">';
-  
-  html += renderMessageArcs(step.messages, posMap, arenaW, arenaH);
-  for (const p of positions) {
-    if (p.id === 'w') {
-      html += renderWitnessCard(state.witness, step, p.x, p.y);
-    } else {
-      const prev = prevState && prevState.voters[p.id];
-      html += renderVoterCard(p.id, state.voters[p.id], step, p.x, p.y, state.voters, prev);
-    }
+  if (state.witness) {
+    html += renderWitnessRow(state.witness, step, prevState && prevState.witness);
   }
   html += '</div>';
 
@@ -412,12 +322,6 @@ function go(delta) {
     location.hash = currentStep;
     render();
   }
-}
-
-function escHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
 }
 
 document.addEventListener('keydown', (e) => {
