@@ -4576,3 +4576,153 @@ func TestLeaseInternalLookupCtxWithLocked(t *testing.T) {
 	require.NoError(t, grp.Wait())
 
 }
+
+// TestLeaseManagerLRUEviction verifies that the lease manager evicts
+// unused leases (refcount == 0) under memory pressure using an LRU
+// policy. It first demonstrates that queries fail with a memory budget
+// error when eviction is disabled, then enables eviction and shows
+// that the same queries succeed.
+func TestLeaseManagerLRUEviction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Use a memory limit that is large enough to hold system
+	// descriptors plus a handful of user descriptors, but small
+	// enough that leasing many user tables forces eviction.
+	const memoryLimit = 50000 // 50 KB
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				MemoryLimit:                 memoryLimit,
+				DisallowBytesMonitorCaching: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create enough tables that accessing all of them would exceed
+	// the memory limit.
+	const numTables = 100
+	for i := 0; i < numTables; i++ {
+		runner.Exec(t, fmt.Sprintf(
+			"CREATE TABLE defaultdb.evict_%d (k INT PRIMARY KEY)", i))
+	}
+
+	// Disable eviction. Accessing tables should eventually fail with
+	// a memory budget exceeded error.
+	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_lease.eviction.enabled = false")
+
+	var sawMemoryError bool
+	for i := 0; i < numTables; i++ {
+		_, err := sqlDB.ExecContext(ctx,
+			fmt.Sprintf("SELECT * FROM defaultdb.evict_%d", i))
+		if err != nil {
+			require.ErrorContains(t, err, "memory budget exceeded")
+			sawMemoryError = true
+			t.Logf("memory error after accessing table %d", i)
+			break
+		}
+	}
+	require.True(t, sawMemoryError,
+		"expected a memory budget exceeded error with eviction disabled")
+
+	// Enable eviction. Now the same queries should succeed because
+	// unused leases are evicted under memory pressure.
+	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_lease.eviction.enabled = true")
+
+	for i := 0; i < numTables; i++ {
+		runner.Exec(t, fmt.Sprintf("SELECT * FROM defaultdb.evict_%d", i))
+	}
+
+	// Memory usage must stay within the configured limit.
+	lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+	used := lm.TestingBoundAccountUsed()
+	t.Logf("memory used after accessing %d tables with eviction: %d bytes (limit %d)",
+		numTables, used, memoryLimit)
+	require.LessOrEqual(t, used, int64(memoryLimit),
+		"memory usage should not exceed the configured limit")
+}
+
+// TestLeaseManagerLRUEvictionSkipsInUse verifies that the LRU eviction
+// policy does not evict descriptor leases that are held by an open
+// transaction (refcount > 0).
+func TestLeaseManagerLRUEvictionSkipsInUse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const memoryLimit = 50000 // 50 KB
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				MemoryLimit:                 memoryLimit,
+				DisallowBytesMonitorCaching: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_lease.eviction.enabled = true")
+
+	const numTables = 100
+	const numHeld = 10
+	for i := 0; i < numTables; i++ {
+		runner.Exec(t, fmt.Sprintf(
+			"CREATE TABLE defaultdb.hold_%d (k INT PRIMARY KEY)", i))
+	}
+
+	// Collect descriptor IDs for the held tables.
+	heldIDs := make(map[int64]bool, numHeld)
+	for i := 0; i < numHeld; i++ {
+		var id int64
+		runner.QueryRow(t,
+			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = 'hold_%d'", i),
+		).Scan(&id)
+		heldIDs[id] = true
+	}
+
+	// Open a transaction that holds leases on the first numHeld tables.
+	// This keeps their refcount > 0 for the duration of the transaction.
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	for i := 0; i < numHeld; i++ {
+		_, err := tx.ExecContext(ctx,
+			fmt.Sprintf("SELECT * FROM defaultdb.hold_%d", i))
+		require.NoError(t, err)
+	}
+
+	// Access all tables from the main connection to trigger eviction.
+	// The held tables' leases must survive because refcount > 0.
+	for i := 0; i < numTables; i++ {
+		runner.Exec(t, fmt.Sprintf("SELECT * FROM defaultdb.hold_%d", i))
+	}
+
+	// Use VisitLeases to verify that the held descriptors still have
+	// refcount > 0 in the lease manager — proving they were not evicted.
+	lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+	seen := make(map[int64]bool, numHeld)
+	lm.VisitLeases(func(
+		desc catalog.Descriptor, _ bool, refCount int, _ tree.DTimestamp,
+	) bool {
+		if heldIDs[int64(desc.GetID())] {
+			require.Greater(t, refCount, 0,
+				"held descriptor %d should have refcount > 0", desc.GetID())
+			seen[int64(desc.GetID())] = true
+		}
+		return true
+	})
+	require.Equal(t, len(heldIDs), len(seen),
+		"all held descriptors should still be present in the lease manager")
+
+	require.NoError(t, tx.Commit())
+
+	used := lm.TestingBoundAccountUsed()
+	t.Logf("memory used: %d bytes (limit %d)", used, memoryLimit)
+	require.LessOrEqual(t, used, int64(memoryLimit))
+}

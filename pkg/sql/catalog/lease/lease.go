@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -141,6 +143,18 @@ var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.max_batch_lease_count",
 	"the maximum number of descriptors to lease in a single batch",
 	1000)
+
+// LeaseEvictionEnabled controls whether the lease manager evicts unused
+// descriptor leases (refcount == 0) using an LRU policy when memory
+// budget is exceeded. When disabled, memory budget errors are returned
+// to callers without attempting eviction.
+var LeaseEvictionEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.eviction.enabled",
+	"enables LRU eviction of unused descriptor leases when the lease manager "+
+		"runs out of memory budget",
+	false,
+)
 
 // GetLockedLeaseTimestampEnabled returns if locked leasing timestamps are enabled.
 func GetLockedLeaseTimestampEnabled(ctx context.Context, settings *cluster.Settings) bool {
@@ -1270,6 +1284,88 @@ func wrapMemoryError(err error) error {
 	return errors.WithHint(err, "Consider increasing --max-sql-memory startup parameter.")
 }
 
+// isMemoryError returns true if the error is a memory budget exceeded error.
+func isMemoryError(err error) bool {
+	return pgerror.GetPGCode(err) == pgcode.OutOfMemory
+}
+
+// evictLeastRecentlyUsed attempts to free memory by evicting
+// descriptor leases with refcount == 0, walking from the least
+// recently used end of the LRU list. It skips the descriptor with
+// the given skipID to avoid deadlocks (the caller may hold that
+// descriptor's lock). Returns true if any memory was freed.
+func (m *Manager) evictLeastRecentlyUsed(ctx context.Context, skipID descpb.ID) bool {
+	if !LeaseEvictionEnabled.Get(&m.settings.SV) {
+		return false
+	}
+
+	usedBefore := m.boundAccount.Used()
+	log.Dev.Warningf(ctx,
+		"lru eviction: sql memory almost full (%d bytes used for descriptor leases), "+
+			"evicting unused leases (skip descriptor: %d)",
+		usedBefore, skipID)
+
+	const maxEvictionCandidates = 100
+
+	candidates := func() []*descriptorState {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		var out []*descriptorState
+		for e := m.mu.lru.tail(); e != nil && len(out) < maxEvictionCandidates; e = m.mu.lru.prev(e) {
+			if e.id != skipID {
+				out = append(out, e)
+			}
+		}
+		return out
+	}()
+
+	var numFreed int
+	for _, t := range candidates {
+		leases := func() []*storedLease {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			return t.removeInactiveVersions(ctx)
+		}()
+		for _, l := range leases {
+			releaseLease(ctx, l, m)
+			numFreed++
+		}
+	}
+
+	// Remove descriptors that have no active versions left.
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for _, t := range candidates {
+			empty := func() bool {
+				t.mu.Lock()
+				defer t.mu.Unlock()
+				return len(t.mu.active.data) == 0
+			}()
+			if empty {
+				m.mu.lru.remove(t)
+				delete(m.mu.descriptors, t.id)
+			}
+		}
+	}()
+
+	log.Dev.Warningf(ctx,
+		"lru eviction: freed %d leases from %d candidates, memory used: %d bytes (was %d bytes)",
+		numFreed, len(candidates), m.boundAccount.Used(), usedBefore)
+	return numFreed > 0
+}
+
+// retryWithEviction calls fn. If fn returns a memory budget error,
+// it evicts unused leases in batches and retries until fn succeeds
+// or no more memory can be freed.
+func (m *Manager) retryWithEviction(ctx context.Context, skipID descpb.ID, fn func() error) error {
+	err := fn()
+	for err != nil && isMemoryError(err) && m.evictLeastRecentlyUsed(ctx, skipID) {
+		err = fn()
+	}
+	return err
+}
+
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
 func (m *Manager) insertDescriptorVersions(
@@ -1478,7 +1574,9 @@ func (m *Manager) EnsureBatch(ctx context.Context, ids []descpb.ID) error {
 				if batch.errs[idx] != nil {
 					continue
 				}
-				if err := m.upsertDescriptorIntoState(ctx, id, session, batch.descs[idx]); err != nil {
+				if err := m.retryWithEviction(ctx, id, func() error {
+					return m.upsertDescriptorIntoState(ctx, id, session, batch.descs[idx])
+				}); err != nil {
 					return err
 				}
 			}
@@ -1586,7 +1684,9 @@ func (m *Manager) acquireNodeLease(
 				if err != nil {
 					return false, err
 				}
-				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
+				if err := m.retryWithEviction(ctx, id, func() error {
+					return m.upsertDescriptorIntoState(ctx, id, session, desc)
+				}); err != nil {
 					return false, err
 				}
 				// Descriptor versions for these tables participate directly in memo
@@ -1618,7 +1718,9 @@ func (m *Manager) acquireNodeLease(
 					}
 					return true, nil
 				}
-				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
+				if err := m.retryWithEviction(ctx, id, func() error {
+					return m.upsertDescriptorIntoState(ctx, id, session, desc)
+				}); err != nil {
 					return false, err
 				}
 			}
@@ -2033,6 +2135,12 @@ type Manager struct {
 
 		// pendingObserverEvents is a list of observer events.
 		pendingObserverEvents []observerEvent
+
+		// lru is a doubly-linked list of descriptorState objects ordered
+		// from most recently used (head) to least recently used (tail).
+		// Used by the eviction policy to free leases with refcount == 0
+		// under memory pressure.
+		lru descriptorStateLRU
 	}
 
 	// closeTimeStamp is the most recent closeTimeStamp handle, for
@@ -2086,6 +2194,68 @@ type Manager struct {
 }
 
 const leaseConcurrencyLimit = 5
+
+// lruEntry holds the prev/next pointers for the LRU
+// doubly-linked list embedded in each descriptorState.
+type lruEntry struct {
+	prev *descriptorState
+	next *descriptorState
+}
+
+// descriptorStateLRU is a doubly-linked list of descriptorState objects.
+// The list is ordered from most recently used (head) to least recently used (tail).
+// All operations are O(1). The list is protected by Manager.mu.
+type descriptorStateLRU struct {
+	root descriptorState
+}
+
+// init initializes the LRU list.
+func (l *descriptorStateLRU) init() {
+	l.root.next = &l.root
+	l.root.prev = &l.root
+}
+
+// tail returns the least recently used entry, or nil if empty.
+func (l *descriptorStateLRU) tail() *descriptorState {
+	if l.root.prev == &l.root {
+		return nil
+	}
+	return l.root.prev
+}
+
+// prev returns the entry before e, or nil if e is the tail.
+func (l *descriptorStateLRU) prev(e *descriptorState) *descriptorState {
+	if e.prev == &l.root {
+		return nil
+	}
+	return e.prev
+}
+
+// pushFront moves or inserts e to the front (most recently used)
+// of the list. If e is already in the list, it is moved; otherwise
+// it is inserted.
+func (l *descriptorStateLRU) pushFront(e *descriptorState) {
+	if e == l.root.next {
+		return // already at front
+	}
+	if e.next != nil {
+		// Already in the list; remove first.
+		l.remove(e)
+	}
+	h := l.root.next
+	e.next = h
+	e.prev = &l.root
+	h.prev = e
+	l.root.next = e
+}
+
+// remove removes e from the list. e must be in the list.
+func (l *descriptorStateLRU) remove(e *descriptorState) {
+	e.prev.next = e.next
+	e.next.prev = e.prev
+	e.next = nil
+	e.prev = nil
+}
 
 // NewLeaseManager creates a new Manager.
 //
@@ -2201,6 +2371,7 @@ func NewLeaseManager(
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.stopper.AddCloser(stop.CloserFn(lm.AssertAllLeasesAreReleasedAfterDrain))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
+	lm.mu.lru.init()
 	lm.mu.descriptorTxnUpdatesToProcess = btree.NewG(2, func(a, b *descriptorTxnUpdate) bool {
 		return a.timestamp.Less(b.timestamp)
 	})
@@ -2224,7 +2395,7 @@ func NewLeaseManager(
 	if lm.testingKnobs.DisallowBytesMonitorCaching {
 		bytesMonitorIncrement = 1
 	}
-	lm.bytesMonitor = mon.NewMonitor(mon.Options{
+	monOpts := mon.Options{
 		Name:       mon.MakeName("leased-descriptors"),
 		CurCount:   lm.storage.leasingMetrics.leaseCurBytesCount,
 		MaxHist:    lm.storage.leasingMetrics.leaseMaxBytesHist,
@@ -2232,7 +2403,11 @@ func NewLeaseManager(
 		Settings:   settings,
 		LongLiving: true,
 		Increment:  bytesMonitorIncrement,
-	})
+	}
+	if lm.testingKnobs.MemoryLimit > 0 {
+		monOpts.Limit = lm.testingKnobs.MemoryLimit
+	}
+	lm.bytesMonitor = mon.NewMonitor(monOpts)
 	lm.bytesMonitor.StartNoReserved(context.Background(), rootBytesMonitor)
 	lm.boundAccount = lm.bytesMonitor.MakeConcurrentBoundAccount()
 	// Add a stopper for the bound account that we are using to
@@ -2572,8 +2747,9 @@ func (m *Manager) Acquire(
 			if errRead != nil {
 				return nil, errRead
 			}
-			errRead = m.insertDescriptorVersions(ctx, id, versions)
-			if errRead != nil {
+			if errRead = m.retryWithEviction(ctx, id, func() error {
+				return m.insertDescriptorVersions(ctx, id, versions)
+			}); errRead != nil {
 				return nil, errRead
 			}
 		default:
@@ -2700,6 +2876,9 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	if t == nil && create {
 		t = &descriptorState{m: m, id: id, stopper: m.stopper}
 		m.mu.descriptors[id] = t
+	}
+	if t != nil {
+		m.mu.lru.pushFront(t)
 	}
 	return t
 }
@@ -3545,6 +3724,9 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 						func() {
 							m.mu.Lock()
 							defer m.mu.Unlock()
+							if t := m.mu.descriptors[id]; t != nil {
+								m.mu.lru.remove(t)
+							}
 							delete(m.mu.descriptors, id)
 						}()
 					}
