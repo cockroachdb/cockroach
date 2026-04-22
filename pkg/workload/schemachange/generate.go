@@ -69,7 +69,7 @@ func PickBetween[T any](rng *rand.Rand, atLeast, atMost int, options []T) ([]T, 
 	})
 
 	length := atLeast + rng.Intn(atMost-atLeast+1)
-	return options[:length], nil
+	return cloned[:length], nil
 }
 
 // Values is a helper for formatting a list of SQL values within a
