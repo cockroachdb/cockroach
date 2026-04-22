@@ -1482,3 +1482,250 @@ func TestVectorCompositeEncoding(t *testing.T) {
 	require.Equal(t, collatedString, decodedStr)
 	require.Equal(t, 0, len(val))
 }
+
+// TestPrimaryIndexEncoder_EncodeFamily verifies the per-family encoding
+// rules implemented by PrimaryIndexEncoder. The cases exercise both
+// single-default-column families (which use the legacy direct value
+// encoding) and multi-column families (which use the tuple encoding), and
+// cover composite primary key columns, NULL values, and the family-0
+// sentinel.
+//
+// The cross-check at the end compares EncodeFamily output against
+// EncodePrimaryIndexWithKeyPrefix on the same tables; both paths must
+// produce byte-for-byte identical values.
+func TestPrimaryIndexEncoder_EncodeFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Helper: load a table descriptor and build a colMap from public
+	// columns.
+	loadTable := func(name string) (catalog.TableDescriptor, catalog.TableColMap) {
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", name)
+		var colMap catalog.TableColMap
+		for _, c := range desc.PublicColumns() {
+			colMap.Set(c.GetID(), c.Ordinal())
+		}
+		return desc, colMap
+	}
+
+	// Helper: pull a family by ID.
+	getFamily := func(desc catalog.TableDescriptor, id descpb.FamilyID) *descpb.ColumnFamilyDescriptor {
+		for _, f := range desc.GetFamilies() {
+			if f.ID == id {
+				famCopy := f
+				return &famCopy
+			}
+		}
+		t.Fatalf("family %d not found", id)
+		return nil
+	}
+
+	t.Run("single default column with value", func(t *testing.T) {
+		runner.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`)
+		desc, colMap := loadTable("t1")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(42)}
+		family := getFamily(desc, 1)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.False(t, res.Skipped)
+		require.True(t, res.Value.IsPresent())
+
+		// The value should decode to the same int we encoded.
+		got, err := res.Value.GetInt()
+		require.NoError(t, err)
+		require.Equal(t, int64(42), got)
+	})
+
+	t.Run("single default column with NULL", func(t *testing.T) {
+		runner.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`)
+		desc, colMap := loadTable("t2")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		values := []tree.Datum{tree.NewDInt(1), tree.DNull}
+		family := getFamily(desc, 1)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.False(t, res.Skipped)
+		// MarshalLegacy of DNull returns an empty Value; callers issue a
+		// delete when overwriting.
+		require.False(t, res.Value.IsPresent())
+	})
+
+	t.Run("single default column not in colMap is skipped", func(t *testing.T) {
+		runner.Exec(t, `CREATE TABLE t3 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`)
+		desc, _ := loadTable("t3")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		// colMap intentionally only contains the PK column.
+		var colMap catalog.TableColMap
+		colMap.Set(desc.PublicColumns()[0].GetID(), 0)
+		values := []tree.Datum{tree.NewDInt(1)}
+		family := getFamily(desc, 1)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.True(t, res.Skipped)
+		require.False(t, res.Value.IsPresent())
+	})
+
+	t.Run("multi-column family encodes tuple", func(t *testing.T) {
+		runner.Exec(t,
+			`CREATE TABLE t4 (a INT PRIMARY KEY, b INT, c INT, FAMILY pk (a), FAMILY bc (b, c))`,
+		)
+		desc, colMap := loadTable("t4")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(10), tree.NewDInt(20)}
+		family := getFamily(desc, 1)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.False(t, res.Skipped)
+		require.True(t, res.Value.IsPresent())
+
+		// The value tag must be TUPLE.
+		require.Equal(t, roachpb.ValueType_TUPLE, res.Value.GetTag())
+	})
+
+	t.Run("multi-column family with all NULL values", func(t *testing.T) {
+		runner.Exec(t,
+			`CREATE TABLE t5 (a INT PRIMARY KEY, b INT, c INT, FAMILY pk (a), FAMILY bc (b, c))`,
+		)
+		desc, colMap := loadTable("t5")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		values := []tree.Datum{tree.NewDInt(1), tree.DNull, tree.DNull}
+		family := getFamily(desc, 1)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.False(t, res.Skipped)
+		// Family != 0 with no encoded columns: Value is empty so the
+		// caller can decide to delete (overwrite paths) or skip.
+		require.False(t, res.Value.IsPresent())
+	})
+
+	t.Run("family 0 sentinel always emitted", func(t *testing.T) {
+		runner.Exec(t,
+			`CREATE TABLE t6 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`,
+		)
+		desc, colMap := loadTable("t6")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2)}
+		family := getFamily(desc, 0)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.False(t, res.Skipped)
+		// Family 0 with only the PK column produces an empty TUPLE — the
+		// row sentinel — even though no value-side columns were encoded.
+		require.True(t, res.Value.IsPresent())
+		require.Equal(t, roachpb.ValueType_TUPLE, res.Value.GetTag())
+	})
+
+	t.Run("composite primary key column flows into family 0 value", func(t *testing.T) {
+		runner.Exec(t,
+			`CREATE TABLE t7 (a DECIMAL PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`,
+		)
+		desc, colMap := loadTable("t7")
+		enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+
+		// -0 vs 0 — the canonical composite-decimal example.
+		negZero, err := tree.ParseDDecimal("-0")
+		require.NoError(t, err)
+
+		values := []tree.Datum{negZero, tree.NewDInt(2)}
+		family := getFamily(desc, 0)
+
+		res, _, err := enc.EncodeFamily(family, colMap, values, nil)
+		require.NoError(t, err)
+		require.True(t, res.Value.IsPresent())
+		require.Equal(t, roachpb.ValueType_TUPLE, res.Value.GetTag())
+		// Composite encoding of -0 produces non-empty data bytes inside
+		// the TUPLE; an empty sentinel would have only the header.
+		require.Greater(t, len(res.Value.RawBytes), 5)
+	})
+
+	// Cross-check: EncodeFamily, called over each family, must produce
+	// the same per-family Values that EncodePrimaryIndexWithKeyPrefix
+	// produces. This is the single strongest guarantee that the new
+	// encoder matches the existing pure encoder.
+	t.Run("matches EncodePrimaryIndexWithKeyPrefix", func(t *testing.T) {
+		cases := []struct {
+			ddl    string
+			values []tree.Datum
+		}{
+			{
+				ddl:    `CREATE TABLE x1 (a INT PRIMARY KEY, b INT)`,
+				values: []tree.Datum{tree.NewDInt(1), tree.NewDInt(2)},
+			},
+			{
+				ddl:    `CREATE TABLE x2 (a INT PRIMARY KEY, b INT, c INT, FAMILY pk (a), FAMILY bc (b, c))`,
+				values: []tree.Datum{tree.NewDInt(1), tree.NewDInt(10), tree.NewDInt(20)},
+			},
+			{
+				ddl:    `CREATE TABLE x3 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`,
+				values: []tree.Datum{tree.NewDInt(1), tree.NewDInt(99)},
+			},
+			{
+				ddl:    `CREATE TABLE x4 (a INT PRIMARY KEY, b INT, FAMILY pk (a), FAMILY f (b))`,
+				values: []tree.Datum{tree.NewDInt(1), tree.DNull},
+			},
+		}
+		for i, tc := range cases {
+			t.Run(fmt.Sprintf("case_%d", i), func(t *testing.T) {
+				runner.Exec(t, tc.ddl)
+				// Extract the table name from the DDL.
+				name := fmt.Sprintf("x%d", i+1)
+				desc, colMap := loadTable(name)
+
+				wantEntries, err := EncodePrimaryIndex(
+					codec, desc, desc.GetPrimaryIndex(), colMap, tc.values, false, /* includeEmpty */
+				)
+				require.NoError(t, err)
+
+				// Build a map of family ID -> expected Value bytes from
+				// the reference encoder.
+				want := map[descpb.FamilyID][]byte{}
+				for _, e := range wantEntries {
+					want[e.Family] = append([]byte(nil), e.Value.RawBytes...)
+				}
+
+				enc := MakePrimaryIndexEncoder(desc, desc.GetPrimaryIndex())
+				var buf []byte
+				for _, family := range desc.GetFamilies() {
+					f := family
+					var res PrimaryIndexFamilyValue
+					res, buf, err = enc.EncodeFamily(&f, colMap, tc.values, buf)
+					require.NoError(t, err)
+					if res.Skipped {
+						_, hasEntry := want[f.ID]
+						require.False(t, hasEntry, "family %d Skipped but reference emitted an entry", f.ID)
+						continue
+					}
+					if !res.Value.IsPresent() && f.ID != 0 {
+						_, hasEntry := want[f.ID]
+						require.False(t, hasEntry, "family %d empty but reference emitted an entry", f.ID)
+						continue
+					}
+					gotBytes := res.Value.RawBytes
+					wantBytes, ok := want[f.ID]
+					require.True(t, ok, "encoder produced family %d but reference omitted it", f.ID)
+					require.True(t, bytes.Equal(wantBytes, gotBytes),
+						"family %d: want %x got %x", f.ID, wantBytes, gotBytes)
+				}
+			})
+		}
+	})
+}
