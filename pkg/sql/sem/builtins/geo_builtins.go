@@ -3654,6 +3654,48 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			},
 			volatility.Immutable,
 		),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "spheroid", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				spheroidStr := string(tree.MustBeDString(args[2]))
+				spheroid, err := geogfn.ParseSpheroid(spheroidStr)
+				if err != nil {
+					return nil, err
+				}
+				aGeog, err := a.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				bGeog, err := b.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geogfn.DistanceWithSpheroid(aGeog, bGeog, spheroid)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the distance in meters between geometry_a and geometry_b using the supplied " +
+					"spheroid for the geodesic computation. The spheroid argument follows the PostGIS textual " +
+					"format, e.g. `SPHEROID[\"GRS_1980\",6378137,298.257222101]`, where the second number " +
+					"is the semi-major axis in meters and the third is the inverse flattening." +
+					spheroidDistanceMessage,
+				libraryUsage: usesGeographicLib | usesS2,
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
 	),
 	"st_frechetdistance": makeBuiltin(
 		defProps(),
