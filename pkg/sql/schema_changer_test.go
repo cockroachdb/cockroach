@@ -4224,6 +4224,17 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 		sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
 
+		// Split t.test off into its own range. Without this, t.test shares a
+		// range with system tables (notably system.jobs), and the GCRequest
+		// injected below would advance the GC threshold on that shared range.
+		// The schema changer recovers from BatchTimestampBeforeGCError on the
+		// backfill, but the parallel poll-show-jobs query in jobs.WaitForJobs
+		// would race with the threshold bump and fail the CREATE INDEX.
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+		if err := kvDB.AdminSplit(ctx, codec.TablePrefix(uint32(tableDesc.GetID())), hlc.MaxTimestamp); err != nil {
+			t.Fatal(err)
+		}
+
 		shouldRunGC.Store(true)
 		if _, err := db.Exec(
 			fmt.Sprintf(`CREATE UNIQUE INDEX %s ON t.test (v)`, indexName),
