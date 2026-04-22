@@ -35,12 +35,17 @@ go_library(
 
 go_test(
     name = "txnfeed_test",
-    srcs = ["catchup_scan_test.go"],
+    srcs = [
+        "catchup_scan_test.go",
+        "processor_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":txnfeed"],
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/rangefeed",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
@@ -48,6 +53,8 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
