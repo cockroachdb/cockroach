@@ -12,6 +12,7 @@ go_library(
         "intersects.go",
         "segmentize.go",
         "spheroid.go",
+        "spheroid_parse.go",
         "topology_operations.go",
         "unary_operators.go",
     ],
@@ -45,6 +46,7 @@ go_test(
         "geogfn_test.go",
         "intersects_test.go",
         "segmentize_test.go",
+        "spheroid_parse_test.go",
         "topology_operations_test.go",
         "unary_operators_test.go",
     ],
@@ -52,6 +54,7 @@ go_test(
     embed = [":geogfn"],
     deps = [
         "//pkg/geo",
+        "//pkg/geo/geographiclib",
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geotest",
         "@com_github_golang_geo//s1",
