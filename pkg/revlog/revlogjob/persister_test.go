@@ -108,7 +108,7 @@ func TestRehydrateOpenTicksAreClosedWithPriorFiles(t *testing.T) {
 	}
 
 	d, err := revlogjob.NewDriver(es, []roachpb.Span{allSpan}, ts(100), testTickWidth,
-		&seqFileIDs{}, revlogjob.ResumeState{})
+		&seqFileIDs{}, revlogjob.ResumeState{}, 0 /* forwardThreshold */)
 	require.NoError(t, err)
 	require.NoError(t, d.Manager.Rehydrate(state))
 
@@ -165,7 +165,7 @@ func TestResumeProducerBumpsFlushOrder(t *testing.T) {
 	require.Equal(t, int32(1), resume.StartingFlushOrders[openTickEnd])
 
 	d, err := revlogjob.NewDriver(es, []roachpb.Span{allSpan}, ts(100), testTickWidth,
-		&seqFileIDs{}, resume)
+		&seqFileIDs{}, resume, 0 /* forwardThreshold */)
 	require.NoError(t, err)
 	require.NoError(t, d.Manager.Rehydrate(state))
 

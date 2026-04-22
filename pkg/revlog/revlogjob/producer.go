@@ -82,16 +82,33 @@ type TickSink interface {
 // Producers are wired to a TickSink that receives the resulting file
 // descriptors and frontier advances.
 //
+// On flush, each per-tick buffer takes one of two paths depending on
+// its size relative to forwardThreshold:
+//
+//   - Above the threshold: PUT as a standalone data file under
+//     log/data/<tick-end>/, and reported in the next Flush as a
+//     FlushedFile.
+//   - At or below the threshold (and threshold > 0): the events are
+//     packaged as a revlogpb.Coalesce and forwarded to the coordinator
+//     in the next Flush. The coordinator merges Coalesces across
+//     producers per tick and, before closing the tick, either PUTs
+//     the merged result as one combined data file or stuffs it into
+//     the manifest's inline_tail (see TickManager).
+//
+// forwardThreshold == 0 disables the coalesce path entirely; every
+// non-empty buffer becomes its own file.
+//
 // Producer is the per-node piece of the revlog write path: in
 // production its OnValue / OnCheckpoint are bound directly to
 // rangefeed.WithOnValue / WithOnCheckpoint via a tiny adapter that
 // unpacks the kvpb wire types into the plain-args API here.
 type Producer struct {
-	es        cloud.ExternalStorage
-	tickWidth time.Duration
-	startHLC  hlc.Timestamp
-	fileIDs   FileIDSource
-	sink      TickSink
+	es               cloud.ExternalStorage
+	tickWidth        time.Duration
+	startHLC         hlc.Timestamp
+	fileIDs          FileIDSource
+	sink             TickSink
+	forwardThreshold int64
 
 	// frontier tracks the resolved time of every covered span. It
 	// is internal: the producer uses it only to decide which ticks
@@ -117,9 +134,11 @@ type Producer struct {
 	// consumed value.
 	startingFlushOrders map[hlc.Timestamp]int32
 
-	// pendingFiles and pendingCheckpoints accumulate between
-	// Flushes. Both are reset on each call to sink.Flush.
+	// pendingFiles, pendingCoalesces, and pendingCheckpoints
+	// accumulate between Flushes. All three are reset on each call
+	// to sink.Flush.
 	pendingFiles       []revlogpb.FlushedFile
+	pendingCoalesces   []revlogpb.Coalesce
 	pendingCheckpoints []kvpb.RangeFeedCheckpoint
 }
 
@@ -128,6 +147,14 @@ type tickBuffer struct {
 	// TODO(dt): track total byte size for size-triggered
 	// flushes (multi-file per tick, flush_order > 0).
 	events []bufferedEvent
+
+	// approxBytes is sum(len(key)+len(value)+len(prevValue)) over
+	// events. It's the "logical bytes" measure used by
+	// forwardThreshold to decide forward-vs-PUT — we don't pay for
+	// the per-FlushEntry proto framing here because that overhead
+	// is bounded (single-digit bytes per entry) and the threshold
+	// is fuzzy by design.
+	approxBytes int64
 }
 
 // bufferedEvent is the in-memory shape of a KV awaiting flush.
@@ -148,6 +175,11 @@ type bufferedEvent struct {
 //
 // The first closeable tick is the one whose tick_end is the
 // smallest boundary > min(startHLC, all SpanResumes.Resolved).
+//
+// forwardThreshold is the per-tick buffer-bytes ceiling at or below
+// which the producer forwards events to the coordinator as a
+// Coalesce instead of PUTing them as a standalone data file. Pass
+// 0 to disable the coalesce path. See ProducerForwardThreshold.
 func NewProducer(
 	es cloud.ExternalStorage,
 	spans []roachpb.Span,
@@ -156,6 +188,7 @@ func NewProducer(
 	fileIDs FileIDSource,
 	sink TickSink,
 	resume ResumeState,
+	forwardThreshold int64,
 ) (*Producer, error) {
 	if len(spans) == 0 {
 		return nil, errors.AssertionFailedf("revlogjob: NewProducer requires at least one span")
@@ -165,6 +198,10 @@ func NewProducer(
 	}
 	if sink == nil {
 		return nil, errors.AssertionFailedf("revlogjob: sink must be non-nil")
+	}
+	if forwardThreshold < 0 {
+		return nil, errors.AssertionFailedf(
+			"revlogjob: forwardThreshold must be non-negative (got %d)", forwardThreshold)
 	}
 	// TODO(dt): support replan / dynamic re-partitioning rather than
 	// taking a static span set at construction.
@@ -189,6 +226,7 @@ func NewProducer(
 		startHLC:            startHLC,
 		fileIDs:             fileIDs,
 		sink:                sink,
+		forwardThreshold:    forwardThreshold,
 		frontier:            f,
 		open:                make(map[hlc.Timestamp]*tickBuffer),
 		flushedThrough:      flushedThrough,
@@ -220,6 +258,7 @@ func (p *Producer) OnValue(
 		value:     value,
 		prevValue: prevValue,
 	})
+	buf.approxBytes += int64(len(key) + len(value) + len(prevValue))
 }
 
 // OnCheckpoint records a rangefeed checkpoint, advances the
@@ -251,18 +290,22 @@ func (p *Producer) OnCheckpoint(ctx context.Context, sp roachpb.Span, ts hlc.Tim
 	}
 	msg := &revlogpb.Flush{
 		Files:       p.pendingFiles,
+		Coalesces:   p.pendingCoalesces,
 		Checkpoints: p.pendingCheckpoints,
 	}
 	p.pendingFiles = nil
+	p.pendingCoalesces = nil
 	p.pendingCheckpoints = nil
 	return p.sink.Flush(ctx, msg)
 }
 
-// flushTick writes any buffered events for tickEnd as one SST data file
-// and appends a FlushedFile entry to pendingFiles for the next Flush
-// emission. Empty ticks (no buffered events) flush nothing — the
-// coordinator's TickManager will still write a manifest for them when
-// its aggregate frontier crosses the boundary.
+// flushTick drains any buffered events for tickEnd. Small enough
+// buffers (forwardThreshold > 0 and approxBytes <= forwardThreshold)
+// are packaged as a Coalesce and appended to pendingCoalesces;
+// larger buffers are PUT as one SST data file and appended to
+// pendingFiles. Empty ticks (no buffered events) flush nothing —
+// the coordinator's TickManager will still write a manifest for
+// them when its aggregate frontier crosses the boundary.
 //
 // TODO(dt): support size/time-triggered intra-tick flushes producing
 // multiple files per tick (flush_order > 0).
@@ -283,7 +326,8 @@ func (p *Producer) flushTick(ctx context.Context, tickEnd hlc.Timestamp) error {
 	// uniquely identifies an MVCC revision, so any such duplicates
 	// carry the same value and dropping them is safe. Without this
 	// the SSTable writer would reject the second occurrence ("keys
-	// must be added in strictly increasing order").
+	// must be added in strictly increasing order"); the same
+	// uniqueness expectation applies to forwarded Coalesces.
 	deduped := buf.events[:0]
 	for _, ev := range buf.events {
 		if n := len(deduped); n > 0 {
@@ -295,6 +339,23 @@ func (p *Producer) flushTick(ctx context.Context, tickEnd hlc.Timestamp) error {
 		deduped = append(deduped, ev)
 	}
 	buf.events = deduped
+
+	if p.forwardThreshold > 0 && buf.approxBytes <= p.forwardThreshold {
+		entries := make([]revlogpb.FlushEntry, len(buf.events))
+		for i, ev := range buf.events {
+			entries[i] = revlogpb.FlushEntry{
+				UserKey:   ev.key,
+				MvccTs:    ev.timestamp,
+				Value:     ev.value,
+				PrevValue: ev.prevValue,
+			}
+		}
+		p.pendingCoalesces = append(p.pendingCoalesces, revlogpb.Coalesce{
+			TickEnd: tickEnd,
+			Entries: entries,
+		})
+		return nil
+	}
 
 	flushOrder := p.startingFlushOrders[tickEnd]
 	// Consume so an intra-tick second flush (TODO) increments from

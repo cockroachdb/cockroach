@@ -51,10 +51,17 @@ func newTestDriver(
 	t *testing.T, startHLC hlc.Timestamp,
 ) (*revlogjob.Driver, cloud.ExternalStorage) {
 	t.Helper()
+	return newTestDriverWithThreshold(t, startHLC, 0 /* forwardThreshold */)
+}
+
+func newTestDriverWithThreshold(
+	t *testing.T, startHLC hlc.Timestamp, forwardThreshold int64,
+) (*revlogjob.Driver, cloud.ExternalStorage) {
+	t.Helper()
 	es := newTestStorage(t)
 	t.Cleanup(func() { es.Close() })
 	d, err := revlogjob.NewDriver(es, []roachpb.Span{allSpan}, startHLC, testTickWidth,
-		&seqFileIDs{}, revlogjob.ResumeState{})
+		&seqFileIDs{}, revlogjob.ResumeState{}, forwardThreshold)
 	require.NoError(t, err)
 	return d, es
 }
@@ -191,6 +198,87 @@ func TestDriverEmptyTickStillClosed(t *testing.T) {
 	for i, tk := range ticks {
 		require.Empty(t, tk.Manifest.Files, "tick %d should have no files", i)
 	}
+}
+
+// TestDriverCoalesceInline runs three small KVs through a producer
+// with a generous forward threshold (1 MiB). The producer should
+// forward the per-tick buffer as a Coalesce instead of PUTing an
+// SST; the coordinator should then drain it into Manifest.InlineTail
+// (well below inlineTailMaxBytes). Files should be empty and the
+// events should still be readable end-to-end via the LogReader's
+// inline-tail path.
+func TestDriverCoalesceInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	d, es := newTestDriverWithThreshold(t, ts(100), 1<<20)
+	d.OnValue(ctx, roachpb.Key("a"), ts(103), []byte("v_a"), nil)
+	d.OnValue(ctx, roachpb.Key("b"), ts(105), []byte("v_b"), nil)
+	d.OnValue(ctx, roachpb.Key("c"), ts(107), []byte("v_c"), nil)
+	require.NoError(t, d.OnCheckpoint(ctx, allSpan, ts(110)))
+
+	ticks := readBackTicks(t, ctx, es, ts(99), ts(110))
+	require.Len(t, ticks, 1)
+	require.Empty(t, ticks[0].Manifest.Files, "expected coalesced events to be inlined, not PUT")
+	require.Len(t, ticks[0].Manifest.InlineTail, 3)
+
+	events := readBackEvents(t, ctx, es, ticks[0])
+	require.Len(t, events, 3)
+	require.Equal(t, "a", string(events[0].Key))
+	require.Equal(t, "b", string(events[1].Key))
+	require.Equal(t, "c", string(events[2].Key))
+}
+
+// TestDriverCoalescePromotesToFile runs a per-tick batch large
+// enough that, even though the producer forwards it (it's under the
+// 1 MiB producer threshold), the merged coalesce buffer is too big
+// for the inline-tail cap (128 KiB). The coordinator should then
+// promote the merged buffer to a real data file (flushorder = 0
+// since there are no other files in the tick — the promoted file
+// always sits at max(existing flushorder) + 1, defaulting to 0
+// when there's no other file to come after). InlineTail should be
+// empty.
+func TestDriverCoalescePromotesToFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Producer threshold 1 MiB, payload ~256 KiB → forwarded
+	// (under producer threshold) but well over inlineTailMaxBytes
+	// (128 KiB) once at the coordinator.
+	d, es := newTestDriverWithThreshold(t, ts(100), 1<<20)
+	const numKeys = 256
+	const valSize = 1 << 10 // 1 KiB each → ~256 KiB total
+	val := make([]byte, valSize)
+	for i := 0; i < numKeys; i++ {
+		key := roachpb.Key([]byte{0x80, byte(i >> 8), byte(i)})
+		d.OnValue(ctx, key, ts(105), val, nil)
+	}
+	require.NoError(t, d.OnCheckpoint(ctx, allSpan, ts(110)))
+
+	ticks := readBackTicks(t, ctx, es, ts(99), ts(110))
+	require.Len(t, ticks, 1)
+	require.Empty(t, ticks[0].Manifest.InlineTail, "expected promoted file, not inline tail")
+	require.Len(t, ticks[0].Manifest.Files, 1)
+
+	events := readBackEvents(t, ctx, es, ticks[0])
+	require.Len(t, events, numKeys)
+}
+
+// TestDriverCoalesceDisabled with threshold=0 keeps the legacy
+// "every flush is a PUT" behavior — Files populated, InlineTail
+// empty, identical to the no-coalesce path.
+func TestDriverCoalesceDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	d, es := newTestDriverWithThreshold(t, ts(100), 0)
+	d.OnValue(ctx, roachpb.Key("a"), ts(103), []byte("v"), nil)
+	require.NoError(t, d.OnCheckpoint(ctx, allSpan, ts(110)))
+
+	ticks := readBackTicks(t, ctx, es, ts(99), ts(110))
+	require.Len(t, ticks, 1)
+	require.Len(t, ticks[0].Manifest.Files, 1)
+	require.Empty(t, ticks[0].Manifest.InlineTail)
 }
 
 // TestDriverNoCheckpointNoClose verifies that without a checkpoint,

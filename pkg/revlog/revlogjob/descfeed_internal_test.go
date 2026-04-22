@@ -7,6 +7,7 @@ package revlogjob
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
+
+// internalSeqFileIDs is an atomic-counter FileIDSource for the
+// in-package internal tests (the external _test package has its
+// own seqFileIDs in driver_test.go).
+type internalSeqFileIDs struct{ n atomic.Int64 }
+
+func (s *internalSeqFileIDs) Next() int64 { return s.n.Add(1) }
 
 // fakeScope is a stub Scope that returns a span set keyed off
 // the descriptor's ID at the time the call is made. The test
@@ -97,7 +105,7 @@ func newDescFeedTestState(
 	)
 	t.Cleanup(func() { _ = es.Close() })
 
-	manager, err := NewTickManager(es, lastSpans, startHLC, 10*time.Second)
+	manager, err := NewTickManager(es, lastSpans, startHLC, 10*time.Second, &internalSeqFileIDs{})
 	require.NoError(t, err)
 	manager.DisableDescFrontier()
 

@@ -31,6 +31,15 @@ message Manifest {
   // stats is the per-tick rollup of File-level stats (best-effort,
   // monitoring only — not required for read correctness).
   Stats stats = 4 [(gogoproto.nullable) = false];
+
+  // inline_tail carries entries the coordinator coalesced from
+  // small per-producer flushes (see Coalesce / Flush.coalesce) that
+  // were too small to justify a separate data file. Entries are
+  // already in (user_key, mvcc_ts) ascending order across all
+  // contributors. Readers process inline_tail as a virtual data
+  // file at flushorder = max(files.flush_order) + 1, after every
+  // real file.
+  repeated FlushEntry inline_tail = 5 [(gogoproto.nullable) = false];
 }
 
 // Stats summarizes the size of a unit of revlog output. Attached
@@ -61,13 +70,41 @@ message File {
 }
 
 // Flush is the producer→coordinator message: data files just
-// durably written plus rangefeed checkpoints observed since the
-// previous Flush. The two are paired because every reported
-// checkpoint's covered events are, by construction, in the
-// reported files.
+// durably written, in-line coalesce contributions for small
+// per-tick batches the producer chose to forward instead of PUT,
+// and rangefeed checkpoints observed since the previous Flush.
+// All three are paired because every reported checkpoint's covered
+// events are, by construction, in the reported files / coalesces.
 message Flush {
   repeated FlushedFile                            files       = 1 [(gogoproto.nullable) = false];
   repeated cockroach.roachpb.RangeFeedCheckpoint  checkpoints = 2 [(gogoproto.nullable) = false];
+  repeated Coalesce                               coalesces   = 3 [(gogoproto.nullable) = false];
+}
+
+// Coalesce is one producer's small per-tick batch forwarded to the
+// coordinator instead of PUT as a standalone data file. The
+// coordinator merges Coalesces across producers per tick; before
+// closing the tick, the merged result is either PUT as a single
+// data file (large enough to justify it) or stuffed into
+// Manifest.inline_tail (small enough to inline). Entries are
+// already (user_key, mvcc_ts) ascending within one Coalesce.
+message Coalesce {
+  util.hlc.Timestamp tick_end = 1 [(gogoproto.nullable) = false];
+  repeated FlushEntry entries = 2 [(gogoproto.nullable) = false];
+}
+
+// FlushEntry is one (user_key, mvcc_ts, value, prev_value) tuple in
+// the wire / inline-tail encoding. ValueFrame is the SSTable-value
+// equivalent (which omits user_key / mvcc_ts because they live in
+// the SSTable key); FlushEntry carries them inline because there
+// is no enclosing key/value structure.
+message FlushEntry {
+  option (gogoproto.equal) = true;
+
+  bytes              user_key   = 1;
+  util.hlc.Timestamp mvcc_ts    = 2 [(gogoproto.nullable) = false];
+  bytes              value      = 3;
+  bytes              prev_value = 4;
 }
 
 // FlushedFile pairs one data file with its tick and the producer's

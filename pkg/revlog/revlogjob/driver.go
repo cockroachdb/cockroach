@@ -40,6 +40,10 @@ type Driver struct {
 // descriptor-frontier gating — the close loop fires purely off
 // the data frontier, matching how Driver-based tests have
 // always behaved.
+//
+// forwardThreshold is the producer's coalesce-forward threshold; see
+// NewProducer. Tests that don't care about coalescing typically pass
+// 0 to keep every flush as its own SST file.
 func NewDriver(
 	es cloud.ExternalStorage,
 	spans []roachpb.Span,
@@ -47,13 +51,16 @@ func NewDriver(
 	tickWidth time.Duration,
 	fileIDs FileIDSource,
 	resume ResumeState,
+	forwardThreshold int64,
 ) (*Driver, error) {
-	manager, err := NewTickManager(es, spans, startHLC, tickWidth)
+	manager, err := NewTickManager(es, spans, startHLC, tickWidth, fileIDs)
 	if err != nil {
 		return nil, err
 	}
 	manager.DisableDescFrontier()
-	producer, err := NewProducer(es, spans, startHLC, tickWidth, fileIDs, manager, resume)
+	producer, err := NewProducer(
+		es, spans, startHLC, tickWidth, fileIDs, manager, resume, forwardThreshold,
+	)
 	if err != nil {
 		return nil, err
 	}

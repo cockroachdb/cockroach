@@ -146,9 +146,10 @@ func (p *proc) run(ctx context.Context) error {
 	sink := newMetaSink(p.progCh)
 	tickWidth := time.Duration(p.spec.TickWidthNanos)
 	resume := resumeFromSpec(p.spec)
+	forwardThreshold := ProducerForwardThreshold.Get(&cfg.Settings.SV)
 	producer, err := NewProducer(es, p.spec.Spans, p.spec.StartHLC, tickWidth,
 		nodeFileIDs{instanceID: unique.ProcessUniqueID(p.FlowCtx.NodeID.SQLInstanceID())},
-		sink, resume)
+		sink, resume, forwardThreshold)
 	if err != nil {
 		return errors.Wrap(err, "constructing producer")
 	}
