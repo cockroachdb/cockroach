@@ -103,6 +103,18 @@ func TestCollectWrites(t *testing.T) {
 			expectedPrevVals: []string{""},
 		},
 		{
+			name: "point key span",
+			setup: func(t *testing.T, eng storage.Engine) {
+				putVal(t, eng, "a", 5, "old")
+				putVal(t, eng, "a", 10, "new")
+			},
+			writeSpans:       []roachpb.Span{mkSpan("a", "")},
+			commitTS:         10,
+			expectedKeys:     []string{"a"},
+			expectedValues:   []string{"new"},
+			expectedPrevVals: []string{"old"},
+		},
+		{
 			name: "overwrite with previous value",
 			setup: func(t *testing.T, eng storage.Engine) {
 				putVal(t, eng, "a", 5, "old")
@@ -113,6 +125,20 @@ func TestCollectWrites(t *testing.T) {
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{"new"},
 			expectedPrevVals: []string{"old"},
+		},
+		{
+			name: "many prior versions returns immediate predecessor",
+			setup: func(t *testing.T, eng storage.Engine) {
+				putVal(t, eng, "a", 3, "v1")
+				putVal(t, eng, "a", 5, "v2")
+				putVal(t, eng, "a", 7, "v3")
+				putVal(t, eng, "a", 10, "current")
+			},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
+			commitTS:         10,
+			expectedKeys:     []string{"a"},
+			expectedValues:   []string{"current"},
+			expectedPrevVals: []string{"v3"},
 		},
 		{
 			name: "tombstone with previous value",
@@ -201,6 +227,19 @@ func TestCollectWrites(t *testing.T) {
 			expectedKeys:     []string{"a", "b"},
 			expectedValues:   []string{"val-a", "val-b"},
 			expectedPrevVals: []string{"", ""},
+		},
+		{
+			name: "key with prior values followed by adjacent key at commitTS",
+			setup: func(t *testing.T, eng storage.Engine) {
+				putVal(t, eng, "a", 5, "old-a")
+				putVal(t, eng, "a", 10, "new-a")
+				putVal(t, eng, "b", 10, "val-b")
+			},
+			writeSpans:       []roachpb.Span{mkSpan("a", "c")},
+			commitTS:         10,
+			expectedKeys:     []string{"a", "b"},
+			expectedValues:   []string{"new-a", "val-b"},
+			expectedPrevVals: []string{"old-a", ""},
 		},
 		{
 			name: "write span clipped to range boundary",
