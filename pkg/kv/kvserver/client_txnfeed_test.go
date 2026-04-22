@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -344,6 +345,240 @@ func verifyCommittedEvent(
 			// EndKey is exclusive, so it can equal feedSpan.EndKey.
 			require.True(t, rs.EndKey.Compare(feedSpan.EndKey) <= 0,
 				"%s read span end %s exceeds feed span end %s", label, rs.EndKey, feedSpan.EndKey)
+		}
+	}
+}
+
+// TestGetTxnDetailsWriteSet verifies that GetTxnDetails returns the correct
+// write set for a committed transaction, including previous values.
+func TestGetTxnDetailsWriteSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.ServerConn(0).Exec(
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+	require.NoError(t, err)
+
+	ts := tc.Server(0)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	db := ts.DB()
+
+	scratchKey := tc.ScratchRange(t)
+	feedSpan := roachpb.Span{
+		Key:    scratchKey,
+		EndKey: scratchKey.PrefixEnd(),
+	}
+	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
+
+	// Pre-populate keys that the transaction will overwrite and delete.
+	overwriteKey := append(scratchKey.Clone(), 'b')
+	deleteKey := append(scratchKey.Clone(), 'c')
+	require.NoError(t, db.Put(ctx, overwriteKey, "old-value"))
+	require.NoError(t, db.Put(ctx, deleteKey, "doomed-value"))
+
+	// Register a txn feed so we can capture the commit event.
+	startTS := db.Clock().Now()
+	stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
+	defer disconnector.Disconnect(nil)
+
+	// Run a transaction that creates, overwrites, and deletes keys.
+	newKey := append(scratchKey.Clone(), 'a')
+	var txnID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnID = txn.ID()
+		if err := txn.Put(ctx, newKey, "new-value"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, overwriteKey, "updated-value"); err != nil {
+			return err
+		}
+		_, err := txn.Del(ctx, deleteKey)
+		return err
+	})
+	require.NoError(t, err)
+
+	// Wait for the committed event to appear on the feed.
+	var committed *kvpb.TxnFeedCommitted
+	testutils.SucceedsSoon(t, func() error {
+		for _, ev := range stream.events() {
+			if ev.Committed != nil && ev.Committed.TxnID == txnID {
+				committed = ev.Committed
+				return nil
+			}
+		}
+		return errors.New("waiting for committed event")
+	})
+
+	// Send GetTxnDetailsRequest using the write spans from the feed event.
+	desc := store.LookupReplica(roachpb.RKey(scratchKey)).Desc()
+	resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(),
+		&kvpb.GetTxnDetailsRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    desc.StartKey.AsRawKey(),
+				EndKey: desc.EndKey.AsRawKey(),
+			},
+			TxnID:           committed.TxnID,
+			CommitTimestamp: committed.CommitTimestamp,
+			WriteSpans:      committed.WriteSpans,
+		})
+	require.Nil(t, pErr)
+	details := resp.(*kvpb.GetTxnDetailsResponse)
+
+	verifyWriteSet(t, details.Writes, []expectedWrite{
+		{key: newKey, value: "new-value"},
+		{key: overwriteKey, value: "updated-value", prevVal: "old-value"},
+		{key: deleteKey, prevVal: "doomed-value"},
+	})
+}
+
+// TestGetTxnDetailsMultiRange verifies that GetTxnDetails correctly collects
+// writes from a transaction that spans multiple ranges.
+func TestGetTxnDetailsMultiRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.ServerConn(0).Exec(
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+	require.NoError(t, err)
+
+	ts := tc.Server(0)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	db := ts.DB()
+
+	// Create two ranges: [scratchKey, midKey) and [midKey, ...).
+	scratchKey := tc.ScratchRange(t)
+	midKey := append(scratchKey.Clone(), 'm')
+	tc.SplitRangeOrFatal(t, midKey)
+
+	// Register a txn feed on the first range to capture the commit event.
+	feedSpan := roachpb.Span{Key: scratchKey, EndKey: midKey}
+	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
+	startTS := db.Clock().Now()
+	stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
+	defer disconnector.Disconnect(nil)
+
+	// Pre-populate a key in the second range to test prev_value across ranges.
+	key2Old := append(midKey.Clone(), 'b')
+	require.NoError(t, db.Put(ctx, key2Old, "range2-old"))
+
+	// Run a 2PC transaction writing one key per range.
+	key1 := append(scratchKey.Clone(), 'a')
+	key2 := key2Old
+	var txnID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnID = txn.ID()
+		if err := txn.Put(ctx, key1, "range1-value"); err != nil {
+			return err
+		}
+		return txn.Put(ctx, key2, "range2-value")
+	})
+	require.NoError(t, err)
+
+	// Wait for the committed event.
+	var committed *kvpb.TxnFeedCommitted
+	testutils.SucceedsSoon(t, func() error {
+		for _, ev := range stream.events() {
+			if ev.Committed != nil && ev.Committed.TxnID == txnID {
+				committed = ev.Committed
+				return nil
+			}
+		}
+		return errors.New("waiting for committed event")
+	})
+	require.NotEmpty(t, committed.WriteSpans, "expected write spans")
+
+	// Send GetTxnDetailsRequest spanning both ranges. The DistSender
+	// should split this across the two ranges and combine the results.
+	resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(),
+		&kvpb.GetTxnDetailsRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    scratchKey,
+				EndKey: scratchKey.PrefixEnd(),
+			},
+			TxnID:           committed.TxnID,
+			CommitTimestamp: committed.CommitTimestamp,
+			WriteSpans:      committed.WriteSpans,
+		})
+	require.Nil(t, pErr)
+	details := resp.(*kvpb.GetTxnDetailsResponse)
+
+	verifyWriteSet(t, details.Writes, []expectedWrite{
+		{key: key1, value: "range1-value"},
+		{key: key2, value: "range2-value", prevVal: "range2-old"},
+	})
+}
+
+// expectedWrite describes the expected state of a single key in a
+// GetTxnDetailsResponse.
+type expectedWrite struct {
+	key     roachpb.Key
+	value   string // empty = tombstone
+	prevVal string // empty = no previous value
+}
+
+// verifyWriteSet asserts that the response contains exactly the expected
+// writes, matched by key.
+func verifyWriteSet(t *testing.T, writes []kvpb.TxnDetailKV, expected []expectedWrite) {
+	t.Helper()
+	require.Len(t, writes, len(expected), "wrong number of writes")
+
+	byKey := make(map[string]kvpb.TxnDetailKV, len(writes))
+	for _, w := range writes {
+		byKey[string(w.KeyValue.Key)] = w
+	}
+
+	for _, exp := range expected {
+		w, ok := byKey[string(exp.key)]
+		require.True(t, ok, "missing write for key %s", exp.key)
+
+		if exp.value == "" {
+			require.Len(t, w.KeyValue.Value.RawBytes, 0,
+				"key %s: expected tombstone", exp.key)
+		} else {
+			v, err := w.KeyValue.Value.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, exp.value, string(v),
+				"key %s: wrong value", exp.key)
+		}
+
+		if exp.prevVal == "" {
+			require.False(t, w.PrevValue.IsPresent(),
+				"key %s: expected no prev_value", exp.key)
+		} else {
+			require.True(t, w.PrevValue.IsPresent(),
+				"key %s: expected prev_value", exp.key)
+			pv, err := w.PrevValue.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, exp.prevVal, string(pv),
+				"key %s: wrong prev_value", exp.key)
 		}
 	}
 }

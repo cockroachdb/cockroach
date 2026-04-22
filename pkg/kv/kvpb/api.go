@@ -709,6 +709,21 @@ func (r *ExciseResponse) combine(_ context.Context, c combinable, _ *BatchReques
 
 var _ combinable = &ExciseResponse{}
 
+// combine implements the combinable interface.
+func (r *GetTxnDetailsResponse) combine(_ context.Context, c combinable, _ *BatchRequest) error {
+	other := c.(*GetTxnDetailsResponse)
+	if r != nil {
+		r.Writes = append(r.Writes, other.Writes...)
+		r.Dependencies = append(r.Dependencies, other.Dependencies...)
+		if err := r.ResponseHeader.combine(other.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &GetTxnDetailsResponse{}
+
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
 	return rh
