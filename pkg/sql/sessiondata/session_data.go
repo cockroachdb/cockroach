@@ -449,6 +449,9 @@ func getValueToSet(value, typeName string) (_ reflect.Value, ok bool) {
 	case "DistSQLExecMode":
 		v, ok := sessiondatapb.DistSQLExecModeFromString(value)
 		return reflect.ValueOf(v), ok
+	case "NewSchemaChangerMode":
+		v, ok := sessiondatapb.NewSchemaChangerModeFromString(value)
+		return reflect.ValueOf(v), ok
 	}
 	return reflect.Value{}, false
 }

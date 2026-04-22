@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
@@ -1161,8 +1162,9 @@ func truncateTable(ctx context.Context, execCfg *sql.ExecutorConfig, id catid.De
 		return err
 	}
 
+	unsafeAlways := sessiondatapb.UseNewSchemaChangerUnsafeAlways
 	override := sessiondata.NodeUserSessionDataOverride
-	override.MultiOverride = "use_declarative_schema_changer=unsafe_always"
+	override.NewSchemaChangerMode = &unsafeAlways
 	_, err = execCfg.InternalDB.Executor().ExecParsed(
 		ctx,
 		redact.RedactableString("import-truncate-table"),

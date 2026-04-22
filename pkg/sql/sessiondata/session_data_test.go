@@ -172,6 +172,8 @@ func TestUpdateSessionData(t *testing.T) {
 		{variable: "OptSplitScanLimit", value: "123", localOnly: true, expectedSubstring: `opt_split_scan_limit:123`},
 		// DistSQLExecMode custom type.
 		{variable: "DistSQLMode", value: "on", localOnly: true, expectedSubstring: `dist_sql_mode:2`},
+		// NewSchemaChangerMode custom type.
+		{variable: "NewSchemaChangerMode", value: "unsafe_always", localOnly: true, expectedSubstring: `new_schema_changer_mode:3`},
 	} {
 		sd = SessionData{}
 		ok := sd.Update(tc.variable, tc.value)
