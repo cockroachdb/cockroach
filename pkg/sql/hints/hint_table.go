@@ -18,17 +18,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
+// distSQLOff is used to take the address of sessiondatapb.DistSQLOff.
+var distSQLOff = sessiondatapb.DistSQLOff
+
 // nodeUserLocalOnly is a session data override that forces local (non-DistSQL)
 // execution. Statement hint queries are simple point lookups that should not
 // incur the overhead of distributed execution.
 var nodeUserLocalOnly = sessiondata.InternalExecutorOverride{
-	User:          sessiondata.NodeUserSessionDataOverride.User,
-	MultiOverride: "distsql=off",
+	User:        sessiondata.NodeUserSessionDataOverride.User,
+	DistSQLMode: &distSQLOff,
 }
 
 var (
