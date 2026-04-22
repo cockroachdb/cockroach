@@ -250,6 +250,7 @@ func makeCPUTimeTokenGrantCoordinator(
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
+	allocator.strategy = allocator.newStrategy(serverlessMode)
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler: filler,
