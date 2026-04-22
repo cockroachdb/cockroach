@@ -8,9 +8,12 @@ package batcheval
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -18,7 +21,24 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.GetTxnDetails, DefaultDeclareIsolatedKeys, GetTxnDetails)
+	RegisterReadOnlyCommand(kvpb.GetTxnDetails, declareKeysGetTxnDetails, GetTxnDetails)
+}
+
+// declareKeysGetTxnDetails declares latches only on the spans that
+// GetTxnDetails will actually read.
+func declareKeysGetTxnDetails(
+	_ ImmutableRangeState,
+	_ *kvpb.Header,
+	req kvpb.Request,
+	latchSpans *spanset.SpanSet,
+	_ *lockspanset.LockSpanSet,
+	_ time.Duration,
+) error {
+	args := req.(*kvpb.GetTxnDetailsRequest)
+	for _, ws := range args.WriteSpans {
+		latchSpans.AddMVCC(spanset.SpanReadOnly, ws, args.CommitTimestamp)
+	}
+	return nil
 }
 
 // GetTxnDetails retrieves a transaction's raw writes and dependencies on a
