@@ -194,3 +194,47 @@ func TestUpdateSessionData(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateMultiOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		expectedErr string
+	}{
+		{name: "empty", input: ""},
+		{name: "valid bool", input: "DefaultTxnReadOnly=true"},
+		{name: "valid string", input: "Database=foo"},
+		{name: "valid multiple", input: "Database=foo,DefaultTxnReadOnly=true"},
+		{name: "valid DistSQLMode", input: "DistSQLMode=off"},
+		{name: "valid NewSchemaChangerMode", input: "NewSchemaChangerMode=unsafe_always"},
+		{
+			name:        "bad format",
+			input:       "no_equals_sign",
+			expectedErr: "invalid override format",
+		},
+		{
+			name:        "unknown field name",
+			input:       "distsql=off",
+			expectedErr: `unknown or unsupported session variable "distsql"`,
+		},
+		{
+			name:        "bad value for type",
+			input:       "DefaultTxnReadOnly=notabool",
+			expectedErr: `unknown or unsupported session variable "DefaultTxnReadOnly"`,
+		},
+		{
+			name:        "second override invalid",
+			input:       "Database=foo,bogus=bar",
+			expectedErr: `unknown or unsupported session variable "bogus"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateMultiOverride(tc.input)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

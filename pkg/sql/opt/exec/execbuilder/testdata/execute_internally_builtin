@@ -211,10 +211,8 @@ SELECT crdb_internal.execute_internally('SELECT session_user;');
 ----
 testuser
 
-query T
+statement error unknown or unsupported session variable "User"
 SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=root');
-----
-testuser
 
 user root
 
@@ -223,10 +221,8 @@ SELECT crdb_internal.execute_internally('SELECT session_user;');
 ----
 root
 
-query T
+statement error unknown or unsupported session variable "User"
 SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=testuser');
-----
-root
 
 statement ok
 SELECT crdb_internal.execute_internally('EXPLAIN ANALYZE SELECT 1;');

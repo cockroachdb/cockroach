@@ -4249,6 +4249,11 @@ func makeInternallyExecutedQueryGeneratorOverload(
 					return nil, errors.Newf("expected string argument for 'overrides', got %s", args[overridesIdx].ResolvedType())
 				}
 				overrides = string(*o)
+				if overrides != "" {
+					if err := sessiondata.ValidateMultiOverride(overrides); err != nil {
+						return nil, err
+					}
+				}
 			}
 			var useTxn bool
 			if withTxn {
