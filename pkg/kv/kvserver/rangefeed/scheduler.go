@@ -32,17 +32,17 @@ import (
 // notifies callbacks in order passing them union of event types that were
 // enqueued since last notification.
 
-// processorEventType is a mask for pending events for the processor. All event
+// ProcessorEventType is a mask for pending events for the processor. All event
 // types that were enqueued between two callback invocations are coalesced into
 // a single value.
-type processorEventType int
+type ProcessorEventType int
 
 const (
 	// Queued is an internal event type that indicate that there's already a
 	// pending work for processor and it is already scheduled for execution.
 	// When more events types come in, they should just be added to existing
 	// pending value.
-	Queued processorEventType = 1 << iota
+	Queued ProcessorEventType = 1 << iota
 	// Stopped is an event that indicates that there would be no more events
 	// scheduled for the processor. once it is enqueued, all subsequent events
 	// are rejected. processor should perform any cleanup when receiving this
@@ -61,7 +61,7 @@ const (
 	numProcessorEventTypes int = iota
 )
 
-var eventNames = map[processorEventType]string{
+var eventNames = map[ProcessorEventType]string{
 	Queued:        "Queued",
 	Stopped:       "Stopped",
 	EventQueued:   "Event",
@@ -69,10 +69,10 @@ var eventNames = map[processorEventType]string{
 	PushTxnQueued: "PushTxn",
 }
 
-func (e processorEventType) String() string {
+func (e ProcessorEventType) String() string {
 	var evts []string
 	for i := 0; i < numProcessorEventTypes; i++ {
-		if eventType := processorEventType(1 << i); eventType&e != 0 {
+		if eventType := ProcessorEventType(1 << i); eventType&e != 0 {
 			evts = append(evts, eventNames[eventType])
 		}
 	}
@@ -97,7 +97,7 @@ const schedulerLatencyHistogramCollectionFrequency = 13
 //
 // This mechanism allows processors to throttle processing if it has too much
 // pending data to process in one go without blocking other processors.
-type Callback func(event processorEventType) (remaining processorEventType)
+type Callback func(event ProcessorEventType) (remaining ProcessorEventType)
 
 // SchedulerConfig contains configurable scheduler parameters.
 type SchedulerConfig struct {
@@ -163,7 +163,7 @@ type schedulerShard struct {
 	bulkChunkSize int
 	cond          *sync.Cond
 	procs         map[int64]Callback
-	status        map[int64]processorEventType
+	status        map[int64]ProcessorEventType
 	queue         *idQueue
 	// No more new registrations allowed. Workers are winding down.
 	quiescing bool
@@ -224,7 +224,7 @@ func newSchedulerShard(
 		numWorkers:         numWorkers,
 		bulkChunkSize:      bulkChunkSize,
 		procs:              map[int64]Callback{},
-		status:             map[int64]processorEventType{},
+		status:             map[int64]ProcessorEventType{},
 		queue:              newIDQueue(),
 		metrics:            metrics,
 		histogramFrequency: histogramFrequency,
@@ -322,14 +322,14 @@ func (s *Scheduler) stopProcessor(id int64) {
 
 // Enqueue event for existing callback. The event is ignored if the processor
 // does not exist.
-func (s *Scheduler) enqueue(id int64, evt processorEventType) {
+func (s *Scheduler) enqueue(id int64, evt ProcessorEventType) {
 	priority := s.priorityIDs.Contains(id)
 	s.shards[shardIndex(id, len(s.shards), priority)].enqueue(id, evt)
 }
 
 // EnqueueBatch enqueues an event for a set of processors across all shards.
 // Using a batch allows efficient enqueueing with minimal lock contention.
-func (s *Scheduler) EnqueueBatch(batch *SchedulerBatch, evt processorEventType) {
+func (s *Scheduler) EnqueueBatch(batch *SchedulerBatch, evt ProcessorEventType) {
 	for shardIdx, ids := range batch.ids {
 		if len(ids) > 0 {
 			s.shards[shardIdx].enqueueN(ids, evt)
@@ -371,7 +371,7 @@ func (ss *schedulerShard) unregister(id int64) {
 
 // enqueue enqueues a single event for a given processor in this shard, and wakes
 // up a worker to process it. The caller must not hold the shard lock.
-func (ss *schedulerShard) enqueue(id int64, evt processorEventType) {
+func (ss *schedulerShard) enqueue(id int64, evt ProcessorEventType) {
 	// We get time outside of lock to get more realistic delay in case there's a
 	// scheduler contention.
 	now := ss.maybeEnqueueStartTime()
@@ -399,7 +399,7 @@ func (ss *schedulerShard) maybeEnqueueStartTime() int64 {
 
 // enqueueLocked enqueues a single event for a given processor in this shard.
 // Does not wake up a worker to process it.
-func (ss *schedulerShard) enqueueLocked(entry queueEntry, evt processorEventType) bool {
+func (ss *schedulerShard) enqueueLocked(entry queueEntry, evt ProcessorEventType) bool {
 	if _, ok := ss.procs[entry.id]; !ok {
 		return false
 	}
@@ -421,7 +421,7 @@ func (ss *schedulerShard) enqueueLocked(entry queueEntry, evt processorEventType
 
 // enqueueN enqueues an event for multiple processors on this shard, and wakes
 // up workers to process them. The caller must not hold the shard lock.
-func (ss *schedulerShard) enqueueN(ids []int64, evt processorEventType) int {
+func (ss *schedulerShard) enqueueN(ids []int64, evt ProcessorEventType) int {
 	// Avoid locking for 0 new processors.
 	if len(ids) == 0 {
 		return 0
@@ -646,7 +646,7 @@ func (cs *ClientScheduler) Register(cb Callback, priority bool) error {
 }
 
 // Enqueue schedules callback execution for event.
-func (cs *ClientScheduler) Enqueue(event processorEventType) {
+func (cs *ClientScheduler) Enqueue(event ProcessorEventType) {
 	cs.s.enqueue(cs.id, event)
 }
 

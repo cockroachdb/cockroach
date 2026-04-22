@@ -155,7 +155,7 @@ func (p *ScheduledProcessor) Start(
 
 // process is a scheduler callback that is processing scheduled events and
 // requests.
-func (p *ScheduledProcessor) process(e processorEventType) processorEventType {
+func (p *ScheduledProcessor) process(e ProcessorEventType) ProcessorEventType {
 	ctx := p.processCtx
 	if e&RequestQueued != 0 {
 		p.processRequests(ctx)

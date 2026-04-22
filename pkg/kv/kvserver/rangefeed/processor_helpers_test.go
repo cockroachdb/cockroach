@@ -425,7 +425,7 @@ func newTestProcessor(
 	cfg.Scheduler = sch
 	// Also create a dummy priority processor to populate priorityIDs for
 	// BenchmarkRangefeed. It should never be called.
-	noop := func(e processorEventType) processorEventType {
+	noop := func(e ProcessorEventType) ProcessorEventType {
 		if e != Stopped {
 			t.Errorf("unexpected event %s for noop priority processor", e)
 		}

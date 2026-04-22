@@ -47,14 +47,14 @@ func TestStopNonEmpty(t *testing.T) {
 }
 
 type schedulerConsumer struct {
-	c  chan processorEventType
+	c  chan ProcessorEventType
 	mu struct {
 		syncutil.RWMutex
 		wait    chan interface{}
 		waiting chan interface{}
 	}
-	reschedule chan processorEventType
-	flat       []processorEventType
+	reschedule chan ProcessorEventType
+	flat       []ProcessorEventType
 	sched      *Scheduler
 	id         int64
 }
@@ -64,8 +64,8 @@ func createAndRegisterConsumerOrFail(
 ) *schedulerConsumer {
 	t.Helper()
 	c := &schedulerConsumer{
-		c:          make(chan processorEventType, 1000),
-		reschedule: make(chan processorEventType, 1),
+		c:          make(chan ProcessorEventType, 1000),
+		reschedule: make(chan ProcessorEventType, 1),
 		sched:      scheduler,
 		id:         id,
 	}
@@ -74,7 +74,7 @@ func createAndRegisterConsumerOrFail(
 	return c
 }
 
-func (c *schedulerConsumer) process(ev processorEventType) processorEventType {
+func (c *schedulerConsumer) process(ev ProcessorEventType) ProcessorEventType {
 	c.c <- ev
 	c.mu.RLock()
 	w, ww := c.mu.wait, c.mu.waiting
@@ -117,12 +117,12 @@ func (c *schedulerConsumer) resume() {
 	close(w)
 }
 
-func (c *schedulerConsumer) rescheduleNext(e processorEventType) {
+func (c *schedulerConsumer) rescheduleNext(e ProcessorEventType) {
 	c.reschedule <- e
 }
 
 func (c *schedulerConsumer) assertTill(
-	t *testing.T, timeout time.Duration, assert func(flat []processorEventType) bool,
+	t *testing.T, timeout time.Duration, assert func(flat []ProcessorEventType) bool,
 ) bool {
 	t.Helper()
 	till := time.After(timeout)
@@ -140,7 +140,7 @@ func (c *schedulerConsumer) assertTill(
 }
 
 func (c *schedulerConsumer) requireEvent(
-	t *testing.T, timeout time.Duration, event processorEventType, count ...int,
+	t *testing.T, timeout time.Duration, event ProcessorEventType, count ...int,
 ) {
 	t.Helper()
 	min, max := 0, 0
@@ -153,8 +153,8 @@ func (c *schedulerConsumer) requireEvent(
 	default:
 		t.Fatal("event count limits must be 1 (exact) or 2 [mix, max]")
 	}
-	var lastHist []processorEventType
-	if !c.assertTill(t, timeout, func(flat []processorEventType) bool {
+	var lastHist []ProcessorEventType
+	if !c.assertTill(t, timeout, func(flat []ProcessorEventType) bool {
 		lastHist = flat
 		match := 0
 		for _, e := range lastHist {
@@ -170,11 +170,11 @@ func (c *schedulerConsumer) requireEvent(
 }
 
 func (c *schedulerConsumer) requireHistory(
-	t *testing.T, timeout time.Duration, history []processorEventType,
+	t *testing.T, timeout time.Duration, history []ProcessorEventType,
 ) {
 	t.Helper()
-	var lastHist []processorEventType
-	if !c.assertTill(t, timeout, func(flat []processorEventType) bool {
+	var lastHist []ProcessorEventType
+	if !c.assertTill(t, timeout, func(flat []ProcessorEventType) bool {
 		lastHist = flat
 		return slices.Equal(history, lastHist)
 	}) {
@@ -184,8 +184,8 @@ func (c *schedulerConsumer) requireHistory(
 
 func (c *schedulerConsumer) requireStopped(t *testing.T, timeout time.Duration) {
 	t.Helper()
-	lastEvent := processorEventType(0)
-	if !c.assertTill(t, timeout, func(flat []processorEventType) bool {
+	lastEvent := ProcessorEventType(0)
+	if !c.assertTill(t, timeout, func(flat []ProcessorEventType) bool {
 		t.Helper()
 		if len(c.flat) == 0 {
 			return false
@@ -232,7 +232,7 @@ func TestNoParallel(t *testing.T) {
 	c.waitPaused()
 	s.enqueue(c.id, te2)
 	c.resume()
-	c.requireHistory(t, time.Second*30, []processorEventType{te1, te2})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1, te2})
 	assertStopsWithinTimeout(t, s)
 }
 
@@ -250,9 +250,9 @@ func TestProcessOtherWhilePaused(t *testing.T) {
 	s.enqueue(c1.id, te1)
 	c1.waitPaused()
 	s.enqueue(c2.id, te1)
-	c2.requireHistory(t, time.Second*30, []processorEventType{te1})
+	c2.requireHistory(t, time.Second*30, []ProcessorEventType{te1})
 	c1.resume()
-	c1.requireHistory(t, time.Second*30, []processorEventType{te1})
+	c1.requireHistory(t, time.Second*30, []ProcessorEventType{te1})
 	assertStopsWithinTimeout(t, s)
 	c1.requireStopped(t, time.Second*30)
 	c2.requireStopped(t, time.Second*30)
@@ -273,7 +273,7 @@ func TestEventsCombined(t *testing.T) {
 	s.enqueue(c.id, te2)
 	s.enqueue(c.id, te3)
 	c.resume()
-	c.requireHistory(t, time.Second*30, []processorEventType{te1, te2 | te3})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1, te2 | te3})
 	assertStopsWithinTimeout(t, s)
 }
 
@@ -291,7 +291,7 @@ func TestRescheduleEvent(t *testing.T) {
 	c.waitPaused()
 	s.enqueue(c.id, te1)
 	c.resume()
-	c.requireHistory(t, time.Second*30, []processorEventType{te1, te1})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1, te1})
 	assertStopsWithinTimeout(t, s)
 }
 
@@ -307,21 +307,21 @@ func TestClientScheduler(t *testing.T) {
 	// Manually create consumer as we don't want it to start, but want to use it
 	// via client scheduler.
 	c := &schedulerConsumer{
-		c:          make(chan processorEventType, 1000),
-		reschedule: make(chan processorEventType, 1),
+		c:          make(chan ProcessorEventType, 1000),
+		reschedule: make(chan ProcessorEventType, 1),
 		sched:      s,
 		id:         1,
 	}
 	require.NoError(t, cs.Register(c.process, false), "failed to register consumer")
 	require.Error(t,
-		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }, false),
+		cs.Register(func(event ProcessorEventType) (remaining ProcessorEventType) { return 0 }, false),
 		"reregistration must fail")
 	c.pause()
 	cs.Enqueue(te2)
 	c.waitPaused()
 	cs.Unregister()
 	c.resume()
-	c.requireHistory(t, time.Second*30, []processorEventType{te2})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te2})
 	assertStopsWithinTimeout(t, s)
 }
 
@@ -365,7 +365,7 @@ func TestPartialProcessing(t *testing.T) {
 	// Set process response to trigger process once again.
 	c.rescheduleNext(te1)
 	s.enqueue(c.id, te1)
-	c.requireHistory(t, time.Second*30, []processorEventType{te1, te1})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1, te1})
 	assertStopsWithinTimeout(t, s)
 }
 
@@ -392,11 +392,11 @@ func TestUnregisterWithoutStop(t *testing.T) {
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s, 1, false /* priority */)
 	s.enqueue(c.id, te1)
-	c.requireHistory(t, time.Second*30, []processorEventType{te1})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1})
 	s.unregister(c.id)
 	assertStopsWithinTimeout(t, s)
 	// Ensure that we didn't send stop after callback was removed.
-	c.requireHistory(t, time.Second*30, []processorEventType{te1})
+	c.requireHistory(t, time.Second*30, []ProcessorEventType{te1})
 }
 
 func TestStartupFailure(t *testing.T) {
@@ -424,8 +424,8 @@ func TestSchedulerShutdown(t *testing.T) {
 	s.stopProcessor(c2.id)
 	s.Stop()
 	// Ensure that we are not stopped twice.
-	c1.requireHistory(t, time.Second*30, []processorEventType{Stopped})
-	c2.requireHistory(t, time.Second*30, []processorEventType{Stopped})
+	c1.requireHistory(t, time.Second*30, []ProcessorEventType{Stopped})
+	c2.requireHistory(t, time.Second*30, []ProcessorEventType{Stopped})
 }
 
 func TestQueueReadWrite1By1(t *testing.T) {
@@ -572,11 +572,11 @@ func TestSchedulerPriority(t *testing.T) {
 
 	// The priority consumer should be able to process events.
 	s.enqueue(cPri.id, te1)
-	cPri.requireHistory(t, 5*time.Second, []processorEventType{te1})
+	cPri.requireHistory(t, 5*time.Second, []ProcessorEventType{te1})
 
 	// Resuming the regular consumer should process its queued event.
 	c.resume()
-	c.requireHistory(t, 5*time.Second, []processorEventType{te1})
+	c.requireHistory(t, 5*time.Second, []ProcessorEventType{te1})
 	assertStopsWithinTimeout(t, s)
 	c.requireStopped(t, 5*time.Second)
 	cPri.requireStopped(t, 5*time.Second)
