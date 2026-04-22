@@ -146,3 +146,4 @@ The following repo-specific skills are available:
 * Focus on accuracy and efficiency.
 * Challenge my assumptions when needed.
 * Prioritize quality information and directness.
+* Favor clear communication over jargon.

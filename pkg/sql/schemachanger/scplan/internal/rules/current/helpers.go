@@ -102,6 +102,9 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 
 func isTableDescriptorChildElement(e scpb.Element) bool {
 	if isColumn(e) || isConstraint(e) {
+		if isTypeDescriptorChildElement(e) {
+			return false
+		}
 		return true
 	}
 
