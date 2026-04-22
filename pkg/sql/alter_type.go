@@ -304,19 +304,13 @@ func (p *planner) renameTypeValue(
 ) error {
 	enumMemberIndex := -1
 
-	// Do one pass to verify that the oldVal exists and there isn't already
-	// a member that is named newVal.
+	// Verify that oldVal exists.
 	for i := range n.desc.EnumMembers {
-		member := n.desc.EnumMembers[i]
-		if member.LogicalRepresentation == oldVal {
+		if n.desc.EnumMembers[i].LogicalRepresentation == oldVal {
 			enumMemberIndex = i
-		} else if member.LogicalRepresentation == newVal {
-			return pgerror.Newf(pgcode.DuplicateObject,
-				"enum value %s already exists", newVal)
+			break
 		}
 	}
-
-	// An enum member with the name oldVal was not found.
 	if enumMemberIndex == -1 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
 			"%s is not an existing enum value", oldVal)
@@ -329,7 +323,14 @@ func (p *planner) renameTypeValue(
 	if enumMemberIsAdding(&n.desc.EnumMembers[enumMemberIndex]) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"enum value %q is being added, try again later", oldVal)
+	}
 
+	// Check that newVal doesn't already exist.
+	for _, member := range n.desc.EnumMembers {
+		if member.LogicalRepresentation == newVal {
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"enum value %s already exists", newVal)
+		}
 	}
 
 	n.desc.EnumMembers[enumMemberIndex].LogicalRepresentation = newVal
