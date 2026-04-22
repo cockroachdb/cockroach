@@ -2913,6 +2913,18 @@ var builtinOidsArray = []string{
 	2958: `pg_try_advisory_xact_lock(key1: int4, key2: int4) -> bool`,
 	2959: `pg_try_advisory_xact_lock_shared(key: int) -> bool`,
 	2960: `pg_try_advisory_xact_lock_shared(key1: int4, key2: int4) -> bool`,
+	2961: `random_normal() -> float`,
+	2962: `random_normal(mean: float, stddev: float) -> float`,
+	2963: `factorial(val: int) -> decimal`,
+	2964: `gcd(a: int, b: int) -> int`,
+	2965: `lcm(a: int, b: int) -> int`,
+	2966: `scale(val: decimal) -> int`,
+	2967: `min_scale(val: decimal) -> int`,
+	2968: `trim_scale(val: decimal) -> decimal`,
+	2969: `log10(val: float) -> float`,
+	2970: `log10(val: decimal) -> decimal`,
+	2971: `erf(val: float) -> float`,
+	2972: `erfc(val: float) -> float`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -4846,3 +4846,128 @@ statement ok
 RESET search_path;
 
 subtest end
+
+subtest factorial
+
+query RRRR
+SELECT factorial(0), factorial(1), factorial(5), factorial(20)
+----
+1  1  120  2432902008176640000
+
+query R
+SELECT factorial(25)
+----
+15511210043330985984000000
+
+statement error pgcode 22003 factorial of a negative number is undefined
+SELECT factorial(-1)
+
+statement error pgcode 22003 value overflows numeric format
+SELECT factorial(32178)
+
+subtest end
+
+subtest gcd_lcm
+
+query IIII
+SELECT gcd(12, 18), gcd(0, 0), gcd(0, 7), gcd(-12, 18)
+----
+6  0  7  6
+
+query IIII
+SELECT lcm(4, 6), lcm(0, 7), lcm(7, 0), lcm(-4, 6)
+----
+12  0  0  12
+
+query II
+SELECT gcd(9223372036854775807, 3), lcm(9223372036854775807, 1)
+----
+1  9223372036854775807
+
+# gcd(MinInt64, 0) = 2^63 which overflows int64.
+statement error pgcode 22003 bigint out of range
+SELECT gcd(-9223372036854775808, 0)
+
+statement error pgcode 22003 bigint out of range
+SELECT lcm(9223372036854775807, 2)
+
+subtest end
+
+subtest scale_min_scale_trim_scale
+
+query IIII
+SELECT scale(1.234), scale(1.2300), scale(0), scale(100)
+----
+3  4  0  0
+
+query IIII
+SELECT min_scale(1.234), min_scale(1.2300), min_scale(0), min_scale(100.000)
+----
+3  2  0  0
+
+query RRRR
+SELECT trim_scale(1.23000), trim_scale(0.0), trim_scale(100.00), trim_scale(1.234)
+----
+1.23  0  100  1.234
+
+# NaN and Infinity return NULL for scale/min_scale.
+query II
+SELECT scale('NaN'::decimal), min_scale('Infinity'::decimal)
+----
+NULL  NULL
+
+# trim_scale passes NaN/Infinity through unchanged.
+query RR
+SELECT trim_scale('NaN'::decimal), trim_scale('Infinity'::decimal)
+----
+NaN  Infinity
+
+subtest end
+
+subtest log10
+
+query RR
+SELECT log10(1000::float), log10(1000::decimal)
+----
+3  3.0000000000000000000
+
+statement error pgcode 2201E cannot take logarithm of a negative number
+SELECT log10(-1::decimal)
+
+statement error pgcode 2201E cannot take logarithm of zero
+SELECT log10(0::decimal)
+
+subtest end
+
+subtest erf
+
+query RR
+SELECT round(erf(1)::numeric, 4), round(erfc(1)::numeric, 4)
+----
+0.8427  0.1573
+
+query RR
+SELECT erf(0::float), erfc(0::float)
+----
+0  1
+
+subtest end
+
+subtest random_normal
+
+# Non-deterministic; just check that the calls succeed and return floats.
+query BB
+SELECT random_normal() IS NOT NULL, random_normal(0, 1) IS NOT NULL
+----
+true  true
+
+# stddev=0 collapses to mean.
+query R
+SELECT random_normal(5, 0)
+----
+5
+
+statement error pgcode 22023 stddev cannot be negative
+SELECT random_normal(0, -1)
+
+subtest end
