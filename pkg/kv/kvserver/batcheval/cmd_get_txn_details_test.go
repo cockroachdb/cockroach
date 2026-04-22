@@ -69,7 +69,7 @@ func evalGetTxnDetails(
 	return resp
 }
 
-func span(start, end string) roachpb.Span {
+func mkSpan(start, end string) roachpb.Span {
 	s := roachpb.Span{Key: roachpb.Key(start)}
 	if end != "" {
 		s.EndKey = roachpb.Key(end)
@@ -96,7 +96,7 @@ func TestCollectWrites(t *testing.T) {
 			setup: func(t *testing.T, eng storage.Engine) {
 				putVal(t, eng, "a", 10, "new")
 			},
-			writeSpans:       []roachpb.Span{span("a", "b")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{"new"},
@@ -108,7 +108,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "a", 5, "old")
 				putVal(t, eng, "a", 10, "new")
 			},
-			writeSpans:       []roachpb.Span{span("a", "b")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{"new"},
@@ -120,7 +120,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "a", 5, "doomed")
 				delKey(t, eng, "a", 10)
 			},
-			writeSpans:       []roachpb.Span{span("a", "b")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{""},
@@ -131,7 +131,7 @@ func TestCollectWrites(t *testing.T) {
 			setup: func(t *testing.T, eng storage.Engine) {
 				delKey(t, eng, "a", 10)
 			},
-			writeSpans:       []roachpb.Span{span("a", "b")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{""},
@@ -144,7 +144,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "b", 10, "val-b")
 				putVal(t, eng, "c", 10, "val-c")
 			},
-			writeSpans:       []roachpb.Span{span("a", "d")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "d")},
 			commitTS:         10,
 			expectedKeys:     []string{"a", "b", "c"},
 			expectedValues:   []string{"val-a", "val-b", "val-c"},
@@ -156,7 +156,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "a", 10, "val-a")
 				putVal(t, eng, "e", 10, "val-e")
 			},
-			writeSpans:       []roachpb.Span{span("a", "b"), span("e", "f")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b"), mkSpan("e", "f")},
 			commitTS:         10,
 			expectedKeys:     []string{"a", "e"},
 			expectedValues:   []string{"val-a", "val-e"},
@@ -169,7 +169,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "b", 10, "at-commit")
 				putVal(t, eng, "c", 15, "after")
 			},
-			writeSpans:       []roachpb.Span{span("a", "d")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "d")},
 			commitTS:         10,
 			expectedKeys:     []string{"b"},
 			expectedValues:   []string{"at-commit"},
@@ -182,7 +182,7 @@ func TestCollectWrites(t *testing.T) {
 				delKey(t, eng, "a", 5)
 				putVal(t, eng, "a", 10, "resurrected")
 			},
-			writeSpans:       []roachpb.Span{span("a", "b")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "b")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{"resurrected"},
@@ -196,7 +196,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "a", 10, "val-a")
 				putVal(t, eng, "b", 10, "val-b")
 			},
-			writeSpans:       []roachpb.Span{span("a", "c")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "c")},
 			commitTS:         10,
 			expectedKeys:     []string{"a", "b"},
 			expectedValues:   []string{"val-a", "val-b"},
@@ -209,7 +209,7 @@ func TestCollectWrites(t *testing.T) {
 				putVal(t, eng, "m", 10, "out-of-range")
 			},
 			// Write span extends beyond range [a, g), but should be clipped.
-			writeSpans:       []roachpb.Span{span("a", "z")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "z")},
 			commitTS:         10,
 			expectedKeys:     []string{"a"},
 			expectedValues:   []string{"in-range"},
@@ -220,7 +220,7 @@ func TestCollectWrites(t *testing.T) {
 			setup: func(t *testing.T, eng storage.Engine) {
 				putVal(t, eng, "x", 10, "outside")
 			},
-			writeSpans:       []roachpb.Span{span("x", "z")},
+			writeSpans:       []roachpb.Span{mkSpan("x", "z")},
 			commitTS:         10,
 			expectedKeys:     nil,
 			expectedValues:   nil,
@@ -230,7 +230,7 @@ func TestCollectWrites(t *testing.T) {
 			name: "empty span returns no writes",
 			setup: func(t *testing.T, eng storage.Engine) {
 			},
-			writeSpans:       []roachpb.Span{span("a", "z")},
+			writeSpans:       []roachpb.Span{mkSpan("a", "z")},
 			commitTS:         10,
 			expectedKeys:     nil,
 			expectedValues:   nil,

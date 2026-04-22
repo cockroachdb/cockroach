@@ -438,41 +438,11 @@ func TestGetTxnDetailsWriteSet(t *testing.T) {
 	require.Nil(t, pErr)
 	details := resp.(*kvpb.GetTxnDetailsResponse)
 
-	// Build a map of key -> TxnDetailKV for easy lookup.
-	writesByKey := make(map[string]kvpb.TxnDetailKV, len(details.Writes))
-	for _, w := range details.Writes {
-		writesByKey[string(w.KeyValue.Key)] = w
-	}
-
-	require.Len(t, details.Writes, 3, "expected writes for new, overwrite, and delete keys")
-
-	// New key: value present, no prev_value.
-	w, ok := writesByKey[string(newKey)]
-	require.True(t, ok, "missing write for new key")
-	v, err := w.KeyValue.Value.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "new-value", string(v))
-	require.False(t, w.PrevValue.IsPresent(), "new key should have no prev_value")
-
-	// Overwritten key: value present, prev_value is "old-value".
-	w, ok = writesByKey[string(overwriteKey)]
-	require.True(t, ok, "missing write for overwritten key")
-	v, err = w.KeyValue.Value.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "updated-value", string(v))
-	require.True(t, w.PrevValue.IsPresent(), "overwritten key should have prev_value")
-	pv, err := w.PrevValue.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "old-value", string(pv))
-
-	// Deleted key: tombstone (empty RawBytes), prev_value is "doomed-value".
-	w, ok = writesByKey[string(deleteKey)]
-	require.True(t, ok, "missing write for deleted key")
-	require.Len(t, w.KeyValue.Value.RawBytes, 0, "deleted key should have empty value")
-	require.True(t, w.PrevValue.IsPresent(), "deleted key should have prev_value")
-	pv, err = w.PrevValue.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "doomed-value", string(pv))
+	verifyWriteSet(t, details.Writes, []expectedWrite{
+		{key: newKey, value: "new-value"},
+		{key: overwriteKey, value: "updated-value", prevVal: "old-value"},
+		{key: deleteKey, prevVal: "doomed-value"},
+	})
 }
 
 // TestGetTxnDetailsMultiRange verifies that GetTxnDetails correctly collects
@@ -560,31 +530,57 @@ func TestGetTxnDetailsMultiRange(t *testing.T) {
 	require.Nil(t, pErr)
 	details := resp.(*kvpb.GetTxnDetailsResponse)
 
-	writesByKey := make(map[string]kvpb.TxnDetailKV, len(details.Writes))
-	for _, w := range details.Writes {
-		writesByKey[string(w.KeyValue.Key)] = w
+	verifyWriteSet(t, details.Writes, []expectedWrite{
+		{key: key1, value: "range1-value"},
+		{key: key2, value: "range2-value", prevVal: "range2-old"},
+	})
+}
+
+// expectedWrite describes the expected state of a single key in a
+// GetTxnDetailsResponse.
+type expectedWrite struct {
+	key     roachpb.Key
+	value   string // empty = tombstone
+	prevVal string // empty = no previous value
+}
+
+// verifyWriteSet asserts that the response contains exactly the expected
+// writes, matched by key.
+func verifyWriteSet(t *testing.T, writes []kvpb.TxnDetailKV, expected []expectedWrite) {
+	t.Helper()
+	require.Len(t, writes, len(expected), "wrong number of writes")
+
+	byKey := make(map[string]kvpb.TxnDetailKV, len(writes))
+	for _, w := range writes {
+		byKey[string(w.KeyValue.Key)] = w
 	}
 
-	require.Len(t, details.Writes, 2, "expected writes from both ranges")
+	for _, exp := range expected {
+		w, ok := byKey[string(exp.key)]
+		require.True(t, ok, "missing write for key %s", exp.key)
 
-	// Key in first range.
-	w, ok := writesByKey[string(key1)]
-	require.True(t, ok, "missing write for key in first range")
-	v, err := w.KeyValue.Value.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "range1-value", string(v))
-	require.False(t, w.PrevValue.IsPresent(), "new key should have no prev_value")
+		if exp.value == "" {
+			require.Len(t, w.KeyValue.Value.RawBytes, 0,
+				"key %s: expected tombstone", exp.key)
+		} else {
+			v, err := w.KeyValue.Value.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, exp.value, string(v),
+				"key %s: wrong value", exp.key)
+		}
 
-	// Key in second range: should have prev_value.
-	w, ok = writesByKey[string(key2)]
-	require.True(t, ok, "missing write for key in second range")
-	v, err = w.KeyValue.Value.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "range2-value", string(v))
-	require.True(t, w.PrevValue.IsPresent(), "overwritten key should have prev_value")
-	pv, err := w.PrevValue.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, "range2-old", string(pv))
+		if exp.prevVal == "" {
+			require.False(t, w.PrevValue.IsPresent(),
+				"key %s: expected no prev_value", exp.key)
+		} else {
+			require.True(t, w.PrevValue.IsPresent(),
+				"key %s: expected prev_value", exp.key)
+			pv, err := w.PrevValue.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, exp.prevVal, string(pv),
+				"key %s: wrong prev_value", exp.key)
+		}
+	}
 }
 
 type missingTxnFeedEventsError struct {
