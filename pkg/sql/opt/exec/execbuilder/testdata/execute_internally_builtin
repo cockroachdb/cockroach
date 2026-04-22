@@ -211,10 +211,8 @@ SELECT crdb_internal.execute_internally('SELECT session_user;');
 ----
 testuser
 
-query T
-SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=root');
-----
-testuser
+statement error changing the user via overrides is not allowed
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'UserProto=root');
 
 user root
 
@@ -223,10 +221,8 @@ SELECT crdb_internal.execute_internally('SELECT session_user;');
 ----
 root
 
-query T
-SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=testuser');
-----
-root
+statement error changing the user via overrides is not allowed
+SELECT crdb_internal.execute_internally('SELECT session_user;', 'UserProto=testuser');
 
 statement ok
 SELECT crdb_internal.execute_internally('EXPLAIN ANALYZE SELECT 1;');

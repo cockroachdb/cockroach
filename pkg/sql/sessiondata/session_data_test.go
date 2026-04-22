@@ -150,9 +150,8 @@ func TestUpdateSessionData(t *testing.T) {
 	}{
 		// string type.
 		{variable: "Database", value: "foo", localOnly: false, expectedSubstring: `database:"foo"`},
-		// This variable uses string type under the hood but has the custom
-		// cast type which isn't handled, so the update should be a no-op.
-		{variable: "UserProto", value: "foo", localOnly: false},
+		// SQLUsernameProto custom type.
+		{variable: "UserProto", value: "foo", localOnly: false, expectedSubstring: `user_proto:"foo"`},
 		// This variable has a custom type that isn't handled, so the update
 		// should be a no-op.
 		{variable: "DataConversionConfig", value: "foo", localOnly: false},
@@ -192,5 +191,49 @@ func TestUpdateSessionData(t *testing.T) {
 			require.Equal(t, unchangedLocal, local)
 			require.Equal(t, unchangedRemote, remote)
 		}
+	}
+}
+
+func TestValidateMultiOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		expectedErr string
+	}{
+		{name: "empty", input: ""},
+		{name: "valid bool", input: "DefaultTxnReadOnly=true"},
+		{name: "valid string", input: "Database=foo"},
+		{name: "valid multiple", input: "Database=foo,DefaultTxnReadOnly=true"},
+		{name: "valid DistSQLMode", input: "DistSQLMode=off"},
+		{name: "valid NewSchemaChangerMode", input: "NewSchemaChangerMode=unsafe_always"},
+		{
+			name:        "bad format",
+			input:       "no_equals_sign",
+			expectedErr: "invalid override format",
+		},
+		{
+			name:        "unknown field name",
+			input:       "distsql=off",
+			expectedErr: `unknown or unsupported session variable "distsql"`,
+		},
+		{
+			name:        "bad value for type",
+			input:       "DefaultTxnReadOnly=notabool",
+			expectedErr: `unknown or unsupported session variable "DefaultTxnReadOnly"`,
+		},
+		{
+			name:        "second override invalid",
+			input:       "Database=foo,bogus=bar",
+			expectedErr: `unknown or unsupported session variable "bogus"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateMultiOverride(tc.input)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }

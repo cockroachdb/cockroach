@@ -452,8 +452,35 @@ func getValueToSet(value, typeName string) (_ reflect.Value, ok bool) {
 	case "NewSchemaChangerMode":
 		v, ok := sessiondatapb.NewSchemaChangerModeFromString(value)
 		return reflect.ValueOf(v), ok
+	case "SQLUsernameProto":
+		return reflect.ValueOf(username.SQLUsernameProto(value)), true
 	}
 	return reflect.Value{}, false
+}
+
+// ValidateMultiOverride checks that each "variable=value" pair in a
+// comma-separated override string refers to a real SessionData field and that
+// the value can be parsed for that field's type.
+func ValidateMultiOverride(multiOverride string) error {
+	if multiOverride == "" {
+		return nil
+	}
+	var sd SessionData
+	for _, override := range strings.Split(multiOverride, ",") {
+		parts := strings.Split(override, "=")
+		if len(parts) != 2 {
+			return errors.Newf(
+				"invalid override format: expected 'variable=value', found %q",
+				override,
+			)
+		}
+		if !sd.Update(parts[0], parts[1]) {
+			return errors.Newf(
+				"unknown or unsupported session variable %q", parts[0],
+			)
+		}
+	}
+	return nil
 }
 
 // updateField updates a single field in elem (which must be of Struct kind)

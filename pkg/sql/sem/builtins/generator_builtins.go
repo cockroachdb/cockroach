@@ -4249,6 +4249,21 @@ func makeInternallyExecutedQueryGeneratorOverload(
 					return nil, errors.Newf("expected string argument for 'overrides', got %s", args[overridesIdx].ResolvedType())
 				}
 				overrides = string(*o)
+				if overrides != "" {
+					if err := sessiondata.ValidateMultiOverride(overrides); err != nil {
+						return nil, err
+					}
+					// Disallow changing the user via the override for
+					// security reasons.
+					for _, override := range strings.Split(overrides, ",") {
+						parts := strings.Split(override, "=")
+						if len(parts) == 2 && parts[0] == "UserProto" {
+							return nil, errors.Newf(
+								"changing the user via overrides is not allowed",
+							)
+						}
+					}
+				}
 			}
 			var useTxn bool
 			if withTxn {
