@@ -495,6 +495,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptSplitScanLimit = 0
 	notStale()
 
+	// Stale optimizer_span_limit.
+	evalCtx.SessionData().OptimizerSpanLimit = 100
+	stale()
+	evalCtx.SessionData().OptimizerSpanLimit = 0
+	notStale()
+
 	// Stale optimizer_use_improved_zigzag_join_costing.
 	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	stale()
