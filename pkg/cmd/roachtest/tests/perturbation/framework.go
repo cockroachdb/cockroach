@@ -904,52 +904,33 @@ func isAcceptableChange(
 		}
 		base := baseline[name]
 
-		// p99 latency impact: p95(p99/s) ratio.
+		check := func(label, baseStr, gotStr string, ratio, limit float64) {
+			if ratio > limit {
+				f := fmt.Sprintf(
+					"FAILURE: %-15s: %s ratio %.2fx exceeds limit %.1fx (baseline: %s, measured: %s)",
+					name, label, ratio, limit, baseStr, gotStr)
+				logger.Printf(f)
+				failures = append(failures, f)
+				return
+			}
+			logger.Printf("PASSED : %-15s: %s ratio %.2fx within limit %.1fx", name, label, ratio, limit)
+		}
+
+		// Latency impact uses the p95(p99/s) and p95(p50/s) ratios; throughput
+		// uses p5(tput/s) inverted so higher = worse.
 		if base.p99 > 0 {
-			ratio := float64(stats.p99) / float64(base.p99)
-			if ratio > limits.maxP99Impact {
-				f := fmt.Sprintf(
-					"FAILURE: %-15s: p99 ratio %.2fx exceeds limit %.1fx (baseline: %v, measured: %v)",
-					name, ratio, limits.maxP99Impact, base.p99, stats.p99)
-				logger.Printf(f)
-				failures = append(failures, f)
-			} else {
-				logger.Printf(
-					"PASSED : %-15s: p99 ratio %.2fx within limit %.1fx",
-					name, ratio, limits.maxP99Impact)
-			}
+			check("p99", base.p99.String(), stats.p99.String(),
+				float64(stats.p99)/float64(base.p99), limits.maxP99Impact)
 		}
-
-		// p50 latency impact: p95(p50/s) ratio.
 		if base.p50 > 0 {
-			ratio := float64(stats.p50) / float64(base.p50)
-			if ratio > limits.maxP50Impact {
-				f := fmt.Sprintf(
-					"FAILURE: %-15s: p50 ratio %.2fx exceeds limit %.1fx (baseline: %v, measured: %v)",
-					name, ratio, limits.maxP50Impact, base.p50, stats.p50)
-				logger.Printf(f)
-				failures = append(failures, f)
-			} else {
-				logger.Printf(
-					"PASSED : %-15s: p50 ratio %.2fx within limit %.1fx",
-					name, ratio, limits.maxP50Impact)
-			}
+			check("p50", base.p50.String(), stats.p50.String(),
+				float64(stats.p50)/float64(base.p50), limits.maxP50Impact)
 		}
-
-		// Throughput impact: p5(tput/s) ratio (inverted so higher = worse).
 		if base.throughput > 0 {
-			ratio := base.throughput / nonZero(stats.throughput)
-			if ratio > limits.maxThroughputImpact {
-				f := fmt.Sprintf(
-					"FAILURE: %-15s: throughput ratio %.2fx exceeds limit %.1fx (baseline: %.0f ops/s, measured: %.0f ops/s)",
-					name, ratio, limits.maxThroughputImpact, base.throughput, stats.throughput)
-				logger.Printf(f)
-				failures = append(failures, f)
-			} else {
-				logger.Printf(
-					"PASSED : %-15s: throughput ratio %.2fx within limit %.1fx",
-					name, ratio, limits.maxThroughputImpact)
-			}
+			check("throughput",
+				fmt.Sprintf("%.0f ops/s", base.throughput),
+				fmt.Sprintf("%.0f ops/s", stats.throughput),
+				base.throughput/nonZero(stats.throughput), limits.maxThroughputImpact)
 		}
 	}
 	return failures
