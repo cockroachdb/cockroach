@@ -7,11 +7,13 @@ package txnfeed
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,6 +29,11 @@ import (
 // does not track intents or compute resolved timestamps from lock state — the
 // resolved timestamp is simply the range's closed timestamp.
 //
+// The processor uses the rangefeed scheduler pattern: event production under
+// raftMu is O(1) (channel send + scheduler enqueue), and event consumption
+// (iterating registrations, publishing events) runs on scheduler worker
+// goroutines. This avoids blocking raftMu during event delivery.
+//
 // Unlike rangefeed's bufferedRegistration, registrations do not have
 // long-lived goroutines. Instead, each registration runs a short-lived
 // goroutine only during the catch-up scan. After the catch-up scan, the
@@ -37,6 +44,24 @@ type Processor struct {
 	span       roachpb.RSpan
 	stopper    *stop.Stopper
 
+	// scheduler is the per-processor handle to the shared rangefeed scheduler.
+	scheduler rangefeed.ClientScheduler
+	// processCtx is an annotated background context used by the scheduler
+	// callback. It outlives any single RPC context.
+	processCtx context.Context
+	// eventC buffers events (committed txn ops and closed timestamp updates)
+	// for async processing by the scheduler callback.
+	eventC chan *txnFeedEvent
+	// requestQueue buffers request closures (register, stop, disconnect) for
+	// serial execution by the scheduler callback.
+	requestQueue chan request
+	// stoppedC is closed when the processor has fully stopped and unregistered
+	// from the scheduler.
+	stoppedC chan struct{}
+	// stopping is set when a stop has been initiated. Once set, new events are
+	// discarded in the scheduler callback.
+	stopping atomic.Bool
+
 	mu struct {
 		syncutil.RWMutex
 		stopped bool
@@ -44,21 +69,53 @@ type Processor struct {
 	}
 }
 
+// txnFeedEvent is an event enqueued for async processing by the scheduler.
+// Only one field is set per event.
+type txnFeedEvent struct {
+	ops  *kvserverpb.CommitTxnOps // committed txn ops from Raft apply
+	ct   hlc.Timestamp            // closed timestamp forward
+	sync *syncEvent               // synchronization barrier
+}
+
+// syncEvent is used to synchronize with the scheduler callback. The caller
+// sends a syncEvent through eventC and waits on c; the scheduler callback
+// closes c after processing all prior events.
+type syncEvent struct {
+	c chan struct{}
+}
+
+// request is a closure executed serially on the scheduler callback thread.
+type request func(context.Context)
+
 // Config holds the configuration for a TxnFeed Processor.
 type Config struct {
 	log.AmbientContext
-	Span    roachpb.RSpan
-	Stopper *stop.Stopper
+	Span      roachpb.RSpan
+	Stopper   *stop.Stopper
+	Scheduler *rangefeed.Scheduler
 }
 
-// NewProcessor creates a new TxnFeed Processor.
+// NewProcessor creates a new TxnFeed Processor. The caller must call Start
+// to register with the scheduler before delivering events.
 func NewProcessor(cfg Config) *Processor {
+	cfg.AmbientContext.AddLogTag("txnfeed", nil)
 	p := &Processor{
-		ambientCtx: cfg.AmbientContext,
-		span:       cfg.Span,
-		stopper:    cfg.Stopper,
+		ambientCtx:   cfg.AmbientContext,
+		span:         cfg.Span,
+		stopper:      cfg.Stopper,
+		scheduler:    cfg.Scheduler.NewClientScheduler(),
+		processCtx:   cfg.AmbientContext.AnnotateCtx(context.Background()),
+		eventC:       make(chan *txnFeedEvent, 16),
+		requestQueue: make(chan request, 20),
+		stoppedC:     make(chan struct{}),
 	}
 	return p
+}
+
+// Start registers the processor with the scheduler. Must be called after
+// NewProcessor and before any events are delivered.
+func (p *Processor) Start() error {
+	return p.scheduler.Register(p.process, false /* priority */)
 }
 
 // Register registers a new TxnFeed stream for the specified anchor span.
@@ -79,34 +136,65 @@ func (p *Processor) Register(
 	snap storage.Reader,
 	stream Stream,
 ) (Disconnector, error) {
-	if startTS.IsEmpty() {
-		// No catch-up scan needed — close the snapshot immediately.
-		snap.Close()
-		snap = nil
-	}
+	// Synchronize the event channel so that this registration doesn't see any
+	// events that were consumed before this registration was called. Instead,
+	// it should see these events during its catch-up scan.
+	p.syncEventC()
 
-	reg, err := p.addRegistration(span, startTS, stream, snap)
-	if err != nil {
-		if snap != nil {
+	type result struct {
+		disconnector Disconnector
+		err          error
+	}
+	ch := make(chan result, 1)
+
+	p.enqueueRequest(func(_ context.Context) {
+		if p.stopping.Load() {
+			if snap != nil {
+				snap.Close()
+			}
+			ch <- result{err: errors.New("txnfeed processor is stopped")}
+			return
+		}
+
+		if startTS.IsEmpty() && snap != nil {
 			snap.Close()
+			snap = nil
 		}
-		return nil, err
-	}
 
-	if reg.needsCatchUp() {
-		// Start a short-lived goroutine to run the catch-up scan and drain the
-		// catch-up buffer. Once complete, the goroutine exits and future events
-		// flow through publish() → SendBuffered().
-		if err := p.stopper.RunAsyncTask(
-			ctx, "txnfeed: catch-up scan", reg.runOutputLoop,
-		); err != nil {
-			p.unregister(reg)
-			reg.Disconnect(kvpb.NewError(err))
-			return nil, err
+		reg, err := p.addRegistration(span, startTS, stream, snap)
+		if err != nil {
+			if snap != nil {
+				snap.Close()
+			}
+			ch <- result{err: err}
+			return
+		}
+
+		if reg.needsCatchUp() {
+			if err := p.stopper.RunAsyncTask(
+				ctx, "txnfeed: catch-up scan", reg.runOutputLoop,
+			); err != nil {
+				p.unregisterInternal(reg)
+				reg.Disconnect(kvpb.NewError(err))
+				ch <- result{err: err}
+				return
+			}
+		}
+
+		ch <- result{disconnector: reg}
+	})
+
+	select {
+	case r := <-ch:
+		return r.disconnector, r.err
+	case <-p.stoppedC:
+		select {
+		case r := <-ch:
+			return r.disconnector, r.err
+		default:
+			return nil, errors.New("txnfeed processor stopped")
 		}
 	}
-
-	return reg, nil
 }
 
 func (p *Processor) addRegistration(
@@ -132,16 +220,168 @@ func (p *Processor) addRegistration(
 	return reg, nil
 }
 
-// ConsumeCommitTxnOps delivers committed transaction ops from Raft apply to
-// all matching registrations. Called under raftMu.
-//
-// If a registration's catch-up buffer is full, it is marked as overflowed and
-// will be disconnected once the catch-up scan goroutine finishes. After the
-// catch-up scan, events are sent via Stream.SendBuffered (non-blocking).
+// ConsumeCommitTxnOps enqueues committed transaction ops for async processing
+// by the scheduler. Called under raftMu — O(1).
 func (p *Processor) ConsumeCommitTxnOps(ctx context.Context, ops *kvserverpb.CommitTxnOps) {
 	if ops == nil {
 		return
 	}
+	p.sendEvent(ctx, &txnFeedEvent{ops: ops})
+}
+
+// ForwardClosedTS enqueues a closed timestamp update for async processing by
+// the scheduler. Called under raftMu — O(1).
+func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) {
+	if closedTS.IsEmpty() {
+		return
+	}
+	p.sendEvent(ctx, &txnFeedEvent{ct: closedTS})
+}
+
+// Stop stops the processor and disconnects all registrations.
+func (p *Processor) Stop() {
+	p.StopWithErr(nil)
+}
+
+// StopWithErr flushes pending events and then enqueues a stop request that
+// terminates all registrations with the given error.
+func (p *Processor) StopWithErr(pErr *kvpb.Error) {
+	// Flush any remaining events before stopping.
+	p.syncEventC()
+	// Send the processor a stop signal.
+	p.sendStop(pErr)
+}
+
+func (p *Processor) sendStop(pErr *kvpb.Error) {
+	p.enqueueRequest(func(ctx context.Context) {
+		p.stopInternal(ctx, pErr)
+	})
+}
+
+// nolint:deferunlockcheck
+func (p *Processor) stopInternal(ctx context.Context, pErr *kvpb.Error) {
+	p.mu.Lock()
+	if p.mu.stopped {
+		p.mu.Unlock()
+		return
+	}
+	p.mu.stopped = true
+	regs := p.mu.regs
+	p.mu.regs = nil
+	p.mu.Unlock()
+
+	// Disconnect registrations outside the lock to avoid holding mu while
+	// calling into stream.SendError which may block.
+	for _, reg := range regs {
+		reg.Disconnect(pErr)
+	}
+	p.stopping.Store(true)
+	p.scheduler.StopProcessor()
+}
+
+// Len returns the number of active registrations.
+func (p *Processor) Len() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.mu.regs)
+}
+
+// DisconnectSpanWithErr disconnects all registrations that overlap the given
+// span with the given error.
+func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
+	p.enqueueRequest(func(ctx context.Context) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		remaining := p.mu.regs[:0]
+		for _, reg := range p.mu.regs {
+			if reg.span.AsRawSpanWithNoLocals().Overlaps(span) {
+				reg.Disconnect(pErr)
+			} else {
+				remaining = append(remaining, reg)
+			}
+		}
+		p.mu.regs = remaining
+	})
+}
+
+// unregister enqueues a request to remove the registration from the
+// processor's registration list. Used as the unregisterFromProcessor callback
+// on each registration.
+func (p *Processor) unregister(target *registration) {
+	p.enqueueRequest(func(ctx context.Context) {
+		p.unregisterInternal(target)
+	})
+}
+
+// unregisterInternal removes the registration from the list. Must be called on
+// the scheduler callback thread.
+func (p *Processor) unregisterInternal(target *registration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, reg := range p.mu.regs {
+		if reg == target {
+			p.mu.regs = append(p.mu.regs[:i], p.mu.regs[i+1:]...)
+			return
+		}
+	}
+}
+
+// process is the scheduler callback. It processes pending requests and events.
+func (p *Processor) process(e rangefeed.ProcessorEventType) rangefeed.ProcessorEventType {
+	ctx := p.processCtx
+	if e&rangefeed.RequestQueued != 0 {
+		p.processRequests(ctx)
+	}
+	if e&rangefeed.EventQueued != 0 {
+		p.processEvents(ctx)
+	}
+	if e&rangefeed.Stopped != 0 {
+		p.processStop()
+	}
+	return 0
+}
+
+func (p *Processor) processRequests(ctx context.Context) {
+	for {
+		select {
+		case req := <-p.requestQueue:
+			req(ctx)
+		default:
+			return
+		}
+	}
+}
+
+func (p *Processor) processEvents(ctx context.Context) {
+	// Only process as many events as are currently buffered to avoid starving
+	// other processors sharing the same scheduler.
+	for max := len(p.eventC); max > 0; max-- {
+		select {
+		case e := <-p.eventC:
+			if !p.stopping.Load() {
+				p.consumeEvent(ctx, e)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (p *Processor) consumeEvent(ctx context.Context, e *txnFeedEvent) {
+	switch {
+	case e.ops != nil:
+		p.consumeCommitTxnOps(ctx, e.ops)
+	case !e.ct.IsEmpty():
+		p.forwardClosedTS(ctx, e.ct)
+	case e.sync != nil:
+		close(e.sync.c)
+	}
+}
+
+// consumeCommitTxnOps delivers committed transaction ops to all matching
+// registrations. Called on the scheduler callback thread.
+func (p *Processor) consumeCommitTxnOps(ctx context.Context, ops *kvserverpb.CommitTxnOps) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -169,9 +409,9 @@ func (p *Processor) ConsumeCommitTxnOps(ctx context.Context, ops *kvserverpb.Com
 	}
 }
 
-// ForwardClosedTS forwards the closed timestamp to all registrations as a
-// TxnFeedCheckpoint event. Called under raftMu.
-func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) {
+// forwardClosedTS forwards the closed timestamp to all registrations as a
+// TxnFeedCheckpoint event. Called on the scheduler callback thread.
+func (p *Processor) forwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -190,58 +430,43 @@ func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 	}
 }
 
-// Stop stops the processor and disconnects all registrations.
-func (p *Processor) Stop() {
-	p.StopWithErr(nil)
+func (p *Processor) processStop() {
+	p.scheduler.Unregister()
+	close(p.stoppedC)
 }
 
-// StopWithErr terminates all registrations with the given error and stops the
-// processor.
-func (p *Processor) StopWithErr(pErr *kvpb.Error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.stopped {
-		return
+// sendEvent puts an event on the event channel and notifies the scheduler.
+func (p *Processor) sendEvent(ctx context.Context, e *txnFeedEvent) {
+	select {
+	case p.eventC <- e:
+		p.scheduler.Enqueue(rangefeed.EventQueued)
+	case <-p.stoppedC:
 	}
-	p.mu.stopped = true
-	for _, reg := range p.mu.regs {
-		reg.Disconnect(pErr)
+}
+
+// enqueueRequest puts a request closure on the request queue and notifies the
+// scheduler.
+func (p *Processor) enqueueRequest(req request) {
+	select {
+	case p.requestQueue <- req:
+		p.scheduler.Enqueue(rangefeed.RequestQueued)
+	case <-p.stoppedC:
 	}
-	p.mu.regs = nil
 }
 
-// Len returns the number of active registrations.
-func (p *Processor) Len() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return len(p.mu.regs)
-}
-
-// DisconnectSpanWithErr disconnects all registrations that overlap the given
-// span with the given error.
-func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	remaining := p.mu.regs[:0]
-	for _, reg := range p.mu.regs {
-		if reg.span.AsRawSpanWithNoLocals().Overlaps(span) {
-			reg.Disconnect(pErr)
-		} else {
-			remaining = append(remaining, reg)
+// syncEventC synchronizes with the scheduler callback by flushing the event
+// pipeline. It blocks until all events enqueued before this call have been
+// processed.
+func (p *Processor) syncEventC() {
+	se := &syncEvent{c: make(chan struct{})}
+	select {
+	case p.eventC <- &txnFeedEvent{sync: se}:
+		p.scheduler.Enqueue(rangefeed.EventQueued)
+		select {
+		case <-se.c:
+		case <-p.stoppedC:
 		}
-	}
-	p.mu.regs = remaining
-}
-
-func (p *Processor) unregister(target *registration) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for i, reg := range p.mu.regs {
-		if reg == target {
-			p.mu.regs = append(p.mu.regs[:i], p.mu.regs[i+1:]...)
-			return
-		}
+	case <-p.stoppedC:
 	}
 }
 
