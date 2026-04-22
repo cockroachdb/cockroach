@@ -5833,6 +5833,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.UndefinedColumn, condition: true},
 		{code: pgcode.UndefinedObject, condition: true},
 		{code: pgcode.InvalidParameterValue, condition: true},
+		{code: pgcode.InvalidTextRepresentation, condition: true},
 	})
 
 	return opStmt, nil
