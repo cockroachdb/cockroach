@@ -14,15 +14,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/vectorizer/content"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -50,6 +54,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var tmpl string
 	var model string
 	var connectionName string
+	var loadingMode string
 	var batchSize int64
 	var companionTableName tree.TableName
 	var sourceTableName tree.TableName
@@ -74,6 +79,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		tmpl = vectorizerCfg.Template
 		model = vectorizerCfg.Model
 		connectionName = vectorizerCfg.ConnectionName
+		loadingMode = vectorizerCfg.LoadingMode
 		batchSize = vectorizerCfg.BatchSize
 		if batchSize <= 0 {
 			batchSize = 64
@@ -122,14 +128,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
-	// Build the SELECT query to find rows missing embeddings.
-	//
-	// SELECT s.<pk_cols>, s.<source_cols>
-	// FROM <source_table> AS s
-	// LEFT JOIN <companion_table> AS e
-	//   ON s.<pk> = e.source_<pk>
-	// WHERE e.source_<pk[0]> IS NULL
-	// LIMIT <batch_size>
+	// Build shared column lists for queries.
 	var selectCols []string
 	for _, pk := range pkColNames {
 		selectCols = append(selectCols,
@@ -149,7 +148,25 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		))
 	}
 
-	selectSQL := fmt.Sprintf(
+	numPKCols := len(pkColNames)
+
+	// Resolve the embedder: local engine or remote provider.
+	embedder, err := resolveEmbedder(ctx, execCfg, model, connectionName)
+	if err != nil {
+		return err
+	}
+
+	var totalProcessed int64
+
+	// Phase 1: Find rows missing embeddings (anti-join).
+	//
+	// SELECT s.<pk_cols>, s.<source_cols>
+	// FROM <source_table> AS s
+	// LEFT JOIN <companion_table> AS e
+	//   ON s.<pk> = e.source_<pk>
+	// WHERE e.source_<pk[0]> IS NULL
+	// LIMIT <batch_size>
+	missingSQL := fmt.Sprintf(
 		"SELECT %s FROM %s AS s LEFT JOIN %s AS e ON %s "+
 			"WHERE e.%s IS NULL LIMIT %d",
 		strings.Join(selectCols, ", "),
@@ -160,113 +177,97 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		batchSize,
 	)
 
-	// Execute the query.
-	rows, err := execCfg.InternalDB.Executor().QueryBufferedEx(
-		ctx, "vectorizer-select-pending", nil, /* txn */
+	missingRows, err := execCfg.InternalDB.Executor().QueryBufferedEx(
+		ctx, "vectorizer-select-missing", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		selectSQL,
+		missingSQL,
 	)
 	if err != nil {
-		return errors.Wrap(err, "vectorizer: querying pending rows")
+		return errors.Wrap(err, "vectorizer: querying missing rows")
 	}
 
-	if len(rows) == 0 {
+	if len(missingRows) > 0 {
+		log.Ops.Infof(ctx,
+			"vectorizer: embedding %d missing rows for table %d",
+			len(missingRows), tableID)
+
+		inserted, err := embedAndInsertRows(
+			ctx, execCfg, embedder, missingRows,
+			numPKCols, pkColNames, sourceColumns, tmpl,
+			companionTableName, loadingMode, false, /* isUpdate */
+		)
+		if err != nil {
+			return err
+		}
+		totalProcessed += inserted
+	}
+
+	// Phase 2: Find stale rows where source data changed after
+	// embedding. Uses the MVCC timestamp of each source row compared
+	// against last_embedded_at in the companion table.
+	//
+	// SELECT s.<pk_cols>, s.<source_cols>
+	// FROM <source_table> AS s
+	// JOIN <companion_table> AS e
+	//   ON s.<pk> = e.source_<pk>
+	// WHERE s.crdb_internal_mvcc_timestamp > e.last_embedded_at::DECIMAL * 1e9
+	// GROUP BY s.<pk_cols>, s.<source_cols>
+	// LIMIT <batch_size>
+	var groupByCols []string
+	groupByCols = append(groupByCols, selectCols...)
+
+	staleSQL := fmt.Sprintf(
+		"SELECT %s FROM %s AS s JOIN %s AS e ON %s "+
+			"WHERE s.crdb_internal_mvcc_timestamp > e.last_embedded_at::DECIMAL * 1e9 "+
+			"GROUP BY %s LIMIT %d",
+		strings.Join(selectCols, ", "),
+		sourceTableName.String(),
+		companionTableName.String(),
+		strings.Join(joinConds, " AND "),
+		strings.Join(groupByCols, ", "),
+		batchSize,
+	)
+
+	staleRows, err := execCfg.InternalDB.Executor().QueryBufferedEx(
+		ctx, "vectorizer-select-stale", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		staleSQL,
+	)
+	if err != nil {
+		return errors.Wrap(err, "vectorizer: querying stale rows")
+	}
+
+	if len(staleRows) > 0 {
+		log.Ops.Infof(ctx,
+			"vectorizer: re-embedding %d stale rows for table %d",
+			len(staleRows), tableID)
+
+		updated, err := embedAndInsertRows(
+			ctx, execCfg, embedder, staleRows,
+			numPKCols, pkColNames, sourceColumns, tmpl,
+			companionTableName, loadingMode, true, /* isUpdate */
+		)
+		if err != nil {
+			return err
+		}
+		totalProcessed += updated
+	}
+
+	if totalProcessed == 0 {
 		log.Ops.Infof(ctx,
 			"vectorizer: no pending rows for table %d", tableID)
-		return nil
-	}
-
-	log.Ops.Infof(ctx,
-		"vectorizer: processing %d rows for table %d", len(rows), tableID)
-
-	numPKCols := len(pkColNames)
-
-	// Resolve the embedder: local engine or remote provider.
-	var embedder embedding.Embedder
-	provider, _ := embedding.ParseModelSpec(model)
-	if provider == "" {
-		// Local model.
-		embedder, err = embedding.GetEngine()
-		if err != nil {
-			return jobs.MarkAsPermanentJobError(
-				errors.Wrap(err, "vectorizer: embedding engine not available"))
-		}
 	} else {
-		// Remote model: look up the external connection URI.
-		connURI, err := lookupExternalConnURI(ctx, execCfg, connectionName)
-		if err != nil {
-			return errors.Wrap(err, "vectorizer: resolving external connection")
-		}
-		embedder, err = embedding.ResolveRemoteEmbedder(model, connURI)
-		if err != nil {
-			return jobs.MarkAsPermanentJobError(
-				errors.Wrap(err, "vectorizer: resolving remote embedder"))
-		}
+		log.Ops.Infof(ctx,
+			"vectorizer: processed %d rows for table %d",
+			totalProcessed, tableID)
 	}
-
-	// Build text to embed for each row.
-	texts := make([]string, len(rows))
-	for i, row := range rows {
-		texts[i] = buildTextFromRow(row, numPKCols, sourceColumns, tmpl)
-	}
-
-	embeddings, err := embedder.EmbedBatch(ctx, texts)
-	if err != nil {
-		return errors.Wrap(err, "vectorizer: generating embeddings")
-	}
-
-	// Insert embeddings into the companion table.
-	var insertedCount int64
-	for i, row := range rows {
-		var colNames []string
-		var placeholders []string
-		var args []interface{}
-		argIdx := 1
-
-		for j, pk := range pkColNames {
-			colNames = append(colNames, tree.NameString("source_"+pk))
-			placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-			args = append(args, row[j])
-			argIdx++
-		}
-
-		colNames = append(colNames, "chunk_seq", "chunk", "embedding")
-		placeholders = append(placeholders,
-			fmt.Sprintf("$%d", argIdx),
-			fmt.Sprintf("$%d", argIdx+1),
-			fmt.Sprintf("$%d", argIdx+2),
-		)
-		args = append(args, 0, texts[i], vectorToSQL(embeddings[i]))
-
-		insertSQL := fmt.Sprintf(
-			"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
-			companionTableName.String(),
-			strings.Join(colNames, ", "),
-			strings.Join(placeholders, ", "),
-		)
-
-		if _, err := execCfg.InternalDB.Executor().ExecEx(
-			ctx, "vectorizer-insert-embedding", nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			insertSQL, args...,
-		); err != nil {
-			return errors.Wrapf(
-				err, "vectorizer: inserting embedding for row %d", i,
-			)
-		}
-		insertedCount++
-	}
-
-	log.Ops.Infof(ctx,
-		"vectorizer: inserted %d embeddings for table %d",
-		insertedCount, tableID)
 
 	// Update job progress.
 	return r.job.NoTxn().FractionProgressed(ctx, func(
 		ctx context.Context, details jobspb.ProgressDetails,
 	) float32 {
 		prog := details.(*jobspb.Progress_Vectorizer).Vectorizer
-		prog.RowsProcessed += insertedCount
+		prog.RowsProcessed += totalProcessed
 		return 1.0 // Single-batch job, always complete.
 	})
 }
@@ -281,6 +282,168 @@ func (r *vectorizerResumer) OnFailOrCancel(
 // CollectProfile implements the jobs.Resumer interface.
 func (r *vectorizerResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
 	return nil
+}
+
+// resolveEmbedder returns the appropriate Embedder for the given model
+// spec. For local models it returns the ONNX engine; for remote models
+// it looks up the external connection URI and constructs a remote client.
+func resolveEmbedder(
+	ctx context.Context, execCfg *sql.ExecutorConfig, model string, connectionName string,
+) (embedding.Embedder, error) {
+	provider, _ := embedding.ParseModelSpec(model)
+	if provider == "" {
+		eng, err := embedding.GetEngine()
+		if err != nil {
+			return nil, jobs.MarkAsPermanentJobError(
+				errors.Wrap(err, "vectorizer: embedding engine not available"))
+		}
+		return eng, nil
+	}
+	connURI, err := lookupExternalConnURI(ctx, execCfg, connectionName)
+	if err != nil {
+		return nil, errors.Wrap(err, "vectorizer: resolving external connection")
+	}
+	embedder, err := embedding.ResolveRemoteEmbedder(model, connURI)
+	if err != nil {
+		return nil, jobs.MarkAsPermanentJobError(
+			errors.Wrap(err, "vectorizer: resolving remote embedder"))
+	}
+	return embedder, nil
+}
+
+// embedAndInsertRows embeds the given rows and writes them to the
+// companion table. When isUpdate is true, existing embeddings are
+// replaced via ON CONFLICT DO UPDATE; otherwise new rows are inserted
+// with ON CONFLICT DO NOTHING.
+//
+// When loadingMode is "uri", the source column value is treated as a
+// cloud storage URI. The file is fetched, its text is extracted, and
+// the extracted text is embedded instead of the raw column value.
+func embedAndInsertRows(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	embedder embedding.Embedder,
+	rows []tree.Datums,
+	numPKCols int,
+	pkColNames []string,
+	sourceColumns []string,
+	tmpl string,
+	companionTableName tree.TableName,
+	loadingMode string,
+	isUpdate bool,
+) (int64, error) {
+	texts := make([]string, len(rows))
+	for i, row := range rows {
+		if loadingMode == "uri" {
+			uri := string(tree.MustBeDString(row[numPKCols]))
+			text, err := readURIContent(ctx, execCfg, uri)
+			if err != nil {
+				return 0, errors.Wrapf(err,
+					"vectorizer: reading URI for row %d", i)
+			}
+			texts[i] = text
+		} else {
+			texts[i] = buildTextFromRow(row, numPKCols, sourceColumns, tmpl)
+		}
+	}
+
+	embeddings, err := embedder.EmbedBatch(ctx, texts)
+	if err != nil {
+		return 0, errors.Wrap(err, "vectorizer: generating embeddings")
+	}
+
+	var count int64
+	for i, row := range rows {
+		var colNames []string
+		var placeholders []string
+		var args []interface{}
+		argIdx := 1
+
+		for j, pk := range pkColNames {
+			colNames = append(colNames, tree.NameString("source_"+pk))
+			placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
+			args = append(args, row[j])
+			argIdx++
+		}
+
+		colNames = append(colNames,
+			"chunk_seq", "chunk", "embedding", "last_embedded_at")
+		placeholders = append(placeholders,
+			fmt.Sprintf("$%d", argIdx),
+			fmt.Sprintf("$%d", argIdx+1),
+			fmt.Sprintf("$%d", argIdx+2),
+			"now()",
+		)
+		args = append(args, 0, texts[i], vectorToSQL(embeddings[i]))
+
+		var conflictClause string
+		if isUpdate {
+			uniqueCols := make([]string, len(pkColNames))
+			for k, pk := range pkColNames {
+				uniqueCols[k] = tree.NameString("source_" + pk)
+			}
+			conflictClause = fmt.Sprintf(
+				"ON CONFLICT (%s, chunk_seq) DO UPDATE SET "+
+					"chunk = excluded.chunk, "+
+					"embedding = excluded.embedding, "+
+					"last_embedded_at = now()",
+				strings.Join(uniqueCols, ", "),
+			)
+		} else {
+			conflictClause = "ON CONFLICT DO NOTHING"
+		}
+
+		insertSQL := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) %s",
+			companionTableName.String(),
+			strings.Join(colNames, ", "),
+			strings.Join(placeholders, ", "),
+			conflictClause,
+		)
+
+		if _, err := execCfg.InternalDB.Executor().ExecEx(
+			ctx, "vectorizer-upsert-embedding", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			insertSQL, args...,
+		); err != nil {
+			return count, errors.Wrapf(
+				err, "vectorizer: writing embedding for row %d", i,
+			)
+		}
+		count++
+	}
+	return count, nil
+}
+
+// readURIContent fetches file content from a cloud storage URI and
+// extracts text suitable for embedding. Supports S3, GCS, HTTP, and
+// nodelocal URIs. Text extraction handles .txt, .md, .csv, .json,
+// .pdf, and other text-based formats.
+func readURIContent(ctx context.Context, execCfg *sql.ExecutorConfig, uri string) (string, error) {
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
+		ctx, uri, username.RootUserName(),
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "opening external storage")
+	}
+	defer store.Close()
+
+	file, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
+	if err != nil {
+		return "", errors.Wrap(err, "reading file")
+	}
+	data, err := ioctx.ReadAll(ctx, file)
+	if err != nil {
+		return "", errors.Wrap(err, "reading file content")
+	}
+
+	if int64(len(data)) > content.MaxFileSize {
+		return "", errors.Newf(
+			"file size %d bytes exceeds maximum %d bytes",
+			len(data), content.MaxFileSize)
+	}
+
+	return content.ExtractText(data, uri)
 }
 
 // buildTextFromRow constructs the text to embed from a result row.
