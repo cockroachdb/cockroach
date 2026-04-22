@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -109,6 +110,7 @@ type jwtAuthenticatorConf struct {
 	issuerCA             string
 	jwks                 jwk.Set
 	claim                string
+	claimSegments        []string // pre-parsed RFC 6901 pointer segments (decoded), nil when claim is ""
 	jwksAutoFetchEnabled bool
 	httpClient           *httputil.Client
 }
@@ -125,13 +127,16 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	ctx context.Context, st *cluster.Settings,
 ) {
 	clientTimeout := JWTAuthClientTimeout.Get(&st.SV)
+	rawClaim := JWTAuthClaim.Get(&st.SV)
 	conf := jwtAuthenticatorConf{
-		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
-		enabled:              JWTAuthEnabled.Get(&st.SV),
-		issuersConf:          mustParseJWTIssuersConf(JWTAuthIssuersConfig.Get(&st.SV)),
-		issuerCA:             JWTAuthIssuerCustomCA.Get(&st.SV),
-		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
-		claim:                JWTAuthClaim.Get(&st.SV),
+		audience:    mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
+		enabled:     JWTAuthEnabled.Get(&st.SV),
+		issuersConf: mustParseJWTIssuersConf(JWTAuthIssuersConfig.Get(&st.SV)),
+		issuerCA:    JWTAuthIssuerCustomCA.Get(&st.SV),
+		jwks:        mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
+		claim:       rawClaim,
+		// If rawClaim is a JSON Pointer, parse it once here to save CPU cycles later.
+		claimSegments:        mustParseClaimSegments(rawClaim),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
 		httpClient: httputil.NewClient(
 			httputil.WithClientTimeout(clientTimeout),
@@ -289,6 +294,114 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return authenticator.retrieveIdentityLocked(user, tokenBytes, identMap)
 }
 
+// mustParseClaimSegments pre-parses the claim setting into decoded RFC 6901
+// pointer segments so that per-login lookups avoid repeated string splitting
+// and escape decoding. For simple claim names (no leading "/") and for empty
+// string the result is nil.
+func mustParseClaimSegments(claim string) []string {
+	// Not a JSON Pointer (RFC 6901)
+	if claim == "" || !strings.HasPrefix(claim, "/") {
+		return nil
+	}
+	// JSON Pointer (RFC 6901): split and decode escape sequences.
+	raw := strings.Split(claim[1:], "/")
+	segments := make([]string, len(raw))
+	for i, tok := range raw {
+		tok = strings.ReplaceAll(tok, "~1", "/")
+		tok = strings.ReplaceAll(tok, "~0", "~")
+		segments[i] = tok
+	}
+	return segments
+}
+
+// lookupIdentityClaimByJSONPointer resolves a claim value from the token
+// using pre-parsed, decoded RFC 6901 JSON Pointer segments. The token is
+// converted to a generic map and the segments are walked to locate the
+// target value. The returned bool and error follow the same tri-state
+// contract as resolveJSONPointer.
+func lookupIdentityClaimByJSONPointer(token jwt.Token, claimSegments []string) (any, bool, error) {
+	allClaims, err := token.AsMap(context.Background())
+	if err != nil {
+		return nil, false, err
+	}
+	return resolveJSONPointer(allClaims, claimSegments)
+}
+
+// resolveJSONPointer traverses a map according to pre-parsed, decoded
+// RFC 6901 JSON Pointer segments. Both JSON objects (map[string]any)
+// and JSON arrays ([]any) are supported as intermediate or leaf values
+// per RFC 6901 §4.
+//
+// The return contract is tri-state:
+//   - (value, true, nil): the pointer resolved to a value.
+//   - (nil, false, nil): a map segment referenced a key that is not
+//     present. This is treated as a legitimately absent claim so that
+//     callers can surface a uniform "missing claim" error regardless
+//     of whether a simple claim name or a JSON Pointer was configured.
+//   - (nil, false, err): the pointer is malformed relative to the
+//     document (e.g. an array index that is non-numeric, negative,
+//     has a leading zero, is out of bounds, or an intermediate value
+//     that is neither a JSON object nor a JSON array). These indicate
+//     misconfiguration rather than an absent claim.
+func resolveJSONPointer(m map[string]any, segments []string) (any, bool, error) {
+	var current any = m
+	for _, tok := range segments {
+		switch v := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = v[tok]
+			if !ok {
+				return nil, false, nil
+			}
+		case []any:
+			// RFC 6901 §4: for arrays the reference token must be an
+			// unsigned base-10 integer (leading zeros are not allowed,
+			// and "-" refers to a nonexistent element past the end).
+			idx, err := strconv.Atoi(tok)
+			if err != nil || idx < 0 || tok == "-" || (len(tok) > 1 && tok[0] == '0') {
+				return nil, false, fmt.Errorf(
+					"JSON pointer: invalid array index %q", tok,
+				)
+			}
+			if idx >= len(v) {
+				return nil, false, fmt.Errorf(
+					"JSON pointer: array index %d out of bounds (len %d)",
+					idx, len(v),
+				)
+			}
+			current = v[idx]
+		default:
+			return nil, false, fmt.Errorf(
+				"JSON pointer: value at %q is neither an object nor an array",
+				tok,
+			)
+		}
+	}
+	return current, true, nil
+}
+
+// lookupIdentityClaim extracts the identity claim from the token. For simple
+// claim names (claimSegments == nil) it uses the token's native Get method;
+// for JSON Pointers it delegates to lookupIdentityClaimByJSONPointer which
+// resolves the pre-parsed pointer segments against the token's claims map.
+func (authenticator *jwtAuthenticator) lookupIdentityClaim(
+	unverifiedToken jwt.Token,
+) (claimValue any, ok bool, err error) {
+	if authenticator.mu.conf.claimSegments == nil {
+		// The top-level claim path (non JSON Pointer scenario)
+		claimValue, ok = unverifiedToken.Get(authenticator.mu.conf.claim)
+	} else {
+		// The JSON Pointer scenario (supports top-level and nested claims)
+		claimValue, ok, err = lookupIdentityClaimByJSONPointer(unverifiedToken, authenticator.mu.conf.claimSegments)
+		if err != nil {
+			return nil, false, errors.WithDetailf(
+				errors.Newf("JWT authentication: failed to extract claim"),
+				"failed to extract claim %s: %v", authenticator.mu.conf.claim, err)
+		}
+	}
+	return claimValue, ok, nil
+}
+
 // retrieveIdentityLocked contains the core principal-to-user mapping
 // logic. The caller must already hold a.mu; this helper therefore
 // performs no locking or config reloads and must never call anything
@@ -312,7 +425,10 @@ func (authenticator *jwtAuthenticator) retrieveIdentityLocked(
 	if authenticator.mu.conf.claim == "" || authenticator.mu.conf.claim == "sub" {
 		tokenPrincipals = []string{unverifiedToken.Subject()}
 	} else {
-		claimValue, ok := unverifiedToken.Get(authenticator.mu.conf.claim)
+		claimValue, ok, err := authenticator.lookupIdentityClaim(unverifiedToken)
+		if err != nil {
+			return user, err
+		}
 		if !ok {
 			return user, errors.WithDetailf(
 				errors.Newf("JWT authentication: missing claim"),
