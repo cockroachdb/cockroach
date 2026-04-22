@@ -335,6 +335,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
 		}, "Calculates the natural log of `val`.", volatility.Immutable),
 		decimalLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`."),
+		intLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`."),
 	),
 
 	"log": makeBuiltin(defProps(),
@@ -357,36 +358,9 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Log10(x) / math.Log10(b))), nil
 		}, "Calculates the base `b` log of `val`.", volatility.Immutable),
 		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
-		decimalOverload2("b", "x", func(b, x *apd.Decimal) (tree.Datum, error) {
-			switch x.Sign() {
-			case -1:
-				return nil, errLogOfNegNumber
-			case 0:
-				return nil, errLogOfZero
-			}
-			switch b.Sign() {
-			case -1:
-				return nil, errLogOfNegNumber
-			case 0:
-				return nil, errLogOfZero
-			}
-			if isInf(b) {
-				return &tree.DDecimal{Decimal: *decimalZero}, nil
-			}
-
-			top := new(apd.Decimal)
-			if _, err := tree.IntermediateCtx.Ln(top, x); err != nil {
-				return nil, err
-			}
-			bot := new(apd.Decimal)
-			if _, err := tree.IntermediateCtx.Ln(bot, b); err != nil {
-				return nil, err
-			}
-
-			dd := &tree.DDecimal{}
-			_, err := tree.DecimalCtx.Quo(&dd.Decimal, top, bot)
-			return dd, err
-		}, "Calculates the base `b` log of `val`.", volatility.Immutable),
+		decimalOverload2("b", "x", decimalLogBaseB, "Calculates the base `b` log of `val`.", volatility.Immutable),
+		intLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
+		intLogBaseBOverload(),
 	),
 
 	"log10": makeBuiltin(defProps(),
@@ -394,6 +368,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Log10(x))), nil
 		}, "Calculates the base 10 log of `val`.", volatility.Immutable),
 		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
+		intLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
 	),
 
 	"min_scale": makeBuiltin(defProps(),
@@ -833,6 +808,84 @@ func decimalLogFn(
 		_, err := logFn(&dd.Decimal, x)
 		return dd, err
 	}, info, volatility.Immutable)
+}
+
+// intLogFn returns a log overload for an int argument that mirrors the
+// PostgreSQL behavior of implicitly casting int to numeric and dispatching
+// to the numeric log implementation.
+func intLogFn(
+	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
+) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
+		ReturnType: tree.FixedReturnType(types.Decimal),
+		Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			x := int64(tree.MustBeDInt(args[0]))
+			switch {
+			case x < 0:
+				return nil, errLogOfNegNumber
+			case x == 0:
+				return nil, errLogOfZero
+			}
+			var d apd.Decimal
+			d.SetInt64(x)
+			dd := &tree.DDecimal{}
+			_, err := logFn(&dd.Decimal, &d)
+			return dd, err
+		},
+		Info:       info,
+		Volatility: volatility.Immutable,
+	}
+}
+
+// decimalLogBaseB computes the base-`b` logarithm of `x` as a decimal,
+// shared between the decimal and int two-argument log overloads.
+func decimalLogBaseB(b, x *apd.Decimal) (tree.Datum, error) {
+	switch x.Sign() {
+	case -1:
+		return nil, errLogOfNegNumber
+	case 0:
+		return nil, errLogOfZero
+	}
+	switch b.Sign() {
+	case -1:
+		return nil, errLogOfNegNumber
+	case 0:
+		return nil, errLogOfZero
+	}
+	if isInf(b) {
+		return &tree.DDecimal{Decimal: *decimalZero}, nil
+	}
+
+	top := new(apd.Decimal)
+	if _, err := tree.IntermediateCtx.Ln(top, x); err != nil {
+		return nil, err
+	}
+	bot := new(apd.Decimal)
+	if _, err := tree.IntermediateCtx.Ln(bot, b); err != nil {
+		return nil, err
+	}
+
+	dd := &tree.DDecimal{}
+	_, err := tree.DecimalCtx.Quo(&dd.Decimal, top, bot)
+	return dd, err
+}
+
+// intLogBaseBOverload returns the log(b: int, x: int) -> decimal overload,
+// mirroring PostgreSQL's implicit cast of int args to numeric for log/2.
+func intLogBaseBOverload() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{{Name: "b", Typ: types.Int}, {Name: "x", Typ: types.Int}},
+		ReturnType: tree.FixedReturnType(types.Decimal),
+		Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			var b, x apd.Decimal
+			b.SetInt64(int64(tree.MustBeDInt(args[0])))
+			x.SetInt64(int64(tree.MustBeDInt(args[1])))
+			return decimalLogBaseB(&b, &x)
+		},
+		Info:       "Calculates the base `b` log of `val`.",
+		Volatility: volatility.Immutable,
+	}
 }
 
 func floatOverload1(

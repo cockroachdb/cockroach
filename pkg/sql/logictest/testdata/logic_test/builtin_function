@@ -4939,6 +4939,34 @@ SELECT log10(0::decimal)
 
 subtest end
 
+subtest log_int_args
+
+# PostgreSQL implicitly casts int to numeric for log/log10/ln; CRDB matches via
+# explicit int overloads.
+query RRR
+SELECT log(1000), log10(1000), ln(1)
+----
+3.0000000000000000000  3.0000000000000000000  0
+
+query R
+SELECT log(2, 64)
+----
+6.0000000000000000000
+
+statement error pgcode 2201E cannot take logarithm of zero
+SELECT log(0)
+
+statement error pgcode 2201E cannot take logarithm of a negative number
+SELECT log(-1)
+
+statement error pgcode 2201E cannot take logarithm of zero
+SELECT log(2, 0)
+
+statement error pgcode 2201E cannot take logarithm of a negative number
+SELECT log(-2, 8)
+
+subtest end
+
 subtest erf
 
 query RR
