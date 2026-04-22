@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -386,45 +385,6 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	}
 
 	return rh.indexEntries, nil
-}
-
-// encodePrimaryIndexValuesToBuf encodes the given values, writing
-// into the given buffer.
-//
-// TODO(mw5h): the writer.go family loop will move onto the encoder
-// directly in a follow-up commit; this helper will be removed then.
-func (rh *RowHelper) encodePrimaryIndexValuesToBuf(
-	vals []tree.Datum,
-	valColIDMapping catalog.TableColMap,
-	sortedColumnIDs []descpb.ColumnID,
-	fetchedCols []catalog.Column,
-	buf []byte,
-) ([]byte, error) {
-	var lastColID descpb.ColumnID
-	for _, colID := range sortedColumnIDs {
-		idx, ok := valColIDMapping.Get(colID)
-		if !ok || vals[idx] == tree.DNull {
-			// Column not being updated or inserted.
-			continue
-		}
-
-		if skip, _ := rh.SkipColumnNotInPrimaryIndexValue(colID, vals[idx]); skip {
-			continue
-		}
-
-		col := fetchedCols[idx]
-		if lastColID > col.GetID() {
-			return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-		}
-		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-		lastColID = col.GetID()
-		var err error
-		buf, err = valueside.Encode(buf, colIDDelta, vals[idx])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return buf, nil
 }
 
 // SkipColumnNotInPrimaryIndexValue returns true if the value at column colID

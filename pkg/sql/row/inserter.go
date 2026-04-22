@@ -199,7 +199,7 @@ func (ri *Inserter) InsertRow(
 
 	// Add the new values to the primary index.
 	ri.valueBuf, err = prepareInsertOrUpdateBatch(
-		ctx, b, &ri.Helper, primaryIndexKey, ri.InsertCols, values, ri.InsertColIDtoRowIndex,
+		ctx, b, &ri.Helper, primaryIndexKey, values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex, &ri.key, &ri.value, ri.valueBuf, oth, nil, /* oldValues */
 		kvOp, false /* mustValidateOldPKValues */, traceKV,
 	)
