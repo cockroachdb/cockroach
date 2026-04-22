@@ -446,6 +446,9 @@ func getValueToSet(value, typeName string) (_ reflect.Value, ok bool) {
 	case "VectorizeExecMode":
 		v, ok := sessiondatapb.VectorizeExecModeFromString(value)
 		return reflect.ValueOf(v), ok
+	case "DistSQLExecMode":
+		v, ok := sessiondatapb.DistSQLExecModeFromString(value)
+		return reflect.ValueOf(v), ok
 	}
 	return reflect.Value{}, false
 }

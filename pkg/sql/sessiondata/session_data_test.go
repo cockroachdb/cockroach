@@ -170,6 +170,8 @@ func TestUpdateSessionData(t *testing.T) {
 		{variable: "LargeFullScanRows", value: "12.34", localOnly: true, expectedSubstring: `large_full_scan_rows:12.34`},
 		// int32 type.
 		{variable: "OptSplitScanLimit", value: "123", localOnly: true, expectedSubstring: `opt_split_scan_limit:123`},
+		// DistSQLExecMode custom type.
+		{variable: "DistSQLMode", value: "on", localOnly: true, expectedSubstring: `dist_sql_mode:2`},
 	} {
 		sd = SessionData{}
 		ok := sd.Update(tc.variable, tc.value)
