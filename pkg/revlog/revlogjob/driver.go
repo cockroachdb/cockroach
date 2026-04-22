@@ -32,19 +32,21 @@ type Driver struct {
 }
 
 // NewDriver constructs a Driver against the given external storage
-// for a single producer covering the given spans.
+// for a single producer covering the given spans. resume is the
+// per-producer resume slice (zero value = first run).
 func NewDriver(
 	es cloud.ExternalStorage,
 	spans []roachpb.Span,
 	startHLC hlc.Timestamp,
 	tickWidth time.Duration,
 	fileIDs FileIDSource,
+	resume ResumeState,
 ) (*Driver, error) {
 	manager, err := NewTickManager(es, spans, startHLC, tickWidth)
 	if err != nil {
 		return nil, err
 	}
-	producer, err := NewProducer(es, spans, startHLC, tickWidth, fileIDs, manager)
+	producer, err := NewProducer(es, spans, startHLC, tickWidth, fileIDs, manager, resume)
 	if err != nil {
 		return nil, err
 	}
