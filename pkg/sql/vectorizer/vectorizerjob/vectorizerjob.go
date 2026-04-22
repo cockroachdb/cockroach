@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,16 +45,11 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := r.job.Details().(jobspb.VectorizerDetails)
 	tableID := details.TableID
 
-	// Get the embedding engine.
-	engine, err := embedding.GetEngine()
-	if err != nil {
-		return jobs.MarkAsPermanentJobError(
-			errors.Wrap(err, "vectorizer: embedding engine not available"))
-	}
-
 	// Read the vectorizer configuration from the table descriptor.
 	var sourceColumns []string
 	var tmpl string
+	var model string
+	var connectionName string
 	var batchSize int64
 	var companionTableName tree.TableName
 	var sourceTableName tree.TableName
@@ -75,6 +72,8 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		sourceColumns = vectorizerCfg.SourceColumns
 		tmpl = vectorizerCfg.Template
+		model = vectorizerCfg.Model
+		connectionName = vectorizerCfg.ConnectionName
 		batchSize = vectorizerCfg.BatchSize
 		if batchSize <= 0 {
 			batchSize = 64
@@ -182,13 +181,36 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	numPKCols := len(pkColNames)
 
+	// Resolve the embedder: local engine or remote provider.
+	var embedder embedding.Embedder
+	provider, _ := embedding.ParseModelSpec(model)
+	if provider == "" {
+		// Local model.
+		embedder, err = embedding.GetEngine()
+		if err != nil {
+			return jobs.MarkAsPermanentJobError(
+				errors.Wrap(err, "vectorizer: embedding engine not available"))
+		}
+	} else {
+		// Remote model: look up the external connection URI.
+		connURI, err := lookupExternalConnURI(ctx, execCfg, connectionName)
+		if err != nil {
+			return errors.Wrap(err, "vectorizer: resolving external connection")
+		}
+		embedder, err = embedding.ResolveRemoteEmbedder(model, connURI)
+		if err != nil {
+			return jobs.MarkAsPermanentJobError(
+				errors.Wrap(err, "vectorizer: resolving remote embedder"))
+		}
+	}
+
 	// Build text to embed for each row.
 	texts := make([]string, len(rows))
 	for i, row := range rows {
 		texts[i] = buildTextFromRow(row, numPKCols, sourceColumns, tmpl)
 	}
 
-	embeddings, err := engine.EmbedBatch(ctx, texts)
+	embeddings, err := embedder.EmbedBatch(ctx, texts)
 	if err != nil {
 		return errors.Wrap(err, "vectorizer: generating embeddings")
 	}
@@ -288,6 +310,42 @@ func vectorToSQL(v []float32) string {
 		parts[i] = fmt.Sprintf("%g", f)
 	}
 	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// lookupExternalConnURI queries system.external_connections for the
+// connection URI associated with the given connection name.
+func lookupExternalConnURI(
+	ctx context.Context, execCfg *sql.ExecutorConfig, connectionName string,
+) (string, error) {
+	row, err := execCfg.InternalDB.Executor().QueryRowEx(
+		ctx, "vectorizer-lookup-external-connection", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT connection_details FROM system.external_connections WHERE connection_name = $1",
+		connectionName,
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "looking up external connection")
+	}
+	if row == nil {
+		return "", errors.Newf(
+			"external connection %q not found", connectionName,
+		)
+	}
+
+	detailsBytes := []byte(tree.MustBeDBytes(row[0]))
+	var details connectionpb.ConnectionDetails
+	if err := protoutil.Unmarshal(detailsBytes, &details); err != nil {
+		return "", errors.Wrap(err, "decoding external connection details")
+	}
+
+	simpleURI, ok := details.Details.(*connectionpb.ConnectionDetails_SimpleURI)
+	if !ok {
+		return "", errors.Newf(
+			"external connection %q is not a URI-based connection",
+			connectionName,
+		)
+	}
+	return simpleURI.SimpleURI.URI, nil
 }
 
 func init() {
