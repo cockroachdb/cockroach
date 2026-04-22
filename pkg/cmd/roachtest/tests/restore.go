@@ -929,7 +929,7 @@ func (rd *restoreDriver) initRestorePerfMetrics(
 			testDuration,
 			throughput)
 		exportToRoachperf(ctx, rd.t, rd.c, rd.sp.testName, int64(throughput))
-		uploadRestoreSummaryStats(ctx, rd.t, rd.c, testDuration, throughput)
+		uploadRestoreSummaryStats(rd.t, rd.c, testDuration, throughput)
 	}
 }
 
@@ -1002,11 +1002,7 @@ func exportToRoachperf(
 }
 
 func uploadRestoreSummaryStats(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	durationSeconds float64,
-	throughputMBPerSPerNode float64,
+	t test.Test, c cluster.Cluster, durationSeconds float64, throughputMBPerSPerNode float64,
 ) {
 	stats := roachtestutil.AggregatedPerfMetrics{
 		{
@@ -1022,7 +1018,7 @@ func uploadRestoreSummaryStats(
 			IsHigherBetter: true,
 		},
 	}
-	if err := roachtestutil.UploadPerfSummaryStats(ctx, t, c, stats, c.Node(1)); err != nil {
+	if err := roachtestutil.WritePerfSummaryStats(t, c, stats); err != nil {
 		t.L().Printf("failed to upload perf summary stats: %v", err)
 	}
 }

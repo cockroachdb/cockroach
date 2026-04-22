@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -576,24 +577,17 @@ func GetOpenmetricsLabelsFromString(labelString string) (map[string]string, erro
 	return labels, nil
 }
 
-// UploadPerfSummaryStats serializes the given metrics to both JSON
-// (for human readability) and openmetrics format, then uploads both
-// files to the perf artifacts directory on the specified node.
-func UploadPerfSummaryStats(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	stats AggregatedPerfMetrics,
-	node option.NodeListOption,
-) error {
+// WritePerfSummaryStats serializes the given metrics to both JSON
+// (for human readability) and openmetrics format, then writes both
+// files to a summary.perf directory under the test's local artifacts
+// directory.
+func WritePerfSummaryStats(t test.Test, c cluster.Cluster, stats AggregatedPerfMetrics) error {
 	if len(stats) == 0 {
 		return errors.New("no summary stats provided")
 	}
 
-	perfDir := t.PerfArtifactsDir()
-	if err := c.RunE(
-		ctx, option.WithNodes(node), "mkdir -p "+perfDir,
-	); err != nil {
+	destDir := filepath.Join(t.ArtifactsDir(), "summary.perf")
+	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return err
 	}
 
@@ -601,9 +595,8 @@ func UploadPerfSummaryStats(
 	if err != nil {
 		return err
 	}
-	jsonDest := filepath.Join(perfDir, "summary_stats.json")
-	if err := c.PutString(
-		ctx, jsonBuf.String(), jsonDest, 0755, node,
+	if err := os.WriteFile(
+		filepath.Join(destDir, "summary_stats.json"), jsonBuf.Bytes(), 0644,
 	); err != nil {
 		return err
 	}
@@ -612,8 +605,9 @@ func UploadPerfSummaryStats(
 	if err != nil {
 		return err
 	}
-	omDest := filepath.Join(perfDir, "summary_stats.om")
-	return c.PutString(ctx, omBuf.String(), omDest, 0755, node)
+	return os.WriteFile(
+		filepath.Join(destDir, "summary_stats.om"), omBuf.Bytes(), 0644,
+	)
 }
 
 type summaryStatJSON struct {
