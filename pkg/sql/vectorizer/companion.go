@@ -93,6 +93,7 @@ func CreateCompanionTableSQL(source tree.TableName, pkCols []PKColumn, dims int)
     chunk_seq INT8 NOT NULL DEFAULT 0,
     chunk STRING NOT NULL,
     embedding VECTOR(%d) NOT NULL,
+    last_embedded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 %s,
 %s
 )`,

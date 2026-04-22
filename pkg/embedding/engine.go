@@ -11,12 +11,16 @@
 package embedding
 
 import (
+	"context"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/embedding/onnxruntime"
 	"github.com/cockroachdb/cockroach/pkg/embedding/tokenizer"
 	"github.com/cockroachdb/errors"
 )
+
+// Verify that Engine implements Embedder at compile time.
+var _ Embedder = (*Engine)(nil)
 
 // Engine combines a WordPiece tokenizer with an ONNX model to produce
 // vector embeddings from raw text. It is safe for concurrent use.
@@ -101,8 +105,10 @@ func (e *Engine) Dims() int {
 }
 
 // Embed produces a normalized embedding vector for a single text
-// input. The returned slice has length Dims().
-func (e *Engine) Embed(text string) ([]float32, error) {
+// input. The returned slice has length Dims(). The context is
+// accepted for interface compliance but is not used by the local
+// ONNX engine.
+func (e *Engine) Embed(_ context.Context, text string) ([]float32, error) {
 	enc := e.tokenizer.Encode(text)
 	seqLen := len(enc.InputIDs)
 
@@ -126,8 +132,9 @@ func (e *Engine) Tokenizer() *tokenizer.Tokenizer {
 }
 
 // EmbedBatch produces normalized embedding vectors for multiple texts.
-// Each inner slice has length Dims().
-func (e *Engine) EmbedBatch(texts []string) ([][]float32, error) {
+// Each inner slice has length Dims(). The context is accepted for
+// interface compliance but is not used by the local ONNX engine.
+func (e *Engine) EmbedBatch(_ context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}

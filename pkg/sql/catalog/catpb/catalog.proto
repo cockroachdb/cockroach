@@ -256,6 +256,25 @@ message Vectorizer {
   // cloud storage (S3, GCS, HTTP, etc.), auto-detect the content
   // type, extract text, then embed.
   optional string loading_mode = 8 [(gogoproto.nullable) = false];
+
+  // ConnectionName is the name of the external connection used for
+  // remote embedding models (e.g., "openai"). Empty for local models.
+  optional string connection_name = 9 [(gogoproto.nullable) = false];
+
+  // InputType indicates whether source columns contain text or image
+  // data. TEXT (default) uses the Embedder interface; IMAGE uses
+  // ImageEmbedder and skips chunking.
+  optional VectorizerInputType input_type = 10 [(gogoproto.nullable) = false];
+}
+
+// VectorizerInputType indicates whether a vectorizer processes text
+// or image data.
+enum VectorizerInputType {
+  // VECTORIZER_INPUT_TEXT indicates text embedding (default).
+  VECTORIZER_INPUT_TEXT = 0;
+  // VECTORIZER_INPUT_IMAGE indicates image embedding. Source columns
+  // must be BYTES, and the model must support image modality.
+  VECTORIZER_INPUT_IMAGE = 1;
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

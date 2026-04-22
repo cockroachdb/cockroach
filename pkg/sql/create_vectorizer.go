@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -184,9 +185,70 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		}
 	}
 
-	// Determine the embedding dimensions based on the model.
-	// For all-MiniLM-L6-v2, dimensions = 384.
-	dims := 384
+	// Look up model info from the registry to determine dimensions.
+	info, err := embedding.LookupModel(model)
+	if err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+			"unknown embedding model %q", model)
+	}
+	dims := info.Dims
+
+	// Determine input type by inspecting source column types. If all
+	// columns are BYTES, this is an image vectorizer. Mixed types are
+	// not allowed.
+	inputType := catpb.VectorizerInputType_VECTORIZER_INPUT_TEXT
+	var hasBytesCol, hasNonBytesCol bool
+	for _, colName := range n.n.Columns {
+		col := catalog.FindColumnByTreeName(n.tableDesc, colName)
+		if col.GetType().Family() == types.BytesFamily {
+			hasBytesCol = true
+		} else {
+			hasNonBytesCol = true
+		}
+	}
+	if hasBytesCol && hasNonBytesCol {
+		return pgerror.Newf(pgcode.DatatypeMismatch,
+			"cannot mix BYTES and non-BYTES columns in a vectorizer")
+	}
+	if hasBytesCol {
+		inputType = catpb.VectorizerInputType_VECTORIZER_INPUT_IMAGE
+		if !info.SupportsImage() {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"model %q does not support image embeddings; "+
+					"BYTES columns require a multimodal model like "+
+					"'google/multimodalembedding@001'", model)
+		}
+		if tmpl != "" {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"template option is not supported for image vectorizers")
+		}
+		if loadingMode == "uri" {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"URI loading mode is not supported for image vectorizers")
+		}
+	}
+
+	// For remote models, validate that the external connection exists.
+	var connectionName string
+	provider, _ := embedding.ParseModelSpec(model)
+	if provider != "" {
+		connectionName = provider
+		row, err := p.InternalSQLTxn().QueryRowEx(
+			ctx, "create-vectorizer-check-connection", p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			"SELECT connection_name FROM system.external_connections WHERE connection_name = $1",
+			connectionName,
+		)
+		if err != nil {
+			return errors.Wrap(err, "checking external connection")
+		}
+		if row == nil {
+			return pgerror.Newf(pgcode.UndefinedObject,
+				"external connection %q not found; create it with: "+
+					"CREATE EXTERNAL CONNECTION %s AS 'https://api.openai.com/v1?api_key=sk-...'",
+				connectionName, connectionName)
+		}
+	}
 
 	// Create the companion embeddings table.
 	companionSQL := vectorizer.CreateCompanionTableSQL(n.tableName, pkCols, dims)
@@ -235,6 +297,8 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		BatchSize:        batchSize,
 		ScheduleID:       sj.ScheduleID(),
 		LoadingMode:      loadingMode,
+		ConnectionName:   connectionName,
+		InputType:        inputType,
 	}
 
 	return p.writeSchemaChange(

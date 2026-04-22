@@ -2908,6 +2908,9 @@ var builtinOidsArray = []string{
 	2953: `embed(text: string) -> vector`,
 	2954: `embed_chunks(text: string) -> tuple{int AS chunk_seq, string AS chunk, vector AS embedding}`,
 	2955: `read_uri(uri: string) -> string`,
+	2956: `embed(text: string, model: string) -> vector`,
+	2957: `embed_chunks(text: string, model: string) -> tuple{int AS chunk_seq, string AS chunk, vector AS embedding}`,
+	2958: `embed_image(image: bytes, model: string) -> vector`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

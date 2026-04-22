@@ -3,13 +3,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "embedding",
     srcs = [
+        "embedder.go",
         "engine.go",
+        "models.go",
+        "resolve.go",
         "singleton.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/embedding",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/embedding/google",
         "//pkg/embedding/onnxruntime",
+        "//pkg/embedding/openai",
         "//pkg/embedding/tokenizer",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -22,6 +27,7 @@ go_test(
     size = "small",
     srcs = [
         "engine_test.go",
+        "models_test.go",
         "singleton_test.go",
     ],
     data = glob(["testdata/**"]) + glob(["onnxruntime/testdata/**"]),
