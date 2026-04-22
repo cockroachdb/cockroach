@@ -92,6 +92,9 @@ type InternalExecutorOverride struct {
 	PreventPartitioningSoftLimitedScans *bool
 	// DistSQLMode, if set, overrides the distsql session variable.
 	DistSQLMode *sessiondatapb.DistSQLExecMode
+	// NewSchemaChangerMode, if set, overrides the use_declarative_schema_changer
+	// session variable.
+	NewSchemaChangerMode *sessiondatapb.NewSchemaChangerMode
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
