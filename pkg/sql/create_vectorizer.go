@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,6 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vectorizer"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+)
+
+// vectorizerDefaultSchedule controls the default schedule interval for
+// vectorizer background jobs when not explicitly specified via the
+// schedule WITH option.
+var vectorizerDefaultSchedule = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"sql.vectorizer.default_schedule",
+	"default cron expression for the vectorizer background job schedule",
+	"@every 5m",
 )
 
 // Vectorizer option names.
@@ -124,7 +135,7 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 	if v, ok := optMap[vectorizerOptTemplate]; ok {
 		tmpl = v
 	}
-	scheduleCron := "@every 5m"
+	scheduleCron := vectorizerDefaultSchedule.Get(&p.ExecCfg().Settings.SV)
 	if v, ok := optMap[vectorizerOptSchedule]; ok {
 		scheduleCron = v
 	}

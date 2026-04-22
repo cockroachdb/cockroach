@@ -95,7 +95,8 @@ func CreateCompanionTableSQL(source tree.TableName, pkCols []PKColumn, dims int)
     embedding VECTOR(%d) NOT NULL,
     last_embedded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 %s,
-%s
+%s,
+    VECTOR INDEX (embedding vector_cosine_ops)
 )`,
 		companion.String(),
 		strings.Join(sourceColDefs, ",\n"),
