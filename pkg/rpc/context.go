@@ -1206,6 +1206,132 @@ func (a muxRangeFeedServerAdapter) Recv() (*kvpb.RangeFeedRequest, error) {
 	return m, nil
 }
 
+var muxTxnFeedDesc = &grpc.StreamDesc{
+	StreamName:    "MuxTxnFeed",
+	ServerStreams: true,
+	ClientStreams: true,
+}
+
+const muxTxnFeedMethodName = "/cockroach.roachpb.Internal/MuxTxnFeed"
+
+var muxTxnFeedStreamInfo = &grpc.StreamServerInfo{
+	FullMethod:     muxTxnFeedMethodName,
+	IsClientStream: true,
+	IsServerStream: true,
+}
+
+// MuxTxnFeed implements the RestrictedInternalClient interface.
+func (a internalClientAdapter) MuxTxnFeed(
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	eventWriter, eventReader := makePipe(func(dst interface{}, src interface{}) {
+		*dst.(*kvpb.MuxTxnFeedEvent) = *src.(*kvpb.MuxTxnFeedEvent)
+	})
+	requestWriter, requestReader := makePipe(func(dst interface{}, src interface{}) {
+		*dst.(*kvpb.TxnFeedRequest) = *src.(*kvpb.TxnFeedRequest)
+	})
+	rawClientStream := &clientStream{
+		ctx:      ctx,
+		receiver: eventReader,
+		sender:   requestWriter,
+	}
+
+	serverCtx, serverCancel := context.WithCancel(ctx)
+
+	if a.separateTracers {
+		serverCtx = tracing.ContextWithSpan(serverCtx, nil)
+	}
+	serverCtx = grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID)
+	serverCtx = grpcutil.ClearIncomingContext(serverCtx)
+
+	rawServerStream := &serverStream{
+		ctx:      serverCtx,
+		receiver: requestReader,
+		sender:   eventWriter,
+	}
+
+	wg := ctxgroup.WithContext(serverCtx)
+	wg.Go(func() error {
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			adapter := muxTxnFeedServerAdapter{
+				ServerStream: stream,
+			}
+			return a.server.MuxTxnFeed(adapter)
+		}
+		err := a.serverStreamInterceptors.run(
+			a.server, rawServerStream, muxTxnFeedStreamInfo, handler,
+		)
+		if err == nil {
+			err = io.EOF
+		}
+		rawServerStream.sendError(err)
+		return nil
+	})
+
+	clientStream, err := a.clientStreamInterceptors.run(
+		ctx, muxTxnFeedDesc, nil, muxTxnFeedMethodName,
+		func(
+			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+			method string, opts ...grpc.CallOption,
+		) (grpc.ClientStream, error) {
+			return rawClientStream, nil
+		})
+	if err != nil {
+		serverCancel()
+		return nil, errors.CombineErrors(err, wg.Wait())
+	}
+
+	return muxTxnFeedClientAdapter{
+		ClientStream: clientStream,
+		serverCancel: serverCancel,
+		serverWg:     &wg,
+	}, nil
+}
+
+type muxTxnFeedClientAdapter struct {
+	grpc.ClientStream
+	serverCancel context.CancelFunc
+	serverWg     *ctxgroup.Group
+}
+
+var _ kvpb.Internal_MuxTxnFeedClient = muxTxnFeedClientAdapter{}
+
+func (a muxTxnFeedClientAdapter) Close() error {
+	a.serverCancel()
+	return a.serverWg.Wait()
+}
+
+func (a muxTxnFeedClientAdapter) Send(request *kvpb.TxnFeedRequest) error {
+	request.AdmissionHeader.SourceLocation = kvpb.AdmissionHeader_LOCAL
+	return a.SendMsg(request)
+}
+
+func (a muxTxnFeedClientAdapter) Recv() (*kvpb.MuxTxnFeedEvent, error) {
+	m := new(kvpb.MuxTxnFeedEvent)
+	if err := a.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+type muxTxnFeedServerAdapter struct {
+	grpc.ServerStream
+}
+
+var _ kvpb.Internal_MuxTxnFeedServer = muxTxnFeedServerAdapter{}
+
+func (a muxTxnFeedServerAdapter) Send(event *kvpb.MuxTxnFeedEvent) error {
+	return a.SendMsg(event)
+}
+
+func (a muxTxnFeedServerAdapter) Recv() (*kvpb.TxnFeedRequest, error) {
+	m := new(kvpb.TxnFeedRequest)
+	if err := a.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // pipe represents a uni-directional pipe. Datums can be written through send(),
 // and received through recv(). Errors can also be sent through sendError();
 // they'll be received through recv() without ordering guarantees in

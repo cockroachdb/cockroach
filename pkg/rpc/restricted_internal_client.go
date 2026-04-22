@@ -21,4 +21,5 @@ import (
 type RestrictedInternalClient interface {
 	Batch(ctx context.Context, in *kvpb.BatchRequest) (*kvpb.BatchResponse, error)
 	MuxRangeFeed(ctx context.Context) (kvpb.RPCInternal_MuxRangeFeedClient, error)
+	MuxTxnFeed(ctx context.Context) (kvpb.RPCInternal_MuxTxnFeedClient, error)
 }

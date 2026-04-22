@@ -196,6 +196,7 @@ func (n *Dialer) DialInternalClient(
 		client = &unaryDRPCBatchServiceToInternalAdapter{
 			kvBatchClient:      kvpb.NewDRPCKVBatchClientAdapter(dc),
 			muxRangeFeedClient: kvpb.NewDRPCRangeFeedClientAdapter(dc),
+			muxTxnFeedClient:   kvpb.NewDRPCTxnFeedClientAdapter(dc),
 			drpcStreamPool:     pool,
 		}
 	}
@@ -367,6 +368,13 @@ func (c *baseInternalClient) MuxRangeFeed(
 	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).MuxRangeFeed(ctx)
 }
 
+// MuxTxnFeed implements the RestrictedInternalClient interface.
+func (c *baseInternalClient) MuxTxnFeed(
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).MuxTxnFeed(ctx)
+}
+
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"rpc.batch_stream_pool.enabled",
@@ -405,6 +413,13 @@ func (c *batchStreamPoolClient) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	return kvpb.NewGRPCInternalClientAdapter(c.asPool().Conn()).MuxRangeFeed(ctx)
+}
+
+// MuxTxnFeed implements the RestrictedInternalClient interface.
+func (c *batchStreamPoolClient) MuxTxnFeed(
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	return kvpb.NewGRPCInternalClientAdapter(c.asPool().Conn()).MuxTxnFeed(ctx)
 }
 
 // tracingInternalClient wraps a RestrictedInternalClient and fills in trace

@@ -15,6 +15,7 @@ import (
 type unaryDRPCBatchServiceToInternalAdapter struct {
 	kvBatchClient      kvpb.RPCKVBatchClient
 	muxRangeFeedClient kvpb.RPCRangeFeedClient
+	muxTxnFeedClient   kvpb.RPCTxnFeedClient
 	drpcStreamPool     *rpc.DRPCBatchStreamPool
 }
 
@@ -31,4 +32,10 @@ func (a *unaryDRPCBatchServiceToInternalAdapter) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
 	return a.muxRangeFeedClient.MuxRangeFeed(ctx)
+}
+
+func (a *unaryDRPCBatchServiceToInternalAdapter) MuxTxnFeed(
+	ctx context.Context,
+) (kvpb.RPCInternal_MuxTxnFeedClient, error) {
+	return a.muxTxnFeedClient.MuxTxnFeed(ctx)
 }
