@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "openai",
+    srcs = ["client.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/embedding/openai",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/httputil",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "openai_test",
+    srcs = ["client_test.go"],
+    embed = [":openai"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_stretchr_testify//require",
+    ],
+)

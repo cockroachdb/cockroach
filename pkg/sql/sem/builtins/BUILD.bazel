@@ -36,6 +36,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/cloud/externalconn/connectionpb",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/embedding",

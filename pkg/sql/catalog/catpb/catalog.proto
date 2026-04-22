@@ -256,6 +256,10 @@ message Vectorizer {
   // cloud storage (S3, GCS, HTTP, etc.), auto-detect the content
   // type, extract text, then embed.
   optional string loading_mode = 8 [(gogoproto.nullable) = false];
+
+  // ConnectionName is the name of the external connection used for
+  // remote embedding models (e.g., "openai"). Empty for local models.
+  optional string connection_name = 9 [(gogoproto.nullable) = false];
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

@@ -6,6 +6,7 @@
 package embedding
 
 import (
+	"context"
 	"math"
 	"os"
 	"path/filepath"
@@ -75,7 +76,7 @@ func TestEngine(t *testing.T) {
 
 		require.Greater(t, eng.Dims(), 0)
 
-		vec, err := eng.Embed("hello world")
+		vec, err := eng.Embed(context.Background(), "hello world")
 		require.NoError(t, err)
 		require.Len(t, vec, eng.Dims())
 
@@ -93,7 +94,7 @@ func TestEngine(t *testing.T) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		vecs, err := eng.EmbedBatch([]string{"hello", "world"})
+		vecs, err := eng.EmbedBatch(context.Background(), []string{"hello", "world"})
 		require.NoError(t, err)
 		require.Len(t, vecs, 2)
 		for i, vec := range vecs {
@@ -106,7 +107,7 @@ func TestEngine(t *testing.T) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		vec, err := eng.Embed("")
+		vec, err := eng.Embed(context.Background(), "")
 		require.NoError(t, err)
 		require.Len(t, vec, eng.Dims())
 	})
@@ -116,7 +117,7 @@ func TestEngine(t *testing.T) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		vecs, err := eng.EmbedBatch(nil)
+		vecs, err := eng.EmbedBatch(context.Background(), nil)
 		require.NoError(t, err)
 		require.Nil(t, vecs)
 	})

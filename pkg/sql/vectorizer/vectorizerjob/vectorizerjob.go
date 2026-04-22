@@ -188,7 +188,7 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 		texts[i] = buildTextFromRow(row, numPKCols, sourceColumns, tmpl)
 	}
 
-	embeddings, err := engine.EmbedBatch(texts)
+	embeddings, err := engine.EmbedBatch(ctx, texts)
 	if err != nil {
 		return errors.Wrap(err, "vectorizer: generating embeddings")
 	}

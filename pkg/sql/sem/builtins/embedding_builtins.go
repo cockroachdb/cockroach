@@ -8,6 +8,7 @@ package builtins
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/embedding/chunker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -17,10 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vectorizer/content"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -56,6 +60,20 @@ var embeddingGenerators = map[string]builtinDefinition{
 				"limit.",
 			volatility.Stable,
 		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "text", Typ: types.String},
+				{Name: "model", Typ: types.String},
+			},
+			embedChunksGeneratorType,
+			makeEmbedChunksGeneratorWithModel,
+			"Splits the input text into overlapping chunks, embeds each "+
+				"chunk using the specified model, and returns rows of "+
+				"(chunk_seq, chunk, embedding). For remote models like "+
+				"'openai/text-embedding-3-small', requires a matching "+
+				"external connection.",
+			volatility.Stable,
+		),
 	),
 }
 
@@ -67,14 +85,14 @@ var embeddingBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.PGVector),
 			Fn: func(
-				_ context.Context, _ *eval.Context, args tree.Datums,
+				ctx context.Context, _ *eval.Context, args tree.Datums,
 			) (tree.Datum, error) {
 				eng, err := embedding.GetEngine()
 				if err != nil {
 					return nil, err
 				}
 				text := string(tree.MustBeDString(args[0]))
-				vec, err := eng.Embed(text)
+				vec, err := eng.Embed(ctx, text)
 				if err != nil {
 					return nil, err
 				}
@@ -84,6 +102,34 @@ var embeddingBuiltins = map[string]builtinDefinition{
 				"all-MiniLM-L6-v2 model (384 dimensions). The model is " +
 				"downloaded automatically on first use. Requires the ONNX " +
 				"Runtime library (--embedding-libs).",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "text", Typ: types.String},
+				{Name: "model", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.PGVector),
+			Fn: func(
+				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				text := string(tree.MustBeDString(args[0]))
+				modelSpec := string(tree.MustBeDString(args[1]))
+				embedder, err := resolveEmbedder(ctx, evalCtx, modelSpec)
+				if err != nil {
+					return nil, err
+				}
+				vec, err := embedder.Embed(ctx, text)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDPGVector(vector.T(vec)), nil
+			},
+			Info: "Returns the vector embedding of the input text using the " +
+				"specified model. For remote models like " +
+				"'openai/text-embedding-3-small', requires a matching " +
+				"external connection (CREATE EXTERNAL CONNECTION openai " +
+				"AS 'https://api.openai.com/v1?api_key=sk-...').",
 			Volatility: volatility.Stable,
 		},
 	),
@@ -123,8 +169,70 @@ var embeddingBuiltins = map[string]builtinDefinition{
 	),
 }
 
+// resolveEmbedder resolves a model specification into an Embedder.
+// For local models (no "/" prefix), returns the global ONNX engine.
+// For remote models like "openai/text-embedding-3-small", looks up
+// the external connection named after the provider to get the
+// connection URI, then constructs the remote embedder.
+func resolveEmbedder(
+	ctx context.Context, evalCtx *eval.Context, modelSpec string,
+) (embedding.Embedder, error) {
+	provider, _ := embedding.ParseModelSpec(modelSpec)
+	if provider == "" {
+		// Local model.
+		return embedding.GetEngine()
+	}
+
+	// Remote model: look up connection URI from external connection.
+	connURI, err := lookupExternalConnURI(ctx, evalCtx, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	return embedding.ResolveRemoteEmbedder(modelSpec, connURI)
+}
+
+// lookupExternalConnURI queries system.external_connections for a
+// connection with the given name and returns the raw URI string.
+func lookupExternalConnURI(
+	ctx context.Context, evalCtx *eval.Context, connectionName string,
+) (string, error) {
+	row, err := evalCtx.Planner.QueryRowEx(
+		ctx,
+		redact.Sprint("embed-lookup-external-connection"),
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT connection_details FROM system.external_connections WHERE connection_name = $1",
+		connectionName,
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "looking up external connection")
+	}
+	if row == nil {
+		return "", pgerror.Newf(pgcode.UndefinedObject,
+			"external connection %q not found; create it with: "+
+				"CREATE EXTERNAL CONNECTION %s AS '...'",
+			connectionName, connectionName)
+	}
+
+	// Deserialize the ConnectionDetails protobuf.
+	detailsBytes := []byte(tree.MustBeDBytes(row[0]))
+	var details connectionpb.ConnectionDetails
+	if err := protoutil.Unmarshal(detailsBytes, &details); err != nil {
+		return "", errors.Wrap(err, "decoding external connection details")
+	}
+
+	// Extract the URI from the SimpleURI variant.
+	simpleURI, ok := details.Details.(*connectionpb.ConnectionDetails_SimpleURI)
+	if !ok {
+		return "", pgerror.Newf(pgcode.InvalidParameterValue,
+			"external connection %q is not a URI-based connection", connectionName)
+	}
+
+	return simpleURI.SimpleURI.URI, nil
+}
+
 // makeEmbedChunksGenerator creates a ValueGenerator that chunks text
-// and embeds each chunk.
+// and embeds each chunk using the local engine.
 func makeEmbedChunksGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
@@ -132,14 +240,30 @@ func makeEmbedChunksGenerator(
 	return &embedChunksGenerator{text: text}, nil
 }
 
+// makeEmbedChunksGeneratorWithModel creates a ValueGenerator that
+// chunks text and embeds each chunk using the specified model.
+func makeEmbedChunksGeneratorWithModel(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	text := string(tree.MustBeDString(args[0]))
+	modelSpec := string(tree.MustBeDString(args[1]))
+	return &embedChunksGenerator{
+		text:      text,
+		modelSpec: modelSpec,
+		evalCtx:   evalCtx,
+	}, nil
+}
+
 // embedChunksGenerator implements eval.ValueGenerator for embed_chunks().
 // It lazily chunks and embeds the text in Start, then yields one row
 // per chunk via Next/Values.
 type embedChunksGenerator struct {
-	text   string
-	chunks []chunker.Chunk
-	vecs   [][]float32
-	idx    int
+	text      string
+	modelSpec string
+	evalCtx   *eval.Context
+	chunks    []chunker.Chunk
+	vecs      [][]float32
+	idx       int
 }
 
 // ResolvedType implements eval.ValueGenerator.
@@ -149,7 +273,15 @@ func (g *embedChunksGenerator) ResolvedType() *types.T {
 
 // Start implements eval.ValueGenerator. It chunks the text and embeds
 // all chunks in a single batch.
-func (g *embedChunksGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (g *embedChunksGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	if g.modelSpec == "" {
+		return g.startLocal(ctx)
+	}
+	return g.startWithModel(ctx)
+}
+
+// startLocal uses the local ONNX engine with token-aware chunking.
+func (g *embedChunksGenerator) startLocal(ctx context.Context) error {
 	eng, err := embedding.GetEngine()
 	if err != nil {
 		return err
@@ -158,16 +290,38 @@ func (g *embedChunksGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	ch := chunker.NewChunker(eng.Tokenizer())
 	g.chunks = ch.Chunk(g.text)
 
-	// Collect chunk texts for batch embedding.
 	texts := make([]string, len(g.chunks))
 	for i, c := range g.chunks {
 		texts[i] = c.Text
 	}
 
-	g.vecs, err = eng.EmbedBatch(texts)
+	g.vecs, err = eng.EmbedBatch(ctx, texts)
 	if err != nil {
 		return err
 	}
+
+	g.idx = -1
+	return nil
+}
+
+// startWithModel resolves the specified model and embeds. For remote
+// models, the entire text is treated as a single chunk since the
+// local tokenizer does not match the remote model's tokenizer.
+// TODO(pradyum): Use per-model chunk sizes for remote models.
+func (g *embedChunksGenerator) startWithModel(ctx context.Context) error {
+	embedder, err := resolveEmbedder(ctx, g.evalCtx, g.modelSpec)
+	if err != nil {
+		return err
+	}
+
+	// For now, treat the entire text as a single chunk for remote
+	// models. Per-model chunking is a future enhancement.
+	g.chunks = []chunker.Chunk{{Text: g.text, SeqNum: 0}}
+	vec, err := embedder.Embed(ctx, g.text)
+	if err != nil {
+		return err
+	}
+	g.vecs = [][]float32{vec}
 
 	g.idx = -1
 	return nil

@@ -323,6 +323,7 @@ go_library(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/docs",
+        "//pkg/embedding",
         "//pkg/featureflag",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",

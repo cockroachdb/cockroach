@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -184,9 +185,35 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		}
 	}
 
-	// Determine the embedding dimensions based on the model.
-	// For all-MiniLM-L6-v2, dimensions = 384.
-	dims := 384
+	// Look up model info from the registry to determine dimensions.
+	info, err := embedding.LookupModel(model)
+	if err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+			"unknown embedding model %q", model)
+	}
+	dims := info.Dims
+
+	// For remote models, validate that the external connection exists.
+	var connectionName string
+	provider, _ := embedding.ParseModelSpec(model)
+	if provider != "" {
+		connectionName = provider
+		row, err := p.InternalSQLTxn().QueryRowEx(
+			ctx, "create-vectorizer-check-connection", p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			"SELECT connection_name FROM system.external_connections WHERE connection_name = $1",
+			connectionName,
+		)
+		if err != nil {
+			return errors.Wrap(err, "checking external connection")
+		}
+		if row == nil {
+			return pgerror.Newf(pgcode.UndefinedObject,
+				"external connection %q not found; create it with: "+
+					"CREATE EXTERNAL CONNECTION %s AS 'https://api.openai.com/v1?api_key=sk-...'",
+				connectionName, connectionName)
+		}
+	}
 
 	// Create the companion embeddings table.
 	companionSQL := vectorizer.CreateCompanionTableSQL(n.tableName, pkCols, dims)
@@ -235,6 +262,7 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		BatchSize:        batchSize,
 		ScheduleID:       sj.ScheduleID(),
 		LoadingMode:      loadingMode,
+		ConnectionName:   connectionName,
 	}
 
 	return p.writeSchemaChange(
