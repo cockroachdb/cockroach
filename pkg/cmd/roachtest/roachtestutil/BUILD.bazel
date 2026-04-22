@@ -63,6 +63,7 @@ go_test(
     srcs = [
         "commandbuilder_test.go",
         "load_group_test.go",
+        "metric_utils_test.go",
         "utils_test.go",
     ],
     embed = [":roachtestutil"],
