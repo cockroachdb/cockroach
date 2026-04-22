@@ -69,6 +69,11 @@ type importTestingKnobs struct {
 	// call inside ingestWithRetry. If it returns an error, that error
 	// replaces the nil err and triggers a retry.
 	afterDistImport func() error
+	// duringDistImport, if set, is called during distImport processing
+	// after each batch's progress has been recorded (and persisted, if
+	// alwaysFlushJobProgress is true). If it returns a non-nil error,
+	// distImport fails with that error.
+	duringDistImport func() error
 }
 
 type importResumer struct {
@@ -101,6 +106,10 @@ func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
 
 func (r *importResumer) TestingSetAfterDistImportKnob(fn func() error) {
 	r.testingKnobs.afterDistImport = fn
+}
+
+func (r *importResumer) TestingSetDuringDistImportKnob(fn func() error) {
+	r.testingKnobs.duringDistImport = fn
 }
 
 var _ jobs.TraceableJob = &importResumer{}
