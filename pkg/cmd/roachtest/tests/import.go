@@ -51,6 +51,9 @@ type dataset interface {
 	// getFingerprint() returns a map containing the expected fingerprint for this
 	// dataset, or 'nil' if the table has not been calibrated yet.
 	getFingerprint() map[string]string
+
+	// getDataFormat() returns the SQL data format keyword (e.g. "CSV", "PARQUET").
+	getDataFormat() string
 }
 
 // staticDataset represents a statically created dataset stored in external
@@ -62,6 +65,7 @@ type staticDataset struct {
 	createTableStmt string
 	dataURLs        []string
 	fingerprint     map[string]string
+	dataFormat      string
 }
 
 func (sd *staticDataset) init(_ context.Context, _ cluster.Cluster, _ *logger.Logger) error {
@@ -71,25 +75,48 @@ func (sd staticDataset) getTableName() string              { return sd.tableName
 func (sd staticDataset) getCreateTableStmt() string        { return sd.createTableStmt }
 func (sd staticDataset) getDataURLs() []string             { return sd.dataURLs }
 func (sd staticDataset) getFingerprint() map[string]string { return sd.fingerprint }
+func (sd staticDataset) getDataFormat() string             { return sd.dataFormat }
 
-// tpchDataset represents a TPC-H dataset file stored on external storage.
+// tpchDataset represents a TPC-H dataset stored on external storage. The
+// format field determines whether data files are CSV or Parquet; schemas and
+// fingerprints are always read from the CSV bucket (the calibration master).
 type tpchDataset struct {
 	staticDataset
+	// dataBaseURL is the GCS bucket prefix where data files are stored.
+	dataBaseURL string
+	// fileExt is the data file extension (e.g. "tbl" for CSV, "parquet").
+	fileExt string
 }
 
-// init() implements the dataset interface. We use scale factor 1 for local clusters and scale
-// factor 100 for roachprod clusters.
+const (
+	tpchCSVBaseURL     = "gs://cockroach-fixtures-us-east1/tpch-csv/"
+	tpchParquetBaseURL = "gs://cockroach-fixtures-us-east1/tpch-parquet/"
+)
+
+// tpchFingerprintURL returns the GCS URL for a table's fingerprint file.
+// Fingerprints are always stored in the CSV bucket, which is the calibration
+// master for all formats.
+func tpchFingerprintURL(scale, tableName string) string {
+	return fmt.Sprintf("%s%s/%s.fingerprint?AUTH=implicit",
+		tpchCSVBaseURL, scale, tableName)
+}
+
+// init implements the dataset interface. We use scale factor 1 for local
+// clusters and scale factor 100 for roachprod clusters. Schemas and
+// fingerprints are always read from the CSV bucket so that all formats share
+// a single calibration source.
 func (tpch *tpchDataset) init(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger,
 ) (err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Wrapf(err, "initializing %s", tpch.tableName)
+			err = errors.Wrapf(err, "initializing %s %s",
+				tpch.dataFormat, tpch.tableName)
 		}
 	}()
 	conn := c.Conn(ctx, l, 1)
 	defer conn.Close()
-	baseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
+
 	var scale string
 	if c.IsLocal() {
 		scale = "sf-1"
@@ -98,117 +125,74 @@ func (tpch *tpchDataset) init(
 	}
 
 	tpch.createTableStmt, err = readFileFromFixture(
-		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", baseURL, tpch.tableName), conn)
+		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit",
+			tpchCSVBaseURL, tpch.tableName), conn)
 	if err != nil {
 		return err
 	}
 
-	fingerprintURL := fmt.Sprintf("%s/%s/%s.fingerprint?AUTH=implicit", baseURL, scale, tpch.tableName)
+	// Fingerprints are always read from the CSV bucket, which serves as the
+	// calibration master for all formats.
+	fingerprintURL := tpchFingerprintURL(scale, tpch.tableName)
 	var fingerprint string
 	fingerprint, err = readFileFromFixture(fingerprintURL, conn)
 	if err != nil {
-		// It's okay to not have fingerprints here because we may be doing a calibration run.
+		// It's okay to not have fingerprints here because we may be
+		// doing a calibration run.
 		if !strings.Contains(err.Error(), "gcs object does not exist") {
 			return err
 		}
 	} else {
 		err = json.Unmarshal([]byte(fingerprint), &tpch.fingerprint)
 		if err != nil {
-			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s", fingerprint)
+			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s",
+				fingerprint)
 		}
 	}
 
 	tpch.dataURLs = make([]string, 0, 8)
 	for i := 1; i <= 8; i++ {
 		tpch.dataURLs = append(tpch.dataURLs,
-			fmt.Sprintf("%s/%s/%s.tbl.%d?AUTH=implicit", baseURL, scale, tpch.tableName, i))
+			fmt.Sprintf("%s/%s/%s.%s.%d?AUTH=implicit",
+				tpch.dataBaseURL, scale, tpch.tableName,
+				tpch.fileExt, i))
 	}
 
 	return nil
 }
 
-// newTPCHDataset() is a convenience function to quickly declare a TPC-H dataset by name.
-func newTPCHDataset(name string) *tpchDataset {
+// newTPCHCSVDataset creates a TPC-H dataset backed by CSV files.
+func newTPCHCSVDataset(name string) *tpchDataset {
 	return &tpchDataset{
 		staticDataset: staticDataset{
-			tableName: name,
+			tableName:  name,
+			dataFormat: "CSV",
 		},
+		dataBaseURL: tpchCSVBaseURL,
+		fileExt:     "tbl",
 	}
 }
 
-// tpchParquetDataset represents a TPC-H dataset stored in Parquet format.
-type tpchParquetDataset struct {
-	staticDataset
-}
-
-// init implements the dataset interface. Schema is reused from the CSV bucket
-// since table definitions are identical; only the data format differs.
-func (tpq *tpchParquetDataset) init(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger,
-) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Wrapf(err, "initializing parquet %s", tpq.tableName)
-		}
-	}()
-	conn := c.Conn(ctx, l, 1)
-	defer conn.Close()
-
-	parquetBaseURL := "gs://cockroach-fixtures-us-east1/tpch-parquet/"
-	csvBaseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
-	var scale string
-	if c.IsLocal() {
-		scale = "sf-1"
-	} else {
-		scale = "sf-100"
-	}
-
-	// Reuse schema from CSV bucket.
-	tpq.createTableStmt, err = readFileFromFixture(
-		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", csvBaseURL, tpq.tableName), conn)
-	if err != nil {
-		return err
-	}
-
-	fingerprintURL := fmt.Sprintf("%s/%s/%s.fingerprint?AUTH=implicit", parquetBaseURL, scale, tpq.tableName)
-	var fingerprint string
-	fingerprint, err = readFileFromFixture(fingerprintURL, conn)
-	if err != nil {
-		if !strings.Contains(err.Error(), "gcs object does not exist") {
-			return err
-		}
-	} else {
-		err = json.Unmarshal([]byte(fingerprint), &tpq.fingerprint)
-		if err != nil {
-			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s", fingerprint)
-		}
-	}
-
-	tpq.dataURLs = make([]string, 0, 8)
-	for i := 1; i <= 8; i++ {
-		tpq.dataURLs = append(tpq.dataURLs,
-			fmt.Sprintf("%s/%s/%s.parquet.%d?AUTH=implicit", parquetBaseURL, scale, tpq.tableName, i))
-	}
-
-	return nil
-}
-
-func newTPCHParquetDataset(name string) *tpchParquetDataset {
-	return &tpchParquetDataset{
+// newTPCHParquetDataset creates a TPC-H dataset backed by Parquet files.
+func newTPCHParquetDataset(name string) *tpchDataset {
+	return &tpchDataset{
 		staticDataset: staticDataset{
-			tableName: name,
+			tableName:  name,
+			dataFormat: "PARQUET",
 		},
+		dataBaseURL: tpchParquetBaseURL,
+		fileExt:     "parquet",
 	}
 }
 
 // datasets is the set of all known datasets to test with.
 var datasets = map[string]dataset{
-	"tpch/customer": newTPCHDataset("customer"),
-	"tpch/lineitem": newTPCHDataset("lineitem"),
-	"tpch/orders":   newTPCHDataset("orders"),
-	"tpch/part":     newTPCHDataset("part"),
-	"tpch/partsupp": newTPCHDataset("partsupp"),
-	"tpch/supplier": newTPCHDataset("supplier"),
+	"tpch/customer": newTPCHCSVDataset("customer"),
+	"tpch/lineitem": newTPCHCSVDataset("lineitem"),
+	"tpch/orders":   newTPCHCSVDataset("orders"),
+	"tpch/part":     newTPCHCSVDataset("part"),
+	"tpch/partsupp": newTPCHCSVDataset("partsupp"),
+	"tpch/supplier": newTPCHCSVDataset("supplier"),
 
 	"tpch-parquet/customer": newTPCHParquetDataset("customer"),
 	"tpch-parquet/lineitem": newTPCHParquetDataset("lineitem"),
@@ -243,6 +227,48 @@ type FromFunc func(rng *rand.Rand) []string
 
 func (f FromFunc) Strings(rng *rand.Rand) []string { return f(rng) }
 
+// allDatasets returns the names of all registered datasets, regardless of
+// format. Tests that use this pool exercise both CSV and Parquet paths via
+// randomization.
+func allDatasets(_ *rand.Rand) []string {
+	return slices.Collect(maps.Keys(datasets))
+}
+
+// nDatasets returns n randomly chosen dataset names with distinct table names.
+// This prevents conflicts when multiple datasets are imported concurrently
+// into the same database (e.g. both tpch/orders and tpch-parquet/orders
+// target import_test.orders).
+func nDatasets(rng *rand.Rand, n int) []string {
+	all := allDatasets(rng)
+	rng.Shuffle(len(all), func(i, j int) {
+		all[i], all[j] = all[j], all[i]
+	})
+	seen := make(map[string]bool)
+	var result []string
+	for _, name := range all {
+		tbl := datasets[name].getTableName()
+		if seen[tbl] {
+			continue
+		}
+		seen[tbl] = true
+		result = append(result, name)
+		if len(result) == n {
+			break
+		}
+	}
+	return result
+}
+
+func anyThreeDatasets(rng *rand.Rand) []string {
+	return nDatasets(rng, 3)
+}
+
+func anyDataset(rng *rand.Rand) []string {
+	return nDatasets(rng, 1)
+}
+
+// allCSVDatasets returns only CSV-format dataset names. Used for calibration
+// since CSV is the fingerprint master.
 func allCSVDatasets(_ *rand.Rand) []string {
 	var csvDatasets []string
 	for name := range datasets {
@@ -251,22 +277,6 @@ func allCSVDatasets(_ *rand.Rand) []string {
 		}
 	}
 	return csvDatasets
-}
-
-func nCSVDatasets(rng *rand.Rand, n int) []string {
-	all := allCSVDatasets(rng)
-	rng.Shuffle(len(all), func(i, j int) {
-		all[i], all[j] = all[j], all[i]
-	})
-	return all[:n]
-}
-
-func anyThreeCSVDatasets(rng *rand.Rand) []string {
-	return nCSVDatasets(rng, 3)
-}
-
-func anyCSVDataset(rng *rand.Rand) []string {
-	return nCSVDatasets(rng, 1)
 }
 
 func anyCSVSmallDataset(rng *rand.Rand) []string {
@@ -278,32 +288,6 @@ func anyCSVSmallDataset(rng *rand.Rand) []string {
 		small[i], small[j] = small[j], small[i]
 	})
 	return small[:1]
-}
-
-func allParquetDatasets(_ *rand.Rand) []string {
-	var parquetDatasets []string
-	for name := range datasets {
-		if strings.HasPrefix(name, "tpch-parquet/") {
-			parquetDatasets = append(parquetDatasets, name)
-		}
-	}
-	return parquetDatasets
-}
-
-func nParquetDatasets(rng *rand.Rand, n int) []string {
-	all := allParquetDatasets(rng)
-	rng.Shuffle(len(all), func(i, j int) {
-		all[i], all[j] = all[j], all[i]
-	})
-	return all[:n]
-}
-
-func anyThreeParquetDatasets(rng *rand.Rand) []string {
-	return nParquetDatasets(rng, 3)
-}
-
-func anyParquetDataset(rng *rand.Rand) []string {
-	return nParquetDatasets(rng, 1)
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -359,11 +343,12 @@ var tests = []importTestSpec{
 		manualOnly:   true,
 		datasetNames: One("tpch/supplier"),
 	},
-	// Basic test w/o injected failures.
+	// Basic test w/o injected failures. Draws from all formats so that both
+	// CSV and Parquet paths are exercised via randomization.
 	{
 		subtestName:  "basic",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyCSVDataset),
+		datasetNames: FromFunc(anyDataset),
 	},
 	// Basic test w/benchmarking.
 	{
@@ -372,11 +357,12 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: One("tpch/lineitem"),
 	},
-	// Basic test importing three datasets concurrently.
+	// Basic test importing three datasets concurrently. Draws from all
+	// formats so that both CSV and Parquet paths are exercised.
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeCSVDatasets),
+		datasetNames: FromFunc(anyThreeDatasets),
 	},
 	// Test with a decommissioned node. Exclude lineitem (the largest dataset)
 	// to avoid timeouts when running with only 3 active nodes.
@@ -435,38 +421,29 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "cancellation",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeCSVDatasets),
+		datasetNames: FromFunc(anyThreeDatasets),
 		importRunner: importCancellationRunner,
 	},
 	// Test column families.
 	{
 		subtestName:  "colfam",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyCSVDataset),
+		datasetNames: FromFunc(anyDataset),
 		preTestHook:  makeColumnFamilies,
 	},
 	// Test pause and resume of import jobs.
 	{
 		subtestName:  "pause",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyCSVDataset),
+		datasetNames: FromFunc(anyDataset),
 		importRunner: importPauseRunner,
 	},
 	// Test importing a table in two separate IMPORT jobs (split files).
 	{
 		subtestName:  "split",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyCSVDataset),
+		datasetNames: FromFunc(anyDataset),
 		importRunner: splitImportRunner,
-	},
-	// Parquet import: generate fingerprints for uncalibrated datasets.
-	{
-		subtestName:  "parquet/calibrate",
-		nodes:        []int{4},
-		manualOnly:   true,
-		calibrate:    true,
-		datasetNames: FromFunc(allParquetDatasets),
-		importRunner: parquetImportRunner,
 	},
 	// Parquet import: small dataset for quick iteration.
 	{
@@ -474,29 +451,13 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		manualOnly:   true,
 		datasetNames: One("tpch-parquet/supplier"),
-		importRunner: parquetImportRunner,
 	},
-	// Parquet import: basic test w/o injected failures.
-	{
-		subtestName:  "parquet/basic",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anyParquetDataset),
-		importRunner: parquetImportRunner,
-	},
-	// Parquet import: basic test w/benchmarking.
+	// Parquet import: benchmarking with Parquet-specific dataset.
 	{
 		subtestName:  "parquet/benchmark",
 		benchmark:    true,
 		nodes:        []int{4},
 		datasetNames: One("tpch-parquet/lineitem"),
-		importRunner: parquetImportRunner,
-	},
-	// Parquet import: basic test importing three datasets concurrently.
-	{
-		subtestName:  "parquet/concurrency",
-		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeParquetDatasets),
-		importRunner: parquetImportRunner,
 	},
 }
 
@@ -856,7 +817,7 @@ func importCancellationRunner(
 			strings.Join(urls, ", ")))
 
 		var jobID jobspb.JobID
-		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls)
+		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls, ds.getDataFormat())
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -1054,7 +1015,7 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing first batch (%d files) of %s",
 		len(first), ds.getTableName()))
-	importStmt := formatImportStmt(ds.getTableName(), first, false)
+	importStmt := formatImportStmt(ds.getTableName(), first, ds.getDataFormat(), false)
 	l.Printf("first import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1062,7 +1023,7 @@ func splitImportRunner(
 
 	t.WorkerStatus(fmt.Sprintf("importing second batch (%d files) of %s",
 		len(second), ds.getTableName()))
-	importStmt = formatImportStmt(ds.getTableName(), second, false)
+	importStmt = formatImportStmt(ds.getTableName(), second, ds.getDataFormat(), false)
 	l.Printf("second import: %s", importStmt)
 	if _, err := conn.ExecContext(ctx, importStmt); err != nil {
 		return errors.Wrapf(err, "%s", importStmt)
@@ -1116,9 +1077,10 @@ func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster, rng
 	}
 }
 
-// runSyncImportJob() runs an import job and waits for it to complete.
+// runSyncImportJob runs an import job and waits for it to complete.
 func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
-	importStmt := formatImportStmt(ds.getTableName(), ds.getDataURLs(), false)
+	importStmt := formatImportStmt(
+		ds.getTableName(), ds.getDataURLs(), ds.getDataFormat(), false)
 	_, err := conn.ExecContext(ctx, importStmt)
 	if err != nil {
 		err = errors.Wrapf(err, "%s", importStmt)
@@ -1126,16 +1088,18 @@ func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 	return err
 }
 
-// runAsyncImportJob() runs an import job and returns the job id immediately.
+// runAsyncImportJob runs an import job and returns the job id immediately.
 func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
-	return runRawAsyncImportJob(ctx, conn, ds.getTableName(), ds.getDataURLs())
+	return runRawAsyncImportJob(
+		ctx, conn, ds.getTableName(), ds.getDataURLs(), ds.getDataFormat())
 }
 
-// runRawAsyncImportJob() runs an import job using the table name and files provided.
+// runRawAsyncImportJob runs an import job using the table name and files
+// provided. The format parameter determines the SQL data format keyword.
 func runRawAsyncImportJob(
-	ctx context.Context, conn *gosql.DB, tableName string, urls []string,
+	ctx context.Context, conn *gosql.DB, tableName string, urls []string, format string,
 ) (jobspb.JobID, error) {
-	importStmt := formatImportStmt(tableName, urls, true)
+	importStmt := formatImportStmt(tableName, urls, format, true)
 
 	var jobID jobspb.JobID
 	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
@@ -1146,50 +1110,25 @@ func runRawAsyncImportJob(
 	return jobID, err
 }
 
-// formatImportStmt() takes a dataset and formats a SQL import statment for that
-// dataset.
-func formatImportStmt(tableName string, urls []string, detached bool) string {
+// formatImportStmt builds a SQL IMPORT INTO statement for the given format.
+// CSV imports include a delimiter option; other formats do not.
+func formatImportStmt(tableName string, urls []string, format string, detached bool) string {
 	var stmt strings.Builder
-	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
-		tableName, strings.Join(urls, "', '"))
+	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s %s DATA ('%s')`,
+		tableName, format, strings.Join(urls, "', '"))
 
+	var options []string
+	if format == "CSV" {
+		options = append(options, "delimiter='|'")
+	}
 	if detached {
-		stmt.WriteString(", detached")
+		options = append(options, "detached")
+	}
+	if len(options) > 0 {
+		fmt.Fprintf(&stmt, " WITH %s", strings.Join(options, ", "))
 	}
 
 	return stmt.String()
-}
-
-// formatParquetImportStmt formats a IMPORT INTO ... PARQUET DATA statement.
-func formatParquetImportStmt(tableName string, urls []string, detached bool) string {
-	var stmt strings.Builder
-	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s PARQUET DATA ('%s')`,
-		tableName, strings.Join(urls, "', '"))
-
-	if detached {
-		stmt.WriteString(" WITH detached")
-	}
-
-	return stmt.String()
-}
-
-// runSyncParquetImportJob runs a Parquet import job and waits for completion.
-func runSyncParquetImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
-	importStmt := formatParquetImportStmt(ds.getTableName(), ds.getDataURLs(), false)
-	_, err := conn.ExecContext(ctx, importStmt)
-	if err != nil {
-		err = errors.Wrapf(err, "%s", importStmt)
-	}
-	return err
-}
-
-// parquetImportRunner is the import runner used by Parquet test specs.
-func parquetImportRunner(
-	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset,
-) error {
-	importConn := c.Conn(ctx, l, 1)
-	defer importConn.Close()
-	return runSyncParquetImportJob(ctx, importConn, ds)
 }
 
 func registerImportTPCC(r registry.Registry) {
