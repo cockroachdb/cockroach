@@ -51,7 +51,7 @@ type Chaos struct {
 	// Chaos is responsible for closing the channel when the test is over.
 	// This is optional.
 	ChaosEventCh chan ChaosEvent
-	// Env is an array of enviroment variables to set when restarting nodes.
+	// Env is an array of environment variables to set when restarting nodes.
 	// Ex. "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true"
 	Env []string
 }

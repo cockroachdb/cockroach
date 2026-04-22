@@ -1054,7 +1054,7 @@ func TestChangefeedSendError(t *testing.T) {
 		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
 			if retryCounter.Value() < 1 {
-				return fmt.Errorf("no retry has occured")
+				return fmt.Errorf("no retry has occurred")
 			}
 			return nil
 		})

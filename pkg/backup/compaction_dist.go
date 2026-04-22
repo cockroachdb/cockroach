@@ -245,7 +245,7 @@ func (set *localitySet) maybeUpdateTargetInstance() {
 // available nodes, this function has two behaviors, depending on whether strict is set.
 // If strict is true, this function will return an error. If strict is false, we fall back to
 // assigning all available nodes. In that case, compactions may output data to a different URI
-// than they recieved it from. This is an edge case that would occur if the cluster topology has
+// than they received it from. This is an edge case that would occur if the cluster topology has
 // changed between backup time and compaction time such that all nodes matching one of our URIs
 // become unavailable (for example, a region going down).
 func buildLocalitySets(

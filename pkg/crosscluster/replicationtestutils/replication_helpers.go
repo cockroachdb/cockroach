@@ -155,7 +155,7 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 	return minResolvedTimestamp(rf.msg.GetCheckpoint().ResolvedSpans)
 }
 
-// ObserveRangeStats consumes the feed until we recieve a checkpoint that
+// ObserveRangeStats consumes the feed until we receive a checkpoint that
 // contains range stats. Returns the stats from the checkpoint.
 func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) rangescanstatspb.RangeStats {
 	if !ContainsRangeStats()(rf.msg) {

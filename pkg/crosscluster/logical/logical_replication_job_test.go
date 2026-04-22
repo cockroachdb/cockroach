@@ -2721,7 +2721,7 @@ func TestAlterExternalConnection(t *testing.T) {
 	q1.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
 	dbANode1URL.RawQuery = q1.Encode()
 
-	// We want to make sure operations for cluster B is on seperate node from cluster A.
+	// We want to make sure operations for cluster B is on separate node from cluster A.
 	node2 := server.Server(2).ApplicationLayer()
 	dbBNode2 := sqlutils.MakeSQLRunner(node2.SQLConn(t, serverutils.DBName(dbNames[1])))
 

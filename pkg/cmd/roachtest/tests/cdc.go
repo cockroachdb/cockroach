@@ -2347,7 +2347,7 @@ func registerCDC(r registry.Registry) {
 		// change aggregators in the execution_locality region while targeting tables
 		// whose primary region is different. In issue #2955, in that scenario,
 		// a single change aggregator (on the gateway node) would watch all the ranges.
-		// The above scenario occured with the older bin-packing oracle rather than
+		// The above scenario occurred with the older bin-packing oracle rather than
 		// the bulk oracle.
 		Name:             "cdc/multi-region-execution-locality-tpcc",
 		Owner:            registry.OwnerCDC,

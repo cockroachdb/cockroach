@@ -650,7 +650,7 @@ func runGenerativeSplitAndScatter(
 					}
 
 					if _, ok := flowCtx.NodeID.OptionalNodeID(); !ok {
-						// If a seperate process tenant is running restore, the nodeID
+						// If a separate process tenant is running restore, the nodeID
 						// returned by scatter does not map identically to a sqlInstanceID;
 						// thus, the processor must randomly choose a sqlInstanceID to route
 						// the chunk to.
