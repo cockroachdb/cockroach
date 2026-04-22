@@ -27,9 +27,12 @@ func init() {
 }
 
 var (
-	errAbsOfMinInt64  = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
-	errLogOfNegNumber = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
-	errLogOfZero      = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errAbsOfMinInt64       = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
+	errLogOfNegNumber      = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
+	errLogOfZero           = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errFactorialOfNegative = pgerror.New(pgcode.NumericValueOutOfRange, "factorial of a negative number is undefined")
+	errFactorialOverflow   = pgerror.New(pgcode.NumericValueOutOfRange, "value overflows numeric format")
+	errIntOutOfRange       = pgerror.New(pgcode.NumericValueOutOfRange, "bigint out of range")
 
 	bigTen = apd.NewBigInt(10)
 )
@@ -212,6 +215,18 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"erf": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Erf(x))), nil
+		}, "Calculates the error function of `val`.", volatility.Immutable),
+	),
+
+	"erfc": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Erfc(x))), nil
+		}, "Calculates the complementary error function: `1 - erf(val)`.", volatility.Immutable),
+	),
+
 	"exp": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Exp(x))), nil
@@ -221,6 +236,28 @@ var mathBuiltins = map[string]builtinDefinition{
 			_, err := tree.DecimalCtx.Exp(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates *e* ^ `val`.", volatility.Immutable),
+	),
+
+	"factorial": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				n := int64(tree.MustBeDInt(args[0]))
+				switch {
+				case n < 0:
+					return nil, errFactorialOfNegative
+				case n > 32177:
+					// PostgreSQL's numeric type cannot represent 32178! or larger.
+					return nil, errFactorialOverflow
+				}
+				dd := &tree.DDecimal{}
+				dd.Coeff.MulRange(1, n)
+				return dd, nil
+			},
+			Info:       "Calculates the factorial of `val`. `val` must be between 0 and 32177 inclusive.",
+			Volatility: volatility.Immutable,
+		},
 	),
 
 	"floor": makeBuiltin(defProps(),
@@ -239,6 +276,19 @@ var mathBuiltins = map[string]builtinDefinition{
 				return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
 			},
 			Info:       "Calculates the largest integer not greater than `val`.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"gcd": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "a", Typ: types.Int}, {Name: "b", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return intGCD(int64(tree.MustBeDInt(args[0])), int64(tree.MustBeDInt(args[1])))
+			},
+			Info: "Calculates the greatest common divisor of `a` and `b`. " +
+				"Returns 0 if both inputs are 0; otherwise returns a positive value.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -263,6 +313,19 @@ var mathBuiltins = map[string]builtinDefinition{
 				return tree.MakeDBool(tree.DBool(isNaN)), nil
 			},
 			Info:       "Returns true if `val` is NaN, false otherwise.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"lcm": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "a", Typ: types.Int}, {Name: "b", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return intLCM(int64(tree.MustBeDInt(args[0])), int64(tree.MustBeDInt(args[1])))
+			},
+			Info: "Calculates the least common multiple of `a` and `b`. " +
+				"Returns 0 if either input is 0.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -324,6 +387,31 @@ var mathBuiltins = map[string]builtinDefinition{
 			_, err := tree.DecimalCtx.Quo(&dd.Decimal, top, bot)
 			return dd, err
 		}, "Calculates the base `b` log of `val`.", volatility.Immutable),
+	),
+
+	"log10": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Log10(x))), nil
+		}, "Calculates the base 10 log of `val`.", volatility.Immutable),
+		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
+	),
+
+	"min_scale": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := &args[0].(*tree.DDecimal).Decimal
+				if d.Form != apd.Finite {
+					return tree.DNull, nil
+				}
+				var reduced apd.Decimal
+				reduced.Reduce(d)
+				return tree.NewDInt(tree.DInt(decimalScale(&reduced))), nil
+			},
+			Info:       "Returns the minimum scale (number of fractional decimal digits) needed to represent `val` exactly.",
+			Volatility: volatility.Immutable,
+		},
 	),
 
 	"mod": makeBuiltin(defProps(),
@@ -430,6 +518,22 @@ var mathBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"scale": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.Int4),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := &args[0].(*tree.DDecimal).Decimal
+				if d.Form != apd.Finite {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.DInt(decimalScale(d))), nil
+			},
+			Info:       "Returns the scale (number of fractional decimal digits) of `val`.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	"sin": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Sin(x))), nil
@@ -509,6 +613,27 @@ var mathBuiltins = map[string]builtinDefinition{
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Tanh(x))), nil
 		}, "Calculates the hyperbolic tangent of `val`.", volatility.Immutable),
+	),
+
+	"trim_scale": makeBuiltin(defProps(),
+		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			if x.Form != apd.Finite {
+				dd.Decimal.Set(x)
+				return dd, nil
+			}
+			dd.Decimal.Reduce(x)
+			// Reduce strips trailing zeros from the coefficient including those
+			// to the left of the decimal point (e.g. 100 -> 1E+2). PostgreSQL's
+			// trim_scale only trims zeros in the fractional part, so restore any
+			// positive exponent by scaling the coefficient back to exponent 0.
+			if dd.Exponent > 0 {
+				scale := apd.NewBigInt(0).Exp(bigTen, apd.NewBigInt(int64(dd.Exponent)), nil)
+				dd.Coeff.Mul(&dd.Coeff, scale)
+				dd.Exponent = 0
+			}
+			return dd, nil
+		}, "Returns `val` with any trailing zeros after the decimal point removed.", volatility.Immutable),
 	),
 
 	"trunc": makeBuiltin(defProps(),
@@ -791,6 +916,53 @@ func roundDecimal(x *apd.Decimal, scale int32) (tree.Datum, error) {
 		dd.Negative = false
 	}
 	return dd, err
+}
+
+// intGCD returns the greatest common divisor of a and b as a non-negative
+// DInt, matching PostgreSQL semantics: gcd(0, 0) = 0, and otherwise the
+// result is positive. Errors with bigint-out-of-range when the result does
+// not fit in an int64 (only possible for gcd(MinInt64, 0)).
+func intGCD(a, b int64) (tree.Datum, error) {
+	var ba, bb, g apd.BigInt
+	ba.SetInt64(a)
+	bb.SetInt64(b)
+	g.GCD(nil, nil, &ba, &bb) // lint: uppercase function OK
+	if !g.IsInt64() {
+		return nil, errIntOutOfRange
+	}
+	return tree.NewDInt(tree.DInt(g.Int64())), nil
+}
+
+// intLCM returns the least common multiple of a and b, computed in
+// arbitrary-precision integer space to avoid intermediate overflow. Returns
+// 0 if either input is 0. Errors with bigint-out-of-range when the result
+// does not fit in an int64.
+func intLCM(a, b int64) (tree.Datum, error) {
+	if a == 0 || b == 0 {
+		return tree.DZero, nil
+	}
+	var ba, bb, g, res apd.BigInt
+	ba.SetInt64(a)
+	bb.SetInt64(b)
+	g.GCD(nil, nil, &ba, &bb) // lint: uppercase function OK
+	// |a / gcd(a, b) * b|.
+	res.Quo(&ba, &g)
+	res.Mul(&res, &bb)
+	res.Abs(&res)
+	if !res.IsInt64() {
+		return nil, errIntOutOfRange
+	}
+	return tree.NewDInt(tree.DInt(res.Int64())), nil
+}
+
+// decimalScale returns the number of fractional digits in d, mirroring the
+// PostgreSQL scale() semantics. The caller is responsible for handling the
+// non-finite forms (NaN, Infinity).
+func decimalScale(d *apd.Decimal) int32 {
+	if d.Exponent >= 0 {
+		return 0
+	}
+	return -d.Exponent
 }
 
 // widthBucket returns the bucket number to which operand would be assigned in a histogram having count
