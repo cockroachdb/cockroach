@@ -117,25 +117,25 @@ func getPkgToTests(diff string) map[string][]string {
 	return ret
 }
 
-// selectAppropriateTests constructs bazel test targets from pkgToTests,
-// then uses `bazel query` to exclude any targets tagged with
+// selectAppropriateTests discovers test targets in the packages from
+// pkgToTests via `bazel query`, excluding any targets tagged with
 // "integration". Returns the surviving test targets and a sorted,
 // deduplicated list of test names to stress.
 func selectAppropriateTests(
 	ctx context.Context, pkgToTests map[string][]string,
 ) (testTargets []string, tests []string, err error) {
-	var candidates []string
+	var pkgTargets []string
 	for pkg := range pkgToTests {
-		targetName := strings.ReplaceAll(filepath.Base(pkg), ".", "_")
-		candidates = append(candidates, fmt.Sprintf("//%s:%s_test", pkg, targetName))
+		pkgTargets = append(pkgTargets, fmt.Sprintf("//%s:all", pkg))
 	}
-	if len(candidates) == 0 {
+	if len(pkgTargets) == 0 {
 		return nil, nil, nil
 	}
-	targetSet := strings.Join(candidates, " ")
+	pkgUnion := strings.Join(pkgTargets, " + ")
+	testKind := fmt.Sprintf("kind(\"_test rule\", %s)", pkgUnion)
 	query := fmt.Sprintf(
-		"set(%s) except attr(\"tags\", \"[\\[ ]integration[,\\]]\", set(%s))",
-		targetSet, targetSet,
+		"%s except attr(\"tags\", \"[\\[ ]integration[,\\]]\", %s)",
+		testKind, testKind,
 	)
 	cmd := exec.CommandContext(ctx, "bazel", "query", query)
 	outputBytes, err := cmd.Output()
