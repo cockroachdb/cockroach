@@ -653,4 +653,49 @@ CREATE TABLE public.table_w0_66 (
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
 ) WITH (schema_locked = true);
 
+# Regression for #168748: combining DROP CONSTRAINT <pk> with ADD PRIMARY KEY
+# in a single ALTER TABLE must not leave behind a unique secondary index on
+# the old PK columns. The user explicitly asked for the old PK to go away,
+# so the standard "preserve old PK as a unique secondary" behavior of ALTER
+# PRIMARY KEY does not apply.
+statement disable-cf-mutator ok
+CREATE TABLE t168748 (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false)
+
+statement ok
+ALTER TABLE t168748 DROP CONSTRAINT t168748_pkey, ADD PRIMARY KEY (y)
+
+query TT
+SHOW CREATE TABLE t168748
+----
+t168748  CREATE TABLE public.t168748 (
+           x INT8 NOT NULL,
+           y INT8 NOT NULL,
+           CONSTRAINT t168748_pkey PRIMARY KEY (y ASC)
+         );
+
+statement ok
+DROP TABLE t168748
+
+# Same as above but with a composite old PK: covers the shape that originally
+# motivated the "preserve old PK as a unique secondary" behavior, ensuring it
+# is suppressed for composite keys too.
+statement disable-cf-mutator ok
+CREATE TABLE t168748_composite (a INT, b INT, c INT NOT NULL, PRIMARY KEY (a, b)) WITH (schema_locked = false)
+
+statement ok
+ALTER TABLE t168748_composite DROP CONSTRAINT t168748_composite_pkey, ADD PRIMARY KEY (c)
+
+query TT
+SHOW CREATE TABLE t168748_composite
+----
+t168748_composite  CREATE TABLE public.t168748_composite (
+                     a INT8 NOT NULL,
+                     b INT8 NOT NULL,
+                     c INT8 NOT NULL,
+                     CONSTRAINT t168748_composite_pkey PRIMARY KEY (c ASC)
+                   );
+
+statement ok
+DROP TABLE t168748_composite
+
 subtest end

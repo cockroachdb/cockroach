@@ -105,6 +105,10 @@ func alterTableAddPrimaryKey(
 		Sharded:       d.Sharded,
 		Name:          d.Name,
 		StorageParams: d.StorageParams,
+		// If the user did not have a default rowid PK, the only legal way to
+		// reach this point is to have dropped the existing PK constraint by
+		// name in the same statement (the panic above guarantees this).
+		PkConstraintExplicitlyDropped: implicitRowIDPKCol == nil,
 	})
 }
 
