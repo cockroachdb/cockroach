@@ -475,6 +475,118 @@ func TestGetTxnDetailsWriteSet(t *testing.T) {
 	require.Equal(t, "doomed-value", string(pv))
 }
 
+// TestGetTxnDetailsMultiRange verifies that GetTxnDetails correctly collects
+// writes from a transaction that spans multiple ranges.
+func TestGetTxnDetailsMultiRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := tc.ServerConn(0).Exec(
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+	require.NoError(t, err)
+
+	ts := tc.Server(0)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	db := ts.DB()
+
+	// Create two ranges: [scratchKey, midKey) and [midKey, ...).
+	scratchKey := tc.ScratchRange(t)
+	midKey := append(scratchKey.Clone(), 'm')
+	tc.SplitRangeOrFatal(t, midKey)
+
+	// Register a txn feed on the first range to capture the commit event.
+	feedSpan := roachpb.Span{Key: scratchKey, EndKey: midKey}
+	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
+	startTS := db.Clock().Now()
+	stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
+	defer disconnector.Disconnect(nil)
+
+	// Pre-populate a key in the second range to test prev_value across ranges.
+	key2Old := append(midKey.Clone(), 'b')
+	require.NoError(t, db.Put(ctx, key2Old, "range2-old"))
+
+	// Run a 2PC transaction writing one key per range.
+	key1 := append(scratchKey.Clone(), 'a')
+	key2 := key2Old
+	var txnID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnID = txn.ID()
+		if err := txn.Put(ctx, key1, "range1-value"); err != nil {
+			return err
+		}
+		return txn.Put(ctx, key2, "range2-value")
+	})
+	require.NoError(t, err)
+
+	// Wait for the committed event.
+	var committed *kvpb.TxnFeedCommitted
+	testutils.SucceedsSoon(t, func() error {
+		for _, ev := range stream.events() {
+			if ev.Committed != nil && ev.Committed.TxnID == txnID {
+				committed = ev.Committed
+				return nil
+			}
+		}
+		return errors.New("waiting for committed event")
+	})
+	require.NotEmpty(t, committed.WriteSpans, "expected write spans")
+
+	// Send GetTxnDetailsRequest spanning both ranges. The DistSender
+	// should split this across the two ranges and combine the results.
+	resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(),
+		&kvpb.GetTxnDetailsRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    scratchKey,
+				EndKey: scratchKey.PrefixEnd(),
+			},
+			TxnID:           committed.TxnID,
+			CommitTimestamp: committed.CommitTimestamp,
+			WriteSpans:      committed.WriteSpans,
+		})
+	require.Nil(t, pErr)
+	details := resp.(*kvpb.GetTxnDetailsResponse)
+
+	writesByKey := make(map[string]kvpb.TxnDetailKV, len(details.Writes))
+	for _, w := range details.Writes {
+		writesByKey[string(w.KeyValue.Key)] = w
+	}
+
+	require.Len(t, details.Writes, 2, "expected writes from both ranges")
+
+	// Key in first range.
+	w, ok := writesByKey[string(key1)]
+	require.True(t, ok, "missing write for key in first range")
+	v, err := w.KeyValue.Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "range1-value", string(v))
+	require.False(t, w.PrevValue.IsPresent(), "new key should have no prev_value")
+
+	// Key in second range: should have prev_value.
+	w, ok = writesByKey[string(key2)]
+	require.True(t, ok, "missing write for key in second range")
+	v, err = w.KeyValue.Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "range2-value", string(v))
+	require.True(t, w.PrevValue.IsPresent(), "overwritten key should have prev_value")
+	pv, err := w.PrevValue.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, "range2-old", string(pv))
+}
+
 type missingTxnFeedEventsError struct {
 	has1PC, has2PC bool
 }

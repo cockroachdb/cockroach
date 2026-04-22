@@ -29,8 +29,15 @@ func GetTxnDetails(
 	args := cArgs.Args.(*kvpb.GetTxnDetailsRequest)
 	reply := resp.(*kvpb.GetTxnDetailsResponse)
 
-	for i := range args.WriteSpans {
-		if err := collectWrites(ctx, reader, &args.WriteSpans[i], args.CommitTimestamp, reply); err != nil {
+	desc := cArgs.EvalCtx.Desc()
+	rangeBounds := desc.KeySpan().AsRawSpanWithNoLocals()
+
+	for _, ws := range args.WriteSpans {
+		clipped := ws.Intersect(rangeBounds)
+		if !clipped.Valid() {
+			continue
+		}
+		if err := collectWrites(ctx, reader, &clipped, args.CommitTimestamp, reply); err != nil {
 			return result.Result{}, err
 		}
 	}
