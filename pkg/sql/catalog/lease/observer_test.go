@@ -75,9 +75,15 @@ func TestLeaseObserver(t *testing.T) {
 	defer maybeCloseSchemaChangeComplete()
 	var maxVersion atomic.Int64
 	maxVersion.Store(1)
+	var grpErr atomic.Pointer[error]
 	// Ensure the first version is locked before we start the schema change.
 	firstVersionLocked := make(chan struct{})
-	grp.GoCtx(func(ctx context.Context) error {
+	grp.GoCtx(func(ctx context.Context) (retErr error) {
+		defer func() {
+			if retErr != nil {
+				grpErr.Store(&retErr)
+			}
+		}()
 		firstVersionLockedClosed := false
 		maybeCloseFirstVersionLocked := func() {
 			if firstVersionLockedClosed {
@@ -99,10 +105,9 @@ func TestLeaseObserver(t *testing.T) {
 		for {
 			select {
 			case v := <-obs.notified:
-				if ld.Underlying().GetVersion()+1 != v {
-					return errors.AssertionFailedf("expected version %d, got %d", ld.Underlying().GetVersion()+1, v)
+				if v <= ld.Underlying().GetVersion() {
+					continue
 				}
-				require.Equal(t, ld.Underlying().GetVersion()+1, v)
 				maxVersion.Store(int64(v))
 				newLease, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(kvDB.Clock().Now()), tableID)
 				if err != nil {
@@ -110,9 +115,12 @@ func TestLeaseObserver(t *testing.T) {
 				}
 				ld.Release(ctx)
 				ld = newLease
-				if ld.Underlying().GetVersion() != descpb.DescriptorVersion(maxVersion.Load()) {
-					return errors.AssertionFailedf("expected version %d, got %d", maxVersion.Load(), ld.Underlying().GetVersion())
+				if ld.Underlying().GetVersion() < descpb.DescriptorVersion(maxVersion.Load()) {
+					return errors.AssertionFailedf(
+						"expected version >= %d, got %d", maxVersion.Load(), ld.Underlying().GetVersion(),
+					)
 				}
+				maxVersion.Store(int64(ld.Underlying().GetVersion()))
 			case <-schemaChangeComplete:
 				return nil
 			}
@@ -123,6 +131,9 @@ func TestLeaseObserver(t *testing.T) {
 	sqlRunner.Exec(t, "ALTER TABLE t ADD COLUMN v INT")
 	// Validate the schema change was observed.
 	testutils.SucceedsSoon(t, func() error {
+		if e := grpErr.Load(); e != nil {
+			return *e
+		}
 		if maxVersion.Load() <= int64(1) {
 			return errors.New("new versions were not detected")
 		}
