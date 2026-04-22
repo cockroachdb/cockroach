@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "content",
+    srcs = ["content.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vectorizer/content",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ledongthuc_pdf//:pdf",
+    ],
+)
+
+go_test(
+    name = "content_test",
+    srcs = ["content_test.go"],
+    embed = [":content"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
