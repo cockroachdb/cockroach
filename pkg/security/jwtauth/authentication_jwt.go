@@ -317,25 +317,33 @@ func mustParseClaimSegments(claim string) []string {
 // lookupIdentityClaimByJSONPointer resolves a claim value from the token
 // using pre-parsed, decoded RFC 6901 JSON Pointer segments. The token is
 // converted to a generic map and the segments are walked to locate the
-// target value. The returned bool follows map-lookup semantics: false
-// means the pointer could not be resolved.
+// target value. The returned bool and error follow the same tri-state
+// contract as resolveJSONPointer.
 func lookupIdentityClaimByJSONPointer(token jwt.Token, claimSegments []string) (any, bool, error) {
 	allClaims, err := token.AsMap(context.Background())
 	if err != nil {
 		return nil, false, err
 	}
-	value, err := resolveJSONPointer(allClaims, claimSegments)
-	if err != nil {
-		return nil, false, err
-	}
-	return value, true, nil
+	return resolveJSONPointer(allClaims, claimSegments)
 }
 
 // resolveJSONPointer traverses a map according to pre-parsed, decoded
 // RFC 6901 JSON Pointer segments. Both JSON objects (map[string]any)
 // and JSON arrays ([]any) are supported as intermediate or leaf values
 // per RFC 6901 §4.
-func resolveJSONPointer(m map[string]any, segments []string) (any, error) {
+//
+// The return contract is tri-state:
+//   - (value, true, nil): the pointer resolved to a value.
+//   - (nil, false, nil): a map segment referenced a key that is not
+//     present. This is treated as a legitimately absent claim so that
+//     callers can surface a uniform "missing claim" error regardless
+//     of whether a simple claim name or a JSON Pointer was configured.
+//   - (nil, false, err): the pointer is malformed relative to the
+//     document (e.g. an array index that is non-numeric, negative,
+//     has a leading zero, is out of bounds, or an intermediate value
+//     that is neither a JSON object nor a JSON array). These indicate
+//     misconfiguration rather than an absent claim.
+func resolveJSONPointer(m map[string]any, segments []string) (any, bool, error) {
 	var current any = m
 	for _, tok := range segments {
 		switch v := current.(type) {
@@ -343,9 +351,7 @@ func resolveJSONPointer(m map[string]any, segments []string) (any, error) {
 			var ok bool
 			current, ok = v[tok]
 			if !ok {
-				return nil, fmt.Errorf(
-					"JSON pointer: key %q not found", tok,
-				)
+				return nil, false, nil
 			}
 		case []any:
 			// RFC 6901 §4: for arrays the reference token must be an
@@ -353,25 +359,25 @@ func resolveJSONPointer(m map[string]any, segments []string) (any, error) {
 			// and "-" refers to a nonexistent element past the end).
 			idx, err := strconv.Atoi(tok)
 			if err != nil || idx < 0 || tok == "-" || (len(tok) > 1 && tok[0] == '0') {
-				return nil, fmt.Errorf(
+				return nil, false, fmt.Errorf(
 					"JSON pointer: invalid array index %q", tok,
 				)
 			}
 			if idx >= len(v) {
-				return nil, fmt.Errorf(
+				return nil, false, fmt.Errorf(
 					"JSON pointer: array index %d out of bounds (len %d)",
 					idx, len(v),
 				)
 			}
 			current = v[idx]
 		default:
-			return nil, fmt.Errorf(
+			return nil, false, fmt.Errorf(
 				"JSON pointer: value at %q is neither an object nor an array",
 				tok,
 			)
 		}
 	}
-	return current, nil
+	return current, true, nil
 }
 
 // lookupIdentityClaim extracts the identity claim from the token. For simple

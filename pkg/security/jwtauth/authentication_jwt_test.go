@@ -1314,13 +1314,13 @@ func TestLookupIdentityClaimByJSONPointer(t *testing.T) {
 			name:    "pointer_missing_leaf",
 			pointer: "/user/missing",
 			wantOK:  false,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "pointer_missing_intermediate",
 			pointer: "/nonexistent/deep/path",
 			wantOK:  false,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "pointer_non_object_intermediate",
@@ -1455,7 +1455,7 @@ func TestLookupIdentityClaimByJSONPointer(t *testing.T) {
 			name:    "k8s_missing_nested_key",
 			pointer: "/kubernetes.io/serviceaccount/nonexistent",
 			wantOK:  false,
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -1545,9 +1545,31 @@ func TestLookupIdentityClaim(t *testing.T) {
 		auth.mu.conf.claimSegments = mustParseClaimSegments("/user/missing")
 
 		_, ok, err := auth.lookupIdentityClaim(tok)
-		require.Error(t, err)
+		require.NoError(t, err)
 		require.False(t, ok)
-		require.ErrorContains(t, err, "JWT authentication: failed to extract claim")
+	})
+
+	// Regression test: both the simple-claim and JSON Pointer paths must
+	// produce identical (ok=false, err=nil) semantics for a missing claim,
+	// so the caller always sees "JWT authentication: missing claim"
+	// regardless of which form of claim configuration was used.
+	t.Run("missing_claim_equivalent_across_paths", func(t *testing.T) {
+		simpleAuth := &jwtAuthenticator{}
+		simpleAuth.mu.conf.claim = "nonexistent"
+		simpleAuth.mu.conf.claimSegments = mustParseClaimSegments("nonexistent") // nil
+
+		pointerAuth := &jwtAuthenticator{}
+		pointerAuth.mu.conf.claim = "/user/missing"
+		pointerAuth.mu.conf.claimSegments = mustParseClaimSegments("/user/missing")
+
+		sVal, sOK, sErr := simpleAuth.lookupIdentityClaim(tok)
+		pVal, pOK, pErr := pointerAuth.lookupIdentityClaim(tok)
+
+		require.NoError(t, sErr)
+		require.NoError(t, pErr)
+		require.False(t, sOK)
+		require.False(t, pOK)
+		require.Equal(t, sVal, pVal, "return value should match across paths")
 	})
 
 	t.Run("json_pointer_non_traversable", func(t *testing.T) {
