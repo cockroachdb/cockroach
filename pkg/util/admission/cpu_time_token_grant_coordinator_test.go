@@ -39,6 +39,9 @@ func TestObsoleteCode(t *testing.T) {
 	}
 }
 
+// TestCPUTimeTokenACEnableAndDisable verifies that GetKVWorkQueue
+// routes work to the correct queue based on cpuTimeTokenACMode,
+// activeMode, the legacy bool, and the kill switch.
 func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -51,6 +54,12 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 	defer coords.Close()
 	cpuCoords := coords.RegularCPU
+	// The filler goroutine is disabled, so activeMode must be set
+	// manually to simulate what the filler would do on each
+	// resetInterval.
+	setActiveMode := func(mode cpuTimeTokenMode) {
+		cpuCoords.cpuTimeCoord.filler.activeMode.Store(int64(mode))
+	}
 
 	ctx := context.Background()
 	defer func(prevMode cpuTimeTokenMode, prevEnabled bool) {
@@ -61,30 +70,47 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	// Both settings off: slot-based AC.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
+	setActiveMode(offMode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
-	// Mode set to serverless: CPU time token AC.
+	// Mode set to serverless: CPU time token AC with separate queues
+	// per tenant.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
+	setActiveMode(serverlessMode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
-	// Mode set to resource_manager: CPU time token AC.
+	// Mode set to resource_manager: CPU time token AC with a single
+	// queue for all work.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
+	setActiveMode(resourceManagerMode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+
+	// Legacy bool fallback: mode is off but enabled=true enables CTT
+	// AC. activeMode stays serverless (the default when mode is off).
+	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
+	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, true)
+	setActiveMode(serverlessMode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
-	// Legacy bool fallback: mode is off but enabled=true enables CTT AC.
-	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
-	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, true)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	// Defensive case: setting says serverless but activeMode is offMode.
+	// This shouldn't occur in production (the constructor and filler
+	// never store offMode), but GetKVWorkQueue handles it by falling
+	// back to slots.
+	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
+	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
+	setActiveMode(offMode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 
 	// Kill switch overrides all modes.
 	defer func(prev bool) {
@@ -94,6 +120,7 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	// Kill switch overrides serverlessMode.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
+	setActiveMode(serverlessMode)
 	cpuTimeTokenACKillSwitch = true
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
@@ -101,12 +128,14 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 
 	// Kill switch overrides resourceManagerMode.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
+	setActiveMode(resourceManagerMode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 
 	// Kill switch overrides legacy bool fallback.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, true)
+	setActiveMode(serverlessMode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 
