@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,6 +67,12 @@ func (k LockKey) Encode(baseKey roachpb.Key) ([]byte, error) {
 	return keys.MakeFamilyKey(baseKey, 0), nil
 }
 
+// Extract returns the components of the key.
+func (k LockKey) Extract() (databaseID descpb.ID, isSingleValue bool, lockKey int64) {
+	isSingleValue = k.lockType == lockKeyTypeSingle
+	return k.databaseID, isSingleValue, k.lockKey
+}
+
 func (k LockKey) String() string {
 	return fmt.Sprintf("(%d, %d, %d)", k.databaseID, k.lockType, k.lockKey)
 }
@@ -103,12 +110,56 @@ const (
 	LockModeExclusive
 )
 
+func strongerLockMode(a, b LockMode) LockMode {
+	if a == LockModeExclusive || b == LockModeExclusive {
+		return LockModeExclusive
+	}
+	return a
+}
+
+// String returns a stable display name for the lock mode.
+func (m LockMode) String() string {
+	switch m {
+	case LockModeShare:
+		return "SHARED"
+	case LockModeExclusive:
+		return "EXCLUSIVE"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", m)
+	}
+}
+
+// SafeValue is part of the redact.SafeValue interface.
+func (LockMode) SafeValue() {}
+
+type acquisition struct {
+	key  LockKey
+	mode LockMode
+}
+
+// RewindSnapshot captures advisory lock manager state at a txn rewind position.
+type RewindSnapshot struct {
+	markers []int
+	acqLen  int
+}
+
 // Manager is responsible for acquiring and releasing advisory locks, depending
 // on the scope of the lock.
 type Manager struct {
 	descs   *descs.Collection
 	codec   keys.SQLCodec
 	baseKey roachpb.Key
+
+	mu struct {
+		syncutil.Mutex
+		// stack is ordered acquisition attempts in the current SQL txn (suffix
+		// truncated on savepoint rollback / stmt rewind).
+		stack []acquisition
+		// savepointMarkers[i] is len(stack) when SQL savepoint i was created.
+		// Invariant (when driven by conn_executor_savepoints): len(savepointMarkers)
+		// equals the SQL savepoint stack depth.
+		savepointMarkers []int
+	}
 }
 
 // NewManager creates a new advisory lock manager.
@@ -190,6 +241,9 @@ func (m *Manager) AcquireInTxn(
 		}
 		return errors.Wrap(resErr, "failed to acquire advisory lock in transaction")
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.stack = append(m.mu.stack, acquisition{key: key, mode: mode})
 	return nil
 }
 
@@ -201,4 +255,111 @@ func isWaitPolicyLockConflict(err error) bool {
 		return false
 	}
 	return wi.Reason == kvpb.WriteIntentError_REASON_WAIT_POLICY
+}
+
+// HeldLockInfo represents information about a held advisory lock.
+type HeldLockInfo struct {
+	Key  LockKey
+	Mode LockMode
+}
+
+// GetHeldLocks returns a copy of the effective per-key lock modes derived from
+// the acquisition stack (max strength per key). Safe for concurrent callers.
+func (m *Manager) GetHeldLocks() []HeldLockInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Gather all the modes that locks are uniquely held in.
+	sharedLocks := make(map[LockKey]struct{})
+	exclusiveLocks := make(map[LockKey]struct{})
+	for _, acq := range m.mu.stack {
+		switch acq.mode {
+		case LockModeShare:
+			sharedLocks[acq.key] = struct{}{}
+		case LockModeExclusive:
+			exclusiveLocks[acq.key] = struct{}{}
+		}
+	}
+	heldInfo := make([]HeldLockInfo, 0, len(sharedLocks)+len(exclusiveLocks))
+	for key := range sharedLocks {
+		heldInfo = append(heldInfo, HeldLockInfo{key, LockModeShare})
+	}
+	for key := range exclusiveLocks {
+		heldInfo = append(heldInfo, HeldLockInfo{key, LockModeExclusive})
+	}
+	return heldInfo
+}
+
+// OnSQLSavepointCreated records the current acquisition stack depth for a new
+// SQL savepoint. Call after pushing the SQL savepoint.
+func (m *Manager) OnSQLSavepointCreated() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.savepointMarkers = append(m.mu.savepointMarkers, len(m.mu.stack))
+}
+
+// OnSQLRollbackToSavepoint rolls back the acquisition stack to the depth at
+// SQL savepoint index targetIdx. Call only after txn.RollbackToSavepoint succeeds.
+func (m *Manager) OnSQLRollbackToSavepoint(targetIdx int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if targetIdx < 0 || targetIdx >= len(m.mu.savepointMarkers) {
+		return errors.AssertionFailedf("invalid savepoint index %d", targetIdx)
+	}
+	prefix := m.mu.savepointMarkers[targetIdx]
+	if prefix > len(m.mu.stack) {
+		prefix = len(m.mu.stack)
+	}
+	m.mu.stack = m.mu.stack[:prefix]
+	m.mu.savepointMarkers = m.mu.savepointMarkers[:targetIdx+1]
+	return nil
+}
+
+// OnSQLSavepointStackTruncated shrinks the savepoint marker stack after RELEASE
+// SAVEPOINT (acquisitions unchanged).
+func (m *Manager) OnSQLSavepointStackTruncated(newLen int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if newLen < 0 {
+		newLen = 0
+	}
+	if newLen > len(m.mu.savepointMarkers) {
+		return
+	}
+	m.mu.savepointMarkers = m.mu.savepointMarkers[:newLen]
+}
+
+// OnSQLSavepointsCleared clears savepoint markers (e.g. when SQL savepoints are
+// cleared without replacing the manager).
+func (m *Manager) OnSQLSavepointsCleared() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.savepointMarkers = nil
+}
+
+// ExportRewindSnapshot returns a copy of marker stack and acquisition depth for
+// stmt rewind positions.
+func (m *Manager) ExportRewindSnapshot() RewindSnapshot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var snap RewindSnapshot
+	if len(m.mu.savepointMarkers) > 0 {
+		snap.markers = append([]int(nil), m.mu.savepointMarkers...)
+	}
+	snap.acqLen = len(m.mu.stack)
+	return snap
+}
+
+// ApplyRewindSnapshot restores acquisition prefix and marker stack from a prior
+// ExportRewindSnapshot.
+func (m *Manager) ApplyRewindSnapshot(s RewindSnapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s.acqLen < len(m.mu.stack) {
+		m.mu.stack = m.mu.stack[:s.acqLen]
+	}
+	if s.markers != nil {
+		m.mu.savepointMarkers = append([]int(nil), s.markers...)
+	} else {
+		m.mu.savepointMarkers = nil
+	}
 }

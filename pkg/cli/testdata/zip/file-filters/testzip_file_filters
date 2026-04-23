@@ -5,6 +5,7 @@ debug/cluster_settings_history.txt
 debug/crdb_internal.cluster_contention_events.txt
 debug/crdb_internal.cluster_database_privileges.txt
 debug/crdb_internal.cluster_distsql_flows.txt
+debug/crdb_internal.cluster_held_advisory_locks.txt
 debug/crdb_internal.cluster_inspect_errors.txt
 debug/crdb_internal.cluster_locks.txt
 debug/crdb_internal.cluster_queries.txt
@@ -162,6 +163,7 @@ debug/cluster_settings_history.txt
 debug/crdb_internal.cluster_contention_events.txt
 debug/crdb_internal.cluster_database_privileges.txt
 debug/crdb_internal.cluster_distsql_flows.txt
+debug/crdb_internal.cluster_held_advisory_locks.txt
 debug/crdb_internal.cluster_inspect_errors.txt
 debug/crdb_internal.cluster_locks.txt
 debug/crdb_internal.cluster_queries.txt
@@ -325,6 +327,7 @@ debug/cluster_settings_history.txt
 debug/crdb_internal.cluster_contention_events.txt
 debug/crdb_internal.cluster_database_privileges.txt
 debug/crdb_internal.cluster_distsql_flows.txt
+debug/crdb_internal.cluster_held_advisory_locks.txt
 debug/crdb_internal.cluster_inspect_errors.txt
 debug/crdb_internal.cluster_locks.txt
 debug/crdb_internal.cluster_queries.txt
@@ -484,6 +487,7 @@ debug/cluster_settings_history.txt
 debug/crdb_internal.cluster_contention_events.txt
 debug/crdb_internal.cluster_database_privileges.txt
 debug/crdb_internal.cluster_distsql_flows.txt
+debug/crdb_internal.cluster_held_advisory_locks.txt
 debug/crdb_internal.cluster_inspect_errors.txt
 debug/crdb_internal.cluster_locks.txt
 debug/crdb_internal.cluster_queries.txt
@@ -610,6 +614,7 @@ debug/cluster_settings_history.txt
 debug/crdb_internal.cluster_contention_events.txt
 debug/crdb_internal.cluster_database_privileges.txt
 debug/crdb_internal.cluster_distsql_flows.txt
+debug/crdb_internal.cluster_held_advisory_locks.txt
 debug/crdb_internal.cluster_inspect_errors.txt
 debug/crdb_internal.cluster_locks.txt
 debug/crdb_internal.cluster_queries.txt

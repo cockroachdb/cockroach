@@ -142,6 +142,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterQueriesTableID:              crdbInternalClusterQueriesTable,
 		catconstants.CrdbInternalClusterTransactionsTableID:         crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:             crdbInternalClusterSessionsTable,
+		catconstants.CrdbInternalClusterHeldAdvisoryLocksTableID:    crdbInternalClusterHeldAdvisoryLocksTable,
 		catconstants.CrdbInternalClusterSettingsTableID:             crdbInternalClusterSettingsTable,
 		catconstants.CrdbInternalClusterStmtStatsTableID:            crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateFunctionStmtsTableID:         crdbInternalCreateFunctionStmtsTable,
@@ -2572,6 +2573,84 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 		}
 		return populateSessionsTable(ctx, p, addRow, response)
 	},
+}
+
+// crdbInternalClusterHeldAdvisoryLocksTable exposes transaction-scoped advisory
+// locks held on sessions across the cluster (cluster RPC; expensive).
+var crdbInternalClusterHeldAdvisoryLocksTable = virtualSchemaTable{
+	comment: "advisory locks held by open sessions visible to current user (cluster RPC; expensive!)",
+	schema: `
+CREATE TABLE crdb_internal.cluster_held_advisory_locks (
+  session_id STRING NOT NULL,
+	database_id int8 NOT NULL,
+	lock_id int8 NOT NULL,
+	is_single_value BOOL,
+  lock_mode   STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		req, err := p.makeSessionsRequest(ctx, true /* excludeClosed */)
+		if err != nil {
+			return err
+		}
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateClusterHeldAdvisoryLocksTable(ctx, p, addRow, response)
+	},
+}
+
+func populateClusterHeldAdvisoryLocksTable(
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
+) error {
+	canViewOtherUser := false
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+		return err
+	} else if isAdmin {
+		canViewOtherUser = true
+	} else {
+		if hasPriv, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx); err != nil {
+			return err
+		} else if hasPriv {
+			canViewOtherUser = true
+		}
+	}
+	for _, session := range response.Sessions {
+		normalizedUser, err := username.MakeSQLUsernameFromUserInput(session.Username, username.PurposeValidation)
+		if err != nil {
+			return err
+		}
+		if !canViewOtherUser && normalizedUser != p.User() {
+			continue
+		}
+		sessionID := getSessionID(session)
+		for i := range session.HeldAdvisoryLocks {
+			h := &session.HeldAdvisoryLocks[i]
+			lockMode := "UNKNOWN"
+			switch h.LockMode {
+			case serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_EXCLUSIVE:
+				lockMode = "ExclusiveLock"
+			case serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_SHARED:
+				lockMode = "ShareLock"
+			}
+			if err := addRow(
+				sessionID,
+				tree.NewDInt(tree.DInt(h.LockDatabaseId)),
+				tree.NewDInt(tree.DInt(h.LockId)),
+				tree.MakeDBool(tree.DBool(h.IsSingeValue)),
+				tree.NewDString(lockMode),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	for _, rpcErr := range response.Errors {
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
+	}
+	return nil
 }
 
 func populateSessionsTable(
