@@ -32,6 +32,7 @@ go_library(
         "restore_span_covering.go",
         "revision_reader.go",
         "revlog_job.go",
+        "revlog_scope.go",
         "schedule_exec.go",
         "schedule_pts_chaining.go",
         "show.go",

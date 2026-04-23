@@ -6,6 +6,7 @@
 package revlog
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -19,24 +20,39 @@ import (
 //	log/
 //	  data/<tick-end>/<file_id>.sst
 //	  resolved/<tick-end>.pb
+//	  coverage/<effective-from-HLC>
+//	  schema/descs/<changed-at-HLC>/<desc-id>.pb
 //
 // A tick-end is the path-fragment "YYYY-MM-DD/HH-MM.SS" (UTC). The
 // embedded "/" makes the day half a real directory, so a reader can
 // LIST log/resolved/ with delim="/" to enumerate days that have any
 // closed tick, then LIST log/resolved/<day>/ flat to enumerate the
 // ticks within that day.
+//
+// Coverage and schema HLCs are formatted as fixed-width
+// "<19-digit-wall-nanos>_<10-digit-logical>" so a flat lex sort
+// matches HLC ordering (see FormatHLCName / ParseHLCName).
 const (
-	logRoot     = "log"
-	dataDir     = logRoot + "/data"
-	resolvedDir = logRoot + "/resolved"
-	sstExt      = ".sst"
-	markerExt   = ".pb"
+	logRoot        = "log"
+	dataDir        = logRoot + "/data"
+	resolvedDir    = logRoot + "/resolved"
+	coverageDir    = logRoot + "/coverage"
+	schemaDescsDir = logRoot + "/schema/descs"
+	sstExt         = ".sst"
+	markerExt      = ".pb"
 
 	tickEndLayout = "2006-01-02/15-04.05"
 )
 
 // ResolvedRoot is the LIST root for tick discovery.
 const ResolvedRoot = resolvedDir + "/"
+
+// CoverageRoot is the LIST root for coverage-epoch discovery.
+const CoverageRoot = coverageDir + "/"
+
+// SchemaDescsRoot is the LIST root for schema-descriptor-delta
+// discovery.
+const SchemaDescsRoot = schemaDescsDir + "/"
 
 // FormatTickEnd renders a tick-end timestamp as the path-fragment
 // "YYYY-MM-DD/HH-MM.SS" in UTC. Only the wall-clock component
@@ -69,4 +85,46 @@ func DataDirPath(tickEnd hlc.Timestamp) string {
 // DataFilePath is the path of one data file in a tick.
 func DataFilePath(tickEnd hlc.Timestamp, fileID int64) string {
 	return DataDirPath(tickEnd) + strconv.FormatInt(fileID, 10) + sstExt
+}
+
+// FormatHLCName renders an HLC as a fixed-width, lex-sortable
+// "<19-digit-wall-nanos>_<10-digit-logical>" path-name fragment.
+// 19 digits accommodates the int64 max wall-time (9223372036854775807,
+// 19 digits); 10 digits accommodates the int32 max logical
+// (2147483647, 10 digits). The fixed widths mean lex order on
+// formatted names equals HLC order — required for the flat LIST +
+// "largest entry with HLC <= T" lookup pattern used by the coverage
+// and schema descs subtrees.
+func FormatHLCName(ts hlc.Timestamp) string {
+	return fmt.Sprintf("%019d_%010d", ts.WallTime, ts.Logical)
+}
+
+// ParseHLCName is the inverse of FormatHLCName.
+func ParseHLCName(s string) (hlc.Timestamp, error) {
+	var wall int64
+	var logical int32
+	if _, err := fmt.Sscanf(s, "%019d_%010d", &wall, &logical); err != nil {
+		return hlc.Timestamp{}, errors.Wrapf(err, "parsing HLC name %q", s)
+	}
+	return hlc.Timestamp{WallTime: wall, Logical: logical}, nil
+}
+
+// CoveragePath is the path of one coverage epoch's object.
+func CoveragePath(effectiveFrom hlc.Timestamp) string {
+	return CoverageRoot + FormatHLCName(effectiveFrom)
+}
+
+// SchemaDescPath is the path of one descriptor-change object: a
+// (changedAt, descID) tuple. The HLC is the directory level so a
+// flat LIST under SchemaDescsRoot + FormatHLCName(...) enumerates
+// every descriptor changed at that HLC.
+func SchemaDescPath(changedAt hlc.Timestamp, descID int64) string {
+	return SchemaDescsRoot + FormatHLCName(changedAt) + "/" +
+		strconv.FormatInt(descID, 10) + markerExt
+}
+
+// SchemaDescDirPath is the parent directory of one HLC's
+// descriptor changes.
+func SchemaDescDirPath(changedAt hlc.Timestamp) string {
+	return SchemaDescsRoot + FormatHLCName(changedAt) + "/"
 }
