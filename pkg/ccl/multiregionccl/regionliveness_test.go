@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -243,7 +244,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		return cs
 	}
 	defer regionliveness.TestingSetUnavailableAtTTLOverride(testingRegionLivenessTTL)()
-
 	expectedRegions := []string{
 		"us-east",
 		"us-south",
@@ -308,6 +308,12 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 			TenantID: id,
 			Locality: s.Locality(),
 			TestingKnobs: base.TestingKnobs{
+				// Speed up job adoption for this test, since we can potentially
+				// end up with the schema change jobs rolling back below. The goal
+				// of this test is to confirm that we recover after a region failure,
+				// so any delay in adopting a rollback / rollback failure will cause
+				// our SucceedsSoon block to timeout.
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 						if !detectLeaseWait.Load() {
