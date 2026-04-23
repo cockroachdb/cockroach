@@ -3507,6 +3507,11 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		_, pErr = kv.SendWrapped(ctx, store0.TestSender(), truncArgs)
 		require.Nil(t, pErr)
 
+		// Wait for the truncation to be enacted. Under loosely coupled
+		// truncations, the truncation is applied asynchronously after the state
+		// machine engine flushes, so we poll until GetCompactedIndex catches up.
+		waitForTruncationForTesting(t, repl0, index)
+
 		// Complete or initiate the lease transfer attempt to node 2, which must not
 		// succeed because node 2 now needs a snapshot.
 		var transferErr error
