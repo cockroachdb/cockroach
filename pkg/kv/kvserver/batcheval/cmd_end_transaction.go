@@ -619,16 +619,18 @@ func EndTxn(
 			return result.Result{}, err
 		}
 
-		// Emit a CommitTxnOp for the TxnFeed processor. This is attached to
-		// the ReplicatedEvalResult and delivered via Raft to all replicas.
+		// Emit a COMMITTED TxnFeedOp for the TxnFeed processor. This is
+		// attached to the ReplicatedEvalResult and delivered via Raft to all
+		// replicas.
 		if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
-			txnResult.Replicated.CommitTxnOps = &kvserverpb.CommitTxnOps{
-				Ops: []kvserverpb.CommitTxnOp{{
-					TxnID:           reply.Txn.ID,
-					AnchorKey:       reply.Txn.Key,
-					CommitTimestamp: reply.Txn.WriteTimestamp,
-					WriteSpans:      args.LockSpans,
-					ReadSpans:       args.ReadSpans,
+			txnResult.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_COMMITTED,
+					TxnID:          reply.Txn.ID,
+					AnchorKey:      reply.Txn.Key,
+					WriteTimestamp: reply.Txn.WriteTimestamp,
+					WriteSpans:     args.LockSpans,
+					ReadSpans:      args.ReadSpans,
 				}},
 			}
 		}

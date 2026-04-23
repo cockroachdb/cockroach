@@ -23,7 +23,7 @@ import (
 )
 
 // TxnFeedEnabled controls whether TxnFeed is active. It gates the TxnFeed
-// streaming RPC, the emission of CommitTxnOp events through Raft, and the
+// streaming RPC, the emission of TxnFeedOp events through Raft, and the
 // writing of committed transaction records to MVCC history for catch-up scans.
 //
 // This setting lives in kvserverbase (rather than the txnfeed package) so that

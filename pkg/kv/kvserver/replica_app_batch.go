@@ -501,9 +501,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 
-	// Deliver committed transaction events to the TxnFeed processor.
-	if ops := cmd.Cmd.ReplicatedEvalResult.CommitTxnOps; ops != nil {
-		b.r.handleCommitTxnOpsRaftMuLocked(ctx, ops)
+	// Deliver transaction lifecycle events to the TxnFeed processor.
+	if ops := cmd.Cmd.ReplicatedEvalResult.TxnFeedOps; ops != nil {
+		b.r.handleTxnFeedOpsRaftMuLocked(ctx, ops)
 	}
 
 	return nil

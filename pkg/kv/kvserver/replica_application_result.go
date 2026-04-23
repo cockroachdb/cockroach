@@ -63,9 +63,9 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// DoTimelyApplicationToAllReplicas is trivial. It has been consumed in
 	// apply.Batch.Stage.
 	r.DoTimelyApplicationToAllReplicas = false
-	// CommitTxnOps have been delivered to the TxnFeed processor in
+	// TxnFeedOps have been delivered to the TxnFeed processor in
 	// runPostAddTriggersReplicaOnly.
-	r.CommitTxnOps = nil
+	r.TxnFeedOps = nil
 }
 
 // prepareLocalResult is performed after the command has been committed to the

@@ -72,9 +72,9 @@ type Processor struct {
 // txnFeedEvent is an event enqueued for async processing by the scheduler.
 // Only one field is set per event.
 type txnFeedEvent struct {
-	ops  *kvserverpb.CommitTxnOps // committed txn ops from Raft apply
-	ct   hlc.Timestamp            // closed timestamp forward
-	sync *syncEvent               // synchronization barrier
+	ops  *kvserverpb.TxnFeedOps // txn lifecycle ops from Raft apply
+	ct   hlc.Timestamp          // closed timestamp forward
+	sync *syncEvent             // synchronization barrier
 }
 
 // syncEvent is used to synchronize with the scheduler callback. The caller
@@ -124,7 +124,7 @@ func (p *Processor) Start() error {
 // exits, live events are delivered directly via Stream.SendBuffered.
 //
 // The caller must hold raftMu when calling Register to ensure that no
-// CommitTxnOps are missed between the catch-up scan snapshot and the
+// TxnFeedOps are missed between the catch-up scan snapshot and the
 // start of live event delivery.
 //
 // NB: startTS is exclusive; the first possible event will have an MVCC
@@ -220,9 +220,9 @@ func (p *Processor) addRegistration(
 	return reg, nil
 }
 
-// ConsumeCommitTxnOps enqueues committed transaction ops for async processing
+// ConsumeTxnFeedOps enqueues transaction lifecycle ops for async processing
 // by the scheduler. Called under raftMu — O(1).
-func (p *Processor) ConsumeCommitTxnOps(ctx context.Context, ops *kvserverpb.CommitTxnOps) {
+func (p *Processor) ConsumeTxnFeedOps(ctx context.Context, ops *kvserverpb.TxnFeedOps) {
 	if ops == nil {
 		return
 	}
@@ -371,7 +371,7 @@ func (p *Processor) processEvents(ctx context.Context) {
 func (p *Processor) consumeEvent(ctx context.Context, e *txnFeedEvent) {
 	switch {
 	case e.ops != nil:
-		p.consumeCommitTxnOps(ctx, e.ops)
+		p.consumeTxnFeedOps(ctx, e.ops)
 	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.sync != nil:
@@ -379,9 +379,9 @@ func (p *Processor) consumeEvent(ctx context.Context, e *txnFeedEvent) {
 	}
 }
 
-// consumeCommitTxnOps delivers committed transaction ops to all matching
-// registrations. Called on the scheduler callback thread.
-func (p *Processor) consumeCommitTxnOps(ctx context.Context, ops *kvserverpb.CommitTxnOps) {
+// consumeTxnFeedOps processes transaction lifecycle ops. COMMITTED ops are
+// delivered to matching registrations. Called on the scheduler callback thread.
+func (p *Processor) consumeTxnFeedOps(ctx context.Context, ops *kvserverpb.TxnFeedOps) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -391,11 +391,14 @@ func (p *Processor) consumeCommitTxnOps(ctx context.Context, ops *kvserverpb.Com
 
 	for i := range ops.Ops {
 		op := &ops.Ops[i]
+		if op.Type != kvserverpb.TxnFeedOp_COMMITTED {
+			continue
+		}
 		event := &kvpb.TxnFeedEvent{
 			Committed: &kvpb.TxnFeedCommitted{
 				TxnID:           op.TxnID,
 				AnchorKey:       op.AnchorKey,
-				CommitTimestamp: op.CommitTimestamp,
+				CommitTimestamp: op.WriteTimestamp,
 				WriteSpans:      op.WriteSpans,
 				ReadSpans:       op.ReadSpans,
 			},

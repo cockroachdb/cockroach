@@ -97,16 +97,14 @@ func (r *Replica) setTxnFeedProcessor(p *txnfeed.Processor) {
 	r.txnFeedMu.proc = p
 }
 
-// handleCommitTxnOpsRaftMuLocked delivers committed transaction ops from Raft
+// handleTxnFeedOpsRaftMuLocked delivers transaction lifecycle events from Raft
 // apply to the TxnFeed processor. Called under raftMu.
-func (r *Replica) handleCommitTxnOpsRaftMuLocked(
-	ctx context.Context, ops *kvserverpb.CommitTxnOps,
-) {
+func (r *Replica) handleTxnFeedOpsRaftMuLocked(ctx context.Context, ops *kvserverpb.TxnFeedOps) {
 	p := r.getTxnFeedProcessorRaftMuLocked()
 	if p == nil {
 		return
 	}
-	p.ConsumeCommitTxnOps(ctx, ops)
+	p.ConsumeTxnFeedOps(ctx, ops)
 }
 
 // forwardClosedTSForTxnFeedRaftMuLocked forwards the closed timestamp to the

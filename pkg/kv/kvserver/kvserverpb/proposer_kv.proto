@@ -291,13 +291,11 @@ message ReplicatedEvalResult {
   // replicated range-id local key.
   bool do_timely_application_to_all_replicas = 29;
 
-  // CommitTxnOps contains committed transaction metadata emitted during
-  // EndTxn or 1PC evaluation. These are replicated through Raft so that
-  // all replicas can feed TxnFeed processors. Unlike the LogicalOpLog
-  // (which filters out local keys), these ops are explicitly constructed
-  // for transaction record commits. A wrapper message is used so that
-  // the ReplicatedEvalResult struct remains comparable via ==.
-  CommitTxnOps commit_txn_ops = 31;
+  // TxnFeedOps contains transaction lifecycle events emitted during EndTxn,
+  // HeartbeatTxn, or PushTxn evaluation. These are replicated through Raft
+  // so that all replicas can feed TxnFeed processors. A wrapper message is
+  // used so that the ReplicatedEvalResult struct remains comparable via ==.
+  TxnFeedOps txn_feed_ops = 31;
 
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }
@@ -319,39 +317,59 @@ message LogicalOpLog {
   repeated storage.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
 }
 
-// CommitTxnOps is a list of committed transaction operations. A wrapper
-// message is used so that the absence of the field can be distinguished from
-// an empty list, and so the containing struct remains comparable via ==.
-message CommitTxnOps {
-  repeated CommitTxnOp ops = 1 [(gogoproto.nullable) = false];
+// TxnFeedOps is a list of transaction lifecycle events. A wrapper message is
+// used so that the absence of the field can be distinguished from an empty
+// list, and so the containing struct remains comparable via ==.
+message TxnFeedOps {
+  repeated TxnFeedOp ops = 1 [(gogoproto.nullable) = false];
 }
 
-// CommitTxnOp is emitted when a transaction record transitions to COMMITTED.
-// It carries the metadata needed by TxnFeed consumers. It is included in the
-// ReplicatedEvalResult so that all replicas can feed their TxnFeed processors.
-message CommitTxnOp {
+// TxnFeedOp represents a transaction lifecycle event for the TxnFeed
+// processor. It is included in the ReplicatedEvalResult so that all replicas
+// can feed their TxnFeed processors.
+message TxnFeedOp {
+  enum Type {
+    // UNKNOWN is a sentinel value. The processor fatals on unknown types to
+    // prevent silent misprocessing of uninitialized ops.
+    UNKNOWN = 0;
+    // RECORD_WRITTEN indicates a non-finalized transaction record (PENDING or
+    // STAGING) was written or updated. Used by the processor to track
+    // unresolved transactions for resolved timestamp computation.
+    RECORD_WRITTEN = 1;
+    // COMMITTED indicates the transaction committed. Carries write and read
+    // spans for TxnFeed consumers.
+    COMMITTED = 2;
+    // ABORTED indicates the transaction was aborted. Allows the processor to
+    // stop tracking the transaction for resolved timestamp computation.
+    ABORTED = 3;
+  }
+  Type type = 1;
   // The transaction's unique ID.
-  bytes txn_id = 1 [
+  bytes txn_id = 2 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false
   ];
   // The anchor key where this transaction's record is stored.
-  bytes anchor_key = 2 [
+  bytes anchor_key = 3 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"
   ];
-  // The MVCC timestamp at which the transaction committed.
-  util.hlc.Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
-  // The key spans where the transaction acquired locks. These are derived from
-  // EndTxnRequest.LockSpans and may be condensed. They include all spans where
-  // locks were acquired (both intent writes and locking reads like SELECT FOR
-  // UPDATE), so they are a superset of the actual write footprint.
-  repeated roachpb.Span write_spans = 4 [(gogoproto.nullable) = false];
-  // The key spans that the transaction read. Populated from
-  // EndTxnRequest.ReadSpans, which the client-side txnFeedReadTracker
-  // accumulates during transaction execution. Like write_spans, these may be
-  // condensed if the read footprint exceeded a size threshold.
-  repeated roachpb.Span read_spans = 5 [(gogoproto.nullable) = false];
+  // The transaction's WriteTimestamp. For COMMITTED ops this is the commit
+  // timestamp. For RECORD_WRITTEN ops this is used by the processor for
+  // resolved timestamp tracking.
+  util.hlc.Timestamp write_timestamp = 4 [(gogoproto.nullable) = false];
+  // The key spans where the transaction acquired locks. Only populated for
+  // COMMITTED ops. Derived from EndTxnRequest.LockSpans and may be condensed.
+  // They include all spans where locks were acquired (both intent writes and
+  // locking reads like SELECT FOR UPDATE), so they are a superset of the
+  // actual write footprint.
+  repeated roachpb.Span write_spans = 5 [(gogoproto.nullable) = false];
+  // The key spans that the transaction read. Only populated for COMMITTED ops.
+  // Populated from EndTxnRequest.ReadSpans, which the client-side
+  // txnFeedReadTracker accumulates during transaction execution. Like
+  // write_spans, these may be condensed if the read footprint exceeded a size
+  // threshold.
+  repeated roachpb.Span read_spans = 6 [(gogoproto.nullable) = false];
 }
 
 // RaftCommand is the message written to the raft log. It contains some metadata

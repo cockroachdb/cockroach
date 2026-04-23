@@ -657,14 +657,15 @@ func (r *Replica) evaluate1PC(
 					pErr:    kvpb.NewError(errors.Wrap(err, "tombstoning 1PC txn record for txnfeed")),
 				}
 			}
-			// Emit a CommitTxnOp for the TxnFeed processor.
-			res.Replicated.CommitTxnOps = &kvserverpb.CommitTxnOps{
-				Ops: []kvserverpb.CommitTxnOp{{
-					TxnID:           clonedTxn.ID,
-					AnchorKey:       clonedTxn.Key,
-					CommitTimestamp: clonedTxn.WriteTimestamp,
-					WriteSpans:      etArg.LockSpans,
-					ReadSpans:       etArg.ReadSpans,
+			// Emit a COMMITTED TxnFeedOp for the TxnFeed processor.
+			res.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_COMMITTED,
+					TxnID:          clonedTxn.ID,
+					AnchorKey:      clonedTxn.Key,
+					WriteTimestamp: clonedTxn.WriteTimestamp,
+					WriteSpans:     etArg.LockSpans,
+					ReadSpans:      etArg.ReadSpans,
 				}},
 			}
 		}

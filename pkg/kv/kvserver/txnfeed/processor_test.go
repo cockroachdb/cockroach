@@ -91,9 +91,9 @@ func (s *testStream) getError() *kvpb.Error {
 	return s.mu.err
 }
 
-// TestProcessorConsumeCommitTxnOps verifies that committed transaction ops are
+// TestProcessorConsumeTxnFeedOps verifies that committed transaction ops are
 // delivered to matching registrations.
-func TestProcessorConsumeCommitTxnOps(t *testing.T) {
+func TestProcessorConsumeTxnFeedOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -110,16 +110,17 @@ func TestProcessorConsumeCommitTxnOps(t *testing.T) {
 	require.NotNil(t, disc)
 
 	txnID := uuid.MakeV4()
-	ops := &kvserverpb.CommitTxnOps{
-		Ops: []kvserverpb.CommitTxnOp{{
-			TxnID:           txnID,
-			AnchorKey:       roachpb.Key("b"),
-			CommitTimestamp: hlc.Timestamp{WallTime: 10},
-			WriteSpans:      []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+	ops := &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_COMMITTED,
+			TxnID:          txnID,
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			WriteSpans:     []roachpb.Span{{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
 		}},
 	}
 
-	p.ConsumeCommitTxnOps(ctx, ops)
+	p.ConsumeTxnFeedOps(ctx, ops)
 	p.syncEventC()
 
 	events := stream.getAndClearEvents()
@@ -130,9 +131,9 @@ func TestProcessorConsumeCommitTxnOps(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 10}, events[0].Committed.CommitTimestamp)
 }
 
-// TestProcessorConsumeCommitTxnOpsFiltering verifies that events are only
+// TestProcessorConsumeTxnFeedOpsFiltering verifies that events are only
 // delivered to registrations whose span contains the anchor key.
-func TestProcessorConsumeCommitTxnOpsFiltering(t *testing.T) {
+func TestProcessorConsumeTxnFeedOpsFiltering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -158,14 +159,15 @@ func TestProcessorConsumeCommitTxnOpsFiltering(t *testing.T) {
 	require.NotNil(t, disc2)
 
 	// Send an op with anchor key in the first span.
-	ops := &kvserverpb.CommitTxnOps{
-		Ops: []kvserverpb.CommitTxnOp{{
-			TxnID:           uuid.MakeV4(),
-			AnchorKey:       roachpb.Key("b"),
-			CommitTimestamp: hlc.Timestamp{WallTime: 10},
+	ops := &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_COMMITTED,
+			TxnID:          uuid.MakeV4(),
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
 		}},
 	}
-	p.ConsumeCommitTxnOps(ctx, ops)
+	p.ConsumeTxnFeedOps(ctx, ops)
 	p.syncEventC()
 
 	// stream1 should receive the event; stream2 should not.
@@ -281,6 +283,6 @@ func TestProcessorNilOps(t *testing.T) {
 	defer p.Stop()
 
 	// Should not panic or enqueue anything.
-	p.ConsumeCommitTxnOps(ctx, nil)
+	p.ConsumeTxnFeedOps(ctx, nil)
 	p.ForwardClosedTS(ctx, hlc.Timestamp{})
 }

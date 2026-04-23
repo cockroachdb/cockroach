@@ -412,15 +412,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.DoTimelyApplicationToAllReplicas = false
 
-	if q.Replicated.CommitTxnOps != nil {
-		if p.Replicated.CommitTxnOps == nil {
-			p.Replicated.CommitTxnOps = q.Replicated.CommitTxnOps
+	if q.Replicated.TxnFeedOps != nil {
+		if p.Replicated.TxnFeedOps == nil {
+			p.Replicated.TxnFeedOps = q.Replicated.TxnFeedOps
 		} else {
-			p.Replicated.CommitTxnOps.Ops = append(
-				p.Replicated.CommitTxnOps.Ops, q.Replicated.CommitTxnOps.Ops...)
+			p.Replicated.TxnFeedOps.Ops = append(
+				p.Replicated.TxnFeedOps.Ops, q.Replicated.TxnFeedOps.Ops...)
 		}
 	}
-	q.Replicated.CommitTxnOps = nil
+	q.Replicated.TxnFeedOps = nil
 
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
