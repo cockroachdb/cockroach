@@ -9,6 +9,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb:kvpb_proto",
+        "//pkg/roachpb:roachpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -22,6 +23,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
