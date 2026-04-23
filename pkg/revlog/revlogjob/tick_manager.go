@@ -74,6 +74,16 @@ type TickManager struct {
 		// log may begin mid-tick); after each close it equals the
 		// closed tick's TickEnd.
 		lastClosed hlc.Timestamp
+
+		// descFrontier tracks how far the coordinator's descriptor
+		// rangefeed has advanced. Tick close is gated on
+		// min(data frontier, descFrontier) so a late-delivered
+		// descriptor change inside an open tick can't leave the
+		// recorded coverage / schema state wrong for some of the
+		// tick's events. Tests / in-process callers without a
+		// descfeed call DisableDescFrontier to set it to
+		// MaxTimestamp.
+		descFrontier hlc.Timestamp
 	}
 }
 
@@ -105,7 +115,31 @@ func NewTickManager(
 	m.mu.prevFrontier = startHLC
 	m.mu.pending = make(map[hlc.Timestamp]*pendingTick)
 	m.mu.lastClosed = startHLC
+	m.mu.descFrontier = startHLC
 	return m, nil
+}
+
+// DisableDescFrontier removes descriptor-frontier gating from the
+// close loop. Callers that don't wire up a descriptor rangefeed
+// (Driver, in-process tests) need this; without it the close loop
+// can never advance past startHLC.
+func (m *TickManager) DisableDescFrontier() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.descFrontier = hlc.MaxTimestamp
+}
+
+// ForwardDescFrontier advances the descriptor-rangefeed frontier
+// to ts (no-op if ts <= current) and re-runs the close loop in
+// case the advance unblocks any pending closes.
+func (m *TickManager) ForwardDescFrontier(ctx context.Context, ts hlc.Timestamp) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.mu.descFrontier.Less(ts) {
+		return nil
+	}
+	m.mu.descFrontier = ts
+	return m.runCloseLoopLocked(ctx)
 }
 
 // Rehydrate replays a persisted State into the manager: forwards
@@ -116,7 +150,7 @@ func NewTickManager(
 // Spans absent from the persisted frontier are left at startHLC
 // (the natural "no progress yet here" position); spans persisted
 // but no longer in the manager's span set are silently dropped
-// (the resolveSpans seam is the source of truth for current
+// (the Scope seam is the source of truth for current
 // coverage). Stats are not restored — see revlogpb.OpenTicks.
 func (m *TickManager) Rehydrate(state State) error {
 	m.mu.Lock()
@@ -262,20 +296,32 @@ func (m *TickManager) applyFlush(
 			return hlc.Timestamp{}, hlc.Timestamp{}, errors.Wrap(err, "advancing frontier")
 		}
 	}
-	frontier = m.mu.frontier.Frontier()
-	for {
-		next := nextTickEndAfter(m.mu.lastClosed, m.tickWidth)
-		if frontier.Less(next) {
-			break
-		}
-		if err := m.closeTickLocked(ctx, next); err != nil {
-			return hlc.Timestamp{}, hlc.Timestamp{}, err
-		}
-		m.mu.lastClosed = next
+	if err := m.runCloseLoopLocked(ctx); err != nil {
+		return hlc.Timestamp{}, hlc.Timestamp{}, err
 	}
+	frontier = m.mu.frontier.Frontier()
 	prevFrontier = m.mu.prevFrontier
 	m.mu.prevFrontier = frontier
 	return frontier, prevFrontier, nil
+}
+
+// runCloseLoopLocked closes every tick whose end is at or below
+// gate = min(data frontier, descFrontier). mu must be held.
+func (m *TickManager) runCloseLoopLocked(ctx context.Context) error {
+	gate := m.mu.frontier.Frontier()
+	if m.mu.descFrontier.Less(gate) {
+		gate = m.mu.descFrontier
+	}
+	for {
+		next := nextTickEndAfter(m.mu.lastClosed, m.tickWidth)
+		if gate.Less(next) {
+			return nil
+		}
+		if err := m.closeTickLocked(ctx, next); err != nil {
+			return err
+		}
+		m.mu.lastClosed = next
+	}
 }
 
 // closeTickLocked writes the manifest for tickEnd using whatever
