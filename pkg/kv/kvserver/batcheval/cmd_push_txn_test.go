@@ -9,12 +9,17 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -96,4 +101,82 @@ func TestPushTxnAmbiguousAbort(t *testing.T) {
 			AmbiguousAbort: !canCreateTxnRecord,
 		}, resp)
 	})
+}
+
+// TestPushTxnAbortTxnFeedOps verifies that PushTxn emits an ABORTED
+// TxnFeedOp when aborting a transaction that has an existing on-disk record.
+func TestPushTxnAbortTxnFeedOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
+	now := clock.Now()
+
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	st := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &st.SV, true)
+
+	key := roachpb.Key("foo")
+	txnID := uuid.MakeV4()
+
+	// Write a PENDING transaction record to the engine so that PushTxn
+	// finds it and ok == true.
+	txnRecord := roachpb.TransactionRecord{
+		TxnMeta: enginepb.TxnMeta{
+			ID:             txnID,
+			Key:            key,
+			WriteTimestamp: now,
+			MinTimestamp:   now,
+		},
+		Status:        roachpb.PENDING,
+		LastHeartbeat: now,
+	}
+	txnRecordKey := keys.TransactionKey(key, txnID)
+	require.NoError(t, storage.MVCCPutProto(
+		ctx, engine, txnRecordKey, clock.Now(), &txnRecord,
+		storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory},
+	))
+
+	evalCtx := (&batcheval.MockEvalCtx{
+		Clock:           clock,
+		ClusterSettings: st,
+		CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
+			return true, 0
+		},
+	}).EvalContext()
+
+	resp := kvpb.PushTxnResponse{}
+	res, err := batcheval.PushTxn(ctx, engine, batcheval.CommandArgs{
+		EvalCtx: evalCtx,
+		Header: kvpb.Header{
+			Timestamp: clock.Now(),
+		},
+		Args: &kvpb.PushTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
+			PusherTxn: roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Priority: enginepb.MaxTxnPriority,
+				},
+			},
+			PusheeTxn: enginepb.TxnMeta{
+				ID:             txnID,
+				Key:            key,
+				WriteTimestamp: now,
+				MinTimestamp:   now,
+			},
+			PushType: kvpb.PUSH_ABORT,
+		},
+	}, &resp)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.ABORTED, resp.PusheeTxn.Status)
+
+	require.NotNil(t, res.Replicated.TxnFeedOps)
+	require.Len(t, res.Replicated.TxnFeedOps.Ops, 1)
+	op := res.Replicated.TxnFeedOps.Ops[0]
+	require.Equal(t, kvserverpb.TxnFeedOp_ABORTED, op.Type)
+	require.Equal(t, txnID, op.TxnID)
+	require.Equal(t, key, op.AnchorKey)
 }

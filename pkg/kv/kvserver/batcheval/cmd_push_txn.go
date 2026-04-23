@@ -14,8 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -344,7 +346,23 @@ func PushTxn(
 		return result.Result{}, errors.AssertionFailedf("unexpected push type: %v", pushType)
 	}
 
-	result := result.Result{}
-	result.Local.UpdatedTxns = []*roachpb.Transaction{&reply.PusheeTxn}
-	return result, nil
+	res := result.Result{}
+	res.Local.UpdatedTxns = []*roachpb.Transaction{&reply.PusheeTxn}
+	// Emit an ABORTED TxnFeedOp when the pushee's on-disk record was
+	// aborted. We only emit when the record existed (ok == true) because
+	// the processor never saw a RECORD_WRITTEN for a record that was
+	// never persisted.
+	if pushType == kvpb.PUSH_ABORT && ok {
+		if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			res.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_ABORTED,
+					TxnID:          reply.PusheeTxn.ID,
+					AnchorKey:      reply.PusheeTxn.Key,
+					WriteTimestamp: reply.PusheeTxn.WriteTimestamp,
+				}},
+			}
+		}
+	}
+	return res, nil
 }

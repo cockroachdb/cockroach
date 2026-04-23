@@ -11,7 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,7 +56,7 @@ func TestRecoverTxn(t *testing.T) {
 		// Issue a RecoverTxn request.
 		var resp kvpb.RecoverTxnResponse
 		if _, err := RecoverTxn(ctx, db, CommandArgs{
-			EvalCtx: (&MockEvalCtx{Clock: clock}).EvalContext(),
+			EvalCtx: (&MockEvalCtx{Clock: clock, ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext(),
 			Args: &kvpb.RecoverTxnRequest{
 				RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 				Txn:                 txn.TxnMeta,
@@ -231,7 +234,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			// Issue a RecoverTxn request.
 			var resp kvpb.RecoverTxnResponse
 			_, err := RecoverTxn(ctx, db, CommandArgs{
-				EvalCtx: (&MockEvalCtx{Clock: clock}).EvalContext(),
+				EvalCtx: (&MockEvalCtx{Clock: clock, ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext(),
 				Args: &kvpb.RecoverTxnRequest{
 					RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 					Txn:                 txn.TxnMeta,
@@ -267,4 +270,77 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRecoverTxnTxnFeedOps verifies that RecoverTxn emits a COMMITTED or
+// ABORTED TxnFeedOp when recovering a STAGING transaction, so the TxnFeed
+// processor can remove the transaction from its unresolved queue.
+func TestRecoverTxnTxnFeedOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &st.SV, true)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
+
+	k, k2 := roachpb.Key("a"), roachpb.Key("b")
+	ts := hlc.Timestamp{WallTime: 1}
+	txn := roachpb.MakeTransaction(
+		"test", k, 0, 0, ts, 0, 1, 0, false, /* omitInRangefeeds */
+	)
+	txn.Status = roachpb.STAGING
+	txn.LockSpans = []roachpb.Span{{Key: k}}
+	txn.ReadSpans = []roachpb.Span{{Key: k, EndKey: k2}}
+	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
+
+	testutils.RunTrueAndFalse(t, "implicitly committed",
+		func(t *testing.T, implicitlyCommitted bool) {
+			db := storage.NewDefaultInMemForTesting()
+			defer db.Close()
+
+			txnKey := keys.TransactionKey(txn.Key, txn.ID)
+			txnRecord := txn.AsRecord()
+			require.NoError(t, storage.MVCCPutProto(
+				ctx, db, txnKey, ts.Prev(), &txnRecord, storage.MVCCWriteOptions{},
+			))
+
+			var resp kvpb.RecoverTxnResponse
+			res, err := RecoverTxn(ctx, db, CommandArgs{
+				EvalCtx: (&MockEvalCtx{
+					Clock:           clock,
+					ClusterSettings: st,
+				}).EvalContext(),
+				Args: &kvpb.RecoverTxnRequest{
+					RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
+					Txn:                 txn.TxnMeta,
+					ImplicitlyCommitted: implicitlyCommitted,
+				},
+				Header: kvpb.Header{
+					Timestamp: ts,
+				},
+			}, &resp)
+			require.NoError(t, err)
+
+			require.NotNil(t, res.Replicated.TxnFeedOps)
+			require.Len(t, res.Replicated.TxnFeedOps.Ops, 1)
+			op := res.Replicated.TxnFeedOps.Ops[0]
+			require.Equal(t, txn.ID, op.TxnID)
+			require.Equal(t, roachpb.Key(txn.Key), op.AnchorKey)
+			require.Equal(t, txn.WriteTimestamp, op.WriteTimestamp)
+
+			if implicitlyCommitted {
+				require.Equal(t, kvserverpb.TxnFeedOp_COMMITTED, op.Type)
+				// WriteSpans should contain the original LockSpans plus the
+				// merged InFlightWrites.
+				require.Equal(t,
+					[]roachpb.Span{{Key: k}, {Key: k2}}, op.WriteSpans)
+				require.Equal(t,
+					[]roachpb.Span{{Key: k, EndKey: k2}}, op.ReadSpans)
+			} else {
+				require.Equal(t, kvserverpb.TxnFeedOp_ABORTED, op.Type)
+				require.Empty(t, op.WriteSpans)
+				require.Empty(t, op.ReadSpans)
+			}
+		})
 }

@@ -487,7 +487,18 @@ func EndTxn(
 			if err := updateStagingTxn(ctx, readWriter, ms, key, now, args, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
-			return result.Result{}, nil
+			var res result.Result
+			if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+				res.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+					Ops: []kvserverpb.TxnFeedOp{{
+						Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+						TxnID:          reply.Txn.ID,
+						AnchorKey:      reply.Txn.Key,
+						WriteTimestamp: reply.Txn.WriteTimestamp,
+					}},
+				}
+			}
+			return res, nil
 		}
 
 		// Else, the transaction can be explicitly committed.
@@ -631,6 +642,20 @@ func EndTxn(
 					WriteTimestamp: reply.Txn.WriteTimestamp,
 					WriteSpans:     args.LockSpans,
 					ReadSpans:      args.ReadSpans,
+				}},
+			}
+		}
+	} else if reply.Txn.Status == roachpb.ABORTED && recordAlreadyExisted {
+		// Only emit ABORTED when the record previously existed on disk,
+		// because the processor never saw a RECORD_WRITTEN for a record
+		// that was never persisted.
+		if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			txnResult.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_ABORTED,
+					TxnID:          reply.Txn.ID,
+					AnchorKey:      reply.Txn.Key,
+					WriteTimestamp: reply.Txn.WriteTimestamp,
 				}},
 			}
 		}

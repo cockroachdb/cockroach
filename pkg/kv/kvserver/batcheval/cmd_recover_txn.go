@@ -12,8 +12,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -230,5 +232,33 @@ func RecoverTxn(
 	// request.
 	result := result.Result{}
 	result.Local.UpdatedTxns = []*roachpb.Transaction{&reply.RecoveredTxn}
+	// Emit a TxnFeedOp so the TxnFeed processor can remove the recovered
+	// transaction from its unresolved queue. The STAGING record was tracked
+	// via a RECORD_WRITTEN op from EndTxn; without a corresponding
+	// COMMITTED or ABORTED op, the resolved timestamp would be permanently
+	// held back.
+	if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+		if args.ImplicitlyCommitted {
+			result.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_COMMITTED,
+					TxnID:          reply.RecoveredTxn.ID,
+					AnchorKey:      reply.RecoveredTxn.Key,
+					WriteTimestamp: reply.RecoveredTxn.WriteTimestamp,
+					WriteSpans:     reply.RecoveredTxn.LockSpans,
+					ReadSpans:      reply.RecoveredTxn.ReadSpans,
+				}},
+			}
+		} else {
+			result.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_ABORTED,
+					TxnID:          reply.RecoveredTxn.ID,
+					AnchorKey:      reply.RecoveredTxn.Key,
+					WriteTimestamp: reply.RecoveredTxn.WriteTimestamp,
+				}},
+			}
+		}
+	}
 	return result, nil
 }

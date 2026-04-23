@@ -9,11 +9,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -139,4 +143,167 @@ func TestEndTxnWriteTooOldBelowClosedTS(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEndTxnTxnFeedOps verifies that EndTxn emits the correct TxnFeedOps
+// for parallel commits (STAGING → RECORD_WRITTEN) and explicit aborts
+// (ABORTED → ABORTED op).
+func TestEndTxnTxnFeedOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
+	now := clock.Now()
+
+	startKey := roachpb.Key("0000")
+	endKey := roachpb.Key("9999")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(startKey),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	as := abortspan.New(desc.RangeID)
+	txnKey := roachpb.Key("a")
+
+	st := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &st.SV, true)
+
+	t.Run("staging emits RECORD_WRITTEN", func(t *testing.T) {
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		txn := roachpb.MakeTransaction(
+			"test", txnKey, 0, 0, now, 0, 1, 0, false, /* omitInRangefeeds */
+		)
+
+		req := kvpb.EndTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: txnKey},
+			Commit:        true,
+			LockSpans:     []roachpb.Span{{Key: roachpb.Key("b")}},
+			InFlightWrites: []roachpb.SequencedWrite{
+				{Key: roachpb.Key("b"), Sequence: 1},
+			},
+		}
+
+		var resp kvpb.EndTxnResponse
+		res, err := EndTxn(ctx, batch, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				Desc:            &desc,
+				Clock:           clock,
+				AbortSpan:       as,
+				ClusterSettings: st,
+				CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
+					return true, 0
+				},
+			}).EvalContext(),
+			Args: &req,
+			Header: kvpb.Header{
+				Timestamp: now,
+				Txn:       txn.Clone(),
+			},
+		}, &resp)
+		require.NoError(t, err)
+		require.Equal(t, roachpb.STAGING, resp.Txn.Status)
+
+		require.NotNil(t, res.Replicated.TxnFeedOps)
+		require.Len(t, res.Replicated.TxnFeedOps.Ops, 1)
+		op := res.Replicated.TxnFeedOps.Ops[0]
+		require.Equal(t, kvserverpb.TxnFeedOp_RECORD_WRITTEN, op.Type)
+		require.Equal(t, resp.Txn.ID, op.TxnID)
+		require.Equal(t, txnKey, op.AnchorKey)
+		require.Equal(t, resp.Txn.WriteTimestamp, op.WriteTimestamp)
+	})
+
+	t.Run("abort with existing record emits ABORTED", func(t *testing.T) {
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+
+		txn := roachpb.MakeTransaction(
+			"test", txnKey, 0, 0, now, 0, 1, 0, false, /* omitInRangefeeds */
+		)
+
+		// Pre-write a PENDING transaction record so recordAlreadyExisted is true.
+		txnRecord := txn.AsRecord()
+		txnRecordKey := keys.TransactionKey(txnKey, txn.ID)
+		require.NoError(t, storage.MVCCPutProto(
+			ctx, db, txnRecordKey, clock.Now(), &txnRecord,
+			storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory},
+		))
+
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		req := kvpb.EndTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: txnKey},
+			Commit:        false,
+			LockSpans:     []roachpb.Span{{Key: roachpb.Key("b")}},
+		}
+
+		var resp kvpb.EndTxnResponse
+		res, err := EndTxn(ctx, batch, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				Desc:            &desc,
+				Clock:           clock,
+				AbortSpan:       as,
+				ClusterSettings: st,
+				CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
+					return true, 0
+				},
+			}).EvalContext(),
+			Args: &req,
+			Header: kvpb.Header{
+				Timestamp: now,
+				Txn:       txn.Clone(),
+			},
+		}, &resp)
+		require.NoError(t, err)
+		require.Equal(t, roachpb.ABORTED, resp.Txn.Status)
+
+		require.NotNil(t, res.Replicated.TxnFeedOps)
+		require.Len(t, res.Replicated.TxnFeedOps.Ops, 1)
+		op := res.Replicated.TxnFeedOps.Ops[0]
+		require.Equal(t, kvserverpb.TxnFeedOp_ABORTED, op.Type)
+		require.Equal(t, resp.Txn.ID, op.TxnID)
+	})
+
+	t.Run("abort without existing record does not emit", func(t *testing.T) {
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		txn := roachpb.MakeTransaction(
+			"test", txnKey, 0, 0, now, 0, 1, 0, false, /* omitInRangefeeds */
+		)
+
+		req := kvpb.EndTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: txnKey},
+			Commit:        false,
+			LockSpans:     []roachpb.Span{{Key: roachpb.Key("b")}},
+		}
+
+		var resp kvpb.EndTxnResponse
+		res, err := EndTxn(ctx, batch, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				Desc:            &desc,
+				Clock:           clock,
+				AbortSpan:       as,
+				ClusterSettings: st,
+				CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
+					return true, 0
+				},
+			}).EvalContext(),
+			Args: &req,
+			Header: kvpb.Header{
+				Timestamp: now,
+				Txn:       txn.Clone(),
+			},
+		}, &resp)
+		require.NoError(t, err)
+		require.Equal(t, roachpb.ABORTED, resp.Txn.Status)
+		require.Nil(t, res.Replicated.TxnFeedOps)
+	})
 }

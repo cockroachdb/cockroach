@@ -292,7 +292,7 @@ message ReplicatedEvalResult {
   bool do_timely_application_to_all_replicas = 29;
 
   // TxnFeedOps contains transaction lifecycle events emitted during EndTxn,
-  // HeartbeatTxn, or PushTxn evaluation. These are replicated through Raft
+  // HeartbeatTxn, PushTxn, or RecoverTxn evaluation. These are replicated through Raft
   // so that all replicas can feed TxnFeed processors. A wrapper message is
   // used so that the ReplicatedEvalResult struct remains comparable via ==.
   TxnFeedOps txn_feed_ops = 31;
@@ -369,6 +369,11 @@ message TxnFeedOp {
   // txnFeedReadTracker accumulates during transaction execution. Like
   // write_spans, these may be condensed if the read footprint exceeded a size
   // threshold.
+  //
+  // It is a critical bug if a COMMITTED op is emitted without read_spans,
+  // as TxnFeed consumers rely on them for correctness (e.g. dependency
+  // tracking). All code paths that emit COMMITTED ops must ensure
+  // read_spans are populated from the transaction record or request.
   repeated roachpb.Span read_spans = 6 [(gogoproto.nullable) = false];
 }
 

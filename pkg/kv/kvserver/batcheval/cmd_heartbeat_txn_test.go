@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -100,4 +102,55 @@ func TestHeartbeatTxnWriteTimestampBumpedAboveClosedTS(t *testing.T) {
 				"unexpected WriteTimestamp on heartbeat response")
 		})
 	}
+}
+
+// TestHeartbeatTxnTxnFeedOps verifies that HeartbeatTxn emits a
+// RECORD_WRITTEN TxnFeedOp for non-finalized transactions when
+// txnfeed is enabled.
+func TestHeartbeatTxnTxnFeedOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Now()))
+	now := clock.Now()
+
+	key := roachpb.Key("a")
+	st := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &st.SV, true)
+
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	headerTxn := roachpb.MakeTransaction(
+		"test", key, 0, 0, now, 0, 1, 0, false, /* omitInRangefeeds */
+	)
+
+	evalCtx := (&MockEvalCtx{
+		Clock:           clock,
+		ClusterSettings: st,
+	}).EvalContext()
+
+	resp := kvpb.HeartbeatTxnResponse{}
+	res, err := HeartbeatTxn(ctx, engine, CommandArgs{
+		EvalCtx: evalCtx,
+		Header: kvpb.Header{
+			Timestamp: now,
+			Txn:       &headerTxn,
+		},
+		Args: &kvpb.HeartbeatTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
+			Now:           now,
+		},
+	}, &resp)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Txn)
+
+	require.NotNil(t, res.Replicated.TxnFeedOps)
+	require.Len(t, res.Replicated.TxnFeedOps.Ops, 1)
+	op := res.Replicated.TxnFeedOps.Ops[0]
+	require.Equal(t, kvserverpb.TxnFeedOp_RECORD_WRITTEN, op.Type)
+	require.Equal(t, resp.Txn.ID, op.TxnID)
+	require.Equal(t, key, op.AnchorKey)
+	require.Equal(t, resp.Txn.WriteTimestamp, op.WriteTimestamp)
 }

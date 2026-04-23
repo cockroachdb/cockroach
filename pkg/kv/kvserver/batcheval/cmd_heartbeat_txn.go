@@ -13,8 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -108,5 +110,23 @@ func HeartbeatTxn(
 	}
 
 	reply.Txn = &txn
-	return result.Result{}, nil
+	var res result.Result
+	if !txn.Status.IsFinalized() {
+		// Emit a RECORD_WRITTEN op so the TxnFeed processor can track this
+		// unresolved transaction for resolved timestamp computation. Heartbeats
+		// create or update the transaction record for non-1PC transactions,
+		// so this is the primary path for records that don't go through the
+		// parallel commit (STAGING) path in EndTxn.
+		if txnfeed.Enabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+			res.Replicated.TxnFeedOps = &kvserverpb.TxnFeedOps{
+				Ops: []kvserverpb.TxnFeedOp{{
+					Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+					TxnID:          txn.ID,
+					AnchorKey:      txn.Key,
+					WriteTimestamp: txn.WriteTimestamp,
+				}},
+			}
+		}
+	}
+	return res, nil
 }
