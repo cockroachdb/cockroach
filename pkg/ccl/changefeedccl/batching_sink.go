@@ -29,7 +29,7 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeBatchBuffer(topic string) BatchBuffer
+	MakeBatchBuffer() BatchBuffer
 	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
 	// an iterator over the set of topics in case the client chooses to emit
 	// the payload to multiple topics.
@@ -46,7 +46,7 @@ type SinkClient interface {
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
 // to the sink.
 type BatchBuffer interface {
-	Append(ctx context.Context, key []byte, value []byte, attributes attributes)
+	Append(ctx context.Context, topic string, key []byte, value []byte, attributes attributes)
 	ShouldFlush() bool
 
 	// Once all data has been Append'ed, Close can be called to return a finalized
@@ -305,12 +305,12 @@ func hashToInt(h hash.Hash32, buf []byte) int {
 }
 
 // Append adds the contents of a kvEvent to the batch, merging its alloc pool.
-func (sb *sinkBatch) Append(ctx context.Context, e *rowEvent) {
+func (sb *sinkBatch) Append(ctx context.Context, topic string, e *rowEvent) {
 	if sb.isEmpty() {
 		sb.bufferTime = crtime.NowMono()
 	}
 
-	sb.buffer.Append(ctx, e.key, e.val, attributes{
+	sb.buffer.Append(ctx, topic, e.key, e.val, attributes{
 		tableName: e.topicDescriptor.GetTableName(),
 		headers:   e.headers,
 		mvcc:      e.mvcc,
@@ -333,9 +333,9 @@ func (s *batchingSink) handleError(err error) {
 	}
 }
 
-func (s *batchingSink) newBatchBuffer(topic string) *sinkBatch {
+func (s *batchingSink) newBatchBuffer() *sinkBatch {
 	batch := newSinkBatch()
-	batch.buffer = s.client.MakeBatchBuffer(topic)
+	batch.buffer = s.client.MakeBatchBuffer()
 	batch.hasher = s.hasher
 	return batch
 }
@@ -402,7 +402,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		if !ok || batchBuffer.isEmpty() {
 			return nil
 		}
-		topicBatches[topic] = s.newBatchBuffer(topic)
+		topicBatches[topic] = s.newBatchBuffer()
 
 		if err := batchBuffer.FinalizePayload(); err != nil {
 			return err
@@ -507,11 +507,11 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				batchBuffer, ok := topicBatches[topic]
 				if !ok {
-					batchBuffer = s.newBatchBuffer(topic)
+					batchBuffer = s.newBatchBuffer()
 					topicBatches[topic] = batchBuffer
 				}
 
-				batchBuffer.Append(ctx, r)
+				batchBuffer.Append(ctx, topic, r)
 				if s.knobs.OnAppend != nil {
 					s.knobs.OnAppend(r)
 				}

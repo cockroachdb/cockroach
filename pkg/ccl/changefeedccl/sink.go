@@ -200,6 +200,17 @@ var KafkaV2Enabled = settings.RegisterBoolSetting(
 	settings.WithName("changefeed.new_kafka_sink.enabled"),
 )
 
+// NoLingerBatchingSinkEnabled determines whether the no-linger pull-based
+// batching sink is used instead of the timer-driven batchingSink.
+var NoLingerBatchingSinkEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.no_linger_batching.enabled",
+	"if enabled, sinks use a pull-based batching model where idle workers "+
+		"pull batches immediately instead of waiting for a flush timer, "+
+		"eliminating the need to tune min_flush_frequency",
+	true,
+)
+
 func getSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,

@@ -1892,9 +1892,9 @@ func (s *fakeKafkaSink) Topics() []string {
 }
 
 // fakeKafkaSinkV2 is a sink that arranges for fake kafka client and producer
-// to be used.
+// to be used. It wraps either a *batchingSink or *noLingerSink.
 type fakeKafkaSinkV2 struct {
-	*batchingSink
+	Sink
 	// For compatibility with all the other fakeKafka test stuff, we convert kgo Records to sarama messages.
 	// TODO(#126991): clean this up when we remove the v1 sink.
 	feedCh      chan *sarama.ProducerMessage
@@ -1907,12 +1907,32 @@ type fakeKafkaSinkV2 struct {
 var _ Sink = (*fakeKafkaSinkV2)(nil)
 var _ SinkWithTopics = (*fakeKafkaSinkV2)(nil)
 
+// Topics implements SinkWithTopics.
+func (s *fakeKafkaSinkV2) Topics() []string {
+	if sink, ok := s.Sink.(SinkWithTopics); ok {
+		return sink.Topics()
+	}
+	return nil
+}
+
+// sinkClient extracts the SinkClient from a *batchingSink or
+// *noLingerSink. Returns nil if the sink type is not recognized.
+func sinkClient(s Sink) SinkClient {
+	switch s := s.(type) {
+	case *batchingSink:
+		return s.client
+	case *noLingerSink:
+		return s.client
+	default:
+		return nil
+	}
+}
+
 // Dial implements Sink interface. We use it to initialize the fake kafka sink,
 // since the test framework doesn't use constructors. We set up our mocks to
 // feed records into the channel that the wrapper can read from.
 func (s *fakeKafkaSinkV2) Dial() error {
-	bs := s.batchingSink
-	kc := bs.client.(*kafkaSinkClientV2)
+	kc := sinkClient(s.Sink).(*kafkaSinkClientV2)
 	s.ctrl = gomock.NewController(s.t)
 	s.client = mocks.NewMockKafkaClientV2(s.ctrl)
 	s.client.EXPECT().ProduceSync(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults {
@@ -1965,7 +1985,7 @@ func (s *fakeKafkaSinkV2) Dial() error {
 	}).AnyTimes()
 	kc.adminClient = s.adminClient
 
-	return bs.Dial()
+	return s.Sink.Dial()
 }
 
 type kafkaFeedFactory struct {
@@ -2072,9 +2092,9 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		// TODO(#126991): clean this up when we remove the v1 sink.
 		if KafkaV2Enabled.Get(&k.s.ClusterSettings().SV) {
 			return &fakeKafkaSinkV2{
-				batchingSink: s.(*batchingSink),
-				feedCh:       feedCh,
-				t:            k.t,
+				Sink:   s,
+				feedCh: feedCh,
+				t:      k.t,
 			}
 		}
 
@@ -2354,6 +2374,8 @@ type webhookFeed struct {
 	ss           *sinkSynchronizer
 	envelopeType changefeedbase.EnvelopeType
 	mockSink     *cdctest.MockWebhookSink
+	// pending holds extra values from a multi-element batch payload.
+	pending [][]byte
 }
 
 var _ cdctest.TestFeed = (*webhookFeed)(nil)
@@ -2411,9 +2433,9 @@ type webhookSinkTestfeedPayload struct {
 	Length  int                 `json:"length"`
 }
 
-// extractValueFromJSONMessage extracts the value of the first element of
-// the payload array from an webhook sink JSON message.
-func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
+// extractValuesFromJSONMessage extracts all payload elements from a
+// webhook sink JSON message. A batch may contain multiple elements.
+func extractValuesFromJSONMessage(message []byte) (vals [][]byte, err error) {
 	defer func() {
 		if err != nil {
 			err = errors.Wrapf(err, "message was '%s'", message)
@@ -2423,16 +2445,18 @@ func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
 	if err := gojson.Unmarshal(message, &parsed); err != nil {
 		return nil, err
 	}
-	keyParsed := parsed.Payload
-	if len(keyParsed) <= 0 {
+	if len(parsed.Payload) <= 0 {
 		return nil, fmt.Errorf("payload value in json message contains no elements")
 	}
 
-	var value []byte
-	if value, err = reformatJSON(keyParsed[0]); err != nil {
-		return nil, err
+	for _, raw := range parsed.Payload {
+		value, err := reformatJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		vals = append(vals, value)
 	}
-	return value, nil
+	return vals, nil
 }
 
 // Ignore these headers from the webhook sink, since they're always included and not interesting.
@@ -2443,9 +2467,39 @@ var ignoreHeaders = []string{
 	"Accept-Encoding",
 }
 
+// makeMessageFromValue constructs a TestFeedMessage from a single
+// extracted payload value, applying key/topic extraction and dedup.
+func (f *webhookFeed) makeMessageFromValue(wrappedValue []byte) (*cdctest.TestFeedMessage, error) {
+	m := &cdctest.TestFeedMessage{}
+	var err error
+	if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
+		return nil, err
+	}
+	if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
+		return nil, err
+	}
+	if isNew := f.markSeen(m); !isNew {
+		return nil, nil // duplicate, skip
+	}
+	return m, nil
+}
+
 // Next implements TestFeed
 func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
+		// Drain any buffered values from a previous multi-element batch.
+		for len(f.pending) > 0 {
+			val := f.pending[0]
+			f.pending = f.pending[1:]
+			m, err := f.makeMessageFromValue(val)
+			if err != nil {
+				return nil, err
+			}
+			if m != nil {
+				return m, nil
+			}
+		}
+
 		msgWithHeaders := f.mockSink.PopWithHeaders()
 		msg := msgWithHeaders.Row
 		if msg != "" {
@@ -2470,11 +2524,15 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 					if resolved {
 						m.Resolved = []byte(msg)
 					} else {
-						wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+						vals, err := extractValuesFromJSONMessage([]byte(msg))
 						if err != nil {
 							return nil, err
 						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, wrappedValue); err != nil {
+						// Buffer extra elements for subsequent Next() calls.
+						if len(vals) > 1 {
+							f.pending = append(f.pending, vals[1:]...)
+						}
+						if m.Key, m.Value, err = extractKeyFromJSONValue(f.envelopeType, vals[0]); err != nil {
 							return nil, err
 						}
 						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.envelopeType, m.Value); err != nil {
@@ -2657,13 +2715,11 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	wrapSink := func(s Sink) Sink {
 		mu.Lock() // Called concurrently due to getEventSink and getResolvedTimestampSink
 		defer mu.Unlock()
-		if batchingSink, ok := s.(*batchingSink); ok {
-			if sinkClient, ok := batchingSink.client.(*pubsubSinkClient); ok {
-				conn, _ := mockServer.Dial()
-				startedConn = conn
-				mockClient, _ := pubsubv1.NewPublisherClient(context.Background(), option.WithGRPCConn(conn))
-				sinkClient.client = mockClient
-			}
+		if sc, ok := sinkClient(s).(*pubsubSinkClient); ok {
+			conn, _ := mockServer.Dial()
+			startedConn = conn
+			mockClient, _ := pubsubv1.NewPublisherClient(context.Background(), option.WithGRPCConn(conn))
+			sc.client = mockClient
 			return &notifyFlushSinkWithTopics{SinkWithTopics: s.(SinkWithTopics), notifyFlushSink: notifyFlushSink{Sink: s, sync: ss}}
 		}
 		return s

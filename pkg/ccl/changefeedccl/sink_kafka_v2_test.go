@@ -97,10 +97,10 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	fx := newKafkaSinkV2Fx(t)
 	defer fx.close()
 
-	buf := fx.sink.MakeBatchBuffer("t")
+	buf := fx.sink.MakeBatchBuffer()
 	keys := []string{"k1", "k2", "k3"}
 	for i, key := range keys {
-		buf.Append(context.Background(), []byte(key), []byte(strconv.Itoa(i)), attributes{})
+		buf.Append(context.Background(), "t", []byte(key), []byte(strconv.Itoa(i)), attributes{})
 	}
 	payload, err := buf.Close()
 	require.NoError(t, err)
@@ -122,9 +122,10 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 		}))
 		defer fx.close()
 
-		buf := fx.sink.MakeBatchBuffer("t")
+		buf := fx.sink.MakeBatchBuffer()
 		for i := range 100 {
 			buf.Append(context.Background(),
+				"t",
 				[]byte("k1"),
 				[]byte(strconv.Itoa(i)),
 				attributes{
@@ -571,8 +572,8 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	fx := newKafkaSinkV2Fx(t, withRealClient(), withKOptsClient([]kgo.Opt{kgo.RecordDeliveryTimeout(1 * time.Second)}))
 	defer fx.close()
 
-	buf := fx.sink.MakeBatchBuffer("t")
-	buf.Append(context.Background(), []byte("k1"), []byte("v1"), attributes{})
+	buf := fx.sink.MakeBatchBuffer()
+	buf.Append(context.Background(), "t", []byte("k1"), []byte("v1"), attributes{})
 	payload, err := buf.Close()
 	require.NoError(t, err)
 

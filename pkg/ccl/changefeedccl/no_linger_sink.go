@@ -1,0 +1,595 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package changefeedccl
+
+import (
+	"container/heap"
+	"context"
+	"hash"
+	"hash/crc32"
+	"sync"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+// pendingEvent holds a single changefeed event waiting to be batched.
+type pendingEvent struct {
+	topic TopicDescriptor
+	key   []byte
+	val   []byte
+	attrs attributes
+	alloc kvevent.Alloc
+	mvcc  hlc.Timestamp
+}
+
+// pendingBatch is returned by getBatch: a slice of events and the set
+// of key hashes included.
+type pendingBatch struct {
+	events []pendingEvent
+	keys   intsets.Fast
+}
+
+// keyHeapEntry pairs a key hash with the mvcc timestamp of the oldest
+// pending event for that key, used for age-based heap ordering.
+type keyHeapEntry struct {
+	keyHash int
+	mvcc    hlc.Timestamp
+}
+
+// keyHeap is a min-heap of keyHeapEntry ordered by mvcc timestamp
+// (oldest first).
+type keyHeap []keyHeapEntry
+
+func (h keyHeap) Len() int            { return len(h) }
+func (h keyHeap) Less(i, j int) bool  { return h[i].mvcc.Less(h[j].mvcc) }
+func (h keyHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
+func (h *keyHeap) Push(x interface{}) { *h = append(*h, x.(keyHeapEntry)) }
+func (h *keyHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[:n-1]
+	return x
+}
+
+// pendingBuffer is a thread-safe buffer of pending events organized by
+// key hash. Workers pull non-conflicting batches via getBatch; completed
+// batches are returned via completeBatch to unlock those keys.
+type pendingBuffer struct {
+	mu          sync.Mutex
+	cond        *sync.Cond
+	keyHeap     keyHeap
+	keyMessages map[int][]pendingEvent
+	inflight    intsets.Fast
+	totalEvents int
+	// totalInflight counts events currently being processed by workers.
+	totalInflight int
+	// maxBuffered is the maximum number of events allowed in the buffer.
+	// addRow blocks when the limit is hit. 0 means unbounded.
+	maxBuffered int
+	// totalAdded is a monotonically increasing count of all events ever
+	// added via addRow. Used by Flush to determine when all pre-Flush
+	// events have been completed.
+	totalAdded int64
+	// totalCompleted is a monotonically increasing count of all events
+	// ever completed via completeBatch. Flush waits until totalCompleted
+	// reaches the snapshot of totalAdded taken at Flush time.
+	totalCompleted int64
+	closed         bool
+	hasher         hash.Hash32
+}
+
+func newPendingBuffer(maxBuffered int) *pendingBuffer {
+	pb := &pendingBuffer{
+		keyMessages: make(map[int][]pendingEvent),
+		maxBuffered: maxBuffered,
+		hasher:      crc32.New(crc32.MakeTable(crc32.IEEE)),
+	}
+	pb.cond = sync.NewCond(&pb.mu)
+	return pb
+}
+
+func (pb *pendingBuffer) computeKeyHash(topicName string, key []byte) int {
+	pb.hasher.Reset()
+	pb.hasher.Write([]byte(topicName))
+	pb.hasher.Write(key)
+	return int(pb.hasher.Sum32())
+}
+
+// addRow adds an event to the buffer and signals waiting workers.
+// Blocks only when the buffer is full (backpressure). Does not block
+// during Flush — new events flow in freely while Flush drains prior events.
+func (pb *pendingBuffer) addRow(topicName string, e pendingEvent) {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	if pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered && !pb.closed {
+		log.VEventf(context.Background(), 1,
+			"no-linger addRow blocking: reason=buffer_full totalEvents=%d maxBuffered=%d inflight=%d heapLen=%d",
+			pb.totalEvents, pb.maxBuffered, pb.totalInflight, pb.keyHeap.Len())
+		for pb.maxBuffered > 0 && pb.totalEvents >= pb.maxBuffered && !pb.closed {
+			pb.cond.Wait()
+		}
+	}
+
+	h := pb.computeKeyHash(topicName, e.key)
+	_, exists := pb.keyMessages[h]
+	pb.keyMessages[h] = append(pb.keyMessages[h], e)
+	pb.totalEvents++
+	pb.totalAdded++
+
+	// Only push to heap if this key is new (not already queued or inflight).
+	// Use the event's mvcc timestamp for age-based ordering.
+	if !exists && !pb.inflight.Contains(h) {
+		heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, mvcc: e.mvcc})
+	}
+
+	pb.cond.Signal()
+}
+
+// hasActionableWork returns true if there are non-inflight keys with
+// pending events.
+func (pb *pendingBuffer) hasActionableWork() bool {
+	return pb.keyHeap.Len() > 0
+}
+
+// getBatch blocks until a batch of events is available, then returns
+// it. Returns nil if the buffer is closed. The caller must call
+// completeBatch when done processing.
+func (pb *pendingBuffer) getBatch(maxMessages, maxBytes int) *pendingBatch {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	for !pb.hasActionableWork() && !pb.closed {
+		pb.cond.Wait()
+	}
+	if pb.closed {
+		return nil
+	}
+
+	batch := &pendingBatch{}
+	totalBytes := 0
+
+	for pb.keyHeap.Len() > 0 {
+		entry := heap.Pop(&pb.keyHeap).(keyHeapEntry)
+		events := pb.keyMessages[entry.keyHash]
+		if len(events) == 0 {
+			delete(pb.keyMessages, entry.keyHash)
+			continue
+		}
+
+		taken := 0
+		for _, ev := range events {
+			evSize := len(ev.key) + len(ev.val)
+			if maxMessages > 0 && len(batch.events) >= maxMessages {
+				break
+			}
+			if maxBytes > 0 && totalBytes+evSize > maxBytes && len(batch.events) > 0 {
+				break
+			}
+			batch.events = append(batch.events, ev)
+			totalBytes += evSize
+			taken++
+		}
+
+		batch.keys.Add(entry.keyHash)
+		pb.inflight.Add(entry.keyHash)
+
+		if taken < len(events) {
+			pb.keyMessages[entry.keyHash] = events[taken:]
+		} else {
+			delete(pb.keyMessages, entry.keyHash)
+		}
+
+		if maxMessages > 0 && len(batch.events) >= maxMessages {
+			break
+		}
+		if maxBytes > 0 && totalBytes >= maxBytes {
+			break
+		}
+	}
+
+	pb.totalEvents -= len(batch.events)
+	pb.totalInflight += len(batch.events)
+
+	return batch
+}
+
+// completeBatch marks the keys in the batch as no longer inflight.
+// If any of those keys have new pending events, they're re-added to
+// the heap.
+func (pb *pendingBuffer) completeBatch(batch *pendingBatch) {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	batch.keys.ForEach(func(h int) {
+		pb.inflight.Remove(h)
+		if events, ok := pb.keyMessages[h]; ok && len(events) > 0 {
+			heap.Push(&pb.keyHeap, keyHeapEntry{keyHash: h, mvcc: events[0].mvcc})
+		}
+	})
+
+	pb.totalInflight -= len(batch.events)
+	pb.totalCompleted += int64(len(batch.events))
+	pb.cond.Broadcast()
+}
+
+// close signals all waiting goroutines to stop.
+func (pb *pendingBuffer) close() {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	pb.closed = true
+	pb.cond.Broadcast()
+}
+
+// noLingerSinkStats tracks aggregate stats for periodic logging.
+type noLingerSinkStats struct {
+	mu              syncutil.Mutex
+	totalEmitted    int64
+	totalFlushed    int64
+	totalBatches    int64
+	totalFlushNanos int64
+	totalBuildNanos int64
+	lastLog         time.Time
+}
+
+type statsSnapshot struct {
+	emitted, flushed, batches, flushNanos int64
+	elapsed                               time.Duration
+}
+
+// recordBatch records a completed batch and returns whether a periodic
+// log is due along with a snapshot of the accumulated stats.
+func (st *noLingerSinkStats) recordBatch(
+	events int64, flushDur time.Duration,
+) (bool, statsSnapshot) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.totalFlushed += events
+	st.totalBatches++
+	st.totalFlushNanos += flushDur.Nanoseconds()
+	elapsed := timeutil.Since(st.lastLog)
+	if elapsed < noLingerLogInterval {
+		return false, statsSnapshot{}
+	}
+	snap := statsSnapshot{
+		emitted:    st.totalEmitted,
+		flushed:    st.totalFlushed,
+		batches:    st.totalBatches,
+		flushNanos: st.totalFlushNanos,
+		elapsed:    elapsed,
+	}
+	st.totalEmitted = 0
+	st.totalFlushed = 0
+	st.totalBatches = 0
+	st.totalFlushNanos = 0
+	st.lastLog = timeutil.Now()
+	return true, snap
+}
+
+type bufferSnapshot struct {
+	pending, inflight, heapKeys, bufKeys int
+}
+
+// snapshot returns a point-in-time view of buffer state under the lock.
+func (pb *pendingBuffer) snapshot() bufferSnapshot {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	return bufferSnapshot{
+		pending:  pb.totalEvents,
+		inflight: pb.totalInflight,
+		heapKeys: pb.keyHeap.Len(),
+		bufKeys:  len(pb.keyMessages),
+	}
+}
+
+// noLingerSink implements the Sink interface using a pull-based model
+// where idle workers pull batches from a shared pendingBuffer.
+type noLingerSink struct {
+	client       SinkClient
+	topicNamer   *TopicNamer
+	concreteType sinkType
+
+	buf *pendingBuffer
+
+	maxMessages int
+	maxBytes    int
+	ioWorkers   int
+	retryOpts   retry.Options
+
+	metrics        metricsRecorder
+	noLingerMetric noLingerMetricsRecorder
+	settings       *cluster.Settings
+	stats          noLingerSinkStats
+
+	termErr error // guarded by buf.mu
+
+	wg     ctxgroup.Group
+	cancel context.CancelFunc
+}
+
+var _ Sink = (*noLingerSink)(nil)
+
+// Dial implements the Sink interface.
+func (s *noLingerSink) Dial() error {
+	return s.client.CheckConnection(context.TODO())
+}
+
+// Close implements the Sink interface.
+func (s *noLingerSink) Close() error {
+	s.buf.close()
+	s.cancel()
+	_ = s.wg.Wait()
+	return s.client.Close()
+}
+
+// getConcreteType implements the Sink interface.
+func (s *noLingerSink) getConcreteType() sinkType {
+	return s.concreteType
+}
+
+func (s *noLingerSink) getTermErr() error {
+	s.buf.mu.Lock()
+	defer s.buf.mu.Unlock()
+	return s.termErr
+}
+
+func (s *noLingerSink) setTermErr(err error) {
+	s.buf.mu.Lock()
+	defer s.buf.mu.Unlock()
+	if s.termErr == nil {
+		s.termErr = err
+	}
+}
+
+// EmitRow implements the Sink interface.
+func (s *noLingerSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+	headers rowHeaders,
+) error {
+	if err := s.getTermErr(); err != nil {
+		return err
+	}
+
+	var topicName string
+	if s.topicNamer != nil {
+		var err error
+		topicName, err = s.topicNamer.Name(topic)
+		if err != nil {
+			return err
+		}
+	}
+
+	s.metrics.recordMessageSize(int64(len(key) + len(value)))
+
+	e := pendingEvent{
+		topic: topic,
+		key:   key,
+		val:   value,
+		attrs: attributes{
+			tableName: topic.GetTableName(),
+			headers:   headers,
+			mvcc:      mvcc,
+		},
+		alloc: alloc,
+		mvcc:  mvcc,
+	}
+	s.buf.addRow(topicName, e)
+	s.noLingerMetric.recordPendingRows(1)
+	s.stats.mu.Lock()
+	s.stats.totalEmitted++
+	s.stats.mu.Unlock()
+	return nil
+}
+
+// Flush implements the Sink interface. It waits until all events that
+// were pending at the time of the Flush call have been processed.
+// New EmitRow calls are NOT blocked — events added after Flush is called
+// will be drained by a subsequent Flush.
+func (s *noLingerSink) Flush(ctx context.Context) error {
+	defer s.metrics.recordFlushRequestCallback()()
+
+	s.buf.mu.Lock()
+	defer s.buf.mu.Unlock()
+
+	if s.termErr != nil {
+		return s.termErr
+	}
+
+	// Snapshot the total number of events added so far. We wait until
+	// totalCompleted catches up to this value, meaning all events that
+	// existed at Flush time have been processed. New events added after
+	// this point are not waited for.
+	target := s.buf.totalAdded
+	pending := s.buf.totalEvents
+	inflight := s.buf.totalInflight
+
+	log.VEventf(ctx, 1,
+		"no-linger Flush started: target=%d completed=%d pending=%d inflight=%d",
+		target, s.buf.totalCompleted, pending, inflight)
+
+	flushStart := timeutil.Now()
+
+	for s.buf.totalCompleted < target &&
+		s.termErr == nil && !s.buf.closed {
+		s.buf.cond.Wait()
+	}
+
+	log.VEventf(ctx, 1,
+		"no-linger Flush completed: dur=%s err=%v",
+		timeutil.Since(flushStart), s.termErr)
+
+	return s.termErr
+}
+
+// EmitResolvedTimestamp implements the Sink interface.
+func (s *noLingerSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	data, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
+	if err != nil {
+		return err
+	}
+	if err = s.Flush(ctx); err != nil {
+		return err
+	}
+	return s.client.FlushResolvedPayload(
+		ctx, data, s.topicNamer.Each, s.retryOpts,
+	)
+}
+
+// Topics implements SinkWithTopics.
+func (s *noLingerSink) Topics() []string {
+	if s.topicNamer == nil {
+		return nil
+	}
+	return s.topicNamer.DisplayNamesSlice()
+}
+
+var _ SinkWithTopics = (*noLingerSink)(nil)
+
+// noLingerLogInterval controls how often periodic stats are logged.
+const noLingerLogInterval = 10 * time.Second
+
+// runWorker is the main loop for each IO worker goroutine.
+func (s *noLingerSink) runWorker(ctx context.Context) error {
+	for {
+		waitStart := timeutil.Now()
+		batch := s.buf.getBatch(s.maxMessages, s.maxBytes)
+		if batch == nil {
+			return nil // closed
+		}
+		waitDur := timeutil.Since(waitStart)
+		s.noLingerMetric.recordGetBatchWait(waitDur)
+		s.noLingerMetric.recordPendingRows(-int64(len(batch.events)))
+
+		if s.maxMessages > 0 {
+			pct := int64(len(batch.events)) * 100 / int64(s.maxMessages)
+			s.noLingerMetric.recordBatchFillPct(pct)
+		}
+
+		nKeys := batch.keys.Len()
+
+		buildStart := timeutil.Now()
+		s.metrics.recordSinkIOInflightChange(int64(len(batch.events)))
+		err := s.processBatch(ctx, batch)
+		flushDur := timeutil.Since(buildStart)
+		s.metrics.recordSinkIOInflightChange(-int64(len(batch.events)))
+
+		// Release allocs regardless of success.
+		for i := range batch.events {
+			batch.events[i].alloc.Release(ctx)
+		}
+
+		s.buf.completeBatch(batch)
+
+		// Log per-batch at V(2) and periodic summary at V(1).
+		log.VEventf(ctx, 2,
+			"no-linger batch: events=%d keys=%d wait=%s flush=%s err=%v",
+			len(batch.events), nKeys, waitDur, flushDur, err)
+
+		shouldLog, snapshot := s.stats.recordBatch(int64(len(batch.events)), flushDur)
+		if shouldLog {
+			bufSnap := s.buf.snapshot()
+			log.Changefeed.Infof(ctx,
+				"no-linger stats (last %s): emitted=%d flushed=%d batches=%d "+
+					"avgFlush=%s pending=%d inflight=%d heapKeys=%d bufKeys=%d",
+				snapshot.elapsed.Truncate(time.Second),
+				snapshot.emitted, snapshot.flushed, snapshot.batches,
+				time.Duration(snapshot.flushNanos/max(snapshot.batches, 1)),
+				bufSnap.pending, bufSnap.inflight, bufSnap.heapKeys, bufSnap.bufKeys)
+		}
+
+		if err != nil {
+			s.setTermErr(err)
+			s.buf.close()
+			return err
+		}
+	}
+}
+
+// processBatch creates a BatchBuffer, appends all events, and flushes.
+func (s *noLingerSink) processBatch(ctx context.Context, batch *pendingBatch) error {
+	bb := s.client.MakeBatchBuffer()
+	for _, ev := range batch.events {
+		var topicName string
+		if s.topicNamer != nil {
+			var err error
+			topicName, err = s.topicNamer.Name(ev.topic)
+			if err != nil {
+				return err
+			}
+		}
+		bb.Append(ctx, topicName, ev.key, ev.val, ev.attrs)
+	}
+
+	payload, err := bb.Close()
+	if err != nil {
+		return err
+	}
+
+	return s.retryOpts.Do(ctx, func(ctx context.Context) error {
+		return s.client.Flush(ctx, payload)
+	})
+}
+
+func makeNoLingerSink(
+	ctx context.Context,
+	concreteType sinkType,
+	client SinkClient,
+	retryOpts retry.Options,
+	numWorkers int,
+	maxMessages int,
+	maxBytes int,
+	topicNamer *TopicNamer,
+	metrics metricsRecorder,
+	settings *cluster.Settings,
+) *noLingerSink {
+	ctx, cancel := context.WithCancel(ctx)
+
+	sink := &noLingerSink{
+		client:         client,
+		topicNamer:     topicNamer,
+		concreteType:   concreteType,
+		buf:            newPendingBuffer(256 * numWorkers),
+		maxMessages:    maxMessages,
+		maxBytes:       maxBytes,
+		ioWorkers:      numWorkers,
+		retryOpts:      retryOpts,
+		metrics:        metrics,
+		noLingerMetric: metrics.newNoLingerMetricsRecorder(),
+		settings:       settings,
+		cancel:         cancel,
+		stats:          noLingerSinkStats{lastLog: timeutil.Now()},
+	}
+
+	sink.wg = ctxgroup.WithContext(ctx)
+	for i := 0; i < numWorkers; i++ {
+		sink.wg.GoCtx(sink.runWorker)
+	}
+
+	// Watch for context cancellation and close the buffer.
+	sink.wg.GoCtx(func(ctx context.Context) error {
+		<-ctx.Done()
+		sink.buf.close()
+		return nil
+	})
+
+	return sink
+}

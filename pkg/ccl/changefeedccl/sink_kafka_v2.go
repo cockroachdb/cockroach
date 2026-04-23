@@ -286,8 +286,8 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 }
 
 // MakeBatchBuffer implements SinkClient.
-func (k *kafkaSinkClientV2) MakeBatchBuffer(topic string) BatchBuffer {
-	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg, constHeaders: k.constHeaders, includeErrorDetails: k.includeErrorDetails}
+func (k *kafkaSinkClientV2) MakeBatchBuffer() BatchBuffer {
+	return &kafkaBuffer{batchCfg: k.batchCfg, constHeaders: k.constHeaders, includeErrorDetails: k.includeErrorDetails}
 }
 
 func (k *kafkaSinkClientV2) shouldTryResizing(err error, msgs []*kgo.Record) bool {
@@ -321,7 +321,6 @@ var _ SinkClient = (*kafkaSinkClientV2)(nil)
 var _ SinkPayload = ([]*kgo.Record)(nil) // NOTE: This doesn't actually assert anything, but it's good documentation.
 
 type kafkaBuffer struct {
-	topic     string
 	messages  []*kgo.Record
 	byteCount int
 
@@ -332,7 +331,9 @@ type kafkaBuffer struct {
 
 type mvccTSKey struct{}
 
-func (b *kafkaBuffer) Append(ctx context.Context, key []byte, value []byte, attrs attributes) {
+func (b *kafkaBuffer) Append(
+	ctx context.Context, topic string, key []byte, value []byte, attrs attributes,
+) {
 	// HACK: kafka sink v1 encodes nil keys as sarama.ByteEncoder(key) which is != nil, and unit tests rely on this.
 	// So do something equivalent.
 	if key == nil {
@@ -351,7 +352,7 @@ func (b *kafkaBuffer) Append(ctx context.Context, key []byte, value []byte, attr
 		rctx = context.WithValue(ctx, mvccTSKey{}, attrs.mvcc)
 	}
 
-	b.messages = append(b.messages, &kgo.Record{Key: key, Value: value, Topic: b.topic, Headers: headers, Context: rctx})
+	b.messages = append(b.messages, &kgo.Record{Key: key, Value: value, Topic: topic, Headers: headers, Context: rctx})
 	b.byteCount += len(value)
 }
 
@@ -419,6 +420,13 @@ func makeKafkaSinkV2(
 	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck, sinkOpts.Headers, sinkOpts.PartitionAlg)
 	if err != nil {
 		return nil, err
+	}
+
+	if NoLingerBatchingSinkEnabled.Get(&settings.SV) {
+		return makeNoLingerSink(
+			ctx, sinkTypeKafka, client, retryOpts, parallelism,
+			batchCfg.Messages, batchCfg.Bytes, topicNamer, mb(true), settings,
+		), nil
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
