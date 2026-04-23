@@ -530,9 +530,9 @@
 a convenience function to display HLCs in a print-friendly form. Use the decimal
 value if you rely on the HLC for accuracy.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="min_scale"></a><code>min_scale(val: <a href="decimal.html">decimal</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the minimum scale (number of fractional decimal digits) needed to represent <code>val</code> exactly.</p>
+<tr><td><a name="min_scale"></a><code>min_scale(val: <a href="decimal.html">decimal</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the minimum scale (number of fractional decimal digits) needed to represent <code>val</code> exactly.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="scale"></a><code>scale(val: <a href="decimal.html">decimal</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale (number of fractional decimal digits) of <code>val</code>.</p>
+<tr><td><a name="scale"></a><code>scale(val: <a href="decimal.html">decimal</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the scale (number of fractional decimal digits) of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_number"></a><code>to_number(value: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Convert a string to a numeric using the given format.</p>
 </span></td><td>Stable</td></tr>
@@ -1223,7 +1223,11 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
+<tr><td><a name="gcd"></a><code>gcd(a: <a href="decimal.html">decimal</a>, b: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the greatest common divisor of <code>a</code> and <code>b</code>. Returns 0 if both inputs are 0; otherwise returns a positive value. Returns NaN if either input is NaN or Infinity.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="gcd"></a><code>gcd(a: <a href="int.html">int</a>, b: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the greatest common divisor of <code>a</code> and <code>b</code>. Returns 0 if both inputs are 0; otherwise returns a positive value.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lcm"></a><code>lcm(a: <a href="decimal.html">decimal</a>, b: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the least common multiple of <code>a</code> and <code>b</code>. Returns 0 if either input is 0. Returns NaN if either input is NaN or Infinity.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lcm"></a><code>lcm(a: <a href="int.html">int</a>, b: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the least common multiple of <code>a</code> and <code>b</code>. Returns 0 if either input is 0.</p>
 </span></td><td>Immutable</td></tr>

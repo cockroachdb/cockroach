@@ -2929,6 +2929,8 @@ var builtinOidsArray = []string{
 	2974: `log(val: int) -> decimal`,
 	2975: `log(b: int, x: int) -> decimal`,
 	2976: `log10(val: int) -> decimal`,
+	2977: `gcd(a: decimal, b: decimal) -> decimal`,
+	2978: `lcm(a: decimal, b: decimal) -> decimal`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
