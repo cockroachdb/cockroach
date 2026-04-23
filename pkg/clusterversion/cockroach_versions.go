@@ -281,6 +281,15 @@ const (
 	// storing advisory lock state.
 	V26_3_AddAdvisoryLocksTable
 
+	// V26_3_UploadDebugDataJob gates the UPLOAD_DEBUG_DATA job type and the
+	// Admin.StartUploadDebugData / Status.UploadNodeDebugData RPCs that back
+	// the "stream debug artifacts to an upload server" feature (see
+	// `cockroach debug zip upload-server` and the Advanced Debug UI). The
+	// gate ensures that a coordinator does not attempt to create the job or
+	// fan out the worker RPC before every node in the cluster has upgraded
+	// to a binary that knows how to resume / serve it.
+	V26_3_UploadDebugDataJob
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -367,6 +376,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
 
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
+
+	V26_3_UploadDebugDataJob: {Major: 26, Minor: 2, Internal: 8},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

@@ -1312,6 +1312,32 @@ service Admin {
   // ReadFromTenantInfo returns the tenant from which the requesting tenant
   // should read, if any.
   rpc ReadFromTenantInfo(ReadFromTenantInfoRequest) returns (ReadFromTenantInfoResponse) {}
+
+  // StartUploadDebugData creates a background job of type UPLOAD_DEBUG_DATA
+  // that streams cluster-wide and per-node debug artifacts to the configured
+  // upload server. It returns immediately with the job id; progress is
+  // tracked through the jobs framework (see Job / Jobs / GetUploadDebugDataStatus
+  // RPCs and the `cockroach debug zip upload-server watch` CLI command).
+  rpc StartUploadDebugData(StartUploadDebugDataRequest) returns (StartUploadDebugDataResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/upload_debug_data"
+      body: "*"
+    };
+  }
+
+  // GetUploadDebugDataStatus returns the typed status of an UPLOAD_DEBUG_DATA
+  // job, including the upload-server session id and the list of node ids that
+  // failed during the upload. This decoded view drives the "Retry Failed
+  // Nodes" UI button and the `cockroach debug zip upload-server retry` CLI
+  // subcommand.
+  //
+  // The response deliberately omits the original API key (secret) embedded in
+  // the job payload.
+  rpc GetUploadDebugDataStatus(GetUploadDebugDataStatusRequest) returns (GetUploadDebugDataStatusResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/upload_debug_data/status/{job_id}"
+    };
+  }
 }
 
 message ListTenantsRequest{}
@@ -1487,4 +1513,92 @@ message FeatureFlags {
   // debug operations. This is helpful in application tenant contexsts, where these requests
   // can only return errors since the tenant cannot perform the operations.
   bool disable_kv_level_advanced_debug = 3;
+}
+
+// StartUploadDebugDataRequest is the request for the Admin.StartUploadDebugData
+// RPC. All fields map 1:1 onto jobspb.UploadDebugDataDetails.
+message StartUploadDebugDataRequest {
+  // ServerUrl is the base URL of the upload server.
+  string server_url = 1;
+  // ApiKey is the cluster API key used to authenticate session creation with
+  // the upload server.
+  string api_key = 2;
+  // Redact, when true, asks every node to redact sensitive fields from logs
+  // and SQL dumps before uploading.
+  bool redact = 3;
+  // CpuProfSeconds captures a CPU profile of this duration (in seconds) on
+  // every node; 0 disables CPU profiling.
+  int32 cpu_prof_seconds = 4;
+  // Labels are free-form metadata attached to the upload session.
+  map<string, string> labels = 5;
+  // IncludeRangeInfo, when true, collects per-node ranges.json and cluster
+  // problem-ranges / tenant-ranges artifacts.
+  bool include_range_info = 6;
+  // IncludeGoroutineStacks, when true, captures a stop-the-world goroutine
+  // dump on every node.
+  bool include_goroutine_stacks = 7;
+  // NodeIds, when non-empty, restricts the per-node fan-out to this subset.
+  // Used by "retry failed nodes" so a reupload only re-collects the failed
+  // nodes from the original attempt.
+  repeated int32 node_ids = 8;
+  // ReuploadSessionId, when non-empty, re-opens an existing upload-server
+  // session instead of creating a new one. All artifacts land under the same
+  // GCS prefix as the original attempt.
+  string reupload_session_id = 9;
+}
+
+// StartUploadDebugDataResponse is the response from Admin.StartUploadDebugData.
+message StartUploadDebugDataResponse {
+  // JobID is the id of the newly created UPLOAD_DEBUG_DATA job. Callers can
+  // pass it to GetUploadDebugDataStatus, to the existing /_admin/v1/jobs/{id}
+  // endpoint, or to the CLI `debug zip upload-server watch` subcommand.
+  int64 job_id = 1 [(gogoproto.customname) = "JobID"];
+}
+
+// GetUploadDebugDataStatusRequest is the request for
+// Admin.GetUploadDebugDataStatus. Field name intentionally matches the
+// generated Go default (JobId) so that grpc-gateway can populate it from
+// the {job_id} URL path parameter; see existing JobRequest above for the
+// same pattern.
+message GetUploadDebugDataStatusRequest {
+  int64 job_id = 1;
+}
+
+// GetUploadDebugDataStatusResponse is the response from
+// Admin.GetUploadDebugDataStatus. It is a flattened, UI/CLI-friendly view of
+// the underlying job's payload + progress. The original API key from the
+// job's payload is intentionally not returned.
+message GetUploadDebugDataStatusResponse {
+  // JobID of the job whose status this is.
+  int64 job_id = 1 [(gogoproto.customname) = "JobID"];
+  // State is the job state (e.g. "running", "succeeded", "failed").
+  string state = 2;
+  // SessionId is the upload-server session id for this job. Empty until the
+  // job has created/reopened the session.
+  string session_id = 3;
+  // TotalNodes is the number of nodes that this job will (or did) upload
+  // from.
+  int32 total_nodes = 4;
+  // NodesCompleted is the number of nodes that finished without any errors.
+  int32 nodes_completed = 5;
+  // NodesFailed is the number of nodes that reported at least one upload
+  // error.
+  int32 nodes_failed = 6;
+  // ArtifactsUploaded is the cumulative count of artifacts uploaded so far.
+  int32 artifacts_uploaded = 7;
+  // FailedNodeIds is the list of nodes that failed during upload. This field
+  // drives "Retry Failed Nodes" in the UI and CLI.
+  repeated int32 failed_node_ids = 8;
+  // FractionCompleted is the job's fraction_completed (0..1).
+  float fraction_completed = 9;
+  // RunningStatus is the job's human-readable status message.
+  string running_status = 10;
+  // Error is the job's terminal error message (set only on failed/canceled
+  // jobs).
+  string error = 11;
+  // ServerUrl is the upload server URL recorded in the job details. Returned
+  // so the UI/CLI retry flow can pre-populate the form. NOT sensitive.
+  string server_url = 12;
+  // Redact echoes the redaction flag used when creating the job.
+  bool redact = 13;
 }

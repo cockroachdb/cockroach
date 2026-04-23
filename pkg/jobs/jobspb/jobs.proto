@@ -1637,6 +1637,71 @@ message FingerprintProgress {
  // Not used: progress is stored in its own info key(s) and frontier.
 }
 
+// UploadDebugDataDetails is the payload for an UPLOAD_DEBUG_DATA job, which
+// streams cluster-wide and per-node debug artifacts to a CRL-hosted upload
+// server (which forwards them to a GCS bucket). The job is created by the
+// Admin.StartUploadDebugData RPC (driven by the DB Console UI or the
+// `cockroach debug zip upload-server` CLI).
+message UploadDebugDataDetails {
+  // ServerUrl is the base URL of the upload server, e.g.
+  // "https://upload.cockroachlabs.com".
+  string server_url = 1;
+  // ApiKey is the upload-server cluster API key used to authenticate session
+  // creation. It is a secret: the Admin.GetUploadDebugDataStatus RPC MUST NOT
+  // return this field.
+  string api_key = 2;
+  // Redact, when true, asks every node to redact sensitive fields from logs
+  // and SQL dumps before uploading.
+  bool redact = 3;
+  // CpuProfSeconds, if > 0, captures a CPU profile of that duration on every
+  // node. 0 disables CPU profiling.
+  int32 cpu_prof_seconds = 4;
+  // Labels are free-form metadata attached to the upload session (e.g. ticket
+  // id, environment tag).
+  map<string, string> labels = 5;
+  // IncludeRangeInfo, when true, collects per-node ranges.json and cluster
+  // problem-ranges / tenant-ranges artifacts.
+  bool include_range_info = 6;
+  // IncludeGoroutineStacks, when true, captures a stop-the-world goroutine
+  // dump (stacks.txt) on every node.
+  bool include_goroutine_stacks = 7;
+  // NodeIds, when non-empty, restricts the per-node fan-out to this subset.
+  // Used by "retry failed nodes" so that a reupload only re-collects data for
+  // the nodes that failed in the original attempt. Empty means "all nodes".
+  repeated int32 node_ids = 8;
+  // ReuploadSessionId, when non-empty, re-opens an existing upload-server
+  // session instead of creating a new one. All artifacts land under the same
+  // GCS prefix as the original attempt.
+  string reupload_session_id = 9;
+}
+
+// UploadDebugDataProgress is the progress payload for an UPLOAD_DEBUG_DATA
+// job. Per-node error strings are NOT stored here; they are recorded on the
+// job's message log (system.job_message) to keep progress updates bounded.
+message UploadDebugDataProgress {
+  // SessionId is the upload-server session id assigned to this job. It is
+  // persisted after session creation/reopen so that, if the coordinating node
+  // crashes mid-upload, a re-adopting node can reopen the same session
+  // (single GCS folder) instead of creating a fresh one.
+  string session_id = 1;
+  // TotalNodes is the number of nodes this job is uploading from (cluster
+  // node count, or len(NodeIds) for a retry).
+  int32 total_nodes = 2;
+  // NodesCompleted counts nodes whose per-node fan-out returned with no
+  // errors.
+  int32 nodes_completed = 3;
+  // NodesFailed counts nodes whose per-node fan-out returned with at least
+  // one error (or that the fan-out RPC could not reach).
+  int32 nodes_failed = 4;
+  // ArtifactsUploaded is the cumulative count of individual artifacts
+  // (files / tables / profiles) uploaded by the coordinator and the nodes.
+  int32 artifacts_uploaded = 5;
+  // FailedNodeIds lists the nodes whose upload produced at least one error.
+  // This field drives the "Retry Failed Nodes" UI button and the
+  // `cockroach debug zip upload-server retry` CLI subcommand.
+  repeated int32 failed_node_ids = 6;
+}
+
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
   enum Status {
@@ -1775,6 +1840,7 @@ message Payload {
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
     InspectDetails inspect_details = 53;
     FingerprintDetails fingerprint_details = 54;
+    UploadDebugDataDetails upload_debug_data_details = 55;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1799,7 +1865,7 @@ message Payload {
   // specifies how old such record could get before this job is canceled.
   int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
 
-  // NEXT ID: 54
+  // NEXT ID: 56
 }
 
 message Progress {
@@ -1860,11 +1926,12 @@ message Progress {
     HotRangesLoggerProgress hot_ranges_logger = 40;
     InspectProgress inspect = 41;
     FingerprintProgress fingerprint = 42;
+    UploadDebugDataProgress upload_debug_data = 43;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
 
-  // NEXT ID: 42
+  // NEXT ID: 44
 }
 
 enum Type {
@@ -1908,6 +1975,7 @@ enum Type {
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
   INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
   FINGERPRINT = 34 [(gogoproto.enumvalue_customname) = "TypeFingerprint"];
+  UPLOAD_DEBUG_DATA = 35 [(gogoproto.enumvalue_customname) = "TypeUploadDebugData"];
 }
 
 message Job {
