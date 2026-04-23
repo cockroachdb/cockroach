@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,6 +37,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestQueryBuilderAddRowDefaultNullNilRow(t *testing.T) {
+	q := queryBuilder{
+		inputColumns: []string{"pk", "v"},
+	}
+
+	require.NoError(t, q.AddRowDefaultNull(nil))
+	require.Equal(t, []interface{}{tree.DNull, tree.DNull}, q.scratchDatums)
+}
 
 func TestLWWInsertQueryGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()

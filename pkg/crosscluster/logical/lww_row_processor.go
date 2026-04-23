@@ -145,6 +145,7 @@ func (q *queryBuilder) AddRowDefaultNull(row *cdcevent.Row) error {
 		for range q.inputColumns {
 			q.scratchDatums = append(q.scratchDatums, tree.DNull)
 		}
+		return nil
 	}
 
 	for _, n := range q.inputColumns {
