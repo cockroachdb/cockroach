@@ -6,11 +6,13 @@
 package sql
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -1368,7 +1370,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
 		ctx, descs.WithDescriptorSessionDataProvider(dsdp), descs.WithMonitor(ex.sessionMon),
 	)
-	ex.extraTxnState.advisoryLockManager = advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec)
+	ex.extraTxnState.advisoryLockManager = &atomic.Pointer[advisorylock.Manager]{}
+	ex.extraTxnState.advisoryLockManager.Store(advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec))
 	ex.extraTxnState.jobs = newTxnJobsCollection()
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
@@ -1659,8 +1662,9 @@ type connExecutor struct {
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
 
-		// advisoryLockManager is the manager for advisory locks.
-		advisoryLockManager *advisorylock.Manager
+		// advisoryLockManager is an atomic pointer that refers to
+		//  the current advisory lock manager.
+		advisoryLockManager *atomic.Pointer[advisorylock.Manager]
 
 		jobs *txnJobsCollection
 
@@ -1793,6 +1797,7 @@ type connExecutor struct {
 		rewindPosSnapshot struct {
 			savepoints       savepointStack
 			sessionDataStack *sessiondata.Stack
+			advisoryRewind   advisorylock.RewindSnapshot
 		}
 		// transactionStatementFingerprintIDs tracks all statement IDs that make up the current
 		// transaction. It's length is bound by the TxnStatsNumStmtFingerprintIDsToRecord
@@ -2237,7 +2242,18 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		}
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
-		ex.extraTxnState.advisoryLockManager = advisorylock.NewManager(ex.extraTxnState.descCollection, ex.server.cfg.Codec)
+		// Advisory lock acquisitions are stored both in KV (where they are
+		// held by the txn record and survive refresh/restart) and in the
+		// in-memory advisoryLockManager. On txnRestart the KV intents
+		// persist, so we must preserve the manager too; replacing it would
+		// silently desync the in-memory stack from KV for the rest of the
+		// txn, surfacing as wrong rows in pg_locks /
+		// crdb_internal.cluster_held_advisory_locks.
+		if ev.eventType != txnRestart {
+			ex.extraTxnState.advisoryLockManager.Store(advisorylock.NewManager(
+				ex.extraTxnState.descCollection, ex.server.cfg.Codec,
+			))
+		}
 		ex.extraTxnState.jobs.reset()
 		ex.extraTxnState.validateDbZoneConfig = false
 		ex.extraTxnState.schemaChangerState.memAcc.Clear(ctx)
@@ -2271,6 +2287,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		ex.extraTxnState.prepStmtsNamespace.closeSnapshotPortals(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
+		if ex.extraTxnState.skipResettingSchemaObjects {
+			if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+				mgr.OnSQLSavepointsCleared()
+			}
+		}
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev, payloadErr)
 	case txnRestart:
@@ -2846,6 +2867,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// Note we use the Replace function instead of reassigning, as there are
 		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
 		ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
+		if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+			mgr.ApplyRewindSnapshot(ex.extraTxnState.rewindPosSnapshot.advisoryRewind)
+		}
 		advInfo.rewCap.rewindAndUnlock(ctx)
 	case stayInPlace:
 		// Nothing to do. The same statement will be executed again.
@@ -3022,6 +3046,11 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) error {
 	ex.stmtBuf.Ltrim(ctx, pos)
 	ex.extraTxnState.rewindPosSnapshot.savepoints = ex.extraTxnState.savepoints.clone()
 	ex.extraTxnState.rewindPosSnapshot.sessionDataStack = ex.sessionDataStack.Clone()
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		ex.extraTxnState.rewindPosSnapshot.advisoryRewind = mgr.ExportRewindSnapshot()
+	} else {
+		ex.extraTxnState.rewindPosSnapshot.advisoryRewind = advisorylock.RewindSnapshot{}
+	}
 	return ex.commitPrepStmtNamespace(ctx)
 }
 
@@ -3978,8 +4007,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		localSQLStats:        ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
-		advisoryLockManager:  ex.extraTxnState.advisoryLockManager,
 	}
+	evalCtx.advisoryLockManager = ex.extraTxnState.advisoryLockManager
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
 
@@ -4744,6 +4773,40 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + elapsed.Nanoseconds())
 	}
 
+	var heldAdvisoryLocks []serverpb.HeldAdvisoryLock
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		if locks := mgr.GetHeldLocks(); len(locks) > 0 {
+			heldAdvisoryLocks = make([]serverpb.HeldAdvisoryLock, 0, len(locks))
+			for _, lock := range locks {
+				convertedMode := serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_UNKNOWN
+				switch lock.Mode {
+				case advisorylock.LockModeExclusive:
+					convertedMode = serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_EXCLUSIVE
+				case advisorylock.LockModeShare:
+					convertedMode = serverpb.HeldAdvisoryLock_ADVISORY_LOCK_MODE_SHARED
+				default:
+					log.Dev.Warningf(ex.Ctx(), "unknown advisory lock mode: %d", lock.Mode)
+				}
+				db, isSingleValue, id := lock.Key.Extract()
+				heldAdvisoryLocks = append(heldAdvisoryLocks, serverpb.HeldAdvisoryLock{
+					LockDatabaseId: int64(db),
+					LockId:         id,
+					IsSingeValue:   isSingleValue,
+					LockMode:       convertedMode,
+				})
+			}
+			slices.SortFunc(heldAdvisoryLocks, func(a, b serverpb.HeldAdvisoryLock) int {
+				if c := cmp.Compare(a.LockDatabaseId, b.LockDatabaseId); c != 0 {
+					return c
+				}
+				if c := cmp.Compare(a.LockId, b.LockId); c != 0 {
+					return c
+				}
+				return cmp.Compare(a.LockMode, b.LockMode)
+			})
+		}
+	}
+
 	return serverpb.Session{
 		Username:          sd.SessionUser().Normalized(),
 		ClientAddress:     remoteStr,
@@ -4766,6 +4829,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		GoroutineID:                ex.ctxHolder.goroutineID,
 		AuthenticationMethod:       sd.AuthenticationMethod,
 		DefaultIsolationLevel:      tree.IsolationLevel(sd.DefaultTxnIsolationLevel).String(),
+		HeldAdvisoryLocks:          heldAdvisoryLocks,
 	}
 }
 
