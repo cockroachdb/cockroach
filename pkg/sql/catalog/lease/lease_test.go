@@ -3462,9 +3462,16 @@ SELECT * FROM t1;
 			_, err = conn.ExecContext(ctx, `
 COMMIT;`,
 			)
+			// The commit deadline can be detected at two layers:
+			//   - RETRY_COMMIT_DEADLINE_EXCEEDED: server-side EndTxn deadline check.
+			//   - ABORT_REASON_CLIENT_REJECT: txnCoordSender heartbeat observed the
+			//     txn record was aborted before EndTxn was sent (see #168540).
+			// Both outcomes prove the txn was correctly prevented from committing.
 			if err == nil {
 				err = errors.New("Failing did not get expected error")
-			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*") {
+			} else if !testutils.IsError(err, "pq: restart transaction: TransactionRetryWithProtoRefreshError: "+
+				"(TransactionRetryError: retry txn \\(RETRY_COMMIT_DEADLINE_EXCEEDED -.*"+
+				"|TransactionAbortedError\\(ABORT_REASON_CLIENT_REJECT\\).*)") {
 				err = errors.Wrap(err, "Failed unexpected error")
 			} else {
 				err = nil
