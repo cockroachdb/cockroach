@@ -55,6 +55,15 @@ type alterPrimaryKeySpec struct {
 	Name          tree.Name
 	StorageParams tree.StorageParams
 	Partitioning  *partitioningSpec
+
+	// PkConstraintExplicitlyDropped is true when the user dropped the existing
+	// primary key constraint by name in the same statement (e.g.
+	// `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY KEY (...)`). In that
+	// case alterPrimaryKey must not preserve the old PK as a unique secondary
+	// index — the user explicitly asked for the uniqueness constraint to go
+	// away. Only set by the ADD CONSTRAINT entry point; ALTER PRIMARY KEY
+	// leaves it false.
+	PkConstraintExplicitlyDropped bool
 }
 
 // partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
@@ -955,7 +964,8 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 ) {
 	overrideIndexPartitioning := t.Partitioning != nil
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop, overrideIndexPartitioning,
+		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		overrideIndexPartitioning, t.PkConstraintExplicitlyDropped,
 	) {
 		return
 	}
@@ -1116,6 +1126,9 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 
 // We only recreate the old primary key of the table as a unique secondary
 // index if:
+//   - The user did not explicitly drop the old PK constraint in the same
+//     statement (e.g. `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY
+//     KEY (...)`).
 //   - The table has a primary key (no DROP PRIMARY KEY statements have
 //     been executed).
 //   - The primary key is not the default rowid primary key.
@@ -1130,7 +1143,11 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
 	overrideIndexPartitioning bool,
+	pkConstraintExplicitlyDropped bool,
 ) bool {
+	if pkConstraintExplicitlyDropped {
+		return false
+	}
 	// A function that retrieves all KEY columns of this index.
 	// If excludeShardedCol, sharded column is excluded, if any.
 	keyColumnIDsAndDirsOfIndex := func(
