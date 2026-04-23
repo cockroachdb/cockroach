@@ -287,16 +287,16 @@ func selectDistinctLiveRows(
 		rows = truncated
 	}
 	sort.Slice(rows, func(idx1, idx2 int) bool {
-		if rows[idx1].sqlAddr == rows[idx2].sqlAddr {
+		if rows[idx1].rpcAddr == rows[idx2].rpcAddr {
 			return !rows[idx1].timestamp.Less(rows[idx2].timestamp) // decreasing timestamp order
 		}
-		return rows[idx1].sqlAddr < rows[idx2].sqlAddr
+		return rows[idx1].rpcAddr < rows[idx2].rpcAddr
 	})
 	// Only provide the latest entry for a given address.
 	{
 		truncated := rows[:0]
 		for i := 0; i < len(rows); i++ {
-			if i == 0 || rows[i].sqlAddr != rows[i-1].sqlAddr {
+			if i == 0 || rows[i].rpcAddr != rows[i-1].rpcAddr {
 				truncated = append(truncated, rows[i])
 			}
 		}

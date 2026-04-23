@@ -40,6 +40,43 @@ func makeSession() sqlliveness.SessionID {
 	return session
 }
 
+func TestSelectDistinctLiveRowsDeduplicatesByRPCAddr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	slStorage := slstorage.NewFakeStorage()
+
+	session1 := makeSession()
+	session2 := makeSession()
+	require.NoError(t, slStorage.Insert(ctx, session1, hlc.Timestamp{WallTime: int64(time.Hour)}))
+	require.NoError(t, slStorage.Insert(ctx, session2, hlc.Timestamp{WallTime: int64(time.Hour)}))
+
+	rows := []instancerow{
+		{
+			instanceID: 1,
+			rpcAddr:    "rpc1",
+			sqlAddr:    "sql1",
+			sessionID:  session1,
+			timestamp:  hlc.Timestamp{WallTime: 1},
+		},
+		{
+			instanceID: 2,
+			rpcAddr:    "rpc1",
+			sqlAddr:    "sql2",
+			sessionID:  session2,
+			timestamp:  hlc.Timestamp{WallTime: 2},
+		},
+	}
+
+	result, err := selectDistinctLiveRows(ctx, slStorage, rows)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, base.SQLInstanceID(2), result[0].instanceID)
+	require.Equal(t, "rpc1", result[0].rpcAddr)
+	require.Equal(t, "sql2", result[0].sqlAddr)
+}
+
 func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
