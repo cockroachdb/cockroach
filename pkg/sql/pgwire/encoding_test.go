@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -345,6 +347,50 @@ func TestExoticNumericEncodings(t *testing.T) {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf("%v != %v", d, expected)
+			}
+		})
+	}
+}
+
+func TestInvalidBinaryNumericEncodings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name     string
+		encoding []byte
+	}{
+		{
+			name:     "negative digit count",
+			encoding: []byte{0xff, 0xff, 0, 0, 0, 0, 0, 0},
+		},
+		{
+			name:     "weight inconsistent with digit count",
+			encoding: []byte{0, 1, 0xff, 0xfd, 0, 0, 0, 0, 0, 1},
+		},
+		{
+			name:     "negative digit",
+			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0xff, 0xff},
+		},
+		{
+			name:     "digit too large",
+			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0x27, 0x10},
+		},
+	}
+
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(nil)
+	var da tree.DatumAlloc
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := pgwirebase.DecodeDatum(
+				ctx, &evalCtx, types.Decimal, pgwirebase.FormatBinary, tc.encoding, &da,
+			)
+			if err == nil {
+				t.Fatal("expected invalid binary representation error")
+			}
+			if code := pgerror.GetPGCode(err); code != pgcode.InvalidBinaryRepresentation {
+				t.Fatalf("expected %s, got %s: %v", pgcode.InvalidBinaryRepresentation, code, err)
 			}
 		})
 	}

@@ -589,6 +589,10 @@ func DecodeDatum(
 				}
 			}
 
+			if alloc.pgNum.Ndigits < 0 {
+				return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid numeric digit count: %d", alloc.pgNum.Ndigits)
+			}
+
 			if alloc.pgNum.Dscale < 0 {
 				return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid decimal scale: %d", alloc.pgNum.Dscale)
 			}
@@ -598,6 +602,9 @@ func DecodeDatum(
 				for i := int16(0); i < alloc.pgNum.Ndigits; i++ {
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 						return nil, err
+					}
+					if alloc.i16 < 0 || alloc.i16 >= 10000 {
+						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid numeric digit: %d", alloc.i16)
 					}
 					// Each 16-bit "digit" can represent a 4 digit number.
 					// In the case where each digit is not 4 digits, we must append
@@ -665,11 +672,16 @@ func DecodeDatum(
 				// * if the digits we have in the buffer on the RHS, as calculated above,
 				// is larger or smaller than our calculated dscale, truncate or pad our buffer to
 				// match the desired dscale.
-				overScale := (alloc.pgNum.Ndigits-(alloc.pgNum.Weight+1))*PGDecDigits - alloc.pgNum.Dscale
+				overScale := (int(alloc.pgNum.Ndigits)-(int(alloc.pgNum.Weight)+1))*PGDecDigits - int(alloc.pgNum.Dscale)
 				if overScale > 0 {
-					decDigits = decDigits[:len(decDigits)-int(overScale)]
+					if overScale > len(decDigits) {
+						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation,
+							"invalid numeric: weight %d is inconsistent with digit count %d and scale %d",
+							alloc.pgNum.Weight, alloc.pgNum.Ndigits, alloc.pgNum.Dscale)
+					}
+					decDigits = decDigits[:len(decDigits)-overScale]
 				} else {
-					for i := int16(0); i < -overScale; i++ {
+					for i := 0; i < -overScale; i++ {
 						decDigits = append(decDigits, '0')
 					}
 				}
