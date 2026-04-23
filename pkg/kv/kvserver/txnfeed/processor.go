@@ -20,14 +20,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // Processor manages TxnFeed registrations for a single range. It receives
-// committed transaction events from Raft apply and forwards them to all
-// registered streams. It is simpler than the rangefeed Processor because it
-// does not track intents or compute resolved timestamps from lock state — the
-// resolved timestamp is simply the range's closed timestamp.
+// transaction lifecycle events from Raft apply and forwards committed
+// transaction events to all registered streams.
+//
+// The processor tracks unresolved (PENDING/STAGING) transaction records via
+// the resolvedTimestamp subsystem and computes the resolved timestamp as:
+//
+//	min(closedTS, oldestUnresolved.WriteTimestamp.Prev())
+//
+// Checkpoints are emitted to registrations only when the resolved timestamp
+// advances, ensuring the guarantee that no future TxnFeedCommitted events
+// will be emitted at or below the resolved timestamp.
 //
 // The processor uses the rangefeed scheduler pattern: event production under
 // raftMu is O(1) (channel send + scheduler enqueue), and event consumption
@@ -49,7 +57,7 @@ type Processor struct {
 	// processCtx is an annotated background context used by the scheduler
 	// callback. It outlives any single RPC context.
 	processCtx context.Context
-	// eventC buffers events (committed txn ops and closed timestamp updates)
+	// eventC buffers events (txn lifecycle ops and closed timestamp updates)
 	// for async processing by the scheduler callback.
 	eventC chan *txnFeedEvent
 	// requestQueue buffers request closures (register, stop, disconnect) for
@@ -62,6 +70,15 @@ type Processor struct {
 	// discarded in the scheduler callback.
 	stopping atomic.Bool
 
+	// rts tracks unresolved transaction records and computes the resolved
+	// timestamp. Only accessed from the scheduler callback thread (no
+	// synchronization needed).
+	rts resolvedTimestamp
+	// lastEmittedRTS is the last resolved timestamp emitted as a checkpoint
+	// event. Used to avoid emitting duplicate checkpoints. Only accessed
+	// from the scheduler callback thread.
+	lastEmittedRTS hlc.Timestamp
+
 	mu struct {
 		syncutil.RWMutex
 		stopped bool
@@ -72,9 +89,24 @@ type Processor struct {
 // txnFeedEvent is an event enqueued for async processing by the scheduler.
 // Only one field is set per event.
 type txnFeedEvent struct {
-	ops  *kvserverpb.TxnFeedOps // txn lifecycle ops from Raft apply
-	ct   hlc.Timestamp          // closed timestamp forward
-	sync *syncEvent             // synchronization barrier
+	ops      *kvserverpb.TxnFeedOps // txn lifecycle ops from Raft apply
+	ct       hlc.Timestamp          // closed timestamp forward
+	initScan *initScanResult        // buffered init scan results
+	sync     *syncEvent             // synchronization barrier
+}
+
+// initScanResult holds the buffered results of the initial unresolved txn
+// record scan. Sent as a single event through eventC after the async scan
+// completes.
+type initScanResult struct {
+	records []initScanRecord
+}
+
+// initScanRecord is a single unresolved transaction record discovered
+// during the initial scan.
+type initScanRecord struct {
+	txnID   uuid.UUID
+	writeTS hlc.Timestamp
 }
 
 // syncEvent is used to synchronize with the scheduler callback. The caller
@@ -116,6 +148,50 @@ func NewProcessor(cfg Config) *Processor {
 // NewProcessor and before any events are delivered.
 func (p *Processor) Start() error {
 	return p.scheduler.Register(p.process, false /* priority */)
+}
+
+// InitAsync launches an asynchronous scan of unresolved transaction records
+// to initialize the resolved timestamp. The snapshot must be taken under
+// raftMu to ensure atomicity with the start of live event delivery; the
+// actual scan runs on a background goroutine via the stopper.
+//
+// On completion, the scan results are sent through eventC and processed on
+// the scheduler callback thread (where rts is safe to access). Events
+// arriving before initialization are tracked but do not produce checkpoints
+// until Init completes.
+//
+// The snapshot is always closed by this method or the background goroutine.
+func (p *Processor) InitAsync(ctx context.Context, snap storage.Reader) error {
+	err := p.stopper.RunAsyncTask(
+		ctx, "txnfeed: init resolved ts", func(ctx context.Context) {
+			defer snap.Close()
+			var result initScanResult
+			scanErr := ScanUnresolvedTxnRecords(
+				ctx, snap, p.span.Key, p.span.EndKey,
+				func(txnID uuid.UUID, writeTS hlc.Timestamp) {
+					result.records = append(
+						result.records,
+						initScanRecord{txnID: txnID, writeTS: writeTS},
+					)
+				},
+			)
+			if scanErr != nil {
+				scanErr = errors.Wrap(
+					scanErr, "initial resolved timestamp scan failed")
+				if ctx.Err() == nil {
+					log.KvExec.Errorf(ctx, "%v", scanErr)
+				}
+				p.StopWithErr(kvpb.NewError(scanErr))
+				return
+			}
+			p.sendEvent(ctx, &txnFeedEvent{initScan: &result})
+		},
+	)
+	if err != nil {
+		snap.Close()
+		return err
+	}
+	return nil
 }
 
 // Register registers a new TxnFeed stream for the specified anchor span.
@@ -374,14 +450,52 @@ func (p *Processor) consumeEvent(ctx context.Context, e *txnFeedEvent) {
 		p.consumeTxnFeedOps(ctx, e.ops)
 	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
+	case e.initScan != nil:
+		p.consumeInitScan(ctx, e.initScan)
 	case e.sync != nil:
 		close(e.sync.c)
 	}
 }
 
-// consumeTxnFeedOps processes transaction lifecycle ops. COMMITTED ops are
-// delivered to matching registrations. Called on the scheduler callback thread.
+// consumeTxnFeedOps processes transaction lifecycle ops. It updates the
+// resolved timestamp tracker and delivers COMMITTED ops to matching
+// registrations. Called on the scheduler callback thread.
 func (p *Processor) consumeTxnFeedOps(ctx context.Context, ops *kvserverpb.TxnFeedOps) {
+	for i := range ops.Ops {
+		op := &ops.Ops[i]
+		switch op.Type {
+		case kvserverpb.TxnFeedOp_RECORD_WRITTEN:
+			p.rts.ConsumeRecordWritten(ctx, op.TxnID, op.WriteTimestamp)
+		case kvserverpb.TxnFeedOp_COMMITTED:
+			p.rts.ConsumeCommitted(ctx, op.TxnID)
+			p.publishCommitted(ctx, op)
+		case kvserverpb.TxnFeedOp_ABORTED:
+			p.rts.ConsumeAborted(ctx, op.TxnID)
+		default:
+			log.KvExec.Fatalf(ctx, "unknown TxnFeedOp type: %v", op.Type)
+		}
+	}
+	p.maybeEmitCheckpoints(ctx)
+}
+
+// consumeInitScan processes the buffered results from the initial unresolved
+// txn record scan and initializes the resolved timestamp. Records that were
+// already committed or aborted by live events (tracked in preInitRemovals)
+// are skipped. Called on the scheduler callback thread.
+func (p *Processor) consumeInitScan(ctx context.Context, result *initScanResult) {
+	for i := range result.records {
+		rec := &result.records[i]
+		if p.rts.wasRemovedBeforeInit(rec.txnID) {
+			continue
+		}
+		p.rts.txnQ.Add(rec.txnID, rec.writeTS)
+	}
+	p.rts.Init(ctx)
+	p.maybeEmitCheckpoints(ctx)
+}
+
+// publishCommitted delivers a COMMITTED event to matching registrations.
+func (p *Processor) publishCommitted(ctx context.Context, op *kvserverpb.TxnFeedOp) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -389,32 +503,39 @@ func (p *Processor) consumeTxnFeedOps(ctx context.Context, ops *kvserverpb.TxnFe
 		return
 	}
 
-	for i := range ops.Ops {
-		op := &ops.Ops[i]
-		if op.Type != kvserverpb.TxnFeedOp_COMMITTED {
+	event := &kvpb.TxnFeedEvent{
+		Committed: &kvpb.TxnFeedCommitted{
+			TxnID:           op.TxnID,
+			AnchorKey:       op.AnchorKey,
+			CommitTimestamp: op.WriteTimestamp,
+			WriteSpans:      op.WriteSpans,
+			ReadSpans:       op.ReadSpans,
+		},
+	}
+	for _, reg := range p.mu.regs {
+		if !reg.containsKey(op.AnchorKey) {
 			continue
 		}
-		event := &kvpb.TxnFeedEvent{
-			Committed: &kvpb.TxnFeedCommitted{
-				TxnID:           op.TxnID,
-				AnchorKey:       op.AnchorKey,
-				CommitTimestamp: op.WriteTimestamp,
-				WriteSpans:      op.WriteSpans,
-				ReadSpans:       op.ReadSpans,
-			},
-		}
-		for _, reg := range p.mu.regs {
-			if !reg.containsKey(op.AnchorKey) {
-				continue
-			}
-			reg.publish(event)
-		}
+		reg.publish(event)
 	}
 }
 
-// forwardClosedTS forwards the closed timestamp to all registrations as a
-// TxnFeedCheckpoint event. Called on the scheduler callback thread.
+// forwardClosedTS advances the closed timestamp and emits checkpoint events
+// if the resolved timestamp advanced. Called on the scheduler callback thread.
 func (p *Processor) forwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) {
+	p.rts.ForwardClosedTS(ctx, closedTS)
+	p.maybeEmitCheckpoints(ctx)
+}
+
+// maybeEmitCheckpoints emits TxnFeedCheckpoint events to all registrations
+// if the resolved timestamp has advanced past the last emitted checkpoint.
+func (p *Processor) maybeEmitCheckpoints(ctx context.Context) {
+	resolvedTS := p.rts.Get()
+	if resolvedTS.IsEmpty() || !p.lastEmittedRTS.Less(resolvedTS) {
+		return
+	}
+	p.lastEmittedRTS = resolvedTS
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -426,7 +547,7 @@ func (p *Processor) forwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 		event := &kvpb.TxnFeedEvent{
 			Checkpoint: &kvpb.TxnFeedCheckpoint{
 				AnchorSpan: reg.span.AsRawSpanWithNoLocals(),
-				ResolvedTS: closedTS,
+				ResolvedTS: resolvedTS,
 			},
 		}
 		reg.publish(event)

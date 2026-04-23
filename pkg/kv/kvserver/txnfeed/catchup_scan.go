@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -128,6 +129,87 @@ func CatchUpScan(
 			return err
 		}
 		// Found the committed record; skip remaining versions of this key.
+		iter.NextKey()
+	}
+}
+
+// ScanUnresolvedTxnRecords scans for non-finalized (PENDING or STAGING)
+// transaction records in the given range. For each such record, it calls fn
+// with the transaction's ID and WriteTimestamp. This is used during processor
+// initialization to populate the unresolved transaction queue before
+// processing live events.
+//
+// Unlike CatchUpScan, this function only needs the latest version of each
+// key (no tombstone digging) and has no timestamp filter.
+func ScanUnresolvedTxnRecords(
+	ctx context.Context,
+	snap storage.Reader,
+	rangeStartKey, rangeEndKey roachpb.RKey,
+	fn func(txnID uuid.UUID, writeTS hlc.Timestamp),
+) error {
+	startKey := keys.MakeRangeKeyPrefix(rangeStartKey)
+	endKey := keys.MakeRangeKeyPrefix(rangeEndKey)
+
+	iter, err := snap.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:     storage.IterKeyTypePointsOnly,
+		LowerBound:   startKey,
+		UpperBound:   endKey,
+		ReadCategory: fs.RangefeedReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: startKey})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+
+		key := iter.UnsafeKey()
+
+		_, suffix, _, err := keys.DecodeRangeKey(key.Key)
+		if err != nil {
+			return errors.Wrap(err, "decoding range-local key")
+		}
+		if !bytes.Equal(suffix, keys.LocalTransactionSuffix.AsRawKey()) {
+			iter.NextKey()
+			continue
+		}
+
+		// Skip tombstones — we only care about live records.
+		_, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
+		if err != nil {
+			return errors.Wrap(err, "checking tombstone")
+		}
+		if isTombstone {
+			iter.NextKey()
+			continue
+		}
+
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return errors.Wrap(err, "reading value")
+		}
+		mvccVal, err := storage.DecodeMVCCValue(v)
+		if err != nil {
+			return errors.Wrap(err, "decoding MVCC value")
+		}
+
+		var txn roachpb.Transaction
+		if err := mvccVal.Value.GetProto(&txn); err != nil {
+			return errors.Wrap(err, "unmarshaling transaction record")
+		}
+
+		if !txn.Status.IsFinalized() {
+			fn(txn.ID, txn.WriteTimestamp)
+		}
+
 		iter.NextKey()
 	}
 }

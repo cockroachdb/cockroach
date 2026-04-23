@@ -51,7 +51,7 @@ func (r *Replica) TxnFeed(
 	p := r.getTxnFeedProcessorRaftMuLocked()
 	if p == nil {
 		var err error
-		p, err = r.initTxnFeedProcessorRaftMuLocked()
+		p, err = r.initTxnFeedProcessorRaftMuLocked(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +68,14 @@ func (r *Replica) TxnFeed(
 // initTxnFeedProcessorRaftMuLocked creates a new TxnFeed processor for this
 // replica, registers it with the scheduler, and stores it. Must be called
 // under raftMu.
-func (r *Replica) initTxnFeedProcessorRaftMuLocked() (*txnfeed.Processor, error) {
+//
+// The processor's resolved timestamp is initialized by scanning for existing
+// unresolved transaction records. The snapshot is taken under raftMu so no
+// TxnFeedOps are missed between the scan and the start of live event
+// delivery.
+func (r *Replica) initTxnFeedProcessorRaftMuLocked(
+	ctx context.Context,
+) (*txnfeed.Processor, error) {
 	desc := r.Desc()
 	p := txnfeed.NewProcessor(txnfeed.Config{
 		AmbientContext: r.AmbientContext,
@@ -79,6 +86,16 @@ func (r *Replica) initTxnFeedProcessorRaftMuLocked() (*txnfeed.Processor, error)
 	if err := p.Start(); err != nil {
 		return nil, err
 	}
+
+	// Launch an async scan for unresolved transaction records to initialize
+	// the resolved timestamp. The snapshot is taken under raftMu; the scan
+	// runs on a background goroutine.
+	snap := r.store.StateEngine().NewSnapshot()
+	if err := p.InitAsync(ctx, snap); err != nil {
+		p.Stop()
+		return nil, err
+	}
+
 	r.setTxnFeedProcessor(p)
 	return p, nil
 }

@@ -43,6 +43,29 @@ func newTestProcessor(t *testing.T, stopper *stop.Stopper, span roachpb.RSpan) *
 		Scheduler:      s,
 	})
 	require.NoError(t, p.Start())
+	// Initialize the resolved timestamp with an empty unresolved queue.
+	// In production, Init is called with a storage snapshot that scans
+	// for existing unresolved transaction records.
+	p.rts.Init(context.Background())
+	return p
+}
+
+// newTestProcessorUninitialized creates a processor without calling
+// rts.Init(), simulating a processor whose async init scan has not yet
+// completed. The caller is responsible for sending an initScan event or
+// calling rts.Init() directly.
+func newTestProcessorUninitialized(
+	t *testing.T, stopper *stop.Stopper, span roachpb.RSpan,
+) *Processor {
+	t.Helper()
+	s := newTestScheduler(t, stopper)
+	p := NewProcessor(Config{
+		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
+		Span:           span,
+		Stopper:        stopper,
+		Scheduler:      s,
+	})
+	require.NoError(t, p.Start())
 	return p
 }
 
@@ -285,4 +308,247 @@ func TestProcessorNilOps(t *testing.T) {
 	// Should not panic or enqueue anything.
 	p.ConsumeTxnFeedOps(ctx, nil)
 	p.ForwardClosedTS(ctx, hlc.Timestamp{})
+}
+
+// TestProcessorResolvedTimestampHeldBack verifies that an unresolved
+// transaction record holds back the resolved timestamp (and thus checkpoint
+// emission) even when the closed timestamp advances past it.
+func TestProcessorResolvedTimestampHeldBack(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	p := newTestProcessor(t, stopper, defaultSpan)
+	defer p.Stop()
+
+	stream := &testStream{}
+	_, err := p.Register(ctx, defaultSpan, hlc.Timestamp{}, nil, stream)
+	require.NoError(t, err)
+
+	txnID := uuid.MakeV4()
+
+	// Add a RECORD_WRITTEN op at ts(10).
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+			TxnID:          txnID,
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+		}},
+	})
+	p.syncEventC()
+
+	// Advance closed TS to 20. The resolved TS should be held back to
+	// ts(10).Prev() = ts(9) (logical truncated to 0).
+	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 20})
+	p.syncEventC()
+
+	events := stream.getAndClearEvents()
+	require.Len(t, events, 1)
+	require.NotNil(t, events[0].Checkpoint)
+	require.Equal(t, hlc.Timestamp{WallTime: 9}, events[0].Checkpoint.ResolvedTS)
+
+	// Commit the transaction. Resolved TS should catch up to closed TS.
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_COMMITTED,
+			TxnID:          txnID,
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			WriteSpans:     []roachpb.Span{{Key: roachpb.Key("b")}},
+		}},
+	})
+	p.syncEventC()
+
+	events = stream.getAndClearEvents()
+	// Should have a committed event and a checkpoint.
+	var checkpoint *kvpb.TxnFeedCheckpoint
+	for _, e := range events {
+		if e.Checkpoint != nil {
+			checkpoint = e.Checkpoint
+		}
+	}
+	require.NotNil(t, checkpoint)
+	require.Equal(t, hlc.Timestamp{WallTime: 20}, checkpoint.ResolvedTS)
+}
+
+// TestProcessorMultipleUnresolved verifies that with multiple unresolved
+// records, the oldest one determines the resolved timestamp.
+func TestProcessorMultipleUnresolved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	p := newTestProcessor(t, stopper, defaultSpan)
+	defer p.Stop()
+
+	stream := &testStream{}
+	_, err := p.Register(ctx, defaultSpan, hlc.Timestamp{}, nil, stream)
+	require.NoError(t, err)
+
+	txnA := uuid.MakeV4()
+	txnB := uuid.MakeV4()
+
+	// Add two unresolved records.
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{
+			{
+				Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+				TxnID:          txnA,
+				AnchorKey:      roachpb.Key("b"),
+				WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			},
+			{
+				Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+				TxnID:          txnB,
+				AnchorKey:      roachpb.Key("c"),
+				WriteTimestamp: hlc.Timestamp{WallTime: 20},
+			},
+		},
+	})
+	p.syncEventC()
+
+	// Advance closed TS. Oldest record (txnA at ts(10)) holds back.
+	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 50})
+	p.syncEventC()
+
+	events := stream.getAndClearEvents()
+	require.Len(t, events, 1)
+	require.Equal(t, hlc.Timestamp{WallTime: 9}, events[0].Checkpoint.ResolvedTS)
+
+	// Abort txnA. Now txnB at ts(20) is oldest. Resolved = ts(19).
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_ABORTED,
+			TxnID:          txnA,
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+		}},
+	})
+	p.syncEventC()
+
+	events = stream.getAndClearEvents()
+	require.Len(t, events, 1)
+	require.Equal(t, hlc.Timestamp{WallTime: 19}, events[0].Checkpoint.ResolvedTS)
+}
+
+// TestProcessorInitScanPreInitEvents verifies that events arriving before the
+// init scan completes are tracked but do not produce checkpoints. After the
+// init scan is processed, the resolved timestamp incorporates all state.
+func TestProcessorInitScanPreInitEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	p := newTestProcessorUninitialized(t, stopper, defaultSpan)
+	defer p.Stop()
+
+	stream := &testStream{}
+	_, err := p.Register(ctx, defaultSpan, hlc.Timestamp{}, nil, stream)
+	require.NoError(t, err)
+
+	// Before init, forward closed TS and add a RECORD_WRITTEN. These should
+	// not produce checkpoints because the resolved TS is not initialized.
+	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 50})
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_RECORD_WRITTEN,
+			TxnID:          uuid.MakeV4(),
+			AnchorKey:      roachpb.Key("d"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 30},
+		}},
+	})
+	p.syncEventC()
+
+	events := stream.getAndClearEvents()
+	require.Len(t, events, 0, "no checkpoints before init")
+
+	// Send the init scan result with one unresolved record at ts(20). This
+	// simulates the async scan completing and delivering results.
+	txnFromScan := uuid.MakeV4()
+	p.sendEvent(ctx, &txnFeedEvent{
+		initScan: &initScanResult{
+			records: []initScanRecord{
+				{txnID: txnFromScan, writeTS: hlc.Timestamp{WallTime: 20}},
+			},
+		},
+	})
+	p.syncEventC()
+
+	// After init, a checkpoint should be emitted. The oldest unresolved is
+	// the scan record at ts(20), so resolved = min(50, 20-1) = 19.
+	events = stream.getAndClearEvents()
+	require.Len(t, events, 1)
+	require.NotNil(t, events[0].Checkpoint)
+	require.Equal(t, hlc.Timestamp{WallTime: 19}, events[0].Checkpoint.ResolvedTS)
+}
+
+// TestProcessorInitScanPreInitRemoval verifies that a transaction committed
+// by a live event before the init scan is processed is not re-added by the
+// scan results.
+func TestProcessorInitScanPreInitRemoval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	p := newTestProcessorUninitialized(t, stopper, defaultSpan)
+	defer p.Stop()
+
+	stream := &testStream{}
+	_, err := p.Register(ctx, defaultSpan, hlc.Timestamp{}, nil, stream)
+	require.NoError(t, err)
+
+	// Simulate a live COMMITTED event for a transaction that was PENDING in
+	// the init scan snapshot. This arrives before the init scan result.
+	txnAlreadyCommitted := uuid.MakeV4()
+	p.ConsumeTxnFeedOps(ctx, &kvserverpb.TxnFeedOps{
+		Ops: []kvserverpb.TxnFeedOp{{
+			Type:           kvserverpb.TxnFeedOp_COMMITTED,
+			TxnID:          txnAlreadyCommitted,
+			AnchorKey:      roachpb.Key("b"),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			WriteSpans:     []roachpb.Span{{Key: roachpb.Key("b")}},
+		}},
+	})
+	p.syncEventC()
+
+	// Forward closed TS so we can observe the resolved timestamp.
+	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 50})
+	p.syncEventC()
+
+	// Now send the init scan result that includes the already-committed txn.
+	// It should be skipped because it was in preInitRemovals.
+	p.sendEvent(ctx, &txnFeedEvent{
+		initScan: &initScanResult{
+			records: []initScanRecord{
+				{txnID: txnAlreadyCommitted, writeTS: hlc.Timestamp{WallTime: 10}},
+			},
+		},
+	})
+	p.syncEventC()
+
+	// The resolved timestamp should equal the closed TS (50), not be held
+	// back by the already-committed transaction.
+	events := stream.getAndClearEvents()
+	var checkpoint *kvpb.TxnFeedCheckpoint
+	for _, e := range events {
+		if e.Checkpoint != nil {
+			checkpoint = e.Checkpoint
+		}
+	}
+	require.NotNil(t, checkpoint)
+	require.Equal(t, hlc.Timestamp{WallTime: 50}, checkpoint.ResolvedTS)
+	require.Equal(t, 0, p.rts.txnQ.Len())
 }
