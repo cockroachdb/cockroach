@@ -900,6 +900,7 @@ type Store struct {
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator        *raftLogTruncator
+	wagTruncator         *kvstorage.WAGTruncator     // Initialized only on separate engines.
 	raftSnapshotQueue    *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue   *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner              *replicaScanner             // Replica scanner
@@ -2226,11 +2227,33 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Create the raft log truncator and register the callback.
 	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)
+
+	if s.EnginesSeparated() {
+		// Initialize the WAG sequencer from the last persisted node index so
+		// that new WAG nodes are written after existing ones.
+		if err := s.wagSeq.Init(ctx, s.LogEngine()); err != nil {
+			return err
+		}
+		// Construct the truncator after wagSeq.Init() so that it the WAGTruncator
+		// is initialized correctly. The WAGTruncator doesn't expect to see gaps
+		// after the current WAG sequence.
+		s.wagTruncator = kvstorage.NewWAGTruncator(s.cfg.Settings, s.Engines(), &s.wagSeq)
+		if err := s.wagTruncator.Start(
+			s.cfg.AmbientCtx.AnnotateCtx(context.Background()), stopper,
+		); err != nil {
+			return errors.Wrap(err, "starting WAG truncator")
+		}
+	}
+
 	{
-		truncator := s.raftTruncator
+		raftTruncator := s.raftTruncator
+		wagTruncator := s.wagTruncator
 		// When state machine has persisted new RaftAppliedIndex, fire callback.
 		s.StateEngine().RegisterFlushCompletedCallback(func() {
-			truncator.durabilityAdvancedCallback()
+			raftTruncator.durabilityAdvancedCallback()
+			if wagTruncator != nil {
+				wagTruncator.DurabilityAdvancedCallback()
+			}
 		})
 	}
 
@@ -2292,14 +2315,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
-
-	// Initialize the WAG sequencer from the last persisted node index so that
-	// new WAG nodes are written after existing ones.
-	if s.EnginesSeparated() {
-		if err := s.wagSeq.Init(ctx, s.LogEngine()); err != nil {
-			return err
-		}
-	}
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
