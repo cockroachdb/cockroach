@@ -406,7 +406,6 @@ var CompressionAlgorithmBackupStorage = settings.RegisterEnumSetting[SSTableComp
 	// TODO(radu,jackson): use a metamorphic constant.
 	SSTableCompressionFastest.String(),
 	sstableCompressionProfileToString,
-	settings.WithPublic,
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -423,7 +422,6 @@ var CompressionAlgorithmBackupTransport = settings.RegisterEnumSetting[SSTableCo
 	// TODO(radu,jackson): use a metamorphic constant.
 	SSTableCompressionFastest.String(),
 	sstableCompressionProfileToString,
-	settings.WithPublic,
 )
 
 var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
