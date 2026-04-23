@@ -476,4 +476,161 @@ user root
 statement ok
 COMMIT
 
+subtest cluster_held_advisory_locks
+
+# Begin and the xact lock must be one statement. Separate *sql.DB Execs can use
+# different connections; a lone lock call on autocommit releases before cluster_held.
+statement ok
+BEGIN; SELECT pg_advisory_xact_lock(8877665544); SELECT pg_advisory_xact_lock_shared(8877665544);
+
+query B
+SELECT count(*) >= 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE session_id = (SELECT session_id FROM [SHOW session_id])
+  AND lock_id = 8877665544
+  AND lock_mode = 'ExclusiveLock'
+----
+true
+
+query B
+SELECT count(*) >= 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE session_id = (SELECT session_id FROM [SHOW session_id])
+  AND lock_id = 8877665544
+  AND lock_mode = 'ShareLock'
+----
+true
+
+statement ok
+COMMIT
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 8877665544
+----
+true
+
+subtest advisory_max_mode_cluster_held
+
+statement ok
+BEGIN;
+SELECT pg_advisory_xact_lock_shared(9123456789);
+SELECT pg_advisory_xact_lock(9123456789);
+SELECT pg_advisory_xact_lock_shared(9123456789)
+
+query B
+SELECT bool_or(lock_mode = 'ExclusiveLock')
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE session_id = (SELECT session_id FROM [SHOW session_id]) AND lock_id = 9123456789
+----
+true
+
+statement ok
+COMMIT
+
+subtest advisory_savepoint_rollback_cluster_held
+
+statement ok
+BEGIN; SAVEPOINT sp; SELECT pg_advisory_xact_lock(8123456788)
+
+query B
+SELECT count(*) >= 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 8123456788
+----
+true
+
+statement ok
+ROLLBACK TO SAVEPOINT sp
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 8123456788
+----
+true
+
+statement ok
+ROLLBACK
+
 subtest end
+
+subtest advisory_savepoint_release
+statement ok
+BEGIN;
+SAVEPOINT sp1;
+SELECT pg_advisory_xact_lock(1111);
+SAVEPOINT sp2;
+SELECT pg_advisory_xact_lock(2222);
+RELEASE SAVEPOINT sp2;
+
+# Both locks should still be held after RELEASE
+query B
+SELECT count(*) = 2
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 1111 OR lock_id = 2222
+----
+true
+
+statement ok
+ROLLBACK TO SAVEPOINT sp1;
+
+# Both should be gone after rollback to sp1
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 1111 OR lock_id = 2222
+----
+true
+
+statement ok
+COMMIT
+
+subtest advisory_nested_savepoint_rollback
+statement ok
+BEGIN;
+SELECT pg_advisory_xact_lock(3333);
+SAVEPOINT sp1;
+SELECT pg_advisory_xact_lock(4444);
+SAVEPOINT sp2;
+SELECT pg_advisory_xact_lock(5555);
+ROLLBACK TO SAVEPOINT sp2;
+
+# 3333 and 4444 should still be held
+query B
+SELECT count(*) = 2
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 3333 OR lock_id = 4444
+----
+true
+
+# 5555 should be gone
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 5555
+----
+true
+
+statement ok
+ROLLBACK TO SAVEPOINT sp1;
+
+# Only 3333 should remain
+query B
+SELECT count(*) = 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 3333
+----
+true
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_id = 4444
+----
+true
+
+statement ok
+COMMIT
+

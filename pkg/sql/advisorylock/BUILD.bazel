@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -27,10 +28,13 @@ go_test(
     srcs = [
         "advisory_lock_test.go",
         "main_test.go",
+        "manager_savepoint_test.go",
     ],
+    embed = [":advisorylock"],
     exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

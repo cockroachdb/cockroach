@@ -307,7 +307,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SafeStack": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/advisorylock": {
-						"LockKey": {},
+						"LockKey":  {},
+						"LockMode": {},
 					},
 				}
 				ty := recv[0].Type
