@@ -37,7 +37,7 @@ var vectorizerDefaultSchedule = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"sql.vectorizer.default_schedule",
 	"default cron expression for the vectorizer background job schedule",
-	"@every 5m",
+	"@every 10s",
 )
 
 // Vectorizer option names.
@@ -232,10 +232,6 @@ func (n *createVectorizerNode) startExec(params runParams) error {
 		if tmpl != "" {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				"template option is not supported for image vectorizers")
-		}
-		if loadingMode == "uri" {
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"URI loading mode is not supported for image vectorizers")
 		}
 	}
 

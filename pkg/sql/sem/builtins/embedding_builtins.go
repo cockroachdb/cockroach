@@ -215,6 +215,36 @@ var embeddingBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 	),
+
+	"read_uri_bytes": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "uri", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(
+				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				uri := string(tree.MustBeDString(args[0]))
+				data, err := evalCtx.Planner.ExternalReadFile(ctx, uri)
+				if err != nil {
+					return nil, errors.Wrap(err, "reading URI")
+				}
+				if int64(len(data)) > content.MaxFileSize {
+					return nil, pgerror.Newf(pgcode.ProgramLimitExceeded,
+						"file size %d bytes exceeds maximum %d bytes",
+						len(data), content.MaxFileSize)
+				}
+				return tree.NewDBytes(tree.DBytes(data)), nil
+			},
+			Info: "Fetches raw file content from a cloud storage URI (s3://, gs://, " +
+				"http://, nodelocal://) and returns it as bytes. Useful for " +
+				"fetching images to pass to embed_image(). " +
+				"Maximum file size: 64MB.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 // resolveEmbedder resolves a model specification into an Embedder.
