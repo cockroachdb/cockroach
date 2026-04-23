@@ -8,10 +8,10 @@ jobs:
   claude-code-pr-review:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Run automatically for org members/collaborators (who typically work from forks).
-    # External contributors require a write-access user to apply the 'O-AI-Review' label.
-    # For 'labeled' events, only trigger when the specific 'O-AI-Review' label is applied
-    # to avoid re-running the full review when unrelated labels are added.
+    # Skip release branches, opted-out PRs, merged/draft PRs, and unrelated label events.
+    # Author verification (org membership) is handled by the "Verify author" step below
+    # using usermapper, because GitHub webhook payloads can misreport author_association
+    # (e.g. CONTRIBUTOR instead of MEMBER) for some org members working from forks.
     if: |
       !startsWith(github.base_ref, 'release-') &&
       !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review') &&
@@ -20,10 +20,6 @@ jobs:
       (
         github.event.action != 'labeled' ||
         github.event.label.name == 'O-AI-Review'
-      ) &&
-      (
-        contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association) ||
-        contains(github.event.pull_request.labels.*.name, 'O-AI-Review')
       )
     permissions:
       contents: read
@@ -43,8 +39,43 @@ jobs:
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
           workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
 
+      - name: Get usermapper token
+        id: usermapper_auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: 'dev-inf-prod'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+          token_format: 'id_token'
+          id_token_audience: 'https://us-east4-dev-inf-prod.cloudfunctions.net/usermapper-api'
+
+      - name: Verify author
+        id: verify_author
+        run: |
+          # Check if the PR has the O-AI-Review label (allows external contributors).
+          LABELS='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+          if echo "$LABELS" | jq -e 'index("O-AI-Review")' > /dev/null 2>&1; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Author authorized via O-AI-Review label"
+            exit 0
+          fi
+
+          # Verify org membership via usermapper. GitHub webhook payloads can
+          # misreport author_association for org members working from forks.
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          RESP=$(curl -sf -H "Authorization: bearer ${{ steps.usermapper_auth.outputs.id_token }}" \
+            "https://us-east4-dev-inf-prod.cloudfunctions.net/usermapper-api?v2_github=${AUTHOR}" || true)
+          if [ -n "$RESP" ] && echo "$RESP" | jq -e '.activeOrgs | index("cockroachdb")' > /dev/null 2>&1; then
+            echo "authorized=true" >> "$GITHUB_OUTPUT"
+            echo "Author '${AUTHOR}' verified as cockroachdb org member via usermapper"
+          else
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            echo "Author '${AUTHOR}' is not a cockroachdb org member"
+          fi
+
       - name: Stage 1 - Initial Bug Screening
         id: stage1
+        if: steps.verify_author.outputs.authorized == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
@@ -212,7 +243,7 @@ jobs:
           echo "Stage 3 result extracted (${#RESULT} characters)"
 
       - name: Final Analysis Report
-        if: always()
+        if: always() && steps.verify_author.outputs.authorized == 'true'
         uses: cockroachdb/claude-code-action@v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
