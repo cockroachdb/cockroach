@@ -269,6 +269,15 @@ var AutoUpgradeSystemClusterFromMeta1Leaseholder = settings.RegisterBoolSetting(
 	false,
 )
 
+var AutoUpgradeUseLivenessCache = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.use_liveness_cache.enabled",
+	"use the liveness cache instead of scanning liveness from KV when "+
+		"checking upgrade status; this avoids a KV read on every iteration "+
+		"of the auto-upgrade loop",
+	true,
+)
+
 var metaPreserveDowngradeLastUpdated = metric.Metadata{
 	Name:        "cluster.preserve-downgrade-option.last-updated",
 	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
