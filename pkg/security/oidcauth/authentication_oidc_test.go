@@ -184,10 +184,16 @@ func TestOIDCEnabled(t *testing.T) {
 	if resp.StatusCode != 302 {
 		t.Fatalf("expected 302 status code but got: %d", resp.StatusCode)
 	}
-	if resp.Cookies()[0].Name != secretCookieName {
-		t.Fatal("Missing cookie")
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == secretCookieName {
+			cookie = c
+			break
+		}
 	}
-	cookie := resp.Cookies()[0]
+	if cookie == nil {
+		t.Fatal("Missing oidc_secret cookie")
+	}
 
 	authURL, err := url.Parse(resp.Header.Get("Location"))
 	require.NoError(t, err)
@@ -207,7 +213,7 @@ func TestOIDCEnabled(t *testing.T) {
 		t.Fatal("HMAC generated incorrectly.")
 	}
 
-	key, err := base64.URLEncoding.DecodeString(resp.Cookies()[0].Value)
+	key, err := base64.URLEncoding.DecodeString(cookie.Value)
 	require.NoError(t, err)
 	mac := hmac.New(sha256.New, key)
 	mac.Write(state.Token)
@@ -248,6 +254,142 @@ func TestOIDCEnabled(t *testing.T) {
 	if !foundCookie {
 		t.Fatalf("no session cookie found in callback response")
 	}
+}
+
+// TestOIDCMultiTenantCallbackRouting verifies that the OIDC login and callback
+// flow works correctly in a multi-tenant (shared-process) cluster. When a user
+// navigates to the login page with ?cluster=<tenant>, the tenant cookie is set
+// and persists through the IdP redirect, ensuring the callback is routed to the
+// correct tenant.
+func TestOIDCMultiTenantCallbackRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.SharedTestTenantAlwaysEnabled,
+	})
+	defer srv.Stopper().Stop(ctx)
+	appServer := srv.ApplicationLayer()
+
+	usernameUnderTest := "test"
+
+	realNewManager := NewOIDCManager
+	NewOIDCManager = func(
+		ctx context.Context,
+		conf oidcAuthenticationConf,
+		redirectURL string,
+		scopes []string,
+	) (IOIDCManager, error) {
+		c := &oauth2.Config{
+			ClientID:     conf.clientID,
+			ClientSecret: conf.clientSecret,
+			RedirectURL:  redirectURL,
+			Endpoint: oauth2.Endpoint{
+				AuthURL: "https://provider.example.com/endpoint",
+			},
+			Scopes: scopes,
+		}
+		return &mockOidcManager{
+			oauth2Config: c,
+			claimEmail:   fmt.Sprintf("%s@example.com", usernameUnderTest),
+		}, nil
+	}
+	defer func() {
+		NewOIDCManager = realNewManager
+	}()
+
+	// Create the test user and enable OIDC on the application tenant only.
+	appDB := srv.ApplicationLayer().SQLConn(t)
+	sqlDB := sqlutils.MakeSQLRunner(appDB)
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'unused'`, usernameUnderTest))
+
+	appSettings := appServer.ClusterSettings()
+	OIDCProviderURL.Override(ctx, &appSettings.SV, "providerURL")
+	OIDCClientID.Override(ctx, &appSettings.SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &appSettings.SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &appSettings.SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &appSettings.SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &appSettings.SV, "^([^@]+)@[^@]+$")
+	OIDCEnabled.Override(ctx, &appSettings.SV, true)
+
+	// Build a client that routes through the controller mux. Use the app
+	// server's AdminURL which includes ?cluster=test-tenant automatically.
+	testCertsContext := appServer.NewClientRPCContext(ctx, username.TestUserName())
+	client, err := testCertsContext.GetHTTPClient()
+	require.NoError(t, err)
+	client.Timeout = 30 * time.Second
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	// Step 1: Login request via the app tenant's URL (includes ?cluster=test-tenant).
+	// The httpMux should set the tenant cookie in the response.
+	appURL := appServer.AdminURL()
+	loginURL := appURL.WithPath("/oidc/v1/login")
+	resp, err := client.Get(loginURL.String())
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusFound, resp.StatusCode,
+		"expected redirect to IdP")
+
+	// The response should have the oidc_secret cookie and the tenant cookie.
+	var secretCookie *http.Cookie
+	var tenantCookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		switch c.Name {
+		case secretCookieName:
+			secretCookie = c
+		case authserver.TenantSelectCookieName:
+			tenantCookie = c
+		}
+	}
+	require.NotNil(t, secretCookie, "expected oidc_secret cookie")
+	require.NotNil(t, tenantCookie, "expected tenant cookie from ?cluster= param")
+	require.Equal(t, "test-tenant", tenantCookie.Value)
+
+	// Extract the state from the IdP redirect URL.
+	authURL, err := url.Parse(resp.Header.Get("Location"))
+	require.NoError(t, err)
+	stateParam := authURL.Query().Get("state")
+	require.NotEmpty(t, stateParam)
+
+	// Step 2: Simulate the IdP callback. Use a client from the system layer
+	// which has no tenant header decorator, so only the tenant cookie
+	// (not the X-Cockroach-Tenant header) routes the request. This proves
+	// that cookie-based routing is the mechanism that fixes the callback.
+	sysRPCContext := srv.SystemLayer().NewClientRPCContext(ctx, username.TestUserName())
+	callbackClient, err := sysRPCContext.GetHTTPClient()
+	require.NoError(t, err)
+	callbackClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	baseURL := srv.SystemLayer().AdminURL()
+	callbackURL := baseURL.WithPath("/oidc/v1/callback").String()
+	req, err := http.NewRequest("GET", callbackURL, nil)
+	require.NoError(t, err)
+	req.AddCookie(secretCookie)
+	req.AddCookie(tenantCookie)
+	q := req.URL.Query()
+	q.Add("state", stateParam)
+	req.URL.RawQuery = q.Encode()
+
+	callbackResp, err := callbackClient.Do(req)
+	require.NoError(t, err)
+	defer callbackResp.Body.Close()
+
+	require.Equal(t, http.StatusTemporaryRedirect, callbackResp.StatusCode,
+		"expected successful callback redirect")
+
+	var foundSession bool
+	for _, c := range callbackResp.Cookies() {
+		if c.Name == authserver.SessionCookieName {
+			foundSession = true
+		}
+	}
+	require.True(t, foundSession, "expected session cookie after successful OIDC callback")
 }
 
 func TestKeyAndSignedTokenIsValid(t *testing.T) {
