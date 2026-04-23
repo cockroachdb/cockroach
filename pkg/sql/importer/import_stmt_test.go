@@ -1093,6 +1093,33 @@ var importDataTests = []importDataTest{
 		},
 	},
 	{
+		name:   "unsigned byte escapes",
+		create: `b bytes`,
+		typ:    "PGCOPY",
+		data:   `\200\377\x80\xFF`,
+		query: map[string][][]string{
+			`SELECT encode(b, 'hex') from t`: {{"80ff80ff"}},
+		},
+	},
+	{
+		name:   "utf8 text escapes",
+		create: `s string`,
+		typ:    "PGCOPY",
+		data:   `\xC3\xA9`,
+		query: map[string][][]string{
+			`SELECT encode(s::BYTES, 'hex') from t`: {{"c3a9"}},
+		},
+	},
+	{
+		name:   "copy done marker",
+		create: `i int8, s string`,
+		typ:    "PGCOPY",
+		data:   "1\tSTR\n\\.\n2\tignored",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"1", "STR"}},
+		},
+	},
+	{
 		name:   "normal",
 		create: `i int8, s string`,
 		typ:    "PGCOPY",
