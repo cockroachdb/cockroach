@@ -1055,6 +1055,20 @@ message ListSessionsRequest {
   bool include_internal = 3;
 }
 
+// HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
+message HeldAdvisoryLock {
+  int64 lock_id = 1;
+  int64 lock_database_id = 2;
+  bool isSingeValue  = 3;
+  enum AdvisoryLockMode {
+    ADVISORY_LOCK_MODE_UNKNOWN = 0;
+    ADVISORY_LOCK_MODE_SHARED = 1;
+    ADVISORY_LOCK_MODE_EXCLUSIVE = 2;
+  }
+  AdvisoryLockMode lock_mode = 4;
+
+}
+
 // Session represents one SQL session.
 message Session {
   // ID of node where this session exists.
@@ -1135,6 +1149,10 @@ message Session {
 
   // The session's default transaction isolation level.
   string default_isolation_level = 23;
+
+  // Transaction-scoped advisory locks currently held by this session.
+  repeated HeldAdvisoryLock held_advisory_locks = 24
+      [ (gogoproto.nullable) = false ];
 }
 
 // An error wrapper object for ListSessionsResponse.

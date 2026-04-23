@@ -2321,6 +2321,7 @@ Session represents one SQL session.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
+| held_advisory_locks | [HeldAdvisoryLock](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock) | repeated | Transaction-scoped advisory locks currently held by this session. | [reserved](#support-status) |
 
 
 
@@ -2377,6 +2378,22 @@ TxnInfo represents an in flight user transaction on some Session.
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
 | isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock"></a>
+#### HeldAdvisoryLock
+
+HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 
 
@@ -2473,6 +2490,7 @@ Session represents one SQL session.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
+| held_advisory_locks | [HeldAdvisoryLock](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock) | repeated | Transaction-scoped advisory locks currently held by this session. | [reserved](#support-status) |
 
 
 
@@ -2529,6 +2547,22 @@ TxnInfo represents an in flight user transaction on some Session.
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
 | isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock"></a>
+#### HeldAdvisoryLock
+
+HeldAdvisoryLock is one transaction-scoped advisory lock held by a session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| lock_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| lock_database_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  |  | [reserved](#support-status) |
+| isSingeValue | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  |  | [reserved](#support-status) |
+| lock_mode | [HeldAdvisoryLock.AdvisoryLockMode](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.HeldAdvisoryLock.AdvisoryLockMode) |  |  | [reserved](#support-status) |
 
 
 

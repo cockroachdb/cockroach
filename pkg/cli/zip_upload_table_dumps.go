@@ -67,6 +67,7 @@ var clusterWideTableDumps = map[string]columnParserMap{
 	"crdb_internal.cluster_settings.txt":            {},
 	"system.role_id_seq.txt":                        {},
 	"crdb_internal.cluster_sessions.txt":            {},
+	"crdb_internal.cluster_held_advisory_locks.txt": {},
 	"system.migrations.txt":                         {},
 	"crdb_internal.kv_store_status.txt":             {},
 	"system.locations.txt":                          {},
