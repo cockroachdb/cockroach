@@ -123,7 +123,7 @@ type extendedEvalContext struct {
 	validateDbZoneConfig *bool
 
 	// advisoryLockManager is the manager for advisory locks.
-	advisoryLockManager *advisorylock.Manager
+	advisoryLockManager *atomic.Pointer[advisorylock.Manager]
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -738,10 +738,11 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 		ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
 		ie.SetSessionData(p.SessionData())
 		ie.extraTxnState = &extraTxnState{
-			txn:                p.Txn(),
-			descCollection:     p.Descriptors(),
-			jobs:               p.extendedEvalCtx.jobs,
-			schemaChangerState: p.extendedEvalCtx.SchemaChangerState,
+			txn:                 p.Txn(),
+			descCollection:      p.Descriptors(),
+			jobs:                p.extendedEvalCtx.jobs,
+			schemaChangerState:  p.extendedEvalCtx.SchemaChangerState,
+			advisoryLockManager: p.extendedEvalCtx.advisoryLockManager,
 		}
 		p.internalSQLTxn.init(p.txn, ie)
 	}
@@ -1327,7 +1328,7 @@ func (p *planner) advisoryXactLockImpl(
 		return false, pgerror.New(pgcode.NoActiveSQLTransaction,
 			"advisory locks are only available in a transaction")
 	}
-	mgr := p.extendedEvalCtx.advisoryLockManager
+	mgr := p.extendedEvalCtx.advisoryLockManager.Load()
 	if mgr == nil {
 		return false, errors.AssertionFailedf("advisory lock manager not initialized")
 	}

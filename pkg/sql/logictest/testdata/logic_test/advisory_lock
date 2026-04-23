@@ -468,4 +468,73 @@ user root
 statement ok
 COMMIT
 
+subtest cluster_held_advisory_locks
+
+# Begin and the xact lock must be one statement. Separate *sql.DB Execs can use
+# different connections; a lone lock call on autocommit releases before cluster_held.
+statement ok
+BEGIN; SELECT pg_advisory_xact_lock(8877665544)
+
+query B
+SELECT count(*) >= 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE session_id = (SELECT session_id FROM [SHOW session_id])
+  AND lock_key LIKE '%8877665544%'
+  AND lock_mode = 'EXCLUSIVE'
+----
+true
+
+statement ok
+COMMIT
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%8877665544%'
+----
+true
+
+subtest advisory_max_mode_cluster_held
+
+statement ok
+BEGIN;
+SELECT pg_advisory_xact_lock_shared(9123456789);
+SELECT pg_advisory_xact_lock(9123456789);
+SELECT pg_advisory_xact_lock_shared(9123456789)
+
+query B
+SELECT bool_or(lock_mode = 'EXCLUSIVE')
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE session_id = (SELECT session_id FROM [SHOW session_id]) AND lock_key LIKE '%9123456789%'
+----
+true
+
+statement ok
+COMMIT
+
+subtest advisory_savepoint_rollback_cluster_held
+
+statement ok
+BEGIN; SAVEPOINT sp; SELECT pg_advisory_xact_lock(8123456788)
+
+query B
+SELECT count(*) >= 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%8123456788%'
+----
+true
+
+statement ok
+ROLLBACK TO SAVEPOINT sp
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%8123456788%'
+----
+true
+
+statement ok
+ROLLBACK
+
 subtest end

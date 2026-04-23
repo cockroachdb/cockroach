@@ -234,6 +234,14 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"goroutine_id",
 		},
 	},
+	"crdb_internal.cluster_held_advisory_locks": {
+		// `lock_key` may encode application-specific identifiers.
+		nonSensitiveCols: NonSensitiveColumns{
+			"session_id",
+			"lock_key",
+			"lock_mode",
+		},
+	},
 	"crdb_internal.cluster_settings": {
 		customQueryUnredacted: `SELECT
 			variable,

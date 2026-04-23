@@ -104,6 +104,9 @@ func (ex *connExecutor) execSavepointInOpenState(
 	}
 	savepoints.push(sp)
 	ex.sessionDataStack.PushTopClone()
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		mgr.OnSQLSavepointCreated()
+	}
 
 	return nil, nil, nil
 }
@@ -158,6 +161,9 @@ func (ex *connExecutor) execRelease(
 			// cockroach_restart (that's the whole point of commitOnRelease).
 			env.push(*entry)
 			ex.sessionDataStack.PushTopClone()
+			if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+				mgr.OnSQLSavepointCreated()
+			}
 
 			rc, canAutoRetry := ex.getRewindTxnCapability()
 			ev := eventRetryableErr{
@@ -180,6 +186,10 @@ func (ex *connExecutor) execRelease(
 	if err := ex.state.mu.txn.ReleaseSavepoint(ctx, entry.kvToken); err != nil {
 		ev, payload := ex.makeErrEvent(err, s)
 		return ev, payload
+	}
+
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		mgr.OnSQLSavepointStackTruncated(len(ex.extraTxnState.savepoints))
 	}
 
 	if len(ex.extraTxnState.savepoints) == 0 {
@@ -210,6 +220,10 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
 		ev, payload := ex.makeErrEvent(err, s)
 		return ev, payload
+	}
+
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		mgr.OnSQLRollbackToSavepoint(idx)
 	}
 
 	if err := ex.popSavepointsToIdx(s, idx); err != nil {
@@ -295,6 +309,10 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 
 	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
 		return ex.makeErrEvent(err, s)
+	}
+
+	if mgr := ex.extraTxnState.advisoryLockManager.Load(); mgr != nil {
+		mgr.OnSQLRollbackToSavepoint(idx)
 	}
 
 	if entry.kvToken.Initial() {

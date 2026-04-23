@@ -1,0 +1,23 @@
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+
+# End-to-end smoke: pg_locks (advisory-only) is a queryable view. Detailed row
+# shape is covered in pkg/sql/pg_locks_test.go (TestPGLocksAdvisory*).
+
+statement ok
+SET database = test
+
+# Idle session: no advisory lock rows
+query I
+SELECT count(*)::INT FROM pg_catalog.pg_locks
+----
+0
+
+# Root can read the optional cluster_locks branch (no waiters in an idle cluster)
+subtest non_granted_smoke
+
+query I
+SELECT count(*)::INT FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted
+----
+0
+
+subtest end
