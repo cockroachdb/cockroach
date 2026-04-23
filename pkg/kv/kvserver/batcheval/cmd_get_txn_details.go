@@ -14,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
@@ -37,6 +39,9 @@ func declareKeysGetTxnDetails(
 	args := req.(*kvpb.GetTxnDetailsRequest)
 	for _, ws := range args.WriteSpans {
 		latchSpans.AddMVCC(spanset.SpanReadOnly, ws, args.CommitTimestamp)
+	}
+	for _, rs := range args.ReadSpans {
+		latchSpans.AddMVCC(spanset.SpanReadOnly, rs, args.CommitTimestamp)
 	}
 	return nil
 }
@@ -61,6 +66,32 @@ func GetTxnDetails(
 			return result.Result{}, err
 		}
 	}
+
+	// Collect read dependencies using the CommitIndex.
+	commitIndex := cArgs.EvalCtx.GetCommitIndex()
+	if commitIndex == nil || args.DependencyCutoff.IsEmpty() {
+		reply.EventHorizon = args.CommitTimestamp
+	} else {
+		deps := make(map[uuid.UUID]struct{})
+		reply.EventHorizon = args.DependencyCutoff
+		for _, rs := range args.ReadSpans {
+			clipped := rs.Intersect(rangeBounds)
+			if !clipped.Valid() {
+				continue
+			}
+			if err := collectDependencies(
+				ctx, reader, &clipped,
+				args.CommitTimestamp, args.DependencyCutoff,
+				args.TxnID, commitIndex, deps, &reply.EventHorizon,
+			); err != nil {
+				return result.Result{}, err
+			}
+		}
+		for id := range deps {
+			reply.Dependencies = append(reply.Dependencies, id)
+		}
+	}
+
 	return result.Result{}, nil
 }
 
@@ -171,6 +202,90 @@ func collectWrites(
 			// time bounds from the current position without advancing.
 			iter.SeekGE(storage.MVCCKey{Key: iter.UnsafeKey().Key})
 		}
+	}
+	return nil
+}
+
+// collectDependencies scans a single read span for the latest MVCC version of
+// each key within (dependencyCutoff, commitTS]. For each such version, it looks
+// up the writing transaction in the CommitIndex and adds it to deps. Tombstones
+// are skipped since they represent deletes, not values the transaction read.
+//
+// If a timestamp is not found in the CommitIndex, eventHorizon is forwarded to
+// that timestamp. The caller uses eventHorizon to communicate which portion of
+// the time window has complete dependency coverage.
+func collectDependencies(
+	ctx context.Context,
+	reader storage.Reader,
+	span *roachpb.Span,
+	commitTS, dependencyCutoff hlc.Timestamp,
+	selfTxnID uuid.UUID,
+	commitIndex *txnfeed.CommitIndex,
+	deps map[uuid.UUID]struct{},
+	eventHorizon *hlc.Timestamp,
+) error {
+	startKey := span.Key
+	endKey := span.EndKey
+	if len(endKey) == 0 {
+		endKey = startKey.Next()
+	}
+
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
+		KeyTypes:     storage.IterKeyTypePointsOnly,
+		StartKey:     startKey,
+		EndKey:       endKey,
+		StartTime:    dependencyCutoff,
+		EndTime:      commitTS,
+		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyIgnore,
+		ReadCategory: fs.BatchEvalReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: startKey})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+
+		key := iter.UnsafeKey()
+		if !key.IsValue() {
+			iter.Next()
+			continue
+		}
+
+		valRaw, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		mvccVal, err := storage.DecodeMVCCValue(valRaw)
+		if err != nil {
+			return err
+		}
+
+		if !mvccVal.IsTombstone() {
+			txnIDs, found := commitIndex.Lookup(key.Timestamp)
+			if found {
+				for _, id := range txnIDs {
+					if id != selfTxnID {
+						deps[id] = struct{}{}
+					}
+				}
+			} else {
+				eventHorizon.Forward(key.Timestamp)
+			}
+		}
+
+		// The incremental iterator may return multiple versions per key.
+		// We only care about the latest version (the first one encountered),
+		// so skip to the next user key.
+		iter.NextKey()
 	}
 	return nil
 }

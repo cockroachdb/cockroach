@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -286,6 +287,11 @@ func (rec *SpanSetReplicaEvalContext) GetApproximateDiskBytes(
 // AdmissionHeader implements the batcheval.EvalContext interface.
 func (rec *SpanSetReplicaEvalContext) AdmissionHeader() kvpb.AdmissionHeader {
 	return rec.i.AdmissionHeader()
+}
+
+// GetCommitIndex implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetCommitIndex() *txnfeed.CommitIndex {
+	return rec.i.GetCommitIndex()
 }
 
 // Release implements the batcheval.EvalContext interface.

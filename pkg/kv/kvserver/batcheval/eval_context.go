@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -150,6 +151,10 @@ type EvalContext interface {
 	// AdmissionHeader returns the AdmissionHeader specified for the batch.
 	AdmissionHeader() kvpb.AdmissionHeader
 
+	// GetCommitIndex returns the CommitIndex for this replica, or nil if
+	// none exists. Used by GetTxnDetails for read dependency tracking.
+	GetCommitIndex() *txnfeed.CommitIndex
+
 	// Release returns the memory allocated by the EvalContext implementation to a
 	// sync.Pool.
 	Release()
@@ -191,6 +196,7 @@ type MockEvalCtx struct {
 	MaxBytes               int64
 	ApproxDiskBytes        uint64
 	EvalKnobs              kvserverbase.BatchEvalTestingKnobs
+	CommitIndex            *txnfeed.CommitIndex
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -345,6 +351,9 @@ func (m *mockEvalCtxImpl) AdmissionHeader() kvpb.AdmissionHeader {
 	return kvpb.AdmissionHeader{}
 }
 
+func (m *mockEvalCtxImpl) GetCommitIndex() *txnfeed.CommitIndex {
+	return m.MockEvalCtx.CommitIndex
+}
 func (m *mockEvalCtxImpl) Release() {}
 
 type noopIntentResolver struct{}

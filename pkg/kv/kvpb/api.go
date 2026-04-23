@@ -715,6 +715,7 @@ func (r *GetTxnDetailsResponse) combine(_ context.Context, c combinable, _ *Batc
 	if r != nil {
 		r.Writes = append(r.Writes, other.Writes...)
 		r.Dependencies = append(r.Dependencies, other.Dependencies...)
+		r.EventHorizon.Forward(other.EventHorizon)
 		if err := r.ResponseHeader.combine(other.Header()); err != nil {
 			return err
 		}

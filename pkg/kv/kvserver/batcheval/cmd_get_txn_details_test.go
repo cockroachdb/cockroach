@@ -10,12 +10,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -317,4 +319,237 @@ func TestCollectWrites(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ts(wall int64) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: wall}
+}
+
+// evalGetTxnDetailsWithDeps calls GetTxnDetails with read spans and a
+// CommitIndex, returning the full response including dependencies.
+func evalGetTxnDetailsWithDeps(
+	t *testing.T,
+	eng storage.Engine,
+	rangeStart, rangeEnd string,
+	selfTxnID uuid.UUID,
+	commitTS, depCutoff int64,
+	readSpans []roachpb.Span,
+	commitIndex *txnfeed.CommitIndex,
+) *kvpb.GetTxnDetailsResponse {
+	t.Helper()
+	resp := &kvpb.GetTxnDetailsResponse{}
+	_, err := GetTxnDetails(context.Background(), eng, CommandArgs{
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+			Desc: &roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey(rangeStart),
+				EndKey:   roachpb.RKey(rangeEnd),
+			},
+			CommitIndex: commitIndex,
+		}).EvalContext(),
+		Args: &kvpb.GetTxnDetailsRequest{
+			TxnID:            selfTxnID,
+			CommitTimestamp:  ts(commitTS),
+			DependencyCutoff: ts(depCutoff),
+			ReadSpans:        readSpans,
+		},
+	}, resp)
+	require.NoError(t, err)
+	return resp
+}
+
+func TestCollectDependencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	selfID := uuid.MakeV4()
+	writerA := uuid.MakeV4()
+	writerB := uuid.MakeV4()
+
+	t.Run("single read key finds writer", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Writer A wrote key "a" at ts=5.
+		putVal(t, eng, "a", 5, "val-a")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(5), writerA)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Len(t, resp.Dependencies, 1)
+		require.Equal(t, writerA, resp.Dependencies[0])
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("self txn excluded from dependencies", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 5, "val-a")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(5), selfID)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("version below dependency cutoff not tracked", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Writer A wrote key "a" at ts=3, but cutoff is ts=5.
+		putVal(t, eng, "a", 3, "old")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(3), writerA)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 5,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(5), resp.EventHorizon)
+	})
+
+	t.Run("commit index miss sets event horizon", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 5, "val-a")
+
+		// Empty commit index — no entries.
+		idx := txnfeed.NewCommitIndex()
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(5), resp.EventHorizon)
+	})
+
+	t.Run("nil commit index sets event horizon to commit timestamp", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 5, "val-a")
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, nil)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(10), resp.EventHorizon)
+	})
+
+	t.Run("multiple read spans with different writers", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 5, "val-a")
+		putVal(t, eng, "c", 7, "val-c")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(5), writerA)
+		idx.Record(ts(7), writerB)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b"), mkSpan("c", "d")}, idx)
+
+		require.Len(t, resp.Dependencies, 2)
+		depSet := make(map[uuid.UUID]struct{})
+		for _, d := range resp.Dependencies {
+			depSet[d] = struct{}{}
+		}
+		require.Contains(t, depSet, writerA)
+		require.Contains(t, depSet, writerB)
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("same writer appears once even across multiple keys", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 5, "val-a")
+		putVal(t, eng, "b", 5, "val-b")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(5), writerA)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "c")}, idx)
+
+		require.Len(t, resp.Dependencies, 1)
+		require.Equal(t, writerA, resp.Dependencies[0])
+	})
+
+	t.Run("tombstone version is not a dependency", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		delKey(t, eng, "a", 5)
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(5), writerA)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("latest version in window used not older version", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Writer A wrote at ts=3, Writer B overwrote at ts=7. Both in window.
+		// Transaction reads at commitTS=10, sees version at ts=7 (writerB).
+		putVal(t, eng, "a", 3, "old")
+		putVal(t, eng, "a", 7, "new")
+
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(3), writerA)
+		idx.Record(ts(7), writerB)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Len(t, resp.Dependencies, 1)
+		require.Equal(t, writerB, resp.Dependencies[0])
+	})
+
+	t.Run("event horizon tracks worst miss", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		putVal(t, eng, "a", 3, "val-a")
+		putVal(t, eng, "b", 7, "val-b")
+
+		// CommitIndex only knows about ts=3 (writerA), not ts=7.
+		idx := txnfeed.NewCommitIndex()
+		idx.Record(ts(3), writerA)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "c")}, idx)
+
+		require.Len(t, resp.Dependencies, 1)
+		require.Equal(t, writerA, resp.Dependencies[0])
+		// event_horizon should be ts=7 (the missed timestamp).
+		require.Equal(t, ts(7), resp.EventHorizon)
+	})
 }
