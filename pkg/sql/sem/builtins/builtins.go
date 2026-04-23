@@ -2175,6 +2175,36 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"random_normal": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(evalCtx.GetRNG().NormFloat64())), nil
+			},
+			Info:       "Returns a random floating-point value drawn from the standard normal distribution (mean 0, standard deviation 1).",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "mean", Typ: types.Float},
+				{Name: "stddev", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mean := float64(tree.MustBeDFloat(args[0]))
+				stddev := float64(tree.MustBeDFloat(args[1]))
+				if stddev < 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "stddev cannot be negative")
+				}
+				return tree.NewDFloat(tree.DFloat(stddev*evalCtx.GetRNG().NormFloat64() + mean)), nil
+			},
+			Info:       "Returns a random floating-point value drawn from a normal distribution with the given `mean` and `stddev`.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"setseed": makeBuiltin(
 		defProps(),
 		tree.Overload{

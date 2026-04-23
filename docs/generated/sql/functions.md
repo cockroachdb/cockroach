@@ -530,8 +530,14 @@
 a convenience function to display HLCs in a print-friendly form. Use the decimal
 value if you rely on the HLC for accuracy.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="min_scale"></a><code>min_scale(val: <a href="decimal.html">decimal</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the minimum scale (number of fractional decimal digits) needed to represent <code>val</code> exactly.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="scale"></a><code>scale(val: <a href="decimal.html">decimal</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the scale (number of fractional decimal digits) of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="to_number"></a><code>to_number(value: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Convert a string to a numeric using the given format.</p>
-</span></td><td>Stable</td></tr></tbody>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="trim_scale"></a><code>trim_scale(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> with any trailing zeros after the decimal point removed.</p>
+</span></td><td>Immutable</td></tr></tbody>
 </table>
 
 ### Date and time functions
@@ -948,6 +954,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="div"></a><code>div(x: <a href="int.html">int</a>, y: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the integer quotient of <code>x</code>/<code>y</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="erf"></a><code>erf(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the error function of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="erfc"></a><code>erfc(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the complementary error function: <code>1 - erf(val)</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="exp"></a><code>exp(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates <em>e</em> ^ <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="exp"></a><code>exp(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates <em>e</em> ^ <code>val</code>.</p>
@@ -966,13 +976,25 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="ln"></a><code>ln(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the natural log of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="ln"></a><code>ln(val: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the natural log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="log"></a><code>log(b: <a href="decimal.html">decimal</a>, x: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base <code>b</code> log of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="log"></a><code>log(b: <a href="float.html">float</a>, x: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the base <code>b</code> log of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="log"></a><code>log(b: <a href="int.html">int</a>, x: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base <code>b</code> log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="log"></a><code>log(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="log"></a><code>log(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="log"></a><code>log(val: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="log10"></a><code>log10(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="log10"></a><code>log10(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="log10"></a><code>log10(val: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the base 10 log of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="mod"></a><code>mod(x: <a href="decimal.html">decimal</a>, y: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates <code>x</code>%<code>y</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -997,6 +1019,10 @@ available replica will error.</p>
 <tr><td><a name="radians"></a><code>radians(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> as a degree value to a radians value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="random"></a><code>random() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). Note that the value contains at most 53 bits of randomness.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="random_normal"></a><code>random_normal() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random floating-point value drawn from the standard normal distribution (mean 0, standard deviation 1).</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="random_normal"></a><code>random_normal(mean: <a href="float.html">float</a>, stddev: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random floating-point value drawn from a normal distribution with the given <code>mean</code> and <code>stddev</code>.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="round"></a><code>round(input: <a href="decimal.html">decimal</a>, decimal_accuracy: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Keeps <code>decimal_accuracy</code> number of figures to the right of the zero position in <code>input</code> using half away from zero rounding. If <code>decimal_accuracy</code> is not in the range -2^31…(2^31-1), the results are undefined.</p>
 </span></td><td>Immutable</td></tr>
@@ -1179,6 +1205,8 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="crc32ieee"></a><code>crc32ieee(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the CRC-32 hash using the IEEE polynomial.</p>
 </span></td><td>Leakproof</td></tr>
+<tr><td><a name="factorial"></a><code>factorial(val: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the factorial of <code>val</code>. <code>val</code> must be between 0 and 32177 inclusive.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="fnv32"></a><code>fnv32(<a href="bytes.html">bytes</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv32"></a><code>fnv32(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of values.</p>
@@ -1195,6 +1223,14 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
+<tr><td><a name="gcd"></a><code>gcd(a: <a href="decimal.html">decimal</a>, b: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the greatest common divisor of <code>a</code> and <code>b</code>. Returns 0 if both inputs are 0; otherwise returns a positive value. Returns NaN if either input is NaN or Infinity.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="gcd"></a><code>gcd(a: <a href="int.html">int</a>, b: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the greatest common divisor of <code>a</code> and <code>b</code>. Returns 0 if both inputs are 0; otherwise returns a positive value.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lcm"></a><code>lcm(a: <a href="decimal.html">decimal</a>, b: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the least common multiple of <code>a</code> and <code>b</code>. Returns 0 if either input is 0. Returns NaN if either input is NaN or Infinity.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lcm"></a><code>lcm(a: <a href="int.html">int</a>, b: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the least common multiple of <code>a</code> and <code>b</code>. Returns 0 if either input is 0.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2. Returns 0 or count+1 for an input outside that range.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
