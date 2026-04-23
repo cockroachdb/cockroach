@@ -1,0 +1,571 @@
+/* setup */
+CREATE TABLE t1 (id INT PRIMARY KEY);
+CREATE TABLE t2 (id INT PRIMARY KEY);
+CREATE SEQUENCE s1;
+CREATE SEQUENCE s2;
+CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT * FROM s1;
+    INSERT INTO t2 VALUES (nextval('s2'));
+    RETURN NEW;
+  END
+$$;
+CREATE FUNCTION f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT * FROM s1;
+    INSERT INTO t1 VALUES (nextval('s2'));
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER tg1 AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f1();
+CREATE TRIGGER tg2 AFTER INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f2();
+----
+...
++object {100 101 t1} -> 104
++object {100 101 t2} -> 105
++object {100 101 s1} -> 106
++object {100 101 s2} -> 107
+
+/* test */
+DROP TABLE t1, t2;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
+increment telemetry for sql.schema.drop_table
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 104
+    statement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+    tag: DROP TABLE
+    user: root
+  tableName: defaultdb.public.t1
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 105
+    statement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+    tag: DROP TABLE
+    user: root
+  tableName: defaultdb.public.t2
+## StatementPhase stage 1 of 1 with 94 MutationType ops
+delete object namespace entry {100 101 t1} -> 104
+delete object namespace entry {100 101 t2} -> 105
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 105
+  -    triggerId: 1
+  +  dependedOnBy: []
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 105
+  -    - 106
+  -    - 107
+  -    dependsOnRoutines:
+  -    - 108
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT s1.last_value, s1.log_cnt, s1.is_called FROM defaultdb.public.s1;
+  -      INSERT INTO defaultdb.public.t2 VALUES (nextval(107:::REGCLASS));
+  -      RETURN new;
+  -      END;
+  -    funcId: 108
+  -    id: 1
+  -    name: tg1
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 104
+  -    triggerId: 1
+  +  dependedOnBy: []
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 104
+  -    - 106
+  -    - 107
+  -    dependsOnRoutines:
+  -    - 109
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT s1.last_value, s1.log_cnt, s1.is_called FROM defaultdb.public.s1;
+  -      INSERT INTO defaultdb.public.t1 VALUES (nextval(107:::REGCLASS));
+  -      RETURN new;
+  -      END;
+  -    funcId: 109
+  -    id: 1
+  -    name: tg2
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 104
+  -    triggerId: 1
+  -  - byId: true
+  -    id: 105
+  -    triggerId: 1
+  +  dependedOnBy: []
+     formatVersion: 3
+     id: 106
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 104
+  -    triggerId: 1
+  -  - byId: true
+  -    id: 105
+  -    triggerId: 1
+  +  dependedOnBy: []
+     formatVersion: 3
+     id: 107
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #108
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+upsert descriptor #109
+   function:
+  -  dependedOnBy:
+  -  - id: 105
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 101 MutationType ops
+delete object namespace entry {100 101 t1} -> 104
+delete object namespace entry {100 101 t2} -> 105
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 105
+  -    triggerId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: t1
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+  +        statement: DROP TABLE t1, t2
+  +        statementTag: DROP TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dependedOnBy: []
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 105
+  -    - 106
+  -    - 107
+  -    dependsOnRoutines:
+  -    - 108
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT s1.last_value, s1.log_cnt, s1.is_called FROM defaultdb.public.s1;
+  -      INSERT INTO defaultdb.public.t2 VALUES (nextval(107:::REGCLASS));
+  -      RETURN new;
+  -      END;
+  -    funcId: 108
+  -    id: 1
+  -    name: tg1
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 104
+  -    triggerId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: t2
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+  +        statement: DROP TABLE t1, t2
+  +        statementTag: DROP TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dependedOnBy: []
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 104
+  -    - 106
+  -    - 107
+  -    dependsOnRoutines:
+  -    - 109
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT s1.last_value, s1.log_cnt, s1.is_called FROM defaultdb.public.s1;
+  -      INSERT INTO defaultdb.public.t1 VALUES (nextval(107:::REGCLASS));
+  -      RETURN new;
+  -      END;
+  -    funcId: 109
+  -    id: 1
+  -    name: tg2
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 104
+  -    triggerId: 1
+  -  - byId: true
+  -    id: 105
+  -    triggerId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: s1
+  +  dependedOnBy: []
+     formatVersion: 3
+     id: 106
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 104
+  -    triggerId: 1
+  -  - byId: true
+  -    id: 105
+  -    triggerId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: s2
+  +  dependedOnBy: []
+     formatVersion: 3
+     id: 107
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #108
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 108
+  +      name: f1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+upsert descriptor #109
+   function:
+  -  dependedOnBy:
+  -  - id: 105
+  -    triggerIds:
+  -    - 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 109
+  +      name: f2
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP TABLE defaultdb.public.t1, defaultdb.public.t2"
+  descriptor IDs: [104 105 106 107 108 109]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: t1
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+  -        statement: DROP TABLE t1, t2
+  -        statementTag: DROP TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dependedOnBy: []
+     dropTime: <redacted>"
+  ...
+     triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: t2
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t1›, ‹defaultdb›.‹public›.‹t2›
+  -        statement: DROP TABLE t1, t2
+  -        statementTag: DROP TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dependedOnBy: []
+     dropTime: <redacted>"
+  ...
+     triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 106
+  -      name: s1
+     dependedOnBy: []
+     formatVersion: 3
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 107
+  -      name: s2
+     dependedOnBy: []
+     formatVersion: 3
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #108
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 108
+  -      name: f1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "4"
+  +  version: "5"
+     volatility: VOLATILE
+upsert descriptor #109
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 109
+  -      name: f2
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "4"
+  +  version: "5"
+     volatility: VOLATILE
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP TABLE defaultdb.public.t1, defaultdb.public.t2"
+  descriptor IDs: [104 105]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #3
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase
