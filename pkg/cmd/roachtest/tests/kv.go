@@ -61,6 +61,9 @@ func registerKV(r registry.Registry) {
 		jemallocReleaseFaster bool
 		// Set to true to reduce the Pebble block cache from 25% to 20%.
 		smallBlockCache bool
+		// TODO(ibrahim): Remove this flag once looselyCoupled truncation is enabled
+		// by default.
+		looselyCoupledTrunc bool
 	}
 	computeConcurrency := func(opts kvOptions) int {
 		// Scale the workload concurrency with the number of nodes in the cluster to
@@ -117,6 +120,11 @@ func registerKV(r registry.Registry) {
 		if opts.tracing {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING trace.debug.enable = true"); err != nil {
 				t.Fatalf("failed to enable tracing: %v", err)
+			}
+		}
+		if opts.looselyCoupledTrunc {
+			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.raft_log.loosely_coupled_truncation.enabled = true"); err != nil {
+				t.Fatalf("failed to enable loosely coupled raft log truncation: %v", err)
 			}
 		}
 		if opts.sharedProcessMT {
@@ -231,6 +239,7 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 12 /* 4 KB */},
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 12 /* 4 KB */},
+		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 12 /* 4 KB */, looselyCoupledTrunc: true},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 12 /* 4 KB */},
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
@@ -243,7 +252,14 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 100},
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 16 /* 64 KB */, splits: 100},
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 100, looselyCoupledTrunc: true},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */, splits: 100},
+
+		// These two tests will be used to monitor and compare the performance of
+		// tightly-coupled VS loosely-coupled truncation under a heavy write load
+		// with many replicas.
+		{nodes: 5, cpus: 8, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 10000},
+		{nodes: 5, cpus: 8, readPercent: 0, blockSize: 1 << 16 /* 64 KB */, splits: 10000, looselyCoupledTrunc: true},
 
 		// Configs with large batch sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, batchSize: 16},
@@ -328,6 +344,9 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.sharedProcessMT {
 			nameParts = append(nameParts, "mt-shared-process")
+		}
+		if opts.looselyCoupledTrunc {
+			nameParts = append(nameParts, "loosely-coupled")
 		}
 		owner := registry.OwnerTestEng
 		if opts.owner != "" {
