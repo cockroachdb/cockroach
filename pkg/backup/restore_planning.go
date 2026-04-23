@@ -1857,6 +1857,29 @@ func doRestorePlan(
 		return err
 	}
 
+	// Check whether a revision log exists at the collection root. If so,
+	// adjust the end time to the latest backup in the chain and record
+	// the original AOST as the revision log replay target.
+	var revisionLogTimestamp hlc.Timestamp
+	collectionStore, err := mkStore(ctx, defaultCollectionURI, p.User())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = collectionStore.Close() }()
+
+	endTime, revisionLogTimestamp, err = adjustEndTimeForRevisionLog(
+		ctx, collectionStore, endTime, fullyResolvedSubdir,
+	)
+	if err != nil {
+		return err
+	}
+	if !revisionLogTimestamp.IsEmpty() {
+		log.Dev.Infof(ctx,
+			"revision log detected; restoring to backup end %s, will replay log through %s",
+			endTime, revisionLogTimestamp,
+		)
+	}
+
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
@@ -2172,6 +2195,7 @@ func doRestorePlan(
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
 		TempSystemID:                     tempSysDBID,
 		Grants:                           restoreStmt.Options.Grants,
+		RevisionLogTimestamp:             revisionLogTimestamp,
 	}
 
 	jr := jobs.Record{

@@ -502,6 +502,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("grants")
 	}
+
 }
 
 // CombineWith merges other backup options into this backup options struct.

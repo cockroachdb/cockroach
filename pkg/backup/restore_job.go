@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -2492,6 +2493,14 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// it needs. If that occured, we would not need to update details above.
 		if err := r.doDownloadFilesWithRetry(ctx, p); err != nil {
 			return err
+		}
+	}
+
+	if !details.RevisionLogTimestamp.IsEmpty() {
+		if !build.IsRelease() {
+			if err := r.restoreFromRevisionLog(ctx); err != nil {
+				return errors.Wrap(err, "restoring from revision log")
+			}
 		}
 	}
 
