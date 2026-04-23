@@ -3319,6 +3319,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
       owner: cockroachdb/kv
+    - name: distsender.rpc.err.txnfeedretryerrtype
+      exported_name: distsender_rpc_err_txnfeedretryerrtype
+      description: Number of TxnFeedRetryErrType errors received replica-bound RPCs.
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
+      owner: cockroachdb/kv
     - name: distsender.rpc.err.unsupportedrequesterrtype
       exported_name: distsender_rpc_err_unsupportedrequesterrtype
       description: Number of UnsupportedRequestErrType errors received replica-bound RPCs.
