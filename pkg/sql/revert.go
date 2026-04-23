@@ -77,11 +77,11 @@ func DeleteTableWithPredicate(
 
 	spansToDo := make(chan *roachpb.Span, 1)
 
-	// Create a cancellable context to prevent the worker goroutines below from
-	// leaking once the parent goroutine returns.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+	// Producer and workers run inside the same ctxgroup so they share its
+	// derived context. Either a parent-ctx cancellation (e.g. PAUSE on a
+	// reverting IMPORT) or a worker error then propagates to the other side
+	// via ctx.Done(); without this sharing the producer would block on send
+	// into a channel with no readers. See #168754.
 	grp := ctxgroup.WithContext(ctx)
 	grp.GoCtx(func(ctx context.Context) error {
 		return ctxgroup.GroupWorkers(ctx, numWorkers, func(ctx context.Context, _ int) error {
@@ -142,27 +142,38 @@ func DeleteTableWithPredicate(
 		})
 	})
 
-	var n int64
-	lastKey := tableSpan.Key
-	ri := kvcoord.MakeRangeIterator(distSender)
-	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
-		if !ri.Valid() {
-			return ri.Error()
-		}
-		if n++; n >= rangesPerBatch || !ri.NeedAnother(tableSpan) {
-			endKey := ri.Desc().EndKey
-			if tableSpan.EndKey.Less(endKey) {
-				endKey = tableSpan.EndKey
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(spansToDo)
+		var n int64
+		lastKey := tableSpan.Key
+		ri := kvcoord.MakeRangeIterator(distSender)
+		for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
+			if !ri.Valid() {
+				return ri.Error()
 			}
-			spansToDo <- &roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}
-			n = 0
-			lastKey = endKey
+			if n++; n >= rangesPerBatch || !ri.NeedAnother(tableSpan) {
+				endKey := ri.Desc().EndKey
+				if tableSpan.EndKey.Less(endKey) {
+					endKey = tableSpan.EndKey
+				}
+				select {
+				case <-ctx.Done():
+					// Return nil so grp.Wait surfaces the originating error
+					// (a worker's wrapped KV error, or a worker's ctx.Err on
+					// parent cancellation) rather than this producer's
+					// downstream context.Canceled. ctxgroup.Wait falls back
+					// to ctx.Err when no goroutine returned an error.
+					return nil
+				case spansToDo <- &roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}:
+				}
+				n = 0
+				lastKey = endKey
+			}
+			if !ri.NeedAnother(tableSpan) {
+				return nil
+			}
 		}
+	})
 
-		if !ri.NeedAnother(tableSpan) {
-			break
-		}
-	}
-	close(spansToDo)
 	return grp.Wait()
 }
