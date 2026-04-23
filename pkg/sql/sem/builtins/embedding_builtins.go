@@ -52,7 +52,7 @@ var embeddingGenerators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "text", Typ: types.String}},
 			embedChunksGeneratorType,
-			makeEmbedChunksGenerator,
+			makeEmbedChunksGeneratorChecked,
 			"Splits the input text into overlapping chunks, embeds each "+
 				"chunk, and returns rows of (chunk_seq, chunk, embedding). "+
 				"Uses the all-MiniLM-L6-v2 model (384 dimensions). Useful "+
@@ -66,7 +66,7 @@ var embeddingGenerators = map[string]builtinDefinition{
 				{Name: "model", Typ: types.String},
 			},
 			embedChunksGeneratorType,
-			makeEmbedChunksGeneratorWithModel,
+			makeEmbedChunksGeneratorWithModelChecked,
 			"Splits the input text into overlapping chunks, embeds each "+
 				"chunk using the specified model, and returns rows of "+
 				"(chunk_seq, chunk, embedding). For remote models like "+
@@ -77,6 +77,17 @@ var embeddingGenerators = map[string]builtinDefinition{
 	),
 }
 
+// checkVectorizationEnabled returns a user-facing error if the
+// sql.vectorize.enabled cluster setting is off.
+func checkVectorizationEnabled(evalCtx *eval.Context) error {
+	if !embedding.VectorizationEnabled.Get(&evalCtx.Settings.SV) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"vectorization is disabled; enable it with "+
+				"SET CLUSTER SETTING sql.vectorize.enabled = true")
+	}
+	return nil
+}
+
 var embeddingBuiltins = map[string]builtinDefinition{
 	"embed": makeBuiltin(defProps(),
 		tree.Overload{
@@ -85,8 +96,11 @@ var embeddingBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.PGVector),
 			Fn: func(
-				ctx context.Context, _ *eval.Context, args tree.Datums,
+				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 			) (tree.Datum, error) {
+				if err := checkVectorizationEnabled(evalCtx); err != nil {
+					return nil, err
+				}
 				eng, err := embedding.GetEngine()
 				if err != nil {
 					return nil, err
@@ -113,6 +127,9 @@ var embeddingBuiltins = map[string]builtinDefinition{
 			Fn: func(
 				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 			) (tree.Datum, error) {
+				if err := checkVectorizationEnabled(evalCtx); err != nil {
+					return nil, err
+				}
 				text := string(tree.MustBeDString(args[0]))
 				modelSpec := string(tree.MustBeDString(args[1]))
 				embedder, err := resolveEmbedder(ctx, evalCtx, modelSpec)
@@ -144,6 +161,9 @@ var embeddingBuiltins = map[string]builtinDefinition{
 			Fn: func(
 				ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 			) (tree.Datum, error) {
+				if err := checkVectorizationEnabled(evalCtx); err != nil {
+					return nil, err
+				}
 				imageBytes := []byte(tree.MustBeDBytes(args[0]))
 				modelSpec := string(tree.MustBeDString(args[1]))
 
@@ -277,6 +297,28 @@ func lookupExternalConnURI(
 	}
 
 	return simpleURI.SimpleURI.URI, nil
+}
+
+// makeEmbedChunksGeneratorChecked wraps makeEmbedChunksGenerator with
+// a feature flag check.
+func makeEmbedChunksGeneratorChecked(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	if err := checkVectorizationEnabled(evalCtx); err != nil {
+		return nil, err
+	}
+	return makeEmbedChunksGenerator(ctx, evalCtx, args)
+}
+
+// makeEmbedChunksGeneratorWithModelChecked wraps
+// makeEmbedChunksGeneratorWithModel with a feature flag check.
+func makeEmbedChunksGeneratorWithModelChecked(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	if err := checkVectorizationEnabled(evalCtx); err != nil {
+		return nil, err
+	}
+	return makeEmbedChunksGeneratorWithModel(ctx, evalCtx, args)
 }
 
 // makeEmbedChunksGenerator creates a ValueGenerator that chunks text

@@ -1657,7 +1657,8 @@ The location where all libraries for spatial operations is located.`,
 	EmbeddingLibsDir = FlagInfo{
 		Name: "embedding-libs",
 		Description: `
-The location of the ONNX Runtime library for embedding operations.`,
+The location of the ONNX Runtime library for embedding operations.
+Defaults to ./onnxruntime/lib relative to the working directory.`,
 	}
 
 	EmbeddingModelPath = FlagInfo{

@@ -68,6 +68,12 @@ type createVectorizerNode struct {
 func (p *planner) CreateVectorizer(
 	ctx context.Context, n *tree.CreateVectorizer,
 ) (planNode, error) {
+	if !embedding.VectorizationEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"vectorization is disabled; enable it with "+
+				"SET CLUSTER SETTING sql.vectorize.enabled = true")
+	}
+
 	if err := checkSchemaChangeEnabled(
 		ctx, p.ExecCfg(), "CREATE VECTORIZER",
 	); err != nil {

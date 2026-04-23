@@ -577,7 +577,7 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
-	startCtx.embeddingLibsDir = ""
+	startCtx.embeddingLibsDir = "./onnxruntime/lib"
 	startCtx.embeddingModelPath = ""
 	startCtx.embeddingVocabPath = ""
 	startCtx.embeddingCacheDir = ""

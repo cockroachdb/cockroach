@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/embedding"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +30,12 @@ type dropVectorizerNode struct {
 
 // DropVectorizer removes the automatic embedding generator from a table.
 func (p *planner) DropVectorizer(ctx context.Context, n *tree.DropVectorizer) (planNode, error) {
+	if !embedding.VectorizationEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"vectorization is disabled; enable it with "+
+				"SET CLUSTER SETTING sql.vectorize.enabled = true")
+	}
+
 	if err := checkSchemaChangeEnabled(
 		ctx, p.ExecCfg(), "DROP VECTORIZER",
 	); err != nil {

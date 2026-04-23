@@ -47,6 +47,11 @@ func (r *vectorizerResumer) Resume(ctx context.Context, execCtx interface{}) err
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 
+	if !embedding.VectorizationEnabled.Get(&execCfg.Settings.SV) {
+		log.Ops.Infof(ctx, "vectorizer job skipping: sql.vectorize.enabled is false")
+		return nil
+	}
+
 	details := r.job.Details().(jobspb.VectorizerDetails)
 	tableID := details.TableID
 
