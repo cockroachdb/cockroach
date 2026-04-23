@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package conflict
+package rand
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,14 +37,13 @@ func TestWriter(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 	sqlDB.Exec(t, `CREATE TABLE test_writer (id INT PRIMARY KEY, data TEXT NOT NULL)`)
 
-	table, err := workloadrand.LoadTable(db, "test_writer")
+	table, err := LoadTable(db, "test_writer")
 	require.NoError(t, err)
 
-	writer, err := newWriter(ctx, db, table)
-	require.NoError(t, err)
+	writer := NewTableWriter(db, table)
 
 	row := []any{1, "test data"}
-	err = writer.upsertRow(ctx, row)
+	err = writer.UpsertRow(ctx, row)
 	require.NoError(t, err)
 
 	sqlDB.CheckQueryResults(t,
@@ -53,7 +51,7 @@ func TestWriter(t *testing.T) {
 		[][]string{{"1", "test data"}},
 	)
 
-	err = writer.deleteRow(ctx, row)
+	err = writer.DeleteRow(ctx, row)
 	require.NoError(t, err)
 
 	sqlDB.CheckQueryResults(t,
@@ -74,11 +72,10 @@ func runWriterTest(
 
 	t.Logf("stmt: %s\n", createStmt)
 
-	table, err := workloadrand.LoadTable(db, tableName)
+	table, err := LoadTable(db, tableName)
 	require.NoError(t, err)
 
-	writer, err := newWriter(ctx, db, table)
-	require.NoError(t, err)
+	writer := NewTableWriter(db, table)
 
 	t.Logf("upsert: %s\n", writer.upsertStmt)
 	t.Logf("delete: %s\n", writer.deleteStmt)
@@ -89,7 +86,7 @@ func runWriterTest(
 	// possible the table contains computed columns that combine to overflow
 	// (e.g. a + b). It's tricky to fix randgen so that it only generates values
 	// that do not overflow.
-	shouldRetryUpdate := func(err error, table workloadrand.Table) bool {
+	shouldRetryUpdate := func(err error, table Table) bool {
 		hasComputedColumns := false
 		for _, col := range table.Cols {
 			if col.IsComputed {
@@ -115,7 +112,7 @@ func runWriterTest(
 			return err
 		}
 		t.Logf("inserting row: %+v", row)
-		err = writer.upsertRow(ctx, row)
+		err = writer.UpsertRow(ctx, row)
 		if err != nil && shouldRetryUpdate(err, table) {
 			return err
 		}
@@ -132,7 +129,7 @@ func runWriterTest(
 			return err
 		}
 		t.Logf("mutating row: %+v", row)
-		err = writer.upsertRow(ctx, row)
+		err = writer.UpsertRow(ctx, row)
 		if err != nil && shouldRetryUpdate(err, table) {
 			return err
 		}
@@ -149,7 +146,7 @@ func runWriterTest(
 	)
 
 	t.Logf("deleting row: %+v", row)
-	require.NoError(t, writer.deleteRow(ctx, row))
+	require.NoError(t, writer.DeleteRow(ctx, row))
 
 	rows := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM %s", tableName))
 	if len(rows) != 0 {

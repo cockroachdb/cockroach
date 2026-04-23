@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -469,11 +470,65 @@ func TestLDRConflict(
 		leftURL)
 
 	t.Status("verifying results")
-	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, LDRWorkload{
-		dbName:            "conflict",
-		tableNames:        []string{"conflict"},
-		manualSchemaSetup: true,
-	})
+	verifyConflictCorrectness(ctx, t, setup, leftJobID, rightJobID)
+}
+
+// verifyConflictCorrectness waits for replication to catch up, checks DLQs,
+// and compares table fingerprints. If fingerprints diverge, it runs a row-level
+// diff. There is a known bug where the conflict workload can produce two
+// conflict rows with the same origin timestamp, causing LDR to resolve them
+// nondeterministically. If all differing rows have identical origin timestamps
+// on both sides, the test passes. Otherwise, the test fails and prints the
+// diffs.
+func verifyConflictCorrectness(
+	ctx context.Context, t test.Test, setup multiClusterSetup, leftJobID, rightJobID int,
+) {
+	now := timeutil.Now()
+	t.Status("waiting for replicated times to catchup")
+	waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, 2*time.Minute, now)
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, "conflict"))
+	waitForReplicatedTimeToReachTimestamp(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, 2*time.Minute, now)
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, "conflict"))
+
+	t.Status("comparing fingerprints")
+	fpQuery := "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE conflict.conflict"
+	fpLeft := setup.left.sysSQL.QueryStr(t, fpQuery)
+	fpRight := setup.right.sysSQL.QueryStr(t, fpQuery)
+
+	if fmt.Sprint(fpLeft) == fmt.Sprint(fpRight) {
+		t.L().Printf("fingerprints match")
+		return
+	}
+
+	t.Status("running row-level diff")
+
+	// Limit to 100 diffs: without a limit, the worst case reports the entire
+	// database which is millions of rows. In practice we expect only 1-2 rows
+	// with matching origin timestamps, so if there are 100 or more something
+	// else is wrong.
+	const diffLimit = 100
+	diffs, err := workloadrand.Diff(setup.left.db, "conflict.conflict", setup.right.db, "conflict.conflict", diffLimit)
+	require.NoError(t, err)
+	require.NotEmpty(t, diffs, "fingerprints differ but no row diffs found")
+	require.Less(t, len(diffs), diffLimit, "too many diffs; likely a real divergence, not a timestamp tie")
+
+	// Check if all diffs are caused by the known bug: two conflict rows with
+	// the same origin timestamp cause nondeterministic resolution.
+	for _, diff := range diffs {
+		if diff.RowA == nil || diff.RowB == nil {
+			// TODO(jeffswenson): this case is a little sad because we don't
+			// currently have a way to get the origin timestamp for a tombstone, so
+			// we can't assert the only time we see this is on origin timestamp
+			// conflicts.
+			continue
+		}
+		if diff.OriginTimestampA == diff.OriginTimestampB {
+			// TODO(#168541): if the origin timestamps are the same, lww conflict
+			// resolution will tie and the clusters may diverge.
+			continue
+		}
+		t.Errorf("fingerprints differ with mismatched origin timestamps: %s", diff)
+	}
 }
 
 // TestLDRCreateTablesTPCC inits the left cluster with 1000 warehouse tpcc,
