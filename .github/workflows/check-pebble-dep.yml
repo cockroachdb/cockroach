@@ -30,7 +30,7 @@ jobs:
 
       - name: Notify Slack on failure
         if: steps.run_script.outputs.exitcode != '0'
-        uses: slackapi/slack-github-action@v2.1.0
+        uses: slackapi/slack-github-action@b0fa283ad8fea605de13dc3f449259339835fc52 # v2.1.0
         with:
           errors: true
           method: chat.postMessage
