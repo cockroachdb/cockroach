@@ -144,8 +144,11 @@ type c2cMetrics struct {
 	fingerprintingEnd time.Time
 }
 
-// export summarizes all metrics gathered throughout the test.
-func (m c2cMetrics) export(t test.Test, nodeCount int) {
+// export summarizes all metrics gathered throughout the test and returns
+// the per-phase metrics keyed by "<phase>/<metric>" (e.g.
+// "InitialScan/Duration Minutes").
+func (m c2cMetrics) export(t test.Test, nodeCount int) map[string]float64 {
+	allMetrics := make(map[string]float64)
 
 	// aggregate aggregates metric snapshots across two time periods. A non-zero
 	// durationOverride will be used instead of the duration between the two
@@ -182,6 +185,7 @@ func (m c2cMetrics) export(t test.Test, nodeCount int) {
 		t.L().Printf("%s Perf:", label)
 		for _, name := range metricNames {
 			t.L().Printf("\t%s : %.2f", name, metrics[name])
+			allMetrics[label+"/"+name] = metrics[name]
 		}
 	}
 	aggregate(m.initalScanStart, m.initialScanEnd, "InitialScan", 0)
@@ -191,6 +195,42 @@ func (m c2cMetrics) export(t test.Test, nodeCount int) {
 	// The _amount_ of data processed during cutover should be the data ingested between the
 	// timestamp we cut over to and the start of the cutover process.
 	aggregate(m.cutoverTo, m.cutoverStart, "Cutover", m.cutoverEnd.time.Sub(m.cutoverStart.time))
+
+	return allMetrics
+}
+
+func (rd *replicationDriver) writePerfSummaryStats(
+	exportedMetrics map[string]float64, lv *latencyVerifier,
+) {
+	stats := roachtestutil.AggregatedPerfMetrics{
+		{
+			Name:           "initial_scan_time",
+			Value:          roachtestutil.MetricPoint(exportedMetrics["InitialScan/Duration Minutes"]),
+			Unit:           "minutes",
+			IsHigherBetter: false,
+		},
+		{
+			Name:           "initial_scan_throughput",
+			Value:          roachtestutil.MetricPoint(exportedMetrics["InitialScan/Throughput_LogicalMegabytes_MB/S/Node"]),
+			Unit:           "MB/s/node",
+			IsHigherBetter: true,
+		},
+		{
+			Name:           "cutover_time",
+			Value:          roachtestutil.MetricPoint(exportedMetrics["Cutover/Duration Minutes"]),
+			Unit:           "minutes",
+			IsHigherBetter: false,
+		},
+		{
+			Name:           "max_replication_lag",
+			Value:          roachtestutil.MetricPoint(lv.MaxSeenSteadyLatency().Seconds()),
+			Unit:           "seconds",
+			IsHigherBetter: false,
+		},
+	}
+	if err := roachtestutil.WritePerfSummaryStats(rd.t, rd.c, stats); err != nil {
+		rd.t.L().Printf("failed to write perf summary stats: %v", err)
+	}
 }
 
 type streamingWorkload interface {
@@ -1301,7 +1341,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	)
 	rd.c.StartServiceForVirtualCluster(ctx, rd.t.L(), startOpts, install.MakeClusterSettings())
 
-	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
+	exportedMetrics := rd.metrics.export(rd.t, len(rd.setup.src.nodes))
+	rd.writePerfSummaryStats(exportedMetrics, lv)
 
 	rd.t.Status("comparing fingerprints")
 	rd.compareTenantFingerprintsAtTimestamp(
