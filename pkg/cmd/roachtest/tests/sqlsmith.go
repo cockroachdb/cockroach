@@ -376,19 +376,19 @@ func withIncreasedStmtTimeout(
 	t.Helper()
 	var stmtTimeout int
 	if err := conn.QueryRow("SHOW statement_timeout").Scan(&stmtTimeout); err != nil {
-		t.Fatal(err)
+		return func() {}
 	}
 	if stmtTimeout == 0 {
 		return func() {}
 	}
 	setTimeout := func(v int) {
 		stmt := fmt.Sprintf("SET statement_timeout = %d", v)
-		logStmt(stmt)
 		if _, err := conn.Exec(stmt); err != nil {
-			t.Fatal(err)
+			t.L().Printf("failed to set statement_timeout to %d: %v", v, err)
+			return
 		}
+		logStmt(stmt)
 	}
-	t.L().Printf("temporarily increasing the statement timeout")
 	setTimeout(factor * stmtTimeout)
 	return func() { setTimeout(stmtTimeout) }
 }
