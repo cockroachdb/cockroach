@@ -7,6 +7,8 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -22,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -583,9 +588,31 @@ func verifyWriteSet(t *testing.T, writes []kvpb.TxnDetailKV, expected []expected
 	}
 }
 
-// TestCommitIndexPopulation verifies that the CommitIndex is populated during
-// Raft application for both 1PC and 2PC transaction commit paths.
-func TestCommitIndexPopulation(t *testing.T) {
+// TestGetTxnDetailsDependencies verifies the full dependency tracking
+// pipeline: CommitIndex population during Raft apply, followed by
+// GetTxnDetails resolving read dependencies via the CommitIndex.
+//
+// The test uses two ranges and six transactions:
+//
+//   - Txn A (1PC): writes keyA on range 1. No dependencies.
+//   - Txn B (2PC): reads keyA on range 1, writes keyB1 on range 1 and
+//     keyB2 on range 2. Depends on txn A.
+//   - Txn C (1PC): reads keyB1 on range 1, writes keyC on range 1.
+//     Depends on txn B.
+//   - Txn D (2PC): reads keyC on range 1 and keyB2 on range 2, writes
+//     keyD1 on range 1 and keyD2 on range 2. Depends on txn C
+//     (discovered on range 1) and txn B (discovered on range 2).
+//   - Txn E (2PC): writes keyE1 on range 1 and keyE2 on range 2.
+//     No dependencies. Txn record on range 1; intent on range 2
+//     resolved asynchronously.
+//   - Txn F (1PC): reads keyE2 on range 2, writes keyF on range 1.
+//     Depends on txn E. The dependency is only discoverable on range 2
+//     via the asynchronously resolved intent.
+//
+// This exercises 1PC and 2PC CommitIndex population, cross-range
+// GetTxnDetails via DistSender, dependency chaining, multi-range
+// dependency merging, and async intent resolution.
+func TestGetTxnDetailsDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -602,96 +629,345 @@ func TestCommitIndexPopulation(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	_, err := tc.ServerConn(0).Exec(
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+	require.NoError(t, err)
+
 	ts := tc.Server(0)
 	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	db := ts.DB()
 
+	// Two ranges: [scratchKey, midKey) and [midKey, ...).
 	scratchKey := tc.ScratchRange(t)
 	midKey := append(scratchKey.Clone(), 'm')
 	tc.SplitRangeOrFatal(t, midKey)
 
-	t.Run("1PC", func(t *testing.T) {
-		key := append(scratchKey.Clone(), '1')
-		var txnID uuid.UUID
-		var commitTS hlc.Timestamp
-		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			txnID = txn.ID()
-			b := txn.NewBatch()
-			b.Put(key, "one-phase")
-			return txn.CommitInBatch(ctx, b)
-		})
-		require.NoError(t, err)
+	keyA := append(scratchKey.Clone(), 'a')
+	keyB1 := append(scratchKey.Clone(), 'b')
+	keyB2 := append(midKey.Clone(), 'b')
+	keyC := append(scratchKey.Clone(), 'c')
+	keyD1 := append(scratchKey.Clone(), 'd')
+	keyD2 := append(midKey.Clone(), 'd')
+	keyE1 := append(scratchKey.Clone(), 'e')
+	keyE2 := append(midKey.Clone(), 'e')
+	keyF := append(scratchKey.Clone(), 'f')
 
-		// Read the committed value to discover its MVCC timestamp.
-		kv, err := db.Get(ctx, key)
-		require.NoError(t, err)
-		commitTS = kv.Value.Timestamp
-
-		repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	// waitForCommittedEvent polls the stream until the given txnID appears.
+	waitForCommittedEvent := func(
+		t *testing.T, stream *txnFeedStream, txnID uuid.UUID,
+	) *kvpb.TxnFeedCommitted {
+		t.Helper()
+		var committed *kvpb.TxnFeedCommitted
 		testutils.SucceedsSoon(t, func() error {
-			idx := repl.GetCommitIndex()
-			if idx == nil {
-				return errors.New("commit index not yet created")
-			}
-			ids, ok := idx.Lookup(commitTS)
-			if !ok {
-				return errors.Newf("no entry for ts %s", commitTS)
-			}
-			for _, id := range ids {
-				if id == txnID {
+			for _, ev := range stream.events() {
+				if ev.Committed != nil && ev.Committed.TxnID == txnID {
+					committed = ev.Committed
 					return nil
 				}
 			}
-			return errors.Newf("txn %s not found at ts %s", txnID, commitTS)
+			return errors.Newf("waiting for committed event for %s", txnID.Short())
 		})
-	})
+		return committed
+	}
 
-	t.Run("2PC", func(t *testing.T) {
-		key1 := append(scratchKey.Clone(), '2')
-		key2 := append(midKey.Clone(), '2')
-		txn := kv.NewTxn(ctx, db, 0)
-		txnID := txn.ID()
-		require.NoError(t, txn.Put(ctx, key1, "two-phase-1"))
-		require.NoError(t, txn.Put(ctx, key2, "two-phase-2"))
-		require.NoError(t, txn.Commit(ctx))
-
-		// Read committed values to get the MVCC timestamp.
-		kv1, err := db.Get(ctx, key1)
-		require.NoError(t, err)
-		commitTS := kv1.Value.Timestamp
-
-		// Verify the commit index on both ranges.
-		repl1 := store.LookupReplica(roachpb.RKey(scratchKey))
-		repl2 := store.LookupReplica(roachpb.RKey(midKey))
-
-		for _, tc := range []struct {
-			name string
-			repl *kvserver.Replica
-		}{
-			{"range1", repl1},
-			{"range2", repl2},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				testutils.SucceedsSoon(t, func() error {
-					idx := tc.repl.GetCommitIndex()
-					if idx == nil {
-						return errors.New("commit index not yet created")
-					}
-					ids, ok := idx.Lookup(commitTS)
-					if !ok {
-						return errors.Newf("no entry for ts %s", commitTS)
-					}
-					for _, id := range ids {
-						if id == txnID {
-							return nil
-						}
-					}
-					return errors.Newf("txn %s not found at ts %s", txnID, commitTS)
-				})
-			})
+	fmtSpans := func(spans []roachpb.Span) string {
+		var buf strings.Builder
+		for i, s := range spans {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			if len(s.EndKey) == 0 {
+				fmt.Fprintf(&buf, "{%s}", s.Key)
+			} else {
+				fmt.Fprintf(&buf, "{%s-%s}", s.Key, s.EndKey)
+			}
 		}
+		return buf.String()
+	}
+
+	// getTxnDetails issues a GetTxnDetails request spanning the full scratch
+	// keyspace so DistSender fans it out across both ranges.
+	getTxnDetails := func(
+		t *testing.T, committed *kvpb.TxnFeedCommitted,
+	) *kvpb.GetTxnDetailsResponse {
+		t.Helper()
+		resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(),
+			&kvpb.GetTxnDetailsRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    scratchKey,
+					EndKey: scratchKey.PrefixEnd(),
+				},
+				TxnID:            committed.TxnID,
+				CommitTimestamp:  committed.CommitTimestamp,
+				WriteSpans:       committed.WriteSpans,
+				ReadSpans:        committed.ReadSpans,
+				DependencyCutoff: hlc.Timestamp{WallTime: 1},
+			})
+		require.Nil(t, pErr)
+		return resp.(*kvpb.GetTxnDetailsResponse)
+	}
+
+	logCommitted := func(t *testing.T, name string, c *kvpb.TxnFeedCommitted) {
+		t.Helper()
+		t.Logf("%s committed: id=%s ts=%s", name, c.TxnID.Short(), c.CommitTimestamp)
+		t.Logf("  write_spans: [%s]", fmtSpans(c.WriteSpans))
+		t.Logf("  read_spans:  [%s]", fmtSpans(c.ReadSpans))
+	}
+
+	logDetails := func(t *testing.T, name string, d *kvpb.GetTxnDetailsResponse) {
+		t.Helper()
+		t.Logf("%s details: %d writes, %d deps, event_horizon=%s",
+			name, len(d.Writes), len(d.Dependencies), d.EventHorizon)
+		for _, w := range d.Writes {
+			t.Logf("  write: %s", w.KeyValue.Key)
+		}
+		for _, dep := range d.Dependencies {
+			t.Logf("  depends on: %s", dep.Short())
+		}
+	}
+
+	// Register a txn feed on range 1 before any txns so we capture all
+	// commit events.
+	feedSpan := roachpb.Span{Key: scratchKey, EndKey: midKey}
+	rangeID := store.LookupReplica(roachpb.RKey(scratchKey)).RangeID
+	startTS := db.Clock().Now()
+	stream, disconnector := registerTxnFeed(t, store, rangeID, feedSpan, startTS)
+	defer disconnector.Disconnect(nil)
+
+	// --- Txn A: 1PC write to range 1 ---
+	var txnAID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnAID = txn.ID()
+		b := txn.NewBatch()
+		b.Put(keyA, "from-txn-a")
+		return txn.CommitInBatch(ctx, b)
 	})
+	require.NoError(t, err)
+
+	committedA := waitForCommittedEvent(t, stream, txnAID)
+	logCommitted(t, "txn A (1PC)", committedA)
+
+	// --- Txn B: 2PC, reads keyA (range 1), writes keyB1 (range 1) + keyB2 (range 2) ---
+	txnB := kv.NewTxn(ctx, db, 0)
+	txnBID := txnB.ID()
+	_, err = txnB.Get(ctx, keyA)
+	require.NoError(t, err)
+	require.NoError(t, txnB.Put(ctx, keyB1, "from-txn-b"))
+	require.NoError(t, txnB.Put(ctx, keyB2, "from-txn-b-range2"))
+	require.NoError(t, txnB.Commit(ctx))
+
+	committedB := waitForCommittedEvent(t, stream, txnBID)
+	logCommitted(t, "txn B (2PC)", committedB)
+	require.NotEmpty(t, committedB.WriteSpans)
+	require.NotEmpty(t, committedB.ReadSpans)
+
+	// --- Txn C: 1PC, reads keyB1 (range 1), writes keyC (range 1) ---
+	var txnCID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnCID = txn.ID()
+		if _, err := txn.Get(ctx, keyB1); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		b.Put(keyC, "from-txn-c")
+		return txn.CommitInBatch(ctx, b)
+	})
+	require.NoError(t, err)
+	committedC := waitForCommittedEvent(t, stream, txnCID)
+	logCommitted(t, "txn C (1PC)", committedC)
+
+	// --- Verify txn A has no dependencies ---
+	detailsA := getTxnDetails(t, committedA)
+	logDetails(t, "txn A", detailsA)
+	require.Empty(t, detailsA.Dependencies, "txn A should have no dependencies")
+	verifyWriteSet(t, detailsA.Writes, []expectedWrite{
+		{key: keyA, value: "from-txn-a"},
+	})
+
+	// --- Verify txn B depends on txn A ---
+	detailsB := getTxnDetails(t, committedB)
+	logDetails(t, "txn B", detailsB)
+	require.Contains(t, detailsB.Dependencies, txnAID,
+		"txn B should depend on txn A; got deps=%v", detailsB.Dependencies)
+	verifyWriteSet(t, detailsB.Writes, []expectedWrite{
+		{key: keyB1, value: "from-txn-b"},
+		{key: keyB2, value: "from-txn-b-range2"},
+	})
+
+	// --- Verify txn C depends on txn B ---
+	detailsC := getTxnDetails(t, committedC)
+	logDetails(t, "txn C", detailsC)
+	require.Contains(t, detailsC.Dependencies, txnBID,
+		"txn C should depend on txn B; got deps=%v", detailsC.Dependencies)
+	verifyWriteSet(t, detailsC.Writes, []expectedWrite{
+		{key: keyC, value: "from-txn-c"},
+	})
+
+	// --- Txn D: 2PC, reads keyC (range 1) + keyB2 (range 2) ---
+	// Txn D's dependencies are discovered on different ranges: the
+	// dependency on txn C comes from range 1 (keyC) and the dependency
+	// on txn B comes from range 2 (keyB2). GetTxnDetails fans out via
+	// DistSender, and the response.combine() merges the two dependency
+	// sets.
+	txnD := kv.NewTxn(ctx, db, 0)
+	txnDID := txnD.ID()
+	_, err = txnD.Get(ctx, keyC)
+	require.NoError(t, err)
+	_, err = txnD.Get(ctx, keyB2)
+	require.NoError(t, err)
+	require.NoError(t, txnD.Put(ctx, keyD1, "from-txn-d"))
+	require.NoError(t, txnD.Put(ctx, keyD2, "from-txn-d-range2"))
+	require.NoError(t, txnD.Commit(ctx))
+
+	committedD := waitForCommittedEvent(t, stream, txnDID)
+	logCommitted(t, "txn D (2PC)", committedD)
+	require.NotEmpty(t, committedD.ReadSpans)
+
+	// --- Verify txn D depends on both txn B and txn C ---
+	detailsD := getTxnDetails(t, committedD)
+	logDetails(t, "txn D", detailsD)
+	require.Len(t, detailsD.Dependencies, 2,
+		"txn D should depend on txn B and txn C; got deps=%v", detailsD.Dependencies)
+	require.Contains(t, detailsD.Dependencies, txnCID,
+		"txn D should depend on txn C (via keyC on range 1)")
+	require.Contains(t, detailsD.Dependencies, txnBID,
+		"txn D should depend on txn B (via keyB2 on range 2)")
+	verifyWriteSet(t, detailsD.Writes, []expectedWrite{
+		{key: keyD1, value: "from-txn-d"},
+		{key: keyD2, value: "from-txn-d-range2"},
+	})
+
+	// --- Txn E: 2PC, writes keyE1 (range 1) + keyE2 (range 2) ---
+	// Txn E's record lives on range 1 (first write is keyE1). The
+	// intent on keyE2 (range 2) is resolved asynchronously after
+	// EndTxn completes on range 1.
+	txnE := kv.NewTxn(ctx, db, 0)
+	txnEID := txnE.ID()
+	require.NoError(t, txnE.Put(ctx, keyE1, "from-txn-e"))
+	require.NoError(t, txnE.Put(ctx, keyE2, "from-txn-e-range2"))
+	require.NoError(t, txnE.Commit(ctx))
+
+	committedE := waitForCommittedEvent(t, stream, txnEID)
+	logCommitted(t, "txn E (2PC)", committedE)
+
+	// --- Txn F: reads keyE2 (range 2), writes keyF (range 1) ---
+	// Txn F's only read is on range 2. The dependency on txn E is
+	// exclusively discoverable via range 2's CommitIndex. We do NOT
+	// wait for the CommitIndex to be populated: GetTxnDetails uses
+	// MVCCIncrementalIterIntentPolicyError, so if txn E's intent on
+	// keyE2 hasn't been resolved yet, the concurrency manager pushes
+	// and resolves it — which fires MVCCCommitIntentOp and populates
+	// the CommitIndex — before evaluation proceeds.
+	var txnFID uuid.UUID
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnFID = txn.ID()
+		if _, err := txn.Get(ctx, keyE2); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		b.Put(keyF, "from-txn-f")
+		return txn.CommitInBatch(ctx, b)
+	})
+	require.NoError(t, err)
+
+	committedF := waitForCommittedEvent(t, stream, txnFID)
+	logCommitted(t, "txn F (1PC)", committedF)
+
+	// --- Verify txn F depends on txn E ---
+	detailsF := getTxnDetails(t, committedF)
+	logDetails(t, "txn F", detailsF)
+	require.Contains(t, detailsF.Dependencies, txnEID,
+		"txn F should depend on txn E (via keyE2 on range 2, async-resolved)")
+	verifyWriteSet(t, detailsF.Writes, []expectedWrite{
+		{key: keyF, value: "from-txn-f"},
+	})
+}
+
+// TestGetTxnDetailsResolvesIntents verifies that GetTxnDetails correctly
+// handles unresolved intents in its read spans. It disables async intent
+// resolution so that a 2PC transaction's intent on range 2 remains
+// unresolved after commit. GetTxnDetails must push and resolve the
+// intent (populating the CommitIndex via MVCCCommitIntentOp) and then
+// report the writer as a dependency.
+func TestGetTxnDetailsResolvesIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	txnfeed.Enabled.Override(ctx, &settings.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+						DisableAsyncIntentResolution: true,
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	srv := tc.Server(0)
+	db := srv.DB()
+
+	// Two ranges: [scratchKey, midKey) and [midKey, ...).
+	scratchKey := tc.ScratchRange(t)
+	midKey := append(scratchKey.Clone(), 'm')
+	tc.SplitRangeOrFatal(t, midKey)
+
+	// Txn W: 2PC write to both ranges. keyW1 is in range 1, keyW2 in
+	// range 2. With async intent resolution disabled, the intent on
+	// keyW2 remains unresolved after commit.
+	keyW1 := scratchKey.Next()
+	keyW2 := midKey.Next()
+
+	txnW := kv.NewTxn(ctx, db, 0)
+	txnWID := txnW.ID()
+	require.NoError(t, txnW.Put(ctx, keyW1, "from-txn-w"))
+	require.NoError(t, txnW.Put(ctx, keyW2, "from-txn-w-range2"))
+	require.NoError(t, txnW.Commit(ctx))
+	t.Logf("txn W committed: %s", txnWID.Short())
+
+	// Send GetTxnDetails with ReadSpans covering keyW2. The request
+	// encounters the unresolved intent, pushes and resolves it, then
+	// finds txn W in the CommitIndex as a dependency. Use verbose
+	// tracing to confirm the resolve actually happened.
+	readSpan := roachpb.Span{Key: keyW2, EndKey: keyW2.Next()}
+	commitTS := db.Clock().Now()
+
+	traceCtx, sp := tracing.EnsureChildSpan(ctx, srv.Tracer(),
+		t.Name(), tracing.WithRecording(tracingpb.RecordingVerbose))
+	defer sp.Finish()
+
+	resp, pErr := kv.SendWrapped(traceCtx, db.NonTransactionalSender(),
+		&kvpb.GetTxnDetailsRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    scratchKey,
+				EndKey: scratchKey.PrefixEnd(),
+			},
+			TxnID:            uuid.MakeV4(),
+			CommitTimestamp:  commitTS,
+			ReadSpans:        []roachpb.Span{readSpan},
+			DependencyCutoff: hlc.Timestamp{WallTime: 1},
+		})
+	require.Nil(t, pErr, "GetTxnDetails should resolve intents and succeed")
+	details := resp.(*kvpb.GetTxnDetailsResponse)
+
+	rec := sp.GetConfiguredRecording()
+	msg, found := rec.FindLogMessage("resolving intent")
+	require.True(t, found, "trace should contain intent resolution;\n%s", rec)
+	t.Logf("trace confirmed intent resolution: %s", msg)
+
+	require.Contains(t, details.Dependencies, txnWID,
+		"expected dependency on txn W after intent resolution")
+	t.Logf("found dependency on txn W (%s)", txnWID.Short())
 }
 
 type missingTxnFeedEventsError struct {

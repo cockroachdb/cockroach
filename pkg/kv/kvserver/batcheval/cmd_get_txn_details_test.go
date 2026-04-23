@@ -373,7 +373,8 @@ func TestCollectDependencies(t *testing.T) {
 		// Writer A wrote key "a" at ts=5.
 		putVal(t, eng, "a", 5, "val-a")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(5), writerA)
 
 		resp := evalGetTxnDetailsWithDeps(
@@ -391,7 +392,8 @@ func TestCollectDependencies(t *testing.T) {
 
 		putVal(t, eng, "a", 5, "val-a")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(5), selfID)
 
 		resp := evalGetTxnDetailsWithDeps(
@@ -409,7 +411,8 @@ func TestCollectDependencies(t *testing.T) {
 		// Writer A wrote key "a" at ts=3, but cutoff is ts=5.
 		putVal(t, eng, "a", 3, "old")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(3), writerA)
 
 		resp := evalGetTxnDetailsWithDeps(
@@ -427,7 +430,8 @@ func TestCollectDependencies(t *testing.T) {
 		putVal(t, eng, "a", 5, "val-a")
 
 		// Empty commit index — no entries.
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 
 		resp := evalGetTxnDetailsWithDeps(
 			t, eng, "a", "z", selfID, 10, 1,
@@ -458,7 +462,8 @@ func TestCollectDependencies(t *testing.T) {
 		putVal(t, eng, "a", 5, "val-a")
 		putVal(t, eng, "c", 7, "val-c")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(5), writerA)
 		idx.Record(ts(7), writerB)
 
@@ -483,7 +488,8 @@ func TestCollectDependencies(t *testing.T) {
 		putVal(t, eng, "a", 5, "val-a")
 		putVal(t, eng, "b", 5, "val-b")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(5), writerA)
 
 		resp := evalGetTxnDetailsWithDeps(
@@ -500,7 +506,8 @@ func TestCollectDependencies(t *testing.T) {
 
 		delKey(t, eng, "a", 5)
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(5), writerA)
 
 		resp := evalGetTxnDetailsWithDeps(
@@ -520,7 +527,8 @@ func TestCollectDependencies(t *testing.T) {
 		putVal(t, eng, "a", 3, "old")
 		putVal(t, eng, "a", 7, "new")
 
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(3), writerA)
 		idx.Record(ts(7), writerB)
 
@@ -540,7 +548,8 @@ func TestCollectDependencies(t *testing.T) {
 		putVal(t, eng, "b", 7, "val-b")
 
 		// CommitIndex only knows about ts=3 (writerA), not ts=7.
-		idx := txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
 		idx.Record(ts(3), writerA)
 
 		resp := evalGetTxnDetailsWithDeps(

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
@@ -26,22 +27,27 @@ func init() {
 	RegisterReadOnlyCommand(kvpb.GetTxnDetails, declareKeysGetTxnDetails, GetTxnDetails)
 }
 
-// declareKeysGetTxnDetails declares latches only on the spans that
-// GetTxnDetails will actually read.
+// declareKeysGetTxnDetails declares latches and lock spans for the
+// write and read spans that GetTxnDetails will scan. Lock spans
+// (lock.None) cause the concurrency manager to wait on any intents
+// discovered in the lock table before evaluation begins, avoiding
+// unnecessary evaluate-error-retry cycles.
 func declareKeysGetTxnDetails(
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	req kvpb.Request,
 	latchSpans *spanset.SpanSet,
-	_ *lockspanset.LockSpanSet,
+	lockSpans *lockspanset.LockSpanSet,
 	_ time.Duration,
 ) error {
 	args := req.(*kvpb.GetTxnDetailsRequest)
 	for _, ws := range args.WriteSpans {
 		latchSpans.AddMVCC(spanset.SpanReadOnly, ws, args.CommitTimestamp)
+		lockSpans.Add(lock.None, ws)
 	}
 	for _, rs := range args.ReadSpans {
 		latchSpans.AddMVCC(spanset.SpanReadOnly, rs, args.CommitTimestamp)
+		lockSpans.Add(lock.None, rs)
 	}
 	return nil
 }
@@ -230,13 +236,18 @@ func collectDependencies(
 		endKey = startKey.Next()
 	}
 
+	// Use IntentPolicyError so that unresolved intents surface as
+	// WriteIntentError. The concurrency manager will push the intent's
+	// transaction, resolve the intent (populating the CommitIndex via
+	// MVCCCommitIntentOp), and retry. This guarantees the CommitIndex
+	// has an entry for every committed writer by the time we look it up.
 	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
 		KeyTypes:     storage.IterKeyTypePointsOnly,
 		StartKey:     startKey,
 		EndKey:       endKey,
 		StartTime:    dependencyCutoff,
 		EndTime:      commitTS,
-		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyIgnore,
+		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyError,
 		ReadCategory: fs.BatchEvalReadCategory,
 	})
 	if err != nil {

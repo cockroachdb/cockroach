@@ -16,6 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newCommitIndex(t *testing.T) *CommitIndex {
+	t.Helper()
+	idx, err := NewCommitIndex()
+	require.NoError(t, err)
+	return idx
+}
+
 func TestCommitIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -29,7 +36,7 @@ func TestCommitIndex(t *testing.T) {
 	id3 := uuid.MakeV4()
 
 	t.Run("record and lookup", func(t *testing.T) {
-		idx := NewCommitIndex()
+		idx := newCommitIndex(t)
 		idx.Record(ts(10), id1)
 
 		ids, ok := idx.Lookup(ts(10))
@@ -38,7 +45,7 @@ func TestCommitIndex(t *testing.T) {
 	})
 
 	t.Run("lookup miss", func(t *testing.T) {
-		idx := NewCommitIndex()
+		idx := newCommitIndex(t)
 		idx.Record(ts(10), id1)
 
 		ids, ok := idx.Lookup(ts(5))
@@ -51,7 +58,7 @@ func TestCommitIndex(t *testing.T) {
 	})
 
 	t.Run("multiple txns at same timestamp", func(t *testing.T) {
-		idx := NewCommitIndex()
+		idx := newCommitIndex(t)
 		idx.Record(ts(10), id1)
 		idx.Record(ts(10), id2)
 
@@ -60,13 +67,13 @@ func TestCommitIndex(t *testing.T) {
 		require.Equal(t, []uuid.UUID{id1, id2}, ids)
 	})
 
-	t.Run("sorted order maintained", func(t *testing.T) {
-		idx := NewCommitIndex()
+	t.Run("multiple timestamps", func(t *testing.T) {
+		idx := newCommitIndex(t)
 		idx.Record(ts(5), id1)
 		idx.Record(ts(10), id2)
 		idx.Record(ts(15), id3)
 
-		require.Equal(t, 3, idx.Len())
+		require.Equal(t, 3, idx.EstimatedLen())
 
 		ids, ok := idx.Lookup(ts(5))
 		require.True(t, ok)
@@ -81,8 +88,29 @@ func TestCommitIndex(t *testing.T) {
 		require.Equal(t, []uuid.UUID{id3}, ids)
 	})
 
+	t.Run("out of order recording", func(t *testing.T) {
+		idx := newCommitIndex(t)
+		idx.Record(ts(20), id1)
+		idx.Record(ts(5), id2)
+		idx.Record(ts(15), id3)
+
+		require.Equal(t, 3, idx.EstimatedLen())
+
+		ids, ok := idx.Lookup(ts(20))
+		require.True(t, ok)
+		require.Equal(t, []uuid.UUID{id1}, ids)
+
+		ids, ok = idx.Lookup(ts(5))
+		require.True(t, ok)
+		require.Equal(t, []uuid.UUID{id2}, ids)
+
+		ids, ok = idx.Lookup(ts(15))
+		require.True(t, ok)
+		require.Equal(t, []uuid.UUID{id3}, ids)
+	})
+
 	t.Run("logical timestamp distinguishes entries", func(t *testing.T) {
-		idx := NewCommitIndex()
+		idx := newCommitIndex(t)
 		ts10L0 := hlc.Timestamp{WallTime: 10, Logical: 0}
 		ts10L1 := hlc.Timestamp{WallTime: 10, Logical: 1}
 		idx.Record(ts10L0, id1)
@@ -98,7 +126,7 @@ func TestCommitIndex(t *testing.T) {
 	})
 
 	t.Run("concurrent record and lookup", func(t *testing.T) {
-		idx := NewCommitIndex()
+		idx := newCommitIndex(t)
 
 		var wg sync.WaitGroup
 		// Writer goroutine records 1000 entries.
@@ -122,16 +150,20 @@ func TestCommitIndex(t *testing.T) {
 		}
 
 		wg.Wait()
-		require.Equal(t, 1000, idx.Len())
+		// EstimatedLen is approximate; verify all entries are findable.
+		for i := int64(1); i <= 1000; i++ {
+			_, ok := idx.Lookup(ts(i))
+			require.True(t, ok, "expected entry at ts=%d", i)
+		}
 	})
 
-	t.Run("duplicate txn id at same timestamp", func(t *testing.T) {
-		idx := NewCommitIndex()
+	t.Run("duplicate txn id at same timestamp is deduplicated", func(t *testing.T) {
+		idx := newCommitIndex(t)
 		idx.Record(ts(10), id1)
 		idx.Record(ts(10), id1)
 
 		ids, ok := idx.Lookup(ts(10))
 		require.True(t, ok)
-		require.Equal(t, []uuid.UUID{id1, id1}, ids)
+		require.Equal(t, []uuid.UUID{id1}, ids)
 	})
 }

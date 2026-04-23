@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_maypok86_otter_v2//:otter",
     ],
 )
 

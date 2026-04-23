@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -166,7 +167,10 @@ func (r *Replica) recordCommitTimestampsRaftMuLocked(
 	if !txnfeed.Enabled.Get(&r.ClusterSettings().SV) {
 		return
 	}
-	idx := r.getOrCreateCommitIndexRaftMuLocked()
+	idx := r.getOrCreateCommitIndexRaftMuLocked(ctx)
+	if idx == nil {
+		return
+	}
 	if logOps != nil {
 		for i := range logOps.Ops {
 			t, ok := logOps.Ops[i].GetValue().(*enginepb.MVCCCommitIntentOp)
@@ -186,7 +190,7 @@ func (r *Replica) recordCommitTimestampsRaftMuLocked(
 
 // getOrCreateCommitIndexRaftMuLocked returns the CommitIndex, creating it
 // lazily on first use.
-func (r *Replica) getOrCreateCommitIndexRaftMuLocked() *txnfeed.CommitIndex {
+func (r *Replica) getOrCreateCommitIndexRaftMuLocked(ctx context.Context) *txnfeed.CommitIndex {
 	r.txnFeedMu.RLock()
 	idx := r.txnFeedMu.commitIndex
 	r.txnFeedMu.RUnlock()
@@ -196,7 +200,12 @@ func (r *Replica) getOrCreateCommitIndexRaftMuLocked() *txnfeed.CommitIndex {
 	r.txnFeedMu.Lock()
 	defer r.txnFeedMu.Unlock()
 	if r.txnFeedMu.commitIndex == nil {
-		r.txnFeedMu.commitIndex = txnfeed.NewCommitIndex()
+		idx, err := txnfeed.NewCommitIndex()
+		if err != nil {
+			log.Ops.Warningf(ctx, "failed to create commit index: %v", err)
+			return nil
+		}
+		r.txnFeedMu.commitIndex = idx
 	}
 	return r.txnFeedMu.commitIndex
 }

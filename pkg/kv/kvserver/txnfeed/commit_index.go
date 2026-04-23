@@ -6,12 +6,15 @@
 package txnfeed
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/maypok86/otter/v2"
 )
+
+// commitIndexMaxSize is the maximum number of distinct timestamps stored
+// in the CommitIndex. When exceeded, otter evicts entries according to
+// its internal admission/eviction policy (S3-FIFO).
+const commitIndexMaxSize = 100000
 
 // CommitIndex is an in-memory mapping from MVCC commit timestamps to the
 // transaction IDs that committed at those timestamps. It is populated during
@@ -23,59 +26,55 @@ import (
 // value that a transaction read, the CommitIndex can identify which
 // transaction wrote that value.
 //
-// Record is called under raftMu (single writer). Lookup may be called
-// concurrently from any goroutine.
+// Record and Lookup may be called concurrently from any goroutine. The
+// underlying otter.Cache is thread-safe, so no external synchronization
+// is needed.
 type CommitIndex struct {
-	mu struct {
-		syncutil.RWMutex
-		entries []commitEntry
-	}
-}
-
-type commitEntry struct {
-	ts     hlc.Timestamp
-	txnIDs []uuid.UUID
+	cache *otter.Cache[hlc.Timestamp, []uuid.UUID]
 }
 
 // NewCommitIndex creates a new, empty CommitIndex.
-func NewCommitIndex() *CommitIndex {
-	return &CommitIndex{}
+func NewCommitIndex() (*CommitIndex, error) {
+	c, err := otter.New[hlc.Timestamp, []uuid.UUID](&otter.Options[hlc.Timestamp, []uuid.UUID]{
+		MaximumSize:     commitIndexMaxSize,
+		InitialCapacity: 1024,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &CommitIndex{cache: c}, nil
 }
 
-// Record adds a mapping from ts to txnID. If the most recent entry has the
-// same timestamp, the txnID is appended to that entry's slice; otherwise a
-// new entry is appended. Entries must be recorded in non-decreasing timestamp
-// order (guaranteed by Raft application ordering).
+// Record atomically adds a mapping from ts to txnID. Duplicate (ts, txnID)
+// pairs are ignored — this is expected since 2PC intent resolution fires
+// MVCCCommitIntentOp for every resolved intent, producing many Record calls
+// with the same txnID. When a new slice is needed, it is allocated fresh to
+// avoid mutating a slice that concurrent readers may hold.
 func (c *CommitIndex) Record(ts hlc.Timestamp, txnID uuid.UUID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if n := len(c.mu.entries); n > 0 && c.mu.entries[n-1].ts.Equal(ts) {
-		c.mu.entries[n-1].txnIDs = append(c.mu.entries[n-1].txnIDs, txnID)
-	} else {
-		c.mu.entries = append(c.mu.entries, commitEntry{
-			ts:     ts,
-			txnIDs: []uuid.UUID{txnID},
-		})
-	}
+	c.cache.Compute(ts, func(existing []uuid.UUID, found bool) ([]uuid.UUID, otter.ComputeOp) {
+		if found {
+			for _, id := range existing {
+				if id == txnID {
+					return existing, otter.CancelOp
+				}
+			}
+			newSlice := make([]uuid.UUID, len(existing)+1)
+			copy(newSlice, existing)
+			newSlice[len(existing)] = txnID
+			return newSlice, otter.WriteOp
+		}
+		return []uuid.UUID{txnID}, otter.WriteOp
+	})
 }
 
 // Lookup returns the transaction IDs that committed at the given timestamp.
 // Returns (nil, false) if no entry exists for that timestamp.
 func (c *CommitIndex) Lookup(ts hlc.Timestamp) ([]uuid.UUID, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	i := sort.Search(len(c.mu.entries), func(i int) bool {
-		return !c.mu.entries[i].ts.Less(ts)
-	})
-	if i < len(c.mu.entries) && c.mu.entries[i].ts.Equal(ts) {
-		return c.mu.entries[i].txnIDs, true
-	}
-	return nil, false
+	return c.cache.GetIfPresent(ts)
 }
 
-// Len returns the number of distinct timestamps in the index.
-func (c *CommitIndex) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.mu.entries)
+// EstimatedLen returns the approximate number of distinct timestamps in
+// the index.
+func (c *CommitIndex) EstimatedLen() int {
+	return c.cache.EstimatedSize()
 }
