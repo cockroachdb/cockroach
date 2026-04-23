@@ -291,6 +291,11 @@ var mathBuiltins = map[string]builtinDefinition{
 				"Returns 0 if both inputs are 0; otherwise returns a positive value.",
 			Volatility: volatility.Immutable,
 		},
+		decimalOverload2("a", "b", decimalGCD,
+			"Calculates the greatest common divisor of `a` and `b`. "+
+				"Returns 0 if both inputs are 0; otherwise returns a positive value. "+
+				"Returns NaN if either input is NaN or Infinity.",
+			volatility.Immutable),
 	),
 
 	"isnan": makeBuiltin(defProps(),
@@ -328,6 +333,10 @@ var mathBuiltins = map[string]builtinDefinition{
 				"Returns 0 if either input is 0.",
 			Volatility: volatility.Immutable,
 		},
+		decimalOverload2("a", "b", decimalLCM,
+			"Calculates the least common multiple of `a` and `b`. "+
+				"Returns 0 if either input is 0. Returns NaN if either input is NaN or Infinity.",
+			volatility.Immutable),
 	),
 
 	"ln": makeBuiltin(defProps(),
@@ -1006,6 +1015,139 @@ func intLCM(a, b int64) (tree.Datum, error) {
 		return nil, errIntOutOfRange
 	}
 	return tree.NewDInt(tree.DInt(res.Int64())), nil
+}
+
+// decimalGCD returns the greatest common divisor of x and y as a non-negative
+// DDecimal, matching PostgreSQL's numeric_gcd semantics:
+//   - If either input is NaN or Infinity, the result is NaN.
+//   - The result is always non-negative.
+//   - The display scale of the result is max(scale(x), scale(y)), so e.g.
+//     gcd(1.0, 2) returns 1.0 rather than 1.
+//
+// Errors with "value overflows numeric format" if an intermediate computation
+// exceeds the supported decimal range.
+func decimalGCD(x, y *apd.Decimal) (tree.Datum, error) {
+	if x.Form != apd.Finite || y.Form != apd.Finite {
+		return &tree.DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}, nil
+	}
+	resScale := decimalScale(x)
+	if s := decimalScale(y); s > resScale {
+		resScale = s
+	}
+	dd := &tree.DDecimal{}
+	if err := decimalGCDExact(&dd.Decimal, x, y); err != nil {
+		return nil, err
+	}
+	dd.Negative = false
+	if err := expandDecimalScale(&dd.Decimal, resScale); err != nil {
+		return nil, err
+	}
+	return dd, nil
+}
+
+// decimalLCM returns the least common multiple of x and y, computed in
+// arbitrary-precision decimal space. Matches PostgreSQL's numeric_lcm:
+//   - If either input is NaN or Infinity, the result is NaN.
+//   - If either input is 0, the result is 0.
+//   - Otherwise, the result is |x / gcd(x, y) * y|.
+//   - The display scale of the result is max(scale(x), scale(y)).
+//
+// Errors with "value overflows numeric format" if the result exceeds the
+// supported decimal range.
+func decimalLCM(x, y *apd.Decimal) (tree.Datum, error) {
+	if x.Form != apd.Finite || y.Form != apd.Finite {
+		return &tree.DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}, nil
+	}
+	resScale := decimalScale(x)
+	if s := decimalScale(y); s > resScale {
+		resScale = s
+	}
+	dd := &tree.DDecimal{}
+	if x.IsZero() || y.IsZero() {
+		if err := expandDecimalScale(&dd.Decimal, resScale); err != nil {
+			return nil, err
+		}
+		return dd, nil
+	}
+	var g apd.Decimal
+	if err := decimalGCDExact(&g, x, y); err != nil {
+		return nil, err
+	}
+	g.Negative = false
+	// |x / gcd(x, y) * y|. The division is exact since g divides x; using
+	// QuoInteger gives a clean integer result without trailing-zero padding
+	// from precision-driven rounding.
+	var quo apd.Decimal
+	if cond, err := tree.HighPrecisionCtx.QuoInteger(&quo, x, &g); err != nil {
+		if isDecimalOverflow(cond) {
+			return nil, errFactorialOverflow
+		}
+		return nil, err
+	}
+	if cond, err := tree.HighPrecisionCtx.Mul(&dd.Decimal, &quo, y); err != nil {
+		if isDecimalOverflow(cond) {
+			return nil, errFactorialOverflow
+		}
+		return nil, err
+	}
+	dd.Negative = false
+	if err := expandDecimalScale(&dd.Decimal, resScale); err != nil {
+		return nil, err
+	}
+	return dd, nil
+}
+
+// decimalGCDExact runs the Euclidean algorithm on |x| and |y|, writing the
+// result to g. Both inputs must be finite. The result is always non-negative.
+func decimalGCDExact(g, x, y *apd.Decimal) error {
+	var a, b apd.Decimal
+	a.Set(x)
+	a.Negative = false
+	b.Set(y)
+	b.Negative = false
+	// Arrange for |a| >= |b| so the first Rem isn't a no-op.
+	if a.Cmp(&b) < 0 {
+		a, b = b, a
+	}
+	var mod apd.Decimal
+	for b.Sign() != 0 {
+		if cond, err := tree.HighPrecisionCtx.Rem(&mod, &a, &b); err != nil {
+			if isDecimalOverflow(cond) {
+				return errFactorialOverflow
+			}
+			return err
+		}
+		a.Set(&b)
+		b.Set(&mod)
+	}
+	g.Set(&a)
+	return nil
+}
+
+// isDecimalOverflow reports whether cond signals that an arithmetic result
+// exceeded the supported decimal range. DivisionImpossible is included
+// because QuoInteger raises it when the integer quotient does not fit in
+// the configured precision, which for our purposes is also an overflow.
+func isDecimalOverflow(cond apd.Condition) bool {
+	return cond.Overflow() || cond.SystemOverflow() || cond.DivisionImpossible()
+}
+
+// expandDecimalScale grows d in-place so that its display scale is at least
+// resScale (i.e. it has at least resScale fractional digits). If d already
+// has a smaller exponent (more fractional digits), it is left unchanged. The
+// numeric value is preserved.
+func expandDecimalScale(d *apd.Decimal, resScale int32) error {
+	target := -resScale
+	if d.Exponent <= target {
+		return nil
+	}
+	if int64(d.Exponent-target) > int64(tree.DecimalCtx.MaxExponent) {
+		return errFactorialOverflow
+	}
+	pow := apd.NewBigInt(0).Exp(bigTen, apd.NewBigInt(int64(d.Exponent-target)), nil)
+	d.Coeff.Mul(&d.Coeff, pow)
+	d.Exponent = target
+	return nil
 }
 
 // decimalScale returns the number of fractional digits in d, mirroring the
