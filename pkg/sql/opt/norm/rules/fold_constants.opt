@@ -248,8 +248,21 @@ $result
 $result
 
 # FoldEqualsAnyNull, converts a scalar ANY operation to NULL if the right-hand
-# side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562.
-[FoldEqualsAnyNull, Normalize]
-(AnyScalar * (Null) *)
+# side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562. This has been covered in 132328.
+#[FoldEqualsAnyNull, Normalize]
+#(AnyScalar * (Null) *)
+#=>
+#(Null (BoolType))
+
+# FoldAnyWithConst simplifies a scalar ANY operation when the left side is constant
+# and the right side contains a constant that can determine the result, like this:
+# 0.1 < ANY (c0, 0.4) can be simplified since 0.1 < 0.4 is True. see 132328 
+[FoldAnyWithConst, Normalize]
+(AnyScalar
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:*
+    $cmp:*
+    & (Let ($result $ok):(FoldAnyWithConst $cmp $left $right) $ok)
+)
 =>
-(Null (BoolType))
+$result

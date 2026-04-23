@@ -1463,13 +1463,61 @@ project
       └── CAST(NULL AS INT8) [as=bar:9, type=int]
 
 # --------------------------------------------------
-# FoldEqualsAnyNull
+# FoldEqualsAnyNull - This has been covered under FoldAnyWithConst
 # --------------------------------------------------
-norm expect=FoldEqualsAnyNull
-SELECT * FROM a WHERE i = ANY (NULL::int[])
+#norm expect=FoldEqualsAnyNull
+#SELECT * FROM a WHERE i = ANY (NULL::int[])
+#----
+#values
+ #├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null arr:6!null
+ #├── cardinality: [0 - 0]
+ #├── key: ()
+ #└── fd: ()-->(1-6)
+
+# --------------------------------------------------
+# FoldAnyWithConst
+# --------------------------------------------------
+norm expect=FoldAnyWithConst
+SELECT 1 = ANY(NULL::INT[]);
 ----
 values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null arr:6!null
- ├── cardinality: [0 - 0]
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
  ├── key: ()
- └── fd: ()-->(1-6)
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+norm expect=FoldAnyWithConst
+SELECT 1 < ANY(NULL, 2) 
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldAnyWithConst
+SELECT 1 < ANY(2, 1/0) 
+----
+error (22012): division by zero
+
+norm expect=FoldAnyWithConst
+SELECT 1 = ANY(ARRAY[1/0, 1]);
+----
+error (22012): division by zero
+
+norm expect=FoldAnyWithConst
+SELECT 0.1 > ANY(NULL, 0.2) 
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+norm expect=FoldAnyWithConst
+SELECT 1 = ANY(ARRAY['a', 2]) 
+----
+error (22023): unsupported comparison operator: 1 = ANY ARRAY['a', 2]: could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax
