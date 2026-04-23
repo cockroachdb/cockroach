@@ -117,27 +117,33 @@ func (c *Client) EmbedBatch(ctx context.Context, texts []string) ([][]float32, e
 		return nil, nil
 	}
 
-	var bodyBytes []byte
-	var err error
 	if c.multimodal {
-		// Multimodal models use {"text": "..."} instead of
-		// {"content": "..."}.
-		instances := make([]mmInstance, len(texts))
+		// Vertex AI multimodal endpoint accepts only one instance per
+		// request, so we send each text individually.
+		results := make([][]float32, len(texts))
 		for i, t := range texts {
-			instances[i] = mmInstance{Text: t}
+			bodyBytes, err := json.Marshal(
+				mmPredictRequest{Instances: []mmInstance{{Text: t}}},
+			)
+			if err != nil {
+				return nil, errors.Wrap(err, "marshaling predict request")
+			}
+			vecs, err := c.doPredictBatch(ctx, bodyBytes, 1)
+			if err != nil {
+				return nil, errors.Wrapf(err, "embedding text %d", i)
+			}
+			results[i] = vecs[0]
 		}
-		bodyBytes, err = json.Marshal(
-			mmPredictRequest{Instances: instances},
-		)
-	} else {
-		instances := make([]instance, len(texts))
-		for i, t := range texts {
-			instances[i] = instance{Content: t}
-		}
-		bodyBytes, err = json.Marshal(
-			predictRequest{Instances: instances},
-		)
+		return results, nil
 	}
+
+	instances := make([]instance, len(texts))
+	for i, t := range texts {
+		instances[i] = instance{Content: t}
+	}
+	bodyBytes, err := json.Marshal(
+		predictRequest{Instances: instances},
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling predict request")
 	}
@@ -163,22 +169,27 @@ func (c *Client) EmbedImageBatch(ctx context.Context, images [][]byte) ([][]floa
 		return nil, nil
 	}
 
-	instances := make([]mmInstance, len(images))
+	// Vertex AI multimodal endpoint accepts only one instance per
+	// request, so we send each image individually.
+	results := make([][]float32, len(images))
 	for i, img := range images {
-		instances[i] = mmInstance{
-			Image: &mmImage{
-				BytesBase64Encoded: base64.StdEncoding.EncodeToString(img),
-			},
+		bodyBytes, err := json.Marshal(
+			mmPredictRequest{Instances: []mmInstance{{
+				Image: &mmImage{
+					BytesBase64Encoded: base64.StdEncoding.EncodeToString(img),
+				},
+			}}},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshaling predict request")
 		}
+		vecs, err := c.doPredictBatch(ctx, bodyBytes, 1)
+		if err != nil {
+			return nil, errors.Wrapf(err, "embedding image %d", i)
+		}
+		results[i] = vecs[0]
 	}
-	bodyBytes, err := json.Marshal(
-		mmPredictRequest{Instances: instances},
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling predict request")
-	}
-
-	return c.doPredictBatch(ctx, bodyBytes, len(images))
+	return results, nil
 }
 
 // doPredictBatch sends a predict request and extracts embedding
