@@ -23,6 +23,37 @@ import (
 // This is a POC safety limit — production would use streaming.
 const MaxFileSize = 64 << 20 // 64MB
 
+// ContentType classifies file content for routing to the appropriate
+// embedding pipeline.
+type ContentType int
+
+const (
+	// ContentTypeText indicates text-extractable content (txt, md, csv, pdf, etc.)
+	ContentTypeText ContentType = iota
+	// ContentTypeImage indicates image content that needs a multimodal embedder.
+	ContentTypeImage
+	// ContentTypeUnsupported indicates an unsupported content type.
+	ContentTypeUnsupported
+)
+
+// ClassifyURI determines the content type from the URI's file extension.
+func ClassifyURI(uri string) ContentType {
+	ext := extensionFromURI(uri)
+	switch ext {
+	case ".txt", ".md", ".csv", ".log", ".json", ".xml", ".html", ".yml", ".yaml", ".pdf", "":
+		return ContentTypeText
+	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
+		return ContentTypeImage
+	default:
+		return ContentTypeUnsupported
+	}
+}
+
+// IsImage returns true if the URI points to an image file.
+func IsImage(uri string) bool {
+	return ClassifyURI(uri) == ContentTypeImage
+}
+
 // ExtractText takes raw file content and a URI, detects the content
 // type from the URI's file extension, and extracts text. Returns an
 // error for unsupported file types.

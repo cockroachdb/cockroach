@@ -369,9 +369,40 @@ func embedAndInsertRows(
 		}
 	} else {
 		texts := make([]string, len(rows))
+		embeddings = make([][]float32, len(rows))
+		// Track which rows have already been embedded as images so we
+		// can skip them in the text batch below.
+		imageHandled := make([]bool, len(rows))
+
 		for i, row := range rows {
 			if loadingMode == "uri" {
 				uri := string(tree.MustBeDString(row[numPKCols]))
+
+				// If the URI points to an image file, fetch raw bytes
+				// and embed via the ImageEmbedder path instead of
+				// attempting text extraction.
+				if content.IsImage(uri) {
+					imgEmbedder, ok := embedder.(embedding.ImageEmbedder)
+					if !ok {
+						return 0, errors.Newf(
+							"vectorizer: model does not support image embedding for URI %s", uri)
+					}
+					data, err := readURIBytes(ctx, execCfg, uri)
+					if err != nil {
+						return 0, errors.Wrapf(err,
+							"vectorizer: reading image URI for row %d", i)
+					}
+					vec, err := imgEmbedder.EmbedImage(ctx, data)
+					if err != nil {
+						return 0, errors.Wrapf(err,
+							"vectorizer: embedding image from URI %s", uri)
+					}
+					embeddings[i] = vec
+					imageHandled[i] = true
+					// Leave chunkTexts[i] empty for images.
+					continue
+				}
+
 				text, err := readURIContent(ctx, execCfg, uri)
 				if err != nil {
 					return 0, errors.Wrapf(err,
@@ -384,10 +415,24 @@ func embedAndInsertRows(
 				)
 			}
 		}
-		var err error
-		embeddings, err = embedder.EmbedBatch(ctx, texts)
-		if err != nil {
-			return 0, errors.Wrap(err, "vectorizer: generating embeddings")
+
+		// Collect the text rows that still need embedding.
+		var textIdxs []int
+		var textInputs []string
+		for i := range rows {
+			if !imageHandled[i] {
+				textIdxs = append(textIdxs, i)
+				textInputs = append(textInputs, texts[i])
+			}
+		}
+		if len(textInputs) > 0 {
+			vecs, err := embedder.EmbedBatch(ctx, textInputs)
+			if err != nil {
+				return 0, errors.Wrap(err, "vectorizer: generating embeddings")
+			}
+			for j, idx := range textIdxs {
+				embeddings[idx] = vecs[j]
+			}
 		}
 		chunkTexts = texts
 	}
@@ -457,32 +502,43 @@ func embedAndInsertRows(
 
 // readURIContent fetches file content from a cloud storage URI and
 // extracts text suitable for embedding. Supports S3, GCS, HTTP, and
-// nodelocal URIs. Text extraction handles .txt, .md, .csv, .json,
-// .pdf, and other text-based formats.
-func readURIContent(ctx context.Context, execCfg *sql.ExecutorConfig, uri string) (string, error) {
+// readURIBytes fetches raw file content from a cloud storage URI.
+// Supports s3://, gs://, http://, and nodelocal:// URIs.
+func readURIBytes(ctx context.Context, execCfg *sql.ExecutorConfig, uri string) ([]byte, error) {
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
 		ctx, uri, username.RootUserName(),
 	)
 	if err != nil {
-		return "", errors.Wrap(err, "opening external storage")
+		return nil, errors.Wrap(err, "opening external storage")
 	}
 	defer store.Close()
 
 	file, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
-		return "", errors.Wrap(err, "reading file")
+		return nil, errors.Wrap(err, "reading file")
 	}
 	data, err := ioctx.ReadAll(ctx, file)
 	if err != nil {
-		return "", errors.Wrap(err, "reading file content")
+		return nil, errors.Wrap(err, "reading file content")
 	}
 
 	if int64(len(data)) > content.MaxFileSize {
-		return "", errors.Newf(
+		return nil, errors.Newf(
 			"file size %d bytes exceeds maximum %d bytes",
 			len(data), content.MaxFileSize)
 	}
+	return data, nil
+}
 
+// readURIContent fetches file content from a cloud storage URI and
+// extracts text. Uses readURIBytes for fetching, then applies content
+// type detection and text extraction for supported formats (.txt, .md,
+// .csv, .json, .pdf, etc.).
+func readURIContent(ctx context.Context, execCfg *sql.ExecutorConfig, uri string) (string, error) {
+	data, err := readURIBytes(ctx, execCfg, uri)
+	if err != nil {
+		return "", err
+	}
 	return content.ExtractText(data, uri)
 }
 
