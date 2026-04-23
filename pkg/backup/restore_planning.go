@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1857,6 +1859,29 @@ func doRestorePlan(
 		return err
 	}
 
+	// Check whether a revision log exists at the collection root. If so,
+	// adjust the end time to the latest backup in the chain and record
+	// the original AOST as the revision log replay target.
+	var revisionLogTimestamp hlc.Timestamp
+	collectionStore, err := mkStore(ctx, defaultCollectionURI, p.User())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = collectionStore.Close() }()
+
+	endTime, revisionLogTimestamp, err = maybeAdjustEndTimeForRevisionLog(
+		ctx, collectionStore, endTime, fullyResolvedSubdir,
+	)
+	if err != nil {
+		return err
+	}
+	if !revisionLogTimestamp.IsEmpty() {
+		log.Dev.Infof(ctx,
+			"revision log detected; restoring to backup end %s, will replay log through %s",
+			endTime, revisionLogTimestamp,
+		)
+	}
+
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
@@ -2172,6 +2197,7 @@ func doRestorePlan(
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
 		TempSystemID:                     tempSysDBID,
 		Grants:                           restoreStmt.Options.Grants,
+		RevisionLogTimestamp:             revisionLogTimestamp,
 	}
 
 	jr := jobs.Record{
@@ -2627,11 +2653,24 @@ func resolveRestoreSubdirAndEndTime(
 		// the requested AOST, not that a specific backup covers it. It is easier to
 		// perform the validation here than to overhaul the existing logic.
 		if backupIdx.MVCCFilter != backuppb.MVCCFilter_All {
-			return "", hlc.Timestamp{}, errors.Errorf(
-				"backup %s is not a revision history backup and cannot be used for AS OF SYSTEM TIME restores. "+
-					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
-				backupID,
-			)
+			// The backup is not a revision history backup. If a revision
+			// log exists at the collection root, the AOST can still be
+			// satisfied by replaying the log on top of the backup.
+			hasLog := false
+			if !build.IsRelease() {
+				var logErr error
+				hasLog, logErr = revlog.HasLog(ctx, defaultRootStore)
+				if logErr != nil {
+					return "", hlc.Timestamp{}, logErr
+				}
+			}
+			if !hasLog {
+				return "", hlc.Timestamp{}, errors.Errorf(
+					"backup %s is not a revision history backup and cannot be used for AS OF SYSTEM TIME restores. "+
+						"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
+					backupID,
+				)
+			}
 		} else if aost.Less(backupIdx.RevisionStartTime) || backupIdx.EndTime.Less(aost) {
 			return "", hlc.Timestamp{}, errors.Errorf(
 				"backup %s does not cover the specified AS OF SYSTEM TIME. "+

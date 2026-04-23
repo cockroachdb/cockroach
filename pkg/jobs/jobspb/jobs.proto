@@ -691,7 +691,12 @@ message RestoreDetails {
   // for users that are in the restoring cluster.
   bool grants = 39;
 
-  // NEXT ID: 40.
+  // RevisionLogTimestamp, when non-empty, tells the restore job to replay the
+  // revision log from the backup's end time through this timestamp after the
+  // normal restore completes.
+  util.hlc.Timestamp revision_log_timestamp = 40 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 41.
 }
 
 
