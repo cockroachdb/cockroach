@@ -583,3 +583,42 @@ statement ok
 DROP FUNCTION f(xy);
 
 subtest end
+
+subtest regression_162289
+
+statement ok
+CREATE TABLE t162289 (x INT, y INT);
+
+statement ok
+CREATE FUNCTION test_select_into_162289() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v TEXT;
+  BEGIN
+    SELECT TG_NAME INTO v;  -- This fails
+    RAISE NOTICE 'TG_NAME: %', v;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER tr_test BEFORE INSERT ON t162289 FOR EACH ROW EXECUTE FUNCTION test_select_into_162289();
+
+statement ok
+INSERT INTO t162289 VALUES (1, 1);
+
+statement ok
+CREATE FUNCTION f162289(x INT) RETURNS INT AS $$
+  DECLARE
+    y INT;
+  BEGIN
+    SELECT x INTO y;
+    RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f162289(42);
+----
+42
+
+subtest end

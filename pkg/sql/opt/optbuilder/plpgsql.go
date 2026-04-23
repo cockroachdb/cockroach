@@ -2366,11 +2366,29 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 		}
 		block := &b.blocks[i]
 		for _, name := range block.vars {
-			_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
-			if err != nil {
-				panic(err)
+			// The variable may have been updated since the last continuation call,
+			// in which case there will be a column for it in the current scope.
+			// Otherwise, the variable has not been updated, and we should search for
+			// it by param ord.
+			//
+			// This prevents a subtle bug where a user-supplied expression happens to
+			// project a column for one of the variables in an ancestor scope
+			// (e.g. as part of SELECT INTO). Referencing such a column would lead to
+			// an invalid outer column reference. See also #162289.
+			var col *scopeColumn
+			for j := range s.cols {
+				if s.cols[j].name.MatchesReferenceName(name) {
+					col = &s.cols[j]
+					break
+				}
 			}
-			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
+			if col == nil {
+				col = s.findFuncArgCol(len(args))
+			}
+			if col == nil {
+				panic(errors.AssertionFailedf("variable %s not found", name))
+			}
+			args = append(args, b.ob.factory.ConstructVariable(col.id))
 		}
 		for _, name := range block.hiddenVars {
 			col := s.findFuncArgCol(len(args))
