@@ -1648,9 +1648,16 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	t.L().Printf("setting up test data...")
 	setupStmts := []string{
 		`CREATE TABLE foo (id INT PRIMARY KEY, val INT)`,
+		// Configure frequent checkpointing in the form of frontier persistence.
+		// Span level checkpointing is now deprecated, so we use frontier persistence
+		// instead.
+		//
+		// NB: We set changefeed.span_checkpoint.interval because in addition
+		// to controlling how often we saved the now-deprecated legacy span-level
+		// checkpoint, it also controls how often a change aggregator will flush
+		// its frontier to the coordinator during a backfill.
 		`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
-		`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'`,
-		`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
+		`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 		// We do not set timestamp quantization here since it is off by default
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
 	}
