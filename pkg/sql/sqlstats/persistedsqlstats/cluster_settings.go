@@ -6,9 +6,12 @@
 package persistedsqlstats
 
 import (
+	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
@@ -33,6 +36,18 @@ var SQLStatsFlushBatchSize = settings.RegisterIntSetting(
 	"the number of rows to flush per upsert",
 	10,
 	settings.NonNegativeInt)
+
+// SQLStatsFlushCoordinatedBatchSize controls how many rows are written per
+// UPSERT in a coordinated flush. Coordinated cycles work on cluster-wide
+// merged stats, so they need a larger batch than per-node flushes to keep
+// round-trip count manageable.
+var SQLStatsFlushCoordinatedBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.flush.coordinated.batch_size",
+	"the number of rows to flush per upsert in a coordinated SQL stats flush",
+	500,
+	settings.PositiveInt,
+)
 
 // MinimumInterval is the cluster setting that controls the minimum interval
 // between each flush operation. If flush operations get triggered faster
@@ -67,6 +82,39 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 	"if set, SQL execution statistics are periodically flushed to disk",
 	true, /* defaultValue */
 	settings.WithPublic)
+
+// SQLStatsFlushCoordinatedEnabled opts a cluster into coordinated SQL
+// stats flushes. When true, a singleton job drives all flushes and the
+// per-node flush loops idle. See CoordinatedFlushEnabled for the
+// effective predicate.
+var SQLStatsFlushCoordinatedEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.flush.coordinated.enabled",
+	"if set, a single coordinator job drives SQL stats flushes for the entire "+
+		"cluster instead of each node flushing independently",
+	false, /* defaultValue */
+	settings.WithPublic)
+
+// CoordinatedFlushEnabled returns whether the singleton coordinator owns
+// the write path. Both the coordinator job and the per-node flush loop
+// consult it so they stay in agreement.
+//
+// Coordinated mode collapses fingerprints across nodes into a single row,
+// which is incompatible with gateway-node attribution; we disable
+// ourselves in that mode regardless of the opt-in setting.
+//
+// TODO(kyle.wong): replace clusterversion.Latest with a dedicated key
+// minted alongside the streaming DrainSqlStats RPC. Latest is overly
+// conservative but safe.
+func CoordinatedFlushEnabled(ctx context.Context, st *cluster.Settings) bool {
+	if !st.Version.IsActive(ctx, clusterversion.Latest) {
+		return false
+	}
+	if sqlstats.GatewayNodeEnabled.Get(&st.SV) {
+		return false
+	}
+	return SQLStatsFlushCoordinatedEnabled.Get(&st.SV)
+}
 
 // SQLStatsFlushJitter specifies the jitter fraction on the interval between
 // attempts to flush SQL Stats.
