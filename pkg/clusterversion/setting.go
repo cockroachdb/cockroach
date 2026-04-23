@@ -266,7 +266,7 @@ var AutoUpgradeSystemClusterFromMeta1Leaseholder = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cluster.auto_upgrade.initiate_from_meta1leaseholder.enabled",
 	"only initiate automatic cluster version upgrade from the Meta1 leaseholder (system-cluster only)",
-	false,
+	true,
 )
 
 var metaPreserveDowngradeLastUpdated = metric.Metadata{
