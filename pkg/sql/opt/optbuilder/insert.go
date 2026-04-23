@@ -682,7 +682,14 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		}
 	}
 
+	// pending_commit_timestamp() is a marker that only makes sense as a value
+	// being written to an ALLOW_COMMIT_TIMESTAMP column. Allow it inside the
+	// VALUES (or input subquery) of an INSERT/UPSERT; per-column validation
+	// against the actual target column happens at write time.
+	prevAllowPCT := mb.b.semaCtx.Properties.AllowPendingCommitTimestamp
+	mb.b.semaCtx.Properties.AllowPendingCommitTimestamp = true
 	mb.outScope = mb.b.buildStmt(inputRows, desiredTypes, inScope)
+	mb.b.semaCtx.Properties.AllowPendingCommitTimestamp = prevAllowPCT
 
 	if len(mb.targetColList) != 0 {
 		// Target columns already exist, so ensure that the number of input

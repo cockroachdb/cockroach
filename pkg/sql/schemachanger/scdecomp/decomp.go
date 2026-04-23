@@ -576,6 +576,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
 		IsSystemColumn:                    col.IsSystemColumn(),
+		AllowCommitTimestamp:              col.AllowCommitTimestamp(),
 	}
 	// Only set PgAttributeNum if it differs from ColumnID.
 	if pgAttNum := col.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(col.GetID()) {

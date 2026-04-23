@@ -141,6 +141,25 @@ func TestDecodeTupleValueWithType(t *testing.T) {
 	require.Equal(t, decoded, datum)
 }
 
+// TestEncodeDecodePendingCommitTimestamp checks that the marker datum
+// encodes to a payload-free CommitTimestamp tag and that reads observing
+// the marker (e.g. read-your-own-writes within the writing txn) decode as
+// NULL for both TIMESTAMP and TIMESTAMPTZ columns.
+func TestEncodeDecodePendingCommitTimestamp(t *testing.T) {
+	a := &tree.DatumAlloc{}
+	for _, typ := range []*types.T{types.Timestamp, types.TimestampTZ} {
+		t.Run(typ.SQLString(), func(t *testing.T) {
+			buf, err := valueside.Encode(nil, 1 /* colID */, tree.DPendingCommitTimestampDatum)
+			require.NoError(t, err)
+
+			d, rest, err := valueside.Decode(a, typ, buf)
+			require.NoError(t, err)
+			require.Empty(t, rest)
+			require.Equal(t, tree.DNull, d)
+		})
+	}
+}
+
 func TestLegacy(t *testing.T) {
 	tests := []struct {
 		typ   *types.T

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1891,13 +1892,49 @@ func SkipColumnNotInPrimaryIndexValue(
 //
 // neededValueCols allows an early exit if all the needed columns have been
 // decoded.
+//
+// PENDING_COMMIT_TIMESTAMP() markers (see EncodeCommitTimestampValue) decode
+// to lazy EncDatums whose backing bytes resolve to DNull, since this entry
+// point has no MVCC version timestamp in scope. Callers that have access to
+// the value's version timestamp (notably the row fetcher) should prefer
+// DecodeValueBytesWithMVCCTimestamp, which substitutes the version timestamp
+// for any markers eagerly so downstream consumers see the resolved value.
 func DecodeValueBytes(
 	colIdxMap catalog.TableColMap, valueBytes []byte, neededValueCols int, row EncDatumRow,
+) (colOrds intsets.Fast, err error) {
+	return DecodeValueBytesWithMVCCTimestamp(
+		colIdxMap, valueBytes, neededValueCols, row, nil /* fetchedCols */, hlc.Timestamp{},
+	)
+}
+
+// DecodeValueBytesWithMVCCTimestamp is like DecodeValueBytes, but it
+// additionally resolves any PENDING_COMMIT_TIMESTAMP() marker
+// (encoding.CommitTimestamp tag) into a concrete timestamp datum populated
+// from the supplied MVCC version timestamp. The substitution happens eagerly
+// at fetch time because the row fetcher is the only layer with the version
+// timestamp in scope; downstream consumers see a fully-decoded EncDatum and
+// don't have to thread the timestamp themselves.
+//
+// fetchedCols, if non-nil, must align 1:1 with the column ordinals stored in
+// colIdxMap, i.e. fetchedCols[idx].Type is the type of the column at ordinal
+// idx. It's only consulted when a marker is encountered, so callers that have
+// the slice handy can pass it without paying any cost on the common path.
+//
+// When fetchedCols is nil or mvccTimestamp is empty, markers fall back to the
+// lazy DNull behavior described on DecodeValueBytes.
+func DecodeValueBytesWithMVCCTimestamp(
+	colIdxMap catalog.TableColMap,
+	valueBytes []byte,
+	neededValueCols int,
+	row EncDatumRow,
+	fetchedCols []fetchpb.IndexFetchSpec_Column,
+	mvccTimestamp hlc.Timestamp,
 ) (colOrds intsets.Fast, err error) {
 	var colIDDelta uint32
 	var lastColID descpb.ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
+	resolveMarkers := fetchedCols != nil && mvccTimestamp.IsSet()
 	for len(valueBytes) > 0 && colOrds.Len() < neededValueCols {
 		typeOffset, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
@@ -1913,6 +1950,23 @@ func DecodeValueBytes(
 				return intsets.Fast{}, err
 			}
 			valueBytes = valueBytes[numBytes:]
+			continue
+		}
+
+		// Eagerly substitute PENDING_COMMIT_TIMESTAMP() markers with the MVCC
+		// version timestamp. The marker carries no payload of its own, so we
+		// just need to advance past the tag and synthesize a fully-decoded
+		// EncDatum carrying the resolved timestamp.
+		if resolveMarkers && typ == encoding.CommitTimestamp {
+			datum, rem, err := valueside.DecodeWithMVCCTimestamp(
+				nil /* alloc */, fetchedCols[idx].Type, valueBytes, mvccTimestamp,
+			)
+			if err != nil {
+				return intsets.Fast{}, err
+			}
+			valueBytes = rem
+			row[idx] = DatumToEncDatumUnsafe(fetchedCols[idx].Type, datum)
+			colOrds.Add(idx)
 			continue
 		}
 

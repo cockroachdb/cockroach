@@ -439,8 +439,15 @@ func (cf *cFetcher) Init(
 		table.neededValueColsByIdx.AddRange(0 /* start */, nCols-1)
 	}
 
-	// Check for system columns.
+	// Check for system columns and ALLOW_COMMIT_TIMESTAMP columns. Either
+	// requires MVCC timestamp decoding: the former exposes the version
+	// timestamp directly to SQL via the crdb_internal_mvcc_timestamp
+	// pseudo-column, the latter uses it (in colencoding.DecodeTableValueToCol)
+	// to resolve PENDING_COMMIT_TIMESTAMP() markers stored in the value.
 	for idx := range tableArgs.spec.FetchedColumns {
+		if tableArgs.spec.FetchedColumns[idx].AllowCommitTimestamp {
+			cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
+		}
 		colID := tableArgs.spec.FetchedColumns[idx].ColumnID
 		if colinfo.IsColIDSystemColumn(colID) {
 			// Set up extra metadata for system columns.
@@ -1383,6 +1390,7 @@ func (cf *cFetcher) processValueBytes(
 		valueBytes, err = colencoding.DecodeTableValueToCol(
 			&table.da, &cf.machine.colvecs, vecIdx, cf.machine.rowIdx, typ,
 			dataOffset, cf.table.typs[vecIdx], valueBytes,
+			cf.machine.nextKV.Value.Timestamp,
 		)
 		if err != nil {
 			return "", "", err

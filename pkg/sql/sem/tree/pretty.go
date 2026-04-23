@@ -2057,6 +2057,11 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.Nullable.ConstraintName, hiddenConstraint))
 	}
 
+	// ALLOW_COMMIT_TIMESTAMP qualification.
+	if node.AllowCommitTimestamp {
+		clauses = append(clauses, pretty.Keyword("ALLOW_COMMIT_TIMESTAMP"))
+	}
+
 	// NULL/NOT NULL constraint.
 	nConstraint := pretty.Nil
 	switch node.Nullable.Nullability {

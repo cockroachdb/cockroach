@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -48,7 +49,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		}
 		buf, err = DecodeTableValueToCol(
 			&da, &vecs, i /* vecIdx */, 0 /* rowIdx */, typ,
-			dataOffset, typs[i], buf[typeOffset:],
+			dataOffset, typs[i], buf[typeOffset:], hlc.Timestamp{},
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -442,6 +442,7 @@ func (m *MemBatch) ResetInternalBatch() {
 	for _, v := range m.b {
 		if v.CanonicalTypeFamily() != types.UnknownFamily {
 			v.Nulls().UnsetNulls()
+			v.allPendingCommitTimestamp = false
 			ResetIfBytesLike(v)
 		}
 	}

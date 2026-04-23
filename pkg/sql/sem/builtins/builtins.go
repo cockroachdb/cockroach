@@ -2892,6 +2892,37 @@ months and years, use the timestamptz subtraction operator.`,
 	"current_timestamp":     txnTSWithPrecisionImplBuiltin(true),
 	"transaction_timestamp": txnTSImplBuiltin(true),
 
+	"pending_commit_timestamp": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategoryDateAndTime,
+		},
+		tree.Overload{
+			Types:                 tree.ParamTypes{},
+			ReturnType:            tree.FixedReturnType(types.TimestampTZ),
+			SpecializedVecBuiltin: tree.PendingCommitTimestamp,
+			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				// Return a marker datum. The actual commit timestamp isn't
+				// known yet; the row writer detects the marker and arranges
+				// for the KV layer to fill in the real value during intent
+				// resolution.
+				return tree.DPendingCommitTimestampDatum, nil
+			},
+			Info: `Returns a placeholder for the transaction's commit timestamp.
+
+The marker is only legal as the right-hand side of an assignment to a column
+declared with ALLOW_COMMIT_TIMESTAMP, e.g. inside INSERT ... VALUES or
+UPDATE ... SET. Calling it from any other context (bare SELECT, WHERE, CHECK
+constraints, computed columns, etc.) raises an error at type-check time
+because the marker has no concrete value until the txn commits.
+
+When written into an ALLOW_COMMIT_TIMESTAMP column, the marker is replaced
+with the txn's actual commit timestamp during intent resolution. Reading the
+column from within the writing txn returns NULL because the real value isn't
+known until the txn commits.`,
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"localtimestamp": txnTSWithPrecisionImplBuiltin(false),
 	"localtime":      txnTimeWithPrecisionBuiltin(false),
 

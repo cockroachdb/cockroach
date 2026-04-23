@@ -135,6 +135,20 @@ func TestReadCommittedLogic_alias_types(
 	runLogicTest(t, "alias_types")
 }
 
+func TestReadCommittedLogic_allow_commit_timestamp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "allow_commit_timestamp")
+}
+
+func TestReadCommittedLogic_allow_commit_timestamp_disallowed_ddl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "allow_commit_timestamp_disallowed_ddl")
+}
+
 func TestReadCommittedLogic_alter_column_type(
 	t *testing.T,
 ) {

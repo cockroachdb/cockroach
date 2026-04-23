@@ -232,6 +232,11 @@ func (node *DPGVector) Eval(ctx context.Context, v ExprEvaluator) (Datum, error)
 }
 
 // Eval is part of the TypedExpr interface.
+func (node *DPendingCommitTimestamp) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node *DString) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }

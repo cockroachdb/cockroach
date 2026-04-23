@@ -14,13 +14,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // DecodeTableValueToCol decodes a value encoded by EncodeTableValue, writing
 // the result to the rowIdx'th position of the vecIdx'th vector in
 // coldata.TypedVecs.
 // See the analog in rowenc/column_type_encoding.go.
+//
+// mvccTimestamp is the version timestamp of the KV value being decoded. It's
+// used to resolve PENDING_COMMIT_TIMESTAMP() markers (see
+// EncodeCommitTimestampValue) for ALLOW_COMMIT_TIMESTAMP columns: after
+// intent resolution the version key's timestamp is the writer's commit
+// timestamp, so substituting it gives the column its final value at read
+// time. An empty mvccTimestamp falls back to NULL (same-txn read-your-own-
+// writes don't have a finalized commit timestamp yet, and surfacing the
+// txn's pre-commit provisional timestamp would lie because it can still be
+// pushed forward).
 func DecodeTableValueToCol(
 	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
@@ -30,11 +42,36 @@ func DecodeTableValueToCol(
 	dataOffset int,
 	valTyp *types.T,
 	buf []byte,
+	mvccTimestamp hlc.Timestamp,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
 		vecs.Nulls[vecIdx].SetNull(rowIdx)
 		return buf[dataOffset:], nil
+	}
+	// PENDING_COMMIT_TIMESTAMP() markers carry no payload of their own; the
+	// decoded value comes entirely from the MVCC version timestamp. valTyp must
+	// be TIMESTAMP or TIMESTAMPTZ (the column-type restriction enforced by the
+	// catalog-level ALLOW_COMMIT_TIMESTAMP validation).
+	if typ == encoding.CommitTimestamp {
+		if mvccTimestamp.IsEmpty() {
+			vecs.Nulls[vecIdx].SetNull(rowIdx)
+			return buf[dataOffset:], nil
+		}
+		switch valTyp.Family() {
+		case types.TimestampFamily, types.TimestampTZFamily:
+			colIdx := vecs.ColsMap[vecIdx]
+			// Round to microseconds to match what the row engine produces via
+			// tree.MakeDTimestampTZ(_, time.Microsecond). MVCC HLC physical
+			// times are always within the supported range so we don't bother
+			// with a bounds check.
+			vecs.TimestampCols[colIdx][rowIdx] = mvccTimestamp.GoTime().Round(time.Microsecond)
+			return buf[dataOffset:], nil
+		default:
+			return buf, errors.AssertionFailedf(
+				"PENDING_COMMIT_TIMESTAMP() marker decoded for non-timestamp column type %s",
+				valTyp.SQLStringForError())
+		}
 	}
 
 	// Bool is special because the value is stored in the value tag, so we have

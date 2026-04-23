@@ -220,6 +220,7 @@ var validationMap = []struct {
 				reason: "initial import: TODO(features): add validation"},
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},
 			"SystemColumnKind":          {status: thisFieldReferencesNoObjects},
+			"AllowCommitTimestamp": {status: iSolemnlySwearThisFieldIsValidated},
 			"OnUpdateExpr":              {status: iSolemnlySwearThisFieldIsValidated},
 			"UsesFunctionIds":           {status: iSolemnlySwearThisFieldIsValidated},
 		},

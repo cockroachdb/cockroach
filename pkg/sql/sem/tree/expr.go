@@ -1794,6 +1794,9 @@ func (node *DArray) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *DVoid) String() string            { return AsString(node) }
+func (node *DPendingCommitTimestamp) String() string {
+	return AsString(node)
+}
 func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }

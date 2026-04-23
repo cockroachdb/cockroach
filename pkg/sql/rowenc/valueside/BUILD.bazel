@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/timeutil/pgdate",

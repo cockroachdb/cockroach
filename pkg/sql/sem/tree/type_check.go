@@ -115,6 +115,17 @@ type SemaProperties struct {
 	// "re-type-checking" that occurs for a RECORD-returning routine, for which
 	// the return type is not known until the routine body is built.
 	RoutineUseResolvedType bool
+
+	// AllowPendingCommitTimestamp permits the pending_commit_timestamp()
+	// builtin to appear in the current scope. It defaults to false because the
+	// marker only has meaning as a value being written into a column declared
+	// with ALLOW_COMMIT_TIMESTAMP; outside of that, both reads (the marker has
+	// no concrete value yet) and most expression contexts (CHECK, computed
+	// columns, indexes, etc.) are nonsensical. The flag is flipped on by the
+	// optbuilder for the right-hand sides of INSERT/UPSERT VALUES and
+	// UPDATE/UPSERT SET assignments. Per-column validation against
+	// ALLOW_COMMIT_TIMESTAMP happens later, at write time.
+	AllowPendingCommitTimestamp bool
 }
 
 type semaRequirements struct {
@@ -1085,12 +1096,60 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 	return pgerror.Newf(code, "%s functions are not allowed in %s", cat, context)
 }
 
+// isPendingCommitTimestampBuiltin returns true if def names the
+// pg_catalog.pending_commit_timestamp() builtin. The name check alone isn't
+// sufficient because user-defined functions can shadow builtins; we additionally
+// require at least one overload from the pg_catalog schema so that a UDF named
+// pending_commit_timestamp in a user schema isn't subject to the write-context
+// restriction.
+func isPendingCommitTimestampBuiltin(def *ResolvedFunctionDefinition) bool {
+	if def == nil || def.Name != "pending_commit_timestamp" {
+		return false
+	}
+	for _, o := range def.Overloads {
+		if o.Schema == "pg_catalog" && o.Type == BuiltinRoutine {
+			return true
+		}
+	}
+	return false
+}
+
 // checkFunctionUsage checks whether a given built-in function is
 // allowed in the current context.
 func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *ResolvedFunctionDefinition) error {
 	if sc == nil {
 		// We can't check anything further. Give up.
 		return nil
+	}
+
+	// pending_commit_timestamp() is only meaningful as a value being written to
+	// an ALLOW_COMMIT_TIMESTAMP column. Calling it from any other context (bare
+	// SELECT, WHERE, computed columns, CHECK constraints, etc.) would surface
+	// the marker datum to expression evaluation, which violates the type-system
+	// invariant that a TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ
+	// and crashes downstream consumers (eval, optimizer folds, distsql wire
+	// encoding for projection results, etc.).
+	//
+	// The substitution that turns the marker into a concrete timestamp lives in
+	// the storage→SQL decode path (valueside.DecodeWithMVCCTimestamp +
+	// colencoding.DecodeTableValueToCol), where the MVCC version timestamp is
+	// in scope. That path covers SELECTs of ALLOW_COMMIT_TIMESTAMP columns in
+	// both the row engine and the vectorized engine, but it doesn't help
+	// expressions that synthesize the marker themselves via a call to the
+	// builtin. The optbuilder opts in to the write-side contexts where the
+	// marker is well-defined (assignments to ALLOW_COMMIT_TIMESTAMP columns);
+	// everywhere else we fail fast at type-check time.
+	//
+	// TODO(arul): this rejection is still broader than the spec strictly
+	// requires. We could narrow it to only reject when the call appears in a
+	// position the row-writer can't see (i.e. anywhere other than a direct
+	// assignment expression in INSERT/UPDATE/UPSERT), and move per-column
+	// ALLOW_COMMIT_TIMESTAMP validation into the row-writer / optbuilder so
+	// we get a precise error when the marker is written to a non-ACT column.
+	if !sc.Properties.AllowPendingCommitTimestamp && isPendingCommitTimestampBuiltin(def) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"pending_commit_timestamp() can only be used as the value being written "+
+				"to a column declared with ALLOW_COMMIT_TIMESTAMP")
 	}
 
 	// TODO(Chengxiong): Consider doing this check when we narrow down to an
@@ -2236,6 +2295,14 @@ func (d *DTuple) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (Typed
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DVoid) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DPendingCommitTimestamp) TypeCheck(
+	_ context.Context, _ *SemaContext, _ *types.T,
+) (TypedExpr, error) {
 	return d, nil
 }
 

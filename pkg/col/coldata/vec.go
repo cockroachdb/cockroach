@@ -46,6 +46,24 @@ type Vec struct {
 	canonicalTypeFamily types.Family
 	col                 Column
 	nulls               Nulls
+	// allPendingCommitTimestamp is true when every slot in this Vec stands
+	// in for tree.DPendingCommitTimestampDatum (the marker returned by
+	// pending_commit_timestamp()). The flag is an "all rows" signal: when
+	// set, the underlying column is irrelevant -- consumers that understand
+	// the marker (today only colconv.VecToDatumConverter, used by the
+	// materializer) substitute the marker datum, and consumers that don't
+	// see NULLs (which is what the underlying nulls bitmap is set to).
+	//
+	// The flag is set in three places:
+	//   - colexecbuiltins.pendingCommitTimestampOp, which projects the
+	//     builtin in the vectorized engine.
+	//   - colexec.EncDatumRowToColVecs, when the columnarizer encounters a
+	//     marker datum from a row source.
+	//   - Vec.Copy / Vec.CopyWithReorderedSource, which OR-propagate the
+	//     flag from src so that operators like CASE preserve it across the
+	//     scratch vec.
+	// It is cleared by MemBatch.ResetInternalBatch when the Vec is reused.
+	allPendingCommitTimestamp bool
 }
 
 // ColumnFactory is an interface that can construct columns for Batches.
@@ -283,6 +301,21 @@ func (v *Vec) Nulls() *Nulls {
 // SetNulls sets the nulls vector for this column.
 func (v *Vec) SetNulls(n Nulls) {
 	v.nulls = n
+}
+
+// AllPendingCommitTimestamp reports whether every slot in this Vec is the
+// pending_commit_timestamp() marker. See the field comment on Vec for
+// details.
+func (v *Vec) AllPendingCommitTimestamp() bool {
+	return v.allPendingCommitTimestamp
+}
+
+// SetAllPendingCommitTimestamp marks every slot in this Vec as the
+// pending_commit_timestamp() marker. Callers must also set the underlying
+// nulls bitmap to all-NULL so that consumers that don't understand the
+// marker degrade to NULL rather than reading uninitialized values.
+func (v *Vec) SetAllPendingCommitTimestamp() {
+	v.allPendingCommitTimestamp = true
 }
 
 // Length returns the length of the slice that is underlying this Vec.

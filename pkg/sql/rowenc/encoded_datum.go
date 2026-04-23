@@ -187,6 +187,16 @@ func DatumToEncDatum(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
+		// pending_commit_timestamp() advertises TIMESTAMPTZ as its return
+		// type, but ALLOW_COMMIT_TIMESTAMP columns may also be TIMESTAMP.
+		// The marker carries no value -- it gets substituted into the
+		// column's declared type at decode time -- so we let it through
+		// against either family rather than having callers thread a cast
+		// that would just be a no-op.
+		if _, ok := d.(*tree.DPendingCommitTimestamp); ok &&
+			(ctyp.Family() == types.TimestampFamily || ctyp.Family() == types.TimestampTZFamily) {
+			return EncDatum{Datum: d}, nil
+		}
 		return EncDatum{}, errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError())
 	}
 	return EncDatum{Datum: d}, nil

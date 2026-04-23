@@ -209,6 +209,10 @@ func (c *prevCol) IsInaccessible() bool {
 	return false
 }
 
+func (c *prevCol) AllowCommitTimestamp() bool {
+	return false
+}
+
 func (c *prevCol) IsExpressionIndexColumn() bool {
 	return false
 }

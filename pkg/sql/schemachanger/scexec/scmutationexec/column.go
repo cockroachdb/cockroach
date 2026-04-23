@@ -31,6 +31,7 @@ func (i *immediateVisitor) MakeAbsentColumnDeleteOnly(
 		Inaccessible:            op.Column.IsInaccessible,
 		GeneratedAsIdentityType: op.Column.GeneratedAsIdentityType,
 		PGAttributeNum:          op.Column.PgAttributeNum,
+		AllowCommitTimestamp:    op.Column.AllowCommitTimestamp,
 	}
 	if o := op.Column.GeneratedAsIdentitySequenceOption; o != "" {
 		col.GeneratedAsIdentitySequenceOption = &o

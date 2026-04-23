@@ -193,6 +193,19 @@ func (v *Vec) Copy(args SliceArgs) {
 		// We're about to overwrite this entire range, so unset all the nulls.
 		v.Nulls().UnsetNullRange(args.DestIdx, args.DestIdx+(args.SrcEndIdx-args.SrcStartIdx))
 	}
+	// Propagate the pending_commit_timestamp() marker flag from src. We use OR
+	// semantics: if any source contributing to this vec carried the marker, we
+	// treat the merged vec as carrying it. This is a deliberate
+	// over-approximation -- true correctness would require a per-row mask.
+	// The optbuilder restricts pending_commit_timestamp() to assignment
+	// positions on ALLOW_COMMIT_TIMESTAMP columns, which makes mixed
+	// PCT/non-PCT vecs impossible to construct in practice today (CASE arms
+	// in INSERT...ON CONFLICT DO UPDATE either both call the marker or
+	// neither does). If the surface area expands, this will need to be
+	// revisited.
+	if args.Src.AllPendingCommitTimestamp() {
+		v.SetAllPendingCommitTimestamp()
+	}
 
 	switch v.CanonicalTypeFamily() {
 	// {{range .}}
@@ -316,6 +329,10 @@ func (v *Vec) CopyWithReorderedSource(src *Vec, sel, order []int) {
 	}
 	if v.nulls.MaybeHasNulls() {
 		v.nulls.UnsetNulls()
+	}
+	// See Vec.Copy for the rationale behind propagating the marker flag.
+	if src.AllPendingCommitTimestamp() {
+		v.SetAllPendingCommitTimestamp()
 	}
 	switch v.CanonicalTypeFamily() {
 	// {{range .}}

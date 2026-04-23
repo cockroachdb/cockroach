@@ -1,0 +1,311 @@
+# LogicTest: !local-mixed-25.4
+
+# Covers the ALLOW_COMMIT_TIMESTAMP column qualification: persistence and
+# SHOW CREATE TABLE roundtripping. The DDL rejection matrix lives in
+# allow_commit_timestamp_disallowed_ddl.
+
+subtest create_table_roundtrip
+
+statement disable-cf-mutator ok
+CREATE TABLE commit_ts_tab (
+  id INT PRIMARY KEY,
+  data STRING,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE commit_ts_tab
+----
+commit_ts_tab  CREATE TABLE public.commit_ts_tab (
+                 id INT8 NOT NULL,
+                 data STRING NULL,
+                 ts TIMESTAMP NULL ALLOW_COMMIT_TIMESTAMP,
+                 CONSTRAINT commit_ts_tab_pkey PRIMARY KEY (id ASC)
+               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE commit_ts_tab
+----
+commit_ts_tab  CREATE TABLE public.commit_ts_tab (
+                 id INT8 NOT NULL,
+                 data STRING NULL,
+                 ts TIMESTAMP NULL ALLOW_COMMIT_TIMESTAMP,
+                 CONSTRAINT commit_ts_tab_pkey PRIMARY KEY (id ASC)
+               ) WITH (schema_locked = true);
+
+subtest add_column_roundtrip
+
+statement disable-cf-mutator ok
+CREATE TABLE add_col_tab (id INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE add_col_tab ADD COLUMN ts TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP;
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE add_col_tab
+----
+add_col_tab  CREATE TABLE public.add_col_tab (
+               id INT8 NOT NULL,
+               ts TIMESTAMPTZ NULL ALLOW_COMMIT_TIMESTAMP,
+               CONSTRAINT add_col_tab_pkey PRIMARY KEY (id ASC)
+             );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE add_col_tab
+----
+add_col_tab  CREATE TABLE public.add_col_tab (
+               id INT8 NOT NULL,
+               ts TIMESTAMPTZ NULL ALLOW_COMMIT_TIMESTAMP,
+               CONSTRAINT add_col_tab_pkey PRIMARY KEY (id ASC)
+             ) WITH (schema_locked = true);
+
+subtest no_option
+
+# Without the qualification, SHOW CREATE must not emit the keyword.
+
+statement disable-cf-mutator ok
+CREATE TABLE no_opt_tab (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE no_opt_tab
+----
+no_opt_tab  CREATE TABLE public.no_opt_tab (
+              id INT8 NOT NULL,
+              ts TIMESTAMP NULL,
+              CONSTRAINT no_opt_tab_pkey PRIMARY KEY (id ASC)
+            );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE no_opt_tab
+----
+no_opt_tab  CREATE TABLE public.no_opt_tab (
+              id INT8 NOT NULL,
+              ts TIMESTAMP NULL,
+              CONSTRAINT no_opt_tab_pkey PRIMARY KEY (id ASC)
+            ) WITH (schema_locked = true);
+
+subtest allow_in_shared_family
+
+# Sanity check: a non-sole column in a shared family is fine.
+
+statement ok
+CREATE TABLE allow_shared_family (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP,
+  data STRING,
+  FAMILY f (id, ts, data)
+);
+
+statement ok
+DROP TABLE allow_shared_family;
+
+subtest pending_commit_timestamp_context
+
+# pending_commit_timestamp() is only legal as the RHS of an assignment to an
+# ALLOW_COMMIT_TIMESTAMP column. Outside of that, it must be rejected at
+# type-check time so that the marker datum never reaches downstream consumers
+# (vectorized engine, distsql encoding, optimizer folds, etc.) that assume a
+# TIMESTAMPTZ-typed expression evaluates to a *DTimestampTZ.
+#
+# The per-column ALLOW_COMMIT_TIMESTAMP check happens later, at write time;
+# these cases just exercise the type-check rejection.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_tab (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT pending_commit_timestamp();
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT * FROM pct_tab WHERE ts = pending_commit_timestamp();
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+SELECT pending_commit_timestamp() FROM pct_tab;
+
+# DEFAULT expressions, computed columns, CHECK constraints, and partial-index
+# predicates all type-check the expression outside the write-side context, so
+# they should hit the same rejection.
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_default (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ DEFAULT pending_commit_timestamp()
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_computed (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ AS (pending_commit_timestamp()) STORED
+);
+
+statement error pending_commit_timestamp\(\) can only be used as the value being written to a column declared with ALLOW_COMMIT_TIMESTAMP
+CREATE TABLE pct_check (
+  id INT PRIMARY KEY,
+  ts TIMESTAMPTZ,
+  CHECK (ts < pending_commit_timestamp())
+);
+
+# Write-side contexts (INSERT VALUES, UPDATE SET, UPSERT VALUES, UPSERT DO
+# UPDATE SET) must let the call through. Each path resolves the marker datum
+# differently:
+#   - INSERT VALUES feeds the literal straight into the row inserter, which
+#     special-cases the marker.
+#   - UPDATE plans the assignment as a vectorized projection that goes
+#     through colexecbuiltins.pendingCommitTimestampOp -- it sets the
+#     per-Vec marker flag, and the materializer's vec→datum conversion
+#     substitutes the marker datum back in before the row updater sees it.
+#   - UPSERT VALUES and INSERT...ON CONFLICT DO UPDATE evaluate the marker
+#     in row mode and bounce through the columnarizer; EncDatumRowToColVecs
+#     recognizes the marker datum and sets the same per-Vec flag, with
+#     identical materializer-side behavior.
+
+statement ok
+INSERT INTO pct_tab (id, ts) VALUES (1, pending_commit_timestamp());
+
+statement ok
+UPDATE pct_tab SET ts = pending_commit_timestamp() WHERE id = 1;
+
+statement ok
+UPSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp());
+
+statement ok
+INSERT INTO pct_tab (id, ts) VALUES (2, pending_commit_timestamp())
+ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
+
+# All four write paths above must have produced a real TIMESTAMPTZ value
+# (not a NULL placeholder for the marker datum) for ts.
+query II
+SELECT count(*), count(ts) FROM pct_tab;
+----
+2  2
+
+query B
+SELECT bool_and(ts > '2024-01-01'::TIMESTAMPTZ) FROM pct_tab;
+----
+true
+
+statement ok
+DROP TABLE pct_tab;
+
+subtest sql_decode_substitution
+
+# When the fetcher decodes a row whose value carries one or more
+# PENDING_COMMIT_TIMESTAMP() markers, the decoder substitutes the MVCC
+# version timestamp (which, after intent resolution, is the writer's commit
+# timestamp). All ALLOW_COMMIT_TIMESTAMP columns in the same row resolve to
+# the *same* timestamp, since they share a value-encoded tuple stored under
+# one version key. The substitution happens identically in the row engine
+# (via valueside.DecodeWithMVCCTimestamp) and the vectorized engine (via
+# colencoding.DecodeTableValueToCol), and we exercise both paths below.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_two_cols (
+  id INT PRIMARY KEY,
+  data STRING,
+  ts1 TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP,
+  ts2 TIMESTAMPTZ ALLOW_COMMIT_TIMESTAMP
+);
+
+statement ok
+INSERT INTO pct_two_cols (id, data, ts1, ts2)
+VALUES (1, 'a', pending_commit_timestamp(), pending_commit_timestamp());
+
+# Insert a second row to make sure each row resolves independently to its
+# own commit timestamp.
+statement ok
+INSERT INTO pct_two_cols (id, data, ts1, ts2)
+VALUES (2, 'b', pending_commit_timestamp(), pending_commit_timestamp());
+
+# Read back through the vectorized engine (default), which routes through
+# the colfetcher → colencoding.DecodeTableValueToCol substitution.
+query BBB rowsort
+SELECT
+  ts1 IS NOT NULL,
+  ts1 = ts2,
+  ts1 > '2024-01-01'::TIMESTAMPTZ
+FROM pct_two_cols
+ORDER BY id;
+----
+true  true  true
+true  true  true
+
+# Read back through the row engine, which routes through the row fetcher →
+# valueside.DecodeWithMVCCTimestamp substitution. Same answer.
+statement ok
+SET vectorize = off;
+
+query BBB rowsort
+SELECT
+  ts1 IS NOT NULL,
+  ts1 = ts2,
+  ts1 > '2024-01-01'::TIMESTAMPTZ
+FROM pct_two_cols
+ORDER BY id;
+----
+true  true  true
+true  true  true
+
+statement ok
+RESET vectorize;
+
+# Different rows resolve to different commit timestamps (separate INSERT
+# statements run in separate txns).
+query B
+SELECT (SELECT ts1 FROM pct_two_cols WHERE id = 1)
+     < (SELECT ts1 FROM pct_two_cols WHERE id = 2);
+----
+true
+
+statement ok
+DROP TABLE pct_two_cols;
+
+subtest timestamp_column
+
+# pending_commit_timestamp() advertises TIMESTAMPTZ as its return type, but
+# ALLOW_COMMIT_TIMESTAMP is also valid on TIMESTAMP columns. The marker
+# datum is type-oblivious -- valueside.DecodeWithMVCCTimestamp substitutes
+# the right Go type based on the column's declared type at decode time --
+# so all four write paths (INSERT VALUES, UPDATE, UPSERT, INSERT...ON
+# CONFLICT) need to flow the marker through the implicit TIMESTAMPTZ ->
+# TIMESTAMP assignment cast and the EncDatum type check without losing it.
+
+statement disable-cf-mutator ok
+CREATE TABLE pct_ts (
+  id INT PRIMARY KEY,
+  ts TIMESTAMP ALLOW_COMMIT_TIMESTAMP
+);
+
+statement ok
+INSERT INTO pct_ts (id, ts) VALUES (1, pending_commit_timestamp());
+
+statement ok
+UPDATE pct_ts SET ts = pending_commit_timestamp() WHERE id = 1;
+
+statement ok
+UPSERT INTO pct_ts (id, ts) VALUES (2, pending_commit_timestamp());
+
+statement ok
+INSERT INTO pct_ts (id, ts) VALUES (2, pending_commit_timestamp())
+ON CONFLICT (id) DO UPDATE SET ts = pending_commit_timestamp();
+
+# The decoder must resolve the marker into a TIMESTAMP (not TIMESTAMPTZ)
+# datum, matching the column's declared type.
+query TB
+SELECT pg_typeof(ts), bool_and(ts > '2024-01-01'::TIMESTAMP) FROM pct_ts GROUP BY pg_typeof(ts);
+----
+timestamp without time zone  true
+
+statement ok
+DROP TABLE pct_ts;

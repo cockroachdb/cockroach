@@ -6,6 +6,8 @@
 package valueside
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -15,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
@@ -24,16 +27,68 @@ import (
 )
 
 // Decode decodes a value encoded by Encode.
+//
+// PENDING_COMMIT_TIMESTAMP() markers (see EncodeCommitTimestampValue) decode
+// to DNull because this entry point has no version timestamp in scope. Callers
+// that have access to the MVCC version timestamp of the value being decoded
+// (notably the row fetcher) should prefer DecodeWithMVCCTimestamp, which
+// resolves markers into a concrete timestamp datum carrying the version
+// timestamp.
 func Decode(
 	a *tree.DatumAlloc, valType *types.T, b []byte,
+) (_ tree.Datum, remaining []byte, _ error) {
+	return DecodeWithMVCCTimestamp(a, valType, b, hlc.Timestamp{})
+}
+
+// DecodeWithMVCCTimestamp is like Decode but additionally resolves any
+// PENDING_COMMIT_TIMESTAMP() marker (encoding.CommitTimestamp tag) to a
+// concrete timestamp datum populated from the supplied MVCC version
+// timestamp. This is the SQL-level substitution that gives ALLOW_COMMIT_TIMESTAMP
+// columns their final value at read time: after intent resolution the version
+// key's timestamp *is* the txn's commit timestamp, so handing it back is the
+// resolved value the writer asked for.
+//
+// If mvccTimestamp is empty (e.g. a same-txn read-your-own-write before the
+// txn has been finalized, or a caller that doesn't have the version timestamp
+// in scope), the marker decodes to DNull. Returning the txn's pre-commit
+// provisional timestamp would be misleading because the commit timestamp can
+// still be pushed forward by intent resolution.
+//
+// valType must be TIMESTAMP or TIMESTAMPTZ (the column-type restriction
+// enforced by the catalog-level ALLOW_COMMIT_TIMESTAMP validation); any other
+// type triggers an assertion failure.
+func DecodeWithMVCCTimestamp(
+	a *tree.DatumAlloc, valType *types.T, b []byte, mvccTimestamp hlc.Timestamp,
 ) (_ tree.Datum, remaining []byte, _ error) {
 	_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
 	if err != nil {
 		return nil, b, err
 	}
-	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
 		return tree.DNull, b[dataOffset:], nil
+	}
+	if typ == encoding.CommitTimestamp {
+		if mvccTimestamp.IsEmpty() {
+			return tree.DNull, b[dataOffset:], nil
+		}
+		switch valType.Family() {
+		case types.TimestampTZFamily:
+			d, err := tree.MakeDTimestampTZ(mvccTimestamp.GoTime(), time.Microsecond)
+			if err != nil {
+				return nil, b, err
+			}
+			return d, b[dataOffset:], nil
+		case types.TimestampFamily:
+			d, err := tree.MakeDTimestamp(mvccTimestamp.GoTime(), time.Microsecond)
+			if err != nil {
+				return nil, b, err
+			}
+			return d, b[dataOffset:], nil
+		default:
+			return nil, b, errors.AssertionFailedf(
+				"PENDING_COMMIT_TIMESTAMP() marker decoded for non-timestamp column type %s",
+				valType.SQLStringForError())
+		}
 	}
 	// Bool is special because the value is stored in the value tag.
 	if valType.Family() != types.BoolFamily {

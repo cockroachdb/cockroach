@@ -90,6 +90,7 @@ ElementState:
     usesTypeIds: []
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 1
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -100,6 +101,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 2
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -110,6 +112,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 3
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -120,6 +123,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -130,6 +134,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -140,6 +145,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -150,6 +156,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -160,6 +167,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -170,6 +178,7 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 5
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -847,6 +856,7 @@ ElementState:
     usesTypeIds: []
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 1
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -857,6 +867,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 2
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -867,6 +878,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 3
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -877,6 +889,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -887,6 +900,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -897,6 +911,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -907,6 +922,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -917,6 +933,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -927,6 +944,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 5
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -937,6 +955,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 6
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -947,6 +966,7 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    allowCommitTimestamp: false
     columnId: 7
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0

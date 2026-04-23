@@ -36,6 +36,13 @@ const (
 	FNV64
 	FNV64a
 	DatumsToBytes
+	// PendingCommitTimestamp is the vectorized specialization of
+	// pending_commit_timestamp(). It outputs an all-NULL TIMESTAMPTZ vec
+	// with coldata.Vec.AllPendingCommitTimestamp() set, so that the
+	// materializer's vec→datum conversion produces the marker datum
+	// (tree.DPendingCommitTimestampDatum) instead of the all-zero time
+	// the regular conversion path would assert on.
+	PendingCommitTimestamp
 )
 
 // AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.

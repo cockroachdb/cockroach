@@ -6,6 +6,8 @@
 package tabledesc
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -998,6 +1000,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateTableIndexes(columnsByID, vea.IsActive),
 			desc.validatePartitioning(),
 			desc.validatePolicies(),
+			desc.validateAllowCommitTimestamp(),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -1564,6 +1567,144 @@ func (desc *wrapper) validateCheckConstraints(
 		if !valid {
 			return errors.Newf("check constraint %q refers to unknown columns in expression: %s",
 				chk.GetName(), chk.GetExpr())
+		}
+	}
+	return nil
+}
+
+// isPlaceholderConstraintName reports whether name matches the placeholder
+// pattern that ConstraintNamePlaceholder produces. The declarative schema
+// changer parks synthetic transient CHECKs (e.g. the one that ADD COLUMN ...
+// STORED uses to validate the computed expression during backfill) under a
+// placeholder name and never renames them.
+func isPlaceholderConstraintName(name string) bool {
+	return strings.HasPrefix(name, "crdb_internal_constraint_") &&
+		strings.HasSuffix(name, "_name_placeholder")
+}
+
+// validateAllowCommitTimestamp rejects descriptor states that put a column
+// declared with ALLOW_COMMIT_TIMESTAMP into a context where the
+// PENDING_COMMIT_TIMESTAMP() sentinel cannot be handled correctly. The rules:
+//
+//   - The column's type must be TIMESTAMP or TIMESTAMPTZ.
+//   - The column may not be part of the primary key.
+//   - The column may not be a key column of any secondary index.
+//   - The column may not be referenced by a CHECK constraint.
+//   - The column may not be referenced by a computed column that is itself a
+//     key column of any index (this covers expression indexes, which are
+//     implemented as a hidden computed column that is indexed).
+//   - The column may not be the sole column in its family; the
+//     PENDING_COMMIT_TIMESTAMP() sentinel relies on the multi-column tuple
+//     value encoding and we don't extend the legacy single-column encoding
+//     path to carry it.
+//
+// The checks run on deletable columns so that an illegal transition (e.g. a
+// DROP COLUMN that would leave the ACT column alone in its family) is caught
+// at descriptor write time regardless of which DDL path produced it.
+func (desc *wrapper) validateAllowCommitTimestamp() error {
+	var actColumns []catalog.Column
+	for _, col := range desc.DeletableColumns() {
+		if col.Dropped() || !col.AllowCommitTimestamp() {
+			continue
+		}
+		actColumns = append(actColumns, col)
+	}
+	if len(actColumns) == 0 {
+		return nil
+	}
+
+	// indexKeyCols maps every column that appears as a key column in a non-drop
+	// index to the first such index we saw. The index is only used to produce a
+	// nicer error message.
+	indexKeyCols := make(map[descpb.ColumnID]catalog.Index)
+	for _, idx := range desc.NonDropIndexes() {
+		for i, n := 0, idx.NumKeyColumns(); i < n; i++ {
+			id := idx.GetKeyColumnID(i)
+			if _, ok := indexKeyCols[id]; !ok {
+				indexKeyCols[id] = idx
+			}
+		}
+	}
+
+	// colToFamily maps a column ID to the family that currently contains it.
+	colToFamily := make(map[descpb.ColumnID]*descpb.ColumnFamilyDescriptor)
+	for i := range desc.Families {
+		fam := &desc.Families[i]
+		for _, id := range fam.ColumnIDs {
+			colToFamily[id] = fam
+		}
+	}
+
+	for _, col := range actColumns {
+		switch col.GetType().Family() {
+		case types.TimestampFamily, types.TimestampTZFamily:
+			// Allowed.
+		default:
+			return pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"column %q declared with ALLOW_COMMIT_TIMESTAMP must have type TIMESTAMP or TIMESTAMPTZ; got %s",
+				col.GetName(), col.GetType().SQLString())
+		}
+
+		if idx, ok := indexKeyCols[col.GetID()]; ok {
+			if idx.Primary() {
+				return pgerror.Newf(pgcode.InvalidColumnDefinition,
+					"column %q declared with ALLOW_COMMIT_TIMESTAMP cannot be part of the primary key",
+					col.GetName())
+			}
+			return pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"column %q declared with ALLOW_COMMIT_TIMESTAMP cannot be a key column of index %q",
+				col.GetName(), idx.GetName())
+		}
+
+		// Skip transient synthetic CHECKs that the declarative schema changer
+		// emits during ADD COLUMN ... STORED backfills to validate the
+		// computed expression. They never escape their placeholder name
+		// (they're discarded once the backfill completes rather than being
+		// renamed), so matching on the placeholder pattern is a reliable
+		// signal that the CHECK is internal scaffolding rather than a
+		// user-visible constraint.
+		for _, ck := range desc.CheckConstraints() {
+			// TODO(arul): this is hacky.
+			if isPlaceholderConstraintName(ck.GetName()) {
+				continue
+			}
+			if ck.CollectReferencedColumnIDs().Contains(col.GetID()) {
+				return pgerror.Newf(pgcode.InvalidColumnDefinition,
+					"column %q declared with ALLOW_COMMIT_TIMESTAMP cannot be referenced by CHECK constraint %q",
+					col.GetName(), ck.GetName())
+			}
+		}
+
+		for _, other := range desc.DeletableColumns() {
+			if other.Dropped() || !other.IsComputed() || other.GetID() == col.GetID() {
+				continue
+			}
+			idx, indexed := indexKeyCols[other.GetID()]
+			if !indexed {
+				continue
+			}
+			expr, err := parserutils.ParseExpr(string(other.GetComputeExpr()))
+			if err != nil {
+				// Other validation catches malformed expressions.
+				continue
+			}
+			refs, err := schemaexpr.ExtractColumnIDs(desc, expr)
+			if err != nil {
+				continue
+			}
+			if !refs.Contains(col.GetID()) {
+				continue
+			}
+			return pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"column %q declared with ALLOW_COMMIT_TIMESTAMP is referenced by computed column %q, "+
+					"which is a key column of index %q",
+				col.GetName(), other.GetName(), idx.GetName())
+		}
+
+		if fam, ok := colToFamily[col.GetID()]; ok && len(fam.ColumnIDs) == 1 {
+			return pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"column %q declared with ALLOW_COMMIT_TIMESTAMP cannot be the only column in family %q",
+				col.GetName(), fam.Name)
 		}
 	}
 	return nil

@@ -49,6 +49,18 @@ func EncDatumRowToColVecs(
 		datum := row[vecIdx].Datum
 		if datum == tree.DNull {
 			vecs.Nulls[vecIdx].SetNull(rowIdx)
+		} else if _, ok := datum.(*tree.DPendingCommitTimestamp); ok {
+			// pending_commit_timestamp() flowed through a row source (e.g. a
+			// values clause feeding an upsert through the Columnarizer). The
+			// canonical type for this position is TIMESTAMPTZ, but the marker
+			// datum isn't a *DTimestampTZ, so we can't fan it out into the
+			// vector. Mark the slot NULL and flip the per-Vec marker flag --
+			// the materializer at the other end of the vectorized stage uses
+			// the flag to substitute the marker datum back in. See
+			// pkg/sql/colexec/colexecbuiltins/pending_commit_timestamp.go for
+			// the equivalent handling on the projection side.
+			vecs.Nulls[vecIdx].SetNull(rowIdx)
+			vecs.Vecs[vecIdx].SetAllPendingCommitTimestamp()
 		} else {
 			switch t.Family() {
 			case types.BoolFamily:
