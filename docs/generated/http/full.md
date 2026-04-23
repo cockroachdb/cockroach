@@ -6024,6 +6024,74 @@ show throttling warnings and alerts in DB Console.
 
 
 
+## UploadNodeDebugData
+
+
+
+UploadNodeDebugData is a worker RPC invoked by the UPLOAD_DEBUG_DATA
+job's coordinator on every target node. Each receiving node collects
+its per-node debug artifacts and streams them directly to GCS using the
+coordinator-minted access token.
+
+This RPC is not exposed as an HTTP endpoint; it is strictly an internal
+node-to-node RPC used for the coordinator/worker fan-out. All
+user-facing entry points go through the Admin.StartUploadDebugData RPC
+and the `debug zip upload-server` CLI commands.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+UploadNodeDebugDataRequest is sent from the UPLOAD_DEBUG_DATA job's
+coordinator node to every target node via iterateNodes fan-out. The
+addressed node collects its per-node artifacts and streams them directly
+to GCS using the access token minted by the coordinator, so all
+concurrently running nodes write into the same session prefix.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| server_url | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | ServerUrl is the base URL of the upload server. Workers call into it only to register per-artifact metadata; actual bytes go to GCS. | [reserved](#support-status) |
+| session_id | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | SessionID identifies the upload-server session created (or reopened) by the coordinator. | [reserved](#support-status) |
+| upload_token | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | UploadToken is the short-lived session token returned by the upload server; it authenticates per-artifact metadata registrations. | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  | Redact controls redaction of sensitive fields in logs/SQL dumps. | [reserved](#support-status) |
+| cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadNodeDebugDataRequest-int32) |  | CpuProfSeconds captures a CPU profile of this duration; 0 disables. | [reserved](#support-status) |
+| include_range_info | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  | IncludeRangeInfo pulls per-node ranges.json. | [reserved](#support-status) |
+| include_goroutine_stacks | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  | IncludeGoroutineStacks captures a stop-the-world goroutine dump. | [reserved](#support-status) |
+| gcs_access_token | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | GcsAccessToken is the OAuth2 access token minted by the coordinator and propagated to all workers so that they can stream directly into GCS without each re-negotiating credentials with the upload server. | [reserved](#support-status) |
+| gcs_bucket | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | GcsBucket is the target GCS bucket name. | [reserved](#support-status) |
+| gcs_prefix | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  | GcsPrefix is the object-name prefix (i.e. session folder) under which all artifacts for this session should be written. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+UploadNodeDebugDataResponse is the per-node reply to an
+UploadNodeDebugData RPC. A node is considered "failed" if Errors is
+non-empty, regardless of how many artifacts it successfully uploaded.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| artifacts_uploaded | [int32](#cockroach.server.serverpb.UploadNodeDebugDataResponse-int32) |  | ArtifactsUploaded is the number of artifacts successfully streamed to GCS and registered with the upload server. | [reserved](#support-status) |
+| errors | [string](#cockroach.server.serverpb.UploadNodeDebugDataResponse-string) | repeated | Errors accumulates human-readable error strings; one per failed artifact. The list is empty when the node upload succeeded. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
@@ -8730,6 +8798,147 @@ so.
 | ----- | ---- | ----- | ----------- | -------------- |
 | read_from | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.roachpb.TenantID) |  |  | [reserved](#support-status) |
 | read_at | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## StartUploadDebugData
+
+`POST /_admin/v1/upload_debug_data`
+
+StartUploadDebugData creates a background job of type UPLOAD_DEBUG_DATA
+that streams cluster-wide and per-node debug artifacts to the configured
+upload server. It returns immediately with the job id; progress is
+tracked through the jobs framework (see Job / Jobs / GetUploadDebugDataStatus
+RPCs and the `cockroach debug zip upload-server watch` CLI command).
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+StartUploadDebugDataRequest is the request for the Admin.StartUploadDebugData
+RPC. All fields map 1:1 onto jobspb.UploadDebugDataDetails.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| server_url | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  | ServerUrl is the base URL of the upload server. | [reserved](#support-status) |
+| api_key | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  | ApiKey is the cluster API key used to authenticate session creation with the upload server. | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  | Redact, when true, asks every node to redact sensitive fields from logs and SQL dumps before uploading. | [reserved](#support-status) |
+| cpu_prof_seconds | [int32](#cockroach.server.serverpb.StartUploadDebugDataRequest-int32) |  | CpuProfSeconds captures a CPU profile of this duration (in seconds) on every node; 0 disables CPU profiling. | [reserved](#support-status) |
+| labels | [StartUploadDebugDataRequest.LabelsEntry](#cockroach.server.serverpb.StartUploadDebugDataRequest-cockroach.server.serverpb.StartUploadDebugDataRequest.LabelsEntry) | repeated | Labels are free-form metadata attached to the upload session. | [reserved](#support-status) |
+| include_range_info | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  | IncludeRangeInfo, when true, collects per-node ranges.json and cluster problem-ranges / tenant-ranges artifacts. | [reserved](#support-status) |
+| include_goroutine_stacks | [bool](#cockroach.server.serverpb.StartUploadDebugDataRequest-bool) |  | IncludeGoroutineStacks, when true, captures a stop-the-world goroutine dump on every node. | [reserved](#support-status) |
+| node_ids | [int32](#cockroach.server.serverpb.StartUploadDebugDataRequest-int32) | repeated | NodeIds, when non-empty, restricts the per-node fan-out to this subset. Used by "retry failed nodes" so a reupload only re-collects the failed nodes from the original attempt. | [reserved](#support-status) |
+| reupload_session_id | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  | ReuploadSessionId, when non-empty, re-opens an existing upload-server session instead of creating a new one. All artifacts land under the same GCS prefix as the original attempt. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StartUploadDebugDataRequest-cockroach.server.serverpb.StartUploadDebugDataRequest.LabelsEntry"></a>
+#### StartUploadDebugDataRequest.LabelsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.StartUploadDebugDataRequest-string) |  |  |  |
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+StartUploadDebugDataResponse is the response from Admin.StartUploadDebugData.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.StartUploadDebugDataResponse-int64) |  | JobID is the id of the newly created UPLOAD_DEBUG_DATA job. Callers can pass it to GetUploadDebugDataStatus, to the existing /_admin/v1/jobs/{id} endpoint, or to the CLI `debug zip upload-server watch` subcommand. | [reserved](#support-status) |
+
+
+
+
+
+
+
+## GetUploadDebugDataStatus
+
+`GET /_admin/v1/upload_debug_data/status/{job_id}`
+
+GetUploadDebugDataStatus returns the typed status of an UPLOAD_DEBUG_DATA
+job, including the upload-server session id and the list of node ids that
+failed during the upload. This decoded view drives the "Retry Failed
+Nodes" UI button and the `cockroach debug zip upload-server retry` CLI
+subcommand.
+
+The response deliberately omits the original API key (secret) embedded in
+the job payload.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+GetUploadDebugDataStatusRequest is the request for
+Admin.GetUploadDebugDataStatus. Field name intentionally matches the
+generated Go default (JobId) so that grpc-gateway can populate it from
+the {job_id} URL path parameter; see existing JobRequest above for the
+same pattern.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.GetUploadDebugDataStatusRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+GetUploadDebugDataStatusResponse is the response from
+Admin.GetUploadDebugDataStatus. It is a flattened, UI/CLI-friendly view of
+the underlying job's payload + progress. The original API key from the
+job's payload is intentionally not returned.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int64) |  | JobID of the job whose status this is. | [reserved](#support-status) |
+| state | [string](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-string) |  | State is the job state (e.g. "running", "succeeded", "failed"). | [reserved](#support-status) |
+| session_id | [string](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-string) |  | SessionId is the upload-server session id for this job. Empty until the job has created/reopened the session. | [reserved](#support-status) |
+| total_nodes | [int32](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int32) |  | TotalNodes is the number of nodes that this job will (or did) upload from. | [reserved](#support-status) |
+| nodes_completed | [int32](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int32) |  | NodesCompleted is the number of nodes that finished without any errors. | [reserved](#support-status) |
+| nodes_failed | [int32](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int32) |  | NodesFailed is the number of nodes that reported at least one upload error. | [reserved](#support-status) |
+| artifacts_uploaded | [int32](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int32) |  | ArtifactsUploaded is the cumulative count of artifacts uploaded so far. | [reserved](#support-status) |
+| failed_node_ids | [int32](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-int32) | repeated | FailedNodeIds is the list of nodes that failed during upload. This field drives "Retry Failed Nodes" in the UI and CLI. | [reserved](#support-status) |
+| fraction_completed | [float](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-float) |  | FractionCompleted is the job's fraction_completed (0..1). | [reserved](#support-status) |
+| running_status | [string](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-string) |  | RunningStatus is the job's human-readable status message. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-string) |  | Error is the job's terminal error message (set only on failed/canceled jobs). | [reserved](#support-status) |
+| server_url | [string](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-string) |  | ServerUrl is the upload server URL recorded in the job details. Returned so the UI/CLI retry flow can pre-populate the form. NOT sensitive. | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.GetUploadDebugDataStatusResponse-bool) |  | Redact echoes the redaction flag used when creating the job. | [reserved](#support-status) |
 
 
 

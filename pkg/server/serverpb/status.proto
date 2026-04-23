@@ -2376,6 +2376,52 @@ message GetThrottlingMetadataResponse {
   repeated string nodeIdsWithTelemetryProblems = 8;
 }
 
+// UploadNodeDebugDataRequest is sent from the UPLOAD_DEBUG_DATA job's
+// coordinator node to every target node via iterateNodes fan-out. The
+// addressed node collects its per-node artifacts and streams them directly
+// to GCS using the access token minted by the coordinator, so all
+// concurrently running nodes write into the same session prefix.
+message UploadNodeDebugDataRequest {
+  // ServerUrl is the base URL of the upload server. Workers call into it
+  // only to register per-artifact metadata; actual bytes go to GCS.
+  string server_url = 1;
+  // SessionID identifies the upload-server session created (or reopened) by
+  // the coordinator.
+  string session_id = 2;
+  // UploadToken is the short-lived session token returned by the upload
+  // server; it authenticates per-artifact metadata registrations.
+  string upload_token = 3;
+  // Redact controls redaction of sensitive fields in logs/SQL dumps.
+  bool redact = 4;
+  // CpuProfSeconds captures a CPU profile of this duration; 0 disables.
+  int32 cpu_prof_seconds = 5;
+  // IncludeRangeInfo pulls per-node ranges.json.
+  bool include_range_info = 6;
+  // IncludeGoroutineStacks captures a stop-the-world goroutine dump.
+  bool include_goroutine_stacks = 7;
+  // GcsAccessToken is the OAuth2 access token minted by the coordinator and
+  // propagated to all workers so that they can stream directly into GCS
+  // without each re-negotiating credentials with the upload server.
+  string gcs_access_token = 8;
+  // GcsBucket is the target GCS bucket name.
+  string gcs_bucket = 9;
+  // GcsPrefix is the object-name prefix (i.e. session folder) under which
+  // all artifacts for this session should be written.
+  string gcs_prefix = 10;
+}
+
+// UploadNodeDebugDataResponse is the per-node reply to an
+// UploadNodeDebugData RPC. A node is considered "failed" if Errors is
+// non-empty, regardless of how many artifacts it successfully uploaded.
+message UploadNodeDebugDataResponse {
+  // ArtifactsUploaded is the number of artifacts successfully streamed to
+  // GCS and registered with the upload server.
+  int32 artifacts_uploaded = 1;
+  // Errors accumulates human-readable error strings; one per failed
+  // artifact. The list is empty when the node upload succeeded.
+  repeated string errors = 2;
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2901,4 +2947,15 @@ service Status {
       get: "/_status/throttling"
     };
   }
+
+  // UploadNodeDebugData is a worker RPC invoked by the UPLOAD_DEBUG_DATA
+  // job's coordinator on every target node. Each receiving node collects
+  // its per-node debug artifacts and streams them directly to GCS using the
+  // coordinator-minted access token.
+  //
+  // This RPC is not exposed as an HTTP endpoint; it is strictly an internal
+  // node-to-node RPC used for the coordinator/worker fan-out. All
+  // user-facing entry points go through the Admin.StartUploadDebugData RPC
+  // and the `debug zip upload-server` CLI commands.
+  rpc UploadNodeDebugData(UploadNodeDebugDataRequest) returns (UploadNodeDebugDataResponse) {}
 }
