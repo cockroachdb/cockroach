@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -42,6 +43,7 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
+	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory,
@@ -70,9 +72,240 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestLogic_multi_region(
+func TestLogic_alter_table_locality(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "multi_region")
+	runLogicTest(t, "alter_table_locality")
+}
+
+func TestLogic_global_placement_restricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "global_placement_restricted")
+}
+
+func TestLogic_inspect_ccl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect_ccl")
+}
+
+func TestLogic_multi_region_alter_table_regional_by_row(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_alter_table_regional_by_row")
+}
+
+func TestLogic_multi_region_backup(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_backup")
+}
+
+func TestLogic_multi_region_ccl(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_ccl")
+}
+
+func TestLogic_multi_region_default_primary_region(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_default_primary_region")
+}
+
+func TestLogic_multi_region_drop_region(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_drop_region")
+}
+
+func TestLogic_multi_region_foreign_key_lookup_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_foreign_key_lookup_join")
+}
+
+func TestLogic_multi_region_import_export(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_import_export")
+}
+
+func TestLogic_multi_region_locality_optimized_search_query_behavior(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_locality_optimized_search_query_behavior")
+}
+
+func TestLogic_multi_region_primary_region_switch_zone_configs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_primary_region_switch_zone_configs")
+}
+
+func TestLogic_multi_region_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_privileges")
+}
+
+func TestLogic_multi_region_query_behavior(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_query_behavior")
+}
+
+func TestLogic_multi_region_remote_access_error(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_remote_access_error")
+}
+
+func TestLogic_multi_region_show(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_show")
+}
+
+func TestLogic_multi_region_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_stats")
+}
+
+func TestLogic_multi_region_zone_configs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "multi_region_zone_configs")
+}
+
+func TestLogic_partitioning_hash_sharded_index_mr(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "partitioning_hash_sharded_index_mr")
+}
+
+func TestLogic_placement(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "placement")
+}
+
+func TestLogic_regional_by_row(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row")
+}
+
+func TestLogic_regional_by_row_auto_rehoming(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_auto_rehoming")
+}
+
+func TestLogic_regional_by_row_cascade(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_cascade")
+}
+
+func TestLogic_regional_by_row_foreign_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_foreign_key")
+}
+
+func TestLogic_regional_by_row_hash_sharded_index_query_plan(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_hash_sharded_index_query_plan")
+}
+
+func TestLogic_regional_by_row_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_index")
+}
+
+func TestLogic_regional_by_row_insert_fast_path(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_insert_fast_path")
+}
+
+func TestLogic_regional_by_row_placement_restricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_placement_restricted")
+}
+
+func TestLogic_regional_by_row_query_behavior(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_query_behavior")
+}
+
+func TestLogic_regional_by_row_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_read_committed")
+}
+
+func TestLogic_regional_by_row_rename_column(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_rename_column")
+}
+
+func TestLogic_regional_by_row_safe_updates(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_safe_updates")
+}
+
+func TestLogic_regional_by_row_skip_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_row_skip_unique_checks")
+}
+
+func TestLogic_regional_by_table_placement_restricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "regional_by_table_placement_restricted")
 }

@@ -20,7 +20,6 @@ filegroup(
         ],
     ),
     visibility = [
-        "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
         "//pkg/sql/logictest:__subpackages__",
         "//pkg/sql/schemachanger:__pkg__",
@@ -37,10 +36,6 @@ filegroup(
         "//conditions:default": [],
     }),
     visibility = [
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.1:__pkg__",
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.3:__pkg__",
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.4:__pkg__",
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-26.1:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.1:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",

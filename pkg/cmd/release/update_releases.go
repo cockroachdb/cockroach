@@ -317,7 +317,6 @@ func collectPredecessorVersions(
 // tool is expected to run from the repository root.
 var testserverDirs = []string{
 	"pkg/sql/logictest/tests",
-	"pkg/ccl/logictestccl/tests",
 }
 
 // findTestserverSeries scans for cockroach-go-testserver-* directories
