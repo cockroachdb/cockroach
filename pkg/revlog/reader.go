@@ -366,6 +366,22 @@ func readManifest(
 	return m, nil
 }
 
+// HasLog probes the given external storage for the existence of a
+// revision log by listing the log/resolved/ directory. If at least
+// one resolved marker exists, a revision log is present. The storage
+// should be rooted at the collection root.
+func HasLog(ctx context.Context, store cloud.ExternalStorage) (bool, error) {
+	found := false
+	err := store.List(ctx, ResolvedRoot, cloud.ListOptions{}, func(s string) error {
+		found = true
+		return cloud.ErrListingDone
+	})
+	if !isNotFound(err) {
+		return false, err
+	}
+	return found, nil
+}
+
 // isNotFound reports whether err is a "this object doesn't exist"
 // signal from external storage. Different backends use different
 // concrete errors; we recognize the well-known sentinels here.
