@@ -625,3 +625,71 @@ statement ok
 DROP FUNCTION f145414;
 
 subtest end
+
+# Regression test for #130400. When a PL/pgSQL variable name matches a column
+# name from a SQL statement used with SELECT INTO, the variable should resolve
+# correctly in continuation arguments. Previously, the name-based lookup could
+# resolve to the SQL output column instead of the PL/pgSQL variable, causing an
+# "outer columns" internal error.
+subtest regression_130400
+
+statement ok
+CREATE TABLE t_dept (dept_id INT PRIMARY KEY, dept_name TEXT);
+INSERT INTO t_dept VALUES (1, 'Engineering');
+
+statement ok
+CREATE OR REPLACE FUNCTION get_dept_report(p_dept_id INT)
+RETURNS TABLE(dept_name TEXT, report_status TEXT) AS $$
+  DECLARE
+    v_name TEXT;
+  BEGIN
+    SELECT d.dept_name INTO v_name FROM t_dept d WHERE d.dept_id = p_dept_id;
+    IF v_name IS NOT NULL THEN
+      RETURN QUERY SELECT v_name, 'active'::TEXT;
+    ELSE
+      RETURN QUERY SELECT 'unknown'::TEXT, 'inactive'::TEXT;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query TT
+SELECT * FROM get_dept_report(1);
+----
+Engineering  active
+
+query TT
+SELECT * FROM get_dept_report(999);
+----
+unknown  inactive
+
+# Also test the case where the RETURNS TABLE column name directly matches the
+# table column name used in SELECT INTO.
+statement ok
+CREATE OR REPLACE FUNCTION get_dept_direct(p_dept_id INT)
+RETURNS TABLE(dept_name TEXT) AS $$
+  BEGIN
+    SELECT d.dept_name INTO dept_name FROM t_dept d WHERE d.dept_id = p_dept_id;
+    IF dept_name IS NOT NULL THEN
+      RETURN QUERY SELECT dept_name::TEXT;
+    ELSE
+      RETURN QUERY SELECT 'unknown'::TEXT;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT * FROM get_dept_direct(1);
+----
+Engineering
+
+query T
+SELECT * FROM get_dept_direct(999);
+----
+unknown
+
+statement ok
+DROP FUNCTION get_dept_report;
+DROP FUNCTION get_dept_direct;
+DROP TABLE t_dept;
+
+subtest end
