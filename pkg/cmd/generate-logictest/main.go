@@ -172,7 +172,8 @@ func (t *testdir) dumpConfig(configIdx int) error {
 	if strings.Contains(cfg.Name, "cockroach-go-testserver") {
 		tplCfg.NumCPU = 3
 	}
-	if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
+	if cfg.Name == "3node-tenant" || cfg.Name == "3node-meta" ||
+		strings.HasPrefix(cfg.Name, "multiregion-") {
 		tplCfg.SkipUnderRace = true
 	}
 	tplCfg.UseHeavyPool = useHeavyPoolNever
@@ -182,7 +183,7 @@ func (t *testdir) dumpConfig(configIdx int) error {
 		cfg.Name == "local" {
 		tplCfg.UseHeavyPool = useHeavyPoolForExpensiveConfig
 	} else if strings.Contains(cfg.Name, "cockroach-go-testserver") ||
-		strings.Contains(cfg.Name, "3node-tenant") {
+		strings.Contains(cfg.Name, "3node-tenant") || cfg.Name == "3node-meta" {
 		tplCfg.UseHeavyPool = useHeavyPoolAlways
 	}
 	subdir := filepath.Join(t.dir, cfg.Name)

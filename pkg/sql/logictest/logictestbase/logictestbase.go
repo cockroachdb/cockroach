@@ -10,8 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -92,6 +95,301 @@ type TestClusterConfig struct {
 	DisableSchemaLockedByDefault bool
 	// PrepareQueries executes queries and statements with Prepare and Execute.
 	PrepareQueries bool
+
+	// IsMetamorphic indicates this config resolves knobs randomly per test.
+	IsMetamorphic bool
+	// MetamorphicKnobs defines the probabilities for each knob. Only used
+	// when IsMetamorphic is true.
+	MetamorphicKnobs *MetamorphicKnobs
+	// EquivalentConfigs lists the names of static configs whose behavior the
+	// resolved metamorphic config currently emulates. Populated by
+	// ResolveMetamorphic; used by skipif/onlyif config matching.
+	EquivalentConfigs []string
+}
+
+// MetamorphicKnobs defines the probabilities for metamorphic config resolution.
+//
+// TODO(msbutler): today, test authors use `skipif config <config-name>` to opt
+// out of specific configs, which means we need a named config for every knob
+// combination a test might want to skip (e.g. disk, fakedist-disk). This
+// doesn't scale. Instead, each TestClusterConfig knob should map to its own
+// skipif predicate (e.g. `skipif disk-spill`, `skipif vec-off`) so tests can
+// skip based on individual knobs rather than compound config names.
+type MetamorphicKnobs struct {
+	LegacySchemaChangerProbability float64
+	VecOffProbability              float64
+	PrepareQueriesProbability      float64
+	DiskSpillProbability           float64
+	// IsolationLevelWeights maps isolation levels to their selection
+	// probability. A single die roll partitions [0, 1) across these
+	// levels in enum order. The sum of all weights must equal 1.0.
+	// Serializable should be included explicitly for readability.
+	IsolationLevelWeights map[tree.IsolationLevel]float64
+	TenantProbability     float64
+	// FakedistProbability controls fake span resolver; only for 3node-meta.
+	FakedistProbability float64
+	// MixedVersionOptions lists bootstrap versions to pick from; only for
+	// local-mixed-meta.
+	MixedVersionOptions []clusterversion.Key
+}
+
+// isoLevelConfigName returns the equivalent config name for a given isolation
+// level (e.g. ReadCommittedIsolation → "local-read-committed").
+func isoLevelConfigName(level tree.IsolationLevel) string {
+	return "local-" + strings.ToLower(strings.ReplaceAll(level.String(), " ", "-"))
+}
+
+// mixedVersionName returns the config name for a given bootstrap version key
+// (e.g. "local-mixed-25.4").
+func mixedVersionName(key clusterversion.Key) string {
+	v := clusterversion.RemoveDevOffset(key.Version())
+	return fmt.Sprintf("local-mixed-%d.%d", v.Major, v.Minor)
+}
+
+// ResolveMetamorphic resolves a metamorphic config template into a concrete
+// config with randomly chosen knobs. The returned config has IsMetamorphic set
+// to false and EquivalentConfigs populated. The blocklist contains config names
+// that must not be produced; corresponding knobs are forced off. If skip is
+// true, all possible resolutions were blocked and the test should be skipped.
+func (c TestClusterConfig) ResolveMetamorphic(
+	rng *rand.Rand, blocklist map[string]struct{},
+) (resolved TestClusterConfig, skip bool) {
+	resolved = c
+	resolved.IsMetamorphic = false
+	resolved.MetamorphicKnobs = nil
+	resolved.EquivalentConfigs = nil
+	knobs := c.MetamorphicKnobs
+	if knobs == nil {
+		return resolved, false
+	}
+
+	blocked := func(name string) bool {
+		_, ok := blocklist[name]
+		return ok
+	}
+
+	if len(knobs.MixedVersionOptions) > 0 {
+		var allowed []clusterversion.Key
+		for _, key := range knobs.MixedVersionOptions {
+			if !blocked(mixedVersionName(key)) {
+				allowed = append(allowed, key)
+			}
+		}
+		if len(allowed) == 0 {
+			return resolved, true
+		}
+		chosen := allowed[rng.Intn(len(allowed))]
+		resolved.BootstrapVersion = chosen
+		resolved.DisableUpgrade = true
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, mixedVersionName(chosen),
+		)
+	}
+
+	if !blocked("local-legacy-schema-changer") &&
+		rng.Float64() < knobs.LegacySchemaChangerProbability {
+		resolved.DisableDeclarativeSchemaChanger = true
+		resolved.DisableSchemaLockedByDefault = true
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, "local-legacy-schema-changer",
+		)
+	}
+
+	if !blocked("local-vec-off") && rng.Float64() < knobs.VecOffProbability {
+		resolved.OverrideVectorize = "off"
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, "local-vec-off",
+		)
+	}
+
+	if !blocked("local-prepared") && rng.Float64() < knobs.PrepareQueriesProbability {
+		resolved.PrepareQueries = true
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, "local-prepared",
+		)
+	}
+
+	if !blocked("disk") && rng.Float64() < knobs.DiskSpillProbability {
+		resolved.SQLExecUseDisk = true
+	}
+
+	// Isolation level: single roll against cumulative weights, iterated in
+	// enum order. When a level is blocked, rolls within its range fall
+	// through to serializable (no config override is applied).
+	isoLevels := make([]tree.IsolationLevel, 0, len(knobs.IsolationLevelWeights))
+	var isoWeightSum float64
+	for level, weight := range knobs.IsolationLevelWeights {
+		isoLevels = append(isoLevels, level)
+		isoWeightSum += weight
+	}
+	if len(isoLevels) > 0 && math.Abs(isoWeightSum-1.0) > 1e-9 {
+		panic(fmt.Sprintf(
+			"IsolationLevelWeights must sum to 1.0, got %f", isoWeightSum,
+		))
+	}
+	slices.Sort(isoLevels)
+	if len(isoLevels) > 0 {
+		isoRoll := rng.Float64()
+		var isoCumulative float64
+		for _, level := range isoLevels {
+			isoCumulative += knobs.IsolationLevelWeights[level]
+			if isoRoll < isoCumulative {
+				if level != tree.SerializableIsolation {
+					configName := isoLevelConfigName(level)
+					if !blocked(configName) {
+						resolved.EnableDefaultIsolationLevel = level
+						resolved.EquivalentConfigs = append(
+							resolved.EquivalentConfigs, configName,
+						)
+					}
+				}
+				break
+			}
+		}
+	}
+
+	if !blocked("3node-tenant") && rng.Float64() < knobs.TenantProbability {
+		resolved.UseSecondaryTenant = Always
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, "3node-tenant",
+		)
+	} else {
+		resolved.UseSecondaryTenant = Never
+	}
+
+	if !blocked("fakedist") && rng.Float64() < knobs.FakedistProbability {
+		resolved.UseFakeSpanResolver = true
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, "fakedist",
+		)
+	}
+
+	// Add compound equivalents for fakedist combinations, but respect the blocklist: if a compound is
+	// blocked, disable the non-fakedist knob to avoid the forbidden combination.
+	//
+	// TODO(msbutler): we could simplify this if we remove the UseFakeSpanResolver knob.
+	if resolved.UseFakeSpanResolver {
+		if resolved.OverrideVectorize == "off" {
+			if blocked("fakedist-vec-off") {
+				resolved.OverrideVectorize = ""
+				resolved.EquivalentConfigs = slices.DeleteFunc(
+					resolved.EquivalentConfigs,
+					func(s string) bool { return s == "local-vec-off" },
+				)
+			} else {
+				resolved.EquivalentConfigs = append(
+					resolved.EquivalentConfigs, "fakedist-vec-off",
+				)
+			}
+		}
+		if resolved.SQLExecUseDisk {
+			if blocked("fakedist-disk") {
+				resolved.SQLExecUseDisk = false
+			} else {
+				resolved.EquivalentConfigs = append(
+					resolved.EquivalentConfigs, "fakedist-disk",
+				)
+			}
+		}
+	}
+
+	// When vectorization is off, disable disk spilling: the row-based disk
+	// container doesn't support all column types (e.g. RECORD, #49975),
+	// while the vectorized engine handles them via colserde.
+	// TODO(msbutler): remove this guard once #49975 is resolved and the
+	// row-based disk container supports all column types.
+	if resolved.OverrideVectorize == "off" && resolved.SQLExecUseDisk {
+		resolved.SQLExecUseDisk = false
+	}
+
+	if resolved.SQLExecUseDisk {
+		resolved.EquivalentConfigs = append(resolved.EquivalentConfigs, "disk")
+	}
+
+	return resolved, false
+}
+
+// ResolveMetamorphicBaseline returns a concrete config with all knobs at
+// their neutral/default positions. Used for --rewrite mode to ensure
+// deterministic output.
+func (c TestClusterConfig) ResolveMetamorphicBaseline() TestClusterConfig {
+	resolved := c
+	knobs := c.MetamorphicKnobs
+	resolved.IsMetamorphic = false
+	resolved.MetamorphicKnobs = nil
+	resolved.EquivalentConfigs = nil
+	resolved.UseSecondaryTenant = Never
+	if knobs == nil {
+		return resolved
+	}
+	// Mixed-version must resolve to a concrete bootstrap version because every
+	// actual test run picks one. Choosing the first option deterministically
+	// ensures --rewrite produces expectations that match real runs.
+	if len(knobs.MixedVersionOptions) > 0 {
+		chosen := knobs.MixedVersionOptions[0]
+		resolved.BootstrapVersion = chosen
+		resolved.DisableUpgrade = true
+		resolved.EquivalentConfigs = append(
+			resolved.EquivalentConfigs, mixedVersionName(chosen),
+		)
+	}
+	return resolved
+}
+
+// IsEquivalentTo returns true if the given config name matches any of the
+// resolved equivalent configs, either directly or via a config set alias.
+func (c TestClusterConfig) IsEquivalentTo(configName string) bool {
+	for _, eq := range c.EquivalentConfigs {
+		if eq == configName {
+			return true
+		}
+		if ConfigIsInDefaultList(eq, configName) {
+			return true
+		}
+	}
+	return false
+}
+
+// MetamorphicSummary returns a human-readable summary of the resolved
+// metamorphic knobs for logging.
+func (c TestClusterConfig) MetamorphicSummary() string {
+	var parts []string
+	parts = append(parts, fmt.Sprintf("nodes=%d", c.NumNodes))
+	if c.DisableDeclarativeSchemaChanger {
+		parts = append(parts, "legacy-schema-changer=on")
+	}
+	if c.OverrideVectorize == "off" {
+		parts = append(parts, "vectorize=off")
+	}
+	if c.PrepareQueries {
+		parts = append(parts, "prepared-queries=on")
+	}
+	if c.SQLExecUseDisk {
+		parts = append(parts, "disk-spill=on")
+	}
+	if c.EnableDefaultIsolationLevel != 0 {
+		parts = append(parts, fmt.Sprintf("isolation=%s",
+			strings.ToLower(strings.ReplaceAll(c.EnableDefaultIsolationLevel.String(), " ", "-"))))
+	} else {
+		parts = append(parts, "isolation=serializable")
+	}
+	if c.UseSecondaryTenant == Always {
+		parts = append(parts, "tenant=on")
+	}
+	if c.UseFakeSpanResolver {
+		parts = append(parts, "fake-span-resolver=on")
+	}
+	if c.BootstrapVersion != 0 {
+		parts = append(parts, fmt.Sprintf(
+			"bootstrap-version=%s", mixedVersionName(c.BootstrapVersion),
+		))
+	}
+	if len(c.EquivalentConfigs) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"equivalent-to=[%s]", strings.Join(c.EquivalentConfigs, ","),
+		))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -340,6 +638,12 @@ var LogicTestConfigs = []TestClusterConfig{
 		SkipShort:           true,
 	},
 	{
+		Name:                "disk",
+		NumNodes:            3,
+		OverrideDistSQLMode: "on",
+		SQLExecUseDisk:      true,
+	},
+	{
 		Name:                "5node",
 		NumNodes:            5,
 		OverrideDistSQLMode: "on",
@@ -534,6 +838,63 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:         clusterversion.V26_1,
 		NumNodes:                 3,
 	},
+	{
+		Name:     "local-meta",
+		NumNodes: 1,
+		// Set OverrideDistSQLMode to "off" to stabilize test output, as some tests
+		// assume no distsql.
+		OverrideDistSQLMode: "off",
+		IsMetamorphic:       true, DeclarativeCorpusCollection: true,
+		MetamorphicKnobs: &MetamorphicKnobs{
+			LegacySchemaChangerProbability: 0.5,
+			VecOffProbability:              0.5,
+			PrepareQueriesProbability:      0.5,
+			// The old default config set never had a local
+			// config with disk spilling. Enabling it here causes failures for
+			// types that can't be spilled (e.g. RECORD). We could consider
+			// adding this in the future once disk spilling supports all types.
+			DiskSpillProbability: 0,
+			IsolationLevelWeights: map[tree.IsolationLevel]float64{
+				tree.SerializableIsolation:   0.50,
+				tree.ReadCommittedIsolation:  0.25,
+				tree.RepeatableReadIsolation: 0.25,
+			},
+			TenantProbability: 0.5,
+		},
+	},
+	{
+		Name:     "3node-meta",
+		NumNodes: 3,
+		// Set OverrideDistSQLMode to "on" to stabilize test output, as some tests
+		// assume distsql.
+		OverrideDistSQLMode: "on",
+		IsMetamorphic:       true, DeclarativeCorpusCollection: true,
+		MetamorphicKnobs: &MetamorphicKnobs{
+			LegacySchemaChangerProbability: 0.5,
+			VecOffProbability:              0.5,
+			PrepareQueriesProbability:      0.5,
+			DiskSpillProbability:           0.5,
+			IsolationLevelWeights: map[tree.IsolationLevel]float64{
+				tree.SerializableIsolation:   0.50,
+				tree.ReadCommittedIsolation:  0.25,
+				tree.RepeatableReadIsolation: 0.25,
+			},
+			TenantProbability: 0.5,
+			// TODO(msbutler): what testing value do we get from FakeDist?
+			FakedistProbability: 0.5,
+		},
+	},
+	{
+		Name: "local-mixed-meta", NumNodes: 1, OverrideDistSQLMode: "off",
+		IsMetamorphic: true,
+		MetamorphicKnobs: &MetamorphicKnobs{
+			MixedVersionOptions: []clusterversion.Key{
+				clusterversion.V25_4,
+				clusterversion.V26_1,
+				clusterversion.V26_2,
+			},
+		},
+	},
 }
 
 // ConfigIdx is an index in the above slice.
@@ -612,19 +973,9 @@ var DefaultConfigSets = map[string]ConfigSet{
 	// Default configs which are used when a logictest file doesn't specify any
 	// specific configs.
 	DefaultConfigSet: makeConfigSet(
-		"local",
-		"local-legacy-schema-changer",
-		"local-vec-off",
-		"local-read-committed",
-		"local-repeatable-read",
-		"local-prepared",
-		"fakedist",
-		"fakedist-vec-off",
-		"fakedist-disk",
-		"3node-tenant",
-		"local-mixed-25.4",
-		"local-mixed-26.1",
-		"local-mixed-26.2",
+		"local-meta",
+		"3node-meta",
+		"local-mixed-meta",
 	),
 
 	// Special alias for all 5 node configs.
@@ -733,7 +1084,9 @@ func ReadBackupRestoreProbabilityOverride(
 // ReadTestFileConfigs reads any LogicTest directive at the beginning of a
 // test file. A line that starts with "# LogicTest:" specifies a list of
 // configuration names. The test file is run against each of those
-// configurations.
+// configurations. It also returns the set of blocked config names
+// (expanded from any config-set aliases) for use by metamorphic
+// resolution.
 //
 // Example:
 //
@@ -742,10 +1095,10 @@ func ReadBackupRestoreProbabilityOverride(
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(
 	t logger, path string, defaults ConfigSet,
-) (_ ConfigSet, nonMetamorphicBatchSizes bool) {
+) (_ ConfigSet, nonMetamorphicBatchSizes bool, blockedConfigs map[string]struct{}) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, false
+		return nil, false, nil
 	}
 	defer file.Close()
 
@@ -766,12 +1119,12 @@ func ReadTestFileConfigs(
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			cs, nonMetamorphicBatchSizes := processConfigs(t, path, defaults, fields[2:])
-			return cs, nonMetamorphicBatchSizes
+			cs, nonMetamorphicBatchSizes, blockedConfigs := processConfigs(t, path, defaults, fields[2:])
+			return cs, nonMetamorphicBatchSizes, blockedConfigs
 		}
 	}
 	// No directive found, return the default config.
-	return defaults, false
+	return defaults, false, nil
 }
 
 // getBlocklistIssueNo takes a blocklist directive with an optional issue number
@@ -792,12 +1145,13 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 }
 
 // processConfigs, given a list of configNames, returns the list of
-// corresponding logicTestConfigIdxs as well as a boolean indicating whether
-// metamorphic settings related to batch sizes should be overridden with default
-// production values.
+// corresponding logicTestConfigIdxs, a boolean indicating whether
+// metamorphic settings related to batch sizes should be overridden with
+// default production values, and the set of blocked config names (expanded
+// from any config-set aliases).
 func processConfigs(
 	t logger, path string, defaults ConfigSet, configNames []string,
-) (_ ConfigSet, nonMetamorphicBatchSizes bool) {
+) (_ ConfigSet, nonMetamorphicBatchSizes bool, blockedConfigs map[string]struct{}) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -828,12 +1182,17 @@ func processConfigs(
 		}
 	}
 
+	blockedConfigs = make(map[string]struct{}, len(blocklist))
+	for name := range blocklist {
+		blockedConfigs[name] = struct{}{}
+	}
+
 	if _, ok := blocklist["metamorphic-batch-sizes"]; ok {
 		nonMetamorphicBatchSizes = true
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist), nonMetamorphicBatchSizes
+		return applyBlocklistToConfigs(defaults, blocklist), nonMetamorphicBatchSizes, blockedConfigs
 	}
 
 	var configs ConfigSet
@@ -857,7 +1216,7 @@ func processConfigs(
 		}
 	}
 
-	return dedupConfigs(configs), nonMetamorphicBatchSizes
+	return dedupConfigs(configs), nonMetamorphicBatchSizes, blockedConfigs
 }
 
 // dedupConfigs removes duplicate config indices from a ConfigSet, preserving
@@ -965,7 +1324,7 @@ func EnumerateConfigs(globs ...string) ([][]string, error) {
 	configPaths := make([][]string, len(LogicTestConfigs))
 	configDefaults := DefaultConfigSets[DefaultConfigSet]
 	for _, path := range paths {
-		configs, _ := ReadTestFileConfigs(logger, path, configDefaults)
+		configs, _, _ := ReadTestFileConfigs(logger, path, configDefaults)
 		for _, idx := range configs {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
