@@ -2198,6 +2198,7 @@ func doRestorePlan(
 		TempSystemID:                     tempSysDBID,
 		Grants:                           restoreStmt.Options.Grants,
 		RevisionLogTimestamp:             revisionLogTimestamp,
+		DefaultCollectionURI:             defaultCollectionURI,
 	}
 
 	jr := jobs.Record{

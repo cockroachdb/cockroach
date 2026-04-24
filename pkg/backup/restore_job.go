@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -885,6 +887,12 @@ type restoreResumer struct {
 		afterPreRestore func() error
 		// checksumRecover
 		checksumRecover func() error
+		// afterRevlogTickAssignment, if set, is called with the per-node
+		// tick assignments during revision log restore planning, after
+		// shuffling. Allows tests to inspect the distribution.
+		afterRevlogTickAssignment func(
+			[]base.SQLInstanceID, [][]revlogpb.Manifest,
+		)
 	}
 }
 
@@ -2498,7 +2506,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	if !details.RevisionLogTimestamp.IsEmpty() {
 		if !build.IsRelease() {
-			if err := r.restoreFromRevisionLog(ctx); err != nil {
+			if err := r.restoreFromRevisionLog(ctx, p); err != nil {
 				return errors.Wrap(err, "restoring from revision log")
 			}
 		}

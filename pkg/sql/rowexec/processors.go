@@ -469,6 +469,15 @@ func NewProcessor(
 		}
 		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile)
 	}
+	if core.RevlogLocalMerge != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewRevlogLocalMergeProcessor == nil {
+			return nil, errors.New("RevlogLocalMerge processor unimplemented")
+		}
+		return NewRevlogLocalMergeProcessor(ctx, flowCtx, processorID, *core.RevlogLocalMerge, post)
+	}
 
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
@@ -545,3 +554,5 @@ var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.F
 var NewCompactBackupsProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CompactBackupsSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec) (execinfra.Processor, error)
+
+var NewRevlogLocalMergeProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RevlogLocalMergeSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
