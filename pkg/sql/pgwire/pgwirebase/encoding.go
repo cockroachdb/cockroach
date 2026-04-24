@@ -603,7 +603,7 @@ func DecodeDatum(
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 						return nil, err
 					}
-					if alloc.i16 < 0 || alloc.i16 >= 10000 {
+					if alloc.i16 < 0 || alloc.i16 >= PGDecBase {
 						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid numeric digit: %d", alloc.i16)
 					}
 					// Each 16-bit "digit" can represent a 4 digit number.
@@ -1036,8 +1036,12 @@ const (
 	// PGNumericNan PGNumericSign = 0xC000
 )
 
-// PGDecDigits represents the number of decimal digits per int16 Postgres "digit".
-const PGDecDigits = 4
+const (
+	// PGDecDigits represents the number of decimal digits per int16 Postgres "digit".
+	PGDecDigits = 4
+	// PGDecBase represents the base of a Postgres numeric digit.
+	PGDecBase = 10000
+)
 
 // PGNumeric represents a numeric.
 type PGNumeric struct {

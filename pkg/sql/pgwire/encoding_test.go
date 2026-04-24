@@ -320,6 +320,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(100000000, 0), []byte{0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0}},
 		{apd.New(100000000, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0}},
 		{apd.New(100000001, 0), []byte{0, 3, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1}},
+		{apd.New(9999, 0), []byte{0, 1, 0, 0, 0, 0, 0, 0, 0x27, 0x0f}},
 		// Elixir/Postgrex combinations.
 		{apd.New(1234, 0), []byte{0, 2, 0, 0, 0, 0, 0, 0, 0x4, 0xd2, 0, 0}},
 		{apd.New(12340, -1), []byte{0, 2, 0, 0, 0, 0, 0, 1, 0x4, 0xd2, 0, 0}},
@@ -361,19 +362,23 @@ func TestInvalidBinaryNumericEncodings(t *testing.T) {
 		encoding []byte
 	}{
 		{
-			name:     "negative digit count",
+			name: "negative digit count",
+			// Ndigits=-1, Weight=0, Sign=Pos, Dscale=0.
 			encoding: []byte{0xff, 0xff, 0, 0, 0, 0, 0, 0},
 		},
 		{
-			name:     "weight inconsistent with digit count",
+			name: "weight inconsistent with digit count",
+			// Ndigits=1, Weight=-3, Sign=Pos, Dscale=0, Digit[0]=1.
 			encoding: []byte{0, 1, 0xff, 0xfd, 0, 0, 0, 0, 0, 1},
 		},
 		{
-			name:     "negative digit",
+			name: "negative digit",
+			// Ndigits=1, Weight=0, Sign=Pos, Dscale=0, Digit[0]=-1.
 			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0xff, 0xff},
 		},
 		{
-			name:     "digit too large",
+			name: "digit too large",
+			// Ndigits=1, Weight=0, Sign=Pos, Dscale=0, Digit[0]=10000.
 			encoding: []byte{0, 1, 0, 0, 0, 0, 0, 0, 0x27, 0x10},
 		},
 	}
