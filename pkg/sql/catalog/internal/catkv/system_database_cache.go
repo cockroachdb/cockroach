@@ -134,6 +134,17 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 		c.mu.m[version.Version] = cached
 	}
 	for _, e := range nameCandidates {
+		// Re-check under the write lock: a concurrent update may have raced ahead
+		// and installed a newer entry for this name. We must not regress to an
+		// older mapping. See nameCandidatesForUpdate for why we permit ID changes.
+		if existing := cached.LookupNamespaceEntry(catalog.MakeNameInfo(e)); existing != nil {
+			if existing.GetID() == e.GetID() {
+				continue
+			}
+			if !existing.GetMVCCTimestamp().Less(e.GetMVCCTimestamp()) {
+				continue
+			}
+		}
 		cached.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 	}
 }
@@ -173,7 +184,20 @@ func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	}
 	diff := make([]nstree.NamespaceEntry, 0, len(systemNames))
 	for _, e := range systemNames {
-		if cached.LookupNamespaceEntry(catalog.MakeNameInfo(e)) == nil {
+		existing := cached.LookupNamespaceEntry(catalog.MakeNameInfo(e))
+		if existing == nil {
+			diff = append(diff, e)
+			continue
+		}
+		// Only replace an existing entry when the incoming one carries strictly
+		// newer information: same name but a different ID at a strictly newer
+		// MVCC timestamp. This handles PCR reader tenants, where a dynamically
+		// allocated system table (e.g. system.privileges) is bootstrapped at one
+		// ID and later re-pointed to a different ID by
+		// SetupOrAdvanceStandbyReaderCatalog. Without this, the cache returns
+		// the stale bootstrap ID forever and lookups fail with "resolved <name>
+		// to <id> but found no descriptor with id <id>".
+		if existing.GetID() != e.GetID() && existing.GetMVCCTimestamp().Less(e.GetMVCCTimestamp()) {
 			diff = append(diff, e)
 		}
 	}
