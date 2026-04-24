@@ -2582,6 +2582,8 @@ func (n *Node) gossipSubscription(
 				err := kvpb.NewErrorf("subscription terminated due to slow consumption")
 				log.Dev.Warningf(ctx, "%v", err)
 				e = &kvpb.GossipSubscriptionEvent{Error: err}
+				_ = stream.Send(e)
+				return nil
 			}
 			if err := stream.Send(e); err != nil {
 				return err
