@@ -2224,6 +2224,7 @@ func doRestorePlan(
 		TempSystemID:                     tempSysDBID,
 		Grants:                           restoreStmt.Options.Grants,
 		RevisionLogTimestamp:             revisionLogTimestamp,
+		DefaultCollectionURI:             defaultCollectionURI,
 	}
 
 	// Validate that revision log rekeys can be built from the

@@ -696,7 +696,12 @@ message RestoreDetails {
   // normal restore completes.
   util.hlc.Timestamp revision_log_timestamp = 40 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 41.
+  // DefaultCollectionURI is the collection root URI. Set during planning
+  // so the execution path can access the collection (e.g. to open the
+  // revision log) without re-deriving it.
+  string default_collection_uri = 41 [(gogoproto.customname) = "DefaultCollectionURI"];
+
+  // NEXT ID: 42.
 }
 
 

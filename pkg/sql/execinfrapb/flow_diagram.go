@@ -830,6 +830,10 @@ func (m *MergeLoopbackSpec) summary() (string, []string) {
 	return "MergeLoopback", nil
 }
 
+func (m *RevlogLocalMergeSpec) summary() (string, []string) {
+	return "RevlogLocalMerge", []string{fmt.Sprintf("%d ticks", len(m.Ticks))}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

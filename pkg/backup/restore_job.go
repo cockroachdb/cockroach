@@ -2548,7 +2548,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
-		if err := r.restoreFromRevisionLog(ctx); err != nil {
+		if err := r.restoreFromRevisionLog(ctx, p); err != nil {
 			return errors.Wrap(err, "restoring from revision log")
 		}
 	}
