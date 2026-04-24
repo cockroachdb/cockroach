@@ -16,6 +16,7 @@ go_library(
         "kv_snapshot_strategy.go",
         "lease_history.go",
         "lease_queue.go",
+        "log_engine_metrics.go",
         "markers.go",
         "merge_queue.go",
         "metric_rules.go",

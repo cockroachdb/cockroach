@@ -3761,6 +3761,12 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 	m = eng.GetMetrics()
 	s.metrics.updateEngineMetrics(m)
 
+	// Update log engine metrics separately when using separated engines.
+	if s.EnginesSeparated() {
+		logM := s.LogEngine().GetMetrics()
+		s.metrics.LogEngine.update(logM)
+	}
+
 	// Get engine Env stats.
 	envStats, err := eng.GetEnvStats()
 	if err != nil {

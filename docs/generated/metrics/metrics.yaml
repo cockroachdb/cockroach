@@ -17704,6 +17704,254 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
+    - name: log-engine.batch-commit.commit-wait-duration
+      exported_name: log_engine_batch_commit_commit_wait_duration
+      description: Total time spent waiting for commit in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.count
+      exported_name: log_engine_batch_commit_count
+      description: Number of batch commits in the log engine
+      y_axis_label: Commits
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.duration
+      exported_name: log_engine_batch_commit_duration
+      description: Total duration of batch commits in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.l0-stall-duration
+      exported_name: log_engine_batch_commit_l0_stall_duration
+      description: Total time spent in L0 read-amp write stalls during batch commits in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.mem-stall-duration
+      exported_name: log_engine_batch_commit_mem_stall_duration
+      description: Total time spent in memtable write stalls during batch commits in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.sem-wait-duration
+      exported_name: log_engine_batch_commit_sem_wait_duration
+      description: Total time spent waiting on the commit semaphore in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.wal-queue-wait-duration
+      exported_name: log_engine_batch_commit_wal_queue_wait_duration
+      description: Total time spent waiting on the WAL queue in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.batch-commit.wal-rotation-duration
+      exported_name: log_engine_batch_commit_wal_rotation_duration
+      description: Total time spent waiting for WAL rotation in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.compacted-bytes-read
+      exported_name: log_engine_compacted_bytes_read
+      description: Bytes read during compaction in the log engine
+      y_axis_label: Bytes Read
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.compacted-bytes-written
+      exported_name: log_engine_compacted_bytes_written
+      description: Bytes written during compaction in the log engine
+      y_axis_label: Bytes Written
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.compactions
+      exported_name: log_engine_compactions
+      description: Number of compactions in the log engine
+      y_axis_label: Compactions
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.flushed-bytes
+      exported_name: log_engine_flushed_bytes
+      description: Bytes written during flush in the log engine
+      y_axis_label: Bytes Written
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.flushes
+      exported_name: log_engine_flushes
+      description: Number of flushes in the log engine
+      y_axis_label: Flushes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.l0-level-size
+      exported_name: log_engine_l0_level_size
+      description: Size of the SSTables in log engine level 0
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l0-num-files
+      exported_name: log_engine_l0_num_files
+      description: Number of L0 files in the log engine's LSM
+      y_axis_label: Files
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l0-sublevels
+      exported_name: log_engine_l0_sublevels
+      description: Number of L0 sublevels in the log engine's LSM
+      y_axis_label: Sublevels
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l1-level-size
+      exported_name: log_engine_l1_level_size
+      description: Size of the SSTables in log engine level 1
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l2-level-size
+      exported_name: log_engine_l2_level_size
+      description: Size of the SSTables in log engine level 2
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l3-level-size
+      exported_name: log_engine_l3_level_size
+      description: Size of the SSTables in log engine level 3
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l4-level-size
+      exported_name: log_engine_l4_level_size
+      description: Size of the SSTables in log engine level 4
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l5-level-size
+      exported_name: log_engine_l5_level_size
+      description: Size of the SSTables in log engine level 5
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.l6-level-size
+      exported_name: log_engine_l6_level_size
+      description: Size of the SSTables in log engine level 6
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.memtable.total-size
+      exported_name: log_engine_memtable_total_size
+      description: Current size of memtable in the log engine
+      y_axis_label: Memory
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.num-sstables
+      exported_name: log_engine_num_sstables
+      description: Number of SSTables in the log engine
+      y_axis_label: SSTables
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.pending-compaction
+      exported_name: log_engine_pending_compaction
+      description: Estimated bytes pending compaction in the log engine
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.read-amplification
+      exported_name: log_engine_read_amplification
+      description: Read amplification in the log engine
+      y_axis_label: Disk Reads per Query
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.wal-bytes-in
+      exported_name: log_engine_wal_bytes_in
+      description: Logical bytes written to the WAL in the log engine
+      y_axis_label: Bytes Written
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.wal-bytes-written
+      exported_name: log_engine_wal_bytes_written
+      description: Bytes written to the WAL in the log engine
+      y_axis_label: Bytes Written
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.write-amplification
+      exported_name: log_engine_write_amplification
+      description: Write amplification in the log engine
+      y_axis_label: Amplification
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: log-engine.write-stall-nanos
+      exported_name: log_engine_write_stall_nanos
+      description: Total duration of write stalls in the log engine
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log-engine.write-stalls
+      exported_name: log_engine_write_stalls
+      description: Number of write stalls in the log engine
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.change.external.lease.failure
       exported_name: mma_change_external_lease_failure
       labeled_name: 'mma.change{origin: external, type: lease, result: failure}'
