@@ -220,6 +220,17 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+	upgrade.NewTenantUpgrade(
+		"grant REFERENCES privilege to users with CREATE on tables",
+		clusterversion.V26_3_GrantReferencesToUsersWithCreate.Version(),
+		upgrade.NoPrecondition,
+		grantReferencesToUsersWithCreate,
+		upgrade.RestoreActionNotRequired(
+			"restoring pre-26.3 backups does not automatically grant REFERENCES "+
+				"to users who have CREATE; they will need an explicit GRANT REFERENCES "+
+				"to create foreign keys on the restored tables",
+		),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

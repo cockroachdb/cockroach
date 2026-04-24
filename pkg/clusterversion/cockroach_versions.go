@@ -290,6 +290,12 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_GrantReferencesToUsersWithCreate grants the REFERENCES privilege
+	// to all users/roles that currently hold CREATE on any table. This ensures
+	// backwards compatibility after FK creation switches from requiring CREATE
+	// to requiring REFERENCES on both the origin and referenced tables.
+	V26_3_GrantReferencesToUsersWithCreate
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -380,6 +386,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
