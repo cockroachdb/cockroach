@@ -701,7 +701,15 @@ message RestoreDetails {
   // revision log) without re-deriving it.
   string default_collection_uri = 41 [(gogoproto.customname) = "DefaultCollectionURI"];
 
-  // NEXT ID: 42.
+  // RevlogNewTableIDs lists the NEW (post-rewrite) table descriptor IDs
+  // for tables added by revision log schema changes that have no backup
+  // data. Their spans need split/scatter during revlog restore.
+  repeated uint32 revlog_new_table_ids = 42 [
+    (gogoproto.customname) = "RevlogNewTableIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // NEXT ID: 43.
 }
 
 
