@@ -515,6 +515,74 @@ func TestImportEpochIngestion(t *testing.T) {
 	require.Equal(t, true, checkedJobId)
 }
 
+func TestAddMVCCKeyWithImportEpochZero(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("lots")})
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
+		false, true, mem.MakeConcurrentBoundAccount(), reqs)
+	require.NoError(t, err)
+	defer b.Close(ctx)
+
+	startKey := storageutils.PointKey(s.Codec(), "a", 1)
+	endKey := storageutils.PointKey(s.Codec(), "b", 1)
+	value := storageutils.StringValueRaw("myHumbleValue")
+	mvccValue, err := storage.DecodeMVCCValue(value)
+	require.NoError(t, err)
+
+	require.NoError(t, b.AddMVCCKeyWithImportEpoch(ctx, startKey, value, 0))
+	require.NoError(t, b.AddMVCCKeyWithImportEpoch(ctx, endKey, value, 0))
+	require.NoError(t, b.Flush(ctx))
+
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    startKey.Key,
+			EndKey: endKey.Key,
+		},
+		MVCCFilter: kvpb.MVCCFilter_All,
+		StartTime:  hlc.Timestamp{},
+	}
+
+	header := kvpb.Header{Timestamp: s.Clock().Now()}
+	resp, roachErr := kv.SendWrappedWith(ctx,
+		kvDB.NonTransactionalSender(), header, req)
+	require.NoError(t, roachErr.GoError())
+	iterOpts := storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: startKey.Key,
+		UpperBound: endKey.Key,
+	}
+
+	checked := false
+	for _, file := range resp.(*kvpb.ExportResponse).Files {
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, iterOpts)
+		require.NoError(t, err)
+		defer it.Close()
+		for it.SeekGE(storage.NilKey); ; it.Next() {
+			ok, err := it.Valid()
+			require.NoError(t, err)
+			if !ok {
+				break
+			}
+			rawVal, err := it.UnsafeValue()
+			require.NoError(t, err)
+			val, err := storage.DecodeMVCCValue(rawVal)
+			require.NoError(t, err)
+			require.Equal(t, mvccValue.Value, val.Value)
+			require.Equal(t, uint32(0), val.ImportEpoch)
+			checked = true
+		}
+	}
+	require.True(t, checked)
+}
+
 func TestSSTBatcherError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
