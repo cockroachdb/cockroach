@@ -148,7 +148,7 @@ func (p *postgreStreamCopy) Next() (copyData, error) {
 								base = 16
 								idx = 1
 							}
-							v, err := strconv.ParseInt(string(field[i+idx:i+3]), base, 8)
+							v, err := strconv.ParseUint(string(field[i+idx:i+3]), base, 8)
 							if err != nil {
 								return err
 							}
@@ -276,7 +276,7 @@ var _ importRowProducer = &pgCopyProducer{}
 // Scan implements importRowProducer
 func (p *pgCopyProducer) Scan() bool {
 	p.row, p.err = p.copyStream.Next()
-	if p.err == io.EOF {
+	if p.err == io.EOF || errors.Is(p.err, errCopyDone) {
 		p.err = nil
 		return false
 	}
