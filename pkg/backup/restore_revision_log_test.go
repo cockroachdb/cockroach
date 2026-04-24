@@ -6,14 +6,25 @@
 package backup
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -38,6 +49,231 @@ func makeTicks(n int) []revlogpb.Manifest {
 		ticks[i] = makeTick(i)
 	}
 	return ticks
+}
+
+// newTestStorage returns a cloud.ExternalStorage backed by a temporary
+// directory.
+func newTestStorage(t *testing.T) cloud.ExternalStorage {
+	t.Helper()
+	return nodelocal.TestingMakeNodelocalStorage(
+		t.TempDir(), cluster.MakeTestingClusterSettings(), cloudpb.ExternalStorage{},
+	)
+}
+
+func testTickEnd(sec int) hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime: time.Date(2026, 4, 20, 15, 30, sec, 0, time.UTC).UnixNano(),
+	}
+}
+
+// writeTestTick writes events to a tick data file, seals the tick, and
+// returns the manifest.
+func writeTestTick(
+	t *testing.T,
+	ctx context.Context,
+	es cloud.ExternalStorage,
+	te hlc.Timestamp,
+	fileID int64,
+	events []revlog.Event,
+) revlogpb.Manifest {
+	t.Helper()
+	w, err := revlog.NewTickWriter(ctx, es, te, fileID, 0 /* flushOrder */)
+	require.NoError(t, err)
+	for _, ev := range events {
+		require.NoError(t, w.Add(ev.Key, ev.Timestamp, ev.Value.RawBytes, ev.PrevValue.RawBytes))
+	}
+	f, _, err := w.Close()
+	require.NoError(t, err)
+	m := revlogpb.Manifest{
+		TickStart: te.AddDuration(-10 * time.Second),
+		TickEnd:   te,
+		Files:     []revlogpb.File{f},
+	}
+	require.NoError(t, revlog.WriteTickManifest(ctx, es, m))
+	return m
+}
+
+func testEvent(k string, walltime int64, logical int32, v string) revlog.Event {
+	var val roachpb.Value
+	if v != "" {
+		val.RawBytes = []byte(v)
+	}
+	return revlog.Event{
+		Key:       roachpb.Key(k),
+		Timestamp: hlc.Timestamp{WallTime: walltime, Logical: logical},
+		Value:     val,
+	}
+}
+
+// collectMergedEntries collects all entries from mergeTickEvents into
+// a slice, failing the test on any iteration error.
+func collectMergedEntries(
+	t *testing.T,
+	ctx context.Context,
+	es cloud.ExternalStorage,
+	spec execinfrapb.RevlogLocalMergeSpec,
+) []mergedEntry {
+	t.Helper()
+	var result []mergedEntry
+	for entry, err := range mergeTickEvents(ctx, es, spec) {
+		require.NoError(t, err)
+		result = append(result, entry)
+	}
+	return result
+}
+
+func TestMergeTickEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	es := newTestStorage(t)
+	defer es.Close()
+
+	// Tick 1 (ending at :10): keys a, b, c with timestamps 1000-2000.
+	te1 := testTickEnd(10)
+	m1 := writeTestTick(t, ctx, es, te1, 1, []revlog.Event{
+		testEvent("a", 1000, 0, "a_v1"),
+		testEvent("a", 2000, 0, "a_v2"),
+		testEvent("b", 1500, 0, "b_v1"),
+		testEvent("c", 1000, 0, "c_v1"),
+	})
+
+	// Tick 2 (ending at :20): keys a, b, d with timestamps 3000-4000.
+	te2 := testTickEnd(20)
+	m2 := writeTestTick(t, ctx, es, te2, 2, []revlog.Event{
+		testEvent("a", 3000, 0, "a_v3"),
+		testEvent("b", 4000, 0, "b_v2"),
+		testEvent("d", 3500, 0, "d_v1"),
+	})
+
+	t.Run("dedup keeps latest per key", func(t *testing.T) {
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks: []revlogpb.Manifest{m1, m2},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+
+		// Expected: one entry per key, with the latest timestamp.
+		// a@3000, b@4000, c@1000, d@3500
+		require.Len(t, merged, 4)
+
+		byKey := make(map[string]mergedEntry)
+		for _, e := range merged {
+			byKey[string(e.Key.Key)] = e
+		}
+		require.Equal(t, int64(3000), byKey["a"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("a_v3"), byKey["a"].Value)
+
+		require.Equal(t, int64(4000), byKey["b"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("b_v2"), byKey["b"].Value)
+
+		require.Equal(t, int64(1000), byKey["c"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("c_v1"), byKey["c"].Value)
+
+		require.Equal(t, int64(3500), byKey["d"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("d_v1"), byKey["d"].Value)
+	})
+
+	t.Run("AOST filters future events", func(t *testing.T) {
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks: []revlogpb.Manifest{m1, m2},
+			// AOST at 2500: filters out a@3000, b@4000, d@3500.
+			RestoreTimestamp: hlc.Timestamp{WallTime: 2500},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+
+		// a@2000, b@1500, c@1000 — d is entirely past AOST.
+		require.Len(t, merged, 3)
+		byKey := make(map[string]mergedEntry)
+		for _, e := range merged {
+			byKey[string(e.Key.Key)] = e
+		}
+		require.Equal(t, int64(2000), byKey["a"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("a_v2"), byKey["a"].Value)
+
+		require.Equal(t, int64(1500), byKey["b"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("b_v1"), byKey["b"].Value)
+
+		require.Equal(t, int64(1000), byKey["c"].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("c_v1"), byKey["c"].Value)
+	})
+
+	t.Run("tombstones preserved", func(t *testing.T) {
+		te3 := testTickEnd(30)
+		m3 := writeTestTick(t, ctx, es, te3, 3, []revlog.Event{
+			// Delete key "a" at ts 5000 (empty value = tombstone).
+			testEvent("a", 5000, 0, ""),
+		})
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks: []revlogpb.Manifest{m1, m2, m3},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+
+		byKey := make(map[string]mergedEntry)
+		for _, e := range merged {
+			byKey[string(e.Key.Key)] = e
+		}
+		// a should be a tombstone at ts 5000.
+		require.Equal(t, int64(5000), byKey["a"].Key.Timestamp.WallTime)
+		require.Empty(t, byKey["a"].Value, "tombstone should have empty value")
+	})
+
+	t.Run("empty ticks", func(t *testing.T) {
+		spec := execinfrapb.RevlogLocalMergeSpec{}
+		merged := collectMergedEntries(t, ctx, es, spec)
+		require.Empty(t, merged)
+	})
+
+	t.Run("output sorted by key", func(t *testing.T) {
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks: []revlogpb.Manifest{m1, m2},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+		// Events emerge from the heap in key-ascending order.
+		for i := 1; i < len(merged); i++ {
+			require.True(t,
+				merged[i-1].Key.Key.Compare(merged[i].Key.Key) < 0,
+				"keys must be strictly ascending: %s >= %s",
+				merged[i-1].Key.Key, merged[i].Key.Key,
+			)
+		}
+	})
+
+	t.Run("interleaved timestamps across ticks", func(t *testing.T) {
+		// Key "x" has revisions in both ticks with interleaved
+		// timestamps. The heap must merge them correctly and dedup
+		// must pick the latest.
+		te4 := testTickEnd(40)
+		m4 := writeTestTick(t, ctx, es, te4, 4, []revlog.Event{
+			testEvent("x", 100, 0, "x_early"),
+			testEvent("x", 300, 0, "x_mid"),
+		})
+		te5 := testTickEnd(50)
+		m5 := writeTestTick(t, ctx, es, te5, 5, []revlog.Event{
+			testEvent("x", 200, 0, "x_between"),
+			testEvent("x", 400, 0, "x_latest"),
+		})
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks: []revlogpb.Manifest{m4, m5},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+		require.Len(t, merged, 1)
+		require.Equal(t, int64(400), merged[0].Key.Timestamp.WallTime)
+		require.Equal(t, []byte("x_latest"), merged[0].Value)
+	})
+
+	t.Run("AOST boundary is inclusive", func(t *testing.T) {
+		// An event exactly at the AOST should be kept.
+		spec := execinfrapb.RevlogLocalMergeSpec{
+			Ticks:            []revlogpb.Manifest{m1},
+			RestoreTimestamp: hlc.Timestamp{WallTime: 2000},
+		}
+		merged := collectMergedEntries(t, ctx, es, spec)
+		byKey := make(map[string]mergedEntry)
+		for _, e := range merged {
+			byKey[string(e.Key.Key)] = e
+		}
+		// a@2000 is exactly at the AOST — should be kept.
+		require.Equal(t, int64(2000), byKey["a"].Key.Timestamp.WallTime)
+	})
 }
 
 func TestAssignTicksToNodes(t *testing.T) {
@@ -110,6 +346,124 @@ func TestAssignTicksToNodes(t *testing.T) {
 		}
 		require.Equal(t, expected, got)
 	})
+}
+
+// TestMergeTickEventsFromBackup exercises the merge algorithm against
+// real revision log data produced by BACKUP ... WITH REVISION STREAM.
+//
+//  1. Start a single-node cluster and create a table.
+//  2. Run INSERT, UPDATE, and DELETE to generate MVCC history.
+//  3. BACKUP INTO ... WITH REVISION STREAM to create a backup with a
+//     sibling revision log job.
+//  4. Wait for the revlog job to produce at least one closed tick.
+//  5. Read all ticks from the revlog and run mergeTickEvents.
+//  6. Validate: output is non-empty, keys are sorted, each key
+//     appears exactly once, and values are properly encoded.
+func TestMergeTickEventsFromBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// System tenant is required because kv.rangefeed.enabled is
+	// operator-only, and the revlog producer needs rangefeeds.
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	}
+	_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(
+		t, singleNode, 0 /* numAccounts */, InitManualReplication, params,
+	)
+	defer cleanup()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `CREATE TABLE data.kv (k INT PRIMARY KEY, v STRING)`)
+
+	// Run backup with revision stream to start the sibling revlog
+	// job. The revlog producer watches via rangefeed from this
+	// point forward.
+	const destSubdir = "revlog-merge-test"
+	dest := "nodelocal://1/" + destSubdir
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH REVISION STREAM`, dest)
+
+	collectionDir := filepath.Join(dir, destSubdir)
+	siblingID := readSiblingJobID(t, collectionDir)
+	jobutils.WaitForJobToRun(t, sqlDB, siblingID)
+
+	// Mutations happen after the revlog job starts so the rangefeed
+	// captures them.
+	sqlDB.Exec(t, `INSERT INTO data.kv VALUES (1, 'a'), (2, 'b'), (3, 'c')`)
+	sqlDB.Exec(t, `UPDATE data.kv SET v = 'a2' WHERE k = 1`)
+	sqlDB.Exec(t, `DELETE FROM data.kv WHERE k = 2`)
+
+	// Wait for the revlog job to resolve past the mutations by
+	// polling its high_water_timestamp via SHOW JOBS.
+	require.NoError(t, testutils.SucceedsWithinError(func() error {
+		var resolvedTS *string
+		sqlDB.QueryRow(t,
+			`SELECT resolved_timestamp::STRING `+
+				`FROM [SHOW JOBS WITH RESOLVED TIMESTAMP] WHERE job_id = $1`,
+			siblingID,
+		).Scan(&resolvedTS)
+		if resolvedTS == nil {
+			return errors.New("revlog job has no resolved timestamp yet")
+		}
+		return nil
+	}, 90*time.Second))
+
+	// Open the collection storage and discover ticks.
+	es := nodelocal.TestingMakeNodelocalStorage(
+		collectionDir,
+		cluster.MakeTestingClusterSettings(),
+		cloudpb.ExternalStorage{},
+	)
+	defer es.Close()
+
+	lr := revlog.NewLogReader(es)
+	var manifests []revlogpb.Manifest
+	for tick, tickErr := range lr.Ticks(ctx, hlc.Timestamp{WallTime: 1}, hlc.MaxTimestamp) {
+		require.NoError(t, tickErr)
+		manifests = append(manifests, tick.Manifest)
+	}
+	require.NotEmpty(t, manifests, "expected at least one tick manifest")
+	t.Logf("discovered %d tick(s)", len(manifests))
+
+	// Run the merge algorithm.
+	spec := execinfrapb.RevlogLocalMergeSpec{
+		Ticks: manifests,
+	}
+	merged := collectMergedEntries(t, ctx, es, spec)
+	require.NotEmpty(t, merged, "expected non-empty merge output")
+
+	// Validate: keys must be in ascending order and unique.
+	seen := make(map[string]bool)
+	for i, e := range merged {
+		keyStr := string(e.Key.Key)
+		require.False(t, seen[keyStr],
+			"duplicate key %s in merge output", e.Key.Key)
+		seen[keyStr] = true
+
+		if i > 0 {
+			require.True(t,
+				merged[i-1].Key.Key.Compare(e.Key.Key) < 0,
+				"keys not sorted: %s >= %s",
+				merged[i-1].Key.Key, e.Key.Key,
+			)
+		}
+
+		// Non-tombstone values must be valid roachpb.Value
+		// encoding (4-byte checksum + 1-byte tag + data).
+		if len(e.Value) > 0 {
+			require.GreaterOrEqual(t, len(e.Value), 5,
+				"value for key %s too short to be a roachpb.Value", e.Key.Key)
+		}
+	}
+
+	t.Logf("merge produced %d deduplicated entries", len(merged))
+
+	// Cancel the sibling job so cleanup doesn't hang.
+	sqlDB.Exec(t, `CANCEL JOB $1`, siblingID)
+	jobutils.WaitForJobToCancel(t, sqlDB, siblingID)
 }
 
 // waitForRevlogPastTimestamp polls SHOW JOBS WITH RESOLVED TIMESTAMP
@@ -356,4 +710,92 @@ func TestRevlogDescriptorResolution(t *testing.T) {
 
 		sqlDB.Exec(t, `DROP DATABASE tbl_drop CASCADE`)
 	})
+}
+
+// TestRevlogLocalMerge runs a full restore through the revlog path and
+// verifies the local merge processor produces a non-empty SST. The
+// database has two tables but the restore targets only one, exercising
+// the rekey skip logic for unscoped revlog events.
+func TestRevlogLocalMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	}
+	_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(
+		t, singleNode, 0 /* numAccounts */, InitManualReplication, params,
+	)
+	defer cleanup()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `CREATE DATABASE src`)
+	sqlDB.Exec(t, `CREATE TABLE src.foo (k INT PRIMARY KEY, v STRING)`)
+	sqlDB.Exec(t, `INSERT INTO src.foo VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')`)
+	// A second table in the same database ensures the revlog
+	// contains events for tables outside the restore scope. Without
+	// the rekey skip fix, the local merge processor would fail with
+	// "missing descriptor for table ..." when it encounters bar's
+	// keys.
+	sqlDB.Exec(t, `CREATE TABLE src.bar (k INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO src.bar VALUES (1), (2)`)
+
+	// BACKUP with revision stream to start the sibling revlog job.
+	const destSubdir = "revlog-restore-data"
+	dest := "nodelocal://1/" + destSubdir
+	sqlDB.Exec(t, `BACKUP DATABASE src INTO $1 WITH REVISION STREAM`, dest)
+
+	collectionDir := filepath.Join(dir, destSubdir)
+	siblingID := readSiblingJobID(t, collectionDir)
+	jobutils.WaitForJobToRun(t, sqlDB, siblingID)
+
+	// Mutations after the backup — captured by the revlog
+	// rangefeed. Mutate both tables to ensure the revlog has
+	// events for tables that won't have rekeys.
+	sqlDB.Exec(t, `INSERT INTO src.foo VALUES (100, 'new')`)
+	sqlDB.Exec(t, `UPDATE src.foo SET v = 'updated' WHERE k = 1`)
+	sqlDB.Exec(t, `DELETE FROM src.foo WHERE k = 2`)
+	sqlDB.Exec(t, `INSERT INTO src.bar VALUES (3)`)
+
+	// Record the AOST after mutations.
+	aost := clusterTimestamp(t, sqlDB)
+
+	// Wait for the revlog job to resolve past the AOST.
+	waitForRevlogPastTimestamp(t, sqlDB, siblingID, aost)
+
+	// Cancel the revlog job before restoring.
+	sqlDB.Exec(t, `CANCEL JOB $1`, siblingID)
+	jobutils.WaitForJobToCancel(t, sqlDB, siblingID)
+
+	// Restore only src.foo — the revlog data contains events for
+	// both foo and bar, but only foo has rekeys.
+	sqlDB.Exec(t, `CREATE DATABASE restored`)
+	sqlDB.Exec(t, fmt.Sprintf(
+		`RESTORE TABLE src.foo FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH into_db = 'restored'`,
+		dest, aost,
+	))
+
+	// Find the restore job ID to locate the output SST.
+	var restoreJobID int64
+	sqlDB.QueryRow(t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`,
+	).Scan(&restoreJobID)
+
+	// Verify the SST has data by iterating — at least one entry
+	// must be present.
+	sstPath := filepath.Join(dir, "revlog-merge", fmt.Sprintf("%d", restoreJobID), "0.sst")
+	sstBytes, err := os.ReadFile(sstPath)
+	require.NoError(t, err, "reading output SST at %s", sstPath)
+	iter, err := storage.NewMemSSTIterator(sstBytes, false /* verify */, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		UpperBound: keys.MaxKey,
+	})
+	require.NoError(t, err)
+	defer iter.Close()
+	iter.SeekGE(storage.MVCCKey{})
+	ok, err := iter.Valid()
+	require.NoError(t, err)
+	require.True(t, ok, "expected non-empty SST from revlog local merge")
 }
