@@ -18,9 +18,11 @@ type Source struct {
 	Distance float64
 }
 
-// SearchFilters holds structured filters extracted from a user's natural
-// language query by the LLM.
+// SearchFilters holds the LLM's analysis of a user message: whether a
+// database search is needed and, if so, the semantic query and structured
+// filters to apply.
 type SearchFilters struct {
+	NeedsSearch   bool     `json:"needs_search"`
 	SemanticQuery string   `json:"semantic_query"`
 	MaxPrice      *float64 `json:"max_price"`
 	MinPrice      *float64 `json:"min_price"`
@@ -63,35 +65,44 @@ func (s *ChatService) Close() {
 func (s *ChatService) Chat(
 	ctx context.Context, userMsg string, history []Message,
 ) (string, []Source, error) {
-	// Step 1: Extract structured filters from the user's question.
+	// Step 1: Classify the query and extract filters if needed.
 	filters, err := s.extractFilters(ctx, userMsg)
 	if err != nil {
 		// Fall back to unfiltered search on extraction failure.
 		fmt.Fprintf(os.Stderr, "\n  (filter extraction failed: %v, using unfiltered search)\n", err)
-		filters = SearchFilters{SemanticQuery: userMsg}
+		filters = SearchFilters{NeedsSearch: true, SemanticQuery: userMsg}
+	}
+
+	var sources []Source
+	var messages []Message
+
+	if !filters.NeedsSearch {
+		// No search needed — respond directly from conversation history.
+		fmt.Print("\n  [No search needed]")
+		messages = s.buildDirectPrompt(userMsg, history)
 	} else {
 		s.printFilters(filters)
-	}
 
-	// Step 2: Run filtered semantic search.
-	sources, err := s.search(ctx, filters)
-	if err != nil {
-		return "", nil, fmt.Errorf("search: %w", err)
-	}
-
-	if len(sources) == 0 {
-		msg := "No matching books found."
-		if filters.MaxPrice != nil || filters.MinPrice != nil || filters.Region != nil {
-			msg += " Try relaxing your price or region filters."
-		} else {
-			msg += " Make sure the vectorizer has finished embedding all rows" +
-				" (check: SELECT count(*) FROM books_embeddings)."
+		// Step 2: Run filtered semantic search.
+		sources, err = s.search(ctx, filters)
+		if err != nil {
+			return "", nil, fmt.Errorf("search: %w", err)
 		}
-		return msg, nil, nil
-	}
 
-	// Step 3: Build prompt with retrieved context and conversation history.
-	messages := s.buildPrompt(userMsg, sources, history)
+		if len(sources) == 0 {
+			msg := "No matching books found."
+			if filters.MaxPrice != nil || filters.MinPrice != nil || filters.Region != nil {
+				msg += " Try relaxing your price or region filters."
+			} else {
+				msg += " Make sure the vectorizer has finished embedding all rows" +
+					" (check: SELECT count(*) FROM books_embeddings)."
+			}
+			return msg, nil, nil
+		}
+
+		// Step 3: Build prompt with retrieved context.
+		messages = s.buildPrompt(userMsg, sources, history)
+	}
 
 	// Step 4: Stream the LLM response to stdout.
 	fmt.Print("\nAssistant: ")
@@ -103,25 +114,43 @@ func (s *ChatService) Chat(
 	return response, sources, nil
 }
 
-const filterExtractionPrompt = `You are a query parser for a bookstore search system. Extract structured search filters from the user's question. Return ONLY a JSON object with these fields:
+const filterExtractionPrompt = `You are a query classifier and parser for a bookstore chat system. Analyze the user's message and return a JSON object.
 
-- "semantic_query": the main topic/subject to search for semantically (string, required)
+First, decide if the message requires searching the book database. Set "needs_search" to false for:
+- Greetings, small talk, or thank-you messages
+- Follow-up questions that can be answered from the conversation history alone
+- Questions unrelated to books (weather, sports, etc.)
+- Meta-questions about the chat itself
+
+Set "needs_search" to true when the user is asking about books, topics, prices, or availability.
+
+When "needs_search" is true, also extract:
+- "semantic_query": the main topic/subject to search for (string)
 - "max_price": maximum price in dollars if mentioned (number or null)
 - "min_price": minimum price in dollars if mentioned (number or null)
 - "region": region filter if mentioned (string or null). Valid regions: us-east, us-west, eu-west, eu-central, ap-south, ap-east
 
 Examples:
+User: "Hello!"
+{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+
+User: "Thanks, that was helpful"
+{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+
+User: "Can you tell me more about that last book?"
+{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+
+User: "What is the weather like?"
+{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+
 User: "What books about algorithms cost less than $50?"
-{"semantic_query": "algorithms", "max_price": 50, "min_price": null, "region": null}
+{"needs_search": true, "semantic_query": "algorithms", "max_price": 50, "min_price": null, "region": null}
 
 User: "Recommend a database book available in eu-west"
-{"semantic_query": "database", "max_price": null, "min_price": null, "region": "eu-west"}
+{"needs_search": true, "semantic_query": "database", "max_price": null, "min_price": null, "region": "eu-west"}
 
 User: "What do you have on machine learning?"
-{"semantic_query": "machine learning", "max_price": null, "min_price": null, "region": null}
-
-User: "Books between $30 and $60 in us-east about programming"
-{"semantic_query": "programming", "max_price": 60, "min_price": 30, "region": "us-east"}
+{"needs_search": true, "semantic_query": "machine learning", "max_price": null, "min_price": null, "region": null}
 
 Return ONLY the JSON object, no other text.`
 
@@ -224,6 +253,17 @@ func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Sour
 		sources = append(sources, src)
 	}
 	return sources, rows.Err()
+}
+
+// buildDirectPrompt constructs a prompt for messages that don't require a
+// database search — the LLM responds using only the conversation history.
+func (s *ChatService) buildDirectPrompt(userMsg string, history []Message) []Message {
+	systemPrompt := `You are a helpful bookstore assistant. The user's message does not require looking up books. Respond naturally and conversationally. If the user asks a follow-up about a book previously discussed, use the conversation history to answer. If you don't have enough information, suggest they ask a book-related question.`
+
+	messages := []Message{{Role: "system", Content: systemPrompt}}
+	messages = append(messages, history...)
+	messages = append(messages, Message{Role: "user", Content: userMsg})
+	return messages
 }
 
 // buildPrompt constructs the LLM messages array with a system prompt containing
