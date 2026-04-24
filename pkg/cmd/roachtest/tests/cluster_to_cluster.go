@@ -842,7 +842,8 @@ func (rd *replicationDriver) ensureStandbyPollerAdvances(ctx context.Context, in
 
 	info, err := getStreamIngestionJobInfo(rd.setup.dst.db, ingestionJobID)
 	require.NoError(rd.t, err)
-	initialPCRReplicatedTime := info.GetHighWater()
+	pcrReplicatedTime := info.GetHighWater()
+	require.False(rd.t, pcrReplicatedTime.IsZero(), "PCR job has no replicated time")
 
 	// Connect to the reader tenant
 	readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
@@ -852,28 +853,28 @@ func (rd *replicationDriver) ensureStandbyPollerAdvances(ctx context.Context, in
 
 	// Poll the standby poller job until its high water timestamp matches the PCR job's replicated time
 	testutils.SucceedsWithin(rd.t, func() error {
-		var standbyTimeStr string
+		var standbyHighWaterStr string
 		readerTenantSQL.QueryRow(rd.t,
 			`SELECT COALESCE(high_water_timestamp, '0')
-				FROM crdb_internal.jobs 
-				WHERE job_type = 'STANDBY READ TS POLLER'`).Scan(&standbyTimeStr)
+				FROM crdb_internal.jobs
+				WHERE job_type = 'STANDBY READ TS POLLER'`).Scan(&standbyHighWaterStr)
 
-		if standbyTimeStr == "0" {
+		if standbyHighWaterStr == "0" {
 			return errors.New("standby poller job not found or has no high water timestamp")
 		}
 
-		standbyHLC := DecimalTimeToHLC(rd.t, standbyTimeStr)
-		standbyTime := standbyHLC.GoTime()
+		standbyHighWater := DecimalTimeToHLC(rd.t, standbyHighWaterStr)
+		standbyHighWaterTime := standbyHighWater.GoTime()
 
-		rd.t.L().Printf("Standby poller high water: %s; replicated time %s", standbyTime, initialPCRReplicatedTime)
+		rd.t.L().Printf("Standby poller high water: %s; replicated time %s", standbyHighWaterTime, pcrReplicatedTime)
 
-		if standbyTime.Compare(initialPCRReplicatedTime) >= 0 {
+		if standbyHighWaterTime.Compare(pcrReplicatedTime) >= 0 {
 			rd.t.L().Printf("Standby poller has advanced to PCR replicated time")
 			return nil
 		}
 
 		return errors.Newf("standby poller high water %s not yet at PCR replicated time %s",
-			standbyTime, initialPCRReplicatedTime)
+			standbyHighWaterTime, pcrReplicatedTime)
 	}, 5*time.Minute)
 }
 
@@ -1074,71 +1075,6 @@ func (rd *replicationDriver) maybeRunSchemaChangeWorkload(
 	}
 }
 
-// maybeRestartReaderTenantService restarts the reader tenant service if
-// physical_cluster_replication.reader_system_table_id_offset was set, as the
-// namespace cache needs to be rehydrated after the reader tenant ingests the
-// priviledge table at a higher id.
-func (rd *replicationDriver) maybeRestartReaderTenantService(ctx context.Context) {
-	if rd.rs.withReaderWorkload == nil {
-		// No reader tenant configured, nothing to do
-		return
-	}
-
-	// Check if the reader system table ID offset setting is configured
-	var offsetValue int
-	rd.setup.dst.sysSQL.QueryRow(rd.t, "SHOW CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset").Scan(&offsetValue)
-
-	if offsetValue == 0 {
-		rd.t.L().Printf("reader_system_table_id_offset not set, skipping reader tenant service restart")
-		return
-	}
-	readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
-
-	// Wait for the reader tenant to be in the correct data state and service mode before restarting.
-	testutils.SucceedsSoon(rd.t, func() error {
-		var dataState, serviceMode string
-		rd.setup.dst.sysSQL.QueryRow(rd.t, fmt.Sprintf("SELECT data_state, service_mode FROM [SHOW TENANTS] WHERE name = '%s'", readerTenantName)).Scan(&dataState, &serviceMode)
-		if dataState != "ready" {
-			return errors.Newf("reader tenant %q data state is %q, expected 'ready'", readerTenantName, dataState)
-		}
-		if serviceMode != "shared" {
-			return errors.Newf("reader tenant %q service mode is %q, expected 'shared'", readerTenantName, serviceMode)
-		}
-		return nil
-	})
-
-	// Now wait for the reader tenant to be accepting connections
-	readerTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.setup.dst.gatewayNodes[0],
-		option.VirtualClusterName(readerTenantName),
-		option.DBName("system"),
-		option.User("root"),
-		option.AuthMode(install.AuthRootCert))
-
-	defer readerTenantConn.Close()
-	testutils.SucceedsSoon(rd.t, func() error { return readerTenantConn.Ping() })
-
-	rd.t.Status("restarting reader tenant service")
-
-	// Stop the reader tenant service
-	rd.setup.dst.sysSQL.Exec(rd.t, fmt.Sprintf("ALTER VIRTUAL CLUSTER '%s' STOP SERVICE", readerTenantName))
-
-	// Wait for the service to fully stop
-	testutils.SucceedsSoon(rd.t, func() error {
-		// Try to connect to the reader tenant - if it fails, the service is stopped
-		conn := rd.c.Conn(ctx, rd.t.L(), rd.setup.dst.gatewayNodes[0], option.VirtualClusterName(readerTenantName))
-		defer conn.Close()
-		if err := conn.Ping(); err == nil {
-			return errors.Newf("reader tenant %q still accepting connections", readerTenantName)
-		}
-		return nil
-	})
-
-	// Start the service back up
-	rd.setup.dst.sysSQL.Exec(rd.t, fmt.Sprintf("ALTER VIRTUAL CLUSTER '%s' START SERVICE SHARED", readerTenantName))
-
-	rd.t.L().Printf("successfully restarted reader tenant service")
-}
-
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
 // participating in the replication stream.
 //
@@ -1257,7 +1193,6 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
 
-	rd.maybeRestartReaderTenantService(ctx)
 	rd.maybeRunSchemaChangeWorkload(ctx, workloadMonitor)
 	rd.maybeRunReaderTenantWorkload(ctx, workloadMonitor)
 
@@ -1275,6 +1210,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		return
 	}
 	rd.ensureStandbyPollerAdvances(ctx, ingestionJobID)
+
 	rd.checkParticipatingNodes(ctx, ingestionJobID)
 
 	retainedTime := rd.getReplicationRetainedTime()
