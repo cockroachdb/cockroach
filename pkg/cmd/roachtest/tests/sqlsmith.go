@@ -220,7 +220,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				})
 				defer m.Wait()
 				select {
-				case <-time.After(timeout * 2):
+				case <-time.After(timeout * 6):
+					// Use 6x the statement timeout to account for DDL statements
+					// which have their session statement_timeout increased by 3x.
 					// SQLSmith generates queries that either perform full table scans of
 					// large tables or backup/restore operations that timeout. These
 					// should not cause an issue to be raised, as they most likely are
