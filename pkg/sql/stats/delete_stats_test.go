@@ -42,9 +42,11 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
+		ctx,
 		s.ClusterSettings(),
 		db,
 		s.AppStopper(),
+		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
@@ -338,9 +340,11 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
+		ctx,
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
+		nil, /* parentMon */
 	)
 	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	testData := []TableStatisticProto{
