@@ -207,6 +207,7 @@ go_test(
         "restore_online_test.go",
         "restore_planning_test.go",
         "restore_progress_test.go",
+        "restore_revision_log_test.go",
         "restore_span_covering_test.go",
         "restore_test.go",
         "revision_reader_test.go",

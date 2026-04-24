@@ -10,10 +10,22 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/revlog"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -86,4 +98,191 @@ func maybeAdjustEndTimeForRevisionLog(
 // already-restored backup data.
 func (r *restoreResumer) restoreFromRevisionLog(ctx context.Context) error {
 	return nil // no-op stub
+}
+
+// validateRevlogResolved checks that the revision log has sealed
+// ticks covering the requested AOST. It scans closed ticks after
+// backupEndTime and returns as soon as it finds one whose end time
+// is at or past revlogTimestamp.
+func validateRevlogResolved(
+	ctx context.Context, es cloud.ExternalStorage, backupEndTime, revlogTimestamp hlc.Timestamp,
+) error {
+	lr := revlog.NewLogReader(es)
+	var maxTickEnd hlc.Timestamp
+	for tick, tickErr := range lr.Ticks(
+		ctx, backupEndTime, hlc.MaxTimestamp,
+	) {
+		if tickErr != nil {
+			return errors.Wrap(tickErr, "listing revision log ticks")
+		}
+		if maxTickEnd.Less(tick.EndTime) {
+			maxTickEnd = tick.EndTime
+		}
+		if !maxTickEnd.Less(revlogTimestamp) {
+			// The log has resolved past the requested AOST.
+			return nil
+		}
+	}
+	if maxTickEnd.IsEmpty() {
+		return errors.Newf(
+			"revision log has no resolved ticks after backup end time %s; "+
+				"cannot restore to AS OF SYSTEM TIME %s",
+			backupEndTime, revlogTimestamp,
+		)
+	}
+	return errors.Newf(
+		"revision log has not resolved through the requested "+
+			"AS OF SYSTEM TIME %s; latest resolved: %s",
+		revlogTimestamp, maxTickEnd,
+	)
+}
+
+// applyRevlogDescriptorChanges merges backup descriptors with revision
+// log schema changes to produce the correct descriptor set at the
+// requested AOST. Schema changes that occurred between
+// backupEndTime and revlogTimestamp are applied on top of the
+// backup's descriptors: new descriptors are added, modified
+// descriptors are updated, and dropped/tombstoned descriptors are
+// removed.
+func applyRevlogDescriptorChanges(
+	ctx context.Context,
+	es cloud.ExternalStorage,
+	backupDescs []catalog.Descriptor,
+	backupEndTime, revlogTimestamp hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	// Index backup descriptors by ID.
+	byID := make(map[descpb.ID]catalog.Descriptor, len(backupDescs))
+	for _, d := range backupDescs {
+		byID[d.GetID()] = d
+	}
+
+	// Track the latest schema change per descriptor ID. Since
+	// IterSchemaChanges yields in (changedAt, descID) ascending
+	// order, the last entry per ID is the latest.
+	type changeState struct {
+		desc *descpb.Descriptor // nil = tombstone
+	}
+	latestByID := make(map[descpb.ID]changeState)
+	for sc, err := range revlog.IterSchemaChanges(
+		ctx, es, backupEndTime, revlogTimestamp,
+	) {
+		if err != nil {
+			return nil, errors.Wrap(err, "reading revlog schema changes")
+		}
+		log.Dev.Infof(ctx,
+			"revlog schema change: desc %d at %s (tombstone=%t)",
+			sc.DescID, sc.ChangedAt, sc.Descriptor == nil,
+		)
+		latestByID[sc.DescID] = changeState{desc: sc.Descriptor}
+	}
+	log.Dev.Infof(ctx,
+		"revlog descriptor resolution: %d backup descs, %d schema changes in (%s, %s]",
+		len(backupDescs), len(latestByID), backupEndTime, revlogTimestamp,
+	)
+
+	// Apply changes.
+	for id, change := range latestByID {
+		if change.desc == nil {
+			// Tombstone: descriptor was deleted from KV.
+			delete(byID, id)
+			continue
+		}
+		desc := backupinfo.NewDescriptorForManifest(change.desc)
+		if desc == nil {
+			continue
+		}
+		// Filter out descriptors in the DROP state.
+		if tbl, ok := desc.(catalog.TableDescriptor); ok &&
+			tbl.GetState() == descpb.DescriptorState_DROP {
+			delete(byID, id)
+			continue
+		}
+		byID[id] = desc
+	}
+
+	result := make([]catalog.Descriptor, 0, len(byID))
+	for _, desc := range byID {
+		result = append(result, desc)
+	}
+	return result, nil
+}
+
+// selectTargetsWithRevlog loads backup descriptors, merges them with
+// revision log schema changes through revlogTimestamp, and runs
+// target matching against the merged set. This is the revlog
+// counterpart of selectTargets used during restore planning.
+func selectTargetsWithRevlog(
+	ctx context.Context,
+	p sql.PlanHookState,
+	es cloud.ExternalStorage,
+	backupManifests []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
+	targets tree.BackupTargetList,
+	descriptorCoverage tree.DescriptorCoverage,
+	endTime, revlogTimestamp hlc.Timestamp,
+) (
+	[]catalog.Descriptor,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	[]mtinfopb.TenantInfoWithUsage,
+	bool,
+	error,
+) {
+	allBackupDescs, lastManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(
+		ctx, backupManifests, layerToIterFactory, endTime,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, false,
+			errors.Wrap(err, "loading backup descriptors for revlog merge")
+	}
+	mergedDescs, err := applyRevlogDescriptorChanges(
+		ctx, es, allBackupDescs, endTime, revlogTimestamp,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, false, err
+	}
+	return selectTargetsFromDescs(
+		ctx, p, mergedDescs, lastManifest,
+		targets, descriptorCoverage, endTime,
+	)
+}
+
+// buildRevlogRekeys constructs table and tenant rekeys from the
+// restore details. This mirrors the rekey construction in
+// createRestoreFlows (restore_job.go).
+func buildRevlogRekeys(
+	details jobspb.RestoreDetails, execCfg *sql.ExecutorConfig,
+) ([]execinfrapb.TableRekey, []execinfrapb.TenantRekey, error) {
+	newIDToOldID := make(map[descpb.ID]descpb.ID)
+	for oldID, rewrite := range details.DescriptorRewrites {
+		newIDToOldID[rewrite.ID] = oldID
+	}
+
+	var tableRekeys []execinfrapb.TableRekey
+	for i := range details.TableDescs {
+		desc := tabledesc.NewBuilder(details.TableDescs[i]).
+			BuildImmutableTable()
+		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
+		if err != nil {
+			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(
+				err, "marshaling descriptor",
+			)
+		}
+		tableRekeys = append(tableRekeys, execinfrapb.TableRekey{
+			OldID:   uint32(newIDToOldID[desc.GetID()]),
+			NewDesc: newDescBytes,
+		})
+	}
+
+	// Tenant rekeys: signal that this is a system-tenant-made backup
+	// if the backup codec is for the system tenant.
+	var tenantRekeys []execinfrapb.TenantRekey
+	if execCfg.Codec.ForSystemTenant() {
+		tenantRekeys = append(tenantRekeys, execinfrapb.TenantRekey{
+			OldID: roachpb.SystemTenantID,
+			NewID: roachpb.SystemTenantID,
+		})
+	}
+
+	return tableRekeys, tenantRekeys, nil
 }
