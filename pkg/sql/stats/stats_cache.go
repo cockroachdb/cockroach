@@ -780,6 +780,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
 	e := &cacheEntry{
+		tableID:  tableID,
 		mustWait: true,
 		waitCond: sync.Cond{L: &sc.mu},
 	}
@@ -805,7 +806,6 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	}()
 
 	e.mustWait = false
-	e.tableID = tableID
 	e.latestFullStatsTimestamp, e.latestStableFullStatsTimestamp = latestFullStatsTimestamp, latestStableStatsTimestamp
 	e.forecast, e.userDefinedTypes, e.stats, e.stableStats, e.err = forecast, udts, stats, stableStats, err
 
