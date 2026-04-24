@@ -1735,6 +1735,7 @@ privilege ::=
 	name
 	| 'CREATE'
 	| 'GRANT'
+	| 'REFERENCES'
 	| 'SELECT'
 
 type_name_list ::=

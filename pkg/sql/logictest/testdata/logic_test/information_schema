@@ -3087,6 +3087,7 @@ admin    test           DELETE             NULL
 admin    test           DROP               NULL
 admin    test           INSERT             NULL
 admin    test           MAINTAIN           NULL
+admin    test           REFERENCES         NULL
 admin    test           REPLICATIONDEST    NULL
 admin    test           REPLICATIONSOURCE  NULL
 admin    test           SELECT             NULL
@@ -3102,6 +3103,7 @@ root     test           DELETE             NULL
 root     test           DROP               NULL
 root     test           INSERT             NULL
 root     test           MAINTAIN           NULL
+root     test           REFERENCES         NULL
 root     test           REPLICATIONDEST    NULL
 root     test           REPLICATIONSOURCE  NULL
 root     test           SELECT             NULL

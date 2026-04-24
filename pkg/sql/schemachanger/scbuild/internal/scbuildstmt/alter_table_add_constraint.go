@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -238,6 +239,16 @@ func alterTableAddForeignKey(
 	// schema changer.
 	fromColsFRNames := getFullyResolvedColNames(b, tbl.TableID, fkDef.FromCols)
 
+	// Determine which privilege to check on the referenced (parent) table.
+	// Before the GrantReferencesToUsersWithCreate migration, the referenced
+	// table required CREATE. After the migration, it requires REFERENCES,
+	// matching PostgreSQL. The origin (child) table still requires CREATE,
+	// which is already checked at the ALTER TABLE entry point.
+	fkPriv := privilege.CREATE
+	if b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V26_3_GrantReferencesToUsersWithCreate) {
+		fkPriv = privilege.REFERENCES
+	}
+
 	// 1. If this FK's `ON UPDATE behavior` is not NO ACTION nor RESTRICT, and
 	// any of the originColumns has an `ON UPDATE expr`, panic with error.
 	if fkDef.Actions.Update != tree.NoAction && fkDef.Actions.Update != tree.Restrict {
@@ -304,7 +315,7 @@ func alterTableAddForeignKey(
 	// table name) and check whether it's in the same database as the originTable
 	// (i.e. tbl). Cross database FK references is a deprecated feature and is in
 	// practice no longer supported. We will return an error here directly.
-	referencedTableID := mustGetTableIDFromTableName(b, fkDef.Table)
+	referencedTableID := mustGetTableIDFromTableName(b, fkDef.Table, fkPriv)
 	originalTableNamespaceElem := mustRetrieveNamespaceElem(b, tbl.TableID)
 	referencedTableNamespaceElem := mustRetrieveNamespaceElem(b, referencedTableID)
 	if originalTableNamespaceElem.DatabaseID != referencedTableNamespaceElem.DatabaseID {
@@ -320,6 +331,7 @@ func alterTableAddForeignKey(
 	// match referencedTable's temporariness.
 	referencedTableElem := mustRetrieveTableElem(b, referencedTableID)
 	fkDef.Table.ObjectNamePrefix = b.NamePrefix(referencedTableElem)
+
 	if tbl.IsTemporary != referencedTableElem.IsTemporary {
 		persistenceType := "permanent"
 		if tbl.IsTemporary {
@@ -369,7 +381,7 @@ func alterTableAddForeignKey(
 	// to the length of originColumns.
 	var referencedColIDs []catid.ColumnID
 	for _, colName := range fkDef.ToCols {
-		colID := getColumnIDFromColumnName(b, referencedTableID, colName, true /*required */)
+		colID := getColumnIDFromColumnName(b, referencedTableID, colName, true /*required */, fkPriv)
 		ensureColCanBeUsedInInboundFK(b, referencedTableID, colID)
 		referencedColIDs = append(referencedColIDs, colID)
 	}
