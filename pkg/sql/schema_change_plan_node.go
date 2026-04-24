@@ -75,6 +75,18 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 	}
 
+	// Some statements reach this point because tree.CanModifySchema reports
+	// them as schema-modifying (e.g. DISCARD ALL drops temporary tables),
+	// but they do work beyond schema changes (resetting session state,
+	// plan cache, cached sequence values, etc.) that the declarative schema
+	// changer has no vocabulary for. Route them straight to the legacy path:
+	// scbuild.Build would otherwise panic with a NotImplementedError on
+	// every invocation, producing high-volume INFO log spam on busy clusters.
+	switch stmt.(type) {
+	case *tree.Discard:
+		return nil, nil
+	}
+
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
