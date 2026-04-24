@@ -4556,6 +4556,21 @@ deprules
     - $new-constraint-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-constraint-name, $old-constraint-name-Target, $old-constraint-name-Node)
     - joinTargetNode($new-constraint-name, $new-constraint-name-Target, $new-constraint-name-Node)
+- name: old enum type value is dropped before new enum type value is added
+  from: old-enum-value-Node
+  kind: Precedence
+  to: new-enum-value-Node
+  query:
+    - $old-enum-value[Type] = '*scpb.EnumTypeValue'
+    - $new-enum-value[Type] = '*scpb.EnumTypeValue'
+    - joinOnDescID($old-enum-value, $new-enum-value, $type-id)
+    - SamePhysicalRepresentation(*scpb.EnumTypeValue, *scpb.EnumTypeValue)($old-enum-value, $new-enum-value)
+    - $old-enum-value-Target[TargetStatus] = ABSENT
+    - $old-enum-value-Node[CurrentStatus] = ABSENT
+    - $new-enum-value-Target[TargetStatus] = PUBLIC
+    - $new-enum-value-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-enum-value, $old-enum-value-Target, $old-enum-value-Node)
+    - joinTargetNode($new-enum-value, $new-enum-value-Target, $new-enum-value-Node)
 - name: old index absent before new index public when swapping with transient
   from: old-primary-index-Node
   kind: Precedence
@@ -10173,6 +10188,21 @@ deprules
     - $new-constraint-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-constraint-name, $old-constraint-name-Target, $old-constraint-name-Node)
     - joinTargetNode($new-constraint-name, $new-constraint-name-Target, $new-constraint-name-Node)
+- name: old enum type value is dropped before new enum type value is added
+  from: old-enum-value-Node
+  kind: Precedence
+  to: new-enum-value-Node
+  query:
+    - $old-enum-value[Type] = '*scpb.EnumTypeValue'
+    - $new-enum-value[Type] = '*scpb.EnumTypeValue'
+    - joinOnDescID($old-enum-value, $new-enum-value, $type-id)
+    - SamePhysicalRepresentation(*scpb.EnumTypeValue, *scpb.EnumTypeValue)($old-enum-value, $new-enum-value)
+    - $old-enum-value-Target[TargetStatus] = ABSENT
+    - $old-enum-value-Node[CurrentStatus] = ABSENT
+    - $new-enum-value-Target[TargetStatus] = PUBLIC
+    - $new-enum-value-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-enum-value, $old-enum-value-Target, $old-enum-value-Node)
+    - joinTargetNode($new-enum-value, $new-enum-value-Target, $new-enum-value-Node)
 - name: old index absent before new index public when swapping with transient
   from: old-primary-index-Node
   kind: Precedence

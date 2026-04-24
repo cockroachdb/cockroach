@@ -1,0 +1,9 @@
+/* setup */
+CREATE TYPE salmon AS ENUM ('sockeye', 'king', 'atlantic');
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TYPE salmon RENAME VALUE 'atlantic' TO 'coho';
+----
+Schema change plan for ALTER TYPE ‹defaultdb›.‹public›.‹salmon› RENAME VALUE ‹'atlantic'› TO ‹'coho'›;
+ ├── execute 1 system table mutations transaction
+ └── execute 1 system table mutations transaction

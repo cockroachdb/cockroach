@@ -13,3 +13,11 @@ ALTER TYPE defaultdb.climes DROP VALUE 'arctic'
 ----
 - [[EnumTypeValue:{DescID: 104, Name: arctic}, ABSENT], PUBLIC]
   {logicalRepresentation: arctic, physicalRepresentation: gA==, typeId: 104}
+
+build
+ALTER TYPE defaultdb.climes RENAME VALUE 'tropical' TO 'equatorial'
+----
+- [[EnumTypeValue:{DescID: 104, Name: tropical}, ABSENT], PUBLIC]
+  {logicalRepresentation: tropical, physicalRepresentation: QA==, typeId: 104}
+- [[EnumTypeValue:{DescID: 104, Name: equatorial}, PUBLIC], ABSENT]
+  {logicalRepresentation: equatorial, physicalRepresentation: QA==, typeId: 104}
