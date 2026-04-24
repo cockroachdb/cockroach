@@ -748,8 +748,10 @@ message IngestFileSpec {
 
 // RevlogLocalMergeSpec describes a set of revision log ticks assigned to
 // one SQL instance for local merge. Each tick's manifest identifies the
-// data files to replay. Phase 1 (this spec) distributes the tick
-// assignments; Phase 2 fills in the actual merge logic.
+// data files to replay. The processor reads the assigned ticks, performs
+// a k-way merge, deduplicates to the latest revision per key ≤ the
+// restore timestamp, rewrites key prefixes to the target keyspace, and
+// writes MVCC-encoded SSTs to nodelocal storage.
 message RevlogLocalMergeSpec {
   // collection_uri is the collection root URI where the revision log lives.
   optional string collection_uri = 1 [
@@ -773,5 +775,19 @@ message RevlogLocalMergeSpec {
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"
   ];
-  // NEXT ID: 5.
+
+  // restore_timestamp is the AOST target. During deduplication, only
+  // events with timestamps ≤ this value are kept.
+  optional util.hlc.Timestamp restore_timestamp = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  // table_rekeys maps old table IDs to new table descriptors for
+  // source→target key prefix rewriting.
+  repeated TableRekey table_rekeys = 6 [(gogoproto.nullable) = false];
+
+  // tenant_rekeys maps old tenant IDs to new tenant IDs.
+  repeated TenantRekey tenant_rekeys = 7 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 8.
 }
