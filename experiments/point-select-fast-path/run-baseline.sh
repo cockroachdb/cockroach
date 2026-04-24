@@ -64,6 +64,7 @@ mkdir -p "${RUN_DIR}"
   echo "bench_filter: ${BENCH_FILTER}"
   echo "nodes:        ${POINT_SELECT_NODES:-1} (POINT_SELECT_NODES)"
   echo "splits:       ${POINT_SELECT_SPLITS:-(default)} (POINT_SELECT_SPLITS)"
+  echo "placeholder_fast_path: ${POINT_SELECT_PLACEHOLDER_FAST_PATH:-off} (POINT_SELECT_PLACEHOLDER_FAST_PATH)"
 } > "${RUN_DIR}/env.txt"
 
 cd "${REPO_ROOT}"

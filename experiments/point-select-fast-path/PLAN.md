@@ -1,5 +1,9 @@
 # SQL Processing Overhead: Point-Select Fast Path Experiment
 
+> **This is the original design / planning document.** For the
+> current experimental results, see `SUMMARY.md`. For instructions
+> on reproducing or extending this work, see `HANDOFF.md`.
+
 ## Context
 
 The CTO has asked us to measure how much latency the SQL processing layer

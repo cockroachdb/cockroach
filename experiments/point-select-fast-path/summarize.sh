@@ -48,7 +48,7 @@ parse_one() {
   awk '
     # Match lines like:
     #   BenchmarkPointSelect/conc=8-8     587955     20080 ns/op    151.0 p50_us    337.9 p99_us
-    /^BenchmarkPointSelect\/conc=/ {
+    /^BenchmarkPointSelect[A-Za-z]*\/conc=/ {
       # $1 = "BenchmarkPointSelect/conc=8-8".
       # Extract the digits between "conc=" and the next "-".
       s = $1

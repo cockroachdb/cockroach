@@ -210,7 +210,7 @@ case "${cmd}" in
     # `printf %q` instead of bash 4.4+ ${var@Q} so the script works on
     # the system bash on macOS (which is still 3.2).
     env_prefix=""
-    for v in POINT_SELECT_FAST_PATH POINT_SELECT_NODES POINT_SELECT_SPLITS BENCH_FILTER BENCH_TIME BENCH_COUNT TEST_CPU; do
+    for v in POINT_SELECT_FAST_PATH POINT_SELECT_NODES POINT_SELECT_SPLITS POINT_SELECT_PLACEHOLDER_FAST_PATH BENCH_FILTER BENCH_TIME BENCH_COUNT TEST_CPU; do
       if [[ -n "${!v:-}" ]]; then
         env_prefix+="${v}=$(printf %q "${!v}") "
       fi
