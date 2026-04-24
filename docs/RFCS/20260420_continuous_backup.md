@@ -792,20 +792,245 @@ the encoding chosen here determines the read API there.
 
 #### Schema
 
-Replay reads descriptor revisions from the log and applies them at
-the right times across the replay window so that data ingested
-between two DDL events is interpreted under the correct descriptor.
-Must coordinate with §1 "Reflecting schema changes" — the encoding
-chosen there determines the read API here.
+During restore planning, the set of descriptors available for
+restore target resolution is constructed by starting with the
+descriptors in the base backup and then playing back the changes
+recorded in `log/schema/descs/` up to the requested AOST. This
+playback modifies, deletes, and adds descriptors chronologically,
+producing the actual descriptor set as of the restore time. This
+is necessary because descriptors may have been introduced only
+in the revision log — e.g., a table created after the last
+backup but before AOST — and those must be resolvable as restore
+targets.
 
-TODO — separate session.
+The resulting descriptor set is what restore planning uses when
+resolving the user's `RESTORE` target expressions (database
+names, table names, etc.) to concrete descriptor IDs.
 
-#### (rest TODO — per-component session)
+Must coordinate with §1 "Schema descriptor capture" — the
+encoding chosen there determines the read API here.
 
-Which DistMerge primitive(s) to reuse vs. fork; AddSSTable batching
-and pacing; integration with `RESTORE ... AS OF SYSTEM TIME`
-syntax; per-table point-in-time restore UX; resumability state and
-on-disk staging area.
+#### Log replay pipeline
+
+Restore from a continuous backup is a two-step process: restore
+the base backup via the existing path (online restore is the
+expected default), then replay the suffix of the log that covers
+`(backup.end_time, AOST]`. The log is time-ordered (events are
+bucketed into 10-second ticks by MVCC timestamp); KV ingest
+requires key-ordered SSTs. The volume of revisions in the replay
+window is assumed to exceed available memory, so a streaming /
+spilling approach is required. The solution is a three-phase
+distributed merge pipeline, reusing the same architectural
+pattern as the index backfill distributed merge
+(`pkg/sql/bulkmerge`).
+
+##### Phase 1: Tick assignment (planning)
+
+The coordinator discovers all closed ticks in
+`(backup.end_time, AOST]` via `LogReader.Ticks()` — the
+time-prefix LIST walk specified in the format doc. Ticks are
+**shuffled** (deterministic shuffle seeded by the job ID) and
+assigned to SQL instances via round-robin. The shuffle is
+critical: without it, contiguous ticks would be assigned to the
+same node, and traffic spikes during certain time periods would
+create skew — one node gets most of the data-heavy ticks while
+others sit idle. Shuffling spreads hot ticks uniformly across the
+cluster.
+
+Each node receives a `RevlogLocalMergeSpec` proto listing its
+assigned ticks, the revlog external-storage URI, a
+`nodelocal://` output prefix, and the target AOST.
+
+##### Phase 2: Local merge (per-node)
+
+Each node reads its assigned ticks from cloud storage via the
+`revlog` reader API (`GetTickReader`, `Events()`). Events from
+multiple ticks are fed into a k-way merge. The merge key is
+`(user_key ASC, mvcc_ts ASC)` — the same ordering used within
+revlog data files.
+
+**Deduplication.** For each user key, only the latest MVCC
+revision with `ts ≤ AOST` is kept — including if that revision
+is a tombstone, since we may need to shadow a key present in
+the restored backup. Earlier revisions of the same key are
+discarded. This is correct because restore wants the state
+*as of* AOST, not the full revision history.
+
+**Key prefix rewriting.** Phase 2 also performs source→target
+table-ID prefix rewriting using `KeyRewriter` from
+`pkg/backup/key_rewriter.go`. Since Phase 2 already allocates
+keys to convert from revlog encoding to MVCC `EngineKey`
+encoding (the log stores MVCC timestamps in ascending order;
+engine keys require descending), key prefix rewriting is done
+at the same time with no additional cost. This establishes a
+clean boundary: Phase 2 output is entirely in the
+**target-keyspace**. Phase 3 can therefore work exclusively in
+target-keyspace for span assignment, partitioning, and
+ingest — no rewriting logic is needed in the final merge path.
+
+The merged, deduplicated, rewritten output is written as
+standard MVCC-encoded SSTs (CockroachDB `EngineKey` encoding,
+not revlog encoding) to
+`nodelocal://<instance>/crdb-revlog-merge/<job_id>/`. These SSTs
+are directly compatible with `bulkmerge.Merge()` and
+`AddSSTable` — no re-encoding is needed in Phase 3.
+
+**Key sampling.** Each node collects row samples from its
+output stream (reservoir sampling) and returns them alongside
+SST metadata (URI, key span, size, key count) to the
+coordinator. These samples are used in Phase 3 to identify
+spans introduced by the revision log that were not part of
+the original restore. Sampling also enables more intelligent
+split-point decisions when write volume is heavily skewed —
+e.g., one table received a burst of writes dwarfing all
+others. Without sampling, split points would be derived from
+local SST file boundaries, which reflect time-partitioned
+assignment rather than actual key-space density.
+
+##### Phase 3: Final merge and ingest
+
+The coordinator collects all intermediate SST manifests and
+key samples from Phase 2. Because Phase 2 performs key prefix
+rewriting, all intermediate SSTs are already in the
+**target-keyspace** — span assignment and partitioning operate
+entirely in the target-keyspace with no further rewriting
+needed.
+
+**New span discovery.** The revision log may contain spans
+that were not part of the original restore's split-and-scatter
+— for example, if a user dropped all tables in a database and
+recreated them within the backup chain, the recreated tables
+have new span ranges. The coordinator identifies these by
+subtracting the spans that were restored in the regular restore
+from the key samples returned by Phase 2. The remaining spans
+are new — the coordinator chunks them and performs
+split-and-scatter so that every span the revision log will
+ingest has been assigned to a node.
+
+With all spans accounted for, the coordinator uses
+`PartitionSpans` to obtain a partitioning and node assignment
+from the existing range layout, then calls
+`bulkmerge.Merge()` with this partitioning.
+
+`bulkmerge.Merge()` is **reused as-is** — no fork, no
+modification. The intermediate SSTs from Phase 2 are standard
+MVCC-encoded SSTs on `nodelocal://`, which is exactly the input
+format `bulkmerge` expects. The existing infrastructure handles:
+
+- DistSQL flow planning (MergeLoopback → BulkMerge →
+  MergeCoordinator)
+- Remote blob streaming via gRPC
+- Task assignment with row-sample-based split points
+- KV ingestion via `kvStorageWriter` → `SSTBatcher` →
+  `AddSSTable`
+
+The only configuration differences from the index backfill
+caller: `EnforceUniqueness` is false (the revlog legitimately
+contains overwrites of the same key across ticks), and
+`WriteTimestamp` is set to `Clock().Now()` (see "Timestamp
+handling" below).
+
+##### Why time-partitioned assignment
+
+With N nodes and T ticks, each tick containing F files
+(typically 1–10):
+
+- **Time-partitioned** (each node gets T/N complete ticks):
+  each node reads all files in its assigned ticks
+  sequentially. Total reads across the cluster: T × F. Each
+  read is a full GET of the file.
+- **Key-partitioned** (each node handles a slice of the
+  keyspace across all ticks): every node must open every
+  tick's files and seek to its key range. Total reads across
+  the cluster: N × T × F. Each read is a partial-file read
+  (seek + bounded scan), which on object storage translates
+  to a range-GET that is no cheaper than a full GET for small
+  files.
+
+For realistic numbers (T = 100K ticks for a ~12-day window at
+10s ticks, F = 5 avg files/tick, N = 10 nodes):
+time-partitioned = 500K full reads; key-partitioned = 5M
+partial reads. The 10× difference is entirely in cloud API
+calls, which dominate both cost and latency.
+
+#### Timestamp handling
+
+##### MVCC timestamp rewriting
+
+MVCC timestamp rewriting **must happen in Phase 3**, not Phase 2.
+Because work is time-partitioned, a key modified in two different
+ticks will be assigned to different nodes. Each node's local
+deduplication only sees its own assigned ticks, so both revisions
+survive Phase 2 — node A holds the key at `ts=100` and node B
+holds it at `ts=200`. During Phase 3's cross-node merge, the
+original MVCC timestamps are needed to determine which revision
+is newer and should win. If Phase 2 rewrote timestamps to
+`Clock().Now()`, all revisions would carry the same timestamp
+and the merge could not distinguish them.
+
+Phase 3 (`bulkmerge`'s `kvStorageWriter`) already rewrites MVCC
+timestamps — it sets `key.Timestamp = writeTS` for every key
+before passing it to `SSTBatcher`. This happens *after* the
+merge iterator has resolved cross-node key conflicts using the
+original timestamps, so no information is lost.
+
+##### Write timestamp ordering
+
+The existing restore path writes all ingested data at a timestamp
+obtained from `Clock().Now()` at the time of ingest (via
+`SSTBatcher`). The revlog replay phase runs *after* the main
+restore completes. By construction, `Clock().Now()` at revlog
+ingest time is later than `Clock().Now()` at main restore ingest
+time. Since MVCC resolution picks the latest writer for a given
+key, revlog data naturally supersedes backup data for any key that
+was modified during the replay window. No special timestamp
+coordination, write barriers, or multi-version reasoning is
+needed.
+
+The AOST does *not* become the write timestamp — it controls which
+revlog events are **included** (the deduplication filter in Phase
+2 discards events with `ts > AOST`), not the MVCC timestamp at
+which data is written into KV. This matches the existing restore's
+timestamp strategy exactly.
+
+#### Integration with existing restore flow
+
+The revlog replay is called at the end of `doResume()` in the
+restore job. The feature is gated behind `buildutil.CrdbTestBuild`
+and the `RevisionLogTimestamp` field in `RestoreDetails`; when
+empty, the replay phase is a no-op and the restore proceeds
+exactly as it does today.
+
+#### Syntax and UX
+
+User-facing syntax:
+`RESTORE ... FROM ... AS OF SYSTEM TIME <ts>`.
+No special option is needed — restore planning detects the
+presence of a revision log at the backup location automatically.
+`AS OF SYSTEM TIME` is **mandatory** when a revision log is
+present (restoring "as of latest" is ill-defined for a live
+log).
+
+TODO — planning-time validation steps and `SHOW BACKUP`
+extension to surface the log's resolved time and restorability
+window.
+
+#### Resumability
+
+TODO — resumability state, on-disk staging area lifecycle, and
+idempotency strategy for partial replay.
+
+#### Implementation sketch / key files
+
+| File | Role |
+|------|------|
+| `pkg/revlog/reader.go` | `LogReader`, `TickReader`, `Event` API |
+| `pkg/sql/sem/tree/backup.go` | `RestoreOptions` struct |
+| `pkg/jobs/jobspb/jobs.proto` | `RestoreDetails` (`revision_log_timestamp`) |
+| `pkg/backup/restore_planning.go` | Restore planning + validation |
+| `pkg/backup/restore_revision_log.go` | Orchestration (new file) |
+| `pkg/backup/restore_job.go` | `doResume()` call site |
+| `pkg/sql/bulkmerge/merge.go` | `bulkmerge.Merge()` (reused as-is) |
 
 ---
 
