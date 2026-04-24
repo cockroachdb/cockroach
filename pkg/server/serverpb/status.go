@@ -103,7 +103,7 @@ type TenantStatusServer interface {
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.
 func (s *OptionalNodesStatusServer) OptionalNodesStatusServer() (NodesStatusServer, error) {
-	v, err := s.w.OptionalErr(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	v, err := s.w.OptionalErr()
 	if err != nil {
 		return nil, err
 	}

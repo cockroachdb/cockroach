@@ -66,12 +66,12 @@ func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 	return w.v, true
 }
 
-// OptionalErr calls Optional and returns an error (referring to the optionally
-// supplied Github issues) if the wrapped object is not available.
-func (w TenantSQLDeprecatedWrapper) OptionalErr(issue int) (interface{}, error) {
+// OptionalErr calls Optional and returns an UnsupportedUnderClusterVirtualization
+// error if the wrapped object is not available.
+func (w TenantSQLDeprecatedWrapper) OptionalErr() (interface{}, error) {
 	v, ok := w.Optional()
 	if !ok {
-		return nil, UnsupportedUnderClusterVirtualization(issue)
+		return nil, UnsupportedUnderClusterVirtualization()
 	}
 	return v, nil
 }
