@@ -21,11 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// SystemDatabaseCache is used to cache the system descriptor IDs.
-// We get to assume that for a given name and a given cluster version, the name
-// to ID mapping will never change for the life of process.
-// This is helpful because unlike other descriptors, we can't always leverage
-// the lease manager to cache all system table IDs.
+// SystemDatabaseCache is used to cache the system descriptor IDs. This is
+// helpful because unlike other descriptors, we can't always leverage the lease
+// manager to cache all system table IDs.
+//
+// Cached mappings are usually stable for the life of the process, but the
+// cache permits a name->ID mapping to be replaced when an incoming observation
+// of the same name carries a different ID at a strictly newer MVCC timestamp.
+// This is required for PCR reader tenants, where a dynamically allocated
+// system table can be bootstrapped at one ID and later re-pointed to a
+// different ID by SetupOrAdvanceStandbyReaderCatalog; the MVCC timestamp guard
+// prevents a stale read at an older AOST from regressing a fresher mapping.
 //
 // Note that scoping the cache by active version might not, in most cases, be
 // necessary. It only comes into use if we rename or drop a system object during
