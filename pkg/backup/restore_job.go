@@ -3520,6 +3520,13 @@ func (r *restoreResumer) OnFailOrCancel(
 		return err
 	}
 
+	// Best-effort cleanup of any intermediate revlog merge SSTs
+	// on this node. SSTs on other nodes are cleaned up by the
+	// background CleanupOrphanedFiles sweeper.
+	if !build.IsRelease() {
+		r.cleanupRevlogMergeSSTs(ctx, p)
+	}
+
 	// Emit to the event log that the job has completed reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StateFailed, r.job)
 	return nil

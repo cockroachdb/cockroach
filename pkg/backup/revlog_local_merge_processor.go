@@ -14,17 +14,21 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 const revlogLocalMergeProcessorName = "revlogLocalMerge"
@@ -36,10 +40,16 @@ const revlogLocalMergeProcessorName = "revlogLocalMerge"
 // mvcc_ts ASC), deduplicates to keep only the latest revision per key
 // with timestamp ≤ the restore AOST, rewrites key prefixes from
 // source to target keyspace, and writes the result as MVCC-encoded
-// SSTs to nodelocal storage.
+// SSTs to nodelocal storage. SST metadata and reservoir samples are
+// sent back to the coordinator via BulkProcessorProgress messages.
 type revlogLocalMergeProcessor struct {
 	execinfra.ProcessorBase
 	spec execinfrapb.RevlogLocalMergeSpec
+
+	cancel   context.CancelFunc
+	wg       ctxgroup.Group
+	progCh   chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	mergeErr error
 }
 
 var (
@@ -54,13 +64,17 @@ func newRevlogLocalMergeProcessor(
 	spec execinfrapb.RevlogLocalMergeSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	proc := &revlogLocalMergeProcessor{spec: spec}
+	proc := &revlogLocalMergeProcessor{
+		spec:   spec,
+		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+	}
 	if err := proc.Init(
 		ctx, proc, post, []*types.T{}, flowCtx, processorID,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: nil,
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				proc.close()
 				return nil
 			},
 		},
@@ -72,12 +86,21 @@ func newRevlogLocalMergeProcessor(
 
 // Start implements the execinfra.RowSource interface.
 func (p *revlogLocalMergeProcessor) Start(ctx context.Context) {
-	p.StartInternal(ctx, revlogLocalMergeProcessorName)
+	ctx = p.StartInternal(ctx, revlogLocalMergeProcessorName)
 	log.Dev.Infof(
-		p.Ctx(),
+		ctx,
 		"revlog local merge processor started with %d ticks",
 		len(p.spec.Ticks),
 	)
+
+	grpCtx, cancel := context.WithCancel(ctx)
+	p.cancel = cancel
+	p.wg = ctxgroup.WithContext(grpCtx)
+	p.wg.GoCtx(func(ctx context.Context) error {
+		defer close(p.progCh)
+		p.mergeErr = p.runLocalMerge(ctx)
+		return nil
+	})
 }
 
 // Next implements the execinfra.RowSource interface.
@@ -86,9 +109,29 @@ func (p *revlogLocalMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 		return nil, p.DrainHelper()
 	}
 
-	err := p.runLocalMerge(p.Ctx())
-	p.MoveToDraining(err)
+	for prog := range p.progCh {
+		pr := prog
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &pr}
+	}
+
+	p.MoveToDraining(p.mergeErr)
 	return nil, p.DrainHelper()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (p *revlogLocalMergeProcessor) ConsumerClosed() {
+	p.close()
+}
+
+func (p *revlogLocalMergeProcessor) close() {
+	if p.Closed {
+		return
+	}
+	if p.cancel != nil {
+		p.cancel()
+	}
+	_ = p.wg.Wait()
+	p.InternalClose()
 }
 
 // runLocalMerge performs the core merge algorithm in a single
@@ -97,7 +140,9 @@ func (p *revlogLocalMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 //  2. K-way merge events across all ticks via a min-heap.
 //  3. Deduplicate: keep the latest timestamp ≤ AOST per key.
 //  4. Rewrite key prefixes (source→target keyspace).
-//  5. Write directly to an output SST on nodelocal storage.
+//  5. Write to output SSTs on nodelocal storage via ExternalFileAllocator,
+//     splitting at the configured batch size threshold.
+//  6. Send SST metadata and reservoir samples back via progCh.
 //
 // Key rewriting preserves sort order because restore allocates new
 // descriptor IDs in the same order as the originals (see allocateIDs
@@ -126,8 +171,13 @@ func (p *revlogLocalMergeProcessor) runLocalMerge(ctx context.Context) error {
 		return errors.Wrap(err, "creating key rewriter")
 	}
 
+	// Write output SSTs to nodelocal://{instanceID}/job/{jobID}/map/,
+	// matching the convention used by import and index backfill so
+	// that BulkJobCleaner can sweep on job completion or failure.
+	instanceID := p.FlowCtx.NodeID.SQLInstanceID()
+	paths := bulkutil.NewDistMergePaths(jobspb.JobID(p.spec.JobID))
 	outputURI := fmt.Sprintf(
-		"nodelocal://0/revlog-merge/%d", p.spec.JobID,
+		"nodelocal://%d/%s", instanceID, paths.MapPath(),
 	)
 	outputStore, err := p.FlowCtx.Cfg.ExternalStorageFromURI(
 		ctx, outputURI, user,
@@ -137,16 +187,53 @@ func (p *revlogLocalMergeProcessor) runLocalMerge(ctx context.Context) error {
 	}
 	defer outputStore.Close()
 
-	wc, err := outputStore.Writer(ctx, "0.sst")
-	if err != nil {
-		return errors.Wrap(err, "opening output SST")
-	}
-	w := storage.MakeIngestionSSTWriter(
-		ctx, p.FlowCtx.Cfg.Settings,
-		objstorageprovider.NewRemoteWritable(wc),
+	alloc := bulksst.NewExternalFileAllocator(
+		outputStore, outputURI, p.FlowCtx.Cfg.DB.KV().Clock(),
 	)
 
-	written := 0
+	maxSize := bulksst.BatchSize.Get(&p.FlowCtx.Cfg.Settings.SV)
+	var w storage.SSTWriter
+	var curURI string
+	var firstKey, lastKey roachpb.Key
+	var keyCount uint64
+
+	openNewSST := func() error {
+		writable, uri, openErr := alloc.AddFile(ctx)
+		if openErr != nil {
+			return errors.Wrap(openErr, "creating output SST file")
+		}
+		curURI = uri
+		w = storage.MakeIngestionSSTWriter(
+			ctx, p.FlowCtx.Cfg.Settings, writable,
+		)
+		firstKey = nil
+		lastKey = nil
+		keyCount = 0
+		return nil
+	}
+
+	flushSST := func() error {
+		if keyCount == 0 {
+			w.Close()
+			return nil
+		}
+		if err := w.Finish(); err != nil {
+			return errors.Wrap(err, "finishing output SST")
+		}
+		span := roachpb.Span{
+			Key:    firstKey,
+			EndKey: lastKey.Next(),
+		}
+		alloc.CommitFile(
+			curURI, span, firstKey, uint64(w.DataSize), keyCount,
+		)
+		return nil
+	}
+
+	if err := openNewSST(); err != nil {
+		return err
+	}
+
 	for entry, mergeErr := range mergeTickEvents(ctx, store, p.spec) {
 		if mergeErr != nil {
 			w.Close()
@@ -166,18 +253,65 @@ func (p *revlogLocalMergeProcessor) runLocalMerge(ctx context.Context) error {
 			continue
 		}
 		entry.Key.Key = rewritten
+
+		// Rewriting the key invalidates the roachpb.Value checksum
+		// (which is computed over the original key). Clear and
+		// recompute it for the new key.
+		if len(entry.Value) > 0 {
+			val := roachpb.Value{RawBytes: entry.Value}
+			val.ClearChecksum()
+			val.InitChecksum(entry.Key.Key)
+			entry.Value = val.RawBytes
+		}
+
+		// Split SSTs at the configured batch size threshold.
+		if keyCount > 0 && w.DataSize >= maxSize {
+			if err := flushSST(); err != nil {
+				return err
+			}
+			if err := openNewSST(); err != nil {
+				return err
+			}
+		}
+
+		if firstKey == nil {
+			firstKey = append(roachpb.Key(nil), entry.Key.Key...)
+		}
+		lastKey = append(lastKey[:0], entry.Key.Key...)
+		keyCount++
 		if err := w.PutRawMVCC(entry.Key, entry.Value); err != nil {
 			w.Close()
 			return errors.Wrapf(err, "writing key %s", entry.Key)
 		}
-		written++
 	}
-	if written == 0 {
-		w.Close()
+
+	if err := flushSST(); err != nil {
+		return err
+	}
+
+	files := alloc.GetFileList()
+	if len(files.SST) == 0 {
 		log.Dev.Infof(ctx, "no events after merge, dedup, and rewrite")
 		return nil
 	}
-	return w.Finish()
+
+	// Send SST metadata back to the coordinator as a BulkMapProgress
+	// message, following the pattern used by import and index backfill.
+	manifests := bulksst.SSTFilesToManifests(files, nil /* writeTS */)
+	mapProgress := execinfrapb.BulkMapProgress{SSTManifests: manifests}
+	any, marshalErr := gogotypes.MarshalAny(&mapProgress)
+	if marshalErr != nil {
+		return errors.Wrap(marshalErr, "marshaling SST manifests")
+	}
+	prog := execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+		ProgressDetails: *any,
+	}
+	select {
+	case p.progCh <- prog:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
 }
 
 // mergeTickEvents reads all assigned ticks, k-way merges their events

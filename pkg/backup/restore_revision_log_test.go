@@ -18,13 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -712,11 +710,12 @@ func TestRevlogDescriptorResolution(t *testing.T) {
 	})
 }
 
-// TestRevlogLocalMerge runs a full restore through the revlog path and
-// verifies the local merge processor produces a non-empty SST. The
-// database has two tables but the restore targets only one, exercising
-// the rekey skip logic for unscoped revlog events.
-func TestRevlogLocalMerge(t *testing.T) {
+// TestRestoreFromRevlog runs a full restore through the revlog path
+// and verifies that the restored data in KV reflects the mutations
+// captured by the revision log. The database has two tables but the
+// restore targets only one, exercising the rekey skip logic for
+// unscoped revlog events.
+func TestRestoreFromRevlog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -735,10 +734,7 @@ func TestRevlogLocalMerge(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE src.foo (k INT PRIMARY KEY, v STRING)`)
 	sqlDB.Exec(t, `INSERT INTO src.foo VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')`)
 	// A second table in the same database ensures the revlog
-	// contains events for tables outside the restore scope. Without
-	// the rekey skip fix, the local merge processor would fail with
-	// "missing descriptor for table ..." when it encounters bar's
-	// keys.
+	// contains events for tables outside the restore scope.
 	sqlDB.Exec(t, `CREATE TABLE src.bar (k INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO src.bar VALUES (1), (2)`)
 
@@ -777,25 +773,33 @@ func TestRevlogLocalMerge(t *testing.T) {
 		dest, aost,
 	))
 
-	// Find the restore job ID to locate the output SST.
-	var restoreJobID int64
-	sqlDB.QueryRow(t,
-		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`,
-	).Scan(&restoreJobID)
+	// Verify the restored data matches the expected state at the
+	// AOST: k=1 updated, k=2 deleted, k=3 unchanged, k=100 inserted.
+	rows := sqlDB.QueryStr(t,
+		`SELECT k, v FROM restored.foo ORDER BY k`,
+	)
+	expected := [][]string{
+		{"1", "updated"},
+		{"3", "gamma"},
+		{"100", "new"},
+	}
+	require.Equal(t, expected, rows)
 
-	// Verify the SST has data by iterating — at least one entry
-	// must be present.
-	sstPath := filepath.Join(dir, "revlog-merge", fmt.Sprintf("%d", restoreJobID), "0.sst")
-	sstBytes, err := os.ReadFile(sstPath)
-	require.NoError(t, err, "reading output SST at %s", sstPath)
-	iter, err := storage.NewMemSSTIterator(sstBytes, false /* verify */, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsOnly,
-		UpperBound: keys.MaxKey,
-	})
-	require.NoError(t, err)
-	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{})
-	ok, err := iter.Valid()
-	require.NoError(t, err)
-	require.True(t, ok, "expected non-empty SST from revlog local merge")
+	// Verify that intermediate SSTs were cleaned up after restore.
+	// The local merge writes to nodelocal://{id}/job/{jobID}/map/,
+	// which maps to {dir}/job/{jobID}/ on disk.
+	jobDir := filepath.Join(dir, "job")
+	entries, err := os.ReadDir(jobDir)
+	if err == nil {
+		for _, e := range entries {
+			subdir := filepath.Join(jobDir, e.Name())
+			files, _ := filepath.Glob(
+				filepath.Join(subdir, "**", "*.sst"),
+			)
+			require.Empty(t, files,
+				"expected no leftover SSTs in %s", subdir,
+			)
+		}
+	}
+	// If jobDir doesn't exist at all, cleanup succeeded.
 }
