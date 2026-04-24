@@ -172,10 +172,11 @@ func ensureTypeMetadataIsHydrated(
 			}
 		}
 		tm.DomainData = &types.DomainMetadata{
-			BaseType:         d.GetBaseType(),
-			NotNull:          d.IsNotNull(),
-			DefaultExpr:      d.GetDefaultExpr(),
-			CheckConstraints: checks,
+			BaseType:              d.GetBaseType(),
+			NotNull:               d.IsNotNull(),
+			NotNullConstraintName: d.GetNotNullConstraintName(),
+			DefaultExpr:           d.GetDefaultExpr(),
+			CheckConstraints:      checks,
 		}
 	}
 }

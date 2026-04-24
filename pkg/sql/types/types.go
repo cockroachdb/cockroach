@@ -349,6 +349,9 @@ type DomainMetadata struct {
 	BaseType *T
 	// NotNull is true if the domain has a NOT NULL constraint.
 	NotNull bool
+	// NotNullConstraintName is the name of the NOT NULL constraint.
+	// Empty if the domain has no NOT NULL constraint.
+	NotNullConstraintName string
 	// DefaultExpr is the default expression for the domain, serialized as
 	// a string. Empty if no default is specified.
 	DefaultExpr string

@@ -752,3 +752,96 @@ statement ok
 DROP DOMAIN d_atom
 
 subtest end
+
+subtest domain_constraint_names
+
+# Test that constraint naming behaves like PG18.
+
+statement error pgcode 42710 constraint "upper_bound" for domain d_constraint_names already exists
+CREATE DOMAIN d_constraint_names AS INT
+  CONSTRAINT upper_bound CHECK (VALUE < 100)
+  CONSTRAINT upper_bound CHECK (VALUE < 500);
+
+statement ok
+CREATE DOMAIN d_constraint_names AS INT 
+  CONSTRAINT d_constraint_names_not_null CHECK (VALUE > 0)
+  NOT NULL
+  CONSTRAINT d_constraint_names_check1 CHECK (VALUE < 13)
+  CHECK (VALUE < 17)
+  CHECK (VALUE < 19)
+  CHECK (VALUE != 23);
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_constraint_names'::regtype
+ORDER BY conname
+----
+conname                       contype  condef
+d_constraint_names_check      c        CHECK ((value < 17))
+d_constraint_names_check1     c        CHECK ((value < 13))
+d_constraint_names_check2     c        CHECK ((value < 19))
+d_constraint_names_check3     c        CHECK ((value != 23))
+d_constraint_names_not_null   c        CHECK ((value > 0))
+d_constraint_names_not_null1  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_constraint_names;
+
+# Domain with only NOT NULL and no CHECK constraints.
+statement ok
+CREATE DOMAIN d_not_null_only AS INT NOT NULL;
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_not_null_only'::regtype
+ORDER BY conname
+----
+conname               contype  condef
+d_not_null_only_not_null  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_not_null_only;
+
+# Test a not null constraint name-colliding with a check constraint.
+statement ok
+CREATE DOMAIN d_nn_collision AS INT
+  CONSTRAINT d_nn_collision_not_null CHECK (VALUE > 0)
+  NOT NULL;
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_nn_collision'::regtype
+ORDER BY conname
+----
+conname                   contype  condef
+d_nn_collision_not_null   c        CHECK ((value > 0))
+d_nn_collision_not_null1  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_nn_collision;
+
+
+# TODO(166932): name this constraint when there's grammar support
+# Test a check constraint name-colliding with a not null constraint.
+statement ok
+CREATE DOMAIN d_c_collision AS INT
+  NOT NULL 
+  CHECK (VALUE > 0);
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_c_collision'::regtype
+ORDER BY conname
+----
+conname                 contype  condef
+d_c_collision_check     c        CHECK ((value > 0))
+d_c_collision_not_null  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_c_collision;
+
+subtest end

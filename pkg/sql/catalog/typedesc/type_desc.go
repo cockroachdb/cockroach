@@ -507,6 +507,32 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil domain"))
 		} else if desc.Domain.BaseType == nil {
 			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil base type"))
+		} else {
+			if desc.Domain.NotNull {
+				if desc.Domain.NotNullConstraintName == "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NotNull but no NOT NULL constraint name",
+					))
+				}
+				if desc.Domain.NotNullConstraintID == 0 {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NotNull but no NOT NULL constraint ID",
+					))
+				}
+			} else {
+				if desc.Domain.NotNullConstraintName != "" {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NOT NULL constraint name %q but NotNull is false",
+						desc.Domain.NotNullConstraintName,
+					))
+				}
+				if desc.Domain.NotNullConstraintID != 0 {
+					vea.Report(errors.AssertionFailedf(
+						"DOMAIN type desc has NOT NULL constraint ID %d but NotNull is false",
+						desc.Domain.NotNullConstraintID,
+					))
+				}
+			}
 		}
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor: kind %s should never be serialized or validated", desc.Kind.String()))
@@ -1077,6 +1103,16 @@ func (desc *immutable) IsNotNull() bool {
 	return desc.Domain.NotNull
 }
 
+// GetNotNullConstraintName implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintName() string {
+	return desc.Domain.NotNullConstraintName
+}
+
+// GetNotNullConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetNotNullConstraintID() descpb.ConstraintID {
+	return desc.Domain.NotNullConstraintID
+}
+
 // GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetDefaultExpr() string {
 	return desc.Domain.DefaultExpr
@@ -1095,6 +1131,11 @@ func (desc *immutable) GetCheckConstraintName(idx int) string {
 // GetCheckConstraintExpr implements the catalog.DomainTypeDescriptor interface.
 func (desc *immutable) GetCheckConstraintExpr(idx int) string {
 	return desc.Domain.CheckConstraints[idx].Expr
+}
+
+// GetCheckConstraintID implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintID(idx int) descpb.ConstraintID {
+	return desc.Domain.CheckConstraints[idx].ConstraintID
 }
 
 // Aliased implements the catalog.AliasTypeDescriptor interface.
