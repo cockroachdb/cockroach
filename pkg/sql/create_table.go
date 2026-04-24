@@ -941,6 +941,7 @@ func ResolveFK(
 			persistenceType,
 		)
 	}
+
 	if target.ID == tbl.ID {
 		// When adding a self-ref FK to an _existing_ table, we want to make sure
 		// we edit the same copy.
@@ -2526,6 +2527,28 @@ func newTableDesc(
 	// in descriptors from FK depended-on tables using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
 	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
+		// Check REFERENCES privilege on all FK parent tables before creating
+		// the table descriptor. If the parent table cannot be resolved, it is
+		// either a self-referencing FK (the table being created) or a genuinely
+		// missing table; either way, ResolveFK inside NewTableDesc will handle
+		// it, so we skip the privilege check here.
+		for _, def := range n.Defs {
+			if d, ok := def.(*tree.ForeignKeyConstraintTableDef); ok {
+				_, parentDesc, resolveErr := resolver.ResolveMutableExistingTableObject(
+					params.ctx, params.p, &d.Table, false /* required */, tree.ResolveRequireTableDesc,
+				)
+				if resolveErr != nil {
+					err = resolveErr
+					return
+				}
+				if parentDesc == nil {
+					continue
+				}
+				if err = params.p.checkFKReferencesPrivilege(params.ctx, parentDesc); err != nil {
+					return
+				}
+			}
+		}
 		ret, err = NewTableDesc(
 			params.ctx,
 			params.p.txn,

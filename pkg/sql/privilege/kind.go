@@ -73,7 +73,8 @@ const (
 	BUILTIN_UNSAFE_ALLOWED Kind = 42
 	MAINTAIN               Kind = 43
 	TEMPORARY              Kind = 44
-	largestKind                 = TEMPORARY
+	REFERENCES             Kind = 45
+	largestKind                 = REFERENCES
 
 	// RULE, SET, and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
 	// They exist solely for ACL character mapping used by acldefault, aclexplode,
@@ -187,6 +188,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "MAINTAIN"
 	case TEMPORARY:
 		return "TEMPORARY"
+	case REFERENCES:
+		return "REFERENCES"
 	case SET:
 		return "SET"
 	case ALTERSYSTEM:

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -286,6 +287,21 @@ func (p *planner) CheckPrivilege(
 	ctx context.Context, object privilege.Object, privilege privilege.Kind,
 ) error {
 	return p.CheckPrivilegeForUser(ctx, object, privilege, p.User())
+}
+
+// checkFKReferencesPrivilege verifies that the current user has the REFERENCES
+// privilege on the referenced (parent) table for FK creation. Before the
+// V26_3_GrantReferencesToUsersWithCreate version is active, no check is
+// performed because the REFERENCES privilege does not yet exist.
+func (p *planner) checkFKReferencesPrivilege(
+	ctx context.Context, parent catalog.TableDescriptor,
+) error {
+	if !p.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.V26_3_GrantReferencesToUsersWithCreate,
+	) {
+		return nil
+	}
+	return p.CheckPrivilege(ctx, parent, privilege.REFERENCES)
 }
 
 // MustCheckGrantOptionsForUser calls PrivilegeDescriptor.CheckGrantOptions, which
