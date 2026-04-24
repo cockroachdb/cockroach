@@ -193,13 +193,15 @@ func runMutationStatement(
 	}()
 
 	stmt, stmtType := smither.GenerateWithTag()
+	timeout := statementTimeout
 	if stmtType == tree.TypeDDL {
 		defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+		timeout *= 3
 	}
 
 	// Ignore timeouts.
 	var err error
-	_ = runWithTimeout(t, func() error {
+	_ = runWithTimeout(t, timeout, func() error {
 		// Ignore errors. Log successful statements.
 		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(connInfo + stmt)
@@ -240,7 +242,7 @@ func runTLPQuery(
 	unpartitioned, partitioned, args := smither.GenerateTLP()
 	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
 
-	return runWithTimeout(t, func() error {
+	return runWithTimeout(t, statementTimeout, func() error {
 		counts := conn.QueryRow(combined, args...)
 		var undiffCount, diffCount int
 		if err := counts.Scan(&undiffCount, &diffCount); err != nil {
@@ -293,7 +295,7 @@ func runTLPQuery(
 	})
 }
 
-func runWithTimeout(t task.Tasker, f func() error) error {
+func runWithTimeout(t task.Tasker, timeout time.Duration, f func() error) error {
 	done := make(chan error, 1)
 	t.Go(func(context.Context, *logger.Logger) error {
 		err := f()
@@ -301,7 +303,7 @@ func runWithTimeout(t task.Tasker, f func() error) error {
 		return nil
 	})
 	select {
-	case <-time.After(statementTimeout + time.Second*5):
+	case <-time.After(timeout + time.Second*5):
 		// Ignore timeouts.
 		return nil
 	case err := <-done:
