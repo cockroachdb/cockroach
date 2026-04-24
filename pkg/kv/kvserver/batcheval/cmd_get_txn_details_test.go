@@ -540,6 +540,73 @@ func TestCollectDependencies(t *testing.T) {
 		require.Equal(t, writerB, resp.Dependencies[0])
 	})
 
+	t.Run("own write at commitTS looks through to prior version", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Writer A wrote key "a" at ts=5. Self overwrote it at ts=10
+		// (commitTS). The version at commitTS is our own write; the
+		// dependency is the version we read before overwriting (ts=5).
+		putVal(t, eng, "a", 5, "old")
+		putVal(t, eng, "a", 10, "new")
+
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
+		idx.Record(ts(5), writerA)
+		idx.Record(ts(10), selfID)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Len(t, resp.Dependencies, 1)
+		require.Equal(t, writerA, resp.Dependencies[0])
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("own write at commitTS with no prior version", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Self wrote key "a" at ts=10 (commitTS) with no prior version.
+		// No dependency should be added.
+		putVal(t, eng, "a", 10, "new")
+
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
+		idx.Record(ts(10), selfID)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 1,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(1), resp.EventHorizon)
+	})
+
+	t.Run("own write at commitTS with prior below cutoff", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Writer A wrote at ts=2, self overwrote at ts=10. Cutoff is
+		// ts=5, so the prior version at ts=2 is below the cutoff and
+		// should not produce a dependency.
+		putVal(t, eng, "a", 2, "old")
+		putVal(t, eng, "a", 10, "new")
+
+		idx, err := txnfeed.NewCommitIndex()
+		require.NoError(t, err)
+		idx.Record(ts(2), writerA)
+		idx.Record(ts(10), selfID)
+
+		resp := evalGetTxnDetailsWithDeps(
+			t, eng, "a", "z", selfID, 10, 5,
+			[]roachpb.Span{mkSpan("a", "b")}, idx)
+
+		require.Empty(t, resp.Dependencies)
+		require.Equal(t, ts(5), resp.EventHorizon)
+	})
+
 	t.Run("event horizon tracks worst miss", func(t *testing.T) {
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()

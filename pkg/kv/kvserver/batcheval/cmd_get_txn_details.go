@@ -217,6 +217,12 @@ func collectWrites(
 // up the writing transaction in the CommitIndex and adds it to deps. Tombstones
 // are skipped since they represent deletes, not values the transaction read.
 //
+// When the latest version has timestamp == commitTS, it may be our own write.
+// In that case the value we actually read is the prior version. Rather than
+// inspecting the CommitIndex to determine authorship, we simply process both
+// versions — the self-exclusion filter (id != selfTxnID) prevents us from
+// adding ourselves, and overstating deps is acceptable.
+//
 // If a timestamp is not found in the CommitIndex, eventHorizon is forwarded to
 // that timestamp. The caller uses eventHorizon to communicate which portion of
 // the time window has complete dependency coverage.
@@ -281,22 +287,60 @@ func collectDependencies(
 		}
 
 		if !mvccVal.IsTombstone() {
-			txnIDs, found := commitIndex.Lookup(key.Timestamp)
-			if found {
-				for _, id := range txnIDs {
-					if id != selfTxnID {
-						deps[id] = struct{}{}
-					}
-				}
-			} else {
-				eventHorizon.Forward(key.Timestamp)
-			}
+			addDep(key.Timestamp, selfTxnID, commitIndex, deps, eventHorizon)
 		}
 
-		// The incremental iterator may return multiple versions per key.
-		// We only care about the latest version (the first one encountered),
-		// so skip to the next user key.
-		iter.NextKey()
+		if key.Timestamp == commitTS {
+			// This version may be our own write. The value we actually
+			// read is the prior version, so also check it. If it turns
+			// out this wasn't our write, we harmlessly overstate deps.
+			savedKey := key.Key.Clone()
+			iter.Next()
+			ok, err = iter.Valid()
+			if err != nil {
+				return err
+			}
+			if ok && iter.UnsafeKey().IsValue() &&
+				bytes.Equal(iter.UnsafeKey().Key, savedKey) {
+				prevRaw, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				prevVal, err := storage.DecodeMVCCValue(prevRaw)
+				if err != nil {
+					return err
+				}
+				if !prevVal.IsTombstone() {
+					addDep(iter.UnsafeKey().Timestamp, selfTxnID, commitIndex, deps, eventHorizon)
+				}
+				iter.NextKey()
+			}
+			// If no prior version was found on this key, the iterator
+			// is already positioned on the next key (or exhausted).
+		} else {
+			iter.NextKey()
+		}
 	}
 	return nil
+}
+
+// addDep looks up ts in the CommitIndex and adds all txnIDs except
+// selfTxnID to deps. If ts is not found, eventHorizon is forwarded.
+func addDep(
+	ts hlc.Timestamp,
+	selfTxnID uuid.UUID,
+	commitIndex *txnfeed.CommitIndex,
+	deps map[uuid.UUID]struct{},
+	eventHorizon *hlc.Timestamp,
+) {
+	txnIDs, found := commitIndex.Lookup(ts)
+	if found {
+		for _, id := range txnIDs {
+			if id != selfTxnID {
+				deps[id] = struct{}{}
+			}
+		}
+	} else {
+		eventHorizon.Forward(ts)
+	}
 }
