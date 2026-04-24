@@ -32,6 +32,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	// tpcWorkloads are the TPC-* workloads that must run sequentially
+	// to avoid log.Scope() race condition (see #164266).
+	tpcWorkloads = map[string]struct{}{
+		"tpcc":        {},
+		"tpccmultidb": {},
+	}
+
+	// unsupportedWorkloads are workloads that don't work with IMPORT or have other issues.
+	unsupportedWorkloads = map[string]struct{}{
+		"workload_generator":     {}, // Takes schema from flags at runtime
+		"startrek":               {}, // Doesn't work with IMPORT
+		"roachmart":              {}, // Doesn't work with IMPORT
+		"interleavedpartitioned": {}, // Doesn't work with IMPORT
+		"ttlbench":               {}, // Doesn't work with IMPORT
+		"tpch":                   {}, // Excluded (TODO: implement trimmed version)
+	}
+)
+
 func bigInitialData(meta workload.Meta) bool {
 	switch meta.Name {
 	case `tpcc`, `tpch`, `tpcds`, `tpccmultidb`:
@@ -41,13 +60,73 @@ func bigInitialData(meta workload.Meta) bool {
 	}
 }
 
-func TestAllRegisteredImportFixture(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+// runImportFixtureTest runs the import fixture test for a given workload.
+func runImportFixtureTest(
+	t *testing.T, meta workload.Meta, gen workload.Generator, sqlMemoryPoolSize int64,
+) {
+	if bigInitialData(meta) {
+		skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
+	}
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// The test tenant needs to be disabled for this test until
+		// we address #75449.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+		UseDatabase:       "d",
+		SQLMemoryPoolSize: sqlMemoryPoolSize,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+
+	l := workloadccl.ImportDataLoader{}
+	if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	// Run the consistency check if this workload has one.
+	if h, ok := gen.(workload.Hookser); ok {
+		if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
+			if err := checkConsistencyFn(ctx, db); err != nil {
+				t.Errorf(`%+v`, err)
+			}
+		}
+	}
+}
+
+// runImportFixtures runs import fixture tests for the provided workloads.
+func runImportFixtures(t *testing.T, metas []workload.Meta) {
+	skip.UnderDeadlock(t)
 
 	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
 
-	for _, meta := range workload.Registered() {
+	for _, meta := range metas {
 		meta := meta
+		gen := meta.New()
+
+		if skip.Duress() && meta.Name != `bank` {
+			continue
+		}
+
+		t.Run(meta.Name, func(t *testing.T) {
+			runImportFixtureTest(t, meta, gen, sqlMemoryPoolSize)
+		})
+	}
+}
+
+// TestImportFixture_TPC runs tpcc and tpccmultidb sequentially.
+// These must run sequentially to avoid log.Scope() race condition (see #164266).
+func TestImportFixture_TPCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Filter registered workloads to only include TPCC-* workloads.
+	var metas []workload.Meta
+	for _, meta := range workload.Registered() {
+		if _, ok := tpcWorkloads[meta.Name]; !ok {
+			continue
+		}
+
 		gen := meta.New()
 		hasInitialData := len(gen.Tables()) != 0
 		for _, table := range gen.Tables() {
@@ -60,55 +139,44 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			continue
 		}
 
-		// This test is big enough that it causes timeout issues under race, so only
-		// run one workload. Doing any more than this doesn't get us enough to be
-		// worth the hassle.
-		if util.RaceEnabled && meta.Name != `bank` {
-			continue
-		}
-
-		switch meta.Name {
-		case `startrek`, `roachmart`, `interleavedpartitioned`, `ttlbench`:
-			// These don't work with IMPORT.
-			continue
-		case `tpch`:
-			// TODO(dan): Implement a timmed down version of TPCH to keep the test
-			// runtime down.
-			continue
-		}
-
-		t.Run(meta.Name, func(t *testing.T) {
-			if bigInitialData(meta) {
-				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
-			}
-			defer log.Scope(t).Close(t)
-
-			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// The test tenant needs to be disabled for this test until
-				// we address #75449.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				UseDatabase:       "d",
-				SQLMemoryPoolSize: sqlMemoryPoolSize,
-			})
-			defer s.Stopper().Stop(ctx)
-			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-
-			l := workloadccl.ImportDataLoader{}
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
-				t.Fatalf(`%+v`, err)
-			}
-
-			// Run the consistency check if this workload has one.
-			if h, ok := gen.(workload.Hookser); ok {
-				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
-					if err := checkConsistencyFn(ctx, db); err != nil {
-						t.Errorf(`%+v`, err)
-					}
-				}
-			}
-		})
+		metas = append(metas, meta)
 	}
+
+	require.NotEmpty(t, metas, "no TPC workloads registered to run")
+	runImportFixtures(t, metas)
+}
+
+// TestImportFixture_Others runs all workloads except tpcc, tpccmultidb, and those that don't work with IMPORT.
+func TestImportFixture_Others(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Filter registered workloads, excluding TPCC-* and unsupported workloads.
+	var metas []workload.Meta
+	for _, meta := range workload.Registered() {
+		if _, ok := tpcWorkloads[meta.Name]; ok {
+			continue
+		}
+		if _, ok := unsupportedWorkloads[meta.Name]; ok {
+			continue
+		}
+
+		gen := meta.New()
+		hasInitialData := len(gen.Tables()) != 0
+		for _, table := range gen.Tables() {
+			if table.InitialRows.FillBatch == nil {
+				hasInitialData = false
+				break
+			}
+		}
+		if !hasInitialData {
+			continue
+		}
+
+		metas = append(metas, meta)
+	}
+
+	require.NotEmpty(t, metas, "no other workloads registered to run")
+	runImportFixtures(t, metas)
 }
 
 func TestAllRegisteredSetup(t *testing.T) {
