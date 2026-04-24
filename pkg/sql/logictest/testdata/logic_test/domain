@@ -752,3 +752,40 @@ statement ok
 DROP DOMAIN d_atom
 
 subtest end
+
+subtest domain_constraint_names
+
+# Test that constraint naming behaves like PG18.
+
+statement error pgcode 42710 constraint "upper_bound" for domain d_constraint_names already exists
+CREATE DOMAIN d_constraint_names AS INT
+  CONSTRAINT upper_bound CHECK (VALUE < 100)
+  CONSTRAINT upper_bound CHECK (VALUE < 500);
+
+statement ok
+CREATE DOMAIN d_constraint_names AS INT 
+  CONSTRAINT d_constraint_names_not_null CHECK (VALUE > 0)
+  NOT NULL
+  CONSTRAINT d_constraint_names_check1 CHECK (VALUE < 13)
+  CHECK (VALUE < 17)
+  CHECK (VALUE < 19)
+  CHECK (VALUE != 23);
+
+query TTT colnames
+SELECT conname, contype, pg_get_constraintdef(oid) AS condef
+FROM pg_constraint
+WHERE contypid = 'd_constraint_names'::regtype
+ORDER BY conname
+----
+conname                       contype  condef
+d_constraint_names_check      c        CHECK ((value < 17))
+d_constraint_names_check1     c        CHECK ((value < 13))
+d_constraint_names_check2     c        CHECK ((value < 19))
+d_constraint_names_check3     c        CHECK ((value != 23))
+d_constraint_names_not_null   c        CHECK ((value > 0))
+d_constraint_names_not_null1  n        NOT NULL
+
+statement ok
+DROP DOMAIN d_constraint_names;
+
+subtest end
