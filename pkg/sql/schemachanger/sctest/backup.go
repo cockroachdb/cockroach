@@ -904,8 +904,10 @@ func exerciseBackupRestore(
 		for _, row := range backupContents {
 			switch row[2] {
 			case "table":
-				fqn := fmt.Sprintf("%s.%s.%s", cs.DatabaseName, row[0], row[1])
-				tablesToRestore = append(tablesToRestore, fqn)
+				tn := tree.MakeTableNameWithSchema(
+					tree.Name(cs.DatabaseName), tree.Name(row[0]), tree.Name(row[1]),
+				)
+				tablesToRestore = append(tablesToRestore, tn.FQString())
 			case "schema":
 				if row[1] != "public" {
 					tablesToRestore = nil
