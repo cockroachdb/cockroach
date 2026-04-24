@@ -257,11 +257,19 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="factor">
-        {storeMetrics(
-          {
-            name: "cr.store.rocksdb.read-amplification",
-            aggregateAvg: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.rocksdb.read-amplification",
+              aggregateAvg: true,
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.read-amplification",
+              aggregateAvg: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -305,8 +313,17 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="sstables">
-        {storeMetrics(
-          { name: "cr.store.storage.l0-num-files" },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.storage.l0-num-files",
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.l0-num-files",
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -322,8 +339,17 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="Size" units={AxisUnits.Bytes}>
-        {storeMetrics(
-          { name: "cr.store.storage.l0-level-size" },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.storage.l0-level-size",
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.l0-level-size",
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -339,11 +365,19 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {storeMetrics(
-          {
-            name: "cr.store.rocksdb.flushed-bytes",
-            nonNegativeRate: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.rocksdb.flushed-bytes",
+              nonNegativeRate: true,
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.flushed-bytes",
+              nonNegativeRate: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -359,11 +393,19 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {storeMetrics(
-          {
-            name: "cr.store.storage.wal.bytes_written",
-            nonNegativeRate: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.storage.wal.bytes_written",
+              nonNegativeRate: true,
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.wal-bytes-written",
+              nonNegativeRate: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -379,11 +421,19 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="written bytes">
-        {storeMetrics(
-          {
-            name: "cr.store.rocksdb.compacted-bytes-written",
-            nonNegativeRate: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.rocksdb.compacted-bytes-written",
+              nonNegativeRate: true,
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.compacted-bytes-written",
+              nonNegativeRate: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -421,11 +471,22 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="count">
-        <Metric
-          name="cr.store.storage.write-stalls"
-          title="Write Stalls"
-          nonNegativeRate
-        />
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "state",
+              name: "cr.store.storage.write-stalls",
+              nonNegativeRate: true,
+            },
+            {
+              prefix: "log",
+              name: "cr.store.log-engine.write-stalls",
+              nonNegativeRate: true,
+            },
+          ],
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
       </Axis>
     </LineGraph>,
 
