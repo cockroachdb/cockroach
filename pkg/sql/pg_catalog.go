@@ -1148,6 +1148,7 @@ https://www.postgresql.org/docs/18/catalog-pg-collation.html`,
 var (
 	conTypeCheck     = tree.NewDString("c")
 	conTypeFK        = tree.NewDString("f")
+	conTypeNotNull   = tree.NewDString("n")
 	conTypePKey      = tree.NewDString("p")
 	conTypeUnique    = tree.NewDString("u")
 	conTypeTrigger   = tree.NewDString("t")
@@ -1397,6 +1398,104 @@ func populateTableConstraints(
 	return nil
 }
 
+func populateDomainConstraints(
+	h oidHasher, nspOid tree.Datum, _ tree.Datum, typ *types.T, addRow func(...tree.Datum) error,
+) error {
+	d := typ.TypeMeta.DomainData
+	if d == nil {
+		return nil
+	}
+
+	typOid := typ.Oid()
+
+	for _, ck := range d.CheckConstraints {
+		conoid := h.DomainConstraintOid(typOid, ck.ConstraintID)
+		displayExpr := ck.Expr
+		if parsedExpr, err := parser.ParseExpr(ck.Expr); err == nil {
+			f := tree.NewFmtCtx(tree.FmtPGCatalog)
+			f.FormatNode(parsedExpr)
+			displayExpr = f.CloseAndGetString()
+		}
+		consrc := tree.NewDString(fmt.Sprintf("(%s)", displayExpr))
+		condef := tree.NewDString(fmt.Sprintf("CHECK ((%s))", displayExpr))
+		if err := addRow(
+			conoid,               // oid
+			dNameOrNull(ck.Name), // conname
+			nspOid,               // connamespace
+			conTypeCheck,         // contype
+			tree.DBoolFalse,      // condeferrable
+			tree.DBoolFalse,      // condeferred
+			tree.DBoolTrue,       // convalidated
+			oidZero,              // conrelid
+			tree.NewDOid(typOid), // contypid
+			oidZero,              // conindid
+			oidZero,              // conparentid
+			oidZero,              // confrelid
+			tree.DNull,           // confupdtype
+			tree.DNull,           // confdeltype
+			tree.DNull,           // confmatchtype
+			tree.DBoolTrue,       // conislocal
+			zeroVal,              // coninhcount
+			tree.DBoolTrue,       // connoinherit
+			tree.DNull,           // conkey
+			tree.DNull,           // confkey
+			tree.DNull,           // conpfeqop
+			tree.DNull,           // conppeqop
+			tree.DNull,           // conffeqop
+			tree.DNull,           // confdelsetcols
+			tree.DNull,           // conexclop
+			consrc,               // conbin
+			consrc,               // consrc
+			condef,               // condef
+			tree.DBoolTrue,       // conenforced
+			tree.DBoolFalse,      // conperiod
+		); err != nil {
+			return err
+		}
+	}
+
+	if d.NotNull {
+		conoid := h.DomainConstraintOid(typOid, d.NotNullConstraintID)
+		condef := tree.NewDString("NOT NULL")
+		if err := addRow(
+			conoid,                               // oid
+			dNameOrNull(d.NotNullConstraintName), // conname
+			nspOid,                               // connamespace
+			conTypeNotNull,                       // contype
+			tree.DBoolFalse,                      // condeferrable
+			tree.DBoolFalse,                      // condeferred
+			tree.DBoolTrue,                       // convalidated
+			oidZero,                              // conrelid
+			tree.NewDOid(typOid),                 // contypid
+			oidZero,                              // conindid
+			oidZero,                              // conparentid
+			oidZero,                              // confrelid
+			tree.DNull,                           // confupdtype
+			tree.DNull,                           // confdeltype
+			tree.DNull,                           // confmatchtype
+			tree.DBoolTrue,                       // conislocal
+			zeroVal,                              // coninhcount
+			tree.DBoolTrue,                       // connoinherit
+			tree.DNull,                           // conkey
+			tree.DNull,                           // confkey
+			tree.DNull,                           // conpfeqop
+			tree.DNull,                           // conppeqop
+			tree.DNull,                           // conffeqop
+			tree.DNull,                           // confdelsetcols
+			tree.DNull,                           // conexclop
+			tree.DNull,                           // conbin
+			tree.DNull,                           // consrc
+			condef,                               // condef
+			tree.DBoolTrue,                       // conenforced
+			tree.DBoolFalse,                      // conperiod
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 type oneAtATimeSchemaResolver struct {
 	ctx context.Context
 	p   *planner
@@ -1561,7 +1660,8 @@ https://www.postgresql.org/docs/18/catalog-pg-constraint.html`,
 	hideVirtual, /* Virtual tables have no constraints */
 	false,       /* includesIndexEntries */
 	populateTableConstraints,
-	nil)
+	populateDomainConstraints,
+)
 
 // colIDArrayToDatum returns an int[] containing the ColumnIDs, or NULL if there
 // are no ColumnIDs.
@@ -6072,6 +6172,7 @@ const (
 	triggerTypeTag
 	policyTypeTag
 	roleMembershipTypeTag
+	domainConstraintTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -6185,6 +6286,15 @@ func (h oidHasher) UniqueConstraintOid(
 	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeIndex(uwi.GetID())
+	return h.getOid()
+}
+
+func (h oidHasher) DomainConstraintOid(
+	typeOid oid.Oid, constraintID descpb.ConstraintID,
+) *tree.DOid {
+	h.writeTypeTag(domainConstraintTypeTag)
+	h.writeUInt32(uint32(typeOid))
+	h.writeUInt32(uint32(constraintID))
 	return h.getOid()
 }
 
