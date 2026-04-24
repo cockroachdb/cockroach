@@ -33,7 +33,7 @@ h1 a:hover { text-decoration: underline; }
 .row .state .val { color: #222; }
 .row .state .item.changed .key { color: #8a6d00; }
 .row .state .item.changed .val { color: #5c4900; font-weight: 600; }
-.cell { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+.cell { min-width: 32px; height: 28px; padding: 0 4px; display: flex; align-items: center; justify-content: center;
         border-radius: 3px; font-size: 12px; font-weight: 400; color: #222;
         border: 1px solid rgba(0,0,0,0.12); }
 .cell.changed { font-weight: 800; box-shadow: 0 0 0 2px #d4a800; }
@@ -122,7 +122,7 @@ function renderVoterLog(log, prevLog, initial) {
       const changed = !initial && (!prev || prev.term !== e.term || prev.index !== e.index);
       const cls = 'cell' + (changed ? ' changed' : '');
       html += '<div class="' + cls + '" style="background:' + termBg(e.term) + '">' +
-        escHtml(e.index) + '</div>';
+        escHtml(e.term) + escHtml(e.index) + '</div>';
     }
   }
   html += '</div>';
@@ -165,18 +165,19 @@ function renderWitnessLog(witness, prevWitness, initial) {
     return html;
   }
   const bg = termBg(term);
+  const lbl = escHtml(term || '');
   if (engaged) {
     for (let i = 1; i <= 8; i++) {
       const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
-      html += '<div class="' + cls + '" style="background:' + bg + '">' + i + '</div>';
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
     }
     const tailCls = (!initial && engaged && !prevEngaged) ? ' changed' : '';
-    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">…</div>';
-    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">∞</div>';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '…</div>';
+    html += '<div class="cell synthetic' + tailCls + '" style="background:' + bg + '">' + lbl + '∞</div>';
   } else {
     for (let i = 1; i <= idx; i++) {
       const cls = 'cell' + (cellChanged(i) ? ' changed' : '');
-      html += '<div class="' + cls + '" style="background:' + bg + '">' + i + '</div>';
+      html += '<div class="' + cls + '" style="background:' + bg + '">' + lbl + i + '</div>';
     }
   }
   html += '</div>';
