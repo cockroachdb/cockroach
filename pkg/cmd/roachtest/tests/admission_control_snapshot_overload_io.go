@@ -33,40 +33,36 @@ import (
 // brought down. Upon restart, n3 starts to receive large amounts of snapshot
 // data. It is expected that l0 sublevel counts and p99 latencies remain stable.
 func registerSnapshotOverloadIO(r registry.Registry) {
-	baseClouds := registry.OnlyGCE
-	addVariants := func(subtest string, cfg admissionControlSnapshotOverloadIOOpts) {
-		baseSpecOpts := []spec.Option{
-			spec.CPU(4),
-			spec.WorkloadNode(),
-			spec.VolumeSize(cfg.volumeSize),
-			spec.ReuseNone(),
-			spec.DisableLocalSSD(),
-			// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
-			spec.Arch(spec.AllExceptFIPS),
-		}
-		for _, svReg := range storageVariantRegs(baseClouds, true /* skipLocalSSD */) {
-			r.Add(registry.TestSpec{
-				Name:             "admission-control/snapshot-overload-io/" + subtest + svReg.nameSuffix,
-				Owner:            registry.OwnerAdmissionControl,
-				Benchmark:        true,
-				CompatibleClouds: svReg.clouds,
-				Suites:           registry.Suites(registry.Weekly),
-				Cluster: r.MakeClusterSpec(
-					4,
-					append(baseSpecOpts, svReg.specOpts...)...,
-				),
-				Leases:  registry.MetamorphicLeases,
-				Timeout: 12 * time.Hour,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runAdmissionControlSnapshotOverloadIO(ctx, t, c, cfg)
-				},
-			})
+	spec := func(subtest string, cfg admissionControlSnapshotOverloadIOOpts) registry.TestSpec {
+		return registry.TestSpec{
+			Name:             "admission-control/snapshot-overload-io/" + subtest,
+			Owner:            registry.OwnerAdmissionControl,
+			Benchmark:        true,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Weekly),
+			Cluster: r.MakeClusterSpec(
+				4,
+				spec.CPU(4),
+				spec.WorkloadNode(),
+				spec.VolumeSize(cfg.volumeSize),
+				spec.ReuseNone(),
+				spec.DisableLocalSSD(),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+				spec.Arch(spec.AllExceptFIPS),
+			),
+			Leases:  registry.MetamorphicLeases,
+			Timeout: 12 * time.Hour,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runAdmissionControlSnapshotOverloadIO(ctx, t, c, cfg)
+			},
 		}
 	}
 
 	// This tests the ability of the storage engine to handle a high rate of
 	// snapshots while maintaining a healthy LSM shape and stable p99 latencies.
-	addVariants("excise", admissionControlSnapshotOverloadIOOpts{
+	r.Add(spec("excise", admissionControlSnapshotOverloadIOOpts{
 		// The test uses a large volume size to ensure high provisioned bandwidth
 		// from the cloud provider.
 		volumeSize: 2000,
@@ -79,11 +75,11 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		readPercent:                75,
 		workloadBlockBytes:         12288,
 		rebalanceRate:              "256MiB",
-	})
+	}))
 
 	// This tests the behaviour of snapshot ingestion in bandwidth constrained
 	// environments.
-	addVariants("bandwidth", admissionControlSnapshotOverloadIOOpts{
+	r.Add(spec("bandwidth", admissionControlSnapshotOverloadIOOpts{
 		// 2x headroom from the ~500GB pre-population of the test.
 		volumeSize:                 1000,
 		limitCompactionConcurrency: false,
@@ -91,7 +87,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		readPercent:                20,
 		workloadBlockBytes:         1024,
 		rebalanceRate:              "1GiB",
-	})
+	}))
+
 }
 
 type admissionControlSnapshotOverloadIOOpts struct {

@@ -199,7 +199,6 @@ go_library(
         "sqlsmith.go",
         "status_server.go",
         "stop_and_copy.go",
-        "storage_variant_helpers.go",
         "store_metrics.go",
         "super_region_failover.go",
         "sysbench.go",
@@ -391,7 +390,6 @@ go_test(
         "nodejs_helpers_test.go",
         "query_comparison_util_test.go",
         "restore_test.go",
-        "storage_variant_helpers_test.go",
         "sysbench_test.go",
         "tpcc_test.go",
         ":mocks_drt",  # keep

@@ -498,31 +498,27 @@ func registerKVRangefeed(r registry.Registry) {
 		if cpus == 0 {
 			cpus = 8 // default
 		}
-		// This test is compatible with all clouds, but suspected disk
-		// throughput issues (e.g. gp3 on AWS) and lower observability
-		// (no Grafana on AWS) prompted us to restrict to GCE for the
-		// time being. See #163197.
-		baseClouds := registry.OnlyGCE
-		baseSpecOpts := []spec.Option{
-			spec.CPU(cpus),
-			spec.WorkloadNode(),
-			spec.WorkloadNodeCPU(4),
-		}
-		for _, svReg := range storageVariantRegs(baseClouds, false) {
-			r.Add(registry.TestSpec{
-				Name:      testName + svReg.nameSuffix,
-				Owner:     registry.OwnerKV,
-				Benchmark: true,
-				Cluster: r.MakeClusterSpec(
-					4,
-					append(baseSpecOpts, svReg.specOpts...)...,
-				),
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runKVRangefeed(ctx, t, c, opts)
-				},
-				CompatibleClouds: svReg.clouds,
-				Suites:           registry.Suites(registry.Nightly),
-			})
-		}
+		r.Add(registry.TestSpec{
+			Name:      testName,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Cluster: r.MakeClusterSpec(
+				4,
+				spec.CPU(cpus),
+				spec.WorkloadNode(),
+				spec.WorkloadNodeCPU(4),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+			),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runKVRangefeed(ctx, t, c, opts)
+			},
+			// This test is compatible with all clouds, but suspected disk
+			// throughput issues (e.g. gp3 on AWS) and lower observability
+			// (no Grafana on AWS) prompted us to restrict to GCE for the
+			// time being. See #163197.
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+		})
 	}
 }
