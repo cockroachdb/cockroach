@@ -877,6 +877,14 @@ func ResolveUniqueWithoutIndexConstraint(
 // be looked up uncached, and we'll allow FK dependencies on tables
 // that were just added.
 //
+// fkPrivilegeChecker is an optional interface that resolver.SchemaResolver
+// implementations can satisfy to check REFERENCES privilege during FK
+// resolution. If the SchemaResolver passed to ResolveFK implements this
+// interface, the check is performed after the target table is resolved.
+type fkPrivilegeChecker interface {
+	checkFKReferencesPrivilege(ctx context.Context, parent catalog.TableDescriptor) error
+}
+
 // The passed Txn is used to lookup databases to qualify names in error messages
 // but if nil, will result in unqualified names in those errors.
 //
@@ -919,6 +927,11 @@ func ResolveFK(
 	if err != nil {
 		return err
 	}
+	if checker, ok := sc.(fkPrivilegeChecker); ok {
+		if err := checker.checkFKReferencesPrivilege(ctx, target); err != nil {
+			return err
+		}
+	}
 	if target.ParentID != tbl.ParentID {
 		if !allowCrossDatabaseFKs.Get(&evalCtx.Settings.SV) {
 			return errors.WithHint(
@@ -941,6 +954,7 @@ func ResolveFK(
 			persistenceType,
 		)
 	}
+
 	if target.ID == tbl.ID {
 		// When adding a self-ref FK to an _existing_ table, we want to make sure
 		// we edit the same copy.

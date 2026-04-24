@@ -1835,6 +1835,13 @@ func TestLogic_refcursor(
 	runLogicTest(t, "refcursor")
 }
 
+func TestLogic_references_privilege(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "references_privilege")
+}
+
 func TestLogic_rename_atomic(
 	t *testing.T,
 ) {
