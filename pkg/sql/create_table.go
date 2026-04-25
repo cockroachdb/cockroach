@@ -1134,7 +1134,12 @@ func ResolveFK(
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
+	// Subset-covering unique constraints are accepted only when the cluster
+	// has finalized V26_3 (the version that introduced the feature);
+	// pre-V26_3 we behave as before and consider only exact matches.
+	fkConstraint := c.(catalog.ForeignKeyConstraint)
+	canUseSubset := evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_3)
+	_, _, err = catalog.FindFKReferencedUniqueConstraint(target, fkConstraint, canUseSubset)
 	return err
 }
 

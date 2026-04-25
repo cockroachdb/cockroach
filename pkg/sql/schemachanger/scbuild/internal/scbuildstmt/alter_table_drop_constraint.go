@@ -78,10 +78,15 @@ func maybeDropAdditionallyForUniqueWithoutIndexConstraint(
 	if uwiElem == nil {
 		return
 	}
+	canUseSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3)
 	maybeDropDependentFKConstraints(b, tableID, uwiElem.ConstraintID, constraintName, behavior,
 		func(fkReferencedColIDs []catid.ColumnID) bool {
-			return uwiElem.Predicate == nil &&
-				descpb.ColumnIDs(uwiElem.ColumnIDs).PermutationOf(fkReferencedColIDs)
+			if uwiElem.Predicate != nil {
+				return false
+			}
+			cols := descpb.ColumnIDs(uwiElem.ColumnIDs)
+			return cols.PermutationOf(fkReferencedColIDs) ||
+				(canUseSubset && cols.IsNonEmptySubsetOf(fkReferencedColIDs))
 		})
 }
 

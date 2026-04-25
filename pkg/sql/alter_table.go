@@ -2223,6 +2223,37 @@ func dropColumnImpl(
 	}
 	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
 
+	// Drop inbound FKs that reference the column being dropped. The earlier
+	// unique-constraint cleanup already handled any inbound FK whose backing
+	// constraint contained the column (via tryRemoveFKBackReferences with
+	// withSearchForReplacement=false). What remains here are inbound FKs that
+	// reference the column without any backing unique constraint covering it,
+	// only constructible with subset FKs.
+	sliceIdx = 0
+	for i, fk := range tableDesc.InboundForeignKeys() {
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		if !fk.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
+			continue
+		}
+		if t.DropBehavior != tree.DropCascade {
+			originDesc, err := params.p.Descriptors().MutableByID(params.p.txn).
+				Table(params.ctx, fk.GetOriginTableID())
+			if err != nil {
+				return nil, err
+			}
+			return nil, sqlerrors.NewDependentBlocksOpError(
+				"drop", "column", colToDrop.GetName(),
+				"constraint",
+				fmt.Sprintf("%s on relation %s", fk.GetName(), originDesc.GetName()))
+		}
+		sliceIdx--
+		if err := params.p.removeFKForBackReference(params.ctx, tableDesc, fk); err != nil {
+			return nil, err
+		}
+	}
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
+
 	found := false
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].ID == colToDrop.GetID() {
@@ -2437,9 +2468,10 @@ func (p *planner) tryRemoveFKBackReferences(
 	behavior tree.DropBehavior,
 	withSearchForReplacement bool,
 ) error {
+	canUseSubset := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_3)
 	isSuitable := func(fk catalog.ForeignKeyConstraint, u catalog.UniqueConstraint) bool {
 		return u.GetConstraintID() != uniqueConstraint.GetConstraintID() && !u.Dropped() &&
-			u.IsValidReferencedUniqueConstraint(fk)
+			u.IsValidReferencedUniqueConstraint(fk, canUseSubset)
 	}
 	uwis := tableDesc.UniqueConstraintsWithIndex()
 	uwois := tableDesc.UniqueConstraintsWithoutIndex()
@@ -2470,7 +2502,7 @@ func (p *planner) tryRemoveFKBackReferences(
 		// The constraint being deleted could potentially be required by a
 		// referencing foreign key. Find alternatives if that's the case,
 		// otherwise remove the foreign key.
-		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
+		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk, canUseSubset) &&
 			!uniqueConstraintHasReplacementCandidate(fk) {
 			// If we haven't found a replacement, then we check that the drop
 			// behavior is cascade.

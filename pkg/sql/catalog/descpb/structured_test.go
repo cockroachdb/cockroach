@@ -5,7 +5,11 @@
 
 package descpb
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestColumnIDsPermutationOf(t *testing.T) {
 	type testCase struct {
@@ -71,6 +75,78 @@ func TestColumnIDsPermutationOf(t *testing.T) {
 			if result != tt.expectedResult {
 				t.Errorf("PermuationOf() %s: got %v, want %v", tt.name, result, tt.expectedResult)
 			}
+		})
+	}
+}
+
+func TestColumnIDsIsNonEmptySubsetOf(t *testing.T) {
+	for name, tc := range map[string]struct {
+		candidate, base ColumnIDs
+		expectedResult  bool
+	}{
+		"empty candidate set and empty base set": {
+			candidate:      ColumnIDs{},
+			base:           ColumnIDs{},
+			expectedResult: false,
+		},
+		"empty candidate set and non-empty base set": {
+			candidate:      ColumnIDs{},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: false,
+		},
+		"non-empty candidate set and empty base set": {
+			candidate:      ColumnIDs{ColumnID(1)},
+			base:           ColumnIDs{},
+			expectedResult: false,
+		},
+		"strict subset": {
+			candidate:      ColumnIDs{ColumnID(1)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: true,
+		},
+		"exact match counts as subset": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: true,
+		},
+		"permutation counts as subset": {
+			candidate:      ColumnIDs{ColumnID(2), ColumnID(1)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: true,
+		},
+		"candidate set not contained at all": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2)},
+			base:           ColumnIDs{ColumnID(3), ColumnID(4)},
+			expectedResult: false,
+		},
+		"candidate set partially contained": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(3)},
+			expectedResult: false,
+		},
+		"candidate set is actually a superset": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: false,
+		},
+		"duplicates in candidate set all present in base set": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(1)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: true,
+		},
+		"duplicates in candidate set and one not in base set": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(1), ColumnID(4)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: false,
+		},
+		"duplicates in base set do not affect result": {
+			candidate:      ColumnIDs{ColumnID(1), ColumnID(2)},
+			base:           ColumnIDs{ColumnID(1), ColumnID(1), ColumnID(2), ColumnID(2)},
+			expectedResult: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expectedResult, tc.candidate.IsNonEmptySubsetOf(tc.base))
 		})
 	}
 }
