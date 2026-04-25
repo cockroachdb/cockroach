@@ -120,6 +120,7 @@ func TestDataDriven(t *testing.T) {
 					errStr := err.Error()
 					// Redact transaction IDs from error strings, for determinism.
 					errStr = regexp.MustCompile(`\[txn: [0-9a-f]+]`).ReplaceAllString(errStr, `[txn: ‹×›]`)
+					errStr = regexp.MustCompile(`Table/\d{3,}/`).ReplaceAllString(errStr, `Table/×/`)
 					return errStr
 				}
 
