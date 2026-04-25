@@ -134,10 +134,14 @@ func dropSecondaryIndex(
 		// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
 		// In this case, if we were to drop 'ui' and no other unique constraint can be
 		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
-		//and drop 'fk' as well.
+		// and drop 'fk' as well.
+		// Use the subset-aware check so that FKs created via the
+		// require_fk_unique_constraint_on_all_columns extension are also recognized
+		// as depending on this index. The subset check returns true for both exact
+		// and strict-subset matches.
 		maybeDropDependentFKConstraints(b, sie.TableID, sie.ConstraintID, string(indexName.Index), dropBehavior,
 			func(fkReferencedColIDs []catid.ColumnID) bool {
-				return isIndexUniqueAndCanServeFK(b, &sie.Index, fkReferencedColIDs)
+				return isIndexUniqueAndCanServeFKSubset(b, &sie.Index, fkReferencedColIDs)
 			})
 
 		// If shard index, also drop the shard column and all check constraints that
@@ -540,6 +544,38 @@ func isIndexUniqueAndCanServeFK(
 		allKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs)
 }
 
+// isIndexUniqueAndCanServeFKSubset is the relaxed counterpart of
+// isIndexUniqueAndCanServeFK: it accepts a unique non-partial index whose key
+// columns are a non-empty subset of fkReferencedColIDs (rather than requiring
+// an exact permutation). Used at FK creation time when the
+// require_fk_unique_constraint_on_all_columns session setting is false.
+func isIndexUniqueAndCanServeFKSubset(
+	b BuildCtx, ie *scpb.Index, fkReferencedColIDs []tree.ColumnID,
+) bool {
+	if !ie.IsUnique {
+		return false
+	}
+
+	isPartial := false
+	scpb.ForEachSecondaryIndex(b.QueryByID(ie.TableID), func(
+		current scpb.Status, target scpb.TargetStatus, sie *scpb.SecondaryIndex,
+	) {
+		if sie.TableID == ie.TableID && sie.IndexID == ie.IndexID {
+			isPartial = sie.EmbeddedExpr != nil
+		}
+	})
+	if isPartial {
+		return false
+	}
+
+	keyColIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
+	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
+	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
+	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
+	return explicitKeyColIDsWithoutShardCol.IsNonEmptySubsetOf(fkReferencedColIDs) ||
+		allKeyColIDsWithoutShardCol.IsNonEmptySubsetOf(fkReferencedColIDs)
+}
+
 // hasColsUniquenessConstraintOtherThan returns true if the table ensures
 // uniqueness on `columnIDs` through a constraint other than `otherThan`.
 // Uniqueness can be ensured through PK, UNIQUE, or UNIQUE WITHOUT INDEX.
@@ -557,17 +593,21 @@ func hasColsUniquenessConstraintOtherThan(
 			if ret {
 				return
 			}
+			// Use the subset-aware check so a subset-cover unique constraint can
+			// stand in as a replacement when another constraint is being dropped.
+			// The subset check returns true for both exact and strict-subset
+			// matches.
 			switch t := e.(type) {
 			case *scpb.PrimaryIndex:
-				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs) {
+				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFKSubset(b, &t.Index, columnIDs) {
 					ret = true
 				}
 			case *scpb.SecondaryIndex:
-				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs) {
+				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFKSubset(b, &t.Index, columnIDs) {
 					ret = true
 				}
 			case *scpb.UniqueWithoutIndexConstraint:
-				if t.ConstraintID != otherThan && descpb.ColumnIDs(t.ColumnIDs).PermutationOf(columnIDs) {
+				if t.ConstraintID != otherThan && descpb.ColumnIDs(t.ColumnIDs).IsNonEmptySubsetOf(columnIDs) {
 					ret = true
 				}
 			}

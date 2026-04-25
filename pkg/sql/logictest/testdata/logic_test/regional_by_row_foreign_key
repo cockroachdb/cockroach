@@ -2411,3 +2411,32 @@ statement ok
 DROP TABLE parent_combined
 
 subtest end
+
+# Regression test for #160013. With subset-unique FK matching (the new
+# default), a GLOBAL parent with PRIMARY KEY (id) is sufficient to back an FK
+# from a REGIONAL BY ROW child on (id_ref, region) without requiring a
+# redundant UNIQUE (id, region) on the parent.
+subtest subset_unique_rbr_160013
+
+statement ok
+CREATE TABLE parent_160013 (
+  id INT PRIMARY KEY,
+  val INT,
+  region crdb_internal_region NOT NULL
+) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE child_160013 (
+  id_ref INT NOT NULL,
+  child_val INT,
+  region crdb_internal_region NOT NULL,
+  FOREIGN KEY (id_ref, region) REFERENCES parent_160013 (id, region)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+DROP TABLE child_160013
+
+statement ok
+DROP TABLE parent_160013
+
+subtest end

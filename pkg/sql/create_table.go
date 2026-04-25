@@ -1134,8 +1134,36 @@ func ResolveFK(
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
-	return err
+	// When require_fk_unique_constraint_on_all_columns is false (the default)
+	// and the cluster has finalized V26_3, accept a non-partial unique
+	// constraint covering only a subset of the referenced columns; the extra
+	// columns become implicit equality conditions enforced via a residual
+	// filter on the parent lookup.
+	fkConstraint := c.(catalog.ForeignKeyConstraint)
+	allowSubset := evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_3) &&
+		!evalCtx.SessionData().RequireFKUniqueConstraintOnAllColumns
+	if !allowSubset {
+		_, err = catalog.FindFKReferencedUniqueConstraint(target, fkConstraint)
+		return err
+	}
+	_, isStrictSubset, err := catalog.FindFKReferencedSubsetUniqueConstraint(target, fkConstraint)
+	if err != nil {
+		return err
+	}
+	if isStrictSubset {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx,
+			pgnotice.Newf("foreign key %q is currently backed by a unique constraint "+
+				"that covers a subset of the referenced columns of %s; this is a "+
+				"CockroachDB extension and may not be portable to other databases. "+
+				"Foreign key enforcement on insert may incur additional latency; "+
+				"consider adding a unique index matching all referenced columns, "+
+				"or (if applicable) extending the existing unique index to STORE "+
+				"the other referenced columns",
+				ref.Name, target.GetName()),
+		)
+	}
+	return nil
 }
 
 // CreatePartitioning returns a set of implicit columns and a new partitioning

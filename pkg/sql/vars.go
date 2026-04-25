@@ -2368,6 +2368,29 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension. When false (the default), a foreign key may be
+	// backed by a unique constraint that covers only a subset of the
+	// referenced columns. When true, only an exact match is accepted
+	// (PostgreSQL-compatible behavior).
+	`require_fk_unique_constraint_on_all_columns`: {
+		Description:  sessionVarDescriptions["require_fk_unique_constraint_on_all_columns"],
+		GetStringVal: makePostgresBoolGetStringValFn(`require_fk_unique_constraint_on_all_columns`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`require_fk_unique_constraint_on_all_columns`, s)
+			if err != nil {
+				return err
+			}
+			m.SetRequireFKUniqueConstraintOnAllColumns(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().RequireFKUniqueConstraintOnAllColumns), nil
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
+		},
+	},
+
 	`use_declarative_schema_changer`: {
 		Description:        sessionVarDescriptions["use_declarative_schema_changer"],
 		ClusterSettingName: "sql.defaults.use_declarative_schema_changer",

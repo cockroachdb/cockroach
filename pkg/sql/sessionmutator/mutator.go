@@ -586,6 +586,10 @@ func (m *SessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 	m.Data.EnableUniqueWithoutIndexConstraints = val
 }
 
+func (m *SessionDataMutator) SetRequireFKUniqueConstraintOnAllColumns(val bool) {
+	m.Data.RequireFKUniqueConstraintOnAllColumns = val
+}
+
 func (m *SessionDataMutator) SetUseNewSchemaChanger(val sessiondatapb.NewSchemaChangerMode) {
 	m.Data.NewSchemaChangerMode = val
 }

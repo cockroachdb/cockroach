@@ -5953,3 +5953,44 @@ statement ok
 DROP TABLE t160436_patterns;
 
 subtest end
+
+subtest drop_column_fk_multiple_backing_constraints
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE uwi_inbound_parent (
+  d INT,
+  e INT,
+  CONSTRAINT unique_e_only UNIQUE WITHOUT INDEX (e),
+  CONSTRAINT unique_d_only UNIQUE WITHOUT INDEX (d),
+  CONSTRAINT unique_d_e_only UNIQUE WITHOUT INDEX (d, e)
+);
+CREATE TABLE uwi_inbound_child (
+  d INT,
+  e INT,
+  CONSTRAINT fk_d_e_only FOREIGN KEY (d, e) REFERENCES uwi_inbound_parent (d, e)
+)
+
+onlyif config local-legacy-schema-changer
+statement error pq: "unique_d(_e)?_only" is referenced by foreign key from table "uwi_inbound_child"
+ALTER TABLE uwi_inbound_parent DROP COLUMN d
+
+skipif config local-legacy-schema-changer
+statement error pq: cannot drop column.*because constraint.*fk_d_e_only.*depends on it
+ALTER TABLE uwi_inbound_parent DROP COLUMN d
+
+statement ok
+ALTER TABLE uwi_inbound_parent DROP COLUMN d CASCADE
+
+query TTTTB nosort
+SHOW CONSTRAINTS FROM uwi_inbound_child
+----
+uwi_inbound_child  uwi_inbound_child_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+
+statement ok
+DROP TABLE uwi_inbound_child;
+DROP TABLE uwi_inbound_parent;
+
+subtest end

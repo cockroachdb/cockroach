@@ -487,6 +487,12 @@ type UniqueConstraint interface {
 	// serve as a referenced unique constraint for a foreign key constraint.
 	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint) bool
 
+	// IsValidReferencedSubsetUniqueConstraint returns whether the unique
+	// constraint's key columns are a non-empty subset of the foreign key's
+	// referenced columns. This is the relaxed match used when the
+	// require_fk_unique_constraint_on_all_columns session setting is false.
+	IsValidReferencedSubsetUniqueConstraint(fk ForeignKeyConstraint) bool
+
 	// NumKeyColumns returns the number of columns in this unique constraint.
 	NumKeyColumns() int
 
@@ -1400,4 +1406,80 @@ func FindFKReferencedUniqueConstraint(
 		"there is no unique constraint matching given keys for referenced table %s",
 		referencedTable.GetName(),
 	)
+}
+
+// FindFKReferencedSubsetUniqueConstraint behaves like
+// FindFKReferencedUniqueConstraint but additionally accepts a non-partial
+// unique constraint whose key columns are a non-empty subset of the foreign
+// key's referenced columns. The returned bool reports whether the chosen
+// constraint is a strict subset (i.e. covers fewer columns than the foreign
+// key references); callers should emit a NOTICE in that case.
+//
+// When multiple constraints qualify, preference order is:
+//  1. Any exact match (unique-with-index preferred over unique-without-index).
+//  2. Any subset match: prefer unique-with-index over unique-without-index
+//     (so pg_constraint.conindid surfaces a real index OID and so the chosen
+//     backing matches what the optimizer will actually use for FK
+//     enforcement at query time, since UWOI has no backing index).
+//  3. Among constraints of the same kind, prefer the largest key column
+//     count (tighter subset coverage).
+//  4. Final tiebreak: lowest constraint ID, for deterministic display.
+//
+// Note that the optimizer ultimately picks its own index at FK-enforcement
+// query time; the constraint chosen here is purely for catalog display
+// (pg_constraint, NOTICE text) and must be deterministic across nodes.
+//
+// This is the relaxed lookup used when the require_fk_unique_constraint_on_all_columns
+// session setting is false.
+func FindFKReferencedSubsetUniqueConstraint(
+	referencedTable TableDescriptor, fk ForeignKeyConstraint,
+) (_ UniqueConstraint, isStrictSubset bool, _ error) {
+	if exact, err := FindFKReferencedUniqueConstraint(referencedTable, fk); err == nil {
+		return exact, false, nil
+	}
+	var best UniqueConstraint
+	var bestCols int
+	var bestIsWithIndex bool
+	consider := func(c UniqueConstraint, isWithIndex bool) {
+		if !c.IsValidReferencedSubsetUniqueConstraint(fk) {
+			return
+		}
+		cols := c.NumKeyColumns()
+		// Ranking tiers, highest priority first. See preference order in the
+		// function comment.
+		var better bool
+		switch {
+		case best == nil:
+			better = true
+		case isWithIndex != bestIsWithIndex:
+			better = isWithIndex
+		case cols != bestCols:
+			better = cols > bestCols
+		default:
+			better = c.GetConstraintID() < best.GetConstraintID()
+		}
+		if better {
+			best = c
+			bestCols = cols
+			bestIsWithIndex = isWithIndex
+		}
+	}
+	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+		if !uwi.Dropped() {
+			consider(uwi, true /* isWithIndex */)
+		}
+	}
+	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
+		if !uwoi.Dropped() {
+			consider(uwoi, false /* isWithIndex */)
+		}
+	}
+	if best == nil {
+		return nil, false, pgerror.Newf(
+			pgcode.ForeignKeyViolation,
+			"there is no unique constraint matching given keys for referenced table %s",
+			referencedTable.GetName(),
+		)
+	}
+	return best, true, nil
 }

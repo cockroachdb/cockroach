@@ -198,6 +198,14 @@ func (c uniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
 	return !c.IsPartial() && descpb.ColumnIDs(c.desc.ColumnIDs).PermutationOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
 }
 
+// IsValidReferencedSubsetUniqueConstraint implements the catalog.UniqueConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) IsValidReferencedSubsetUniqueConstraint(
+	fk catalog.ForeignKeyConstraint,
+) bool {
+	return !c.IsPartial() && descpb.ColumnIDs(c.desc.ColumnIDs).IsNonEmptySubsetOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
+}
+
 // NumKeyColumns implements the catalog.UniqueConstraint interface.
 func (c uniqueWithoutIndexConstraint) NumKeyColumns() int {
 	return len(c.desc.ColumnIDs)

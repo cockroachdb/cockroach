@@ -1284,7 +1284,11 @@ func populateTableConstraints(
 			if err != nil {
 				return err
 			}
-			if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
+			// Use the subset finder so that FKs created via the
+			// require_fk_unique_constraint_on_all_columns extension surface
+			// their backing constraint OID. The subset finder returns the
+			// strict (exact) match first when available.
+			if refConstraint, _, err := catalog.FindFKReferencedSubsetUniqueConstraint(referencedTable, fk); err != nil {
 				// We couldn't find a unique constraint that matched. This shouldn't
 				// happen.
 				log.Dev.Warningf(ctx, "broken fk reference: %v", err)
@@ -2181,7 +2185,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					return err
 				}
 				refObjID := oidZero
-				if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
+				// Use the subset finder so that FKs created via the
+				// require_fk_unique_constraint_on_all_columns extension surface
+				// their backing constraint OID. The subset finder returns the
+				// strict (exact) match first when available.
+				if refConstraint, _, err := catalog.FindFKReferencedSubsetUniqueConstraint(referencedTable, fk); err != nil {
 					// We couldn't find a unique constraint that matched. This shouldn't
 					// happen.
 					log.Dev.Warningf(ctx, "broken fk reference: %v", err)

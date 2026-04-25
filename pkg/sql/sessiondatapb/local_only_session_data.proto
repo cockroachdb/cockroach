@@ -816,6 +816,13 @@ message LocalOnlySessionData {
   // OptimizerSpanLimit sets the maximum number of constraint spans allowed in
   // a scan during query optimization. 0 means no limit. Default: 131072.
   int32 optimizer_span_limit = 207;
+  // RequireFKUniqueConstraintOnAllColumns, when true, restricts CREATE TABLE
+  // / ALTER TABLE to only allow creating a foreign key when the referenced
+  // table has a unique constraint covering all of the foreign key's
+  // referenced columns exactly (PostgreSQL-compatible behavior). When false
+  // (the default), CockroachDB also accepts a unique constraint covering
+  // only a non-empty subset of the referenced columns.
+  bool require_fk_unique_constraint_on_all_columns = 208 [(gogoproto.customname) = "RequireFKUniqueConstraintOnAllColumns"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

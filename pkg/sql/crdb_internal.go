@@ -4263,7 +4263,11 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				if err != nil {
 					return err
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTbl, fk)
+				// Use the subset finder so that FKs created via the
+				// require_fk_unique_constraint_on_all_columns extension surface
+				// their backing constraint. The subset finder returns the
+				// strict (exact) match first when available.
+				refConstraint, _, err := catalog.FindFKReferencedSubsetUniqueConstraint(refTbl, fk)
 				if err != nil {
 					return err
 				}
