@@ -215,6 +215,7 @@ recursion_depth_limit                                            1000           
 register_latch_wait_contention_events                            off                 Controls whether contention events are registered for latch wait operations.
 reorder_joins_limit                                              8                   Sets the number of joins at which the optimizer should stop attempting to reorder.
 require_explicit_primary_keys                                    off                 Controls whether CREATE TABLE statements should error out if no primary key is provided.
+require_fk_unique_constraint_on_all_columns                      off                 Controls whether a foreign key must be backed by a unique constraint covering all referenced columns exactly. When false (the default), CockroachDB also accepts a unique constraint covering only a non-empty subset of the referenced columns, which is a CockroachDB extension to standard SQL.
 results_buffer_size                                              524288              Specifies the size at which the pgwire results buffer will self-flush.
 role                                                             none                The current role for the session.
 row_security                                                     on                  Controls whether row level security is enabled.

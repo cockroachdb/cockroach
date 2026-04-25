@@ -2439,7 +2439,7 @@ func (p *planner) tryRemoveFKBackReferences(
 ) error {
 	isSuitable := func(fk catalog.ForeignKeyConstraint, u catalog.UniqueConstraint) bool {
 		return u.GetConstraintID() != uniqueConstraint.GetConstraintID() && !u.Dropped() &&
-			u.IsValidReferencedUniqueConstraint(fk)
+			u.IsValidReferencedUniqueConstraint(fk, true /* allowSubset */)
 	}
 	uwis := tableDesc.UniqueConstraintsWithIndex()
 	uwois := tableDesc.UniqueConstraintsWithoutIndex()
@@ -2470,7 +2470,7 @@ func (p *planner) tryRemoveFKBackReferences(
 		// The constraint being deleted could potentially be required by a
 		// referencing foreign key. Find alternatives if that's the case,
 		// otherwise remove the foreign key.
-		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
+		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk, true /* allowSubset */) &&
 			!uniqueConstraintHasReplacementCandidate(fk) {
 			// If we haven't found a replacement, then we check that the drop
 			// behavior is cascade.

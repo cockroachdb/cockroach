@@ -81,7 +81,7 @@ func maybeDropAdditionallyForUniqueWithoutIndexConstraint(
 	maybeDropDependentFKConstraints(b, tableID, uwiElem.ConstraintID, constraintName, behavior,
 		func(fkReferencedColIDs []catid.ColumnID) bool {
 			return uwiElem.Predicate == nil &&
-				descpb.ColumnIDs(uwiElem.ColumnIDs).PermutationOf(fkReferencedColIDs)
+				descpb.ColumnIDs(uwiElem.ColumnIDs).IsNonEmptySubsetOf(fkReferencedColIDs)
 		})
 }
 

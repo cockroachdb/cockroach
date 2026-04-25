@@ -485,7 +485,12 @@ type UniqueConstraint interface {
 
 	// IsValidReferencedUniqueConstraint returns whether the unique constraint can
 	// serve as a referenced unique constraint for a foreign key constraint.
-	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint) bool
+	//
+	// When allowSubset is false, the constraint's columns must be a permutation
+	// of the FK's referenced columns. When true, a non-partial unique
+	// constraint whose columns are a non-empty subset of the FK's referenced
+	// columns is also accepted.
+	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint, allowSubset bool) bool
 
 	// NumKeyColumns returns the number of columns in this unique constraint.
 	NumKeyColumns() int
@@ -1377,25 +1382,72 @@ func MustFindPublicColumnByID(desc TableDescriptor, id descpb.ColumnID) (Column,
 	return col, nil
 }
 
-// FindFKReferencedUniqueConstraint finds the first index in the supplied
-// referencedTable that can satisfy a foreign key of the supplied column ids.
-// If no such index exists, attempts to find a unique constraint on the supplied
-// column ids. If neither an index nor unique constraint is found, returns an
-// error.
+// FindFKReferencedUniqueConstraint finds a unique constraint on
+// referencedTable that can satisfy the foreign key. It first tries to find an
+// exact match; failing that, if allowSubset is true, it tries to find a unique
+// constraint whose key columns are a non-empty subset of the foreign key's
+// referenced columns. The returned bool (isStrictSubset) reports whether the
+// chosen constraint covers strictly fewer columns than the foreign key references.
+//
+// Preference order when multiple constraints qualify:
+//  1. Unique-with-index over unique-without-index (so pg_constraint.conindid
+//     can surface a real index OID). Applies to both exact and subset modes.
+//
+// Subset mode applies additional tiebreakers:
+//  2. Among constraints of the same kind, prefer the largest key column
+//     count (tighter subset coverage).
+//  3. Final tiebreak: lowest constraint ID, for deterministic display.
+//
+// Note that the optimizer ultimately picks its own index at FK-enforcement
+// query time; the constraint chosen here is purely for catalog display
+// (pg_constraint, NOTICE text) and must be deterministic across nodes.
 func FindFKReferencedUniqueConstraint(
-	referencedTable TableDescriptor, fk ForeignKeyConstraint,
-) (UniqueConstraint, error) {
+	referencedTable TableDescriptor, fk ForeignKeyConstraint, allowSubset bool,
+) (_ UniqueConstraint, isStrictSubset bool, _ error) {
+	// Try exact match first.
 	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
-		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
-			return uwi, nil
+		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk, false /* allowSubset */) {
+			return uwi, false, nil
 		}
 	}
 	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
-		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
-			return uwoi, nil
+		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk, false /* allowSubset */) {
+			return uwoi, false, nil
 		}
 	}
-	return nil, pgerror.Newf(
+	if allowSubset {
+		isBetter := func(c, best UniqueConstraint) bool {
+			if best == nil {
+				return true
+			}
+			if cN, bN := c.NumKeyColumns(), best.NumKeyColumns(); cN != bN {
+				return cN > bN
+			}
+			return c.GetConstraintID() < best.GetConstraintID()
+		}
+		var best UniqueConstraint
+		for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+			if !uwi.Dropped() &&
+				uwi.IsValidReferencedUniqueConstraint(fk, true /* allowSubset */) &&
+				isBetter(uwi, best) {
+				best = uwi
+			}
+		}
+		if best != nil {
+			return best, true, nil
+		}
+		for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
+			if !uwoi.Dropped() &&
+				uwoi.IsValidReferencedUniqueConstraint(fk, true /* allowSubset */) &&
+				isBetter(uwoi, best) {
+				best = uwoi
+			}
+		}
+		if best != nil {
+			return best, true, nil
+		}
+	}
+	return nil, false, pgerror.Newf(
 		pgcode.ForeignKeyViolation,
 		"there is no unique constraint matching given keys for referenced table %s",
 		referencedTable.GetName(),

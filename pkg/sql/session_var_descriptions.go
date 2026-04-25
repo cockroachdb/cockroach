@@ -198,6 +198,7 @@ var sessionVarDescriptions = map[string]string{
 	"register_latch_wait_contention_events":                           "Controls whether contention events are registered for latch wait operations.",
 	"reorder_joins_limit":                                             "Sets the number of joins at which the optimizer should stop attempting to reorder.",
 	"require_explicit_primary_keys":                                   "Controls whether CREATE TABLE statements should error out if no primary key is provided.",
+	"require_fk_unique_constraint_on_all_columns":                     "Controls whether a foreign key must be backed by a unique constraint covering all referenced columns exactly. When false (the default), CockroachDB also accepts a unique constraint covering only a non-empty subset of the referenced columns, which is a CockroachDB extension to standard SQL.",
 	"results_buffer_size":                                             "Specifies the size at which the pgwire results buffer will self-flush.",
 	"role":                                                            "The current role for the session.",
 	"row_security":                                                    "Controls whether row level security is enabled.",

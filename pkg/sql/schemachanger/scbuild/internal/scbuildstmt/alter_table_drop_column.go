@@ -279,22 +279,9 @@ func dropColumn(
 				DropBehavior: behavior,
 			})
 		case *scpb.ForeignKeyConstraint:
-			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
-			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
-				IfExists:     false,
-				Constraint:   tree.Name(constraintName.Name),
-				DropBehavior: behavior,
-			})
+			dropDependentForeignKey(b, tn, tbl, stmt, e.TableID, e.ConstraintID, op, objType, cn.Name, behavior)
 		case *scpb.ForeignKeyConstraintUnvalidated:
-			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
-			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
-				IfExists:     false,
-				Constraint:   tree.Name(constraintName.Name),
-				DropBehavior: behavior,
-			})
-
+			dropDependentForeignKey(b, tn, tbl, stmt, e.TableID, e.ConstraintID, op, objType, cn.Name, behavior)
 		case *scpb.RowLevelTTL:
 			// If a duration expression is set, the column level dependency is on the
 			// internal ttl column, which we are attempting to drop.
@@ -523,6 +510,52 @@ func panicIfColReferencedInPredicate(
 		panic(sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
 			op, objType, colNameElem.Name, uwiNameElem.Name))
 	}
+}
+
+// dropDependentForeignKey tears down a foreign key encountered while
+// cascading a column drop. The FK lives on fkOriginTableID, which equals
+// tbl.TableID for an outbound FK and differs for an inbound FK.
+//
+// For an outbound FK, the drop is routed through alterTableDropConstraint
+// so the same-table path mirrors an explicit ALTER TABLE ... DROP
+// CONSTRAINT. For an inbound FK, the FK's elements are torn down directly
+// on the origin table; alterTableDropConstraint would mis-resolve the
+// name on the table being altered, and FKs have no further declarative
+// dependencies that require a cascade.
+//
+// The behavior check applies only to inbound FKs: outbound FKs are torn
+// down implicitly with the column they reference, but inbound FKs are
+// external objects on another table, so RESTRICT must reject the column
+// drop.
+func dropDependentForeignKey(
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	fkOriginTableID catid.DescID,
+	fkConstraintID catid.ConstraintID,
+	op, objType, columnName string,
+	behavior tree.DropBehavior,
+) {
+	constraintElems := b.QueryByID(fkOriginTableID).Filter(hasConstraintIDAttrFilter(fkConstraintID))
+	if fkOriginTableID == tbl.TableID {
+		_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+		alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
+			IfExists:     false,
+			Constraint:   tree.Name(constraintName.Name),
+			DropBehavior: behavior,
+		})
+		return
+	}
+	if behavior != tree.DropCascade {
+		_, _, originName := scpb.FindNamespace(b.QueryByID(fkOriginTableID))
+		_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+		panic(sqlerrors.NewDependentBlocksOpError(op, objType, columnName,
+			"constraint", fmt.Sprintf("%s on relation %s", constraintName.Name, originName.Name)))
+	}
+	constraintElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, ce scpb.Element) {
+		b.Drop(ce)
+	})
 }
 
 func handleDropColumnPrimaryIndexes(b BuildCtx, tbl *scpb.Table, col *scpb.Column) {

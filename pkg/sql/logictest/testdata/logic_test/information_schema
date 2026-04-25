@@ -4041,6 +4041,7 @@ recursion_depth_limit                                            1000
 register_latch_wait_contention_events                            off
 reorder_joins_limit                                              8
 require_explicit_primary_keys                                    off
+require_fk_unique_constraint_on_all_columns                      off
 results_buffer_size                                              524288
 role                                                             none
 row_security                                                     on

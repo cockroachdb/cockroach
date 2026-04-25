@@ -1010,7 +1010,7 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				if r, ok := matchOptionMap[fk.Match()]; ok {
 					matchType = r
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk)
+				refConstraint, _, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk, true /* allowSubset */)
 				if err != nil {
 					return err
 				}

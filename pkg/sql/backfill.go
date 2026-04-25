@@ -673,7 +673,7 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk)
+					_, _, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk, true /* allowSubset */)
 					if err != nil {
 						return err
 					}

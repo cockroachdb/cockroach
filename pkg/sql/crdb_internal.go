@@ -4263,7 +4263,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				if err != nil {
 					return err
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTbl, fk)
+				refConstraint, _, err := catalog.FindFKReferencedUniqueConstraint(refTbl, fk, true /* allowSubset */)
 				if err != nil {
 					return err
 				}
