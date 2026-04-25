@@ -93,7 +93,8 @@ sudo apt-get install -y fluent-bit;
 	"opentelemetry": `
 sudo apt-get update;
 sudo apt-get install -y curl;
-curl -L -o /tmp/otelcol-contrib.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.101.0/otelcol-contrib_0.101.0_linux_amd64.deb;
+arch="$(dpkg --print-architecture)";
+curl -L -o /tmp/otelcol-contrib.deb https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.101.0/otelcol-contrib_0.101.0_linux_${arch}.deb;
 sudo apt-get install -y /tmp/otelcol-contrib.deb;
 rm /tmp/otelcol-contrib.deb;
 `,
