@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -599,6 +600,7 @@ func (sc *SchemaChanger) addConstraints(
 		if err != nil {
 			return err
 		}
+		canUseSubset := sc.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3)
 
 		b := txn.KV().NewBatch()
 		for _, constraint := range constraints {
@@ -673,7 +675,7 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk)
+					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk, canUseSubset)
 					if err != nil {
 						return err
 					}

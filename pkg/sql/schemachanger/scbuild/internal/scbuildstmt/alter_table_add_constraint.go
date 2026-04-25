@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -424,8 +425,12 @@ func alterTableAddForeignKey(
 	// 11. Verify that the referencedTable guarantees uniqueness on the
 	// referencedColumns. In code, this means we need to find either a
 	// PRIMARY INDEX, a UNIQUE INDEX, or a UNIQUE_WITHOUT_INDEX CONSTRAINT,
-	// that covers exactly referencedColumns.
-	if areColsUnique := areColsUniqueInTable(b, referencedTableID, referencedColIDs); !areColsUnique {
+	// that covers referencedColumns. By default this is an exact match;
+	// when the cluster has finalized V26_3, a non-partial unique
+	// constraint covering only a non-empty subset of referencedColumns is
+	// also accepted.
+	canUseSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3)
+	if !areColsUniqueInTable(b, referencedTableID, referencedColIDs, canUseSubset) {
 		panic(pgerror.Newf(
 			pgcode.ForeignKeyViolation,
 			"there is no unique constraint matching given keys for referenced table %s",
@@ -624,8 +629,15 @@ func getFullyResolvedColNames(
 	return ret
 }
 
-// areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
-func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
+// areColsUniqueInTable returns true if uniqueness on columnIDs is guaranteed
+// by some constraint on this table.
+//
+// When considerSubsets is false, the constraint must cover columnIDs exactly
+// (a permutation match). When true, a non-partial unique constraint whose
+// columns are a non-empty subset of columnIDs is also accepted.
+func areColsUniqueInTable(
+	b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID, considerSubsets bool,
+) (ret bool) {
 	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if ret {
 			return
@@ -633,12 +645,17 @@ func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.Co
 
 		switch te := e.(type) {
 		case *scpb.PrimaryIndex:
-			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, considerSubsets)
 		case *scpb.SecondaryIndex:
-			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
+			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs, considerSubsets)
 		case *scpb.UniqueWithoutIndexConstraint:
-			if te.Predicate == nil && descpb.ColumnIDs(te.ColumnIDs).PermutationOf(columnIDs) {
-				ret = true
+			if te.Predicate != nil {
+				return
+			}
+			if considerSubsets {
+				ret = descpb.ColumnIDs(te.ColumnIDs).IsNonEmptySubsetOf(columnIDs)
+			} else {
+				ret = descpb.ColumnIDs(te.ColumnIDs).PermutationOf(columnIDs)
 			}
 		}
 	})

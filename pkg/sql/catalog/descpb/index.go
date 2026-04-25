@@ -7,6 +7,7 @@ package descpb
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -89,13 +90,24 @@ func (desc *IndexDescriptor) implicitColumnIDs() ColumnIDs {
 // IsValidReferencedUniqueConstraint returns whether the index can serve
 // as a referenced index for a foreign key constraint with the provided set
 // of referencedColumnIDs.
-func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
+//
+// When asSubset is false, the index must cover referencedColIDs exactly
+// (a permutation match). When true, the index validates as a subset match:
+// the index's key columns may be a non-empty subset of referencedColIDs.
+func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(
+	referencedColIDs ColumnIDs, asSubset bool,
+) bool {
+	if !desc.Unique || desc.IsPartial() {
+		return false
+	}
 	explicitColumnIDs := desc.explicitColumnIDsWithoutShardColumn()
-	allColumnIDs := append(explicitColumnIDs, desc.implicitColumnIDs()...)
-	return desc.Unique &&
-		!desc.IsPartial() &&
-		(explicitColumnIDs.PermutationOf(referencedColIDs) ||
-			allColumnIDs.PermutationOf(referencedColIDs))
+	allColumnIDs := slices.Concat(explicitColumnIDs, desc.implicitColumnIDs())
+	if asSubset {
+		return explicitColumnIDs.IsNonEmptySubsetOf(referencedColIDs) ||
+			allColumnIDs.IsNonEmptySubsetOf(referencedColIDs)
+	}
+	return explicitColumnIDs.PermutationOf(referencedColIDs) ||
+		allColumnIDs.PermutationOf(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.

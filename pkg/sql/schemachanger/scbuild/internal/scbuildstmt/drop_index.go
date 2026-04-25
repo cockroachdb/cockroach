@@ -7,7 +7,9 @@ package scbuildstmt
 
 import (
 	"fmt"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -134,10 +136,11 @@ func dropSecondaryIndex(
 		// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
 		// In this case, if we were to drop 'ui' and no other unique constraint can be
 		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
-		//and drop 'fk' as well.
+		// and drop 'fk' as well.
+		canUseSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3)
 		maybeDropDependentFKConstraints(b, sie.TableID, sie.ConstraintID, string(indexName.Index), dropBehavior,
 			func(fkReferencedColIDs []catid.ColumnID) bool {
-				return isIndexUniqueAndCanServeFK(b, &sie.Index, fkReferencedColIDs)
+				return isIndexUniqueAndCanServeFK(b, &sie.Index, fkReferencedColIDs, canUseSubset)
 			})
 
 		// If shard index, also drop the shard column and all check constraints that
@@ -511,10 +514,15 @@ func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.C
 	return colIDs
 }
 
-// isIndexUniqueAndCanServeFK return true if the index `ie` is unique,
-// non-partial, and can thus serve a FK that referenced `fkReferencedColIDs`.
+// isIndexUniqueAndCanServeFK returns true if the index `ie` is unique,
+// non-partial, and can thus serve a FK that references `fkReferencedColIDs`.
+//
+// When asSubset is false, the index must cover the FK's referenced columns
+// exactly (a permutation match). When true, the index validates as a subset
+// match: its key columns may be a non-empty subset of the FK's referenced
+// columns.
 func isIndexUniqueAndCanServeFK(
-	b BuildCtx, ie *scpb.Index, fkReferencedColIDs []tree.ColumnID,
+	b BuildCtx, ie *scpb.Index, fkReferencedColIDs []tree.ColumnID, asSubset bool,
 ) bool {
 	if !ie.IsUnique {
 		return false
@@ -535,7 +543,11 @@ func isIndexUniqueAndCanServeFK(
 	keyColIDs, _, _ := getSortedColumnIDsInIndexByKind(b, ie.TableID, ie.IndexID)
 	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
 	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
-	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
+	allKeyColIDsWithoutShardCol := slices.Concat(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol)
+	if asSubset {
+		return explicitKeyColIDsWithoutShardCol.IsNonEmptySubsetOf(fkReferencedColIDs) ||
+			allKeyColIDsWithoutShardCol.IsNonEmptySubsetOf(fkReferencedColIDs)
+	}
 	return explicitKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs) ||
 		allKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs)
 }
@@ -550,6 +562,7 @@ func isIndexUniqueAndCanServeFK(
 func hasColsUniquenessConstraintOtherThan(
 	b BuildCtx, tableID descpb.ID, columnIDs []descpb.ColumnID, otherThan descpb.ConstraintID,
 ) (ret bool) {
+	canUseSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3)
 	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(publicStatusFilter).
 		ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
@@ -559,15 +572,19 @@ func hasColsUniquenessConstraintOtherThan(
 			}
 			switch t := e.(type) {
 			case *scpb.PrimaryIndex:
-				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs) {
+				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs, canUseSubset) {
 					ret = true
 				}
 			case *scpb.SecondaryIndex:
-				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs) {
+				if t.ConstraintID != otherThan && isIndexUniqueAndCanServeFK(b, &t.Index, columnIDs, canUseSubset) {
 					ret = true
 				}
 			case *scpb.UniqueWithoutIndexConstraint:
-				if t.ConstraintID != otherThan && descpb.ColumnIDs(t.ColumnIDs).PermutationOf(columnIDs) {
+				if t.ConstraintID == otherThan {
+					return
+				}
+				cols := descpb.ColumnIDs(t.ColumnIDs)
+				if cols.PermutationOf(columnIDs) || (canUseSubset && cols.IsNonEmptySubsetOf(columnIDs)) {
 					ret = true
 				}
 			}

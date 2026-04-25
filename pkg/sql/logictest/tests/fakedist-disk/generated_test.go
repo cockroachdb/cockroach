@@ -897,6 +897,13 @@ func TestLogic_fk_read_committed(
 	runLogicTest(t, "fk_read_committed")
 }
 
+func TestLogic_fk_subset_unique(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk_subset_unique")
+}
+
 func TestLogic_float(
 	t *testing.T,
 ) {

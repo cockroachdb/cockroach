@@ -189,8 +189,10 @@ func (w index) IsValidOriginIndex(fk catalog.ForeignKeyConstraint) bool {
 
 // IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
 // interface.
-func (w index) IsValidReferencedUniqueConstraint(fk catalog.ForeignKeyConstraint) bool {
-	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
+func (w index) IsValidReferencedUniqueConstraint(
+	fk catalog.ForeignKeyConstraint, asSubset bool,
+) bool {
+	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs, asSubset)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
