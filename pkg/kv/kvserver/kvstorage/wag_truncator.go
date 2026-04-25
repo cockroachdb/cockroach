@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
@@ -33,10 +35,29 @@ var wagTruncatorBatchSize = settings.RegisterIntSetting(
 	settings.IntInRange(1, 1024),
 )
 
+var wagSuffixRetentionCount = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.wag.retention.nodes",
+	"number of trailing WAG nodes to preserve from truncation. (0 disables retention)",
+	32,
+	settings.NonNegativeInt,
+)
+
+var wagRetentionThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.wag.retention.duration",
+	"duration a WAG node can be retained for before it is eligible for truncation. "+
+		"It is only meaningful if `kv.wag.retention.nodes` is > 0. "+
+		"(0 disables age-based retention threshold)",
+	6*time.Hour,
+)
+
 // WAGTruncatorTestingKnobs contains testing knobs for the WAGTruncator.
 type WAGTruncatorTestingKnobs struct {
 	// AfterTruncationCallback is called after each truncation attempt.
 	AfterTruncationCallback func()
+	// AfterAgeTickCallback is called after each tick of the age-retention timer.
+	AfterAgeTickCallback func()
 }
 
 // WAGTruncator truncates applied WAG nodes and clears their associated raft
@@ -60,6 +81,12 @@ type WAGTruncator struct {
 	// truncIndex is the index of the last WAG node that was successfully
 	// truncated.
 	truncIndex atomic.Uint64
+	// allowedIndex is the highest WAG index that the truncator is permitted to
+	// truncate. It is advanced based on the suffix retention settings. It is safe
+	// that it isn't an atomic variable because it is only accessed by the
+	// truncation goroutine.
+	// INVARIANT: truncIndex ≤ allowedIndex ≤ seq.Load().
+	allowedIndex uint64
 	// wakeCh is signaled when there are potential WAG nodes to truncate.
 	wakeCh chan struct{}
 	knobs  WAGTruncatorTestingKnobs
@@ -77,14 +104,25 @@ func NewWAGTruncator(st *cluster.Settings, eng Engines, seq *wag.Seq) *WAGTrunca
 }
 
 // Start launches the background goroutine that performs WAG truncation.
-// TODO(ibrahim): Add a setting for keeping a suffix of the WAG for debugging.
-// For example, setting a maximum number of WAG nodes to retain for debugging
-// purposes. We could also pair it with some time threshold after which all WAG
-// nodes are automatically truncated to maintain a manageable size.
+//
+// TODO(ibrahim): React to runtime changes to kv.wag.retention.duration via
+// SetOnChange so users don't have to wait for the next tick.
 func (t *WAGTruncator) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "wag-truncation", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
+
+		// prevTickIndex is the last WAG index observed at the previous tick of
+		// the age-retention timer. On each subsequent tick we advance allowedIndex
+		// up to this value, ensuring that if nodes were retained for longer than
+		// the age threshold, they can get truncated.
+		var prevTickIndex uint64
+		var ageTimer timeutil.Timer
+		defer ageTimer.Stop()
+		if d := wagRetentionThreshold.Get(&t.st.SV); d > 0 {
+			ageTimer.Reset(d)
+		}
+
 		for {
 			select {
 			case <-t.wakeCh:
@@ -93,6 +131,23 @@ func (t *WAGTruncator) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				if cb := t.knobs.AfterTruncationCallback; cb != nil {
 					cb()
+				}
+
+			case <-ageTimer.C:
+				t.allowedIndex = max(t.allowedIndex, prevTickIndex)
+				prevTickIndex = t.seq.Load()
+				if cb := t.knobs.AfterAgeTickCallback; cb != nil {
+					cb()
+				}
+
+				// Now that we might have advanced allowedIndex, signal to issue a new
+				// truncation attempt.
+				select {
+				case t.wakeCh <- struct{}{}:
+				default:
+				}
+				if d := wagRetentionThreshold.Get(&t.st.SV); d > 0 {
+					ageTimer.Reset(d)
 				}
 			case <-ctx.Done():
 				return
@@ -151,12 +206,18 @@ func (t *WAGTruncator) truncateBatch(ctx context.Context, stateRO StateRO) (bool
 	var count int64
 	var iter wag.Iterator
 	truncated := t.truncIndex.Load()
+	t.maybeAdvanceAllowedIndex()
 
 	b := t.eng.LogEngine().NewWriteBatch()
 	defer b.Close()
+	// TODO(ibrahim): Set the Iter upperbound to be allowedIndex+1.
 	for index, node := range iter.IterFrom(
 		ctx, t.eng.LogEngine(), keys.StoreWAGNodeKey(truncated+1),
 	) {
+		if index > t.allowedIndex {
+			// We've reached a WAG node that retention policy requires us to keep.
+			break
+		}
 		if index != truncated+1 && index > t.initIndex {
 			// We cannot ignore gaps for WAG indices > initIndex.
 			break
@@ -202,6 +263,17 @@ func (t *WAGTruncator) truncateBatch(ctx context.Context, stateRO StateRO) (bool
 	}
 	t.truncIndex.Store(truncated)
 	return true, nil
+}
+
+// maybeAdvanceAllowedIndex tries to advance allowedIndex to reflect the suffix
+// retention setting.
+func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
+	retain := uint64(wagSuffixRetentionCount.Get(&t.st.SV))
+	if last := t.seq.Load(); last > retain {
+		// The allowedIndex could get advanced by the age-timer, and we want to make
+		// sure that we do not regress it.
+		t.allowedIndex = max(t.allowedIndex, last-retain)
+	}
 }
 
 // clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
