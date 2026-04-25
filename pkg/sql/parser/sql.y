@@ -6690,7 +6690,7 @@ discard_stmt:
 // %Category: Group
 // %Text:
 // DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE,
-// DROP USER, DROP ROLE, DROP TYPE, DROP PROVISIONED ROLES,
+// DROP USER, DROP ROLE, DROP TYPE, DROP PROVISIONED ROLES
 drop_stmt:
   drop_ddl_stmt                    // help texts in sub-rule
 | drop_role_stmt                   // EXTEND WITH HELP: DROP ROLE
