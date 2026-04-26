@@ -371,7 +371,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
-		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
+		{`COMMENT ON FUNCTION f() is 'f'`, 44135, ``, ``},
 
 		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
 		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
@@ -489,7 +489,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
 
-		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
@@ -522,9 +522,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(a INT, UNIQUE (a) NOT VALID)`, 0, `table constraint`,
 			`UNIQUE constraints cannot be marked NOT VALID`},
 
-		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
-		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
-		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 102984, ``, ``},
+		{`UPDATE foo SET a.b = 1`, 102984, ``, ``},
+		{`UPDATE Foo SET x.y = z`, 102984, ``, ``},
 
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
@@ -533,7 +533,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
-		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
 

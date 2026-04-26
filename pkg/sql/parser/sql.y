@@ -4849,7 +4849,7 @@ comment_stmt:
     $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
 | COMMENT ON EXTENSION error { return unimplementedWithIssueDetail(sqllex, 74777, "comment on extension") }
-| COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "comment on function") }
+| COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 44135, "comment on function") }
 
 comment_text:
   SCONST
@@ -14532,10 +14532,10 @@ insert_column_list:
 // position. The rule below can be extended to support a sequence of
 // field subscript or array indexing operators to designate a part of
 // a field, when partial updates are to be supported. This likely will
-// be needed together with support for composite types (#27792).
+// be needed together with support for composite types (#102984).
 insert_column_item:
   column_name
-| column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+| column_name '.' error { return unimplementedWithIssue(sqllex, 102984) }
 
 on_conflict:
   ON CONFLICT DO NOTHING
@@ -14651,7 +14651,7 @@ single_set_clause:
   {
     $$.val = &tree.UpdateExpr{Names: tree.NameList{tree.Name($1)}, Expr: $3.expr()}
   }
-| column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+| column_name '.' error { return unimplementedWithIssue(sqllex, 102984) }
 
 multiple_set_clause:
   '(' insert_column_list ')' '=' in_expr
@@ -17300,7 +17300,7 @@ c_expr:
 // Currently we support array indexing (see c_expr above).
 //
 // TODO(knz/jordan): this is the rule that can be extended to support
-// composite types (#27792) with e.g.:
+// composite types (#102984) with e.g.:
 //
 //     | '(' a_expr ')' field_access_ops
 //
