@@ -154,3 +154,7 @@ func (st StatusTracker) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	}
 	return isLiveMap
 }
+
+func (st StatusTracker) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return st.ScanNodeVitalityFromCache()
+}
