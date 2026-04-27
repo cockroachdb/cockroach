@@ -5,22 +5,30 @@
 # When it transitions back, the group reverts to the 90%-fullness
 # check. The heap position is updated on each transition.
 #
+# SetMaxCPUGroups only governs resource group containers (rgKind), so
+# the test runs in RM mode (set-priority-based-groups=true) and routes
+# work via priority: NormalPri (0) -> rg 1, BulkNormalPri (-30) -> rg 2.
+#
 # Note: admit id= is a test-local handle for tracking admit results,
 # unrelated to tenant or group IDs.
 ###
 init
 ----
 
+set-priority-based-groups v=true
+----
+
 set-try-get-return-value v=true
 ----
 
-# Create two groups.
-admit id=1 tenant=10 requested-count=1
+# Create two groups via priority-based routing. NormalPri -> rg 1,
+# BulkNormalPri -> rg 2.
+admit id=1 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input no_burst, returning true
 id 1: admit succeeded
 
-admit id=2 tenant=20 requested-count=1
+admit id=2 tenant=10 priority=-30 requested-count=1
 ----
 tryGet: input no_burst, returning true
 id 2: admit succeeded
@@ -32,38 +40,38 @@ refill-burst-buckets to-add=51 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=50.0% tokens=50 capacity=100 qual=no_burst t20=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 qual=no_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
 
-# Set group 10 to maxCPU=true via SetMaxCPUGroups. Group 10 should
-# now be can_burst despite being at only 50% fullness.
-set-max-cpu-groups group=10 v=true
+# Set rg 1 to maxCPU=true via SetMaxCPUGroups. rg 1 should now be
+# can_burst despite being at only 50% fullness.
+set-max-cpu-groups group=1 v=true
 ----
 
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst t20=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
 
 # Queue work for both groups.
 set-try-get-return-value v=false
 ----
 
-admit id=3 tenant=20 requested-count=1
+admit id=3 tenant=10 priority=-30 requested-count=1
 ----
 tryGet: input no_burst, returning false
 
-admit id=4 tenant=10 requested-count=1
+admit id=4 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input can_burst, returning false
 
 gc-groups-and-reset-used
 ----
 
-# Group 10 (can_burst via maxCPU) should be granted first.
+# rg 1 (can_burst via maxCPU) should be granted first.
 granted chain-id=1
 ----
 continueGrantChain 1
@@ -77,25 +85,25 @@ id 3: admit succeeded
 granted: returned 1
 
 ###
-# Now revoke maxCPU from group 10. It should revert to no_burst
-# since its bucket is below 90%.
+# Now revoke maxCPU from rg 1. It should revert to no_burst since
+# its bucket is below 90%.
 ###
 
 set-try-get-return-value v=true
 ----
 
-set-max-cpu-groups group=10 v=false
+set-max-cpu-groups group=1 v=false
 ----
 
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=49.0% tokens=49 capacity=100 qual=no_burst t20=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=49.0% tokens=49 capacity=100 qual=no_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
 
 # Both groups are now no_burst. New work should report no_burst.
-admit id=5 tenant=10 requested-count=1
+admit id=5 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input no_burst, returning true
 id 5: admit succeeded
@@ -110,29 +118,29 @@ id 5: admit succeeded
 set-try-get-return-value v=false
 ----
 
-admit id=6 tenant=10 requested-count=1
+admit id=6 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input no_burst, returning false
 
-admit id=7 tenant=20 requested-count=1
+admit id=7 tenant=10 priority=-30 requested-count=1
 ----
 
 gc-groups-and-reset-used
 ----
 
-# Set maxCPU on group 10 while both groups have queued work. Group 10
-# should transition to can_burst and the heap should reorder.
-set-max-cpu-groups group=10 v=true
+# Set maxCPU on rg 1 while both groups have queued work. rg 1 should
+# transition to can_burst and the heap should reorder.
+set-max-cpu-groups group=1 v=true
 ----
 
 print
 ----
-closed epoch: 0 groupHeap len: 2 top group: 10
- group-id: 10 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
- group-id: 20 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
-burst-buckets: t10=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst t20=fullness=49.0% tokens=49 capacity=100 qual=no_burst
+closed epoch: 0 groupHeap len: 2 top group: 1
+ group-id: 1 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 2 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+burst-buckets: rg1=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
 
-# Group 10 (can_burst via maxCPU) should be granted before group 20.
+# rg 1 (can_burst via maxCPU) should be granted before rg 2.
 granted chain-id=1
 ----
 continueGrantChain 1
@@ -149,18 +157,31 @@ set-try-get-return-value v=true
 ----
 
 # Revoke maxCPU to restore state for subsequent tests.
-set-max-cpu-groups group=10 v=false
+set-max-cpu-groups group=1 v=false
 ----
 
 ###
 # Set maxCPU on a group that doesn't exist yet. The flag should be
-# picked up when the group is first created via Admit.
+# picked up when the group is first created via Admit. We exercise
+# this by GC'ing rg 1 (used=0, no waiting work) and then setting
+# maxCPU on rg 1 before re-admitting.
 ###
 
-set-max-cpu-groups group=30 v=true
+# Drain rg 1's used count so it can be GC'd.
+gc-groups-and-reset-used
 ----
 
-admit id=8 tenant=30 requested-count=1
+gc-groups-and-reset-used
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+
+set-max-cpu-groups group=1 v=true
+----
+
+admit id=8 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input can_burst, returning true
 id 8: admit succeeded
@@ -168,7 +189,5 @@ id 8: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
- group-id: 30 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=47.0% tokens=47 capacity=100 qual=no_burst t20=fullness=48.0% tokens=48 capacity=100 qual=no_burst t30=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst
