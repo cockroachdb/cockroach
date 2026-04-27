@@ -2755,13 +2755,133 @@ https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 }
 
 var pgCatalogLocksTable = virtualSchemaTable{
-	comment: `locks held by active processes (empty - feature does not exist)
-https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
+	comment: `advisory locks: granted and waiting advisory locks
+https://www.postgresql.org/docs/18/view-pg-locks.html`,
 	schema: vtable.PGCatalogLocks,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		heldRows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx,
+			"read-held-advisory-locks",
+			p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`
+SELECT
+  h.database_id::OID AS database,
+  (((h.lock_id >> 32)::INT8)::INT4)::OID AS classid,
+  ((h.lock_id & (((1::INT8 << 32) - 1)::INT8))::INT8)::OID AS objid,
+  CASE h.is_single_value
+    WHEN true THEN 1:::INT2
+    ELSE 2:::INT2
+  END AS objsubid,
+  ('0/' || s.pg_backend_pid::STRING)::STRING AS virtualtransaction,
+  s.pg_backend_pid AS pid,
+  h.lock_mode
+FROM crdb_internal.cluster_held_advisory_locks AS h
+INNER JOIN crdb_internal.cluster_sessions AS s ON s.session_id = h.session_id
+`,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range heldRows {
+			if err := addRow(
+				tree.NewDString("advisory"), // locktype
+				row[0],                      // database
+				tree.DNull,                  // relation
+				tree.DNull,                  // page
+				tree.DNull,                  // tuple
+				tree.DNull,                  // virtualxid
+				tree.DNull,                  // transactionid
+				row[1],                      // classid
+				row[2],                      // objid
+				row[3],                      // objsubid
+				row[4],                      // virtualtransaction
+				row[5],                      // pid
+				row[6],                      // mode
+				tree.DBoolTrue,              // granted
+				tree.DBoolFalse,             // fastpath
+				tree.DNull,                  // waitstart
+			); err != nil {
+				return err
+			}
+		}
+		// If no advisory locks are held, then no one should be waiting on them.
+		if len(heldRows) == 0 {
+			return nil
+		}
+
+		waiterRows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx,
+			"read-waiting-advisory-locks",
+			p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`
+SELECT
+  pk.db_id::OID AS database,
+  (((pk.packed_key >> 32)::INT8)::INT4)::OID AS classid,
+  ((pk.packed_key & (((1::INT8 << 32) - 1)::INT8))::INT8)::OID AS objid,
+  CASE pk.lock_type
+    WHEN 1:::INT8 THEN 1:::INT2
+    ELSE 2:::INT2
+  END AS objsubid,
+  ('0/' || s.pg_backend_pid::STRING)::STRING AS virtualtransaction,
+  s.pg_backend_pid AS pid,
+  CASE l.lock_strength
+    WHEN 'Exclusive':::STRING THEN 'ExclusiveLock':::STRING
+    WHEN 'Shared':::STRING THEN 'ShareLock':::STRING
+    ELSE l.lock_strength
+  END AS mode,
+  l.ts::TIMESTAMPTZ AS waitstart
+FROM crdb_internal.cluster_locks AS l
+INNER JOIN LATERAL (
+  SELECT
+    CAST(segs[cardinality(segs) - 3] AS INT8) AS db_id,
+    CAST(segs[cardinality(segs) - 2] AS INT8) AS lock_type,
+    CAST(segs[cardinality(segs) - 1] AS INT8) AS packed_key
+  FROM (SELECT string_to_array(btrim(l.lock_key_pretty, ' /'), '/') AS segs) AS x
+  WHERE cardinality(segs) >= 4
+    AND (segs[cardinality(segs) - 3] ~ '^[0-9]+$')
+    AND (segs[cardinality(segs) - 2] ~ '^[0-9]+$')
+    AND (segs[cardinality(segs) - 1] ~ '^-?[0-9]+$')
+    AND segs[cardinality(segs)] = '0'
+) AS pk ON true
+INNER JOIN crdb_internal.cluster_sessions AS s ON l.txn_id::STRING = s.kv_txn
+WHERE l.database_name = 'system'
+  AND l.table_name = 'advisory_locks'
+  AND l.granted = false
+  AND l.txn_id IS NOT NULL
+`,
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range waiterRows {
+			if err := addRow(
+				tree.NewDString("advisory"), // locktype
+				row[0],                      // database
+				tree.DNull,                  // relation
+				tree.DNull,                  // page
+				tree.DNull,                  // tuple
+				tree.DNull,                  // virtualxid
+				tree.DNull,                  // transactionid
+				row[1],                      // classid
+				row[2],                      // objid
+				row[3],                      // objsubid
+				row[4],                      // virtualtransaction
+				row[5],                      // pid
+				row[6],                      // mode
+				tree.DBoolFalse,             // granted
+				tree.DBoolFalse,             // fastpath
+				row[7],                      // waitstart
+			); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogMatViewsTable = virtualSchemaTable{
