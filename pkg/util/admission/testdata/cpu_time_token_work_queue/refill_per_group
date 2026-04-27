@@ -41,7 +41,7 @@ closed epoch: 0 groupHeap len: 0
  group-id: 10 used: 1, w: 1, fifo: -128
  group-id: 20 used: 1, w: 1, fifo: -128
  group-id: 30 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=99.0% tokens=99 capacity=100 qual=can_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
 
 # Refill group 20 with a smaller amount. Group 20 should reach 49%
 # (no_burst). Group 30 still untouched.
@@ -54,7 +54,7 @@ closed epoch: 0 groupHeap len: 0
  group-id: 10 used: 1, w: 1, fifo: -128
  group-id: 20 used: 1, w: 1, fifo: -128
  group-id: 30 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=99.0% tokens=99 capacity=100 qual=can_burst t20=fullness=49.0% tokens=49 capacity=100 qual=no_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
 
 ###
 # Verify that refill-burst-bucket-for-group correctly updates the heap
@@ -89,7 +89,7 @@ closed epoch: 0 groupHeap len: 2 top group: 20
  group-id: 10 used: 0, w: 1, fifo: -128
  group-id: 20 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
  group-id: 30 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
-burst-buckets: t10=fullness=99.0% tokens=99 capacity=100 qual=can_burst t20=fullness=99.0% tokens=99 capacity=100 qual=can_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t30=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
 
 # Group 20 (now can_burst) should be granted before group 30 (no_burst).
 granted chain-id=1
@@ -117,4 +117,4 @@ closed epoch: 0 groupHeap len: 0
  group-id: 10 used: 0, w: 1, fifo: -128
  group-id: 20 used: 1, w: 1, fifo: -128
  group-id: 30 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=99.0% tokens=99 capacity=100 qual=can_burst t20=fullness=98.0% tokens=98 capacity=100 qual=can_burst t30=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
+burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t20=fullness=0.0% tokens=-2 capacity=0 qual=no_burst t30=fullness=0.0% tokens=-2 capacity=0 qual=no_burst

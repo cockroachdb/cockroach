@@ -143,9 +143,13 @@ type cpuTimeTokenMetrics struct {
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
-	// NB: Matches multitenant.TenantIDLabel for consistency with other
-	// per-tenant metrics. Inlined to avoid a dependency cycle.
-	b := aggmetric.MakeBuilder("tenant_id")
+	// Two-label scheme: kind discriminates "tenant" vs "rg" so the same
+	// numeric ID in different namespaces (system tenant 1 vs rg 1) maps
+	// to distinct child time series; tenant_id stays a bare numeric
+	// string for parity with other per-tenant AggCounters
+	// (multitenant.TenantIDLabel) so dashboards filtering on tenant_id
+	// keep working.
+	b := aggmetric.MakeBuilder("kind", "tenant_id")
 	m := &cpuTimeTokenMetrics{
 		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
 		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),

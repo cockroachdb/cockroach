@@ -315,13 +315,18 @@ func printWorkQueue(q *WorkQueue) string {
 	if len(q.mu.groupHeap) > 0 {
 		buf.WriteString(fmt.Sprintf(" top-group=t%d", q.mu.groupHeap[0].id))
 	}
-	var ids []uint64
-	for id := range q.mu.groups {
-		ids = append(ids, id)
+	var keys []groupKey
+	for k := range q.mu.groups {
+		keys = append(keys, k)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	for _, id := range ids {
-		group := q.mu.groups[id]
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].kind != keys[j].kind {
+			return keys[i].kind < keys[j].kind
+		}
+		return keys[i].id < keys[j].id
+	})
+	for _, k := range keys {
+		group := q.mu.groups[k]
 		buf.WriteString(fmt.Sprintf("\n group=t%d weight=%d fifo-threshold=%s used=%s",
 			group.id,
 			group.weight,
