@@ -2339,6 +2339,21 @@ func (cr *commandRegistry) buildOpentelemetryStartCmd() *cobra.Command {
 	return opentelemetryStartCmd
 }
 
+func (cr *commandRegistry) buildOpentelemetryRestartCmd() *cobra.Command {
+	opentelemetryRestartCmd := &cobra.Command{
+		Use:   "opentelemetry-restart <cluster>",
+		Short: "Restart the OpenTelemetry Collector with updated configuration",
+		Long: "Regenerate configuration and restart the OpenTelemetry Collector. " +
+			"The collector must already be installed via opentelemetry-start.",
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.RestartOpenTelemetry(context.Background(), config.Logger, args[0], opentelemetryConfig)
+		}),
+	}
+	initOpentelemetryStartCmdFlags(opentelemetryRestartCmd)
+	return opentelemetryRestartCmd
+}
+
 func (cr *commandRegistry) buildOpentelemetryStopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "opentelemetry-stop <cluster>",
