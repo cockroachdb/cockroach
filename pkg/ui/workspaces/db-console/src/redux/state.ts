@@ -101,13 +101,6 @@ export function createAdminUIStore(
     {
       login: {
         loggedInUser: dataFromServer.LoggedInUser,
-        error: null,
-        inProgress: false,
-        oidcAutoLogin: dataFromServer.OIDCAutoLogin,
-        oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
-        oidcButtonText: dataFromServer.OIDCButtonText,
-        oidcGenerateJWTAuthTokenEnabled:
-          dataFromServer.OIDCGenerateJWTAuthTokenEnabled,
       },
       flags: dataFromServer.FeatureFlags,
     },

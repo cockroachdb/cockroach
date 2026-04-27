@@ -7,7 +7,9 @@ import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
+import { mutate } from "swr";
 
+import { cockroach } from "src/js/protos";
 import ErrorCircle from "assets/error-circle.svg";
 import {
   CockroachLabsLockupIcon,
@@ -17,8 +19,10 @@ import {
   Text,
   TextTypes,
 } from "src/components";
-import { doLogin, LoginAPIState } from "src/redux/login";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { loginSuccess } from "src/redux/login";
+import { AdminUIState } from "src/redux/state";
+import { userLogin } from "src/util/api";
+import { getDataFromServer } from "src/util/dataFromServer";
 import * as docsURL from "src/util/docs";
 import {
   OIDCGenerateJWTAuthTokenConnected,
@@ -27,8 +31,23 @@ import {
 
 import "./loginPage.scss";
 
+import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
+
+// LoginPageState is the local state needed by the login page UI.
+// inProgress and error are component-local state; only loggedInUser
+// is shared via Redux (for requireLogin, loginIndicator, etc.).
+export interface LoginPageState {
+  loggedInUser: string;
+  error: Error;
+  inProgress: boolean;
+  oidcAutoLogin: boolean;
+  oidcLoginEnabled: boolean;
+  oidcButtonText: string;
+  oidcGenerateJWTAuthTokenEnabled: boolean;
+}
+
 export interface LoginPageProps {
-  loginState: LoginAPIState;
+  loginState: LoginPageState;
   handleLogin: (username: string, password: string) => Promise<any>;
 }
 
@@ -172,11 +191,40 @@ const LoginPageConnected: React.FC<RouteComponentProps> = ({
   location,
   history,
 }) => {
-  const dispatch: AppDispatch = useDispatch();
-  const loginState = useSelector((state: AdminUIState) => state.login);
+  const dispatch = useDispatch();
+  const loggedInUser = useSelector(
+    (state: AdminUIState) => state.login.loggedInUser,
+  );
+  const dataFromServer = getDataFromServer();
 
-  const handleLogin = (username: string, password: string) => {
-    return dispatch(doLogin(username, password));
+  const [inProgress, setInProgress] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const loginState: LoginPageState = {
+    loggedInUser,
+    error,
+    inProgress,
+    oidcAutoLogin: dataFromServer.OIDCAutoLogin,
+    oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
+    oidcButtonText: dataFromServer.OIDCButtonText,
+    oidcGenerateJWTAuthTokenEnabled:
+      dataFromServer.OIDCGenerateJWTAuthTokenEnabled,
+  };
+
+  const handleLogin = async (username: string, password: string) => {
+    setInProgress(true);
+    setError(null);
+    try {
+      await userLogin(new UserLoginRequest({ username, password }));
+      // Clear any stale SWR cache entries (e.g. 401 errors from before login)
+      // so authenticated components fetch fresh data on mount.
+      await mutate(() => true, undefined, { revalidate: false });
+      dispatch(loginSuccess(username));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setInProgress(false);
+    }
   };
 
   return (
