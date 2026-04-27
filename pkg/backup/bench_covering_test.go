@@ -11,11 +11,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -24,11 +21,10 @@ import (
 )
 
 func BenchmarkCoverageChecks(b *testing.B) {
-	dir := b.TempDir()
-	settings := cluster.MakeTestingClusterSettings()
-	storageFactory := func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
-		return nodelocal.TestingMakeNodelocalStorage(dir, settings, dest), nil
-	}
+	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 2, InitManualReplication)
+	defer cleanupFn()
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
+	storageFactory := execCfg.DistSQLSrv.ExternalStorage
 	ctx := context.Background()
 	r, _ := randutil.NewTestRand()
 
@@ -61,11 +57,10 @@ func BenchmarkCoverageChecks(b *testing.B) {
 }
 
 func BenchmarkRestoreEntryCover(b *testing.B) {
-	dir := b.TempDir()
-	settings := cluster.MakeTestingClusterSettings()
-	storageFactory := func(ctx context.Context, dest cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
-		return nodelocal.TestingMakeNodelocalStorage(dir, settings, dest), nil
-	}
+	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 2, InitManualReplication)
+	defer cleanupFn()
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
+	storageFactory := execCfg.DistSQLSrv.ExternalStorage
 
 	ctx := context.Background()
 	r, _ := randutil.NewTestRand()
