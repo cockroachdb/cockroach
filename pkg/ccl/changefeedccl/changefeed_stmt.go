@@ -1349,9 +1349,11 @@ func validateSink(
 	}
 
 	// If there's no projection we may need to force some options to ensure messages
-	// have enough information.
+	// have enough information. Formats like CSV and Parquet inherently include all
+	// columns in every row, so key_in_value is unnecessary.
 	if details.Select == `` {
-		if requiresKeyInValue(canarySink) {
+		format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+		if requiresKeyInValue(canarySink) && formatSupportsKeyInValue(format) {
 			if err = opts.ForceKeyInValue(); err != nil {
 				return err
 			}
@@ -1385,6 +1387,17 @@ func requiresKeyInValue(s Sink) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// formatSupportsKeyInValue returns true if the given format
+// supports key_in_value.
+func formatSupportsKeyInValue(f changefeedbase.FormatType) bool {
+	switch f {
+	case changefeedbase.OptFormatCSV, changefeedbase.OptFormatParquet:
+		return false
+	default:
+		return true
 	}
 }
 
@@ -1543,6 +1556,23 @@ func validateDetailsAndOptions(
 				changefeedbase.OptPartitionAlg,
 				changefeedbase.PartitionAlgEnabled.Name(),
 			)
+		}
+	}
+
+	encOpts, err := opts.GetEncodingOptions()
+	if err != nil {
+		return err
+	}
+	if encOpts.CsvHeader {
+		if details.SinkURI == `` {
+			return errors.Newf(
+				`%s is not supported for sinkless changefeeds`,
+				changefeedbase.OptCsvHeader)
+		}
+		if len(details.TargetSpecifications) > 1 || isDBLevelChangefeed(details) {
+			return errors.Newf(
+				`%s is not supported for changefeeds targeting multiple tables`,
+				changefeedbase.OptCsvHeader)
 		}
 	}
 

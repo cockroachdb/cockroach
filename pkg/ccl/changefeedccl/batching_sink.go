@@ -102,9 +102,10 @@ type flushReq struct {
 // attributes contain additional metadata which may be emitted alongside a row
 // but separate from the encoded keys and values.
 type attributes struct {
-	tableName string
-	headers   map[string][]byte
-	mvcc      hlc.Timestamp
+	tableName       string
+	headers         map[string][]byte
+	mvcc            hlc.Timestamp
+	csvColumnHeader []byte
 }
 
 type rowEvent struct {
@@ -112,6 +113,7 @@ type rowEvent struct {
 	val             []byte
 	topicDescriptor TopicDescriptor
 	headers         rowHeaders
+	csvColumnHeader []byte
 
 	alloc kvevent.Alloc
 	mvcc  hlc.Timestamp
@@ -198,6 +200,7 @@ func (s *batchingSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
@@ -209,6 +212,7 @@ func (s *batchingSink) EmitRow(
 	payload.val = value
 	payload.topicDescriptor = topic
 	payload.headers = headers
+	payload.csvColumnHeader = csvColumnHeader
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -311,9 +315,10 @@ func (sb *sinkBatch) Append(ctx context.Context, e *rowEvent) {
 	}
 
 	sb.buffer.Append(ctx, e.key, e.val, attributes{
-		tableName: e.topicDescriptor.GetTableName(),
-		headers:   e.headers,
-		mvcc:      e.mvcc,
+		tableName:       e.topicDescriptor.GetTableName(),
+		headers:         e.headers,
+		mvcc:            e.mvcc,
+		csvColumnHeader: e.csvColumnHeader,
 	})
 
 	sb.keys.Add(hashToInt(sb.hasher, e.key))

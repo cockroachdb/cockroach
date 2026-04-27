@@ -106,6 +106,7 @@ func (parquetSink *parquetCloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 	headers rowHeaders,
