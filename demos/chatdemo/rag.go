@@ -78,7 +78,7 @@ func (s *ChatService) Chat(
 
 	if !filters.NeedsSearch {
 		// No search needed — respond directly from conversation history.
-		fmt.Print("\n  [No search needed]")
+		//fmt.Print("\n  [No search needed]")
 		messages = s.buildDirectPrompt(userMsg, history)
 	} else {
 		s.printFilters(filters)
@@ -193,7 +193,7 @@ func (s *ChatService) printFilters(filters SearchFilters) {
 	if filters.Region != nil {
 		parts = append(parts, fmt.Sprintf("region=%s", *filters.Region))
 	}
-	fmt.Printf("\n  [Filters: %s]", strings.Join(parts, ", "))
+	//fmt.Printf("\n  [Filters: %s]", strings.Join(parts, ", "))
 }
 
 // search finds the top-K most relevant book chunks for the given semantic
