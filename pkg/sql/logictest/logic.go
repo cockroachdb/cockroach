@@ -1134,6 +1134,13 @@ type logicTest struct {
 	skipOnRetry    bool
 	skippedOnRetry bool
 
+	// skippedDueToSnappy is sticky once set: it indicates that the
+	// "Can't find decompressor for snappy" infra flake was detected
+	// (#124966), the testserver cluster has been stopped, and the
+	// remainder of the test should be skipped rather than run further
+	// directives against the dead cluster.
+	skippedDueToSnappy bool
+
 	// declarativeCorpusCollector used to save declarative schema changer state
 	// to disk.
 	declarativeCorpusCollector *corpus.Collector
@@ -1483,6 +1490,8 @@ func (t *logicTest) handleWaitForInitErr(ts testserver.TestServer, err error) {
 			if ts != nil {
 				ts.Stop()
 			}
+			t.skippedDueToSnappy = true
+			t.testserverCluster = nil
 			t.t().Skip("ignoring init did not finish for node error due to snappy error")
 		}
 	}
@@ -2403,6 +2412,9 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			break
 		}
+		if t.skippedDueToSnappy {
+			break
+		}
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
@@ -2422,6 +2434,10 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 			})
 			t.maybeSkipOnRetry(nil)
 		}
+	}
+	if t.skippedDueToSnappy && !t.rootT.Failed() {
+		skip.IgnoreLintf(t.rootT,
+			"skipping remainder of test due to snappy infra flake; see #124966")
 	}
 
 	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.rootT.Failed() {
