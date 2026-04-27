@@ -108,20 +108,39 @@ func TestMetricsValues(t *testing.T) {
 }
 
 // TestExpiryDaysValues verifies that the days-until-expiry metrics report
-// the correct number of days for each certificate type.
+// the correct number of days for each certificate type, with distinct
+// day counts per cert to ensure each metric is wired correctly.
 func TestExpiryDaysValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	securityassets.ResetLoader()
 	defer ResetTest()
 
-	// Set now to unix 1. Certificates expire at offsets 2..9
-	// (see writeTestCerts). The TTL in seconds for each cert is
-	// (expiration - 1). Days = ceil(ttlSeconds / 86400).
-	// With these tiny TTLs (1-8 seconds), all should be 1 day.
-	now := timeutil.Unix(1, 0)
+	const day = int64(86400)
+	now := timeutil.Unix(0, 0)
 	certsDir := t.TempDir()
-	writeTestCerts(t, certsDir)
+
+	// Write each certificate with a distinct multi-day expiration.
+	// Cert order matches writeTestCerts file names.
+	certs := []struct {
+		certFile string
+		keyFile  string
+		days     int64
+	}{
+		{"ca.crt", "ca.key", 1},
+		{"ca-client.crt", "ca-client.key", 2},
+		{"ca-client-tenant.crt", "ca-client-tenant.key", 3},
+		{"ca-ui.crt", "ca-ui.key", 4},
+		{"node.crt", "node.key", 5},
+		{"ui.crt", "ui.key", 6},
+		{"client-tenant.1.crt", "client-tenant.1.key", 7},
+		{"client.node.crt", "client.node.key", 8},
+	}
+	for _, c := range certs {
+		_, certBytes := makeTestCert(t, "", 0, nil, timeutil.Unix(c.days*day, 0))
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, c.certFile), certBytes, 0700))
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, c.keyFile), []byte("key"), 0700))
+	}
 
 	cm, err := security.NewCertificateManager(
 		certsDir,
@@ -138,13 +157,13 @@ func TestExpiryDaysValues(t *testing.T) {
 		actual   int64
 	}{
 		{"CA Expiry Days", 1, metrics.CAExpiryDays.Value()},
-		{"Client CA Expiry Days", 1, metrics.ClientCAExpiryDays.Value()},
-		{"Tenant CA Expiry Days", 1, metrics.TenantCAExpiryDays.Value()},
-		{"UI CA Expiry Days", 1, metrics.UICAExpiryDays.Value()},
-		{"Node Expiry Days", 1, metrics.NodeExpiryDays.Value()},
-		{"UI Expiry Days", 1, metrics.UIExpiryDays.Value()},
-		{"Tenant Expiry Days", 1, metrics.TenantExpiryDays.Value()},
-		{"Node Client Expiry Days", 1, metrics.NodeClientExpiryDays.Value()},
+		{"Client CA Expiry Days", 2, metrics.ClientCAExpiryDays.Value()},
+		{"Tenant CA Expiry Days", 3, metrics.TenantCAExpiryDays.Value()},
+		{"UI CA Expiry Days", 4, metrics.UICAExpiryDays.Value()},
+		{"Node Expiry Days", 5, metrics.NodeExpiryDays.Value()},
+		{"UI Expiry Days", 6, metrics.UIExpiryDays.Value()},
+		{"Tenant Expiry Days", 7, metrics.TenantExpiryDays.Value()},
+		{"Node Client Expiry Days", 8, metrics.NodeClientExpiryDays.Value()},
 	}
 	for _, check := range checks {
 		require.Equal(t, check.expected, check.actual, check.name)
@@ -286,17 +305,28 @@ func TestRotationTimestampsAllCertTypes(t *testing.T) {
 		require.Equal(t, int64(0), c.gauge.Value(), "%s rotation before reload", c.name)
 	}
 
-	// Rotate all certificates at once.
-	now.Advance(500 * time.Second)
-	for _, c := range checks {
+	// Rotate each certificate at a distinct time so each gets a unique
+	// rotation timestamp, verifying that each metric is wired correctly.
+	for i, c := range checks {
+		now.Advance(time.Duration(100*(i+1)) * time.Second)
 		_, certBytes := makeTestCert(t, "", 0, nil, timeutil.Unix(9999, 0))
 		require.NoError(t, os.WriteFile(filepath.Join(certsDir, c.certFile), certBytes, 0700))
+		require.NoError(t, cm.LoadCertificates())
 	}
-	require.NoError(t, cm.LoadCertificates())
 
-	// All should now reflect the rotation timestamp.
-	for _, c := range checks {
-		require.Equal(t, int64(1500), c.gauge.Value(), "%s rotation after reload", c.name)
+	// Compute expected timestamps. Starting at 1000, each cert i advances
+	// by 100*(i+1) seconds cumulatively.
+	// i=0: 1000 + 100 = 1100
+	// i=1: 1100 + 200 = 1300
+	// i=2: 1300 + 300 = 1600
+	// i=3: 1600 + 400 = 2000
+	// i=4: 2000 + 500 = 2500
+	// i=5: 2500 + 600 = 3100
+	// i=6: 3100 + 700 = 3800
+	// i=7: 3800 + 800 = 4600
+	expectedTimestamps := []int64{1100, 1300, 1600, 2000, 2500, 3100, 3800, 4600}
+	for i, c := range checks {
+		require.Equal(t, expectedTimestamps[i], c.gauge.Value(), "%s rotation after reload", c.name)
 	}
 }
 

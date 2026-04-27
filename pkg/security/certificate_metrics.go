@@ -249,6 +249,8 @@ var (
 		Help:         "Unix timestamp of the last CA certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
 	}
@@ -257,6 +259,8 @@ var (
 		Help:         "Unix timestamp of the last client CA certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
 	}
@@ -265,6 +269,8 @@ var (
 		Help:         "Unix timestamp of the last UI CA certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
 	}
@@ -273,6 +279,8 @@ var (
 		Help:         "Unix timestamp of the last tenant client CA certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
 	}
@@ -281,6 +289,8 @@ var (
 		Help:         "Unix timestamp of the last node certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
 	}
@@ -289,6 +299,8 @@ var (
 		Help:         "Unix timestamp of the last node client certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
 	}
@@ -297,6 +309,8 @@ var (
 		Help:         "Unix timestamp of the last UI certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
 	}
@@ -305,6 +319,8 @@ var (
 		Help:         "Unix timestamp of the last tenant client certificate rotation. 0 means no rotation since process start.",
 		Measurement:  "Certificate Last Rotation",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
 	}
@@ -315,6 +331,8 @@ var (
 		Help:         "Days until expiration for the CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
 	}
@@ -323,6 +341,8 @@ var (
 		Help:         "Days until expiration for the client CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
 	}
@@ -331,6 +351,8 @@ var (
 		Help:         "Days until expiration for the UI CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
 	}
@@ -339,6 +361,8 @@ var (
 		Help:         "Days until expiration for the tenant client CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
 	}
@@ -347,6 +371,8 @@ var (
 		Help:         "Days until expiration for the node certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
 	}
@@ -355,6 +381,8 @@ var (
 		Help:         "Days until expiration for the node client certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
 	}
@@ -363,6 +391,8 @@ var (
 		Help:         "Days until expiration for the UI certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
 	}
@@ -371,6 +401,8 @@ var (
 		Help:         "Days until expiration for the tenant client certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate Expiry Days",
 		Unit:         metric.Unit_COUNT,
+		Visibility:   metric.Metadata_ESSENTIAL,
+		Category:     metric.Metadata_EXPIRATIONS,
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
 	}
@@ -413,6 +445,10 @@ func ttlGauge(
 
 const secondsPerDay = 86400
 
+// expiryDaysGauge returns a FunctionalGauge that reports the number of whole
+// days remaining until the certificate expires. math.Ceil is used so that any
+// partial day is rounded up: a certificate with 1 second remaining reports 1
+// (not 0), matching operator expectations that 0 means "already expired".
 func expiryDaysGauge(
 	metadata metric.Metadata, certFunc certClosure, ts timeutil.TimeSource,
 ) *metric.FunctionalGauge {
