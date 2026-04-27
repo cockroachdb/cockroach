@@ -18,6 +18,7 @@ go_library(
         "elastic_cpu_work_queue.go",
         "grant_coordinator.go",
         "granter.go",
+        "group_key.go",
         "io_load_listener.go",
         "kv_slot_adjuster.go",
         "pacer.go",
