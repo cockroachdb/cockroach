@@ -193,8 +193,12 @@ artifact is `failure-logs.tbz` — a bzip2-compressed tar archive bundled
 
 ```bash
 unzip -j "$DEST/artifacts.zip" "failure-logs.tbz" -d "$DEST"
-tar -xjf "$DEST/failure-logs.tbz" -C "$DEST"
+tar --extract -f "$DEST/failure-logs.tbz" -C "$DEST"
 ```
+
+(GNU tar auto-detects bzip2 compression on extract, so no `-j` flag
+is needed. Use the long-form `--extract` because that's the form
+allowed by the workflow's tool permissions; `tar -xjf` is sandboxed.)
 
 The archive contains:
 
