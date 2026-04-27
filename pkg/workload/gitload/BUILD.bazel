@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gitload",
+    srcs = [
+        "generate.go",
+        "gitdata.go",
+        "gitload.go",
+        "ingest.go",
+        "verify.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/gitload",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "gitload_test",
+    size = "large",
+    srcs = [
+        "gitload_test.go",
+        "main_test.go",
+    ],
+    embed = [":gitload"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

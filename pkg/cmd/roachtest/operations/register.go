@@ -34,6 +34,7 @@ func RegisterOperations(r registry.Registry) {
 	registerSessionVariables(r)
 	registerDebugZip(r)
 	registerDiskFill(r)
+	registerGitloadVerify(r)
 	changefeeds.RegisterChangefeeds(r)
 	registerInspect(r)
 }

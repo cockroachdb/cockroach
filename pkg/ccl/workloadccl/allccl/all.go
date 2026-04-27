@@ -18,6 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/geospatial"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/gitload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/indexes"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/insights"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/jsonload"

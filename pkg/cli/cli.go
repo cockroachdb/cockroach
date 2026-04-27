@@ -32,6 +32,7 @@ import (
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"              // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"           // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/gitload"            // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/insights"           // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"                 // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"               // registers workloads
