@@ -2065,6 +2065,7 @@ raftlog_behind: raftlog.behind
 raftlog_size_max: raftlog.size.max
 raftlog_size_total: raftlog.size.total
 raftlog_truncated: raftlog.truncated
+raftlog_truncator_running_nanos: raftlog.truncator.running_nanos
 range_adds: range.adds
 range_merges: range.merges
 range_raftleaderremovals: range.raftleaderremovals

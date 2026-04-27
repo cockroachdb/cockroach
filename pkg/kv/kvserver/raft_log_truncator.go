@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // pendingLogTruncations tracks proposed truncations for a replica that have
@@ -186,10 +188,11 @@ func (pt pendingTruncation) merge(prev pendingTruncation) pendingTruncation {
 // raftLogTruncator.mu, but the reverse is not permitted.
 
 type raftLogTruncator struct {
-	ambientCtx context.Context
-	store      storeForTruncator
-	stopper    *stop.Stopper
-	mu         struct {
+	ambientCtx   context.Context
+	store        storeForTruncator
+	stopper      *stop.Stopper
+	runningNanos *metric.Counter // maybe nil in tests
+	mu           struct {
 		syncutil.Mutex
 		// Ranges are queued into addRanges and batch dequeued by swapping with
 		// drainRanges. This avoids holding mu for any work proportional to the
@@ -203,12 +206,16 @@ type raftLogTruncator struct {
 }
 
 func makeRaftLogTruncator(
-	ambientCtx log.AmbientContext, store storeForTruncator, stopper *stop.Stopper,
+	ambientCtx log.AmbientContext,
+	store storeForTruncator,
+	stopper *stop.Stopper,
+	runningNanos *metric.Counter,
 ) *raftLogTruncator {
 	t := &raftLogTruncator{
-		ambientCtx: ambientCtx.AnnotateCtx(context.Background()),
-		store:      store,
-		stopper:    stopper,
+		ambientCtx:   ambientCtx.AnnotateCtx(context.Background()),
+		store:        store,
+		stopper:      stopper,
+		runningNanos: runningNanos,
 	}
 	t.mu.addRanges = make(map[roachpb.RangeID]struct{})
 	t.mu.drainRanges = make(map[roachpb.RangeID]struct{})
@@ -388,6 +395,13 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	}
 	if err := t.stopper.RunAsyncTask(t.ambientCtx, "raft-log-truncation",
 		func(ctx context.Context) {
+			if t.runningNanos != nil {
+				start := timeutil.Now()
+				defer func() {
+					t.runningNanos.Inc(timeutil.Since(start).Nanoseconds())
+				}()
+			}
+
 			for {
 				t.durabilityAdvanced(ctx)
 				shouldReturn := false

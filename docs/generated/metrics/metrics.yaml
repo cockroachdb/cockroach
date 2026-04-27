@@ -19755,6 +19755,14 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: raftlog.truncator.running_nanos
+      exported_name: raftlog_truncator_running_nanos
+      description: Cumulative wall-clock nanoseconds the per-store loosely-coupled raft log truncator goroutine has spent running.
+      y_axis_label: Processing Time
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.adds
       exported_name: range_adds
       description: Number of range additions

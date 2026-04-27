@@ -2267,6 +2267,15 @@ var (
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftLogTruncatorRunningNanos = metric.Metadata{
+		Name: "raftlog.truncator.running_nanos",
+		Help: crstrings.UnwrapText(`
+			Cumulative wall-clock nanoseconds the per-store loosely-coupled raft
+			log truncator goroutine has spent running.
+		`),
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	metaRaftLogTotalSize = metric.Metadata{
 		Name:        "raftlog.size.total",
@@ -3645,10 +3654,11 @@ type StoreMetrics struct {
 	RaftSentCrossZoneBytes   *metric.Counter
 
 	// Raft log metrics.
-	RaftLogFollowerBehindCount *metric.Gauge
-	RaftLogTruncated           *metric.Counter
-	RaftLogTotalSize           *metric.Gauge
-	RaftLogMaxSize             *metric.Gauge
+	RaftLogFollowerBehindCount   *metric.Gauge
+	RaftLogTruncated             *metric.Counter
+	RaftLogTruncatorRunningNanos *metric.Counter
+	RaftLogTotalSize             *metric.Gauge
+	RaftLogMaxSize               *metric.Gauge
 
 	RaftPausedFollowerCount       *metric.Gauge
 	RaftPausedFollowerDroppedMsgs *metric.Counter
@@ -4472,10 +4482,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftSentCrossZoneBytes:   metric.NewCounter(metaRaftSentCrossZoneBytes),
 
 		// Raft log metrics.
-		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
-		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
-		RaftLogTotalSize:           metric.NewGauge(metaRaftLogTotalSize),
-		RaftLogMaxSize:             metric.NewGauge(metaRaftLogMaxSize),
+		RaftLogFollowerBehindCount:   metric.NewGauge(metaRaftLogFollowerBehindCount),
+		RaftLogTruncated:             metric.NewCounter(metaRaftLogTruncated),
+		RaftLogTruncatorRunningNanos: metric.NewCounter(metaRaftLogTruncatorRunningNanos),
+		RaftLogTotalSize:             metric.NewGauge(metaRaftLogTotalSize),
+		RaftLogMaxSize:               metric.NewGauge(metaRaftLogMaxSize),
 
 		RaftPausedFollowerCount:       metric.NewGauge(metaRaftFollowerPaused),
 		RaftPausedFollowerDroppedMsgs: metric.NewCounter(metaRaftPausedFollowerDroppedMsgs),

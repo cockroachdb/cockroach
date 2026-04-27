@@ -287,7 +287,7 @@ func TestRaftLogTruncator(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	truncator := makeRaftLogTruncator(
-		log.MakeTestingAmbientContext(tracing.NewTracer()), store, stopper)
+		log.MakeTestingAmbientContext(tracing.NewTracer()), store, stopper, nil /* runningNanos */)
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "raft_log_truncator"),
 		func(t *testing.T, d *datadriven.TestData) string {
