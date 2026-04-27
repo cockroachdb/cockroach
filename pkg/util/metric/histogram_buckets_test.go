@@ -7,6 +7,8 @@ package metric
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -30,10 +32,20 @@ func TestHistogramBuckets(t *testing.T) {
 		return buf.String()
 	}
 
+	arch := runtime.GOARCH
 	for _, config := range StaticBucketConfigs {
 		exp := config.GetBucketsFromBucketConfig()
 		buf := verifyAndPrint(t, exp, config.category)
-		echotest.Require(t, buf, datapathutils.TestDataPath(t, config.category))
+
+		category := config.category
+		if arch == "s390x" {
+			s390xPath := datapathutils.TestDataPath(t, fmt.Sprintf("%s_%s", category, arch))
+			if _, err := os.Stat(s390xPath); err == nil {
+				category = fmt.Sprintf("%s_%s", category, arch)
+			}
+		}
+
+		echotest.Require(t, buf, datapathutils.TestDataPath(t, category))
 	}
 
 }
