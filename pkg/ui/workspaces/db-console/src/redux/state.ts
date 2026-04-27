@@ -25,7 +25,6 @@ import { createSelector } from "reselect";
 
 import { DataFromServer } from "src/util/dataFromServer";
 
-import { initializeAnalytics } from "./analytics";
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { healthReducer, HealthState } from "./health";
 import { hoverReducer, HoverState } from "./hover";
@@ -126,7 +125,6 @@ export function createAdminUIStore(
   );
 
   sagaMiddleware.run(rootSaga);
-  initializeAnalytics(s);
   return s;
 }
 

@@ -4,46 +4,33 @@
 // included in the /LICENSE file.
 
 import { Analytics } from "@segment/analytics-node";
-import { Location, createLocation, createHashHistory } from "history";
+import { Location, createLocation } from "history";
 import each from "lodash/each";
-import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 
 import { AnalyticsSync, defaultRedactions } from "./analytics";
-import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { history } from "./history";
-import { AdminUIState, createAdminUIStore } from "./state";
 
 describe("analytics listener", function () {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
-  const setClusterData = (
-    store: Store<AdminUIState>,
-    enabled = true,
-    enterprise = true,
-  ) => {
-    store.dispatch(
-      clusterReducerObj.receiveData(
-        new protos.cockroach.server.serverpb.ClusterResponse({
-          cluster_id: clusterID,
-          reporting_enabled: enabled,
-          enterprise_enabled: enterprise,
-        }),
-      ),
-    );
-  };
+
+  function makeClusterData(enabled = true, enterprise = true) {
+    return new protos.cockroach.server.serverpb.ClusterResponse({
+      cluster_id: clusterID,
+      reporting_enabled: enabled,
+      enterprise_enabled: enterprise,
+    });
+  }
 
   describe("page method", function () {
-    let store: Store<AdminUIState>;
-    let analytics: Analytics;
+    let analyticsService: Analytics;
     const pageSpy = jest.fn();
 
     beforeEach(function () {
-      store = createAdminUIStore(createHashHistory());
-
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
-      analytics = {
+      analyticsService = {
         page: pageSpy,
       } as any;
     });
@@ -53,7 +40,7 @@ describe("analytics listener", function () {
     });
 
     it("does nothing if cluster info is not available", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
+      const sync = new AnalyticsSync(analyticsService, []);
 
       sync.page({
         pathname: "/test/path",
@@ -63,8 +50,8 @@ describe("analytics listener", function () {
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(store, false);
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData(false));
 
       sync.page({
         pathname: "/test/path",
@@ -74,8 +61,8 @@ describe("analytics listener", function () {
     });
 
     it("correctly calls segment on a page call", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(store);
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData());
 
       sync.page({
         pathname: "/test/path",
@@ -93,13 +80,13 @@ describe("analytics listener", function () {
     });
 
     it("correctly queues calls before cluster ID is available", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
+      const sync = new AnalyticsSync(analyticsService, []);
 
       sync.page({
         pathname: "/test/path",
       } as Location);
 
-      setClusterData(store);
+      sync.updateCluster(makeClusterData());
       expect(pageSpy).not.toHaveBeenCalled();
 
       sync.page({
@@ -126,13 +113,13 @@ describe("analytics listener", function () {
     });
 
     it("correctly applies redaction to matched paths", function () {
-      setClusterData(store);
-      const sync = new AnalyticsSync(analytics, store, [
+      const sync = new AnalyticsSync(analyticsService, [
         {
           match: RegExp("/test/.*/path"),
           replace: "/test/[redacted]/path",
         },
       ]);
+      sync.updateCluster(makeClusterData());
 
       sync.page({
         pathname: "/test/username/path",
@@ -207,8 +194,8 @@ describe("analytics listener", function () {
       ),
     ].map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
-        setClusterData(store);
-        const sync = new AnalyticsSync(analytics, store, defaultRedactions);
+        const sync = new AnalyticsSync(analyticsService, defaultRedactions);
+        sync.updateCluster(makeClusterData());
         const expectedLocation = createLocation(expected);
 
         sync.page(createLocation(input));
@@ -230,16 +217,13 @@ describe("analytics listener", function () {
   });
 
   describe("identify method", function () {
-    let store: Store<AdminUIState>;
-    let analytics: Analytics;
+    let analyticsService: Analytics;
     const identifySpy = jest.fn();
 
     beforeEach(function () {
-      store = createAdminUIStore(createHashHistory());
-
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
-      analytics = {
+      analyticsService = {
         identify: identifySpy,
       } as any;
     });
@@ -248,21 +232,9 @@ describe("analytics listener", function () {
       identifySpy.mockReset();
     });
 
-    const setVersionData = function () {
-      store.dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
-    };
-
     it("does nothing if cluster info is not available", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setVersionData();
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateVersions(["0.1"]);
 
       sync.identify();
 
@@ -270,8 +242,8 @@ describe("analytics listener", function () {
     });
 
     it("does nothing if version info is not available", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(store, true, true);
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData(true, true));
 
       sync.identify();
 
@@ -279,9 +251,9 @@ describe("analytics listener", function () {
     });
 
     it("does nothing if reporting is not explicitly enabled", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(store, false, true);
-      setVersionData();
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData(false, true));
+      sync.updateVersions(["0.1"]);
 
       sync.identify();
 
@@ -289,12 +261,11 @@ describe("analytics listener", function () {
     });
 
     it("sends the correct value of clusterID, version and enterprise", function () {
-      setVersionData();
-
       each([false, true], enterpriseSetting => {
         identifySpy.mockReset();
-        setClusterData(store, true, enterpriseSetting);
-        const sync = new AnalyticsSync(analytics, store, []);
+        const sync = new AnalyticsSync(analyticsService, []);
+        sync.updateCluster(makeClusterData(true, enterpriseSetting));
+        sync.updateVersions(["0.1"]);
         sync.identify();
 
         expect(identifySpy).toHaveBeenCalledTimes(1);
@@ -310,9 +281,9 @@ describe("analytics listener", function () {
     });
 
     it("only reports once", function () {
-      const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(store, true, true);
-      setVersionData();
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData(true, true));
+      sync.updateVersions(["0.1"]);
 
       sync.identify();
       sync.identify();
@@ -322,14 +293,13 @@ describe("analytics listener", function () {
   });
 
   describe("track method", function () {
-    const store: Store<AdminUIState> = createAdminUIStore(createHashHistory());
-    let analytics: Analytics;
+    let analyticsService: Analytics;
     const trackSpy = jest.fn();
 
     beforeEach(() => {
       // Analytics is a completely fake object, we don't want to call
       // segment if an unexpected method is called.
-      analytics = {
+      analyticsService = {
         track: trackSpy,
       } as any;
     });
@@ -339,7 +309,7 @@ describe("analytics listener", function () {
     });
 
     it("does nothing if cluster info is not available", () => {
-      const sync = new AnalyticsSync(analytics, store, []);
+      const sync = new AnalyticsSync(analyticsService, []);
 
       sync.track({
         event: "test",
@@ -349,8 +319,8 @@ describe("analytics listener", function () {
     });
 
     it("add userId to track calls using the cluster_id", () => {
-      setClusterData(store);
-      const sync = new AnalyticsSync(analytics, store, []);
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData());
 
       sync.track({
         event: "test",
@@ -370,8 +340,8 @@ describe("analytics listener", function () {
     });
 
     it("add the page path to properties", () => {
-      setClusterData(store);
-      const sync = new AnalyticsSync(analytics, store, []);
+      const sync = new AnalyticsSync(analyticsService, []);
+      sync.updateCluster(makeClusterData());
       const testPagePath = "/test/page/path";
 
       history.push(testPagePath);

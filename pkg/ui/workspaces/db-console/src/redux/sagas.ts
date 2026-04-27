@@ -7,8 +7,6 @@ import { all, fork } from "redux-saga/effects";
 
 import { timeScaleSaga } from "src/redux/timeScale";
 
-import { analyticsSaga } from "./analyticsSagas";
-import { customAnalyticsSaga } from "./customAnalytics";
 import { indexUsageStatsSaga } from "./indexUsageStats";
 import { localSettingsSaga } from "./localsettings";
 import { sqlStatsSaga } from "./sqlStats";
@@ -17,9 +15,7 @@ import { statementsSaga } from "./statements";
 export default function* rootSaga() {
   yield all([
     fork(localSettingsSaga),
-    fork(customAnalyticsSaga),
     fork(statementsSaga),
-    fork(analyticsSaga),
     fork(sqlStatsSaga),
     fork(indexUsageStatsSaga),
     fork(timeScaleSaga),

@@ -36,6 +36,7 @@ export import LivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.
 
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import INodeStatus = cockroach.server.status.statuspb.INodeStatus;
+import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 import ILocality = cockroach.roachpb.ILocality;
 
 const { MetricConstants } = util;
@@ -512,3 +513,73 @@ export const nodeOptionsSelector = createSelector(
     return base.concat(options);
   },
 );
+
+// ---------------------------------------------------------------------------
+// Pure helper functions (no Redux dependency). These are intended for use in
+// components that fetch data via SWR hooks. The selectors above will be
+// removed once all consumers have migrated to these helpers.
+// ---------------------------------------------------------------------------
+
+/**
+ * getValidatedNodes filters node statuses to only include nodes that have build
+ * info and whose membership status is ACTIVE (i.e. not decommissioning or
+ * decommissioned).
+ */
+export function getValidatedNodes(
+  nodeStatuses: INodeStatus[] | undefined,
+  livenessByNodeID: Record<string, ILiveness>,
+): INodeStatus[] | undefined {
+  if (!nodeStatuses) {
+    return undefined;
+  }
+  return nodeStatuses
+    .filter(status => !!status.build_info)
+    .filter(
+      status =>
+        !status.desc ||
+        !livenessByNodeID[status.desc.node_id] ||
+        !livenessByNodeID[status.desc.node_id].membership ||
+        !(
+          livenessByNodeID[status.desc.node_id].membership !==
+          MembershipStatus.ACTIVE
+        ),
+    );
+}
+
+/**
+ * getNumNodesByVersionsTag returns a map from build tag to the number of nodes
+ * running that tag.
+ */
+export function getNumNodesByVersionsTag(
+  validNodes: INodeStatus[] | undefined,
+): Map<string, number> {
+  if (!validNodes) {
+    return new Map();
+  }
+  return new Map(
+    Object.entries(countBy(validNodes, node => node?.build_info?.tag)),
+  );
+}
+
+/**
+ * getNumNodesByVersions returns a map from major.minor version string to the
+ * number of nodes running that version.
+ */
+export function getNumNodesByVersions(
+  validNodes: INodeStatus[] | undefined,
+): Map<string, number> {
+  if (!validNodes) {
+    return new Map();
+  }
+  return new Map(
+    Object.entries(
+      countBy(validNodes, node => {
+        const serverVersion = node?.desc?.ServerVersion;
+        if (serverVersion) {
+          return `${serverVersion.major_val}.${serverVersion.minor_val}`;
+        }
+        return "";
+      }),
+    ),
+  );
+}
