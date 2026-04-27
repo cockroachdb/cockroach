@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // dummyStream is a minimal implementation of drpc.Stream used for testing the
@@ -190,4 +191,97 @@ func TestDRPCServerWithInterceptor(t *testing.T) {
 	shouldBlock.Store(true)
 	_, err = client.Ping(ctx, &PingRequest{})
 	require.Contains(t, err.Error(), "RPC blocked by interceptor")
+}
+
+// TestDRPCValidateOnDial verifies that validateOnDial rejects freshly
+// dialed drpc conns whose remote cluster identity (cluster ID, node ID)
+// does not match what the client expects, and accepts conns that match.
+func TestDRPCValidateOnDial(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	const serverNodeID roachpb.NodeID = 7
+	const advertiseAddr = "127.0.0.1:1"
+	serverClusterID := uuid.MakeV4()
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
+
+	loopbackL := netutil.NewLoopbackListener(ctx, stopper)
+	serverCtx := newTestContext(serverClusterID, clock, 0, stopper)
+	serverCtx.NodeID.Set(ctx, serverNodeID)
+	serverCtx.SetLoopbackDRPCDialer(loopbackL.Connect)
+	serverCtx.AdvertiseAddr = advertiseAddr
+
+	drpcServer, err := NewDRPCServer(ctx, serverCtx)
+	require.NoError(t, err)
+	require.NoError(t, DRPCRegisterHeartbeat(drpcServer, serverCtx.NewHeartbeatService()))
+
+	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	require.NoError(t, err)
+	tlsListener := tls.NewListener(loopbackL, tlsConfig)
+	require.NoError(t, stopper.RunAsyncTask(ctx, "drpc-server", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(drpcServer.Serve(ctx, tlsListener))
+	}))
+
+	// newClientCtx returns an rpcCtx that dials the test server via the
+	// shared loopback listener. clusterID controls which cluster identity
+	// the client claims, allowing tests to exercise mismatched-identity
+	// cases.
+	newClientCtx := func(clusterID uuid.UUID) *Context {
+		c := newTestContext(clusterID, clock, 0, stopper)
+		c.SetLoopbackDRPCDialer(loopbackL.Connect)
+		c.AdvertiseAddr = advertiseAddr
+		return c
+	}
+
+	// dialAndValidate bare-dials the server through the loopback listener
+	// and runs validateOnDial with the provided expected NodeID, returning
+	// the validation error.
+	dialAndValidate := func(t *testing.T, clientCtx *Context, expectedNodeID roachpb.NodeID) error {
+		opts, err := clientCtx.drpcDialOptionsInternal(ctx, advertiseAddr, rpcbase.DefaultClass, loopbackTransport)
+		require.NoError(t, err)
+		conn, err := drpcclient.DialContext(ctx, advertiseAddr, opts...)
+		require.NoError(t, err)
+		defer func() { _ = conn.Close() }()
+		return validateOnDial(ctx, clientCtx, conn, advertiseAddr, expectedNodeID, rpcbase.DefaultClass, opts)
+	}
+
+	tests := []struct {
+		name        string
+		clientUUID  uuid.UUID
+		nodeID      roachpb.NodeID
+		expectedErr string
+	}{
+		{
+			name:       "matching identity",
+			clientUUID: serverClusterID,
+			nodeID:     serverNodeID,
+		},
+		{
+			name:        "mismatched node ID",
+			clientUUID:  serverClusterID,
+			nodeID:      serverNodeID + 1,
+			expectedErr: "node ID",
+		},
+		{
+			name:        "mismatched cluster ID",
+			clientUUID:  uuid.MakeV4(),
+			nodeID:      serverNodeID,
+			expectedErr: "cluster ID",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dialAndValidate(t, newClientCtx(tc.clientUUID), tc.nodeID)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.expectedErr)
+		})
+	}
 }
