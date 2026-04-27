@@ -14,15 +14,15 @@ import { RouteComponentProps } from "react-router";
 import { withRouter } from "react-router-dom";
 
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import {
-  trackCancelDiagnosticsBundleAction,
-  trackDownloadDiagnosticsBundleAction,
-  trackStatementDetailsSubnavSelectionAction,
-} from "src/redux/analyticsActions";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
-import { trackActivateDiagnostics } from "src/util/analytics";
+import {
+  trackActivateDiagnostics,
+  trackDownloadDiagnosticsBundle,
+  trackSubnavSelection,
+} from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 import { statementAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 
@@ -40,20 +40,22 @@ const mapStateToProps = (
 const mapDispatchToProps: StatementDetailsDispatchProps = {
   dismissStatementDiagnosticsAlertMessage: () =>
     createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-  onTabChanged: trackStatementDetailsSubnavSelectionAction,
+  onTabChanged: (tabName: string) => {
+    return () => trackSubnavSelection(tabName);
+  },
   onTimeScaleChange: setGlobalTimeScaleAction,
   onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
-  onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
+  onDiagnosticBundleDownload: (fingerprint: string) => {
+    return () => trackDownloadDiagnosticsBundle(fingerprint);
+  },
   onActivateStatementDiagnosticsAnalytics: (statementFingerprint: string) => {
     return () => trackActivateDiagnostics(statementFingerprint);
   },
   onDiagnosticCancelRequestTracking: (
     report: clusterUiApi.StatementDiagnosticsReport,
   ) => {
-    return (dispatch: AppDispatch) => {
-      dispatch(
-        trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
-      );
+    return () => {
+      trackCancelDiagnosticsBundle(report.statement_fingerprint);
     };
   },
 };

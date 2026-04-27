@@ -12,11 +12,11 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
 import React, { useCallback, useEffect, useState } from "react";
-import { connect } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
-import { AdminUIState } from "src/redux/state";
+import { AppDispatch } from "src/redux/state";
 import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { getKeyVisualizerSamples } from "src/util/api";
 import {
@@ -218,14 +218,16 @@ const KeyVisualizerContainer: React.FC<
   );
 };
 
-interface KeyVisualizerPageProps {
-  setTimeScale: typeof setTimeScale;
-  timeScale: TimeScale;
-}
-
 const KeyVisualizerPage: React.FunctionComponent<
-  KeyVisualizerPageProps & RouteComponentProps
+  RouteComponentProps
 > = props => {
+  const dispatch: AppDispatch = useDispatch();
+  const timeScale = useSelector(selectTimeScale);
+  const dispatchSetTimeScale = useCallback(
+    (ts: TimeScale) => dispatch(setTimeScale(ts)),
+    [dispatch],
+  );
+
   const { settingValues, isLoading } = useClusterSettings({
     names: [EnabledSetting, IntervalSetting],
   });
@@ -254,17 +256,11 @@ const KeyVisualizerPage: React.FunctionComponent<
   return (
     <KeyVisualizerContainer
       {...props}
-      timeScale={props.timeScale}
+      timeScale={timeScale}
+      setTimeScale={dispatchSetTimeScale}
       refreshInterval={refreshInterval}
     />
   );
 };
 
-export default connect(
-  (state: AdminUIState) => ({
-    timeScale: selectTimeScale(state),
-  }),
-  {
-    setTimeScale,
-  },
-)(KeyVisualizerPage);
+export default KeyVisualizerPage;

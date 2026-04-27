@@ -11,15 +11,14 @@ import {
   TimezoneContext,
   SortSetting,
   ISortedTablePagination,
+  useNodesSummary,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
-import { useSelector } from "react-redux";
 
 import { useHotRanges } from "src/hooks/useHotRanges";
 import { analytics } from "src/redux/analytics";
-import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
 import useFilters, { filterRanges } from "src/views/hotRanges/useFilters";
@@ -45,7 +44,17 @@ const emptyMessages = {
 };
 
 const HotRangesPage = () => {
-  const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
+  const { nodeStatuses } = useNodesSummary();
+  const nodeIdToLocalityMap = useMemo(() => {
+    return new Map(
+      (nodeStatuses ?? []).map(n => {
+        const locality = (n.desc?.locality?.tiers || [])
+          .map(t => `${t.key}=${t.value}`)
+          .join(", ");
+        return [n.desc.node_id, locality];
+      }),
+    );
+  }, [nodeStatuses]);
   const timezone = useContext(TimezoneContext);
 
   const { filters, applyFilters } = useFilters();
