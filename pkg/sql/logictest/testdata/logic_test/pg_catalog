@@ -60,7 +60,7 @@ pg_catalog  pg_init_privs                    table  node  NULL  NULL
 pg_catalog  pg_language                      table  node  NULL  NULL
 pg_catalog  pg_largeobject                   table  node  NULL  NULL
 pg_catalog  pg_largeobject_metadata          table  node  NULL  NULL
-pg_catalog  pg_locks                         view   node  NULL  NULL
+pg_catalog  pg_locks                         table  node  NULL  NULL
 pg_catalog  pg_matviews                      table  node  NULL  NULL
 pg_catalog  pg_namespace                     table  node  NULL  NULL
 pg_catalog  pg_opclass                       table  node  NULL  NULL
@@ -230,7 +230,7 @@ pg_catalog  pg_init_privs                    table  node  NULL  NULL
 pg_catalog  pg_language                      table  node  NULL  NULL
 pg_catalog  pg_largeobject                   table  node  NULL  NULL
 pg_catalog  pg_largeobject_metadata          table  node  NULL  NULL
-pg_catalog  pg_locks                         view   node  NULL  NULL
+pg_catalog  pg_locks                         table  node  NULL  NULL
 pg_catalog  pg_matviews                      table  node  NULL  NULL
 pg_catalog  pg_namespace                     table  node  NULL  NULL
 pg_catalog  pg_opclass                       table  node  NULL  NULL

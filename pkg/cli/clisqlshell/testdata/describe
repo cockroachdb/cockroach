@@ -315,7 +315,7 @@ pg_catalog,pg_init_privs,table,node
 pg_catalog,pg_language,table,node
 pg_catalog,pg_largeobject,table,node
 pg_catalog,pg_largeobject_metadata,table,node
-pg_catalog,pg_locks,table,node
+pg_catalog,pg_locks,view,node
 pg_catalog,pg_matviews,table,node
 pg_catalog,pg_namespace,table,node
 pg_catalog,pg_opclass,table,node
@@ -574,8 +574,10 @@ pg_catalog,pg_language,table,node,permanent,prefix,"available languages
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html"
 pg_catalog,pg_largeobject,table,node,permanent,prefix,pg_largeobject was created for compatibility and is currently unimplemented
 pg_catalog,pg_largeobject_metadata,table,node,permanent,prefix,pg_largeobject_metadata was created for compatibility and is currently unimplemented
-pg_catalog,pg_locks,table,node,permanent,prefix,"locks held by active processes (empty - feature does not exist)
-https://www.postgresql.org/docs/9.6/view-pg-locks.html"
+pg_catalog,pg_locks,view,node,permanent,NULL,"advisory locks: granted (cluster_held_advisory_locks) and waiting
+on system.advisory_locks (cluster_locks) per pg_locks columns. Same privileges
+as the underlying crdb_internal sources (cluster_locks needs VIEWACTIVITY, etc.)
+https://www.postgresql.org/docs/18/view-pg-locks.html"
 pg_catalog,pg_matviews,table,node,permanent,prefix,"available materialized views
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html"
 pg_catalog,pg_namespace,table,node,permanent,prefix,"available namespaces
