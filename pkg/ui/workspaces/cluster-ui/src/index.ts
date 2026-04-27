@@ -64,6 +64,13 @@ export type {
   LocationTree,
 } from "./api/locationsApi";
 export { useNodeLogs } from "./api/nodeLogsApi";
+export { useMetricMetadata } from "./api/metricMetadataApi";
+export { useTenants } from "./api/tenantsApi";
+export {
+  useTracingSnapshots,
+  useTracingSnapshot,
+  useRawTrace,
+} from "./api/tracezApi";
 export * from "./nodes/nodeSummaryStats";
 export * from "./sessions";
 export * from "./timeScaleDropdown";
