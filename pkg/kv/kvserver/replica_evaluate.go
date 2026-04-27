@@ -209,6 +209,7 @@ func evaluateBatch(
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
+	ss *kvpb.ScanStats,
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
 	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
 	cleanup := ash.SetWorkState(
@@ -290,19 +291,20 @@ func evaluateBatch(
 	// retries.
 	var deferredWriteTooOldErr *kvpb.WriteTooOldError
 
-	// Only collect the scan stats if the tracing is enabled.
-	var ss *kvpb.ScanStats
-	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
-		ss = &kvpb.ScanStats{}
-		defer func() {
-			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
-				// Only record non-empty ScanStats.
-				ss.NodeID = rec.NodeID()
-				locality := rec.GetNodeLocality()
-				ss.Region, _ = locality.Find("region")
-				sp.RecordStructured(ss)
-			}
-		}()
+	// Only record the scan stats if the tracing is enabled.
+	// NB: ss should always be non-nil on any meaningful production path.
+	if ss != nil {
+		if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+			defer func() {
+				if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
+					// Only record non-empty ScanStats.
+					ss.NodeID = rec.NodeID()
+					locality := rec.GetNodeLocality()
+					ss.Region, _ = locality.Find("region")
+					sp.RecordStructured(ss)
+				}
+			}()
+		}
 	}
 
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state

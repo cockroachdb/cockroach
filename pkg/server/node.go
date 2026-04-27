@@ -1697,6 +1697,7 @@ func (n *Node) batchInternal(
 		defer log.Event(ctx, "node sending response")
 	}
 
+	var stats kvserver.SomethingStats
 	var rangeTenantIDForAC roachpb.TenantID
 	// The computation of rangeTenantIDForAC fails open in case of error.
 	if len(args.Requests) > 0 {
@@ -1720,10 +1721,8 @@ func (n *Node) batchInternal(
 	// for replication flow control.
 	admissionInfo := handle.AdmissionInfo()
 
-	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
-		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
-		writeBytes.Release()
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, &stats.StoreWriteBytes)
 	}()
 
 	// If a proxy attempt is requested, we copy the request to prevent evaluation
@@ -1743,7 +1742,7 @@ func (n *Node) batchInternal(
 		originalRequest = args.ShallowCopy()
 	}
 	var pErr *kvpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo)
+	br, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo, &stats)
 	if pErr != nil {
 		if originalRequest != nil {
 			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {
