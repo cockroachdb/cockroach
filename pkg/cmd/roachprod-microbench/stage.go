@@ -46,7 +46,11 @@ func stage(cluster, archivePath, remoteDest string, longRetries bool) (err error
 	}
 
 	archiveName := path.Base(archivePath)
-	archiveRemotePath := path.Join("/tmp", archiveName)
+	// Stage to /mnt/data1 (the persistent disk preserved by the MIG's stateful
+	// policy and not subject to systemd-tmpfiles cleanup on boot) rather than
+	// /tmp. On a spot-MIG cluster, /tmp is wiped on every boot even if the
+	// the boot disk itself is preserved across recreation.
+	archiveRemotePath := path.Join("/mnt/data1", archiveName)
 
 	defer func() {
 		// Remove the remote archive after we're done.
