@@ -733,3 +733,78 @@ statement ok
 SET ROLE root
 
 subtest end
+
+# Regression test for #168992. Unqualified function calls should not leak
+# descriptors across database boundaries via the query cache. When two databases
+# have identically-named functions in custom schemas, the memo cached from one
+# database context must be treated as stale when accessed from another, rather
+# than producing a privilege error referencing schemas from the wrong database.
+subtest cross_database_function_resolution
+
+statement ok
+CREATE DATABASE db_a;
+CREATE DATABASE db_b;
+CREATE ROLE role_a;
+CREATE ROLE role_b;
+GRANT role_a TO testuser;
+GRANT role_b TO testuser;
+GRANT CONNECT ON DATABASE db_a TO role_a;
+GRANT CONNECT ON DATABASE db_b TO role_b;
+
+statement ok
+USE db_a;
+CREATE SCHEMA sch_a;
+GRANT USAGE ON SCHEMA sch_a TO role_a;
+CREATE TABLE sch_a.records (id INT PRIMARY KEY, label TEXT NOT NULL);
+GRANT SELECT ON TABLE sch_a.records TO role_a;
+CREATE FUNCTION sch_a.get_records(p_id INT) RETURNS TABLE(id INT, label TEXT) LANGUAGE SQL AS $$
+  SELECT id, label FROM db_a.sch_a.records WHERE id >= p_id ORDER BY id
+$$;
+GRANT EXECUTE ON FUNCTION sch_a.get_records TO role_a;
+INSERT INTO sch_a.records VALUES (1, 'alpha');
+
+statement ok
+USE db_b;
+CREATE SCHEMA sch_b;
+GRANT USAGE ON SCHEMA sch_b TO role_b;
+CREATE TABLE sch_b.records (id INT PRIMARY KEY, label TEXT NOT NULL);
+GRANT SELECT ON TABLE sch_b.records TO role_b;
+CREATE FUNCTION sch_b.get_records(p_id INT) RETURNS TABLE(id INT, label TEXT) LANGUAGE SQL AS $$
+  SELECT id, label FROM db_b.sch_b.records WHERE id >= p_id ORDER BY id
+$$;
+GRANT EXECUTE ON FUNCTION sch_b.get_records TO role_b;
+INSERT INTO sch_b.records VALUES (1, 'beta');
+
+# Populate the query cache for get_records via role_a in db_a.
+statement ok
+USE db_a;
+SET ROLE role_a;
+SET search_path = sch_a;
+
+query I
+SELECT count(*) FROM get_records(1)
+----
+1
+
+# Switch to role_b in db_b. The cached memo references db_a.sch_a, but that
+# should be detected as stale rather than producing a privilege error.
+statement ok
+SET ROLE role_b;
+USE db_b;
+SET search_path = sch_b;
+
+query I
+SELECT count(*) FROM get_records(1)
+----
+1
+
+statement ok
+SET ROLE root;
+USE test;
+SET search_path = public;
+DROP DATABASE db_a CASCADE;
+DROP DATABASE db_b CASCADE;
+DROP ROLE role_a;
+DROP ROLE role_b;
+
+subtest end
