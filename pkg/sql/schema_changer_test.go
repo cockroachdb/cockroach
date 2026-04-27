@@ -6173,7 +6173,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 		f(jobCancellationsToFail.jobs)
 	}
 	jobKnobs := jobs.NewTestingKnobsWithShortIntervals()
-	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) (err error) {
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.DeprecatedJobMetadata) (err error) {
 		withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 			if _, ok := m[orig.ID]; ok && updated.State == jobs.StateCanceled {
 				delete(m, orig.ID)

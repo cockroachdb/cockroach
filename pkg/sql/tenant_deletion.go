@@ -108,7 +108,8 @@ func dropTenantInternal(
 		if err != nil {
 			return errors.Wrap(err, "loading tenant replication job for cancelation")
 		}
-		if err := job.WithTxn(txn).CancelRequested(ctx); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := job.DeprecatedWithTxn(txn).CancelRequested(ctx); err != nil {
 			return errors.Wrapf(err, "canceling tenant replication job %d", info.PhysicalReplicationConsumerJobID)
 		}
 	}

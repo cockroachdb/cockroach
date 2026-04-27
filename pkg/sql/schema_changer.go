@@ -1176,7 +1176,8 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 		}
 		if statusMessage != "" && !desc.Dropped() {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, statusMessage); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, statusMessage); err != nil {
 				return errors.Wrapf(err, "failed to update job status")
 			}
 		}
@@ -1537,7 +1538,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
@@ -2670,7 +2672,8 @@ func (sc *SchemaChanger) updateJobForRollback(
 		}
 	}
 	oldDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
-	u := sc.job.WithTxn(txn)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	u := sc.job.DeprecatedWithTxn(txn)
 	if err := u.SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
 			DescID:               sc.descID,

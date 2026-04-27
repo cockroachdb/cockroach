@@ -240,13 +240,13 @@ func (j *Job) taskName() redact.SafeString {
 
 // Started marks the tracked job as started by updating state to running in
 // jobs table.
-func (u Updater) started(ctx context.Context) error {
+func (u DeprecatedUpdater) started(ctx context.Context) error {
 	sp := tracing.SpanFromContext(ctx)
 	traceID := tracingpb.TraceID(0)
 	if sp != nil {
 		traceID = sp.TraceID()
 	}
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(_ isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State != StatePending && md.State != StateRunning {
 			return errors.Errorf("job with state %s cannot be marked started", md.State)
 		}
@@ -265,15 +265,15 @@ func (u Updater) started(ctx context.Context) error {
 
 // CheckState verifies the state of the job and returns an error if the job's
 // state isn't Running or Reverting.
-func (u Updater) CheckState(ctx context.Context) error {
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, _ *JobUpdater) error {
+func (u DeprecatedUpdater) CheckState(ctx context.Context) error {
+	return u.Update(ctx, func(_ isql.Txn, md DeprecatedJobMetadata, _ *DeprecatedJobUpdater) error {
 		return md.CheckRunningOrReverting()
 	})
 }
 
 // UpdateStatusMessage updates the detailed status of a job currently in progress.
-func (u Updater) UpdateStatusMessage(ctx context.Context, status StatusMessage) error {
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) UpdateStatusMessage(ctx context.Context, status StatusMessage) error {
+	return u.Update(ctx, func(_ isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -305,8 +305,10 @@ func FractionUpdater(f float32) FractionProgressedFn {
 //
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
-func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) FractionProgressed(
+	ctx context.Context, progressedFn FractionProgressedFn,
+) error {
+	return u.Update(ctx, func(_ isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -349,15 +351,15 @@ func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionPr
 // Further the node the runs the job will actively cancel it when it notices
 // that it is in state StateCancelRequested and will move it to state
 // StateReverting.
-func (u Updater) CancelRequested(ctx context.Context) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) CancelRequested(ctx context.Context) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		return ju.CancelRequestedWithReason(ctx, md, errJobCanceled)
 	})
 }
 
 // onPauseRequestFunc is a function used to perform action on behalf of a job
 // implementation when a pause is requested.
-type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater) error
+type onPauseRequestFunc func(ctx context.Context, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error
 
 // PauseRequestedWithFunc sets the state of the tracked job to pause-requested.
 // It does not directly pause the job; it expects the node that runs the job will
@@ -365,16 +367,16 @@ type onPauseRequestFunc func(ctx context.Context, md JobMetadata, ju *JobUpdater
 // and will move it to state StatePaused. If a function is passed, it will be
 // used to update the job state. If the job has builtin logic to run upon
 // pausing, it will be ignored; use PauseRequested if you want that logic to run.
-func (u Updater) PauseRequestedWithFunc(
+func (u DeprecatedUpdater) PauseRequestedWithFunc(
 	ctx context.Context, fn onPauseRequestFunc, reason string,
 ) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		return ju.PauseRequestedWithFunc(ctx, txn, md, fn, reason)
 	})
 }
 
 // reverted sets the state of the tracked job to reverted.
-func (u Updater) reverted(
+func (u DeprecatedUpdater) reverted(
 	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
 ) error {
 	sp := tracing.SpanFromContext(ctx)
@@ -383,7 +385,7 @@ func (u Updater) reverted(
 		traceID = sp.TraceID()
 	}
 
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State != StateReverting &&
 			md.State != StateCancelRequested &&
 			md.State != StateRunning &&
@@ -418,8 +420,8 @@ func (u Updater) reverted(
 }
 
 // Canceled sets the state of the tracked job to cancel.
-func (u Updater) canceled(ctx context.Context) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) canceled(ctx context.Context) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State == StateCanceled {
 			return nil
 		}
@@ -440,8 +442,8 @@ func (u Updater) canceled(ctx context.Context) error {
 }
 
 // Failed marks the tracked job as having failed with the given error.
-func (u Updater) failed(ctx context.Context, err error) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) failed(ctx context.Context, err error) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		// TODO(spaskob): should we fail if the terminal state is not StateFailed?
 		if md.State.Terminal() {
 			// Already done - do nothing.
@@ -482,10 +484,10 @@ func (u Updater) failed(ctx context.Context, err error) error {
 
 // RevertFailed marks the tracked job as having failed during revert with the
 // given error. Manual cleanup is required when the job is in this state.
-func (u Updater) revertFailed(
+func (u DeprecatedUpdater) revertFailed(
 	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
 ) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State != StateReverting {
 			return fmt.Errorf("job with state %s cannot fail during a revert", md.State)
 		}
@@ -504,8 +506,10 @@ func (u Updater) revertFailed(
 
 // succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (u Updater) succeeded(ctx context.Context, fn func(context.Context, isql.Txn) error) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) succeeded(
+	ctx context.Context, fn func(context.Context, isql.Txn) error,
+) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if md.State == StateSucceeded {
 			return nil
 		}
@@ -529,8 +533,8 @@ func (u Updater) succeeded(ctx context.Context, fn func(context.Context, isql.Tx
 }
 
 // SetDetails sets the details field of the currently running tracked job.
-func (u Updater) SetDetails(ctx context.Context, details interface{}) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) SetDetails(ctx context.Context, details interface{}) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -541,8 +545,8 @@ func (u Updater) SetDetails(ctx context.Context, details interface{}) error {
 }
 
 // SetProgress sets the details field of the currently running tracked job.
-func (u Updater) SetProgress(ctx context.Context, details interface{}) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+func (u DeprecatedUpdater) SetProgress(ctx context.Context, details interface{}) error {
+	return u.Update(ctx, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -660,7 +664,7 @@ func (j *Job) loadJobPayloadAndProgress(
 	return payload, progress, nil
 }
 
-func (u Updater) load(ctx context.Context) (retErr error) {
+func (u DeprecatedUpdater) load(ctx context.Context) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
@@ -887,7 +891,7 @@ func (sj *StartableJob) Cancel(ctx context.Context) error {
 			sj.registry.unregister(sj.ID())
 		}
 	}()
-	return sj.Job.NoTxn().CancelRequested(ctx)
+	return sj.Job.DeprecatedNoTxn().CancelRequested(ctx)
 }
 
 func (sj *StartableJob) recordStart() (alreadyStarted bool) {

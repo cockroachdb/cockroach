@@ -287,7 +287,7 @@ func testMigrationWithFailures(
 			defer scope.Close(t)
 
 			type updateEvent struct {
-				orig, updated jobs.JobMetadata
+				orig, updated jobs.DeprecatedJobMetadata
 				errChan       chan error
 			}
 
@@ -296,7 +296,7 @@ func testMigrationWithFailures(
 			// To intercept the schema-change and the migration job.
 			updateEventChan := make(chan updateEvent)
 			var enableUpdateEventCh atomic.Bool
-			beforeUpdate := func(orig, updated jobs.JobMetadata) error {
+			beforeUpdate := func(orig, updated jobs.DeprecatedJobMetadata) error {
 				if !enableUpdateEventCh.Load() {
 					return nil
 				}
@@ -525,9 +525,11 @@ func cancelJob(
 	err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
-		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return s.JobRegistry().(*jobs.Registry).DeprecatedUpdateJobWithTxn(
 			ctx, jobID, txn, func(
-				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+				txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 			) error {
 				ju.UpdateState(jobs.StateCancelRequested)
 				return nil

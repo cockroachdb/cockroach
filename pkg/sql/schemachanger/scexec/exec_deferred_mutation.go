@@ -332,7 +332,7 @@ func manageJobs(
 	}
 	for id, update := range scJobUpdates {
 		if err := jr.UpdateSchemaChangeJob(ctx, id, func(
-			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
+			md jobs.DeprecatedJobMetadata, updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
 		) error {
 			s := schemaChangeJobUpdateState{md: md}
 			defer s.doUpdate(updateProgress, updatePayload)
@@ -357,7 +357,7 @@ func manageJobs(
 // callback passed to TransactionalJobRegistry.UpdateSchemaChangeJob in
 // manageJobs.
 type schemaChangeJobUpdateState struct {
-	md                   jobs.JobMetadata
+	md                   jobs.DeprecatedJobMetadata
 	maybeUpdatedPayload  *jobspb.Payload
 	maybeUpdatedProgress *jobspb.Progress
 }

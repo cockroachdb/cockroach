@@ -91,8 +91,9 @@ func distImport(
 	// addStoragePrefix records a storage prefix before any SST is written to that
 	// location, ensuring cleanup can occur even if the job fails mid-import.
 	addStoragePrefix := func(ctx context.Context, prefix string) error {
-		return job.NoTxn().Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return job.DeprecatedNoTxn().Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			prog := md.Progress.GetImport()
 			if prog == nil {
@@ -169,7 +170,9 @@ func distImport(
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
-		if err := job.NoTxn().FractionProgressed(ctx, func(
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := job.DeprecatedNoTxn().FractionProgressed(ctx, func(
 			ctx context.Context, details jobspb.ProgressDetails,
 		) float32 {
 			prog := details.(*jobspb.Progress_Import).Import

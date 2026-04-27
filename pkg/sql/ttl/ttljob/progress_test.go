@@ -170,7 +170,7 @@ func TestLegacyProgressTrackerRefreshJobProgress(t *testing.T) {
 					FractionCompleted: 0,
 				},
 			}
-			md := jobs.JobMetadata{Progress: initialProgress}
+			md := jobs.DeprecatedJobMetadata{Progress: initialProgress}
 
 			var finalProgress *jobspb.Progress
 			var err error

@@ -257,7 +257,8 @@ func updateStatus(
 	replicationStatus jobspb.ReplicationStatus,
 	status redact.RedactableString,
 ) {
-	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err := ingestionJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		updateStatusInternal(md, ju, replicationStatus, string(status.Redact()))
 		return nil
 	})
@@ -271,8 +272,8 @@ func updateStatus(
 }
 
 func updateStatusInternal(
-	md jobs.JobMetadata,
-	ju *jobs.JobUpdater,
+	md jobs.DeprecatedJobMetadata,
+	ju *jobs.DeprecatedJobUpdater,
 	replicationStatus jobspb.ReplicationStatus,
 	status string,
 ) {
@@ -637,8 +638,9 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 		if err := ptp.Protect(ctx, pts); err != nil {
 			return err
 		}
-		return s.job.WithTxn(txn).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return s.job.DeprecatedWithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
@@ -695,8 +697,9 @@ func maybeRevertToCutoverTimestamp(
 		remainingSpansToRevert roachpb.Spans
 		readerTenantID         roachpb.TenantID
 	)
-	if err := ingestionJob.NoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := ingestionJob.DeprecatedNoTxn().Update(ctx,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if streamIngestionDetails == nil {
 				return errors.AssertionFailedf("unknown payload %v in stream ingestion job %d",
@@ -1020,7 +1023,8 @@ func (c *cutoverProgressTracker) updateJobProgress(
 		return fractionRangesFinished
 	}
 
-	if err := c.job.NoTxn().FractionProgressed(ctx, persistProgress); err != nil {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := c.job.DeprecatedNoTxn().FractionProgressed(ctx, persistProgress); err != nil {
 		return jobs.SimplifyInvalidStateError(err)
 	}
 	if c.onJobProgressUpdate != nil {

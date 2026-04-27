@@ -494,7 +494,8 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	jobID := registry.MakeJobID()
 	replicationJob, err := registry.CreateJobWithTxn(ctx, mockReplicationJobRecord, jobID, nil)
 	require.NoError(t, err)
-	require.NoError(t, replicationJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	require.NoError(t, replicationJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}

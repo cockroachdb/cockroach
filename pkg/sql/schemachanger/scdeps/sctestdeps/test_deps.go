@@ -1130,7 +1130,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 		Details:          jobspb.WrapPayloadDetails(scJob.Details),
 		PauseReason:      "",
 	}
-	oldJobMetadata := jobs.JobMetadata{
+	oldJobMetadata := jobs.DeprecatedJobMetadata{
 		ID:       scJob.JobID,
 		State:    jobs.StateRunning,
 		Payload:  &oldPayload,

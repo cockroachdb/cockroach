@@ -17,7 +17,7 @@ import (
 // JobMetadataGetter is an interface used during job validation.
 // It is similar in principle to validate.ValidationDereferencer.
 type JobMetadataGetter interface {
-	GetJobMetadata(jobspb.JobID) (*JobMetadata, error)
+	GetJobMetadata(jobspb.JobID) (*DeprecatedJobMetadata, error)
 }
 
 // ValidateJobReferencesInDescriptor checks a catalog.Descriptor for
@@ -56,7 +56,7 @@ func ValidateJobReferencesInDescriptor(
 // to an accumulator function. We also have a second accumulator function for
 // keeping track of INFO level details that do not need to fail validation.
 func ValidateDescriptorReferencesInJob(
-	j JobMetadata,
+	j DeprecatedJobMetadata,
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	errorAccFn func(error),
 	infoAccFn func(string),
@@ -94,7 +94,7 @@ func ValidateDescriptorReferencesInJob(
 	}
 }
 
-func collectDescriptorReferences(j JobMetadata) (ids catalog.DescriptorIDSet) {
+func collectDescriptorReferences(j DeprecatedJobMetadata) (ids catalog.DescriptorIDSet) {
 	switch j.Payload.Type() {
 	case jobspb.TypeSchemaChange:
 		sc := j.Payload.GetSchemaChange()

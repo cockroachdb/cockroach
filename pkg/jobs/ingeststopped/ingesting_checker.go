@@ -55,7 +55,8 @@ func WaitForNoIngestingNodes(
 
 		if timeutil.Since(lastStatusUpdate) > statusUpdateFrequency {
 			status := jobs.StatusMessage(fmt.Sprintf("waiting for all nodes to finish ingesting writing before proceeding: %s", err))
-			if statusErr := job.NoTxn().UpdateStatusMessage(ctx, status); statusErr != nil {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			if statusErr := job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); statusErr != nil {
 				log.Dev.Warningf(ctx, "failed to update running status of job %d: %s", job.ID(), statusErr)
 			} else {
 				lastStatusUpdate = timeutil.Now()

@@ -355,7 +355,9 @@ func (b *backupResumer) ResumeCompaction(
 		// Update the job payload (non-volatile job definition) once, with the now
 		// resolved destination, updated description, etc. If we resume again we'll
 		// skip this whole block so this isn't an excessive update of payload.
-		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := b.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
