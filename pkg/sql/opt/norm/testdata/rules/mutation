@@ -343,6 +343,122 @@ update t106663
            ├── false [as=partial_index_put2:14]
            └── false [as=partial_index_del2:15]
 
+# --------------------------------------------------
+# Regression test for #166122. SimplifyPartialIndexProjections must not simplify
+# partial index projections for temporary backfill indexes, even when the update
+# does not touch any columns referenced by the index or its predicate. During a
+# backfill, the execution layer unconditionally writes to temporary indexes for
+# all concurrent mutations.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE t166122 (
+  k INT PRIMARY KEY,
+  a INT,
+  b STRING,
+  c INT,
+  FAMILY (k, a, b),
+  FAMILY (c),
+  INDEX (a) WHERE b IS NOT NULL,
+  INDEX "idx_temp:write-only+temp" (a) WHERE b IS NOT NULL
+)
+----
+
+# The update does not touch columns a or b, but since idx_temp is a temporary
+# backfill index, its partial index put/del columns must NOT be simplified to
+# false.
+norm expect-not=SimplifyPartialIndexProjections
+UPDATE t166122 SET c = 1 WHERE k = 1
+----
+update t166122
+ ├── columns: <none>
+ ├── fetch columns: k:7 a:8 c:10
+ ├── update-mapping:
+ │    └── c_new:13 => c:4
+ ├── partial index put columns: partial_index_put1:14 partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14 partial_index_put1:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:14!null c_new:13!null k:7!null a:8 c:10
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,8,10,13,14)
+      ├── select
+      │    ├── columns: k:7!null a:8 b:9 c:10
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-10)
+      │    ├── scan t166122
+      │    │    ├── columns: k:7!null a:8 b:9 c:10
+      │    │    ├── partial index predicates
+      │    │    │    ├── t166122_a_idx: filters
+      │    │    │    │    └── b:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    │    └── idx_temp: filters
+      │    │    │         └── b:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8-10)
+      │    └── filters
+      │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           ├── b:9 IS NOT NULL [as=partial_index_put1:14, outer=(9)]
+           └── 1 [as=c_new:13]
+
+# When the non-temp partial index on the same predicate is the only one, the
+# simplification SHOULD fire because the update doesn't touch relevant columns.
+exec-ddl
+DROP TABLE t166122
+----
+
+exec-ddl
+CREATE TABLE t166122_nobackfill (
+  k INT PRIMARY KEY,
+  a INT,
+  b STRING,
+  c INT,
+  FAMILY (k, a, b),
+  FAMILY (c),
+  INDEX (a) WHERE b IS NOT NULL
+)
+----
+
+norm expect=SimplifyPartialIndexProjections
+UPDATE t166122_nobackfill SET c = 1 WHERE k = 1
+----
+update t166122_nobackfill
+ ├── columns: <none>
+ ├── fetch columns: k:7 c:10
+ ├── update-mapping:
+ │    └── c_new:13 => c:4
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:14!null c_new:13!null k:7!null c:10
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,10,13,14)
+      ├── select
+      │    ├── columns: k:7!null c:10
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7,10)
+      │    ├── scan t166122_nobackfill
+      │    │    ├── columns: k:7!null c:10
+      │    │    ├── partial index predicates
+      │    │    │    └── t166122_nobackfill_a_idx: filters
+      │    │    │         └── b:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(10)
+      │    └── filters
+      │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           ├── false [as=partial_index_put1:14]
+           └── 1 [as=c_new:13]
+
 norm set=optimizer_use_lock_op_for_serializable=true expect=RemoveZeroCardLock
 SELECT a FROM t WHERE a = 1 AND a = 2 FOR UPDATE;
 ----
@@ -2006,7 +2122,7 @@ update trig
       │         │    │              ├── ((id:6, name:7, val:8) AS id, name, val) [as=old:12, outer=(6-8)]
       │         │    │              └── 2 [as=val_new:11]
       │         │    └── projections
-      │         │         └── clamp_val_before_update(new:13, old:12, 'before_trig_update', 'BEFORE', 'ROW', 'UPDATE', 66, 'trig', 'trig', 'public', 0, ARRAY[]) [as=clamp_val_before_update:43, outer=(12,13), volatile, udf]
+      │         │         └── clamp_val_before_update(new:13, old:12, 'before_trig_update', 'BEFORE', 'ROW', 'UPDATE', 68, 'trig', 'trig', 'public', 0, ARRAY[]) [as=clamp_val_before_update:43, outer=(12,13), volatile, udf]
       │         └── filters
       │              └── clamp_val_before_update:43 IS DISTINCT FROM NULL [outer=(43), immutable, constraints=(/43: (/NULL - ]; tight)]
       └── projections

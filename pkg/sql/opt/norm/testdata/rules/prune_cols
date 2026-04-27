@@ -2500,6 +2500,58 @@ upsert partial_indexes
            ├── upsert_b:20 > 1 [as=partial_index_put1:23, outer=(20)]
            └── b:12 > 1 [as=partial_index_del1:24, outer=(12)]
 
+# Regression test for #166122. When a temporary backfill index exists, columns
+# needed by the index and its predicate must be fetched even when the update does
+# not touch those columns. Here, the scan fetches a (index key) and b (predicate)
+# despite only updating c. Without the temp index, a and b would be pruned.
+exec-ddl
+CREATE TABLE prune_temp_idx (
+  k INT PRIMARY KEY,
+  a INT,
+  b STRING,
+  c INT,
+  FAMILY (k, a, b),
+  FAMILY (c),
+  INDEX "idx_temp:write-only+temp" (a) WHERE b IS NOT NULL
+)
+----
+
+norm
+UPDATE prune_temp_idx SET c = 1 WHERE k = 1
+----
+update prune_temp_idx
+ ├── columns: <none>
+ ├── fetch columns: k:7 a:8 c:10
+ ├── update-mapping:
+ │    └── c_new:13 => c:4
+ ├── partial index put columns: partial_index_put1:14
+ ├── partial index del columns: partial_index_put1:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:14!null c_new:13!null k:7!null a:8 c:10
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,8,10,13,14)
+      ├── select
+      │    ├── columns: k:7!null a:8 b:9 c:10
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-10)
+      │    ├── scan prune_temp_idx
+      │    │    ├── columns: k:7!null a:8 b:9 c:10
+      │    │    ├── partial index predicates
+      │    │    │    └── idx_temp: filters
+      │    │    │         └── b:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8-10)
+      │    └── filters
+      │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── projections
+           ├── b:9 IS NOT NULL [as=partial_index_put1:14, outer=(9)]
+           └── 1 [as=c_new:13]
+
 # Do not prune DELETE fetch columns.
 norm
 DELETE FROM partial_indexes WHERE a = 1

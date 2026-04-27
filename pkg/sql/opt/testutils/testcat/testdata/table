@@ -322,6 +322,37 @@ TABLE mutations
       ├── b int [inaccessible]
       └── rowid int not null default (unique_rowid()) [hidden]
 
+# Table with temporary backfill mutation indexes. The +temp suffix marks an
+# index as a temporary index used during an in-progress index backfill.
+exec-ddl
+CREATE TABLE temp_mutations (
+  a INT PRIMARY KEY,
+  b INT,
+  c STRING,
+  INDEX "idx_partial:write-only+temp" (b) WHERE c IS NOT NULL,
+  INDEX "idx_regular:delete-only+temp" (c)
+)
+----
+
+exec-ddl
+SHOW CREATE temp_mutations
+----
+TABLE temp_mutations
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX temp_mutations_pkey
+ │    └── a int not null
+ ├── INDEX idx_partial (mutation, temp)
+ │    ├── b int
+ │    ├── a int not null
+ │    └── WHERE c IS NOT NULL
+ └── INDEX idx_regular (mutation, temp)
+      ├── c string
+      └── a int not null
+
 # Table with generated_as_identity constraints.
 exec-ddl
 CREATE TABLE generated_as_identity (

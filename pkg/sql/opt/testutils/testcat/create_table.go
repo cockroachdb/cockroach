@@ -937,12 +937,14 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
-	if name, ok := extractWriteOnlyIndex(def); ok {
+	if name, writeOnly, deleteOnly, temp := extractIndexMutationState(def); writeOnly || deleteOnly {
 		idx.IdxName = name
-		tt.writeOnlyIdxCount++
-	} else if name, ok := extractDeleteOnlyIndex(def); ok {
-		idx.IdxName = name
-		tt.deleteOnlyIdxCount++
+		idx.isTemporaryIndexForBackfill = temp
+		if writeOnly {
+			tt.writeOnlyIdxCount++
+		} else {
+			tt.deleteOnlyIdxCount++
+		}
 	}
 
 	// Add explicit columns. Primary key columns definitions have already been
@@ -1496,18 +1498,30 @@ func isMutationColumn(def *tree.ColumnTableDef) bool {
 	return false
 }
 
-func extractWriteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
-	if !strings.HasSuffix(string(def.Name), ":write-only") {
-		return "", false
+// extractIndexMutationState parses the index name for mutation state suffixes.
+// It returns the clean name and flags for the mutation state. Supported
+// suffixes:
+//   - ":write-only"       — write-only mutation index
+//   - ":delete-only"      — delete-only mutation index
+//   - ":write-only+temp"  — write-only temporary backfill index
+//   - ":delete-only+temp" — delete-only temporary backfill index
+func extractIndexMutationState(
+	def *tree.IndexTableDef,
+) (name string, writeOnly, deleteOnly, temp bool) {
+	n := string(def.Name)
+	// Check compound suffixes first to avoid ambiguity.
+	switch {
+	case strings.HasSuffix(n, ":write-only+temp"):
+		return strings.TrimSuffix(n, ":write-only+temp"), true, false, true
+	case strings.HasSuffix(n, ":delete-only+temp"):
+		return strings.TrimSuffix(n, ":delete-only+temp"), false, true, true
+	case strings.HasSuffix(n, ":write-only"):
+		return strings.TrimSuffix(n, ":write-only"), true, false, false
+	case strings.HasSuffix(n, ":delete-only"):
+		return strings.TrimSuffix(n, ":delete-only"), false, true, false
+	default:
+		return n, false, false, false
 	}
-	return strings.TrimSuffix(string(def.Name), ":write-only"), true
-}
-
-func extractDeleteOnlyIndex(def *tree.IndexTableDef) (name string, ok bool) {
-	if !strings.HasSuffix(string(def.Name), ":delete-only") {
-		return "", false
-	}
-	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
 }
 
 func validatedCheckConstraint(def *tree.CheckConstraintTableDef) bool {
