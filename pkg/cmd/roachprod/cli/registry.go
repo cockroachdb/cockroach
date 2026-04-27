@@ -68,6 +68,7 @@ func (cr *commandRegistry) register() {
 		cr.buildFluentBitStartCmd(),
 		cr.buildFluentBitStopCmd(),
 		cr.buildOpentelemetryStartCmd(),
+		cr.buildOpentelemetryRestartCmd(),
 		cr.buildOpentelemetryStopCmd(),
 		cr.buildParcaAgentStartCmd(),
 		cr.buildParcaAgentStopCmd(),
