@@ -21,11 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// SystemDatabaseCache is used to cache the system descriptor IDs.
-// We get to assume that for a given name and a given cluster version, the name
-// to ID mapping will never change for the life of process.
-// This is helpful because unlike other descriptors, we can't always leverage
-// the lease manager to cache all system table IDs.
+// SystemDatabaseCache is used to cache the system descriptor IDs. This is
+// helpful because unlike other descriptors, we can't always leverage the lease
+// manager to cache all system table IDs.
+//
+// Cached mappings are usually stable for the life of the process, but the
+// cache permits a name->ID mapping to be replaced when an incoming observation
+// of the same name carries a different ID at a strictly newer MVCC timestamp.
+// This is required for PCR reader tenants, where a dynamically allocated
+// system table can be bootstrapped at one ID and later re-pointed to a
+// different ID by SetupOrAdvanceStandbyReaderCatalog; the MVCC timestamp guard
+// prevents a stale read at an older AOST from regressing a fresher mapping.
 //
 // Note that scoping the cache by active version might not, in most cases, be
 // necessary. It only comes into use if we rename or drop a system object during
@@ -134,6 +140,17 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 		c.mu.m[version.Version] = cached
 	}
 	for _, e := range nameCandidates {
+		// Re-check under the write lock: a concurrent update may have raced ahead
+		// and installed a newer entry for this name. We must not regress to an
+		// older mapping. See nameCandidatesForUpdate for why we permit ID changes.
+		if existing := cached.LookupNamespaceEntry(catalog.MakeNameInfo(e)); existing != nil {
+			if existing.GetID() == e.GetID() {
+				continue
+			}
+			if !existing.GetMVCCTimestamp().Less(e.GetMVCCTimestamp()) {
+				continue
+			}
+		}
 		cached.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 	}
 }
@@ -173,7 +190,20 @@ func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	}
 	diff := make([]nstree.NamespaceEntry, 0, len(systemNames))
 	for _, e := range systemNames {
-		if cached.LookupNamespaceEntry(catalog.MakeNameInfo(e)) == nil {
+		existing := cached.LookupNamespaceEntry(catalog.MakeNameInfo(e))
+		if existing == nil {
+			diff = append(diff, e)
+			continue
+		}
+		// Only replace an existing entry when the incoming one carries strictly
+		// newer information: same name but a different ID at a strictly newer
+		// MVCC timestamp. This handles PCR reader tenants, where a dynamically
+		// allocated system table (e.g. system.privileges) is bootstrapped at one
+		// ID and later re-pointed to a different ID by
+		// SetupOrAdvanceStandbyReaderCatalog. Without this, the cache returns
+		// the stale bootstrap ID forever and lookups fail with "resolved <name>
+		// to <id> but found no descriptor with id <id>".
+		if existing.GetID() != e.GetID() && existing.GetMVCCTimestamp().Less(e.GetMVCCTimestamp()) {
 			diff = append(diff, e)
 		}
 	}
