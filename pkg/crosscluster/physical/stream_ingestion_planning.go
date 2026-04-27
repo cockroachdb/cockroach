@@ -341,6 +341,7 @@ func createReaderTenant(
 		if err != nil {
 			return readerID, err
 		}
+		telemetry.Count("physical_replication.reader_tenant.created")
 	}
 	return readerID, nil
 }
