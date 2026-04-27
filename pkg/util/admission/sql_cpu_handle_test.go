@@ -661,3 +661,76 @@ func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
 	tenantHandle.Close()
 	rgHandle.Close()
 }
+
+// admitOnce drives a single slow-path Admit on a new SQLCPUHandle
+// for (tenantID, pri) and returns the handle. The caller is
+// responsible for Close.
+func admitOnce(
+	t *testing.T, ctx context.Context, q *WorkQueue, tenantID uint64, pri admissionpb.WorkPriority,
+) *SQLCPUHandle {
+	t.Helper()
+	h := newSQLCPUAdmissionHandle(
+		WorkInfo{TenantID: roachpb.MustMakeTenantID(tenantID), Priority: pri},
+		true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	return h
+}
+
+// requireGroupUsed returns q.mu.groups[key].used, failing the test
+// if the entry does not exist.
+func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
+	t.Helper()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	g, ok := q.mu.groups[key]
+	require.Truef(t, ok, "group %v should exist in q.mu.groups", key)
+	return g.used
+}
+
+// hasGroup reports whether q.mu.groups has an entry for key.
+func hasGroup(q *WorkQueue, key groupKey) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	_, ok := q.mu.groups[key]
+	return ok
+}
+
+// TestSQLCPUHandleCloseAfterModeFlip verifies that a mode flip
+// between Admit and Close still routes the drained reservation to
+// the original (Admit-time) container. The reservationSourceGroup
+// field captures the key at Admit time precisely so this scenario
+// stays correct: re-deriving from the WorkQueue's current
+// useResourceGroup would route to a freshly-created container that
+// never received the tokens.
+func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+	// Start in serverless mode: Admit creates a tenant-keyed container.
+	q.setUseResourceGroup(false)
+
+	h := admitOnce(t, ctx, q, 7, admissionpb.NormalPri)
+	tenantKey := tenantGroupKey(7)
+	require.Equal(t, tenantKey, h.mu.reservationSourceGroup)
+	usedBefore := requireGroupUsed(t, q, tenantKey)
+
+	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
+	// route to rgGroupKey(highResourceGroupID), but Close should still
+	// target the tenant-keyed container that holds the prior tokens.
+	q.setUseResourceGroup(true)
+
+	_ = tg.buf.stringAndReset()
+	h.Close()
+	require.Contains(t, tg.buf.String(), "returnGrant")
+
+	require.Less(t, requireGroupUsed(t, q, tenantKey), usedBefore,
+		"tenant container's used must decrement; if not, Close "+
+			"re-derived the container key from the post-flip mode")
+	require.False(t, hasGroup(q, rgGroupKey(highResourceGroupID)),
+		"rg container must not have been created by Close (it would "+
+			"mean Close re-derived from current mode rather than using "+
+			"reservationSourceGroup)")
+}

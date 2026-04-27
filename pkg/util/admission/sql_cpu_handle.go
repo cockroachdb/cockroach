@@ -153,6 +153,27 @@ type SQLCPUHandle struct {
 		// INVARIANT: closed == true => reservation == 0.
 		reservation atomic.Int64
 
+		// reservationSourceGroup is the groupKey of the container the
+		// most recent successful Admit credited. Close uses it to
+		// return the drained reservation to the same container,
+		// without re-deriving from the WorkQueue's current
+		// useResourceGroup state — which may have flipped between
+		// Admit and Close. In RM mode the container is rg-keyed; the
+		// prior tenantGroupKey-based lookup missed and silently leaked
+		// the drained reservation.
+		//
+		// Invariant: at any moment, every token in reservation came
+		// from the most recent successful Admit. Each Admit only fires
+		// when tryDeductReservation found reservation < needed (i.e.,
+		// drained reservation to 0); Admit then adds its buffer to a
+		// reservation that is 0. By the time the next Admit fires, that
+		// buffer has been drained back to 0 (which is what triggered
+		// the next Admit). The slow path is serialized via admitTurn,
+		// so no two Admits' buffers ever coexist in reservation.
+		// Therefore reservationSourceGroup is always the exact source
+		// of any tokens Close drains.
+		reservationSourceGroup groupKey
+
 		gHandles []*GoroutineCPUHandle
 		// Backing for up to 2 goroutine handles, to avoid allocations in
 		// gHandles when there are 2 or fewer goroutines.
@@ -342,10 +363,14 @@ func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 				// Close sets closed=true and Swap(0) drains reservation, then this
 				// goroutine does Add(buffer), leaking tokens.
 				h.mu.reservation.Add(buffer)
+				h.mu.reservationSourceGroup = resp.groupKey
 				return false
 			}()
 			// Close already ran and drained reservation. Return the buffer
-			// directly using this admit's resp.groupKey.
+			// directly using this admit's resp.groupKey —
+			// reservationSourceGroup wasn't stored (we're in the closed
+			// branch above), so we use the key from the just-completed
+			// Admit.
 			if closed {
 				h.wq.AdmittedSQLWorkDone(resp.groupKey, buffer)
 			}
@@ -440,7 +465,10 @@ func (h *SQLCPUHandle) Close() {
 	// be added to mu.reservation after this.
 	remaining := h.mu.reservation.Swap(0)
 	if remaining > 0 {
-		h.wq.AdmittedSQLWorkDone(tenantGroupKey(h.workInfo.TenantID.ToUint64()), remaining)
+		// closed=true was set under mu before this Swap, so no further
+		// Admit can update reservationSourceGroup; reading it here
+		// without mu is safe.
+		h.wq.AdmittedSQLWorkDone(h.mu.reservationSourceGroup, remaining)
 	}
 }
 
