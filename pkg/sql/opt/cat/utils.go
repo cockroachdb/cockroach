@@ -140,7 +140,11 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 	}
 	mutation := ""
 	if IsMutationIndex(tab, ord) {
-		mutation = " (mutation)"
+		if tab.Index(ord).IsTemporaryIndexForBackfill() {
+			mutation = " (mutation, temp)"
+		} else {
+			mutation = " (mutation)"
+		}
 	}
 
 	idxVisibililty := ""

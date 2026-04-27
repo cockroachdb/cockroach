@@ -1373,6 +1373,11 @@ type Index struct {
 	// numImplicitPartitioningColumns is the number of implicit partitioning
 	// columns defined in this index.
 	numImplicitPartitioningColumns int
+
+	// isTemporaryIndexForBackfill indicates that this is a temporary index
+	// used during an in-progress index backfill (UseDeletePreservingEncoding
+	// in the real catalog).
+	isTemporaryIndexForBackfill bool
 }
 
 // ID is part of the cat.Index interface.
@@ -1515,8 +1520,9 @@ func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
 }
 
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
 func (ti *Index) IsTemporaryIndexForBackfill() bool {
-	return false
+	return ti.isTemporaryIndexForBackfill
 }
 
 // SetPartitions manually sets the partitions.
