@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -145,7 +146,24 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	return coord.GetCTTWorkQueue(isSystemTenant)
+	mode := cpuTimeTokenMode(coord.cpuTimeCoord.filler.activeMode.Load())
+	switch mode {
+	case offMode:
+		// activeMode should never be offMode in normal operation: the
+		// constructor maps off to serverless, and resetInterval never
+		// returns offMode. This case is a defensive fallback.
+		return coord.slotsCoord.GetWorkQueue(KVWork)
+	case serverlessMode:
+		if isSystemTenant {
+			return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+		}
+		return coord.cpuTimeCoord.getWorkQueue(appTenant)
+	case resourceManagerMode:
+		// RM mode uses a single WorkQueue for all work.
+		return coord.cpuTimeCoord.getWorkQueue(0)
+	default:
+		panic(fmt.Sprintf("unexpected mode %d", mode))
+	}
 }
 
 // GetCTTWorkQueue returns the CPU time token WorkQueue unconditionally,
@@ -203,6 +221,17 @@ func makeCPUTimeTokenGrantCoordinator(
 	registry *metric.Registry,
 	knobs *TestingKnobs,
 ) *cpuTimeTokenGrantCoordinator {
+	// Always create 2 tiers. In RM mode, tier-1 sits idle (no work
+	// routed, zero refill rates). This enables dynamic mode switching
+	// at runtime without rebuilding queues.
+	// Default to serverless when mode is off (legacy bool path or CTT
+	// not yet enabled). The strategy only matters when the filler runs,
+	// and the filler only starts when CTT is enabled. Using serverless
+	// as the default preserves the legacy 2-queue behavior.
+	initialMode := cpuTimeTokenACMode.Get(&settings.SV)
+	if initialMode == offMode {
+		initialMode = serverlessMode
+	}
 	metrics := makeCPUTimeTokenMetrics()
 	registry.AddMetricStruct(metrics)
 	timeSource := timeutil.DefaultTimeSource{}
@@ -250,6 +279,7 @@ func makeCPUTimeTokenGrantCoordinator(
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
+	allocator.strategy = allocator.newStrategy(initialMode)
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler: filler,
@@ -257,6 +287,10 @@ func makeCPUTimeTokenGrantCoordinator(
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		coordinator.queues[tier] = requesters[tier]
 	}
+
+	// Initialize the filler's activeMode so GetKVWorkQueue returns the
+	// correct queue before the filler goroutine starts.
+	filler.activeMode.Store(int64(initialMode))
 
 	// The filler ticking appears to have a slight negative impact on perf.
 	// For now, we accept this, since CPU time token AC will be off by
@@ -285,6 +319,16 @@ func makeCPUTimeTokenGrantCoordinator(
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *WorkQueue {
+	// TODO(wenyihu6): activeMode is read here and again in the caller
+	// (GetKVWorkQueue / GetCTTWorkQueue). If a mode transition lands
+	// between the two reads, the assertion can fire.
+	if buildutil.CrdbTestBuild {
+		mode := cpuTimeTokenMode(coord.filler.activeMode.Load())
+		if mode == resourceManagerMode && tier != 0 {
+			panic(fmt.Sprintf(
+				"queue[%d] accessed in resource manager mode", tier))
+		}
+	}
 	return coord.queues[tier].(*WorkQueue)
 }
 

@@ -82,8 +82,9 @@ type testTokenAllocator struct {
 
 func (m *testTokenAllocator) init() {}
 
-func (a *testTokenAllocator) resetInterval(context.Context) {
+func (a *testTokenAllocator) resetInterval(context.Context) cpuTimeTokenMode {
 	fmt.Fprintf(a.buf, "resetInterval()\n")
+	return serverlessMode
 }
 
 func (a *testTokenAllocator) allocateTokens(remainingTicks int64) {
@@ -96,7 +97,8 @@ type testModel struct {
 }
 
 type testBurstManager struct {
-	tokens int64
+	tokens           int64
+	useResourceGroup bool
 }
 
 func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
@@ -107,6 +109,10 @@ func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
 	if m.tokens < -capacity/4 {
 		m.tokens = -capacity / 4
 	}
+}
+
+func (m *testBurstManager) setUseResourceGroup(enabled bool) {
+	m.useResourceGroup = enabled
 }
 
 func (m *testModel) init() {}
@@ -174,15 +180,17 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		testTier0: {},
 		testTier1: {},
 	}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: burstMgrs[testTier0],
+		testTier1: burstMgrs[testTier1],
+	}
 	allocator := cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
 		model:    model,
 		metrics:  metrics,
-		queues: [numResourceTiers]workQueueIForAllocator{
-			testTier0: burstMgrs[testTier0],
-			testTier1: burstMgrs[testTier1],
-		},
+		queues:   queues,
+		strategy: &serverlessStrategy{queues: queues},
 	}
 	printBurstMgrs = func() string {
 		var b strings.Builder
@@ -485,4 +493,147 @@ func (p *testCPUMetricsProvider) append(dur time.Duration, count int) {
 	for i := 0; i < count; i++ {
 		p.durations = append(p.durations, dur)
 	}
+}
+
+// TestServerlessStrategyComputeTargets verifies that computeTargets
+// reads the per-tier cluster settings (app and system utilization
+// goals) and adds the burst delta setting to each to produce the
+// canBurst targets.
+func TestServerlessStrategyComputeTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeClusterSettings()
+	ctx := context.Background()
+	KVCPUTimeAppUtilGoal.Override(ctx, &st.SV, 0.75)
+	KVCPUTimeSystemUtilGoal.Override(ctx, &st.SV, 0.5)
+	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.25)
+
+	s := &serverlessStrategy{}
+	targets := s.computeTargets(&st.SV)
+
+	// noBurst targets come directly from the cluster settings.
+	require.Equal(t, 0.75, targets[appTenant][noBurst])
+	require.Equal(t, 0.5, targets[systemTenant][noBurst])
+	// canBurst targets are noBurst + burstDelta.
+	require.Equal(t, 1.0, targets[appTenant][canBurst])
+	require.Equal(t, 0.75, targets[systemTenant][canBurst])
+}
+
+// TestServerlessStrategyRefillBurst verifies that refillBurst
+// distributes noBurst/4 of each tier's tokens and capacity to the
+// per-group burst buckets. The canBurst token counts should be
+// ignored since burst bucket refill is derived solely from the
+// noBurst allocation.
+func TestServerlessStrategyRefillBurst(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	burstMgrs := [numResourceTiers]*testBurstManager{
+		testTier0: {},
+		testTier1: {},
+	}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: burstMgrs[testTier0],
+		testTier1: burstMgrs[testTier1],
+	}
+	s := &serverlessStrategy{queues: queues}
+
+	// Set up token counts and refill rates. refillBurst should pass
+	// tokens[tier][noBurst]/4 as toAdd and refillRates[tier][noBurst]/4
+	// as capacity to each tier's burst manager.
+	var tokens tokenCounts
+	tokens[testTier0][noBurst] = 400
+	tokens[testTier0][canBurst] = 500 // ignored by refillBurst
+	tokens[testTier1][noBurst] = 200
+	tokens[testTier1][canBurst] = 300 // ignored by refillBurst
+
+	var refillRates rates
+	refillRates[testTier0][noBurst] = 4000
+	refillRates[testTier1][noBurst] = 2000
+
+	s.refillBurst(tokens, refillRates)
+
+	// Each tier gets noBurst/4 tokens, capped at noBurst/4 capacity.
+	require.Equal(t, int64(100), burstMgrs[testTier0].tokens) // 400/4
+	require.Equal(t, int64(50), burstMgrs[testTier1].tokens)  // 200/4
+}
+
+// TestNewStrategy verifies that newStrategy returns the correct
+// strategy for serverlessMode and panics for offMode (not a real
+// strategy), resourceManagerMode (not yet implemented), and unknown
+// modes.
+func TestNewStrategy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	allocator := cpuTimeTokenAllocator{}
+	s := allocator.newStrategy(serverlessMode)
+	require.Equal(t, serverlessMode, s.mode())
+
+	require.Panics(t, func() {
+		allocator.newStrategy(offMode)
+	})
+	require.Panics(t, func() {
+		allocator.newStrategy(resourceManagerMode)
+	})
+	require.Panics(t, func() {
+		allocator.newStrategy(cpuTimeTokenMode(99))
+	})
+}
+
+// TestResetIntervalReturnsMode verifies that resetInterval returns
+// the current strategy's mode and skips strategy swap when the
+// cluster setting is offMode.
+func TestResetIntervalReturnsMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metrics := makeCPUTimeTokenMetrics()
+	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
+	burstMgrs := [numResourceTiers]*testBurstManager{{}, {}}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: burstMgrs[testTier0],
+		testTier1: burstMgrs[testTier1],
+	}
+	// Use default settings where cpuTimeTokenACMode is offMode.
+	// resetInterval should not attempt to swap strategy.
+	st := cluster.MakeClusterSettings()
+	require.Equal(t, offMode, cpuTimeTokenACMode.Get(&st.SV))
+	allocator := cpuTimeTokenAllocator{
+		granter:  granter,
+		settings: st,
+		model:    &testModel{buf: &strings.Builder{}, rates: rates{}},
+		metrics:  metrics,
+		queues:   queues,
+		strategy: &serverlessStrategy{queues: queues},
+	}
+
+	ctx := context.Background()
+	mode := allocator.resetInterval(ctx)
+	require.Equal(t, serverlessMode, mode)
+}
+
+// TestConfigureQueue verifies that configureQueue calls
+// setUseResourceGroup with the correct value based on the
+// current strategy's mode.
+func TestConfigureQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mgr := &testBurstManager{}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: mgr,
+		testTier1: &testBurstManager{},
+	}
+	allocator := cpuTimeTokenAllocator{
+		queues:   queues,
+		strategy: &serverlessStrategy{queues: queues},
+	}
+
+	// In serverless mode, useResourceGroup should be false. The RM
+	// direction (useResourceGroup=true) will be tested when rmStrategy
+	// is implemented.
+	allocator.configureQueue()
+	require.False(t, mgr.useResourceGroup)
 }
