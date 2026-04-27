@@ -299,7 +299,7 @@ func SetResumeSpansAndSSTManifestsInJob(
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	return job.WithTxn(txn).SetDetails(ctx, details)
+	return job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 }
 
 // SetResumeSpansInJob is a helper for legacy callers that only need to persist

@@ -185,8 +185,8 @@ func (t *importCheckpointTracker) Persist(ctx context.Context, job *jobs.Job) er
 	}
 
 	numFiles := t.numFiles
-	err = job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	err = job.DeprecatedDebugNameNoTxn(importProgressDebugName).Update(ctx, func(
+		txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err

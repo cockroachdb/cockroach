@@ -52,7 +52,7 @@ type TestingKnobs struct {
 	// BeforeUpdate is called in the update transaction after the update function
 	// has run. If an error is returned, it will be propagated and the update will
 	// not be committed.
-	BeforeUpdate func(orig, updated JobMetadata) error
+	BeforeUpdate func(orig, updated DeprecatedJobMetadata) error
 
 	// IntervalOverrides consists of override knobs for job intervals.
 	IntervalOverrides TestingIntervalOverrides

@@ -2200,7 +2200,7 @@ func TestLogicalReplicationPlanner(t *testing.T) {
 	})
 	t.Run("generatePlan uses the latest replicated time for planning", func(t *testing.T) {
 		replicatedTime := hlc.Timestamp{WallTime: 142}
-		require.NoError(t, sj.Job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		require.NoError(t, sj.Job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			prog := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 			prog.ReplicatedTime = replicatedTime
 			ju.UpdateProgress(md.Progress)

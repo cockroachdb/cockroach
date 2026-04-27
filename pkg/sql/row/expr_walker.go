@@ -296,7 +296,7 @@ func (j *SeqChunkProvider) RequestChunk(
 	var hasAllocatedChunk bool
 	return j.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
-		resolveChunkFunc := func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		resolveChunkFunc := func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			progress := md.Progress
 
 			// Check if we have already reserved a chunk corresponding to this row in a
@@ -355,7 +355,7 @@ func (j *SeqChunkProvider) RequestChunk(
 		if err != nil {
 			return err
 		}
-		if err := job.WithTxn(txn).Update(ctx, resolveChunkFunc); err != nil {
+		if err := job.DeprecatedWithTxn(txn).Update(ctx, resolveChunkFunc); err != nil {
 			return err
 		}
 

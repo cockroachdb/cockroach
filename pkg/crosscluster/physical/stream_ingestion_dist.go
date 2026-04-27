@@ -84,7 +84,7 @@ func startDistIngestion(
 			return err
 		}
 
-		if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := ingestionJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Progress.GetStreamIngest().InitialRevertRequired = false
 			ju.UpdateProgress(md.Progress)
 			updateStatusInternal(md, ju, jobspb.InitializingReplication, string(msg))
@@ -129,7 +129,7 @@ func startDistIngestion(
 	}
 
 	if planner.initialPartitionPgUrls[0].RoutingMode() != streamclient.RoutingModeGateway {
-		err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		err = ingestionJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			// Persist the initial Stream Addresses to the jobs table before execution begins.
 			if len(planner.initialPartitionPgUrls) == 0 {
 				return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
@@ -279,7 +279,7 @@ func startDistIngestion(
 		replicationStatusForFlow = jobspb.InitialScan
 	}
 
-	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := ingestionJob.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.GetStreamIngest().ReplicationStatus = replicationStatusForFlow
 		md.Progress.GetStreamIngest().InitialSplitComplete = true
 		md.Progress.StatusMessage = replicationStatusForFlow.String()

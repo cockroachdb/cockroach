@@ -1831,8 +1831,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
-		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		if err := cf.js.job.DeprecatedDebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			var err error
 			if err = md.CheckRunningOrReverting(); err != nil {

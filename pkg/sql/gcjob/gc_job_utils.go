@@ -63,7 +63,7 @@ func initDetailsAndProgress(
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			details = *md.Payload.GetSchemaChangeGC()
 			progress = md.Progress.GetSchemaChangeGC()
 			if err := validateDetails(&details); err != nil {
@@ -258,7 +258,7 @@ func persistProgress(
 	status jobs.StatusMessage,
 ) {
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}

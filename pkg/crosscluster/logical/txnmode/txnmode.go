@@ -407,7 +407,7 @@ func (p *TxnLdrCoordinator) stageCheckpoint(ctx context.Context, applier *txnapp
 }
 
 func (p *TxnLdrCoordinator) checkpoint(ctx context.Context, frontier hlc.Timestamp) error {
-	return p.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return p.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}

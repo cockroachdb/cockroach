@@ -6058,12 +6058,12 @@ type marshaledJobMetadataMap map[jobspb.JobID]marshaledJobMetadata
 // GetJobMetadata implements the jobs.JobMetadataGetter interface.
 func (m marshaledJobMetadataMap) GetJobMetadata(
 	jobID jobspb.JobID,
-) (md *jobs.JobMetadata, err error) {
+) (md *jobs.DeprecatedJobMetadata, err error) {
 	ujm, found := m[jobID]
 	if !found {
 		return nil, errors.New("job not found")
 	}
-	md = &jobs.JobMetadata{ID: jobID}
+	md = &jobs.DeprecatedJobMetadata{ID: jobID}
 	if ujm.status == nil {
 		return nil, errors.New("missing status")
 	}

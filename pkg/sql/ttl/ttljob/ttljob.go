@@ -409,7 +409,7 @@ func (t *rowLevelTTLResumer) setupProgressTracking(
 	ctx context.Context, sv *settings.Values, execCfg *sql.ExecutorConfig, entirePKSpan roachpb.Span,
 ) ([]roachpb.Span, error) {
 	var completedSpans []roachpb.Span
-	err := t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err := t.job.DeprecatedNoTxn().Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		ttlProg := md.Progress.GetRowLevelTTL()
 		if ttlProg == nil {
 			return errors.AssertionFailedf("no TTL job progress")

@@ -105,7 +105,7 @@ func (n *newSchemaChangeResumer) CollectProfile(ctx context.Context, execCtx int
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	if err := n.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := n.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		return nil
 	}); err != nil {
 		// TODO(ajwerner): Detect transient errors and classify as retriable here or

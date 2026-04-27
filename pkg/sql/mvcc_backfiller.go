@@ -289,7 +289,7 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 		details.ResumeSpanList[progress.MutationIdx[idx]].ResumeSpans = progress.TodoSpans[idx]
 	}
 
-	return imt.jobMu.job.NoTxn().SetDetails(ctx, details)
+	return imt.jobMu.job.DeprecatedNoTxn().SetDetails(ctx, details)
 }
 
 // FlushFractionCompleted writes out the fraction completed based on the number of total

@@ -130,18 +130,18 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 	j := createJob(defaultRecord)
 	t.Run("SetDetails", func(t *testing.T) {
 		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
-		require.NoError(t, j.NoTxn().SetDetails(ctx, newDetails))
+		require.NoError(t, j.DeprecatedNoTxn().SetDetails(ctx, newDetails))
 		runTests(t, j)
 	})
 
 	t.Run("SetProgress", func(t *testing.T) {
 		newProgress := jobspb.ImportProgress{WriteProgress: []float32{1.0}}
-		require.NoError(t, j.NoTxn().SetProgress(ctx, newProgress))
+		require.NoError(t, j.DeprecatedNoTxn().SetProgress(ctx, newProgress))
 		runTests(t, j)
 	})
 
 	t.Run("Update", func(t *testing.T) {
-		require.NoError(t, j.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		require.NoError(t, j.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Payload.StartedMicros = timeutil.Now().UnixNano()
 			md.Progress.TraceID = tracingpb.TraceID(123)
 			ju.UpdateProgress(md.Progress)
@@ -152,7 +152,7 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 	})
 
 	t.Run("FractionProgressed", func(t *testing.T) {
-		require.NoError(t, j.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(0.9)))
+		require.NoError(t, j.DeprecatedNoTxn().FractionProgressed(ctx, jobs.FractionUpdater(0.9)))
 		runTests(t, j)
 	})
 }

@@ -595,7 +595,7 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		return total, nil
 	}
 
-	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.GetRestore().TotalDownloadRequired = total
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -762,7 +762,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	// either case we can mark the job as done.
 	if total == 0 {
 		r.downloadJobProg = 1.0
-		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		return r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			return 1.0
 		})
 	}
@@ -796,7 +796,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		if timeutil.Since(lastProgressUpdate) > time.Minute {
-			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			if err := r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				return fractionComplete
 			}); err != nil {
 				return err

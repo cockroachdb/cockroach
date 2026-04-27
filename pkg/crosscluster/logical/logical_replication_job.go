@@ -135,7 +135,7 @@ func (r *logicalReplicationResumer) updateStatusMessage(
 	ctx context.Context, status redact.RedactableString,
 ) {
 	log.Dev.Infof(ctx, "%s", status)
-	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.StatusMessage = string(status.Redact())
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -194,7 +194,7 @@ func (r *logicalReplicationResumer) checkpointPartitionURIs(
 	if uris[0].RoutingMode() == streamclient.RoutingModeGateway {
 		return nil
 	}
-	return r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		ldrProg.PartitionConnUris = partitionPgUrls
 		ju.UpdateProgress(md.Progress)
@@ -383,8 +383,8 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 
 	rh.lastPartitionUpdate = timeutil.Now()
 	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
-	if err := rh.job.NoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := rh.job.DeprecatedNoTxn().Update(ctx,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}

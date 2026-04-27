@@ -108,7 +108,7 @@ func dropTenantInternal(
 		if err != nil {
 			return errors.Wrap(err, "loading tenant replication job for cancelation")
 		}
-		if err := job.WithTxn(txn).CancelRequested(ctx); err != nil {
+		if err := job.DeprecatedWithTxn(txn).CancelRequested(ctx); err != nil {
 			return errors.Wrapf(err, "canceling tenant replication job %d", info.PhysicalReplicationConsumerJobID)
 		}
 	}

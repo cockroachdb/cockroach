@@ -346,8 +346,8 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	sf.aggregateAndUpdateRangeMetrics()
 
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	if err := registry.DeprecatedUpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
+		txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
