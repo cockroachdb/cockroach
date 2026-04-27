@@ -267,7 +267,7 @@ DETAIL: source SQL:
 COPY "copytab" FROM STDIN (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
                                                                               ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY "copytab" FROM STDIN (FORMAT CSV, FORCE_NULL (c1, c2, c3))
@@ -277,7 +277,7 @@ DETAIL: source SQL:
 COPY "copytab" FROM STDIN (FORMAT CSV, FORCE_NULL (c1, c2, c3))
                                                   ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY "copytab" FROM STDIN (ESCAPE '/',     FORCE_QUOTE (c1, c2))
@@ -287,17 +287,28 @@ DETAIL: source SQL:
 COPY "copytab" FROM STDIN (ESCAPE '/',     FORCE_QUOTE (c1, c2))
                                                        ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY "copytab" FROM STDIN (HEADER, OIDS)
 ----
-at or near ")": syntax error: unimplemented: this syntax
+----
+at or near "oids": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 COPY "copytab" FROM STDIN (HEADER, OIDS)
-                                       ^
+                                   ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
 
 parse
 COPY (SELECT * FROM t) TO STDOUT (FORMAT csv)
@@ -355,7 +366,7 @@ DETAIL: source SQL:
 COPY (SELECT * FROM t) TO STDOUT (ESCAPE '%', HEADER false, NULL '.', FORCE_NOT_NULL (column))
                                                                                      ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY (SELECT * FROM t) TO STDOUT (FORMAT CSV, FORCE_NULL (c1, c2, c3))
@@ -365,7 +376,7 @@ DETAIL: source SQL:
 COPY (SELECT * FROM t) TO STDOUT (FORMAT CSV, FORCE_NULL (c1, c2, c3))
                                                          ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY (SELECT * FROM t) TO STDOUT (ESCAPE '/',     FORCE_QUOTE (c1, c2))
@@ -375,17 +386,17 @@ DETAIL: source SQL:
 COPY (SELECT * FROM t) TO STDOUT (ESCAPE '/',     FORCE_QUOTE (c1, c2))
                                                               ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/85575/
 
 error
 COPY (SELECT * FROM t) TO STDOUT (HEADER, OIDS)
 ----
-at or near ")": syntax error: unimplemented: this syntax
+at or near "oids": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 COPY (SELECT * FROM t) TO STDOUT (HEADER, OIDS)
-                                              ^
+                                          ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41608/
+See: https://go.crdb.dev/issue-v/96590/
 
 error
 COPY (EXPLAIN SELECT * FROM t) TO STDOUT

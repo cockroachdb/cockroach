@@ -2289,7 +2289,10 @@ type CreateLanguage struct {
 	Replace bool
 }
 
-// Format implements the NodeFormatter interface.
+// Format implements the NodeFormatter interface. The parser swallows the
+// optional TRUSTED/PROCEDURAL modifiers and legacy HANDLER/INLINE/VALIDATOR
+// clauses without recording them, so this does not round-trip the original
+// SQL. That's fine because the statement is a no-op.
 func (node *CreateLanguage) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 	if node.Replace {
