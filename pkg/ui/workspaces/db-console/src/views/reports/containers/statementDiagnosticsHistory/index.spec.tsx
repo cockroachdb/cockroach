@@ -5,7 +5,6 @@
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { render, screen } from "@testing-library/react";
-import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -29,17 +28,7 @@ describe("StatementDiagnosticsHistoryView", () => {
   const defaultProps = {
     loading: false,
     diagnosticsReports: [createMockReport()],
-    getStatementByFingerprint: jest.fn(() => ({
-      id: Long.fromString("123"),
-      key: {
-        key_data: {
-          query: "SELECT * FROM table",
-          implicit_txn: true,
-        },
-      },
-    })),
     onCancelRequest: jest.fn(),
-    refresh: jest.fn(),
   };
 
   const renderComponent = (props = defaultProps) => {
@@ -108,26 +97,6 @@ describe("StatementDiagnosticsHistoryView", () => {
     expect(screen.getByText("5 diagnostics bundles")).toBeTruthy();
   });
 
-  it("renders statement as link when statement data is available", () => {
-    const mockStatement = {
-      id: Long.fromString("123"),
-      key: {
-        key_data: {
-          query: "SELECT * FROM table",
-          implicit_txn: true,
-        },
-      },
-    };
-
-    renderComponent({
-      ...defaultProps,
-      getStatementByFingerprint: jest.fn(() => mockStatement),
-    });
-
-    const linkElement = screen.getByRole("link");
-    expect(linkElement.getAttribute("href")).toBe("/statement/123");
-  });
-
   it("calls onCancelRequest when cancel button is clicked", async () => {
     const pendingReport = createMockReport({
       completed: false,
@@ -147,11 +116,8 @@ describe("StatementDiagnosticsHistoryView", () => {
     });
   });
 
-  it("renders statement as text when statement data is not available", () => {
-    renderComponent({
-      ...defaultProps,
-      getStatementByFingerprint: jest.fn(() => undefined),
-    });
+  it("renders statement fingerprint as text", () => {
+    renderComponent(defaultProps);
 
     expect(screen.getByText("SELECT FROM table")).toBeTruthy();
     expect(screen.queryByRole("link")).not.toBeTruthy();

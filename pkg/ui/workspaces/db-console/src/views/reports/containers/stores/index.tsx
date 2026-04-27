@@ -3,41 +3,21 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
-import isNil from "lodash/isNil";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React, { useEffect } from "react";
+import React from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
-import { storesRequestKey, refreshStores } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { getStores } from "src/util/api";
 import { nodeIDAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 
 import { BackToAdvanceDebug } from "../util";
-
-interface StoresOwnProps {
-  stores: protos.cockroach.server.serverpb.IStoreDetails[];
-  loading: boolean;
-  lastError: Error;
-  refreshStores: typeof refreshStores;
-}
-
-type StoresProps = StoresOwnProps & RouteComponentProps;
-
-function storesRequestFromProps(props: StoresProps) {
-  const nodeId = getMatchParamByName(props.match, nodeIDAttr);
-  return new protos.cockroach.server.serverpb.StoresRequest({
-    node_id: nodeId,
-  });
-}
 
 function renderSimpleRow(header: string, value: string, title = "") {
   let realTitle = title;
@@ -71,20 +51,23 @@ function renderStore(store: protos.cockroach.server.serverpb.IStoreDetails) {
  * Renders the Stores Report page.
  */
 export function Stores({
-  stores,
-  loading,
-  lastError,
-  refreshStores: refreshStoresAction,
   match,
   history,
-}: StoresProps): React.ReactElement {
+}: RouteComponentProps): React.ReactElement {
   const nodeID = getMatchParamByName(match, nodeIDAttr);
 
-  useEffect(() => {
-    refreshStoresAction(
-      new protos.cockroach.server.serverpb.StoresRequest({ node_id: nodeID }),
-    );
-  }, [refreshStoresAction, nodeID]);
+  const { data, error, isLoading } = util.useSwrWithClusterId(
+    ["stores", nodeID],
+    () =>
+      getStores(
+        new protos.cockroach.server.serverpb.StoresRequest({
+          node_id: nodeID,
+        }),
+      ),
+    { revalidateOnFocus: false },
+  );
+
+  const stores = data ? sortBy(data.stores, store => store.store_id) : null;
 
   const renderContent = () => {
     if (isEmpty(stores)) {
@@ -95,6 +78,7 @@ export function Stores({
 
     return <>{React.Children.toArray(map(stores, renderStore))}</>;
   };
+
   let header: string = null;
   if (isNaN(parseInt(nodeID, 10))) {
     header = "Local Node";
@@ -109,54 +93,13 @@ export function Stores({
       <h1 className="base-heading">Stores</h1>
       <h2 className="base-heading">{header} stores</h2>
       <Loading
-        loading={loading}
+        loading={isLoading}
         page={"containers stores"}
-        error={lastError}
+        error={error}
         render={renderContent}
       />
     </div>
   );
 }
 
-function selectStoresState(state: AdminUIState, props: StoresProps) {
-  const nodeIDKey = storesRequestKey(storesRequestFromProps(props));
-  return state.cachedData.stores[nodeIDKey];
-}
-
-const selectStoresLoading = createSelector(selectStoresState, stores => {
-  return isEmpty(stores) || (isEmpty(stores.data) && isNil(stores.lastError));
-});
-
-const selectSortedStores = createSelector(
-  selectStoresLoading,
-  selectStoresState,
-  (loading, stores) => {
-    if (loading) {
-      return null;
-    }
-    return sortBy(stores.data?.stores, store => store.store_id);
-  },
-);
-
-const selectStoresLastError = createSelector(
-  selectStoresLoading,
-  selectStoresState,
-  (loading, stores) => {
-    if (loading) {
-      return null;
-    }
-    return stores.lastError;
-  },
-);
-
-const mapStateToProps = (state: AdminUIState, props: StoresProps) => ({
-  stores: selectSortedStores(state, props),
-  loading: selectStoresLoading(state, props),
-  lastError: selectStoresLastError(state, props),
-});
-
-const mapDispatchToProps = {
-  refreshStores,
-};
-
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Stores));
+export default withRouter(Stores);

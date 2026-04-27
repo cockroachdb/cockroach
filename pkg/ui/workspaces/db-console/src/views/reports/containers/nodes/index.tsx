@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util } from "@cockroachlabs/cluster-ui";
+import { useNodesSummary, util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
 import flow from "lodash/flow";
 import get from "lodash/get";
@@ -16,22 +16,13 @@ import orderBy from "lodash/orderBy";
 import uniq from "lodash/uniq";
 import Long from "long";
 import moment from "moment-timezone";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import { InlineAlert } from "src/components";
 import * as protos from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import {
-  LivenessStatus,
-  nodeIDsStringifiedSelector,
-  selectNodesLastError,
-  nodeStatusByIDSelector,
-  livenessStatusByNodeIDSelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { LivenessStatus } from "src/redux/nodes";
 import { FixLong } from "src/util/fixLong";
 import {
   getFilters,
@@ -46,17 +37,6 @@ import {
 
 import { BackToAdvanceDebug } from "../util";
 
-interface NodesOwnProps {
-  nodeIds: ReturnType<typeof nodeIDsStringifiedSelector.resultFunc>;
-  nodeLastError: ReturnType<typeof selectNodesLastError.resultFunc>;
-  nodeStatusByID: ReturnType<typeof nodeStatusByIDSelector.resultFunc>;
-  livenessStatusByNodeID: ReturnType<
-    typeof livenessStatusByNodeIDSelector.resultFunc
-  >;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
-
 interface NodesTableRowParams {
   title: string;
   extract: (
@@ -69,8 +49,6 @@ interface NodesTableRowParams {
     ns: protos.cockroach.server.status.statuspb.INodeStatus,
   ) => string;
 }
-
-type NodesProps = NodesOwnProps & RouteComponentProps;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
@@ -303,28 +281,19 @@ const nodesTableRows: NodesTableRowParams[] = [
  * Renders the Nodes Diagnostics Report page.
  */
 export function Nodes({
-  nodeIds,
-  nodeLastError,
-  nodeStatusByID,
-  livenessStatusByNodeID,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
   location,
   history,
-}: NodesProps): React.ReactElement {
+}: RouteComponentProps): React.ReactElement {
+  const {
+    nodeIDs: nodeIds,
+    nodeStatusByID,
+    livenessStatusByNodeID,
+    error: nodeLastError,
+  } = useNodesSummary();
+
   const [selectFilter, setSelectFilter] = useState<number | null>(
     isEmpty(getFilters(location)) ? LivenessStatus.NODE_STATUS_LIVE : null,
   );
-
-  useEffect(() => {
-    refreshLivenessAction();
-    refreshNodesAction();
-  }, [
-    location.pathname,
-    location.search,
-    refreshLivenessAction,
-    refreshNodesAction,
-  ]);
 
   const renderNodesTableRow = (
     orderedNodeIDs: string[],
@@ -488,16 +457,4 @@ export function Nodes({
   );
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
-  nodeIds: nodeIDsStringifiedSelector(state),
-  nodeLastError: selectNodesLastError(state),
-  nodeStatusByID: nodeStatusByIDSelector(state),
-  livenessStatusByNodeID: livenessStatusByNodeIDSelector(state),
-});
-
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-};
-
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Nodes));
+export default withRouter(Nodes);

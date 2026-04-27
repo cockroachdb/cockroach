@@ -17,12 +17,9 @@ import {
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import isUndefined from "lodash/isUndefined";
 import moment from "moment-timezone";
 import React, { useRef, useState, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import useSWR from "swr";
 
 import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
@@ -30,9 +27,8 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
-import { AdminUIState } from "src/redux/state";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
@@ -41,9 +37,6 @@ import "./statementDiagnosticsHistoryView.scss";
 
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
-
-export type Stmt =
-  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 const DIAGNOSTICS_REPORTS_KEY = "statement-diagnostics-reports";
 
@@ -78,7 +71,6 @@ function useStatementDiagnosticsReports() {
 interface StatementDiagnosticsHistoryViewProps {
   diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[];
   loading: boolean;
-  getStatementByFingerprint: (fingerprint: string) => Stmt | undefined;
   onCancelRequest: (
     report: clusterUiApi.StatementDiagnosticsReport,
   ) => Promise<void>;
@@ -114,12 +106,7 @@ const StatementColumn: React.FC<{ fingerprint: string }> = ({
 
 export const StatementDiagnosticsHistoryView: React.FC<
   StatementDiagnosticsHistoryViewProps
-> = ({
-  diagnosticsReports,
-  loading,
-  getStatementByFingerprint,
-  onCancelRequest,
-}) => {
+> = ({ diagnosticsReports, loading, onCancelRequest }) => {
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     columnTitle: "activated_on",
     ascending: false,
@@ -142,27 +129,9 @@ export const StatementDiagnosticsHistoryView: React.FC<
     {
       title: "Statement",
       name: "statement",
-      cell: record => {
-        const fingerprint = record.statement_fingerprint;
-        const statement = getStatementByFingerprint(fingerprint);
-        const { query } = statement?.key?.key_data || {};
-
-        if (isUndefined(query)) {
-          return <StatementColumn fingerprint={fingerprint} />;
-        }
-
-        const statementFingerprintID = statement.id.toString();
-        const path = `/statement/${encodeURIComponent(statementFingerprintID)}`;
-
-        return (
-          <Link
-            to={path}
-            className="crl-statements-diagnostics-view__statements-link"
-          >
-            <StatementColumn fingerprint={fingerprint} />
-          </Link>
-        );
-      },
+      cell: record => (
+        <StatementColumn fingerprint={record.statement_fingerprint} />
+      ),
       sort: record => record.statement_fingerprint,
     },
     {
@@ -290,19 +259,6 @@ const StatementDiagnosticsHistoryContainer: React.FC = () => {
     refresh,
   } = useStatementDiagnosticsReports();
 
-  const statements = useSelector(
-    (state: AdminUIState) => state.cachedData.statements.data?.statements,
-  );
-
-  const getStatementByFingerprint = useCallback(
-    (fingerprint: string): Stmt | undefined => {
-      return (statements || []).find(
-        statement => statement.key.key_data.query === fingerprint,
-      );
-    },
-    [statements],
-  );
-
   const handleCancelRequest = useCallback(
     async (report: clusterUiApi.StatementDiagnosticsReport) => {
       try {
@@ -310,9 +266,7 @@ const StatementDiagnosticsHistoryContainer: React.FC = () => {
           requestId: report.id,
         });
 
-        dispatch(
-          trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
-        );
+        trackCancelDiagnosticsBundle(report.statement_fingerprint);
 
         dispatch(
           createStatementDiagnosticsAlertLocalSetting.set({
@@ -348,7 +302,6 @@ const StatementDiagnosticsHistoryContainer: React.FC = () => {
     <StatementDiagnosticsHistoryView
       diagnosticsReports={diagnosticsReports}
       loading={loading}
-      getStatementByFingerprint={getStatementByFingerprint}
       onCancelRequest={handleCancelRequest}
     />
   );

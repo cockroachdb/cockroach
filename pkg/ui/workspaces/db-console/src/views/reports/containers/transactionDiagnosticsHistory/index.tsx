@@ -27,8 +27,8 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import trackCancelDiagnosticsBundle from "src/util/analytics/trackCancelDiagnosticsBundle";
 import { transactionDiagnostics } from "src/util/docs";
 import { trustIcon } from "src/util/trust";
 
@@ -286,9 +286,7 @@ const TransactionDiagnosticsHistoryContainer: React.FC = () => {
           requestId: report.id,
         });
 
-        dispatch(
-          trackCancelDiagnosticsBundleAction(report.transaction_fingerprint),
-        );
+        trackCancelDiagnosticsBundle(report.transaction_fingerprint);
 
         dispatch(
           createStatementDiagnosticsAlertLocalSetting.set({
