@@ -4,6 +4,11 @@
 # always qualifies for burst, regardless of bucket fullness. This
 # is used in resource manager mode for MAX_CPU resource groups.
 #
+# SetMaxCPUGroups only governs resource group containers (rgKind),
+# so the test runs in RM mode (set-priority-based-groups=true) and
+# routes work via priority: NormalPri (0) -> rg 1, BulkNormalPri
+# (-30) -> rg 2.
+#
 # The test uses a mock granter (testGranter) whose tryGet return value
 # is controlled via set-try-get-return-value. refill-burst-buckets
 # only refills the per-group burst buckets in the WorkQueue (for
@@ -15,56 +20,60 @@
 init
 ----
 
+set-priority-based-groups v=true
+----
+
 set-try-get-return-value v=true
 ----
 
-# Create both groups (maxCPU defaults to false), then flip group 10.
-admit id=1 tenant=10 requested-count=1
+# Create both groups via priority-based routing (rg 1 and rg 2),
+# then flip rg 1 to maxCPU=true.
+admit id=1 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input no_burst, returning true
 id 1: admit succeeded
 
-admit id=2 tenant=20 requested-count=1
+admit id=2 tenant=10 priority=-30 requested-count=1
 ----
 tryGet: input no_burst, returning true
 id 2: admit succeeded
 
-set-max-cpu-groups group=10 v=true
+set-max-cpu-groups group=1 v=true
 ----
 
-# Confirm the flip: group 10 is now can_burst (via maxCPU), group 20
+# Confirm the flip: rg 1 is now can_burst (via maxCPU), rg 2
 # remains no_burst. Both buckets are at -1 tokens (no refill yet).
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst t20=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
 
 # Refill 25 tokens with capacity=100. Both buckets: -1+25=24 tokens,
-# 24% full. Group 10 (maxCPU=true) is can_burst despite being well
-# below 90%. Group 20 (maxCPU=false) is no_burst since 24 < 90.
+# 24% full. rg 1 (maxCPU=true) is can_burst despite being well below
+# 90%. rg 2 (maxCPU=false) is no_burst since 24 < 90.
 refill-burst-buckets to-add=25 capacity=100
 ----
 
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 1, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst t20=fullness=24.0% tokens=24 capacity=100 qual=no_burst
+ group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst rg2=fullness=24.0% tokens=24 capacity=100 qual=no_burst
 
-# Queue work for both groups. Group 10's work should be granted
-# first since it has can_burst via maxCPU, even though both have
-# identical bucket fullness.
+# Queue work for both groups. rg 1's work should be granted first
+# since it has can_burst via maxCPU, even though both have identical
+# bucket fullness.
 set-try-get-return-value v=false
 ----
 
-admit id=3 tenant=20 requested-count=1
+admit id=3 tenant=10 priority=-30 requested-count=1
 ----
 tryGet: input no_burst, returning false
 
-admit id=4 tenant=10 requested-count=1
+admit id=4 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input can_burst, returning false
 
@@ -73,8 +82,7 @@ tryGet: input can_burst, returning false
 gc-groups-and-reset-used
 ----
 
-# Group 10 (can_burst via maxCPU) is granted before group 20
-# (no_burst).
+# rg 1 (can_burst via maxCPU) is granted before rg 2 (no_burst).
 granted chain-id=1
 ----
 continueGrantChain 1
@@ -96,23 +104,23 @@ granted: returned 1
 set-try-get-return-value v=true
 ----
 
-# Admit heavy work to drive group 10's bucket deeply negative.
+# Admit heavy work to drive rg 1's bucket deeply negative.
 # Bucket was at 24 tokens; admitting 100000 drives it to 24-100000.
-admit id=5 tenant=10 requested-count=100000
+admit id=5 tenant=10 priority=0 requested-count=100000
 ----
 tryGet: input can_burst, returning true
 id 5: admit succeeded
 
 # Refill with capacity=100. Floor is -capacity/4 = -25.
-# Group 10 tokens: max(-99976+25, -25) = -25. Still can_burst
-# because maxCPU=true bypasses the fullness check.
-# Group 20 tokens: min(23+25, 100) = 48. Still no_burst (48 < 90).
+# rg 1 tokens: max(-99976+25, -25) = -25. Still can_burst because
+# maxCPU=true bypasses the fullness check.
+# rg 2 tokens: min(23+25, 100) = 48. Still no_burst (48 < 90).
 refill-burst-buckets to-add=25 capacity=100
 ----
 
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 10 used: 100001, w: 1, fifo: -128
- group-id: 20 used: 1, w: 1, fifo: -128
-burst-buckets: t10=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t20=fullness=48.0% tokens=48 capacity=100 qual=no_burst
+ group-id: 1 used: 100001, w: 1, fifo: -128
+ group-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: rg1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst rg2=fullness=48.0% tokens=48 capacity=100 qual=no_burst

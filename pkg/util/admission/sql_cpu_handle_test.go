@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -598,4 +599,65 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 		"second deduction should have covered shortfall, skipping Admit")
 
 	h.Close()
+}
+
+// TestSetMaxCPUGroupsRGOnly verifies that SetMaxCPUGroups inputs
+// are interpreted as resource group IDs (rgKind) only. A
+// numerically equal tenant-keyed container must not inherit the
+// flag — that's the cross-namespace collision the kind discriminator
+// in q.mu.groups is meant to prevent. The lookup-time guard in
+// getMaxCPULocked enforces this even though q.mu.maxCPUGroups
+// itself is uint64-keyed.
+func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	// Create a tenant-keyed container with id=1.
+	q.setUseResourceGroup(false)
+	tenantHandle := newSQLCPUAdmissionHandle(
+		WorkInfo{
+			TenantID: roachpb.MustMakeTenantID(1),
+			Priority: admissionpb.NormalPri,
+		}, true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+
+	// Create an rg-keyed container with id=1 (highResourceGroupID).
+	q.setUseResourceGroup(true)
+	rgHandle := newSQLCPUAdmissionHandle(
+		WorkInfo{
+			TenantID: roachpb.MustMakeTenantID(99),
+			Priority: admissionpb.NormalPri,
+		}, true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, rgHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+
+	// Both containers should now coexist with the same numeric ID.
+	q.mu.Lock()
+	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(1)]
+	rgContainer, rgOK := q.mu.groups[rgGroupKey(1)]
+	q.mu.Unlock()
+	require.True(t, tenantOK, "tenant 1 container should exist")
+	require.True(t, rgOK, "rg 1 container should exist")
+	require.NotSame(t, tenantContainer, rgContainer,
+		"tenant 1 and rg 1 must be distinct *groupInfo entries")
+
+	// Set maxCPU on group 1. It should affect the rg container only.
+	q.SetMaxCPUGroups(map[uint64]bool{1: true})
+
+	q.mu.Lock()
+	tenantMaxCPU := tenantContainer.cpuTimeBurstBucket.maxCPU
+	rgMaxCPU := rgContainer.cpuTimeBurstBucket.maxCPU
+	q.mu.Unlock()
+
+	require.False(t, tenantMaxCPU,
+		"tenant container must not inherit the rg-keyed maxCPU flag "+
+			"(getMaxCPULocked's isRg guard is the enforcement)")
+	require.True(t, rgMaxCPU,
+		"rg container should pick up the maxCPU flag")
+
+	tenantHandle.Close()
+	rgHandle.Close()
 }
