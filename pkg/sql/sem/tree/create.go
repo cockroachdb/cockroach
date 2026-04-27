@@ -2278,6 +2278,27 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	})
 }
 
+// CreateLanguage represents a parameterless CREATE LANGUAGE statement (i.e.
+// without HANDLER/INLINE/VALIDATOR clauses). Only plpgsql is accepted; other
+// languages are rejected at parse time. Since CockroachDB has built-in
+// PL/pgSQL, the statement is a no-op and exists for compatibility with
+// PostgreSQL clients that issue CREATE LANGUAGE plpgsql defensively before
+// creating functions.
+type CreateLanguage struct {
+	Name    Name
+	Replace bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateLanguage) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE ")
+	if node.Replace {
+		ctx.WriteString("OR REPLACE ")
+	}
+	ctx.WriteString("LANGUAGE ")
+	ctx.FormatNode(&node.Name)
+}
+
 // CreateExternalConnection represents a CREATE EXTERNAL CONNECTION statement.
 type CreateExternalConnection struct {
 	ConnectionLabelSpec LabelSpec

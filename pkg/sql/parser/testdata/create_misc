@@ -25,6 +25,115 @@ CREATE EXTENSION IF NOT EXISTS bob -- fully parenthesized
 CREATE EXTENSION IF NOT EXISTS bob -- literals removed
 CREATE EXTENSION IF NOT EXISTS bob -- identifiers removed
 
+# CREATE LANGUAGE only accepts plpgsql; other names are rejected at parse time
+# (see error cases below). The OR REPLACE / TRUSTED / PROCEDURAL keywords and
+# the legacy HANDLER/INLINE/VALIDATOR clauses are syntactically accepted but
+# discarded in the AST since execution is a no-op.
+parse
+CREATE LANGUAGE plpgsql
+----
+CREATE LANGUAGE plpgsql
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE OR REPLACE LANGUAGE plpgsql
+----
+CREATE OR REPLACE LANGUAGE plpgsql
+CREATE OR REPLACE LANGUAGE plpgsql -- fully parenthesized
+CREATE OR REPLACE LANGUAGE plpgsql -- literals removed
+CREATE OR REPLACE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE TRUSTED LANGUAGE plpgsql
+----
+CREATE LANGUAGE plpgsql -- normalized!
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE PROCEDURAL LANGUAGE plpgsql
+----
+CREATE LANGUAGE plpgsql -- normalized!
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE OR REPLACE TRUSTED PROCEDURAL LANGUAGE plpgsql
+----
+CREATE OR REPLACE LANGUAGE plpgsql -- normalized!
+CREATE OR REPLACE LANGUAGE plpgsql -- fully parenthesized
+CREATE OR REPLACE LANGUAGE plpgsql -- literals removed
+CREATE OR REPLACE LANGUAGE _ -- identifiers removed
+
+# Case-insensitive identifier match.
+parse
+CREATE LANGUAGE PLPGSQL
+----
+CREATE LANGUAGE plpgsql -- normalized!
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+# Legacy HANDLER form (e.g. emitted by pg_dump).
+parse
+CREATE LANGUAGE plpgsql HANDLER plpgsql_call_handler
+----
+CREATE LANGUAGE plpgsql -- normalized!
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE OR REPLACE LANGUAGE plpgsql HANDLER pg_catalog.plpgsql_call_handler INLINE pg_catalog.plpgsql_inline_handler VALIDATOR pg_catalog.plpgsql_validator
+----
+CREATE OR REPLACE LANGUAGE plpgsql -- normalized!
+CREATE OR REPLACE LANGUAGE plpgsql -- fully parenthesized
+CREATE OR REPLACE LANGUAGE plpgsql -- literals removed
+CREATE OR REPLACE LANGUAGE _ -- identifiers removed
+
+parse
+CREATE LANGUAGE plpgsql HANDLER plpgsql_call_handler NO VALIDATOR
+----
+CREATE LANGUAGE plpgsql -- normalized!
+CREATE LANGUAGE plpgsql -- fully parenthesized
+CREATE LANGUAGE plpgsql -- literals removed
+CREATE LANGUAGE _ -- identifiers removed
+
+# Other languages are unimplemented and reference issue #169118.
+error
+CREATE LANGUAGE plperl
+----
+at or near "EOF": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE LANGUAGE plperl
+                      ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/169118/
+
+error
+CREATE OR REPLACE TRUSTED LANGUAGE pltcl
+----
+at or near "EOF": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE OR REPLACE TRUSTED LANGUAGE pltcl
+                                        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/169118/
+
+error
+CREATE LANGUAGE plperl HANDLER plperl_call_handler
+----
+at or near "EOF": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+CREATE LANGUAGE plperl HANDLER plperl_call_handler
+                                                  ^
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/169118/
+
 parse
 CREATE STATISTICS a ON col1 FROM t
 ----
