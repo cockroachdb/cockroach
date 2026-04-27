@@ -84,7 +84,10 @@ func (f MultiRegionTestClusterFactory) Start(ctx context.Context, t *testing.T) 
 	sql.CreateTableWithSchemaLocked.Override(ctx, &st.SV, !f.schemaLockedDisabled)
 	closedts.TargetDuration.Override(ctx, &st.SV, 20*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 20*time.Millisecond)
-	c, db, _ := multiregionccltestutils.TestingCreateMultiRegionCluster(t, numServers, knobs, multiregionccltestutils.WithSettings(st))
+	c, db, _ := multiregionccltestutils.TestingCreateMultiRegionCluster(t, numServers, knobs,
+		multiregionccltestutils.WithSettings(st),
+		multiregionccltestutils.WithBaseDirectory(t.TempDir()),
+	)
 	return sctest.TestServer{
 		Server: c.Server(0),
 		DB:     db,
