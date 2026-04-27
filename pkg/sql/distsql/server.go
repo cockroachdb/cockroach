@@ -53,12 +53,6 @@ import (
 // nodes.
 const minFlowDrainWait = 1 * time.Second
 
-// MultiTenancyIssueNo is the issue tracking DistSQL's Gossip and
-// NodeID dependencies.
-//
-// See https://github.com/cockroachdb/cockroach/issues/47900.
-const MultiTenancyIssueNo = 47900
-
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
@@ -138,7 +132,7 @@ func (ds *ServerImpl) Drain(
 	if ds.ServerConfig.TestingKnobs.DrainFast {
 		flowWait = 0
 		minWait = 0
-	} else if g, ok := ds.Gossip.Optional(MultiTenancyIssueNo); !ok || len(g.Outgoing()) == 0 {
+	} else if g, ok := ds.Gossip.Optional(); !ok || len(g.Outgoing()) == 0 {
 		// If there is only one node in the cluster (us), there's no need to
 		// wait a minimum time for the draining state to be gossiped.
 		minWait = 0
@@ -153,10 +147,9 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	if !ok {
 		// Ignore draining requests when running on behalf of a tenant.
 		// NB: intentionally swallow the error or the server will fatal.
-		_ = MultiTenancyIssueNo // related issue
 		return nil
 	}
-	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
+	if g, ok := ds.ServerConfig.Gossip.Optional(); ok {
 		return g.AddInfoProto(
 			gossip.MakeDistSQLDrainingKey(base.SQLInstanceID(nodeID)),
 			&execinfrapb.DistSQLDrainingInfo{

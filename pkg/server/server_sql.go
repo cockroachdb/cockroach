@@ -934,7 +934,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
-	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
+	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional()
 	if hasNodeLiveness {
 		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
 			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsLive(livenesspb.DistSQL)

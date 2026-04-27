@@ -900,7 +900,7 @@ func (h *distSQLNodeHealth) checkSystem(
 	}
 
 	// Check that the node is not draining.
-	g, ok := h.gossip.Optional(distsql.MultiTenancyIssueNo)
+	g, ok := h.gossip.Optional()
 	if !ok {
 		return errors.AssertionFailedf("gossip is expected to be available for the system tenant")
 	}

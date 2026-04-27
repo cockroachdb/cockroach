@@ -4986,7 +4986,7 @@ CREATE TABLE crdb_internal.zones (
 }
 
 func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
-	g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+	g, err := p.ExecCfg().Gossip.OptionalErr()
 	if err != nil {
 		return nil, err
 	}
@@ -5044,7 +5044,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5163,7 +5163,7 @@ CREATE TABLE crdb_internal.kv_node_liveness (
 			return err
 		}
 
-		nl, err := p.ExecCfg().NodeLiveness.OptionalErr(47900)
+		nl, err := p.ExecCfg().NodeLiveness.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5229,7 +5229,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
@@ -5305,7 +5305,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 			return err
 		}
 
-		g, err := p.ExecCfg().Gossip.OptionalErr(47899)
+		g, err := p.ExecCfg().Gossip.OptionalErr()
 		if err != nil {
 			return err
 		}
