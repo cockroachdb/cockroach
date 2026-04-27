@@ -185,6 +185,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateSequence(ctx, n)
 	case *tree.CreateExtension:
 		return p.CreateExtension(ctx, n)
+	case *tree.CreateLanguage:
+		return p.CreateLanguage(ctx, n)
 	case *tree.CreateExternalConnection:
 		return p.CreateExternalConnection(ctx, n)
 	case *tree.CreateTenant:
@@ -367,6 +369,7 @@ func init() {
 		&tree.CopyTo{},
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
+		&tree.CreateLanguage{},
 		&tree.CreateExternalConnection{},
 		&tree.CreateTenant{},
 		&tree.CreateIndex{},
