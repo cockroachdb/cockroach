@@ -913,7 +913,7 @@ func (rd *restoreDriver) initRestorePerfMetrics(
 	dut, err := roachtestutil.NewDiskUsageTracker(rd.c, rd.t.L())
 	require.NoError(rd.t, err)
 	startTime := timeutil.Now()
-	startDu := dut.GetDiskUsage(ctx, rd.c.All())
+	startDu := dut.GetDiskUsage(ctx, rd.sp.hardware.getCRDBNodes())
 
 	return func() {
 		promLabel := registry.PromSub(strings.Replace(rd.sp.testName, "restore/", "", 1)) + "_seconds"
@@ -921,7 +921,7 @@ func (rd *restoreDriver) initRestorePerfMetrics(
 		durationGauge.WithLabelValues(promLabel).Set(testDuration)
 
 		// compute throughput as MB / node / second.
-		du := dut.GetDiskUsage(ctx, rd.c.All())
+		du := dut.GetDiskUsage(ctx, rd.sp.hardware.getCRDBNodes())
 		throughput := float64(du-startDu) / (float64(rd.sp.hardware.nodes) * testDuration)
 		rd.t.L().Printf("Usage %d , Nodes %d , Duration %f\n; Throughput: %f mb / node / second",
 			du,
