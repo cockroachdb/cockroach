@@ -62,6 +62,10 @@ var (
 	// reference error used by main.go at the end of a run of tests
 	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
 
+	// errStorageInvariantViolation error sent after a run in [testRunner.Run]
+	// if any worker detected a storage invariant violation.
+	errStorageInvariantViolation = fmt.Errorf("potential data corruption: storage invariant violation detected")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -167,6 +171,10 @@ type testRunner struct {
 
 	// Counts cluster creation errors across all workers.
 	numClusterErrs int32
+
+	// storageInvariantViolation is set when a storage invariant violation
+	// is detected by maybeSaveClusterDueToInvariantProblems.
+	storageInvariantViolation atomic.Bool
 }
 
 // newTestRunner constructs a testRunner.
@@ -431,6 +439,10 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 
+	if r.storageInvariantViolation.Load() {
+		shout(ctx, l, lopt.stdout, "potential data corruption: invariant violation detected")
+		return errStorageInvariantViolation
+	}
 	if r.numClusterErrs > 0 {
 		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
 		return errSomeClusterProvisioningFailed
@@ -1588,6 +1600,7 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 				snapName = "<failed>"
 			}
 			c.Save(ctx, "invariant problem - snap name "+snapName, t.L())
+			r.storageInvariantViolation.Store(true)
 			t.Error("invariant problem - snap name " + snapName + ":\n" + det.Stdout)
 			return
 		}
