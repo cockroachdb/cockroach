@@ -33,7 +33,7 @@ const (
 	// (serverless mode routing via TenantID).
 	tenantKind
 	// rgKind identifies a container created for a resource group
-	// ID (RM mode routing via priorityToResourceGroup).
+	// ID (RM mode routing via priorityToResourceGroupKey).
 	rgKind
 )
 
