@@ -267,8 +267,8 @@ func processJobPTSRecord(
 		return nil
 	}
 
-	err = execCfg.JobRegistry.UpdateJobWithTxn(ctx, jobspb.JobID(jobID), txn,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err = execCfg.JobRegistry.DeprecatedUpdateJobWithTxn(ctx, jobspb.JobID(jobID), txn,
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			p := md.Payload
 			jobType, err := p.CheckType()
 			if err != nil {

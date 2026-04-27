@@ -178,7 +178,7 @@ type TransactionalJobRegistry interface {
 
 // JobUpdateCallback is for updating a job.
 type JobUpdateCallback = func(
-	md jobs.JobMetadata,
+	md jobs.DeprecatedJobMetadata,
 	updateProgress func(*jobspb.Progress),
 	updatePayload func(*jobspb.Payload),
 ) error

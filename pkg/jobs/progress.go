@@ -82,7 +82,7 @@ func DeprecatedNewChunkProgressLoggerForJob(
 ) *ChunkProgressLogger {
 	return NewChunkProgressLogger(
 		func(ctx context.Context, fraction float64) error {
-			return j.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			return j.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				if progressedFn != nil {
 					progressedFn(ctx, details)
 				}

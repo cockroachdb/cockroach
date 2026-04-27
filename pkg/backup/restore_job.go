@@ -2024,7 +2024,7 @@ func createImportingDescriptors(
 		}
 
 		// Update the job once all descs have been prepared for ingestion.
-		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+		err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 
 		// Emit to the event log now that the job has finished preparing descs.
 		emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
@@ -2285,7 +2285,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Ensure we have the latest copy of the job details.
 		details = r.job.Details().(jobspb.RestoreDetails)
 		details.DownloadSpans = downloadSpans
-		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+		if err := r.job.DeprecatedNoTxn().SetDetails(ctx, details); err != nil {
 			return errors.Wrap(err, "updating job details with download spans")
 		}
 	}
@@ -2992,7 +2992,7 @@ func insertStats(
 
 	// Mark the stats insertion complete.
 	details.StatsInserted = true
-	return errors.Wrap(job.NoTxn().SetDetails(ctx, details), "updating job marking stats insertion complete")
+	return errors.Wrap(job.DeprecatedNoTxn().SetDetails(ctx, details), "updating job marking stats insertion complete")
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
@@ -3249,7 +3249,7 @@ func (r *restoreResumer) publishDescriptors(
 	if details.OnlineImpl() {
 		details.PostDownloadTableAutoStatsSettings = tableAutoStatsSettings
 	}
-	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+	if err := r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details); err != nil {
 		return errors.Wrap(err,
 			"updating job details after publishing tables")
 	}
@@ -4116,7 +4116,7 @@ func (r *restoreResumer) restoreSystemTables(
 				// restarts don't try to import data over our migrated data. This would
 				// fail since the restored data would shadow the migrated keys.
 				details.SystemTablesMigrated[systemTable.systemTableName] = true
-				return r.job.WithTxn(txn).SetDetails(ctx, details)
+				return r.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 			}); err != nil {
 				return err
 			}

@@ -120,7 +120,7 @@ func (t *legacyProgressTracker) initJobProgress(ctx context.Context, jobSpanCoun
 	t.setupUpdateFrequency(jobSpanCount)
 
 	// Write initial progress to job record
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return t.job.DeprecatedNoTxn().Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		rowLevelTTL := &jobspb.RowLevelTTLProgress{
 			JobTotalSpanCount:     jobSpanCount,
 			JobProcessedSpanCount: 0,
@@ -140,7 +140,7 @@ func (t *legacyProgressTracker) initJobProgress(ctx context.Context, jobSpanCoun
 // refreshJobProgress computes updated job progress from processor metadata.
 // It may return nil to skip immediate persistence, or a Progress to trigger an update.
 func (t *legacyProgressTracker) refreshJobProgress(
-	_ context.Context, md *jobs.JobMetadata, meta *execinfrapb.ProducerMetadata,
+	_ context.Context, md *jobs.DeprecatedJobMetadata, meta *execinfrapb.ProducerMetadata,
 ) (*jobspb.Progress, error) {
 	if meta.BulkProcessorProgress == nil {
 		return nil, nil
@@ -218,7 +218,7 @@ func (t *legacyProgressTracker) refreshJobProgress(
 func (t *legacyProgressTracker) handleProgressUpdate(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return t.job.DeprecatedNoTxn().Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress, err := t.refreshJobProgress(ctx, &md, meta)
 		if err != nil {
 			return err
@@ -546,7 +546,7 @@ func (t *checkpointProgressTracker) flushProgress(ctx context.Context) error {
 		cachedRowLevelTTL = t.mu.cachedProgress.GetRowLevelTTL()
 	}()
 
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return t.job.DeprecatedNoTxn().Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		newProgress := &jobspb.Progress{
 			Details: &jobspb.Progress_RowLevelTTL{
 				RowLevelTTL: cachedRowLevelTTL,

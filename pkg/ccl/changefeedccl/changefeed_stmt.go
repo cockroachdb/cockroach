@@ -1638,7 +1638,7 @@ func (b *changefeedResumer) setJobStatusMessage(
 	}
 
 	status := jobs.StatusMessage(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
+	if err := b.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); err != nil {
 		log.Changefeed.Warningf(ctx, "failed to set status: %v", err)
 	}
 
@@ -1675,7 +1675,7 @@ func (b *changefeedResumer) ensureClusterIDMatches(ctx context.Context, clusterI
 	if createdBy := b.job.Payload().CreationClusterID; createdBy == uuid.Nil {
 		// This cluster was upgraded from a version that did not set clusterID
 		// in the job record -- rectify this issue.
-		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := b.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Payload.CreationClusterID = clusterID
 			ju.UpdatePayload(md.Payload)
 			return nil
@@ -1758,7 +1758,7 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return b.job.DeprecatedNoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			// directly update running status to avoid the running/reverted job status check
 			md.Progress.StatusMessage = errorMessage
 			ju.UpdateProgress(md.Progress)
@@ -2468,8 +2468,8 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 	details.Select = cdceval.AsStringUnredacted(newExpression)
 
-	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, /* txn */
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := jobExec.ExecCfg().JobRegistry.DeprecatedUpdateJobWithTxn(ctx, jobID, nil, /* txn */
+		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(payload)

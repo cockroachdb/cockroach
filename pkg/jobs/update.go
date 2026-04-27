@@ -25,34 +25,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// UpdateFn is the callback passed to Job.Update. It is called from the context
+// DeprecatedUpdateFn is the callback passed to Job.Update. It is called from the context
 // of a transaction and is passed the current metadata for the job. The callback
 // can modify metadata using the JobUpdater and the changes will be persisted
 // within the same transaction.
 //
 // The function is free to modify contents of JobMetadata in place (but the
 // changes will be ignored unless JobUpdater is used).
-type UpdateFn func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error
+type DeprecatedUpdateFn func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error
 
-type Updater struct {
+type DeprecatedUpdater struct {
 	j            *Job
 	txn          isql.Txn
 	txnDebugName string
 }
 
-func (j *Job) NoTxn() Updater {
-	return Updater{j: j}
+// DeprecatedNoTxn is deprecated, prefer ProgressStorage or InfoStorage instead.
+func (j *Job) DeprecatedNoTxn() DeprecatedUpdater {
+	return DeprecatedUpdater{j: j}
 }
 
-func (j *Job) DebugNameNoTxn(txnDebugName string) Updater {
-	return Updater{j: j, txnDebugName: txnDebugName}
+// DeprecatedDebugNameNoTxn is deprecated, prefer ProgressStorage or InfoStorage instead.
+func (j *Job) DeprecatedDebugNameNoTxn(txnDebugName string) DeprecatedUpdater {
+	return DeprecatedUpdater{j: j, txnDebugName: txnDebugName}
 }
 
-func (j *Job) WithTxn(txn isql.Txn) Updater {
-	return Updater{j: j, txn: txn}
+// DeprecatedWithTxn is deprecated, prefer ProgressStorage or InfoStorage instead.
+func (j *Job) DeprecatedWithTxn(txn isql.Txn) DeprecatedUpdater {
+	return DeprecatedUpdater{j: j, txn: txn}
 }
 
-func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
+func (u DeprecatedUpdater) update(ctx context.Context, updateFn DeprecatedUpdateFn) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
@@ -158,14 +161,14 @@ WHERE id = $1
 		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
 	}
 
-	md := JobMetadata{
+	md := DeprecatedJobMetadata{
 		ID:       j.ID(),
 		State:    state,
 		Payload:  payload,
 		Progress: progress,
 	}
 
-	var ju JobUpdater
+	var ju DeprecatedJobUpdater
 	if err := updateFn(u.txn, md, &ju); err != nil {
 		return err
 	}
@@ -343,8 +346,8 @@ WHERE id = $1
 	return nil
 }
 
-// JobMetadata groups the job metadata values passed to UpdateFn.
-type JobMetadata struct {
+// DeprecatedJobMetadata groups the job metadata values passed to UpdateFn.
+type DeprecatedJobMetadata struct {
 	ID       jobspb.JobID
 	State    State
 	Payload  *jobspb.Payload
@@ -353,20 +356,20 @@ type JobMetadata struct {
 
 // CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
 // StatusRunning or StatusReverting.
-func (md *JobMetadata) CheckRunningOrReverting() error {
+func (md *DeprecatedJobMetadata) CheckRunningOrReverting() error {
 	if md.State != StateRunning && md.State != StateReverting {
 		return &InvalidStateError{md.ID, md.State, "update progress on", md.Payload.Error}
 	}
 	return nil
 }
 
-// JobUpdater accumulates changes to job metadata that are to be persisted.
-type JobUpdater struct {
-	md JobMetadata
+// DeprecatedJobUpdater accumulates changes to job metadata that are to be persisted.
+type DeprecatedJobUpdater struct {
+	md DeprecatedJobMetadata
 }
 
 // UpdateState sets a new status (to be persisted).
-func (ju *JobUpdater) UpdateState(state State) {
+func (ju *DeprecatedJobUpdater) UpdateState(state State) {
 	ju.md.State = state
 }
 
@@ -374,27 +377,27 @@ func (ju *JobUpdater) UpdateState(state State) {
 //
 // WARNING: the payload can be large (resulting in a large KV for each version);
 // it shouldn't be updated frequently.
-func (ju *JobUpdater) UpdatePayload(payload *jobspb.Payload) {
+func (ju *DeprecatedJobUpdater) UpdatePayload(payload *jobspb.Payload) {
 	ju.md.Payload = payload
 }
 
 // UpdateProgress sets a new Progress (to be persisted).
-func (ju *JobUpdater) UpdateProgress(progress *jobspb.Progress) {
+func (ju *DeprecatedJobUpdater) UpdateProgress(progress *jobspb.Progress) {
 	ju.md.Progress = progress
 }
 
-func (ju *JobUpdater) hasUpdates() bool {
-	return ju.md != JobMetadata{}
+func (ju *DeprecatedJobUpdater) hasUpdates() bool {
+	return ju.md != DeprecatedJobMetadata{}
 }
 
-func (ju *JobUpdater) PauseRequested(
-	ctx context.Context, txn isql.Txn, md JobMetadata, reason string,
+func (ju *DeprecatedJobUpdater) PauseRequested(
+	ctx context.Context, txn isql.Txn, md DeprecatedJobMetadata, reason string,
 ) error {
 	return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
 }
 
-func (ju *JobUpdater) PauseRequestedWithFunc(
-	ctx context.Context, txn isql.Txn, md JobMetadata, fn onPauseRequestFunc, reason string,
+func (ju *DeprecatedJobUpdater) PauseRequestedWithFunc(
+	ctx context.Context, txn isql.Txn, md DeprecatedJobMetadata, fn onPauseRequestFunc, reason string,
 ) error {
 	if md.State == StatePauseRequested || md.State == StatePaused {
 		return nil
@@ -421,7 +424,7 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 
 // Unpaused sets the state of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job.
-func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
+func (ju *DeprecatedJobUpdater) Unpaused(_ context.Context, md DeprecatedJobMetadata) error {
 	if md.State == StateRunning || md.State == StateReverting {
 		// Already resumed - do nothing.
 		return nil
@@ -439,12 +442,14 @@ func (ju *JobUpdater) Unpaused(_ context.Context, md JobMetadata) error {
 	return nil
 }
 
-func (ju *JobUpdater) CancelRequested(ctx context.Context, md JobMetadata) error {
+func (ju *DeprecatedJobUpdater) CancelRequested(
+	ctx context.Context, md DeprecatedJobMetadata,
+) error {
 	return ju.CancelRequestedWithReason(ctx, md, errJobCanceled)
 }
 
-func (ju *JobUpdater) CancelRequestedWithReason(
-	ctx context.Context, md JobMetadata, reason error,
+func (ju *DeprecatedJobUpdater) CancelRequestedWithReason(
+	ctx context.Context, md DeprecatedJobMetadata, reason error,
 ) error {
 	if md.Payload.Noncancelable {
 		return errors.Newf("job %d: not cancelable", md.ID)
@@ -487,10 +492,10 @@ func (ju *JobUpdater) CancelRequestedWithReason(
 //
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
-func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
+func (u DeprecatedUpdater) Update(ctx context.Context, updateFn DeprecatedUpdateFn) error {
 	return u.update(ctx, updateFn)
 }
 
-func (u Updater) now() time.Time {
+func (u DeprecatedUpdater) now() time.Time {
 	return u.j.registry.clock.Now().GoTime()
 }

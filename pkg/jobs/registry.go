@@ -176,14 +176,16 @@ type Registry struct {
 	creationKnobs syncutil.Map[jobspb.Type, func(Resumer) Resumer]
 }
 
-// UpdateJobWithTxn calls the Update method on an existing job with
+// DeprecatedUpdateJobWithTxn calls the Update method on an existing job with
 // jobID, using a transaction passed in the txn argument. Passing a
 // nil transaction means that a txn will be automatically created.
-func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
+//
+// This function is deprecated, prefer using ProgressStorage or InfoStorage directly.
+func (r *Registry) DeprecatedUpdateJobWithTxn(
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc DeprecatedUpdateFn,
 ) error {
 	job := Job{registry: r, id: jobID}
-	return job.WithTxn(txn).Update(ctx, updateFunc)
+	return job.DeprecatedWithTxn(txn).Update(ctx, updateFunc)
 }
 
 // jobExecCtxMaker is a wrapper around sql.NewInternalPlanner. It returns an
@@ -870,7 +872,7 @@ func (r *Registry) LoadJobWithTxn(
 		id:       jobID,
 		registry: r,
 	}
-	if err := j.WithTxn(txn).load(ctx); err != nil {
+	if err := j.DeprecatedWithTxn(txn).load(ctx); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -893,7 +895,7 @@ func (r *Registry) LoadClaimedJobWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	if err := j.WithTxn(txn).load(ctx); err != nil {
+	if err := j.DeprecatedWithTxn(txn).load(ctx); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -1311,7 +1313,7 @@ func (r *Registry) deleteJob(ctx context.Context, txn isql.Txn, id jobspb.JobID)
 func (r *Registry) PauseRequested(
 	ctx context.Context, txn isql.Txn, id jobspb.JobID, reason string,
 ) error {
-	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return r.DeprecatedUpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		return ju.PauseRequestedWithFunc(ctx, txn, md, nil /* fn */, reason)
 	})
 }
@@ -1319,7 +1321,7 @@ func (r *Registry) PauseRequested(
 // Unpause changes the paused job with id to running or reverting using the
 // specified txn (may be nil).
 func (r *Registry) Unpause(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
-	return r.UpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return r.DeprecatedUpdateJobWithTxn(ctx, id, txn, func(txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater) error {
 		return ju.Unpaused(ctx, md)
 	})
 }
@@ -1335,7 +1337,7 @@ func (r *Registry) UnsafeFailed(
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).failed(ctx, causingError)
+	return job.DeprecatedWithTxn(txn).failed(ctx, causingError)
 }
 
 // Succeeded marks the job with id as succeeded.
@@ -1346,7 +1348,7 @@ func (r *Registry) Succeeded(ctx context.Context, txn isql.Txn, id jobspb.JobID)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).succeeded(ctx, nil)
+	return job.DeprecatedWithTxn(txn).succeeded(ctx, nil)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
@@ -1646,7 +1648,7 @@ func (r *Registry) stepThroughStateMachine(
 		resumeCtx, undo := pprofutil.SetProfilerLabelsFromCtxTags(resumeCtx)
 		defer undo()
 
-		if err := job.NoTxn().started(ctx); err != nil {
+		if err := job.DeprecatedNoTxn().started(ctx); err != nil {
 			return err
 		}
 
@@ -1718,7 +1720,7 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: unexpected state %s provided to state machine", job.ID(), state)
 	case StateCanceled:
-		if err := job.NoTxn().canceled(ctx); err != nil {
+		if err := job.DeprecatedNoTxn().canceled(ctx); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(
@@ -1734,7 +1736,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: successful but unexpected error provided", job.ID())
 		}
-		err := job.NoTxn().succeeded(ctx, nil /* fn */)
+		err := job.DeprecatedNoTxn().succeeded(ctx, nil /* fn */)
 		switch {
 		case err == nil:
 			telemetry.Inc(TelemetryMetrics[jobType].Successful)
@@ -1746,7 +1748,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		return err
 	case StateReverting:
-		if err := job.NoTxn().reverted(ctx, jobErr, nil /* fn */); err != nil {
+		if err := job.DeprecatedNoTxn().reverted(ctx, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.WithSecondaryError(
@@ -1786,7 +1788,7 @@ func (r *Registry) stepThroughStateMachine(
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StateFailed but no error was provided", job.ID())
 		}
-		if err := job.NoTxn().failed(ctx, jobErr); err != nil {
+		if err := job.DeprecatedNoTxn().failed(ctx, jobErr); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(
@@ -1805,7 +1807,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.AssertionFailedf("job %d: has StateRevertFailed but no error was provided",
 				job.ID())
 		}
-		if err := job.NoTxn().revertFailed(ctx, jobErr, nil /* fn */); err != nil {
+		if err := job.DeprecatedNoTxn().revertFailed(ctx, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(

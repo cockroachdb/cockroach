@@ -214,7 +214,7 @@ func (r *logicalReplicationResumer) maybeStartReverseStream(
 		return errors.Wrapf(err, "failed to start reverse stream")
 	}
 
-	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StartedReverseStream = true
 		ju.UpdateProgress(md.Progress)
 		return nil
@@ -259,7 +259,7 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 		if err := txn.KV().Run(ctx, b); err != nil {
 			return err
 		}
-		return r.job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return r.job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PublishedNewTables = true
 			ju.UpdateProgress(md.Progress)
 			return nil

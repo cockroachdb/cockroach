@@ -149,8 +149,8 @@ func newTrackerConfig(
 			return nil
 		},
 		writeCheckpoint: func(ctx context.Context, bps []scexec.BackfillProgress, mps []scexec.MergeProgress) error {
-			return job.NoTxn().Update(ctx, func(
-				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			return job.DeprecatedNoTxn().Update(ctx, func(
+				txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 			) error {
 				pl := md.Payload
 				backfillJobProgress, err := convertToJobBackfillProgress(codec, bps)

@@ -183,8 +183,8 @@ func updateReplicationStreamProgress(
 			return status, notAReplicationJobError(jobspb.JobID(streamID))
 		}
 		expiration := updateBegin.Add(details.ExpirationWindow)
-		if err := j.WithTxn(txn).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		if err := j.DeprecatedWithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			status = streampb.StreamReplicationStatus{}
 			pts := ptsProvider.WithTxn(txn)
@@ -354,8 +354,8 @@ func completeReplicationStream(
 	if _, ok := j.Details().(jobspb.StreamReplicationDetails); !ok {
 		return notAReplicationJobError(jobspb.JobID(streamID))
 	}
-	return j.WithTxn(txn).Update(ctx, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	return j.DeprecatedWithTxn(txn).Update(ctx, func(
+		txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		// Updates the stream ingestion status, make the job resumer exit running
 		// when picking up the new status.

@@ -162,7 +162,7 @@ func newJobsKnobs() *jobs.TestingKnobs {
 	}{
 		m: make(map[jobspb.JobID]struct{}),
 	}
-	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) error {
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.DeprecatedJobMetadata) error {
 		sc := orig.Payload.GetNewSchemaChange()
 		if sc == nil {
 			return nil

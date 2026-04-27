@@ -975,7 +975,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
-		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
+		if err := sc.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 		writeAsOf = sc.clock.Now()
@@ -1010,11 +1010,11 @@ func (sc *SchemaChanger) distIndexBackfill(
 		) error {
 			details := sc.job.Details().(jobspb.SchemaChangeDetails)
 			details.WriteTimestamp = writeAsOf
-			return sc.job.WithTxn(txn).SetDetails(ctx, details)
+			return sc.job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
 		}, metadataOnlyTxn); err != nil {
 			return err
 		}
-		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
+		if err := sc.job.DeprecatedNoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 	} else {
@@ -1458,7 +1458,7 @@ func (sc *SchemaChanger) updateJobStatusMessage(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, status); err != nil {
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, status); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 			}
 		}
@@ -2468,7 +2468,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			if err := sc.job.DeprecatedWithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
