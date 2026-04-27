@@ -66,8 +66,9 @@ statement ok
 SET TRACING = "off";
 
 # The first execution should miss the query cache.
+# Strip suffix after "query cache ..." because nightly tests with high vmodule setting appends the SQL stmt.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT regexp_replace(message, ':.*', '') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache miss
 query cache add
@@ -83,7 +84,7 @@ SET TRACING = "off";
 
 # The second execution should hit the query cache.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT regexp_replace(message, ':.*', '') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache hit
 
@@ -101,7 +102,7 @@ SET TRACING = "off";
 
 # After running the builtin, the query cache should be cleared.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT regexp_replace(message, ':.*', '') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache miss
 query cache add
