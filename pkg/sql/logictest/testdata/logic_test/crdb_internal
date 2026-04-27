@@ -119,7 +119,7 @@ pg_init_privs                    true
 pg_language                      false
 pg_largeobject                   true
 pg_largeobject_metadata          true
-pg_locks                         true
+pg_locks                         false
 pg_matviews                      false
 pg_namespace                     false
 pg_opclass                       true

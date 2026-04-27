@@ -54,7 +54,6 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogIndexes,
 	vtable.PGCatalogInherits,
 	vtable.PGCatalogLanguage,
-	vtable.PGCatalogLocks,
 	vtable.PGCatalogMatViews,
 	vtable.PGCatalogNamespace,
 	vtable.PGCatalogOperator,
@@ -84,6 +83,7 @@ var pgCatalogTables = []string{
 var pgCatalogViews = []string{
 	vtable.PGCatalogDescription,
 	vtable.PGCatalogSharedDescription,
+	vtable.PGCatalogLocks,
 }
 
 var crdbInternalTables = []string{

@@ -30,9 +30,9 @@ go_test(
         "main_test.go",
         "manager_savepoint_test.go",
     ],
-    embed = [":advisorylock"],
     exec_properties = {"test.Pool": "large"},
     deps = [
+        ":advisorylock",
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
