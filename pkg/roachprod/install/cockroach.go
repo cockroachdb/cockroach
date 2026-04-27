@@ -10,6 +10,7 @@ import (
 	_ "embed" // required for go:embed
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"os/exec"
@@ -1661,14 +1662,21 @@ func (c *SyncedCluster) generateKeyCmd(
 		storeDirs = append(storeDirs, startOpts.ExtraArgs[storeArgIdx+1])
 	}
 
-	// Command to create the store key.
+	// Metamorphically choose between v1 and v2 encryption keys. V1 uses
+	// a raw key-id + key format; v2 uses JWK (JSON Web Key) format. Each
+	// node independently picks its key version; mixed v1/v2 within a
+	// cluster is safe because store keys are per-node.
+	keyVersion := rand.Intn(2) + 1
+	binary := cockroachNodeBinary(c, node)
+	l.Printf("generating encryption key for node %d (version=%d)", node, keyVersion)
+
 	var keyCmd strings.Builder
 	for _, storeDir := range storeDirs {
 		fmt.Fprintf(&keyCmd, `
 			mkdir -p %[1]s;
 			if [ ! -e %[1]s/aes-128.key ]; then
-				openssl rand -out %[1]s/aes-128.key 48;
-			fi;`, storeDir)
+				%[2]s %[3]s gen encryption-key -s 128 --version=%[4]d %[1]s/aes-128.key;
+			fi;`, storeDir, SuppressMetamorphicConstantsEnvVar(), binary, keyVersion)
 	}
 
 	e := expander{node: node}
