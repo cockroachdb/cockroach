@@ -25,7 +25,7 @@ SELECT
   CASE WHEN message LIKE '=== operation:%'
     THEN regexp_replace(
       regexp_replace(message, ' statement:.*?( _| $)', '\1'),
-      ' (gid|node|client|user|txn|cockroach\.\w+|implicit):\S*| hostssl:\S*',
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit|_unfinished):\S*| hostssl:\S*',
       '', 'g')
     ELSE regexp_replace(message, 'pos:[0-9]*', 'pos:?')
   END,
@@ -33,7 +33,7 @@ SELECT
 FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%=== operation:%' OR message LIKE '%pos%executing%';
 ----
-0   === operation:session recording _unfinished:1 _verbose:1  session recording
+0   === operation:session recording _verbose:1                session recording
 1   === operation:session tracing _verbose:1                  session tracing
 1   [Open pos:?] executing Sync                               session tracing
 2   === operation:commit sql txn _verbose:1                   commit sql txn
@@ -1951,7 +1951,7 @@ query T
 SELECT CASE WHEN message LIKE '=== operation:%'
     THEN regexp_replace(
       message,
-      ' (gid|node|client|user|txn|cockroach\.\w+|implicit):\S*| hostssl:\S*',
+      ' (gid|node|client|user|txn|cockroach\.\w+|implicit|_unfinished):\S*| hostssl:\S*',
       '', 'g')
     ELSE message
   END
