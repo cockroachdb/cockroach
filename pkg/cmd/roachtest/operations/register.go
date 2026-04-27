@@ -36,4 +36,5 @@ func RegisterOperations(r registry.Registry) {
 	registerDiskFill(r)
 	changefeeds.RegisterChangefeeds(r)
 	registerInspect(r)
+	registerTPCCCheck(r)
 }
