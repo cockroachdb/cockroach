@@ -118,6 +118,13 @@ type SQLStatsIngester struct {
 
 	metrics Metrics
 
+	// discardedStatsCount is incremented when a statement is dropped because
+	// the memory monitor rejects the allocation in processStatement. This is
+	// the same counter as the one held by SQLStats for downstream
+	// fingerprint-limit drops, so operators see a single signal for
+	// "stats records lost" regardless of where the drop occurred.
+	discardedStatsCount *metric.Counter
+
 	statementStore *statementstore.StatementStore
 }
 
@@ -371,6 +378,7 @@ func NewSQLStatsIngester(
 	st *cluster.Settings,
 	knobs *sqlstats.TestingKnobs,
 	metrics Metrics,
+	discardedStatsCount *metric.Counter,
 	parentMon *mon.BytesMonitor,
 	statementStore *statementstore.StatementStore,
 	sinks ...SQLStatsSink,
@@ -390,6 +398,7 @@ func NewSQLStatsIngester(
 		settings:              st,
 		testingKnobs:          knobs,
 		metrics:               metrics,
+		discardedStatsCount:   discardedStatsCount,
 		statementStore:        statementStore,
 	}
 
@@ -456,6 +465,12 @@ func (i *SQLStatsIngester) processStatement(
 		// If we hit memory limits, we cannot buffer this statement.
 		// The error will propagate through the SQL memory pool accounting,
 		// causing queries to fail with "budget exceeded error" when the pool is exhausted.
+		// Record the drop on the same counter used for downstream
+		// fingerprint-limit drops so operators get a single signal for
+		// "stats records lost" regardless of where the drop occurred.
+		if i.discardedStatsCount != nil {
+			i.discardedStatsCount.Inc(1)
+		}
 		return
 	}
 	i.stmtSizes[statement.SessionID] += stmtSize
