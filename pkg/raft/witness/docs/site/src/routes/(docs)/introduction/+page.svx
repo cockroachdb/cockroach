@@ -1,0 +1,16 @@
+---
+title: Witnesses in CockroachDB
+---
+
+<script>
+  import { marked } from 'marked';
+
+  // The prose body of this page lives in pkg/raft/witness/docs/landing.md
+  // so it's discoverable as plain markdown alongside cost-details.md. We
+  // pull it in at build time and render it via marked.
+  import landingMd from '$docs/landing.md?raw';
+
+  const landingHtml = marked.parse(landingMd);
+</script>
+
+{@html landingHtml}
