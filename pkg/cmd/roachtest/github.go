@@ -89,9 +89,9 @@ func generateHelpCommand(
 				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
 			}
 			// Link to the Datadog Log Explorer with logs for this test run.
-			// ShouldUploadLogsToDatadog(true) is correct because we only
+			// ShouldUploadTestLogsToDatadog(true) is correct because we only
 			// generate help commands for failed tests (which file issues).
-			if datadog.ShouldUploadLogsToDatadog(true /* testFailed */) {
+			if datadog.ShouldUploadTestLogsToDatadog(true /* testFailed */) {
 				ddQuery := fmt.Sprintf("service:roachtest @cluster:%s", clusterName)
 				issues.HelpCommandAsLink(
 					"Datadog Logs",

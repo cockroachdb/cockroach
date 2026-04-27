@@ -3,6 +3,20 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+// Package datadog uploads roachtest log files to Datadog.
+//
+// Log uploads are organized by category. Each category implements:
+//   - NewXxxMetadata: constructs a LogMetadata for that category
+//   - ShouldUploadXxx: decides whether to upload based on branch/flags
+//   - discoverXxxLogFiles: finds the files to upload
+//   - MaybeUploadXxx: orchestrates discovery, parsing, and upload
+//
+// The core parsing and upload infrastructure (parseAndUploadLogFile,
+// selectParser, uploadBatch) is shared across all categories.
+//
+// Current categories:
+//   - Test logs: per-test artifacts (test.log, run_*.log, node logs, etc.)
+//   - Runner logs: run-level logs (test_runner-*.log, w*.log)
 package datadog
 
 import (
@@ -178,18 +192,54 @@ func formatTags(tags map[string]string) string {
 }
 
 // makeTags makes a map of tag names and values to be added to Datadog log
-// entries. Empty tag values do not cause errors.
+// entries. Tags with empty values are omitted to avoid blank entries in
+// Datadog's tag facet dropdowns.
 func (m LogMetadata) makeTags() map[string]string {
 	tagMap := map[string]string{
-		envTagName:      defaultEnv,
+		envTagName: defaultEnv,
+	}
+	for k, v := range map[string]string{
 		testNameTagName: m.TestName,
 		ownerTagName:    m.Owner,
 		cloudTagName:    m.Cloud,
 		platformTagName: m.Platform,
 		versionTagName:  m.Version,
 		logFileTagName:  m.LogName,
+	} {
+		if v != "" {
+			tagMap[k] = v
+		}
 	}
 	return tagMap
+}
+
+// readTCBuildProperties reads TeamCity build properties from the
+// properties file and populates the corresponding fields on m.
+func readTCBuildProperties(l *logger.Logger, m *LogMetadata) {
+	l.Printf("teamcity build properties file: %s", tcBuildPropertyFile)
+	if tcBuildPropertyFile == "" {
+		return
+	}
+	file, err := os.Open(tcBuildPropertyFile)
+	if err != nil {
+		// Reading the properties file is best effort. If it fails, we will
+		// continue to process log events without the teamcity metadata.
+		l.Printf("failed to open teamcity build properties file: %s", err)
+		return
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, tcSystemBuildPropertyAgentNamePrefix):
+			m.TCHost = strings.TrimPrefix(line, tcSystemBuildPropertyAgentNamePrefix)
+		case strings.HasPrefix(line, tcSystemBuildPropertyBuildNumberPrefix):
+			m.TCBuildNumber = strings.TrimPrefix(line, tcSystemBuildPropertyBuildNumberPrefix)
+		case strings.HasPrefix(line, tcSystemBuildConfigurationPrefix):
+			m.TCBuildConfName = strings.TrimPrefix(line, tcSystemBuildConfigurationPrefix)
+		}
+	}
 }
 
 // NewLogMetadata creates a LogMetadata from test execution information
@@ -203,7 +253,6 @@ func NewLogMetadata(
 	arch vm.CPUArch,
 	clusterName string,
 ) LogMetadata {
-
 	m := LogMetadata{
 		TestName: spec.Name,
 		Result:   makeResult(result),
@@ -214,50 +263,34 @@ func NewLogMetadata(
 		Cluster:  clusterName,
 		Version:  os.Getenv(envTCBuildBranch),
 	}
-
-	// Teamcity System Properties are available in the build properties file
-	// separated by line as key value pairs, i.e., agent.name=gce-agent
-	// On TC UI, these properties are prefixed with "system."
-	// In the properties file that prefix is omitted.
-	l.Printf("teamcity build properties file: %s", tcBuildPropertyFile)
-	if tcBuildPropertyFile != "" {
-		file, err := os.Open(tcBuildPropertyFile)
-		if err != nil {
-			// Reading the properties file is best effort. If it fails, we will
-			// continue to process log events without the teamcity metadata.
-			l.Printf("failed to open teamcity build properties file: %s", err)
-		} else {
-			defer file.Close()
-			scanner := bufio.NewScanner(file)
-			for scanner.Scan() {
-				line := scanner.Text()
-				switch {
-				case strings.HasPrefix(line, tcSystemBuildPropertyAgentNamePrefix):
-					m.TCHost = strings.TrimPrefix(line, tcSystemBuildPropertyAgentNamePrefix)
-				case strings.HasPrefix(line, tcSystemBuildPropertyBuildNumberPrefix):
-					m.TCBuildNumber = strings.TrimPrefix(line, tcSystemBuildPropertyBuildNumberPrefix)
-				case strings.HasPrefix(line, tcSystemBuildConfigurationPrefix):
-					m.TCBuildConfName = strings.TrimPrefix(line, tcSystemBuildConfigurationPrefix)
-				}
-			}
-		}
-	}
-
-	// Make tag map from metadata fields
+	readTCBuildProperties(l, &m)
 	m.Tags = m.makeTags()
-
 	l.Printf("Datadog Log Entry Metadata: %+v", m)
 	return m
 }
 
-// ShouldUploadLogsToDatadog determines if test logs should be uploaded to Datadog based
+// NewRunnerLogMetadata creates a LogMetadata for runner-level logs
+// (test_runner-*.log, w*.log). Test-specific fields (TestName, Owner,
+// Cluster, Result, Duration) are left empty.
+func NewRunnerLogMetadata(l *logger.Logger, cloud spec.Cloud) LogMetadata {
+	m := LogMetadata{
+		Version: os.Getenv(envTCBuildBranch),
+		Cloud:   cloud.String(),
+	}
+	readTCBuildProperties(l, &m)
+	m.Tags = m.makeTags()
+	l.Printf("Datadog Runner Log Entry Metadata: %+v", m)
+	return m
+}
+
+// ShouldUploadTestLogsToDatadog determines if test logs should be uploaded to Datadog based
 // on flag settings, branch, and test result.
 //
 // Default behavior: Upload logs only from failed tests on master/release branches.
 // --datadog-send-logs-any-branch: Upload from any branch.
 // --datadog-send-logs-any-result: Upload any result from master/release branches.
 // Both flags: Upload any result from any branch.
-func ShouldUploadLogsToDatadog(testFailed bool) bool {
+func ShouldUploadTestLogsToDatadog(testFailed bool) bool {
 	// Determine if we're on a branch that should upload
 	branch := os.Getenv(envTCBuildBranch)
 	isReleaseBranch := branch == "master" || strings.HasPrefix(branch, "release-")
@@ -270,6 +303,112 @@ func ShouldUploadLogsToDatadog(testFailed bool) bool {
 
 	// Upload if both checks pass
 	return branchCheckPassed && resultCheckPassed
+}
+
+// ShouldUploadRunnerLogsToDatadog determines if runner-level logs should be
+// uploaded to Datadog. Unlike per-test uploads, runner logs are always uploaded
+// on master/release branches regardless of individual test results.
+// --datadog-send-logs-any-branch: Upload from any branch.
+func ShouldUploadRunnerLogsToDatadog() bool {
+	branch := os.Getenv(envTCBuildBranch)
+	isReleaseBranch := branch == "master" || strings.HasPrefix(branch, "release-")
+	return roachtestflags.DatadogSendLogsAnyBranch || isReleaseBranch
+}
+
+// shouldUploadRunnerFile returns true if the given file in the
+// _runner-logs/ directory should be uploaded to Datadog. Currently
+// uploads test_runner-*.log and w*.log files.
+func shouldUploadRunnerFile(name string) bool {
+	if strings.HasPrefix(name, "test_runner-") && strings.HasSuffix(name, ".log") {
+		return true
+	}
+	if strings.HasSuffix(name, ".log") && name[0] == 'w' && name[1] >= '0' && name[1] <= '9' {
+		return true
+	}
+	return false
+}
+
+// discoverRunnerLogFiles returns the list of file paths in runnerLogsDir
+// that should be uploaded to Datadog, filtered by shouldUploadRunnerFile.
+func discoverRunnerLogFiles(runnerLogsDir string) ([]string, error) {
+	entries, err := os.ReadDir(runnerLogsDir)
+	if err != nil {
+		return nil, errors.Wrapf(err, "reading runner logs directory %s", runnerLogsDir)
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if shouldUploadRunnerFile(entry.Name()) {
+			files = append(files, filepath.Join(runnerLogsDir, entry.Name()))
+		}
+	}
+	return files, nil
+}
+
+// MaybeUploadRunnerLogs discovers runner-level log files in runnerLogsDir
+// and uploads them to Datadog. These include the test_runner-*.log and
+// per-worker w*.log files from _runner-logs/.
+func MaybeUploadRunnerLogs(
+	ctx context.Context, l *logger.Logger, runnerLogsDir string, cfg LogMetadata,
+) error {
+	uploadCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer cancel()
+	datadogCtx, err := newDatadogContext(uploadCtx)
+	if err != nil {
+		return err
+	}
+
+	datadogLogger, err := l.ChildLogger("datadog-runner", logger.QuietStdout)
+	if err != nil {
+		return err
+	}
+
+	// Create Datadog Logs API client
+	// Default timeout is 60 seconds per HTTP request
+	configuration := datadog.NewConfiguration()
+	apiClient := datadog.NewAPIClient(configuration)
+	logsAPI := datadogV2.NewLogsApi(apiClient)
+
+	files, err := discoverRunnerLogFiles(runnerLogsDir)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("discovered %d runner log files to upload from %s", len(files), runnerLogsDir)
+	l.Printf("files: %v", files)
+	overallStart := timeutil.Now()
+	var totalBytes int64
+	for _, logPath := range files {
+		logName, err := filepath.Rel(runnerLogsDir, logPath)
+		if err != nil {
+			l.Printf("failed to compute relative path for %s and %s: %v", runnerLogsDir, logPath, err)
+		}
+
+		if info, statErr := os.Stat(logPath); statErr == nil {
+			totalBytes += info.Size()
+		}
+
+		fileCfg := cfg
+		fileCfg.LogName = logName
+		fileCfg.Tags = fileCfg.makeTags()
+
+		parser := selectParser(filepath.Base(logPath))
+		fileStart := timeutil.Now()
+		totalEntries, uploadErr := parseAndUploadLogFile(
+			datadogCtx, datadogLogger, logsAPI, logPath, fileCfg, parser,
+		)
+		if uploadErr != nil {
+			l.Printf("error uploading %s to Datadog (%d entries uploaded): %v",
+				logName, totalEntries, uploadErr)
+		}
+		l.Printf("uploaded %d log events from %s in %s", totalEntries, logName, timeutil.Since(fileStart))
+	}
+	l.Printf("finished uploading runner log files to Datadog in %s (%s total)",
+		timeutil.Since(overallStart), humanizeBytes(totalBytes))
+	return nil
 }
 
 // shouldUploadArtifactFile returns true if the given top-level artifact file
@@ -354,7 +493,7 @@ func nodeFileChannel(name string) string {
 // shouldUploadNodeFile returns true if the given file name from a
 // logs/N.unredacted/ directory should be uploaded. This covers
 // non-log files and special cockroach files. Segment vs base-name
-// filtering is handled by discoverLogFiles.
+// filtering is handled by discoverTestLogFiles.
 func shouldUploadNodeFile(name string) bool {
 	if name == "diskusage.txt" {
 		return true
@@ -371,11 +510,11 @@ func shouldUploadNodeFile(name string) bool {
 	return false
 }
 
-// discoverLogFiles returns the list of file paths in artifactsDir that should
+// discoverTestLogFiles returns the list of file paths in artifactsDir that should
 // be uploaded to Datadog. Top-level files are filtered by shouldUploadArtifactFile.
 // Additionally, node-level logs from logs/N.unredacted/ directories are
 // included, filtered by shouldUploadNodeFile.
-func discoverLogFiles(l *logger.Logger, artifactsDir string) ([]string, error) {
+func discoverTestLogFiles(l *logger.Logger, artifactsDir string) ([]string, error) {
 	entries, err := os.ReadDir(artifactsDir)
 	if err != nil {
 		return nil, errors.Wrapf(err, "reading artifacts directory %s", artifactsDir)
@@ -468,7 +607,7 @@ func MaybeUploadTestLogs(
 	apiClient := datadog.NewAPIClient(configuration)
 	logsAPI := datadogV2.NewLogsApi(apiClient)
 
-	files, err := discoverLogFiles(l, artifactsDir)
+	files, err := discoverTestLogFiles(l, artifactsDir)
 	if err != nil {
 		return err
 	}
@@ -761,12 +900,18 @@ func parseAndUploadLogFile(
 		entry.SetService(defaultService)
 		entry.SetDdtags(formatTags(logMeta.Tags))
 		entry.SetHostname(logMeta.TCHost)
-		entry.AdditionalProperties = map[string]string{
+		entry.AdditionalProperties = make(map[string]string)
+		// Skip empty attributes to avoid blank entries in Datadog's UI.
+		for k, v := range map[string]string{
 			clusterAttributeName:            logMeta.Cluster,
 			buildNumberAttributeName:        logMeta.TCBuildNumber,
 			buildConfigurationAttributeName: logMeta.TCBuildConfName,
 			resultAttributeName:             logMeta.Result,
 			durationAttributeName:           logMeta.Duration,
+		} {
+			if v != "" {
+				entry.AdditionalProperties[k] = v
+			}
 		}
 		for k, v := range logMeta.Tags {
 			entry.AdditionalProperties[k] = v
@@ -837,6 +982,10 @@ func parseCrdbV2Timestamp(ts string) (string, error) {
 }
 
 // selectParser returns the appropriate logFileParser for the given file name.
+// Explicitly lists parsers for specific file types, and defaults to
+// roachtestParser for everything else. In the event that a file is selected
+// during discovery, and its parser does not match any lines, the entire file
+// will be uploaded as a single raw log entry without an extracted timestamp.
 func selectParser(fileName string) logFileParser {
 	if strings.HasSuffix(fileName, ".dmesg.txt") {
 		return dmesgParser
@@ -880,12 +1029,20 @@ func parseLogLine(
 	entry.SetDdtags(formatTags(logMeta.Tags))
 	entry.SetHostname(logMeta.TCHost)
 	entry.AdditionalProperties = map[string]string{
-		timestampAttributeName:          timestamp,
+		timestampAttributeName: timestamp,
+	}
+	// Skip empty attributes to avoid blank entries in Datadog's UI.
+	// Runner logs leave test-specific fields empty (cluster, result, etc.).
+	for k, v := range map[string]string{
 		clusterAttributeName:            logMeta.Cluster,
 		buildNumberAttributeName:        logMeta.TCBuildNumber,
 		buildConfigurationAttributeName: logMeta.TCBuildConfName,
 		resultAttributeName:             logMeta.Result,
 		durationAttributeName:           logMeta.Duration,
+	} {
+		if v != "" {
+			entry.AdditionalProperties[k] = v
+		}
 	}
 	// Duplicate tags into attributes for an improved UI experience
 	for k, v := range logMeta.Tags {

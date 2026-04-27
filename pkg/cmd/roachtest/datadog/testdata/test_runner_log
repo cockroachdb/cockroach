@@ -1,0 +1,12 @@
+2026/03/16 06:22:53 run.go:421: test runner logs in: /artifacts/_runner-logs/test_runner-1773642173.log
+2026/03/16 06:22:53 run.go:177: global random seed: -2881847130721865594
+2026/03/16 06:22:53 test_runner.go:500: using spot VMs to run test acceptance/cli/node-status
+2026/03/16 06:22:53 test_runner.go:500: using spot VMs to run test acceptance/version-upgrade
+2026/03/16 06:22:53 test_runner.go:500: using spot VMs to run test backup/minio
+[w5] 2026/03/16 21:20:39 roachprod.go:1601: OK
+[w5] 2026/03/16 21:20:39 cluster.go:1846: destroying cluster teamcity-xxx-184-n12cpu4 [tag:] (12 nodes)... done
+[w5] 2026/03/16 21:20:39 test_runner.go:768: Worker exiting; no cluster to destroy.
+2026/03/16 21:20:39 test_runner.go:579: FAIL (13 fails)
+2026/03/16 21:20:39 test_runner.go:589: 3 clusters could not be created
+2026/03/16 21:20:39 test_runner.go:593: 13 tests failed
+2026/03/16 21:20:39 run.go:229: runTests destroying all clusters

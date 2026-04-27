@@ -1428,7 +1428,7 @@ func (r *testRunner) runTest(
 		}
 
 		// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
-		if datadog.ShouldUploadLogsToDatadog(t.Failed()) {
+		if datadog.ShouldUploadTestLogsToDatadog(t.Failed()) {
 			m := datadog.NewLogMetadata(
 				t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2f", timeutil.Since(t.start).Seconds()), c.cloud, c.os, c.arch,
 				c.name)
@@ -1842,7 +1842,7 @@ func (r *testRunner) teardownTest(
 	// collection below).
 	r.maybeSaveClusterDueToInvariantProblems(ctx, t, c)
 
-	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts || datadog.ShouldUploadLogsToDatadog(t.Failed()) {
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts || datadog.ShouldUploadTestLogsToDatadog(t.Failed()) {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
