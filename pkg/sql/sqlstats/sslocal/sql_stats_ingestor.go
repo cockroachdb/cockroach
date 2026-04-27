@@ -529,6 +529,10 @@ func (i *SQLStatsIngester) flushBuffer(
 			}
 			i.storeStatementFingerprint(ctx, s)
 		}
+	} else {
+		for _, s := range *statements {
+			i.storeStatementFingerprint(ctx, s)
+		}
 	}
 
 	for _, sink := range i.sinks {

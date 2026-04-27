@@ -569,7 +569,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 
-	statementStoreIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	statementStoreIEMonitor := mon.NewMonitor(mon.Options{
+		Name:       mon.MakeName("statement store"),
+		Settings:   s.GetExecutorConfig().Settings,
+		LongLiving: true,
+	})
 	statementStoreIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.statementsStore.SetInternalExecutor(
 		NewInternalDB(s, MemoryMetrics{}, statementStoreIEMonitor),
