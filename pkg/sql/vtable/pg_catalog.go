@@ -499,27 +499,95 @@ CREATE TABLE pg_catalog.pg_language (
 	lanacl STRING[]
 )`
 
-// PGCatalogLocks describes the schema of the pg_catalog.pg_locks table.
-// https://www.postgresql.org/docs/18/view-pg-locks.html,
-const PGCatalogLocks = `
-CREATE TABLE pg_catalog.pg_locks (
-  locktype TEXT,
-  database OID,
-  relation OID,
-  page INT4,
-  tuple SMALLINT,
-  virtualxid TEXT,
-  transactionid INT,
-  classid OID,
-  objid OID,
-  objsubid SMALLINT,
-  virtualtransaction TEXT,
-  pid INT4,
-  mode TEXT,
-  granted BOOLEAN,
-  fastpath BOOLEAN,
-  waitstart TIMESTAMPTZ
-)`
+// PGCatalogLocks describes pg_catalog.pg_locks (advisory locks only) from
+// crdb_internal.cluster_held_advisory_locks + crdb_internal.cluster_sessions
+// (granted), and crdb_internal.cluster_locks on system.advisory_locks
+// (non-granted waiters) joined to cluster_sessions. Querying the waiter branch
+// needs the same role path as crdb_internal.cluster_locks (VIEWACTIVITY, etc.).
+//
+// https://www.postgresql.org/docs/18/view-pg-locks.html
+var PGCatalogLocks = `
+CREATE VIEW pg_catalog.pg_locks AS
+WITH held_parsed AS (
+  SELECT
+    h.session_id,
+    h.lock_mode,
+    CAST(split_part(replace(substr(h.lock_key, 2, length(h.lock_key) - 2), ' ', ''), ',', 1) AS INT8) AS db_id,
+    CAST(split_part(replace(substr(h.lock_key, 2, length(h.lock_key) - 2), ' ', ''), ',', 2) AS INT8) AS lock_type,
+    CAST(split_part(replace(substr(h.lock_key, 2, length(h.lock_key) - 2), ' ', ''), ',', 3) AS INT8) AS packed_key
+  FROM crdb_internal.cluster_held_advisory_locks AS h
+  WHERE length(h.lock_key) > 4
+)
+SELECT
+  'advisory':::STRING AS locktype,
+  hp.db_id::OID AS database,
+  NULL::OID AS relation,
+  NULL:::INT4 AS page,
+  NULL:::INT2 AS tuple,
+  NULL:::STRING AS virtualxid,
+  NULL:::INT4 AS transactionid,
+  (((hp.packed_key >> 32)::INT8)::INT4)::OID AS classid,
+  ((hp.packed_key & (((1::INT8 << 32) - 1)::INT8))::INT8)::OID AS objid,
+  CASE hp.lock_type
+    WHEN 1:::INT8 THEN 1:::INT2
+    ELSE 2:::INT2
+  END AS objsubid,
+  ('0/' || s.pg_backend_pid::STRING)::STRING AS virtualtransaction,
+  s.pg_backend_pid AS pid,
+  CASE hp.lock_mode
+    WHEN 'EXCLUSIVE':::STRING THEN 'ExclusiveLock':::STRING
+    WHEN 'SHARED':::STRING THEN 'ShareLock':::STRING
+    ELSE 'ExclusiveLock':::STRING
+  END AS mode,
+  true AS granted,
+  false AS fastpath,
+  NULL:::TIMESTAMPTZ AS waitstart
+FROM held_parsed AS hp
+INNER JOIN crdb_internal.cluster_sessions AS s ON s.session_id = hp.session_id
+UNION ALL
+SELECT
+  'advisory':::STRING AS locktype,
+  pk.db_id::OID AS database,
+  NULL::OID AS relation,
+  NULL:::INT4 AS page,
+  NULL:::INT2 AS tuple,
+  NULL:::STRING AS virtualxid,
+  NULL:::INT4 AS transactionid,
+  (((pk.packed_key >> 32)::INT8)::INT4)::OID AS classid,
+  ((pk.packed_key & (((1::INT8 << 32) - 1)::INT8))::INT8)::OID AS objid,
+  CASE pk.lock_type
+    WHEN 1:::INT8 THEN 1:::INT2
+    ELSE 2:::INT2
+  END AS objsubid,
+  ('0/' || s.pg_backend_pid::STRING)::STRING AS virtualtransaction,
+  s.pg_backend_pid AS pid,
+  CASE l.lock_strength
+    WHEN 'Exclusive':::STRING THEN 'ExclusiveLock':::STRING
+    WHEN 'Shared':::STRING THEN 'ShareLock':::STRING
+    ELSE l.lock_strength
+  END AS mode,
+  false AS granted,
+  false AS fastpath,
+  l.ts::TIMESTAMPTZ AS waitstart
+FROM crdb_internal.cluster_locks AS l
+INNER JOIN LATERAL (
+  SELECT
+    CAST(segs[cardinality(segs) - 3] AS INT8) AS db_id,
+    CAST(segs[cardinality(segs) - 2] AS INT8) AS lock_type,
+    CAST(segs[cardinality(segs) - 1] AS INT8) AS packed_key
+  FROM (SELECT string_to_array(btrim(l.lock_key_pretty, ' /'), '/') AS segs) AS x
+  WHERE cardinality(segs) >= 4
+    AND (segs[cardinality(segs) - 3] ~ '^[0-9]+$')
+    AND (segs[cardinality(segs) - 2] ~ '^[0-9]+$')
+    AND (segs[cardinality(segs) - 1] ~ '^-?[0-9]+$')
+    AND segs[cardinality(segs)] = '0'
+) AS pk ON true
+INNER JOIN crdb_internal.cluster_sessions AS s ON l.txn_id::STRING = s.kv_txn
+WHERE l.database_name = 'system'
+  AND l.table_name = 'advisory_locks'
+  AND l.granted = false
+  AND l.txn_id IS NOT NULL
+`
 
 // PGCatalogMatViews describes the schema of the pg_catalog.pg_matviews table.
 // https://www.postgresql.org/docs/9.6/view-pg-matviews.html,

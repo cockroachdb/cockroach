@@ -538,3 +538,80 @@ statement ok
 ROLLBACK
 
 subtest end
+
+subtest advisory_savepoint_release
+statement ok
+BEGIN;
+SAVEPOINT sp1;
+SELECT pg_advisory_xact_lock(1111);
+SAVEPOINT sp2;
+SELECT pg_advisory_xact_lock(2222);
+RELEASE SAVEPOINT sp2;
+
+# Both locks should still be held after RELEASE
+query B
+SELECT count(*) = 2
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%1111%' OR lock_key LIKE '%2222%'
+----
+true
+
+ROLLBACK TO SAVEPOINT sp1;
+
+# Both should be gone after rollback to sp1
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%1111%' OR lock_key LIKE '%2222%'
+----
+true
+
+statement ok
+COMMIT
+
+subtest advisory_nested_savepoint_rollback
+statement ok
+BEGIN;
+SELECT pg_advisory_xact_lock(3333);
+SAVEPOINT sp1;
+SELECT pg_advisory_xact_lock(4444);
+SAVEPOINT sp2;
+SELECT pg_advisory_xact_lock(5555);
+ROLLBACK TO SAVEPOINT sp2;
+
+# 3333 and 4444 should still be held
+query B
+SELECT count(*) = 2
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%3333%' OR lock_key LIKE '%4444%'
+----
+true
+
+# 5555 should be gone
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%5555%'
+----
+true
+
+ROLLBACK TO SAVEPOINT sp1;
+
+# Only 3333 should remain
+query B
+SELECT count(*) = 1
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%3333%'
+----
+true
+
+query B
+SELECT count(*) = 0
+FROM crdb_internal.cluster_held_advisory_locks
+WHERE lock_key LIKE '%4444%'
+----
+true
+
+statement ok
+COMMIT
+

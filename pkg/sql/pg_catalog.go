@@ -188,7 +188,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogLanguageTableID:                   pgCatalogLanguageTable,
 		catconstants.PgCatalogLargeobjectMetadataTableID:        pgCatalogLargeobjectMetadataTable,
 		catconstants.PgCatalogLargeobjectTableID:                pgCatalogLargeobjectTable,
-		catconstants.PgCatalogLocksTableID:                      pgCatalogLocksTable,
+		catconstants.PgCatalogLocksTableID:                      pgCatalogLocksView,
 		catconstants.PgCatalogMatViewsTableID:                   pgCatalogMatViewsTable,
 		catconstants.PgCatalogNamespaceTableID:                  pgCatalogNamespaceTable,
 		catconstants.PgCatalogOpclassTableID:                    pgCatalogOpclassTable,
@@ -2654,14 +2654,30 @@ https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 	},
 }
 
-var pgCatalogLocksTable = virtualSchemaTable{
-	comment: `locks held by active processes (empty - feature does not exist)
-https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
+var pgCatalogLocksView = virtualSchemaView{
 	schema: vtable.PGCatalogLocks,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	resultColumns: colinfo.ResultColumns{
+		{Name: "locktype", Typ: types.String},
+		{Name: "database", Typ: types.Oid},
+		{Name: "relation", Typ: types.Oid},
+		{Name: "page", Typ: types.Int4},
+		{Name: "tuple", Typ: types.Int2},
+		{Name: "virtualxid", Typ: types.String},
+		{Name: "transactionid", Typ: types.Int4},
+		{Name: "classid", Typ: types.Oid},
+		{Name: "objid", Typ: types.Oid},
+		{Name: "objsubid", Typ: types.Int2},
+		{Name: "virtualtransaction", Typ: types.String},
+		{Name: "pid", Typ: types.Int4},
+		{Name: "mode", Typ: types.String},
+		{Name: "granted", Typ: types.Bool},
+		{Name: "fastpath", Typ: types.Bool},
+		{Name: "waitstart", Typ: types.TimestampTZ},
 	},
-	unimplemented: true,
+	comment: `advisory locks: granted (cluster_held_advisory_locks) and waiting
+on system.advisory_locks (cluster_locks) per pg_locks columns. Same privileges
+as the underlying crdb_internal sources (cluster_locks needs VIEWACTIVITY, etc.)
+https://www.postgresql.org/docs/18/view-pg-locks.html`,
 }
 
 var pgCatalogMatViewsTable = virtualSchemaTable{
