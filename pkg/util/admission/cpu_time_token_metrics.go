@@ -85,6 +85,53 @@ var (
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Per-resource-group metric metadata. The counters built from these
+	// metadata are populated under the CTT WorkQueue's RM mode, which
+	// routes all work to the system tier, so there is no per-tier
+	// dimension here.
+	cpuTimeTokenAdmittedCountPerRGMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_resource_group.admitted_count",
+		Help: crstrings.UnwrapText(`
+			Cumulative number of requests admitted per resource group by
+			CPU time token admission control in resource manager mode; use
+			with wait_time_nanos to compute mean wait time via
+			rate(wait_time) / rate(admitted_count)`),
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	cpuTimeTokenWaitTimeNanosPerRGMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_resource_group.wait_time_nanos",
+		Help: crstrings.UnwrapText(`
+			Cumulative nanoseconds of admission queue wait time per
+			resource group in CPU time token admission control resource
+			manager mode; use with admitted_count to compute mean wait
+			time via rate(wait_time) / rate(admitted_count)`),
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	cpuTimeTokensUsedPerRGMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_resource_group.tokens_used",
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens consumed per resource group by
+			admitted work; rate() gives the per-resource-group token
+			consumption rate`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	cpuTimeTokensReturnedPerRGMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_resource_group.tokens_returned",
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens returned per resource group, for
+			example when actual CPU usage was lower than the initial
+			estimate; rate() gives the per-resource-group token return
+			rate`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // cpuTimeTokenMetrics tracks metrics for the CPU time token admission
@@ -140,16 +187,30 @@ type cpuTimeTokenMetrics struct {
 	// they give per-tenant visibility into token flow.
 	TokensUsedPerTenant     [numResourceTiers]*aggmetric.AggCounter
 	TokensReturnedPerTenant [numResourceTiers]*aggmetric.AggCounter
+
+	// Per-resource-group analogs of the PerTenant counters, populated
+	// under RM mode for rg-keyed containers. Each uses the label
+	// rg_id so the namespace is unambiguous in dashboards (vs.
+	// tenant_id on the per-tenant counters). The per-tier dimension
+	// is intentionally absent: RM mode flips useResourceGroup only on
+	// the system-tier WorkQueue (see cpu_time_token_filler.go), so
+	// rg-keyed containers can only ever land on that one tier. A
+	// future symmetrizer should not "fix" this by adding the tier
+	// dimension.
+	AdmittedCountPerRG  *aggmetric.AggCounter
+	WaitTimeNanosPerRG  *aggmetric.AggCounter
+	TokensUsedPerRG     *aggmetric.AggCounter
+	TokensReturnedPerRG *aggmetric.AggCounter
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
-	// Two-label scheme: kind discriminates "tenant" vs "rg" so the same
-	// numeric ID in different namespaces (system tenant 1 vs rg 1) maps
-	// to distinct child time series; tenant_id stays a bare numeric
-	// string for parity with other per-tenant AggCounters
-	// (multitenant.TenantIDLabel) so dashboards filtering on tenant_id
-	// keep working.
-	b := aggmetric.MakeBuilder("kind", "tenant_id")
+	// Per-tenant and per-rg metrics use distinct label names
+	// (tenant_id vs rg_id) so the namespace is unambiguous in
+	// dashboards. tenant_id matches multitenant.TenantIDLabel and
+	// the convention used by other per-tenant AggCounters in CRDB, so
+	// existing dashboards filtering on tenant_id keep working.
+	tenantBuilder := aggmetric.MakeBuilder("tenant_id")
+	rgBuilder := aggmetric.MakeBuilder("rg_id")
 	m := &cpuTimeTokenMetrics{
 		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
 		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
@@ -161,23 +222,29 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 		admittedMeta := cpuTimeTokenAdmittedCountPerTenantMetaBase
 		admittedMeta.Name = fmt.Sprintf(
 			"admission.cpu_time_tokens.per_tenant.admitted_count.%s", tierStr)
-		m.AdmittedCountPerTenant[tier] = b.Counter(admittedMeta)
+		m.AdmittedCountPerTenant[tier] = tenantBuilder.Counter(admittedMeta)
 
 		waitMeta := cpuTimeTokenWaitTimeNanosPerTenantMetaBase
 		waitMeta.Name = fmt.Sprintf(
 			"admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s", tierStr)
-		m.WaitTimeNanosPerTenant[tier] = b.Counter(waitMeta)
+		m.WaitTimeNanosPerTenant[tier] = tenantBuilder.Counter(waitMeta)
 
 		usedMeta := cpuTimeTokensUsedPerTenantMetaBase
 		usedMeta.Name = fmt.Sprintf(
 			"admission.cpu_time_tokens.per_tenant.tokens_used.%s", tierStr)
-		m.TokensUsedPerTenant[tier] = b.Counter(usedMeta)
+		m.TokensUsedPerTenant[tier] = tenantBuilder.Counter(usedMeta)
 
 		returnedMeta := cpuTimeTokensReturnedPerTenantMetaBase
 		returnedMeta.Name = fmt.Sprintf(
 			"admission.cpu_time_tokens.per_tenant.tokens_returned.%s", tierStr)
-		m.TokensReturnedPerTenant[tier] = b.Counter(returnedMeta)
+		m.TokensReturnedPerTenant[tier] = tenantBuilder.Counter(returnedMeta)
 	}
+	// Per-rg counters: RM mode runs on a single tier (system), so
+	// there is no per-tier dimension.
+	m.AdmittedCountPerRG = rgBuilder.Counter(cpuTimeTokenAdmittedCountPerRGMeta)
+	m.WaitTimeNanosPerRG = rgBuilder.Counter(cpuTimeTokenWaitTimeNanosPerRGMeta)
+	m.TokensUsedPerRG = rgBuilder.Counter(cpuTimeTokensUsedPerRGMeta)
+	m.TokensReturnedPerRG = rgBuilder.Counter(cpuTimeTokensReturnedPerRGMeta)
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
 			idx := perBucketIdx(tier, qual)

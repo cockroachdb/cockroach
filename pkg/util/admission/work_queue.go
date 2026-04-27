@@ -386,13 +386,46 @@ type WorkQueue struct {
 	knobs      *TestingKnobs
 }
 
-// groupAggMetrics groups the parent AggCounters from which per-group
-// child counters are created via AddChild.
-type groupAggMetrics struct {
+// groupAggMetricSet bundles the per-group AggCounters for one
+// groupKind. The four counters in a set share a label name (e.g.
+// tenant_id for the tenant-kind set, rg_id for the rg-kind set)
+// and are populated together — a non-nil set means all four fields
+// are non-nil.
+type groupAggMetricSet struct {
 	admittedCount  *aggmetric.AggCounter
 	waitTimeNanos  *aggmetric.AggCounter
 	tokensUsed     *aggmetric.AggCounter
 	tokensReturned *aggmetric.AggCounter
+}
+
+// groupAggMetrics groups the parent AggCounter sets from which
+// per-group child counters are created via AddChild. There is one
+// set per groupKind: tenant-keyed groups feed perTenant (label
+// tenant_id); rg-keyed groups feed perRG (label rg_id). Splitting
+// by kind keeps the label name semantically accurate.
+//
+// A set may be nil to indicate that this WorkQueue never sees
+// groups of that kind. For example, only the system-tier WorkQueue
+// receives rg-keyed groups (RM mode flips useResourceGroup only on
+// queues[0]; see cpu_time_token_filler.go), so app-tier WorkQueues
+// leave perRG nil. newGroupInfo skips child creation for groups
+// whose kind has no corresponding set.
+type groupAggMetrics struct {
+	perTenant *groupAggMetricSet
+	perRG     *groupAggMetricSet
+}
+
+// forKind returns the per-group counter set for the given kind, or
+// nil if no set is wired for that kind.
+func (g *groupAggMetrics) forKind(kind groupKind) *groupAggMetricSet {
+	switch kind {
+	case tenantKind:
+		return g.perTenant
+	case rgKind:
+		return g.perRG
+	default:
+		panic(errors.AssertionFailedf("forKind: invalid groupKind %s", kind))
+	}
 }
 
 var _ requester = &WorkQueue{}
@@ -1959,14 +1992,22 @@ func newGroupInfo(
 	ti.cpuTimeBurstBucket.init(
 		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, maxCPU)
 	if aggMetrics != nil {
-		// AddChild takes the label values in the same order as
-		// aggmetric.MakeBuilder declared them: ("kind", "tenant_id").
-		kindStr := gKey.kind.String()
-		idStr := strconv.FormatUint(gKey.id, 10)
-		ti.perGroupMetrics.admittedCount = aggMetrics.admittedCount.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(kindStr, idStr)
-		ti.perGroupMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(kindStr, idStr)
+		// Route the child to the parent set whose label name matches
+		// gKey.kind (tenant_id for tenant-keyed, rg_id for rg-keyed).
+		// The set is nil when this WorkQueue never sees groups of that
+		// kind (e.g., app-tier WorkQueues never see rg-keyed groups;
+		// see groupAggMetrics doc).
+		//
+		// tenant 1 and rg 1 still share the bare numeric idStr, but
+		// they live in different metric families (per_tenant vs
+		// per_resource_group) so the time series do not collide.
+		if set := aggMetrics.forKind(gKey.kind); set != nil {
+			idStr := strconv.FormatUint(gKey.id, 10)
+			ti.perGroupMetrics.admittedCount = set.admittedCount.AddChild(idStr)
+			ti.perGroupMetrics.waitTimeNanos = set.waitTimeNanos.AddChild(idStr)
+			ti.perGroupMetrics.tokensUsed = set.tokensUsed.AddChild(idStr)
+			ti.perGroupMetrics.tokensReturned = set.tokensReturned.AddChild(idStr)
+		}
 	}
 	return ti
 }

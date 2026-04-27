@@ -267,10 +267,12 @@ func makeCPUTimeTokenGrantCoordinator(
 		opts := makeWorkQueueOptions(KVWork)
 		opts.mode = usesCPUTimeTokens
 		opts.perGroupAggMetrics = &groupAggMetrics{
-			admittedCount:  metrics.AdmittedCountPerTenant[tier],
-			waitTimeNanos:  metrics.WaitTimeNanosPerTenant[tier],
-			tokensUsed:     metrics.TokensUsedPerTenant[tier],
-			tokensReturned: metrics.TokensReturnedPerTenant[tier],
+			perTenant: &groupAggMetricSet{
+				admittedCount:  metrics.AdmittedCountPerTenant[tier],
+				waitTimeNanos:  metrics.WaitTimeNanosPerTenant[tier],
+				tokensUsed:     metrics.TokensUsedPerTenant[tier],
+				tokensReturned: metrics.TokensReturnedPerTenant[tier],
+			},
 		}
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
@@ -278,6 +280,20 @@ func makeCPUTimeTokenGrantCoordinator(
 		// This type assertion is always valid, since makeWorkQueue always
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
+	}
+	// Wire the per-resource-group counter set into the RM-mode queue
+	// only. RM mode flips useResourceGroup only on queues[0] (see
+	// cpu_time_token_filler.go's setUseResourceGroup call), so only
+	// that queue can ever create rg-keyed groups. Wiring the per-rg
+	// parents on the other queues would risk a duplicate-AddChild
+	// panic if a stray rg-keyed admit ever landed there. Other queues
+	// leave perRG nil; newGroupInfo's nil-set guard skips child
+	// creation in that case.
+	requesters[0].(*WorkQueue).perGroupAggMetrics.perRG = &groupAggMetricSet{
+		admittedCount:  metrics.AdmittedCountPerRG,
+		waitTimeNanos:  metrics.WaitTimeNanosPerRG,
+		tokensUsed:     metrics.TokensUsedPerRG,
+		tokensReturned: metrics.TokensReturnedPerRG,
 	}
 	allocator.strategy = allocator.newStrategy(initialMode)
 
