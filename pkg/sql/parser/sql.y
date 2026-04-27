@@ -1047,7 +1047,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTEE GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HEADER HIGH HINTS HISTOGRAM HOLD HOUR
+%token <str> HANDLER HAVING HASH HEADER HIGH HINTS HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
@@ -1055,7 +1055,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
-%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSPECT INSTEAD INT INTEGER
+%token <str> INLINE INNER INOUT INPUT INSENSITIVE INSERT INSPECT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -1113,7 +1113,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> UNBOUNDED UNCOMMITTED UNIDIRECTIONAL UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
 %token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
+%token <str> VALID VALIDATE VALIDATOR VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
 %token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
 %token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
@@ -1311,6 +1311,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_external_connection_stmt
+%type <tree.Statement> create_language_stmt
 %type <tree.Statement> alter_external_connection_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
@@ -4876,6 +4877,7 @@ create_stmt:
 | create_stats_stmt      // EXTEND WITH HELP: CREATE STATISTICS
 | create_changefeed_stmt // EXTEND WITH HELP: CREATE CHANGEFEED
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
+| create_language_stmt   /* SKIP DOC */
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
 | create_virtual_cluster_stmt     // EXTEND WITH HELP: CREATE VIRTUAL CLUSTER
 | create_logical_replication_stream_stmt     // EXTEND WITH HELP: CREATE LOGICAL REPLICATION STREAM
@@ -5222,6 +5224,44 @@ create_extension_stmt:
     return unimplementedWithIssueDetail(sqllex, 74777, "create extension with")
   }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
+
+// CREATE LANGUAGE is a pseudo-statement for PostgreSQL compatibility. The
+// only accepted language is plpgsql, which is built in to CockroachDB; any
+// other language returns unimplemented (#169118). Both the parameterless
+// form and the legacy HANDLER/INLINE/VALIDATOR form are accepted (the
+// HANDLER clauses are syntactically swallowed and ignored, since plpgsql
+// is built-in and pg_dump may emit the legacy form for compatibility).
+create_language_stmt:
+  CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name opt_language_handler
+  /* SKIP DOC */
+  {
+    if !strings.EqualFold($6, "plpgsql") {
+      return unimplementedWithIssueDetail(sqllex, 169118, "create language " + $6)
+    }
+    $$.val = &tree.CreateLanguage{Name: tree.Name($6), Replace: $2.bool()}
+  }
+
+// opt_language_handler matches the legacy CREATE LANGUAGE form's
+// HANDLER/INLINE/VALIDATOR clauses. The handler/inline/validator names are
+// syntactically accepted (including qualified forms like pg_catalog.foo) and
+// then discarded — for plpgsql, we no-op regardless; for other languages, the
+// outer rule already errors before we get here.
+opt_language_handler:
+  /* EMPTY */ {}
+| HANDLER language_handler_name opt_language_inline opt_language_validator {}
+
+opt_language_inline:
+  /* EMPTY */ {}
+| INLINE language_handler_name {}
+
+opt_language_validator:
+  /* EMPTY */ {}
+| VALIDATOR language_handler_name {}
+| NO VALIDATOR {}
+
+language_handler_name:
+  name {}
+| name '.' name {}
 
 // %Help: ALTER POLICY - alter an existing row-level security policy
 // %Category: DDL
@@ -6236,7 +6276,6 @@ create_unsupported:
 | CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
 | CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
-| CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
@@ -6263,7 +6302,7 @@ drop_unsupported:
 | DROP EXTENSION name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension") }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
 | DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
-| DROP opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "drop language " + $4) }
+| DROP opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 169118, "drop language " + $4) }
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
 | DROP RULE error { return unimplemented(sqllex, "drop rule") }
@@ -19182,6 +19221,7 @@ unreserved_keyword:
 | GRANTEE
 | GRANTS
 | GROUPS
+| HANDLER
 | HASH
 | HEADER
 | HIGH
@@ -19203,6 +19243,7 @@ unreserved_keyword:
 | INDEXES
 | INHERITS
 | INJECT
+| INLINE
 | INPUT
 | INSERT
 | INSPECT
@@ -19347,6 +19388,7 @@ unreserved_keyword:
 | PRIORITY
 | PRIVILEGES
 | PUSH
+| PROCEDURAL
 | PROCEDURE
 | PROCEDURES
 | PROVISIONSRC
@@ -19512,6 +19554,7 @@ unreserved_keyword:
 | USERS
 | VALID
 | VALIDATE
+| VALIDATOR
 | VALUE
 | VARIABLES
 | VARYING
@@ -19741,6 +19784,7 @@ bare_label_keywords:
 | GREATEST
 | GROUPING
 | GROUPS
+| HANDLER
 | HASH
 | HEADER
 | HIGH
@@ -19771,6 +19815,7 @@ bare_label_keywords:
 | INHERITS
 | INITIALLY
 | INJECT
+| INLINE
 | INNER
 | INOUT
 | INPUT
@@ -19943,6 +19988,7 @@ bare_label_keywords:
 | PRIORITY
 | PRIVILEGES
 | PUSH
+| PROCEDURAL
 | PROCEDURE
 | PROCEDURES
 | PROVISIONSRC
@@ -20133,6 +20179,7 @@ bare_label_keywords:
 | USING
 | VALID
 | VALIDATE
+| VALIDATOR
 | VALUE
 | VALUES
 | VARBIT

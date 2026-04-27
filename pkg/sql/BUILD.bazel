@@ -68,6 +68,7 @@ go_library(
         "create_external_connection.go",
         "create_function.go",
         "create_index.go",
+        "create_language.go",
         "create_role.go",
         "create_schema.go",
         "create_sequence.go",
