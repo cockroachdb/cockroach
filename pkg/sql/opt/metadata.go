@@ -694,18 +694,24 @@ func (md *Metadata) CheckDependencies(
 	return true, nil
 }
 
-// handleMetadataResolveErr swallows errors that are thrown when a database
-// object is dropped, since such an error potentially only means that the
-// metadata is stale and should be re-resolved.
+// maybeSwallowMetadataResolveErr swallows errors that are thrown when a
+// database object cannot be resolved during a metadata staleness check, since
+// such an error potentially only means that the metadata is stale and should be
+// re-resolved. This includes cases where the object no longer exists, or where
+// the current user lacks privileges to access it (e.g. because the cached memo
+// references objects in a different database context). In both cases, the memo
+// is treated as stale and will be replanned in the correct context, which will
+// surface genuine privilege errors during planning if applicable.
 func maybeSwallowMetadataResolveErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	// Handle when the object no longer exists.
+	// Handle when the object no longer exists or is inaccessible.
 	switch pgerror.GetPGCode(err) {
 	case pgcode.UndefinedObject, pgcode.UndefinedTable, pgcode.UndefinedDatabase,
 		pgcode.UndefinedSchema, pgcode.UndefinedFunction, pgcode.InvalidName,
-		pgcode.InvalidSchemaName, pgcode.InvalidCatalogName:
+		pgcode.InvalidSchemaName, pgcode.InvalidCatalogName,
+		pgcode.InsufficientPrivilege:
 		return nil
 	}
 	if errors.Is(err, catalog.ErrDescriptorDropped) {
