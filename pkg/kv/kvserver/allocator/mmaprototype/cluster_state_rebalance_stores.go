@@ -181,7 +181,15 @@ func (re *rebalanceEnv) rebalanceStores(
 	id := re.mmaid
 	ctx = logtags.AddTag(ctx, "mmaid", id)
 
-	re.logf(ctx, 2, "rebalanceStores begins")
+	// passDetailedLog promotes the outer-loop narrative (rebalanceStores
+	// begins, cluster means, evaluating sN, overload-start/end) at Infof
+	// every outerLogInterval. Gives operators a 10-minute heartbeat of
+	// pass-level context.
+	passDetailedLog := log.ExpensiveLogEnabled(ctx, 3) ||
+		re.outerLogEvery.ShouldProcess(re.now)
+	passLogf := re.makeLogf(passDetailedLog)
+
+	passLogf(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
 	// capacities). We do not want to loop through all ranges in the cluster,
@@ -202,7 +210,7 @@ func (re *rebalanceEnv) rebalanceStores(
 	// example).
 	clusterMeans := re.meansMemo.getMeans(nil)
 	var sheddingStores []sheddingStore
-	re.logf(ctx, 2,
+	passLogf(ctx, 2,
 		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
@@ -223,7 +231,7 @@ func (re *rebalanceEnv) rebalanceStores(
 	for _, ss := range storeStateSlice {
 		storeID := ss.StoreID
 		sls := re.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
-		re.logf(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
+		passLogf(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
 			storeID, sls.nls, sls.sls, sls.worstDim)
 
 		if sls.sls >= overloadSlow {
@@ -231,10 +239,10 @@ func (re *rebalanceEnv) rebalanceStores(
 				if re.now.Sub(ss.overloadEndTime) > overloadGracePeriod {
 					ss.overloadStartTime = re.now
 					clear(ss.lastDetailedLogTimes)
-					re.logf(ctx, 2, "overload-start s%v (%v) - grace period expired", storeID, sls)
+					passLogf(ctx, 2, "overload-start s%v (%v) - grace period expired", storeID, sls)
 				} else {
 					// Else, extend the previous overload interval.
-					re.logf(ctx, 2, "overload-continued s%v (%v) - within grace period", storeID, sls)
+					passLogf(ctx, 2, "overload-continued s%v (%v) - within grace period", storeID, sls)
 				}
 				ss.overloadEndTime = time.Time{}
 			}
@@ -242,17 +250,17 @@ func (re *rebalanceEnv) rebalanceStores(
 			if ss.maxFractionPendingDecrease < re.fractionPendingIncreaseOrDecreaseThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
-				re.logf(ctx, 2, "store s%v was added to shedding store list", storeID)
+				passLogf(ctx, 2, "store s%v was added to shedding store list", storeID)
 				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 			} else {
-				re.logf(ctx, 2,
+				passLogf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
 					storeID, sls.worstDim, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, ss.maxFractionPendingIncrease)
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
 			// loadNoChange, since a store can hover at the border of the two.
-			re.logf(ctx, 2, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
+			passLogf(ctx, 2, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
 			ss.overloadEndTime = re.now
 		}
 	}

@@ -426,6 +426,10 @@ const persistentOverloadThreshold = 30 * time.Minute
 // single persistently overloaded store.
 const detailedLogInterval = 10 * time.Minute
 
+// outerLogInterval is the minimum time between Infof emissions of the
+// rebalanceStores outer-loop narrative.
+const outerLogInterval = 10 * time.Minute
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (i ignoreLevel) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch i {
