@@ -147,7 +147,8 @@ func executeValidateEnumTypeValueRemoval(
 	// Execute the validation operation as a node user.
 	execOverride := sessiondata.NodeUserSessionDataOverride
 	err = deps.Validator().ValidateEnumTypeValueRemoval(
-		ctx, typeDesc, op.PhysicalRepresentation, op.LogicalRepresentation, execOverride,
+		ctx, deps.TransactionalJobRegistry().CurrentJob(), typeDesc,
+		op.PhysicalRepresentation, op.LogicalRepresentation, execOverride,
 	)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)

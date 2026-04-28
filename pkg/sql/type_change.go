@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1141,22 +1143,50 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
 }
 
-// ValidateEnumValueRemoval checks that the given enum value is unused and safe to remove.
+// ValidateEnumValueRemoval checks that the given enum value is unused and safe
+// to remove. It installs a protected timestamp over the enum's referencing
+// descriptors for the duration of the historical scans so that GC cannot
+// invalidate the read timestamp on large tables (see #161636).
 func ValidateEnumValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	codec keys.SQLCodec,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	override sessiondata.InternalExecutorOverride,
-) error {
+	protectedTSManager scexec.ProtectedTimestampManager,
+) (retErr error) {
 	member := descpb.TypeDescriptor_EnumMember{
 		PhysicalRepresentation: physicalRep,
 		LogicalRepresentation:  logicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
 		Direction:              descpb.TypeDescriptor_EnumMember_REMOVE,
 	}
+
+	// Install a protected timestamp over the enum's referencing descriptors so
+	// the historical scans below cannot fail due to GC catching up with the
+	// read timestamp. Backreferences for T[] columns are installed on both the
+	// enum descriptor and its array alias, so iterating typeDesc's referencing
+	// IDs covers both the direct and array-aliased usages.
+	if n := typeDesc.NumReferencingDescriptors(); n > 0 && protectedTSManager != nil && job != nil {
+		ids := make(descpb.IDs, n)
+		for i := 0; i < n; i++ {
+			ids[i] = typeDesc.GetReferencingDescriptorID(i)
+		}
+		target := ptpb.MakeSchemaObjectsTarget(ids)
+		cleaner, err := protectedTSManager.Protect(ctx, job, target, runHistoricalTxn.ReadAsOf())
+		if err != nil {
+			return err
+		}
+		if cleaner != nil {
+			defer func() {
+				retErr = errors.CombineErrors(retErr, cleaner(ctx))
+			}()
+		}
+	}
+
 	return runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn descs.Txn) error {
 		mutableType, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, typeDesc.GetID())
 		if err != nil {
