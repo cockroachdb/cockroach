@@ -72,6 +72,7 @@ go_test(
     srcs = [
         "checkpoint_internal_test.go",
         "descfeed_internal_test.go",
+        "descfeed_loop_test.go",
         "driver_test.go",
         "persister_test.go",
     ],
@@ -79,6 +80,7 @@ go_test(
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/inmemstorage",
         "//pkg/cloud/nodelocal",
         "//pkg/keys",
         "//pkg/kv/kvpb",
@@ -87,11 +89,13 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
