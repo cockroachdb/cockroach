@@ -588,10 +588,16 @@ func (w *schemaChangeWorker) runInTxn(
 		}
 
 		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, numOps)
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
-			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
-			return errors.Mark(err, errRunInTxnRbkSentinel)
-		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) {
+			// OutOfMemory (53200) is rollback-worthy: the workload's
+			// introspection queries can exhaust the server's per-query
+			// memory budget under load, which is not a workload bug.
+			switch pgcode.MakeCode(pgErr.Code) {
+			case pgcode.SerializationFailure, pgcode.OutOfMemory:
+				return errors.Mark(err, errRunInTxnRbkSentinel)
+			}
+		}
+		if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
 			// Error was already marked for us.
 			return err
 		} else if errors.Is(err, context.DeadlineExceeded) {
