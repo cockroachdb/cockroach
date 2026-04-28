@@ -330,6 +330,129 @@ func TestRotationTimestampsAllCertTypes(t *testing.T) {
 	}
 }
 
+// TestExpiryDaysExpiredCert verifies that the expiry-days gauge returns 0
+// when the certificate is already expired (exercises the sec < 0 branch
+// in expiryDaysGauge).
+func TestExpiryDaysExpiredCert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+
+	// Write certs that expired at Unix time 100.
+	expiration := timeutil.Unix(100, 0)
+	for _, certName := range []string{"ca", "node", "client.node"} {
+		_, certBytes := makeTestCert(t, "", 0, nil, expiration)
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, certName+".crt"), certBytes, 0700))
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, certName+".key"), []byte("key"), 0700))
+	}
+
+	// Set "now" well past the expiration so sec < 0.
+	now := timeutil.NewManualTime(timeutil.Unix(99999, 0))
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(now),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+	require.Equal(t, int64(0), metrics.CAExpiryDays.Value(), "expired CA should report 0 days")
+	require.Equal(t, int64(0), metrics.NodeExpiryDays.Value(), "expired node should report 0 days")
+	require.Equal(t, int64(0), metrics.NodeClientExpiryDays.Value(), "expired node-client should report 0 days")
+}
+
+// TestExpiryDaysErroredCert verifies that the expiry-days gauge returns 0
+// when a certificate file contains garbage and CertInfo.Error is set.
+func TestExpiryDaysErroredCert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+	now := timeutil.NewManualTime(timeutil.Unix(0, 0))
+
+	// Write a valid CA cert (required) and node cert, but write garbage to
+	// the UI cert file so its CertInfo.Error is set.
+	_, caCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.crt"), caCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.key"), []byte("key"), 0700))
+
+	_, nodeCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.crt"), nodeCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.key"), []byte("key"), 0700))
+
+	_, nodeClientCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "client.node.crt"), nodeClientCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "client.node.key"), []byte("key"), 0700))
+
+	// Write garbage to ui.crt — the cert loader will set CertInfo.Error.
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ui.crt"), []byte("not a cert"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ui.key"), []byte("key"), 0700))
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(now),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+	// Valid certs should report > 0 days.
+	require.Greater(t, metrics.CAExpiryDays.Value(), int64(0), "valid CA should report > 0 days")
+	require.Greater(t, metrics.NodeExpiryDays.Value(), int64(0), "valid node should report > 0 days")
+	// Errored UI cert should report 0.
+	require.Equal(t, int64(0), metrics.UIExpiryDays.Value(), "errored UI cert should report 0 days")
+}
+
+// TestExpiryDaysMissingCert verifies that the expiry-days gauge returns 0
+// for optional certificates that are not present on disk (CertInfo is nil).
+func TestExpiryDaysMissingCert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	securityassets.ResetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+	now := timeutil.NewManualTime(timeutil.Unix(0, 0))
+
+	// Write only the required certs: CA + node + client.node.
+	// All optional certs (UI CA, client CA, tenant CA, UI, tenant) are absent.
+	_, caCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.crt"), caCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "ca.key"), []byte("key"), 0700))
+
+	_, nodeCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.crt"), nodeCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "node.key"), []byte("key"), 0700))
+
+	_, nodeClientCert := makeTestCert(t, "", 0, nil, timeutil.Unix(86400, 0))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "client.node.crt"), nodeClientCert, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "client.node.key"), []byte("key"), 0700))
+
+	cm, err := security.NewCertificateManager(
+		certsDir,
+		security.CommandTLSSettings{},
+		security.WithTimeSource(now),
+	)
+	require.NoError(t, err)
+
+	metrics := cm.Metrics()
+	// Present certs should report > 0 days.
+	require.Greater(t, metrics.CAExpiryDays.Value(), int64(0), "CA should report > 0 days")
+	require.Greater(t, metrics.NodeExpiryDays.Value(), int64(0), "node should report > 0 days")
+	require.Greater(t, metrics.NodeClientExpiryDays.Value(), int64(0), "node-client should report > 0 days")
+	// Missing optional certs should report 0.
+	require.Equal(t, int64(0), metrics.UICAExpiryDays.Value(), "missing UI CA should report 0 days")
+	require.Equal(t, int64(0), metrics.ClientCAExpiryDays.Value(), "missing client CA should report 0 days")
+	require.Equal(t, int64(0), metrics.TenantCAExpiryDays.Value(), "missing tenant CA should report 0 days")
+	require.Equal(t, int64(0), metrics.UIExpiryDays.Value(), "missing UI cert should report 0 days")
+	require.Equal(t, int64(0), metrics.TenantExpiryDays.Value(), "missing tenant cert should report 0 days")
+}
+
 // TestCertificateReload verifies that when the certificate manager's
 // underlying ceritificates change, the original metrics references (which are
 // the ones registered) also reflect the TTLs on the new certificates.
@@ -445,6 +568,28 @@ func TestCertificateMetricsReloadRace(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(certsDir, c.certFile), certBytes, 0700))
 	}
 
+	// Collect ExpiryDays and LastRotation gauges to include in the race loop.
+	expiryDaysGauges := []*metric.FunctionalGauge{
+		metrics.CAExpiryDays,
+		metrics.ClientCAExpiryDays,
+		metrics.TenantCAExpiryDays,
+		metrics.UICAExpiryDays,
+		metrics.NodeExpiryDays,
+		metrics.UIExpiryDays,
+		metrics.TenantExpiryDays,
+		metrics.NodeClientExpiryDays,
+	}
+	rotationGauges := []*metric.Gauge{
+		metrics.CALastRotation,
+		metrics.ClientCALastRotation,
+		metrics.TenantCALastRotation,
+		metrics.UICALastRotation,
+		metrics.NodeLastRotation,
+		metrics.UILastRotation,
+		metrics.TenantLastRotation,
+		metrics.NodeClientLastRotation,
+	}
+
 	// Read all metrics concurrently with LoadCertificates to trigger the
 	// race detector on any unsynchronized field access. The stop channel
 	// ensures the reader goroutine stays active throughout the entire
@@ -462,6 +607,12 @@ func TestCertificateMetricsReloadRace(t *testing.T) {
 				for i := range checks {
 					checks[i].expiration.Value()
 					checks[i].ttl.Value()
+				}
+				for _, g := range expiryDaysGauges {
+					g.Value()
+				}
+				for _, g := range rotationGauges {
+					g.Value()
 				}
 			}
 		}

@@ -251,6 +251,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
 	}
@@ -261,6 +262,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
 	}
@@ -271,6 +273,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that UI CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
 	}
@@ -281,6 +284,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that tenant client CA certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
 	}
@@ -291,6 +295,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that node certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
 	}
@@ -301,6 +306,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that node client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
 	}
@@ -311,6 +317,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that UI certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
 	}
@@ -321,6 +328,7 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Use this metric to verify that tenant client certificate rotations are occurring as expected. A value of 0 indicates no rotation has happened since the process started. Compare with the corresponding expiry metric to ensure rotations happen well before expiration.",
 		LabeledName:  "security.certificate.last_rotation",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
 	}
@@ -333,6 +341,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the CA certificate and reload it before expiration to avoid cluster-wide TLS failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
 	}
@@ -343,6 +352,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the client CA certificate and reload it before expiration to avoid client authentication failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
 	}
@@ -353,6 +363,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI CA certificate and reload it before expiration to avoid DB Console access failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
 	}
@@ -363,6 +374,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client CA certificate and reload it before expiration to avoid tenant authentication failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
 	}
@@ -373,6 +385,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node certificate and reload it before expiration to avoid inter-node communication failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
 	}
@@ -383,6 +396,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the node client certificate and reload it before expiration to avoid node-to-node RPC failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
 	}
@@ -393,6 +407,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the UI certificate and reload it before expiration to avoid DB Console HTTPS failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
 	}
@@ -403,6 +418,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_EXPIRATIONS,
+		HowToUse:     "Alert when this value drops below your organization's rotation threshold (e.g. 30 days). A value of 0 means the certificate is expired, missing, or has an error. Renew the tenant client certificate and reload it before expiration to avoid tenant-to-KV communication failures.",
 		LabeledName:  "security.certificate.expiry_days",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
 	}
