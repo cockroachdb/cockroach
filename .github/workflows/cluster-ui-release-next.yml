@@ -10,7 +10,7 @@ on:
 
 jobs:
   publish_cluster_ui:
-    if: github.repository == 'cockroachdb/cockroach'
+    if: github.repository == 'cockroachlabs/cockroach-private'
     runs-on: ubuntu-latest
     defaults:
       run:
