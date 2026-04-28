@@ -1621,10 +1621,13 @@ func (m *Manager) acquireNodeLease(
 				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
 					return false, err
 				}
+				// If the version of the lease we are acquiring has changed,
+				// then notify any observers.
+				if desc.GetVersion() != currentVersion {
+					m.maybeAddObserverEvent(id, desc.GetVersion(), desc.GetModificationTime(), false /* dropped */)
+				}
+				return true, nil
 			}
-			// If the version of the lease we are acquiring has changed,
-			// then notify any observers.
-			m.maybeAddObserverEvent(id, currentVersion, false /* dropped */)
 			return true, nil
 		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
@@ -1725,7 +1728,7 @@ func (m *Manager) purgeOldVersions(
 		}()
 		// Fire a notification for dropped descriptors.
 		if dropped && !wasOffline {
-			m.maybeAddObserverEvent(id, minVersion, true /* dropped */)
+			m.maybeAddObserverEvent(id, minVersion, hlc.Timestamp{}, true /* dropped */)
 		}
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
@@ -2278,29 +2281,44 @@ func (m *Manager) findNewest(id descpb.ID) (state *descriptorVersionState, offli
 
 // maybeAddObserverEvent appends a new observer event if the version has changed.
 func (m *Manager) maybeAddObserverEvent(
-	id descpb.ID, currentVersion descpb.DescriptorVersion, dropped bool,
+	id descpb.ID, version descpb.DescriptorVersion, modificationTime hlc.Timestamp, dropped bool,
 ) {
-	newest, _ := m.findNewest(id)
-	// If the version hasn't changed, then nothing needs to be emitted.
-	if (newest != nil && newest.GetVersion() == currentVersion) || (newest == nil && !dropped) {
+	processEvent := func() bool {
+		t := m.findDescriptorState(id, false /* create */)
+		// If the descriptor does not exist, then there is no event
+		// for a new version.
+		if t == nil {
+			return false
+		}
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		// If the version hasn't changed, then nothing needs to be emitted, unless
+		// it's a drop event.
+		if !dropped && version <= t.mu.maxVersionNotified {
+			return false
+		}
+		if !dropped {
+			t.mu.maxVersionNotified = version
+		}
+		return true
+	}()
+	// Event should be skipped, since we already posted observers.
+	if !processEvent {
 		return
 	}
-	// Append the new observer event.
+	// Append the new event.
 	func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		var ts hlc.Timestamp
-		newVersion := currentVersion
-		if dropped {
-			ts = m.storage.clock.Now()
-		} else {
-			ts = newest.GetModificationTime()
-			newVersion = newest.GetVersion()
-		}
-		m.mu.pendingObserverEvents = append(m.mu.pendingObserverEvents, observerEvent{id: id,
-			version:          newVersion,
-			modificationTime: ts,
+		// Append the new observer event.
+		m.mu.pendingObserverEvents = append(m.mu.pendingObserverEvents, observerEvent{
+			id:               id,
+			version:          version,
+			modificationTime: modificationTime,
 		})
+		if dropped {
+			m.mu.pendingObserverEvents[len(m.mu.pendingObserverEvents)-1].modificationTime = m.storage.clock.Now()
+		}
 	}()
 	// Signal there is an event waiting, unless the channel is already
 	// posted.
@@ -2954,6 +2972,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 
 				dropped := desc.Dropped()
 				// Try to refresh the lease to one >= this version.
+
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
 					desc.GetID(), desc.GetVersion(), dropped)
 				// purgeOldVersionsOrAcquireInitialVersion will purge older versions of
@@ -2995,6 +3014,9 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 						log.Dev.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 							desc.GetID(), desc.GetName(), err)
 					}
+					// Notify any observers that a new version of the descriptor is
+					// available.
+					m.maybeAddObserverEvent(desc.GetID(), desc.GetVersion(), desc.GetModificationTime(), dropped)
 				}
 				// New descriptors may appear in the future if the descriptor table is
 				// global or if the transaction which performed the schema change wrote

@@ -55,6 +55,10 @@ type descriptorState struct {
 		// of a descriptor.
 		maxVersionSeen descpb.DescriptorVersion
 
+		// maxVersionNotified is the maximum version of the descriptor for
+		// which observers have been notified.
+		maxVersionNotified descpb.DescriptorVersion
+
 		// acquisitionsInProgress indicates that at least one caller is currently
 		// in the process of performing an acquisition. This tracking is critical
 		// to ensure that notifications of new versions which arrive before a lease
