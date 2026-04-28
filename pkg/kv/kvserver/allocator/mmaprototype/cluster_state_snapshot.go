@@ -32,12 +32,20 @@ func (cs *clusterState) Snapshot() *mmasnappb.ClusterStateSnapshot {
 		ChangeSeqGen:            uint64(cs.changeSeqGen),
 		Nodes:                   make(map[int32]*mmasnappb.NodeSnapshot, len(cs.nodes)),
 		Stores:                  make(map[int32]*mmasnappb.StoreSnapshot, len(cs.stores)),
+		Ranges:                  make(map[int64]*mmasnappb.RangeSnapshot, len(cs.ranges)),
+		PendingChanges:          make(map[uint64]*mmasnappb.PendingReplicaChange, len(cs.pendingChanges)),
 	}
 	for id, n := range cs.nodes {
 		out.Nodes[int32(id)] = snapshotNode(n)
 	}
 	for id, s := range cs.stores {
 		out.Stores[int32(id)] = snapshotStore(s, cs)
+	}
+	for id, r := range cs.ranges {
+		out.Ranges[int64(id)] = snapshotRange(r)
+	}
+	for id, c := range cs.pendingChanges {
+		out.PendingChanges[uint64(id)] = snapshotPendingReplicaChange(c)
 	}
 	return out
 }
@@ -114,11 +122,24 @@ func snapshotStoreAdjusted(s *storeState) mmasnappb.StoreAdjusted {
 }
 
 func snapshotReplicaState(r ReplicaState) *mmasnappb.ReplicaState {
-	return &mmasnappb.ReplicaState{
-		ReplicaID:        r.ReplicaIDAndType.ReplicaID,
-		ReplicaType:      r.ReplicaIDAndType.ReplicaType.ReplicaType,
-		IsLeaseholder:    r.ReplicaIDAndType.ReplicaType.IsLeaseholder,
+	out := snapshotReplicaStateValue(r)
+	return &out
+}
+
+func snapshotReplicaStateValue(r ReplicaState) mmasnappb.ReplicaState {
+	return mmasnappb.ReplicaState{
+		ReplicaIDAndType: snapshotReplicaIDAndType(r.ReplicaIDAndType),
 		LeaseDisposition: uint32(r.LeaseDisposition),
+	}
+}
+
+func snapshotReplicaIDAndType(rit ReplicaIDAndType) mmasnappb.ReplicaIDAndType {
+	return mmasnappb.ReplicaIDAndType{
+		ReplicaID: rit.ReplicaID,
+		ReplicaType: mmasnappb.ReplicaType{
+			ReplicaType:   rit.ReplicaType.ReplicaType,
+			IsLeaseholder: rit.ReplicaType.IsLeaseholder,
+		},
 	}
 }
 
@@ -136,6 +157,59 @@ func snapshotTopKReplicas(t *topKReplicas) *mmasnappb.TopKReplicas {
 		}
 	}
 	return out
+}
+
+func snapshotRange(r *rangeState) *mmasnappb.RangeSnapshot {
+	replicas := make([]mmasnappb.StoreIDAndReplicaState, len(r.replicas))
+	for i, sr := range r.replicas {
+		replicas[i] = mmasnappb.StoreIDAndReplicaState{
+			StoreID:      sr.StoreID,
+			ReplicaState: snapshotReplicaStateValue(sr.ReplicaState),
+		}
+	}
+	pendingIDs := make([]uint64, len(r.pendingChanges))
+	for i, pc := range r.pendingChanges {
+		pendingIDs[i] = uint64(pc.changeID)
+	}
+	return &mmasnappb.RangeSnapshot{
+		LocalRangeOwner:                    r.localRangeOwner,
+		Replicas:                           replicas,
+		HasNormalizationError:              r.hasNormalizationError,
+		Load:                               snapshotRangeLoad(r.load),
+		PendingChangeIds:                   pendingIDs,
+		LastFailedChange:                   nullableTime(r.lastFailedChange),
+		DiversityIncreaseLastFailedAttempt: nullableTime(r.diversityIncreaseLastFailedAttempt),
+	}
+}
+
+func snapshotRangeLoad(rl RangeLoad) mmasnappb.RangeLoad {
+	return mmasnappb.RangeLoad{
+		Load:    loadVectorToSlice(rl.Load),
+		RaftCPU: int64(rl.RaftCPU),
+	}
+}
+
+func snapshotPendingReplicaChange(c *pendingReplicaChange) *mmasnappb.PendingReplicaChange {
+	return &mmasnappb.PendingReplicaChange{
+		ChangeID:      uint64(c.changeID),
+		Change:        snapshotReplicaChange(c.ReplicaChange),
+		StartTime:     c.startTime,
+		GcTime:        c.gcTime,
+		EnactedAtTime: nullableTime(c.enactedAtTime),
+	}
+}
+
+func snapshotReplicaChange(rc ReplicaChange) mmasnappb.ReplicaChange {
+	loadDelta := loadVectorToSlice(rc.loadDelta)
+	secondaryDelta := secondaryLoadVectorToSlice(rc.secondaryLoadDelta)
+	return mmasnappb.ReplicaChange{
+		LoadDelta:          loadDelta,
+		SecondaryLoadDelta: secondaryDelta,
+		Target:             rc.target,
+		RangeID:            rc.rangeID,
+		Prev:               snapshotReplicaStateValue(rc.prev),
+		Next:               snapshotReplicaIDAndType(rc.next),
+	}
 }
 
 // nullableTime returns nil if t is the zero time.Time, else &t. Used to
