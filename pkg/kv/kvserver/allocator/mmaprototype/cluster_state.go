@@ -1771,7 +1771,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			ss.adjusted.topKRanges[msg.StoreID] = topk
 		}
 		topk.startInit()
-		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad, makeStandaloneLogger(ctx))
 		if ss.StoreID == localss.StoreID {
 			topk.dim = CPURate
 		} else {
@@ -2427,8 +2427,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
 	overloadedDim LoadDimension,
-	logf mmaLogf,
-	detailedLog bool,
+	ml mmaLogger,
 ) (canAddLoad bool) {
 	if overloadedDim == NumLoadDimensions {
 		panic("overloadedDim must not be NumLoadDimensions")
@@ -2447,7 +2446,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
-	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad, detailedLog)
+	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad, ml)
 	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
 		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
 
@@ -2459,7 +2458,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcNS := cs.nodes[srcSS.NodeID]
 	srcSS.adjusted.load.subtract(delta)
 	srcNS.adjustedCPU -= delta[CPURate]
-	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad, detailedLog)
+	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad, ml)
 	// Undo the removal.
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
@@ -2467,10 +2466,10 @@ func (cs *clusterState) canShedAndAddLoad(
 	var failureReason redact.StringBuilder
 	defer func() {
 		if canAddLoad {
-			logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			ml.logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else if detailedLog {
-			logf(ctx, 3,
+		} else if !ml.noop {
+			ml.logf(ctx, 3,
 				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
 				&failureReason, delta, targetSLS, srcSLS)
@@ -2479,7 +2478,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
 	if postTransferHighDiskSpaceUtil {
-		if detailedLog {
+		if !ml.noop {
 			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
@@ -2499,7 +2498,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		if detailedLog {
+		if !ml.noop {
 			failureReason.SafeString("overloadUrgent")
 		}
 		return false
@@ -2558,7 +2557,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				logf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				ml.logf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
@@ -2608,7 +2607,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if detailedLog {
+	if !ml.noop {
 		appendSep := func() {
 			if failureReason.Len() != 0 {
 				failureReason.SafeRune(',')
@@ -2646,15 +2645,11 @@ func (cs *clusterState) canShedAndAddLoad(
 }
 
 func (cs *clusterState) computeLoadSummary(
-	ctx context.Context,
-	storeID roachpb.StoreID,
-	msl *meanStoreLoad,
-	mnl *meanNodeLoad,
-	detailedLog bool,
+	ctx context.Context, storeID roachpb.StoreID, msl *meanStoreLoad, mnl *meanNodeLoad, ml mmaLogger,
 ) storeLoadSummary {
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
-	return computeLoadSummary(ctx, ss, ns, msl, mnl, detailedLog)
+	return computeLoadSummary(ctx, ss, ns, msl, mnl, ml)
 }
 
 // TODO(wenyihu6): check to make sure obs here is correct
@@ -2684,14 +2679,14 @@ func computeLoadSummary(
 	ns *nodeState,
 	msl *meanStoreLoad,
 	mnl *meanNodeLoad,
-	detailedLog bool,
+	ml mmaLogger,
 ) storeLoadSummary {
 	sls := loadLow
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
 		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
-			msl.load[i], msl.util[i], detailedLog)
+			msl.load[i], msl.util[i], ml)
 		if ls > sls {
 			sls = ls
 			worstDim = LoadDimension(i)
@@ -2706,7 +2701,7 @@ func computeLoadSummary(
 	// TODO(wenyihu6): the unit mismatch between physical NodeCPULoad and
 	// store-level pending deltas will be resolved with the introduction of
 	// physical load modeling.
-	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU, detailedLog)
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU, ml)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,
