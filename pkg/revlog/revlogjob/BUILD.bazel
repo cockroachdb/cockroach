@@ -70,6 +70,7 @@ go_library(
 go_test(
     name = "revlogjob_test",
     srcs = [
+        "builtins_test.go",
         "checkpoint_internal_test.go",
         "desc_frontier_gating_test.go",
         "descfeed_internal_test.go",
@@ -106,6 +107,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
