@@ -82,7 +82,7 @@ func AlterType(b BuildCtx, n *tree.AlterType) {
 	elts := b.ResolveUserDefinedTypeType(n.Type, ResolveParams{})
 
 	if !elts.FilterCompositeType().IsEmpty() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot modify composite type"))
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.Type.Object()))
 	}
 
 	enumType := elts.FilterEnumType().MustGetOneElement()
