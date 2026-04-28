@@ -71,6 +71,7 @@ go_test(
     name = "revlogjob_test",
     srcs = [
         "checkpoint_internal_test.go",
+        "desc_frontier_gating_test.go",
         "descfeed_internal_test.go",
         "descfeed_loop_test.go",
         "driver_multispan_test.go",
