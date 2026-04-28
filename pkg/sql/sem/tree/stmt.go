@@ -2734,7 +2734,6 @@ func (n *DropType) String() string                            { return AsString(
 func (n *DropView) String() string                            { return AsString(n) }
 func (n *DropProvisionedRoles) String() string                { return AsString(n) }
 func (n *DropRole) String() string                            { return AsString(n) }
-func (n *DropProvisionedRoles) String() string                { return AsString(n) }
 func (n *DropTenant) String() string                          { return AsString(n) }
 func (n *Execute) String() string                             { return AsString(n) }
 func (n *Explain) String() string                             { return AsString(n) }

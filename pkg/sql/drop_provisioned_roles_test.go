@@ -20,10 +20,11 @@ func TestBuildFilterQuery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		name     string
-		node     DropProvisionedRolesNode
-		contains []string
-		excludes []string
+		name         string
+		node         DropProvisionedRolesNode
+		contains     []string
+		excludes     []string
+		expectedArgs []interface{}
 	}{
 		{
 			name: "no options — all provisioned users",
@@ -43,10 +44,10 @@ func TestBuildFilterQuery(t *testing.T) {
 			},
 			contains: []string{
 				"PROVISIONSRC",
-				"ldap:ldap.example.com",
-				"src.value =",
+				"src.value = $1",
 			},
-			excludes: []string{"LIMIT", "estimated_last_login_time"},
+			excludes:     []string{"LIMIT", "estimated_last_login_time"},
+			expectedArgs: []interface{}{"ldap:ldap.example.com"},
 		},
 		{
 			name: "last login before filter",
@@ -58,10 +59,10 @@ func TestBuildFilterQuery(t *testing.T) {
 			contains: []string{
 				"PROVISIONSRC",
 				"estimated_last_login_time <",
-				"2025-01-01",
-				"TIMESTAMPTZ",
+				"$1)::TIMESTAMPTZ",
 			},
-			excludes: []string{"LIMIT", "src.value ="},
+			excludes:     []string{"LIMIT", "src.value ="},
+			expectedArgs: []interface{}{"2025-01-01"},
 		},
 		{
 			name: "both filters",
@@ -73,11 +74,12 @@ func TestBuildFilterQuery(t *testing.T) {
 			},
 			contains: []string{
 				"PROVISIONSRC",
-				"ldap:ad.corp.com",
+				"src.value = $1",
 				"estimated_last_login_time <",
-				"2024-06-15",
+				"$2)::TIMESTAMPTZ",
 			},
-			excludes: []string{"LIMIT"},
+			excludes:     []string{"LIMIT"},
+			expectedArgs: []interface{}{"ldap:ad.corp.com", "2024-06-15"},
 		},
 		{
 			name: "limit only",
@@ -97,9 +99,10 @@ func TestBuildFilterQuery(t *testing.T) {
 			},
 			contains: []string{
 				"PROVISIONSRC",
-				"oidc:okta.example.com",
+				"src.value = $1",
 				"LIMIT 5",
 			},
+			expectedArgs: []interface{}{"oidc:okta.example.com"},
 		},
 		{
 			name: "all options with limit",
@@ -112,16 +115,17 @@ func TestBuildFilterQuery(t *testing.T) {
 			},
 			contains: []string{
 				"PROVISIONSRC",
-				"ldap:ldap.example.com",
+				"src.value = $1",
 				"estimated_last_login_time <",
 				"LIMIT 100",
 			},
+			expectedArgs: []interface{}{"ldap:ldap.example.com", "2025-01-01"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			query, _ := tc.node.buildFilterQuery()
+			query, args := tc.node.buildFilterQuery()
 			for _, substr := range tc.contains {
 				require.True(t, strings.Contains(query, substr),
 					"expected query to contain %q, got:\n%s", substr, query)
@@ -129,6 +133,10 @@ func TestBuildFilterQuery(t *testing.T) {
 			for _, substr := range tc.excludes {
 				require.False(t, strings.Contains(query, substr),
 					"expected query to NOT contain %q, got:\n%s", substr, query)
+			}
+			if tc.expectedArgs != nil {
+				require.Equal(t, tc.expectedArgs, args,
+					"unexpected query args")
 			}
 		})
 	}
@@ -143,7 +151,10 @@ func TestBuildFilterQuerySQLInjection(t *testing.T) {
 			Source: tree.NewStrVal("ldap:evil' OR 1=1 --"),
 		},
 	}
-	query, _ := n.buildFilterQuery()
-	// The injected single quote must be escaped.
-	require.NotContains(t, query, "evil' OR")
+	query, args := n.buildFilterQuery()
+	// With parameterized queries, the malicious value must not appear
+	// in the query string — it is safely passed as a parameter.
+	require.NotContains(t, query, "evil")
+	require.Contains(t, query, "$1")
+	require.Len(t, args, 1)
 }
