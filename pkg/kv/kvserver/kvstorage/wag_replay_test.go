@@ -7,6 +7,7 @@ package kvstorage
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -224,14 +225,18 @@ func TestCanApplyWAGNode(t *testing.T) {
 			for rangeID, state := range tc.states {
 				writePersistedRangeState(t, stateEng, rangeID, state)
 			}
-			action, err := canApplyWAGNode(ctx, tc.node, StateRO(stateEng))
+			apply, err := canApplyWAGNode(ctx, tc.node, StateRO(stateEng))
 			if tc.expErr != "" {
 				require.ErrorContains(t, err, tc.expErr)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tc.shouldApply, action.apply)
-			require.Equal(t, tc.expCatchUps, action.catchUps)
+			require.Equal(t, tc.shouldApply, apply)
+			var catchUps []raftCatchUpTarget
+			if apply {
+				catchUps = slices.Collect(wagNodeCatchUps(tc.node))
+			}
+			require.Equal(t, tc.expCatchUps, catchUps)
 		})
 	}
 }

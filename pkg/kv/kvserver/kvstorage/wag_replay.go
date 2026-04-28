@@ -7,6 +7,7 @@ package kvstorage
 
 import (
 	"context"
+	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
@@ -40,16 +41,6 @@ func loadPersistedRangeState(
 		mark:         mark,
 		appliedIndex: as.RaftAppliedIndex,
 	}, nil
-}
-
-// replayAction describes what the replay loop must do for a WAG node.
-type replayAction struct {
-	// apply indicates whether the WAG node's mutation needs to be applied.
-	apply bool
-	// catchUps lists ranges that must be caught up via raft log replay before
-	// the WAG node can be applied. Empty when apply is false, and may be empty
-	// when apply is true (e.g. for EventCreate/EventInit nodes).
-	catchUps []raftCatchUpTarget
 }
 
 // raftCatchUpTarget identifies a range/replica that must be caught up to a
@@ -124,58 +115,62 @@ func raftCatchUp(event wagpb.Event) kvpb.RaftIndex {
 }
 
 // canApplyWAGNode determines whether a WAG node's mutation can be applied to
-// the state machine. It checks each event in the node and returns the replay
-// action, which indicates whether to apply and which ranges need raft log
-// catch-up first.
+// the state machine. It checks each event in the node against the persisted
+// range state to decide if the node still needs applying.
 //
 // All events in a node are expected to agree on whether they need applying,
 // since they are written and applied atomically.
-func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (replayAction, error) {
-	var result replayAction
+func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (bool, error) {
+	var apply bool
 	for i, event := range node.Events {
 		state, err := loadPersistedRangeState(ctx, stateRO, event.Addr.RangeID)
 		if err != nil {
-			return replayAction{}, errors.Wrapf(err, "loading state for r%d", event.Addr.RangeID)
+			return false, errors.Wrapf(err, "loading state for r%d", event.Addr.RangeID)
 		}
 		// A given RangeID appears at most once in the events list, so the decision
 		// of whether an event can be applied is independent for each event.
-		apply := state.canApply(event)
-		if i == 0 {
-			result.apply = apply
-		} else if apply != result.apply {
-			return replayAction{}, errors.Newf(
+		if evApply := state.canApply(event); i == 0 {
+			apply = evApply
+		} else if evApply != apply {
+			return false, errors.Newf(
 				"partial apply: event[0]=%s (apply=%t), event[%d]=%s (apply=%t)",
-				node.Events[0], result.apply, i, event, apply,
+				node.Events[0], apply, i, event, evApply,
 			)
 		}
-		if !apply {
-			continue
-		}
-		if catchUp := raftCatchUp(event); catchUp > 0 {
-			result.catchUps = append(result.catchUps, raftCatchUpTarget{
+	}
+	return apply, nil
+}
+
+// wagNodeCatchUps returns an iterator over the raft catch-up targets for a WAG
+// node's events. Each target identifies a range/replica that must be caught up
+// to a specific raft index before the node can be applied. The caller must have
+// already determined that the node needs applying via canApplyWAGNode.
+func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
+	return func(yield func(raftCatchUpTarget) bool) {
+		for _, event := range node.Events {
+			if catchUp := raftCatchUp(event); catchUp > 0 && !yield(raftCatchUpTarget{
 				rangeID:   event.Addr.RangeID,
 				replicaID: event.Addr.ReplicaID,
 				index:     catchUp,
-			})
+			}) {
+				return
+			}
 		}
 	}
-	return result, nil
 }
 
 // ReplayWAG iterates over the WAG in the log engine and applies any unapplied
 // nodes to the state machine. It is called during store startup, before the
 // store goes online.
 func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
-	var iter wag.Iterator
-	for wagIdx, node := range iter.Iter(ctx, raftRO) {
-		action, err := canApplyWAGNode(ctx, node, stateRW)
-		if err != nil {
+	var it wag.Iterator
+	for wagIdx, node := range it.Iter(ctx, raftRO) {
+		if apply, err := canApplyWAGNode(ctx, node, stateRW); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
-		}
-		if !action.apply {
+		} else if !apply {
 			continue
 		}
-		// TODO(mira): For each entry in action.catchUps, replay raft log
+		// TODO(mira): For each target in wagNodeCatchUps(node), replay raft log
 		// entries for the target range/replica up to the target index before
 		// applying the WAG node. The current raft log replay in
 		// handleRaftReadyRaftMuLocked needs to be factored out and invoked here.
@@ -185,7 +180,7 @@ func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
 		}
 	}
-	return iter.Error()
+	return it.Error()
 }
 
 // applyMutation applies a WAG node's mutation to the state machine. It handles
