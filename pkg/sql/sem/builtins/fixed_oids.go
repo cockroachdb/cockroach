@@ -2931,6 +2931,7 @@ var builtinOidsArray = []string{
 	2976: `log10(val: int) -> decimal`,
 	2977: `gcd(a: decimal, b: decimal) -> decimal`,
 	2978: `lcm(a: decimal, b: decimal) -> decimal`,
+	2979: `st_distancespheroid(geometry_a: geometry, geometry_b: geometry, spheroid: string) -> float`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

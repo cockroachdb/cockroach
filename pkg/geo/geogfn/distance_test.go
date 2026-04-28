@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/stretchr/testify/require"
 )
 
@@ -368,5 +370,54 @@ func TestDistance(t *testing.T) {
 				})
 			}
 		}
+	})
+}
+
+func TestDistanceWithSpheroid(t *testing.T) {
+	// Match the SRID-derived WGS84 spheroid by passing one constructed with
+	// the same parameters. Distance and DistanceWithSpheroid should agree.
+	t.Run("matches Distance when supplied the WGS84 spheroid for SRID=4326 inputs", func(t *testing.T) {
+		a := geo.MustParseGeography("SRID=4326;POINT(-118.4079 33.9434)")
+		b := geo.MustParseGeography("SRID=4326;POINT(2.5559 49.0083)")
+		want, err := Distance(a, b, UseSpheroid)
+		require.NoError(t, err)
+		got, err := DistanceWithSpheroid(a, b, geographiclib.WGS84Spheroid)
+		require.NoError(t, err)
+		require.InDelta(t, want, got, 1e-9)
+	})
+
+	// A spheroid with a substantially smaller radius must produce a
+	// proportionally smaller distance.
+	t.Run("custom spheroid changes result", func(t *testing.T) {
+		a := geo.MustParseGeography("SRID=4326;POINT(0 0)")
+		b := geo.MustParseGeography("SRID=4326;POINT(1 0)")
+		earth, err := DistanceWithSpheroid(a, b, geographiclib.WGS84Spheroid)
+		require.NoError(t, err)
+		// Mars: a≈3389500, 1/f≈169.8.
+		mars, err := geoprojbase.MakeSpheroid(3389500, 1.0/169.8)
+		require.NoError(t, err)
+		got, err := DistanceWithSpheroid(a, b, mars)
+		require.NoError(t, err)
+		// At the equator the geodesic distance scales linearly with the
+		// equatorial radius for a fixed angular separation, so the Mars/Earth
+		// distance ratio should match the radius ratio (~0.5314). A tight
+		// epsilon catches regressions where the supplied spheroid is silently
+		// dropped or only partially threaded through to GeographicLib.
+		require.InEpsilon(t, 3389500.0/6378137.0*earth, got, 0.001)
+	})
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := DistanceWithSpheroid(
+			mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, geographiclib.WGS84Spheroid,
+		)
+		requireMismatchingSRIDError(t, err)
+	})
+
+	t.Run("empty geography returns IsEmptyGeometryError", func(t *testing.T) {
+		a := geo.MustParseGeography("POINT(1.0 1.0)")
+		b := geo.MustParseGeography("GEOMETRYCOLLECTION EMPTY")
+		_, err := DistanceWithSpheroid(a, b, geographiclib.WGS84Spheroid)
+		require.Error(t, err)
+		require.True(t, geo.IsEmptyGeometryError(err))
 	})
 }
