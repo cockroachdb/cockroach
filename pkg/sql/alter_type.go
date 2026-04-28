@@ -302,6 +302,11 @@ func (p *planner) performRenameTypeDesc(
 func (p *planner) renameTypeValue(
 	ctx context.Context, n *alterTypeNode, oldVal string, newVal string,
 ) error {
+	if n.desc.Kind != descpb.TypeDescriptor_ENUM &&
+		n.desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	}
+
 	enumMemberIndex := -1
 
 	// Verify that oldVal exists.
