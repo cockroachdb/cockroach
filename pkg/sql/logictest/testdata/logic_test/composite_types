@@ -341,3 +341,65 @@ public  et5   root
 statement ok
 DROP DATABASE "CaseSensitiveDatabase";
 USE test;
+
+subtest composite_alter
+
+statement ok
+CREATE TYPE comp_t AS (a INT, b TEXT)
+
+# RENAME on a composite type.
+statement ok
+ALTER TYPE comp_t RENAME TO comp_t2
+
+query T
+SELECT pg_typeof(((1, 'x')::comp_t2))
+----
+public.comp_t2
+
+# The old name should no longer resolve.
+statement error pq: pg_typeof\(\): type "comp_t" does not exist
+SELECT pg_typeof(((1, 'x')::comp_t))
+
+# SET SCHEMA on a composite type — array type should follow.
+statement ok
+CREATE SCHEMA cs1
+
+statement ok
+ALTER TYPE comp_t2 SET SCHEMA cs1
+
+query T
+SELECT pg_typeof(((1, 'x')::cs1.comp_t2))
+----
+cs1.comp_t2
+
+query T
+SELECT pg_typeof(ARRAY[(1, 'x')::cs1.comp_t2])
+----
+cs1.comp_t2[]
+
+# The type should no longer resolve in public.
+statement error pq: pg_typeof\(\): type "comp_t2" does not exist
+SELECT pg_typeof(((1, 'x')::comp_t2))
+
+statement ok
+DROP TYPE cs1.comp_t2;
+DROP SCHEMA cs1
+
+# Enum-only ALTER subcommands should be rejected on a composite type with
+# the same "is not an enum" message as Postgres and the legacy schema changer.
+statement ok
+CREATE TYPE comp_enumop AS (a INT, b TEXT)
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop ADD VALUE 'x'
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop DROP VALUE 'x'
+
+statement error pq: "comp_enumop" is not an enum
+ALTER TYPE comp_enumop RENAME VALUE 'a' TO 'b'
+
+statement ok
+DROP TYPE comp_enumop
+
+subtest end
