@@ -7,6 +7,7 @@ package mmaprototype
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"path/filepath"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
@@ -365,6 +368,46 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	return storeLoadPendingChangeList
 }
 
+// mmaLogCapture captures log entries emitted from the mmaprototype package
+// during a test. It implements log.Interceptor and is installed via
+// log.InterceptWith. Entries from other packages are filtered out so that
+// concurrent log activity in the process does not leak into the test output.
+type mmaLogCapture struct {
+	mu      syncutil.Mutex
+	entries []logpb.Entry
+}
+
+// Intercept implements log.Interceptor.
+func (m *mmaLogCapture) Intercept(jsonBytes []byte) {
+	var e logpb.Entry
+	if err := json.Unmarshal(jsonBytes, &e); err != nil {
+		return
+	}
+	if !strings.Contains(e.File, "/mmaprototype/") {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries = append(m.entries, e)
+}
+
+// formatString writes captured entries one per line as "[tags] message".
+// File names and line numbers are intentionally dropped to match the
+// SafeFormatMinimal style used by the trace path and to keep the output
+// stable across edits to the source files.
+func (m *mmaLogCapture) formatString() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var sb strings.Builder
+	for _, e := range m.entries {
+		if e.Tags != "" {
+			fmt.Fprintf(&sb, "[%s] ", e.Tags)
+		}
+		fmt.Fprintf(&sb, "%s\n", e.Message)
+	}
+	return sb.String()
+}
+
 // safeTrace returns the trace output and asserts that all values in it are
 // properly marked as redaction-safe. The allocator logs only operational data
 // (store IDs, load values, etc.) which should never be redacted. If any
@@ -686,6 +729,35 @@ func TestClusterState(t *testing.T) {
 					}
 					if f, ok := dd.ScanArgOpt[float64](t, d, "fraction-pending-decrease-threshold"); ok {
 						re.fractionPendingIncreaseOrDecreaseThreshold = f
+					}
+
+					// `vmodule` simulates a specific production logging
+					// configuration. The arg is a V level (0, 1, 2, 3, ...);
+					// 0 means vmodule unset. Positive levels are applied as
+					// "*=N" for the duration of the pass. Reading the captured
+					// log shows what an operator running at that vmodule would
+					// actually see.
+					//
+					// This is implemented by running the pass outside any
+					// tracing span: the default rebalance-stores command runs
+					// inside a verbose recording span, which causes
+					// log.ExpensiveLogEnabled(ctx, 3) to return true and
+					// promotes every per-range message to Infof, masking the
+					// dynamic-verbose-logging behavior.
+					if vmodule, ok := dd.ScanArgOpt[int](t, d, "vmodule"); ok {
+						if vmodule > 0 {
+							prev := log.GetVModule()
+							require.NoError(t, log.SetVModule(fmt.Sprintf("*=%d", vmodule)))
+							defer func() {
+								require.NoError(t, log.SetVModule(prev))
+							}()
+						}
+						bgCtx := context.Background()
+						capture := &mmaLogCapture{}
+						stopIntercept := log.InterceptWith(bgCtx, capture)
+						defer stopIntercept()
+						re.rebalanceStores(bgCtx, storeID)
+						return capture.formatString() + printPendingChangesTest(testingGetPendingChanges(t, cs))
 					}
 
 					re.rebalanceStores(ctx, storeID)
