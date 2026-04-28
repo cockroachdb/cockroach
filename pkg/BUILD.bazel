@@ -3164,6 +3164,7 @@ GO_TARGETS = [
     "//pkg/workload/tpch:tpch_test",
     "//pkg/workload/ttlbench:ttlbench",
     "//pkg/workload/ttllogger:ttllogger",
+    "//pkg/workload/uniqueindex:uniqueindex",
     "//pkg/workload/vecann:vecann",
     "//pkg/workload/vecann:vecann_test",
     "//pkg/workload/workload_generator:workload_generator",
