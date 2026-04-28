@@ -92,6 +92,17 @@ func isLwwLoser(err error) bool {
 	return false
 }
 
+// isInsertWinnerWithConflict returns true if the error is a
+// ConditionFailedError with HadNewerOriginTimestamp set, meaning the insert
+// won the LWW comparison but conflicts with an existing row. The caller
+// should fall through to the upsert path.
+func isInsertWinnerWithConflict(err error) bool {
+	if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+		return condErr.HadNewerOriginTimestamp
+	}
+	return false
+}
+
 type queryBuilder struct {
 	// stmts are parsed SQL statements. They should have the same number
 	// of inputs.
@@ -651,10 +662,10 @@ func (lww *lwwQuerier) InsertRow(
 			if isLwwLoser(err) {
 				return batchStats{}, nil
 			}
-			// If the optimistic insert failed with unique violation, we have to
-			// fall back to the pessimistic path. If we got a different error,
-			// then we bail completely.
-			if pgerror.GetPGCode(err) != pgcode.UniqueViolation {
+			// If the optimistic insert failed with a unique violation or because
+			// the insert won LWW but conflicts with an existing row, fall back
+			// to the pessimistic upsert path. For any other error, bail.
+			if pgerror.GetPGCode(err) != pgcode.UniqueViolation && !isInsertWinnerWithConflict(err) {
 				log.Dev.Warningf(ctx, "replicated optimistic insert failed (query: %s): %s", stmt.SQL, err.Error())
 				return batchStats{}, err
 			}

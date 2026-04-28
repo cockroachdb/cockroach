@@ -48,7 +48,7 @@ func ConvertBatchError(
 		)
 
 	case *kvpb.ConditionFailedError:
-		if !v.OriginTimestampOlderThan.IsEmpty() {
+		if !v.OriginTimestampOlderThan.IsEmpty() || v.HadNewerOriginTimestamp {
 			// NOTE: we return the go error here because this error should never be
 			// communicated to pgwire. It's exposed for the LDR writer.
 			return origPErr.GoError()

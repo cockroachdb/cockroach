@@ -360,6 +360,29 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 			)
 		},
 	}, {
+		name: "refresh_converts_insert_to_update",
+		setup: func(t *testing.T, baseID int) {
+			sqlDB.Exec(t, fmt.Sprintf(
+				`INSERT INTO parent (id, payload) VALUES (%d, 'existing')`, baseID+1))
+		},
+		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
+			return ldrdecoder.Transaction{
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
+				WriteSet: []ldrdecoder.DecodedRow{{
+					Row:     parentRow(baseID+1, "insert-winner"),
+					PrevRow: nil, // INSERT: no previous row known on source
+					TableID: parentID,
+				}},
+			}
+		},
+		validate: func(t *testing.T, baseID int, result ApplyResult) {
+			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				[][]string{{"insert-winner"}},
+			)
+		},
+	}, {
 		name: "refresh_converts_update_to_insert",
 		setup: func(t *testing.T, baseID int) {
 		},
