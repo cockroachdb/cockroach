@@ -100,6 +100,45 @@ func ingestEventsSync(ingester *SQLStatsIngester, events []testEvent) {
 	}
 }
 
+// TestIngesterStoresStatementFingerprint verifies that the ingester writes a
+// statement's fingerprint to the statement store as part of processing.
+func TestIngesterStoresStatementFingerprint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	// The store is intentionally not fully initialized (no
+	// SetInternalExecutor/Start) — this test only verifies the
+	// in-memory cache path, not persistence.
+	store := statementstore.NewStatementStore(settings, nil)
+	knobs := &sqlstats.TestingKnobs{
+		SynchronousSQLStats: true,
+	}
+
+	ingester := NewSQLStatsIngester(
+		settings, knobs, NewIngesterMetrics(),
+		nil /* discardedStatsCount */, nil /* parentMon */, store)
+	ingester.Start(ctx, stopper, WithoutTimedFlush())
+
+	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+	query := "SELECT _ FROM t WHERE _ = _"
+	fpID := appstatspb.ConstructStatementFingerprintID(query, "defaultdb")
+
+	// RecordStatement with SynchronousSQLStats waits for processing.
+	ingester.RecordStatement(&sqlstats.RecordedStmtStats{
+		SessionID:     sessionID,
+		FingerprintID: fpID,
+		Query:         query,
+		Database:      "defaultdb",
+	})
+
+	require.True(t, store.TestingIsCached(fpID),
+		"fingerprint should be cached after RecordStatement")
+}
 func getOrderingFromTestEvents(events []testEvent) (stmtIds, txnIds []uint64) {
 	stmtsBySession := make(map[string][]uint64)
 	for _, e := range events {
@@ -437,7 +476,6 @@ func TestStatsCollectorIngester(t *testing.T) {
 		statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			FingerprintID: appstatspb.StmtFingerprintID(i),
 			Query:         fmt.Sprintf("SELECT %d", i),
-			ImplicitTxn:   false,
 			SessionID:     sessionID,
 		})
 	}
@@ -967,68 +1005,4 @@ func TestSQLStatsIngesterMemoryAccounting(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestIngesterStoresStatementFingerprint verifies that the ingester calls
-// storeStatementFingerprint in flushBuffer (not processStatement), ensuring
-// the final ImplicitTxn value is used for the fingerprint ID.
-func TestIngesterStoresStatementFingerprint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	settings := cluster.MakeTestingClusterSettings()
-	// The store is intentionally not fully initialized (no
-	// SetInternalExecutor/Start) — this test only verifies the
-	// in-memory cache path, not persistence.
-	store := statementstore.NewStatementStore(settings, nil)
-	knobs := &sqlstats.TestingKnobs{
-		SynchronousSQLStats: true,
-	}
-
-	ingester := NewSQLStatsIngester(
-		settings, knobs, NewIngesterMetrics(),
-		nil /* discardedStatsCount */, nil /* parentMon */, store)
-	ingester.Start(ctx, stopper, WithoutTimedFlush())
-
-	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
-	query := "SELECT _ FROM t WHERE _ = _"
-
-	// Record a statement that was initially recorded as implicit.
-	// RecordStatement with SynchronousSQLStats waits for processing.
-	initialFpID := appstatspb.ConstructStatementFingerprintID(
-		query, true /* implicitTxn */, "defaultdb")
-	ingester.RecordStatement(&sqlstats.RecordedStmtStats{
-		SessionID:     sessionID,
-		FingerprintID: initialFpID,
-		Query:         query,
-		Database:      "defaultdb",
-		ImplicitTxn:   true,
-	})
-
-	// The fingerprint should NOT be cached yet — storage happens in
-	// flushBuffer, not processStatement.
-	require.False(t, store.TestingIsCached(initialFpID),
-		"fingerprint should not be cached until flushBuffer")
-
-	// Record a transaction with ImplicitTxn=false. This triggers flushBuffer,
-	// which recomputes the fingerprint ID for the buffered statement and
-	// stores the final fingerprint.
-	recomputedFpID := appstatspb.ConstructStatementFingerprintID(
-		query, false /* implicitTxn */, "defaultdb")
-	ingester.RecordTransaction(&sqlstats.RecordedTxnStats{
-		SessionID:   sessionID,
-		ImplicitTxn: false,
-	})
-
-	// Only the recomputed (final) fingerprint should be cached.
-	require.True(t, store.TestingIsCached(recomputedFpID),
-		"recomputed fingerprint should be cached after flushBuffer")
-	require.False(t, store.TestingIsCached(initialFpID),
-		"initial fingerprint with wrong ImplicitTxn should not be cached")
-	require.NotEqual(t, initialFpID, recomputedFpID,
-		"fingerprint IDs should differ when ImplicitTxn changes")
 }

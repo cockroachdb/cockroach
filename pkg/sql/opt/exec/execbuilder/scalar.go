@@ -1219,7 +1219,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 			if i < len(stmtASTs) && stmtASTs[i] != nil {
 				fingerprint := tree.FormatStatementHideConstants(stmtASTs[i], fingerprintFormat)
-				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, dbName)
 				summary := tree.FormatStatementSummary(stmtASTs[i], fingerprintFormat)
 				stmtType := stmtASTs[i].StatementType()
 				builder = sqlstats.NewRecordedStatementStatsBuilder(

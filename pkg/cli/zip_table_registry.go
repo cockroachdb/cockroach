@@ -1043,7 +1043,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"mvcc_range_key_contained_points_var",
 			"mvcc_range_key_skipped_points_avg",
 			"mvcc_range_key_skipped_points_var",
-			"implicit_txn",
 			"full_scan",
 			"sample_plan",
 			"database_name",

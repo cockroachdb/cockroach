@@ -402,7 +402,6 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 							flags.IsSet(planFlagGeneric),
 							flags.ShouldBeDistributed(),
 							flags.IsSet(planFlagVectorized),
-							flags.IsSet(planFlagImplicitTxn),
 							flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 						).
 						QueryTags(g.p.stmt.QueryTags).
