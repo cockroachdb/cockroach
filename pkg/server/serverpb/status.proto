@@ -27,6 +27,7 @@ import "sql/sqlstats/insightspb/insights.proto";
 import "storage/enginepb/key_registry.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/stats.proto";
+import "kv/kvserver/allocator/mmaprototype/mmasnappb/mma_snapshot.proto";
 import "kv/kvserver/kvserverpb/lease_status.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
@@ -713,6 +714,22 @@ message AllocatorRequest {
 }
 
 message AllocatorResponse { repeated AllocatorDryRun dry_runs = 1; }
+
+// MMAStateRequest requests a snapshot of the multi-metric
+// allocator's view of the cluster from the specified node.
+message MMAStateRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+// MMAStateResponse carries the mma allocator's cluster-state
+// snapshot proto. It is intended for diagnostics (e.g. debug zip) and
+// offline analysis; the schema is not a stable API.
+message MMAStateResponse {
+  cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb.ClusterStateSnapshot
+      snapshot = 1;
+}
 
 message JSONResponse { bytes data = 1; }
 
@@ -2489,6 +2506,14 @@ service Status {
   rpc AllocatorRange(AllocatorRangeRequest) returns (AllocatorRangeResponse) {
     option (google.api.http) = {
       get : "/_status/allocator/range/{range_id}"
+    };
+  }
+
+  // MMAState retrieves a snapshot of the mma allocator's view
+  // of the cluster from the given node.
+  rpc MMAState(MMAStateRequest) returns (MMAStateResponse) {
+    option (google.api.http) = {
+      get : "/_status/mma_state/{node_id}"
     };
   }
 

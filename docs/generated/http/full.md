@@ -2245,6 +2245,54 @@ Support status: [reserved](#support-status)
 
 
 
+## MMAState
+
+`GET /_status/mma_state/{node_id}`
+
+MMAState retrieves a snapshot of the mma allocator's view
+of the cluster from the given node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+MMAStateRequest requests a snapshot of the multi-metric
+allocator's view of the cluster from the specified node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.MMAStateRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+MMAStateResponse carries the mma allocator's cluster-state
+snapshot proto. It is intended for diagnostics (e.g. debug zip) and
+offline analysis; the schema is not a stable API.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| snapshot | [cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb.ClusterStateSnapshot](#cockroach.server.serverpb.MMAStateResponse-cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb.ClusterStateSnapshot) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## ListSessions
 
 `GET /_status/sessions`
