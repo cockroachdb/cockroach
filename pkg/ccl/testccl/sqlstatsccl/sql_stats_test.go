@@ -174,7 +174,8 @@ func TestSQLStatsRegions(t *testing.T) {
 				row := tc.obsConn.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
-				 WHERE app_name = $1`, t.Name())
+				 WHERE app_name = $1
+				   AND metadata ->> 'query' = 'SELECT * FROM test'`, t.Name())
 
 				var actualJSON string
 				row.Scan(&actualJSON)

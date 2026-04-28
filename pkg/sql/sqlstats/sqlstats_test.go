@@ -94,7 +94,6 @@ SELECT
 	metadata ->> 'query' AS query,
 	metadata ->> 'querySummary' AS summary,
 	metadata -> 'distsql' AS plan_distributed,
-	metadata -> 'implicitTxn' AS plan_implicit_txn,
 	metadata -> 'vec' AS plan_vectorized,
 	metadata -> 'fullScan' AS plan_full_scan,
 	statistics -> 'statistics'->> 'cnt' AS count,

@@ -34,7 +34,6 @@ import (
 const (
 	timeArgs                 = "time"
 	dbNameArgs               = "db"
-	implicitTxnArgs          = "implicitTxn"
 	fingerprintArgs          = "fingerprint"
 	eventArgs                = "event"
 	eventCallbackCmd         = "callbackCmd"
@@ -132,14 +131,12 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			stubTime.setTime(tm)
 			return stubTime.Now().String()
 		case "should-sample":
-			mustHaveArgsOrFatal(t, d, fingerprintArgs, implicitTxnArgs, dbNameArgs)
+			mustHaveArgsOrFatal(t, d, fingerprintArgs, dbNameArgs)
 
 			var dbName string
-			var implicitTxn bool
 			var fingerprint string
 
 			d.ScanArgs(t, fingerprintArgs, &fingerprint)
-			d.ScanArgs(t, implicitTxnArgs, &implicitTxn)
 			d.ScanArgs(t, dbNameArgs, &dbName)
 
 			// Since the data driven tests framework does not support space
@@ -147,11 +144,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			previouslySampled := appStats.StatementSampled(
-				fingerprint,
-				implicitTxn,
-				dbName,
-			)
+			previouslySampled := appStats.StatementSampled(fingerprint, dbName)
 			return fmt.Sprintf("%t", previouslySampled)
 		case "skip":
 			var issue int

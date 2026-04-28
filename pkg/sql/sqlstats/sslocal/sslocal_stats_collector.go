@@ -124,22 +124,18 @@ func (s *StatsCollector) StartTransaction() {
 
 // ShouldSampleNewStatement returns true if the statement is a new statement
 // and we should sample its execution statistics.
-func (s *StatsCollector) ShouldSampleNewStatement(
-	fingerprint string, implicitTxn bool, database string,
-) bool {
+func (s *StatsCollector) ShouldSampleNewStatement(fingerprint string, database string) bool {
 	if s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV) {
 		// The container is full. Since we can't insert more statements
 		// into the sql stats container, there's no point in sampling this
 		// statement.
 		return false
 	}
-	return s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
+	return s.flushTarget.TrySetStatementSampled(fingerprint, database)
 }
 
-func (s *StatsCollector) SetStatementSampled(
-	fingerprint string, implicitTxn bool, database string,
-) {
-	s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
+func (s *StatsCollector) SetStatementSampled(fingerprint string, database string) {
+	s.flushTarget.TrySetStatementSampled(fingerprint, database)
 }
 
 func (s *StatsCollector) enabled() bool {

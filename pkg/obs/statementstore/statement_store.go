@@ -55,8 +55,10 @@ var flushInterval = settings.RegisterDurationSetting(settings.ApplicationLevel,
 	settings.PositiveDuration)
 
 const (
-	metadataImplicitTrue  = `{"implicit_txn": true}`
-	metadataImplicitFalse = `{"implicit_txn": false}`
+	// emptyMetadata is the placeholder JSON written to the system.statements
+	// metadata column. The column is currently unused but is NOT NULL in the
+	// schema, so we always write an empty object.
+	emptyMetadata = `{}`
 
 	// cacheEntrySize is a rough estimate of the memory overhead per
 	// cache entry (fingerprint ID key + map/list node overhead).
@@ -343,16 +345,12 @@ func (ss *StatementStore) batchInsertStatements(
 		p := i*colsPerRow + 1
 		fmt.Fprintf(&sb, "($%d, $%d, $%d, $%d, $%d)",
 			p, p+1, p+2, p+3, p+4)
-		metadataStr := metadataImplicitFalse
-		if info.ImplicitTxn {
-			metadataStr = metadataImplicitTrue
-		}
 		args = append(args,
 			sqlstatsutil.EncodeUint64ToBytes(uint64(info.FingerprintID)),
 			info.Fingerprint,
 			info.Summary,
 			info.Database,
-			metadataStr,
+			emptyMetadata,
 		)
 	}
 	sb.WriteString(" ON CONFLICT (fingerprint_id) DO UPDATE SET last_upserted = now()")
@@ -401,5 +399,4 @@ type StatementInfo struct {
 	Fingerprint   string
 	Database      string
 	Summary       string
-	ImplicitTxn   bool
 }

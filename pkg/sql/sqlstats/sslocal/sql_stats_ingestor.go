@@ -460,6 +460,7 @@ func (i *SQLStatsIngester) clearSession(ctx context.Context, sessionID clusterun
 func (i *SQLStatsIngester) processStatement(
 	ctx context.Context, statement *sqlstats.RecordedStmtStats,
 ) {
+	i.storeStatementFingerprint(ctx, statement)
 	stmtSize := statement.Size()
 	if err := i.acc.Grow(ctx, stmtSize); err != nil {
 		// If we hit memory limits, we cannot buffer this statement.
@@ -495,7 +496,6 @@ func (i *SQLStatsIngester) storeStatementFingerprint(
 		Fingerprint:   s.Query,
 		Database:      s.Database,
 		Summary:       s.QuerySummary,
-		ImplicitTxn:   s.ImplicitTxn,
 	})
 }
 
@@ -536,17 +536,6 @@ func (i *SQLStatsIngester) flushBuffer(
 			if shouldAssociateWithTxn {
 				s.TransactionFingerprintID = transaction.FingerprintID
 			}
-			if s.ImplicitTxn != transaction.ImplicitTxn {
-				// We need to recompute the fingerprint ID.
-				s.ImplicitTxn = transaction.ImplicitTxn
-				s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-					s.Query, s.ImplicitTxn, s.Database)
-			}
-			i.storeStatementFingerprint(ctx, s)
-		}
-	} else {
-		for _, s := range *statements {
-			i.storeStatementFingerprint(ctx, s)
 		}
 	}
 

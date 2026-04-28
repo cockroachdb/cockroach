@@ -62,7 +62,6 @@ func TestPutStatementDeduplicates(t *testing.T) {
 		Fingerprint:   "SELECT _",
 		Database:      "defaultdb",
 		Summary:       "SELECT",
-		ImplicitTxn:   true,
 	}
 
 	// First call should cache and buffer for async persistence.
@@ -216,7 +215,6 @@ func TestStatementStoreBatchChunking(t *testing.T) {
 			Fingerprint:   fmt.Sprintf("SELECT %d", i),
 			Database:      "defaultdb",
 			Summary:       "SELECT",
-			ImplicitTxn:   true,
 		})
 	}
 	require.Equal(t, 5, store.TestingPendingCount())
@@ -277,7 +275,6 @@ func TestStatementStoreFlushFailureEvictsCache(t *testing.T) {
 		Fingerprint:   "UPDATE _ SET _ = _",
 		Database:      "defaultdb",
 		Summary:       "UPDATE",
-		ImplicitTxn:   true,
 	}
 
 	// Enqueue and verify cached.

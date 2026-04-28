@@ -94,7 +94,6 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 		{"querySummary", (*jsonString)(&s.Key.QuerySummary)},
 		{"db", (*jsonString)(&s.Key.Database)},
 		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
-		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
 	}
@@ -104,7 +103,6 @@ func (s *stmtStatsMetadata) jsonFlagsOnlyFields() jsonFields {
 	return jsonFields{
 		{"db", (*jsonString)(&s.Key.Database)},
 		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
-		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
 	}
@@ -118,7 +116,6 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 		{"appNames", (*stringArray)(&s.AppNames)},
 		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
 		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
-		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
 		{"query", (*jsonString)(&s.Query)},
 		{"formattedQuery", (*jsonString)(&s.FormattedQuery)},
 		{"querySummary", (*jsonString)(&s.QuerySummary)},
@@ -135,7 +132,6 @@ func (s *aggregatedMetadata) jsonAggregatedFields() jsonFields {
 		{"appNames", (*stringArray)(&s.AppNames)},
 		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
 		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
-		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
 		{"vecCount", (*jsonInt)(&s.VecCount)},
 		{"totalCount", (*jsonInt)(&s.TotalCount)},
 	}

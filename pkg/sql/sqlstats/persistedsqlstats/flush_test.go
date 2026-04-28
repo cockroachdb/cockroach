@@ -839,16 +839,11 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 	appStats := sqlStats.GetApplicationStats(appName)
 
-	checkSampled := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
+	checkSampled := func(fingerprint string, expectedPreviouslySampledState bool) {
+		previouslySampled := appStats.StatementSampled(fingerprint, dbName)
 
-		previouslySampled := appStats.StatementSampled(
-			fingerprint,
-			implicitTxn,
-			dbName,
-		)
-
-		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t\n",
-			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled)
+		errMessage := fmt.Sprintf("validate: %s, expected sample before: %t, actual sample before: %t\n",
+			fingerprint, expectedPreviouslySampledState, previouslySampled)
 		require.Equal(t, expectedPreviouslySampledState, previouslySampled, errMessage)
 	}
 
@@ -857,33 +852,22 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 		// If the sampling rate is 0, we shouldn't trace any statements for sql stats.
 		sqlRun.Exec(t, "SELECT 1")
 		sqlRun.Exec(t, "SELECT 1, 2")
-		checkSampled("SELECT 1", true /* implicitTxn */, false /* sampled */)
-		checkSampled("SELECT 1, 2", true /* implicitTxn */, false /* sampled */)
+		checkSampled("SELECT 1", false /* sampled */)
+		checkSampled("SELECT 1, 2", false /* sampled */)
 		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
 	})
 
 	t.Run("sampling on", func(t *testing.T) {
 		sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.01;`)
 		// To start, we should not have any statements sampled.
-		checkSampled("SELECT _", true /* implicit */, false /* sampled */)
-		checkSampled("SELECT _, _", true /* implicit */, false /* sampled */)
+		checkSampled("SELECT _", false /* sampled */)
+		checkSampled("SELECT _, _", false /* sampled */)
 		// Execute each of the above statements to trigger a trace. We
 		// trace all statements the app hasn't seen before.
 		sqlRun.Exec(t, "SELECT 1")
 		sqlRun.Exec(t, "SELECT 1, 2")
-		checkSampled("SELECT _", true /* implicit */, true /* sampled */)
-		checkSampled("SELECT _, _", true /* implicit */, true /* sampled */)
-
-		// Now we'll execute each of the above statements again in explicit transactions.
-		// These should be treated as new statements and should be sampled.
-		checkSampled("SELECT _", false /* implicit */, false /* sampled */)
-		checkSampled("SELECT _, _", false /* implicit */, false /* sampled */)
-
-		sqlRun.Exec(t, "BEGIN; SELECT 1; COMMIT;")
-		sqlRun.Exec(t, "BEGIN; SELECT 1, 2; COMMIT;")
-
-		checkSampled("SELECT _", false /* implicit */, true /* sampled */)
-		checkSampled("SELECT _, _", false /* implicit */, true /* sampled */)
+		checkSampled("SELECT _", true /* sampled */)
+		checkSampled("SELECT _, _", true /* sampled */)
 	})
 
 }
