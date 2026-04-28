@@ -481,6 +481,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo SET DATA TYPE typ COLLATE en RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 
+		{`ALTER TYPE db.t SET (storage = plain)`, 169253, `ALTER TYPE SET`, ``},
+		{`ALTER TYPE db.t SET (receive = recv_fn, send = send_fn)`, 169253, `ALTER TYPE SET`, ``},
+
 		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`, ``},
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},

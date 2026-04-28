@@ -3451,6 +3451,10 @@ alter_type_stmt:
   {
     return unimplementedWithIssueDetail(sqllex, 48701, "ALTER TYPE ATTRIBUTE")
   }
+| ALTER TYPE type_name SET '(' storage_parameter_list ')'
+  {
+    return unimplementedWithIssueDetail(sqllex, 169253, "ALTER TYPE SET")
+  }
 | ALTER TYPE error // SHOW HELP: ALTER TYPE
 
 opt_add_val_placement:
