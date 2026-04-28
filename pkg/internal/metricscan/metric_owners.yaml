@@ -732,6 +732,7 @@ owners:
   raftlog_size_max: cockroachdb/kv
   raftlog_size_total: cockroachdb/kv
   raftlog_truncated: cockroachdb/kv
+  raftlog_truncator_busy_nanos: cockroachdb/kv
   range_adds: cockroachdb/kv
   range_merges: cockroachdb/kv
   range_raftleaderremovals: cockroachdb/kv

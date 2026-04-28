@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // pendingLogTruncations tracks proposed truncations for a replica that have
@@ -189,6 +191,7 @@ type raftLogTruncator struct {
 	ambientCtx context.Context
 	store      storeForTruncator
 	stopper    *stop.Stopper
+	busyNanos  *metric.Counter // maybe nil in tests
 	mu         struct {
 		syncutil.Mutex
 		// Ranges are queued into addRanges and batch dequeued by swapping with
@@ -203,12 +206,16 @@ type raftLogTruncator struct {
 }
 
 func makeRaftLogTruncator(
-	ambientCtx log.AmbientContext, store storeForTruncator, stopper *stop.Stopper,
+	ambientCtx log.AmbientContext,
+	store storeForTruncator,
+	stopper *stop.Stopper,
+	busyNanos *metric.Counter,
 ) *raftLogTruncator {
 	t := &raftLogTruncator{
 		ambientCtx: ambientCtx.AnnotateCtx(context.Background()),
 		store:      store,
 		stopper:    stopper,
+		busyNanos:  busyNanos,
 	}
 	t.mu.addRanges = make(map[roachpb.RangeID]struct{})
 	t.mu.drainRanges = make(map[roachpb.RangeID]struct{})
@@ -388,6 +395,13 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	}
 	if err := t.stopper.RunAsyncTask(t.ambientCtx, "raft-log-truncation",
 		func(ctx context.Context) {
+			if t.busyNanos != nil {
+				start := crtime.NowMono()
+				defer func() {
+					t.busyNanos.Inc(start.Elapsed().Nanoseconds())
+				}()
+			}
+
 			for {
 				t.durabilityAdvanced(ctx)
 				shouldReturn := false

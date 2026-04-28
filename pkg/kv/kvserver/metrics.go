@@ -2267,6 +2267,15 @@ var (
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftLogTruncatorBusyNanos = metric.Metadata{
+		Name: "raftlog.truncator.busy_nanos",
+		Help: crstrings.UnwrapText(`
+			Cumulative wall-clock nanoseconds the per-store loosely-coupled raft
+			log truncator goroutine has spent running.
+		`),
+		Measurement: "Processing Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	metaRaftLogTotalSize = metric.Metadata{
 		Name:        "raftlog.size.total",
@@ -3647,6 +3656,7 @@ type StoreMetrics struct {
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
+	RaftLogTruncatorBusyNanos  *metric.Counter
 	RaftLogTotalSize           *metric.Gauge
 	RaftLogMaxSize             *metric.Gauge
 
@@ -4474,6 +4484,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
+		RaftLogTruncatorBusyNanos:  metric.NewCounter(metaRaftLogTruncatorBusyNanos),
 		RaftLogTotalSize:           metric.NewGauge(metaRaftLogTotalSize),
 		RaftLogMaxSize:             metric.NewGauge(metaRaftLogMaxSize),
 
