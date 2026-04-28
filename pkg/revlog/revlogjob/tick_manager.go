@@ -201,6 +201,46 @@ func (m *TickManager) LastClosed() hlc.Timestamp {
 	return m.mu.lastClosed
 }
 
+// DataFrontier returns the current per-span min of the manager's
+// data frontier — the aggregate "everything below this HLC has been
+// flushed by every producer covering the cluster" position. Safe to
+// call concurrently with Flush. Used by the descfeed (see
+// runDescFeed) to compute the start ts the next flow's rangefeed
+// should resume from after a span widening: any span already at or
+// beyond DataFrontier doesn't need re-scanning, while newly-added
+// spans still at zero do.
+func (m *TickManager) DataFrontier() hlc.Timestamp {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.frontier.Frontier()
+}
+
+// AddSpansAt extends the manager's per-span data frontier with the
+// given spans, each tracked at ts. Used by the descfeed (see
+// runDescFeed) when a descriptor change widens scope: the
+// newly-introduced spans are added at zero so that the producers'
+// per-span ForwardFrontier calls for them are not silently dropped
+// by the manager's frontier (which only tracks spans it was
+// initialized with), and so the close loop's min-across-spans gate
+// won't seal a tick before every new span has reported past it.
+//
+// Spans that overlap existing frontier entries are merged in per
+// span.Frontier semantics; the merged ts is the supplied ts, so
+// callers must pass spans they know are not already tracked at a
+// higher ts (or accept the conservative reset). Safe to call
+// concurrently with Flush, Snapshot, and the close loop.
+func (m *TickManager) AddSpansAt(spans []roachpb.Span, ts hlc.Timestamp) error {
+	if len(spans) == 0 {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.mu.frontier.AddSpansAt(ts, spans...); err != nil {
+		return errors.Wrap(err, "extending frontier with new spans")
+	}
+	return nil
+}
+
 // Snapshot captures the manager's checkpoint state for persistence
 // (see Persister). Holds mu briefly to copy frontier entries and
 // per-tick file lists; the returned State is independent of the
