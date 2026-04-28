@@ -24,6 +24,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info --valid
 <dumping SQL tables>
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
+[node 1] requesting data for debug/nodes/1/mma_state... received response... writing JSON output: debug/nodes/1/mma_state.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done

@@ -46,8 +46,10 @@ const (
 	gossipFileName          = "gossip.json"
 	statusFileName          = "status.json"
 	cpuProfileFileName      = "cpu.pprof"
+	mmaStateFileName        = "mma_state.json"
 	detailsName             = "details"
 	gossipName              = "gossip"
+	mmaStateName            = "mma_state"
 )
 
 func (zc *debugZipContext) collectPerNodeData(
@@ -159,6 +161,17 @@ func makePerNodeZipRequests(
 		})
 	} else {
 		zr.info("skipping %s due to file filters", gossipFileName)
+	}
+
+	if zipCtx.files.shouldIncludeFile(path.Join(prefix, mmaStateFileName)) {
+		zipRequests = append(zipRequests, zipRequest{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.MMAState(ctx, &serverpb.MMAStateRequest{NodeId: id})
+			},
+			pathName: path.Join(prefix, mmaStateName),
+		})
+	} else {
+		zr.info("skipping %s due to file filters", mmaStateFileName)
 	}
 	return zipRequests
 }
