@@ -18,7 +18,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
+
+// ReplicationError is returned by the writer when a source transaction cannot
+// be applied to the destination. The Timestamp is the offending source
+// transaction's commit timestamp.
+type ReplicationError struct {
+	Err       error
+	Timestamp hlc.Timestamp
+}
+
+func (e ReplicationError) Error() string {
+	return redact.StringWithoutMarkers(e)
+}
+
+func (e ReplicationError) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("replication error at %s: %v", e.Timestamp, e.Err)
+}
+
+func (e ReplicationError) Unwrap() error { return e.Err }
 
 type appliedTransaction struct {
 	ldrdecoder.Transaction
@@ -360,6 +379,10 @@ func (a *Applier) writer(
 			if txn.applyResult.DlqReason != nil {
 				// TODO(msbutler): actually write to the DLQ.
 				log.Dev.Errorf(ctx, "transaction %s should be sent to DLQ with reason: %v", transaction.TxnID.Timestamp, txn.applyResult.DlqReason)
+				return ReplicationError{
+					Err:       txn.applyResult.DlqReason,
+					Timestamp: transaction.TxnID.Timestamp,
+				}
 			}
 			select {
 			case <-ctx.Done():
