@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -818,6 +819,29 @@ func loadBackupSQLDescs(
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
+	// For revlog restores, merge in descriptors from schema changes that
+	// occurred between the backup end time and the revlog AOST. This
+	// ensures that tables created during the revlog window are included
+	// in the descriptor set and flow through the normal rewrite and
+	// namespace-entry-writing pipeline in createImportingDescriptors.
+	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
+			ctx, details.DefaultCollectionURI, p.User(),
+		)
+		if err != nil {
+			return nil, backuppb.BackupManifest{}, nil, 0,
+				errors.Wrap(err, "opening collection for revlog descriptor merge")
+		}
+		defer store.Close()
+		allDescs, _, err = applyRevlogDescriptorChanges(
+			ctx, store, allDescs, details.EndTime, details.RevisionLogTimestamp,
+		)
+		if err != nil {
+			return nil, backuppb.BackupManifest{}, nil, 0,
+				errors.Wrap(err, "applying revlog descriptor changes")
+		}
+	}
+
 	for _, m := range details.DatabaseModifiers {
 		for _, typ := range m.ExtraTypeDescs {
 			allDescs = append(allDescs, typedesc.NewBuilder(typ).BuildCreatedMutableType())
@@ -1371,6 +1395,24 @@ func createRestoreFlows(
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
 	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
 
+	// Build a set of pre-rewrite IDs for tables added by the revision log.
+	// These tables have no backup data, so they must be excluded from the
+	// backup data restore flow (their data comes from the revision log).
+	var revlogNewPostIDs map[descpb.ID]struct{}
+	var revlogOldIDs map[descpb.ID]struct{}
+	if !build.IsRelease() && len(details.RevlogNewTableIDs) > 0 {
+		revlogNewPostIDs = make(map[descpb.ID]struct{}, len(details.RevlogNewTableIDs))
+		for _, id := range details.RevlogNewTableIDs {
+			revlogNewPostIDs[id] = struct{}{}
+		}
+		revlogOldIDs = make(map[descpb.ID]struct{})
+		for oldID, rw := range details.DescriptorRewrites {
+			if _, ok := revlogNewPostIDs[rw.ID]; ok {
+				revlogOldIDs[oldID] = struct{}{}
+			}
+		}
+	}
+
 	shouldPreRestore := func(tableDesc catalog.TableDescriptor) bool {
 		if tableDesc.GetParentID() != keys.SystemDatabaseID {
 			return false
@@ -1390,6 +1432,11 @@ func createRestoreFlows(
 			}
 		}
 		if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
+			// Skip tables added by the revision log — they have no backup
+			// data and their content is restored via restoreFromRevisionLog.
+			if _, ok := revlogOldIDs[tableDesc.GetID()]; ok {
+				continue
+			}
 			if shouldPreRestore(tableDesc) {
 				preRestoreTables = append(preRestoreTables, tableDesc)
 			} else {
@@ -1429,6 +1476,10 @@ func createRestoreFlows(
 	var systemTables []catalog.TableDescriptor
 	for i := range details.TableDescs {
 		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+		// Skip rekeys for revlog-added tables — no backup data to rekey.
+		if _, ok := revlogNewPostIDs[desc.GetID()]; ok {
+			continue
+		}
 		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
 		if err != nil {
 			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -2484,7 +2535,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if details.ExperimentalCopy {
-		if len(details.DownloadSpans) == 0 && !details.SchemaOnly {
+		if len(details.DownloadSpans) == 0 && !details.SchemaOnly &&
+			(build.IsRelease() || len(details.RevlogNewTableIDs) == 0) {
 			return errors.AssertionFailedf("download spans should have been persisted to job details")
 		}
 		// TODO(msbutler): ideally doDownloadFiles would not depend on job details
@@ -2492,6 +2544,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// it needs. If that occured, we would not need to update details above.
 		if err := r.doDownloadFilesWithRetry(ctx, p); err != nil {
 			return err
+		}
+	}
+
+	if !build.IsRelease() && !details.RevisionLogTimestamp.IsEmpty() {
+		if err := r.restoreFromRevisionLog(ctx, p); err != nil {
+			return errors.Wrap(err, "restoring from revision log")
 		}
 	}
 
@@ -3460,6 +3518,13 @@ func (r *restoreResumer) OnFailOrCancel(
 
 	if err := r.maybeCleanupTempSystemDB(ctx); err != nil {
 		return err
+	}
+
+	// Best-effort cleanup of any intermediate revlog merge SSTs
+	// on this node. SSTs on other nodes are cleaned up by the
+	// background CleanupOrphanedFiles sweeper.
+	if !build.IsRelease() {
+		r.cleanupRevlogMergeSSTs(ctx, p)
 	}
 
 	// Emit to the event log that the job has completed reverting.

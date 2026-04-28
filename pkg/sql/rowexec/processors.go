@@ -247,6 +247,15 @@ func NewProcessor(
 		}
 		return NewIngestStoppedProcessor(ctx, flowCtx, processorID, *core.IngestStopped, post)
 	}
+	if core.Revlog != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewRevlogProcessor == nil {
+			return nil, errors.New("Revlog processor unimplemented")
+		}
+		return NewRevlogProcessor(ctx, flowCtx, processorID, *core.Revlog, post)
+	}
 	if core.BackupData != nil {
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
@@ -460,6 +469,15 @@ func NewProcessor(
 		}
 		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile)
 	}
+	if core.RevlogLocalMerge != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewRevlogLocalMergeProcessor == nil {
+			return nil, errors.New("RevlogLocalMerge processor unimplemented")
+		}
+		return NewRevlogLocalMergeProcessor(ctx, flowCtx, processorID, *core.RevlogLocalMerge, post)
+	}
 
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
@@ -472,6 +490,10 @@ var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32
 
 // NewIngestStoppedProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewIngestStoppedProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestStoppedSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+// NewRevlogProcessor is implemented in pkg/revlog/revlogjob and injected
+// here via runtime initialization.
+var NewRevlogProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RevlogSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewBulkMergeProcessor func(
 	context.Context,
@@ -532,3 +554,5 @@ var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.F
 var NewCompactBackupsProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CompactBackupsSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec) (execinfra.Processor, error)
+
+var NewRevlogLocalMergeProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RevlogLocalMergeSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)

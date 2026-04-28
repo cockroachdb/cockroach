@@ -548,6 +548,11 @@ func (c *RestoreDataSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (r *RevlogSpec) summary() (string, []string) {
+	return "RevlogSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (c *CloudStorageTestSpec) summary() (string, []string) {
 	return "CloudStorageTestSpec", []string{}
 }
@@ -823,6 +828,10 @@ func (m *MergeCoordinatorSpec) summary() (string, []string) {
 
 func (m *MergeLoopbackSpec) summary() (string, []string) {
 	return "MergeLoopback", nil
+}
+
+func (m *RevlogLocalMergeSpec) summary() (string, []string) {
+	return "RevlogLocalMerge", []string{fmt.Sprintf("%d ticks", len(m.Ticks))}
 }
 
 type diagramCell struct {
