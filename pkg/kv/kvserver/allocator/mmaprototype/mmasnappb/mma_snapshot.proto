@@ -1,0 +1,36 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb";
+
+import "gogoproto/gogo.proto";
+
+// ClusterStateSnapshot is a structured dump of the in-memory cluster state
+// maintained by the multi-metric allocator (mmaprototype.clusterState). It is
+// produced by clusterState.Snapshot and is intended for diagnostics and
+// offline analysis (e.g. mma-investigator-style debugging, regression
+// record/replay). It is not a complete round-trip representation: scratch
+// fields, runtime injections (clocks, interfaces), and pure caches are
+// intentionally omitted. The pkg/kv/kvserver/allocator/mmaprototype package
+// reflect-walks every state-bearing struct reachable from clusterState and
+// requires each field to either map to a field on this proto graph or be
+// listed with an explicit omission reason.
+message ClusterStateSnapshot {
+  // mma_id is a counter incremented on each rebalanceStores call, used for
+  // log-correlation with the snapshot.
+  int32 mma_id = 1 [(gogoproto.customname) = "MMAID"];
+  // disk_util_refuse_threshold is the fraction of disk capacity at or above
+  // which a store will refuse new replicas.
+  double disk_util_refuse_threshold = 2;
+  // disk_util_shed_threshold is the fraction of disk capacity at or above
+  // which ByteSize is forced to be the prioritized dimension when picking the
+  // top-k ranges for shedding, regardless of overall load summary.
+  double disk_util_shed_threshold = 3;
+  // change_seq_gen is the next changeID that will be assigned to a pending
+  // change. Pending changes carry IDs strictly less than this value.
+  uint64 change_seq_gen = 4;
+}
