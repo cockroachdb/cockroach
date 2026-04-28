@@ -2226,7 +2226,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
 	// Create the raft log truncator and register the callback.
-	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)
+	s.raftTruncator = makeRaftLogTruncator(
+		s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper, s.metrics.RaftLogTruncatorBusyNanos)
 
 	if s.EnginesSeparated() {
 		// Initialize the WAG sequencer from the last persisted node index so
