@@ -3,27 +3,21 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  TimeScale,
+  useMetricMetadata,
+  useNodesSummary,
+  useTenants,
+} from "@cockroachlabs/cluster-ui";
 import { Tabs, Upload } from "antd";
 import { RcFile } from "antd/es/upload";
-import React, { useState, useEffect, useRef } from "react";
-import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import React, { useState, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
 
-import { getCookieValue } from "oss/src/redux/cookies";
-import { AdminUIState } from "oss/src/redux/state";
+import { AdminUIState, AppDispatch } from "oss/src/redux/state";
 import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import { Button } from "src/components/button";
-import {
-  refreshMetricMetadata,
-  refreshNodes,
-  refreshTenantsList,
-} from "src/redux/apiReducers";
-import {
-  setMetricsFixedWindow,
-  selectTimeScale,
-  setTimeScale,
-} from "src/redux/timeScale";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 
 import DashboardTab from "./components/dashboardTab";
 import { DashboardConfig } from "./dashboardConfig";
@@ -32,30 +26,23 @@ import type { TabsProps } from "antd";
 
 import "./metricsWorkspace.scss";
 
-type Props = {
-  timeScale: TimeScale;
-  setTimeScale: (timeScale: TimeScale) => void;
-  refreshNodes: typeof refreshNodes;
-  refreshMetricMetadata: typeof refreshMetricMetadata;
-  refreshTenantsList: typeof refreshTenantsList;
-};
-const MetricsWorkspace = ({
-  timeScale,
-  setTimeScale,
-  refreshNodes,
-  refreshMetricMetadata,
-  refreshTenantsList,
-}: Props) => {
+const MetricsWorkspace = () => {
+  const dispatch: AppDispatch = useDispatch();
+  const timeScale = useSelector((state: AdminUIState) =>
+    selectTimeScale(state),
+  );
+  const setTimeScaleAction = (ts: TimeScale) => dispatch(setTimeScale(ts));
   const dashboardCount = useRef(1);
   const [dashboardTabs, setDashboardTabs] = useState<DashboardConfig[]>([]);
   const [activeTabKey, setActiveTabKey] = useState<string>();
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    refreshNodes();
-    refreshMetricMetadata();
-    refreshTenantsList();
-  }, [refreshNodes, refreshMetricMetadata, refreshTenantsList]);
+  // SWR hooks handle data fetching and caching automatically.
+  // Calling the hooks here ensures data is fetched and available
+  // for child components that consume it.
+  useNodesSummary();
+  useMetricMetadata();
+  useTenants();
 
   const handleCreateNewDashboard = () => {
     const name = `Dashboard ${dashboardCount.current}`;
@@ -187,7 +174,7 @@ const MetricsWorkspace = ({
       <div className="metrics-workspace__time-selector">
         <TimeScaleDropdown
           currentScale={timeScale}
-          setTimeScale={setTimeScale}
+          setTimeScale={setTimeScaleAction}
         />
       </div>
 
@@ -212,19 +199,4 @@ const MetricsWorkspace = ({
   );
 };
 
-const mapStateToProps = (state: AdminUIState) => ({
-  timeScale: selectTimeScale(state),
-  currentTenant: getCookieValue("tenant"),
-});
-
-const mapDispatchToProps = {
-  setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setTimeScale,
-  refreshNodes,
-  refreshMetricMetadata,
-  refreshTenantsList,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(MetricsWorkspace),
-);
+export default MetricsWorkspace;

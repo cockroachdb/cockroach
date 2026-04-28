@@ -3,7 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  AxisUnits,
+  NodesSummary,
+  TimeScale,
+  useMetricMetadata,
+  useNodesSummary,
+  useTenants,
+} from "@cockroachlabs/cluster-ui";
 import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
 import isEmpty from "lodash/isEmpty";
@@ -11,26 +18,15 @@ import keys from "lodash/keys";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
 import startsWith from "lodash/startsWith";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
-import { PayloadAction } from "src/interfaces/action";
-import {
-  refreshMetricMetadata,
-  refreshNodes,
-  refreshTenantsList,
-} from "src/redux/apiReducers";
 import { getCookieValue } from "src/redux/cookies";
-import {
-  MetricsMetadata,
-  metricsMetadataSelector,
-} from "src/redux/metricMetadata";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import { tenantDropdownOptions } from "src/redux/tenants";
+import { MetricsMetadata } from "src/redux/metricMetadata";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
   TimeWindow,
   setMetricsFixedWindow,
@@ -56,19 +52,7 @@ import {
 } from "./customMetric";
 import "./customChart.scss";
 
-export interface CustomChartProps {
-  refreshNodes: typeof refreshNodes;
-  nodesQueryValid: boolean;
-  nodesSummary: NodesSummary;
-  refreshMetricMetadata: typeof refreshMetricMetadata;
-  refreshTenantsList: typeof refreshTenantsList;
-  metricsMetadata: MetricsMetadata;
-  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
-  timeScale: TimeScale;
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
-  tenantOptions: ReturnType<() => DropdownOption[]>;
-  currentTenant: string | null;
-}
+export type CustomChartProps = RouteComponentProps;
 
 interface UrlState {
   charts: string;
@@ -106,20 +90,31 @@ export const getSources = (
 };
 
 export function CustomChart({
-  refreshNodes: refreshNodesAction,
-  nodesQueryValid,
-  nodesSummary,
-  refreshMetricMetadata: refreshMetricMetadataAction,
-  refreshTenantsList: refreshTenantsListAction,
-  metricsMetadata,
-  setMetricsFixedWindow: setMetricsFixedWindowAction,
-  timeScale,
-  setTimeScale: setTimeScaleAction,
-  tenantOptions,
-  currentTenant,
   location,
   history,
-}: CustomChartProps & RouteComponentProps): React.ReactElement {
+}: CustomChartProps): React.ReactElement {
+  const dispatch: AppDispatch = useDispatch();
+  const nodesSummary = useNodesSummary();
+  const { data: metricsMetadata } = useMetricMetadata();
+  const timeScale = useSelector((state: AdminUIState) =>
+    selectTimeScale(state),
+  );
+  const { tenants } = useTenants();
+  const tenantOptions: DropdownOption[] = useMemo(() => {
+    const options: DropdownOption[] = [{ label: "All", value: "" }];
+    tenants?.forEach(tenant =>
+      options.push({
+        label: tenant.tenant_name,
+        value: tenant.tenant_id?.id?.toString(),
+      }),
+    );
+    return options;
+  }, [tenants]);
+  const currentTenant = getCookieValue("tenant");
+
+  const setMetricsFixedWindowAction = (tw: TimeWindow) =>
+    dispatch(setMetricsFixedWindow(tw));
+  const setTimeScaleAction = (ts: TimeScale) => dispatch(setTimeScale(ts));
   // Dropdown options computed from cluster node statuses.
   const nodeOptions = useMemo((): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
@@ -151,19 +146,6 @@ export function CustomChart({
       };
     });
   }, [metricsMetadata]);
-
-  // Refresh nodes on every render if the query is stale.
-  useEffect(() => {
-    if (!nodesQueryValid) {
-      refreshNodesAction();
-    }
-  });
-
-  // Fetch metric metadata and tenants list once on mount.
-  useEffect(() => {
-    refreshMetricMetadataAction();
-    refreshTenantsListAction();
-  }, [refreshMetricMetadataAction, refreshTenantsListAction]);
 
   const currentCharts = (): CustomChartState[] => {
     const metrics = queryByName(location, "metrics");
@@ -404,26 +386,7 @@ export function CustomChart({
   );
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
-  nodesQueryValid: state.cachedData.nodes.valid,
-  metricsMetadata: metricsMetadataSelector(state),
-  timeScale: selectTimeScale(state),
-  tenantOptions: tenantDropdownOptions(state),
-  currentTenant: getCookieValue("tenant"),
-});
-
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshMetricMetadata,
-  refreshTenantsList,
-  setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setTimeScale,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(CustomChart),
-);
+export default withRouter(CustomChart);
 
 function isStoreMetric(
   recordedNames: Record<string, string>,

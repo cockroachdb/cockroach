@@ -3,15 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util } from "@cockroachlabs/cluster-ui";
+import { sumNodeStats, useNodesSummary, util } from "@cockroachlabs/cluster-ui";
 import { format } from "d3-format";
-import React from "react";
-import { useSelector } from "react-redux";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { Anchor, Tooltip } from "src/components";
-import { nodeStatusesSelector, nodeSumsSelector } from "src/redux/nodes";
 import { howAreCapacityMetricsCalculated } from "src/util/docs";
 import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
@@ -30,9 +27,12 @@ import {
  * and their current liveness status.
  */
 export const ClusterNodeTotals: React.FC = () => {
-  const nodeSums = useSelector(nodeSumsSelector);
-  const nodesSummaryEmpty = useSelector(selectNodesSummaryEmpty);
-  if (nodesSummaryEmpty) {
+  const { nodeStatuses, livenessStatusByNodeID } = useNodesSummary();
+  const nodeSums = useMemo(
+    () => sumNodeStats(nodeStatuses, livenessStatusByNodeID),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
+  if (!nodeStatuses || nodeStatuses.length === 0) {
     return null;
   }
   const { nodeCounts } = nodeSums;
@@ -72,11 +72,6 @@ export const ClusterNodeTotals: React.FC = () => {
   );
 };
 
-export const selectNodesSummaryEmpty = createSelector(
-  nodeStatusesSelector,
-  nodes => !nodes,
-);
-
 const formatOnePlace = format(".1f");
 const formatPercentage = format(".2%");
 function formatNanosAsMillis(n: number) {
@@ -93,7 +88,11 @@ export interface ClusterSummaryProps {
 
 export default function (props: ClusterSummaryProps) {
   const { Bytes } = util;
-  const nodeSums = useSelector(nodeSumsSelector);
+  const { nodeStatuses, livenessStatusByNodeID } = useNodesSummary();
+  const nodeSums = useMemo(
+    () => sumNodeStats(nodeStatuses, livenessStatusByNodeID),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
   // Capacity math used in the summary status section.
   const { capacityUsed, capacityUsable } = nodeSums;
   const capacityPercent =

@@ -4,10 +4,9 @@
 // included in the /LICENSE file.
 
 import { AdminUIState } from "src/redux/state";
+import { getDataFromServer } from "src/util/dataFromServer";
 
-export function selectEnterpriseEnabled(state: AdminUIState) {
-  return (
-    state.cachedData.cluster.valid &&
-    state.cachedData.cluster.data.enterprise_enabled
-  );
+export function selectEnterpriseEnabled(_state: AdminUIState) {
+  const { LicenseType } = getDataFromServer();
+  return LicenseType !== "OSS";
 }

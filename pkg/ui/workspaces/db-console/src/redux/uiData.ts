@@ -299,88 +299,86 @@ export function getLoadError(state: AdminUIState, key: string): Error {
  * the values have been successfully persisted to the server, they are updated
  * in the local UIDataState store.
  */
-export function saveUIData(...values: KeyValue[]) {
-  return (
-    dispatch: Dispatch<Action>,
-    getState: () => AdminUIState,
-  ): Promise<void> => {
-    const state = getState();
-    values = filter(values, kv => !isInFlight(state, kv.key));
-    if (values.length === 0) {
-      return;
-    }
-    dispatch(beginSaveUIData(map(values, kv => kv.key)));
+export function saveUIData(
+  dispatch: Dispatch<Action>,
+  getState: () => AdminUIState,
+  ...values: KeyValue[]
+): Promise<void> {
+  const state = getState();
+  values = filter(values, kv => !isInFlight(state, kv.key));
+  if (values.length === 0) {
+    return;
+  }
+  dispatch(beginSaveUIData(map(values, kv => kv.key)));
 
-    // Encode data for each UIData key.
-    const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
-    each(values, kv => {
-      const stringifiedValue = JSON.stringify(kv.value);
-      const buffer = new Uint8Array(
-        protobuf.util.utf8.length(stringifiedValue),
+  // Encode data for each UIData key.
+  const request = new protos.cockroach.server.serverpb.SetUIDataRequest();
+  each(values, kv => {
+    const stringifiedValue = JSON.stringify(kv.value);
+    const buffer = new Uint8Array(
+      protobuf.util.utf8.length(stringifiedValue),
+    );
+    protobuf.util.utf8.write(stringifiedValue, buffer, 0);
+    request.key_values[kv.key] = buffer;
+  });
+
+  return setUIData(request)
+    .then(_response => {
+      // SetUIDataResponse is empty. A positive return indicates success.
+      each(values, kv => dispatch(setUIDataKey(kv.key, kv.value)));
+    })
+    .catch(error => {
+      // TODO(maxlang): Fix error handling more comprehensively.
+      // Tracked in #8699
+      setTimeout(
+        () => each(values, kv => dispatch(saveErrorUIData(kv.key, error))),
+        1000,
       );
-      protobuf.util.utf8.write(stringifiedValue, buffer, 0);
-      request.key_values[kv.key] = buffer;
     });
-
-    return setUIData(request)
-      .then(_response => {
-        // SetUIDataResponse is empty. A positive return indicates success.
-        each(values, kv => dispatch(setUIDataKey(kv.key, kv.value)));
-      })
-      .catch(error => {
-        // TODO(maxlang): Fix error handling more comprehensively.
-        // Tracked in #8699
-        setTimeout(
-          () => each(values, kv => dispatch(saveErrorUIData(kv.key, error))),
-          1000,
-        );
-      });
-  };
 }
 
 /**
  * loadUIData loads the values of the give UIData keys from the server.
  */
-export function loadUIData(...keys: string[]) {
-  return (
-    dispatch: Dispatch<Action>,
-    getState: () => AdminUIState,
-  ): Promise<void> => {
-    const state = getState();
-    keys = filter(keys, k => !isInFlight(state, k));
-    if (keys.length === 0) {
-      return;
-    }
-    dispatch(beginLoadUIData(keys));
+export function loadUIData(
+  dispatch: Dispatch<Action>,
+  getState: () => AdminUIState,
+  ...keys: string[]
+): Promise<void> {
+  const state = getState();
+  keys = filter(keys, k => !isInFlight(state, k));
+  if (keys.length === 0) {
+    return;
+  }
+  dispatch(beginLoadUIData(keys));
 
-    return getUIData(
-      new protos.cockroach.server.serverpb.GetUIDataRequest({ keys }),
-    )
-      .then(response => {
-        // Decode data for each UIData key.
-        each(keys, key => {
-          if (has(response.key_values, key)) {
-            const buffer = response.key_values[key].value;
-            dispatch(
-              setUIDataKey(
-                key,
-                JSON.parse(
-                  protobuf.util.utf8.read(buffer, 0, buffer.byteLength),
-                ),
+  return getUIData(
+    new protos.cockroach.server.serverpb.GetUIDataRequest({ keys }),
+  )
+    .then(response => {
+      // Decode data for each UIData key.
+      each(keys, key => {
+        if (has(response.key_values, key)) {
+          const buffer = response.key_values[key].value;
+          dispatch(
+            setUIDataKey(
+              key,
+              JSON.parse(
+                protobuf.util.utf8.read(buffer, 0, buffer.byteLength),
               ),
-            );
-          } else {
-            dispatch(setUIDataKey(key, undefined));
-          }
-        });
-      })
-      .catch(error => {
-        // TODO(maxlang): Fix error handling more comprehensively.
-        // Tracked in #8699
-        setTimeout(
-          () => each(keys, key => dispatch(loadErrorUIData(key, error))),
-          1000,
-        );
+            ),
+          );
+        } else {
+          dispatch(setUIDataKey(key, undefined));
+        }
       });
-  };
+    })
+    .catch(error => {
+      // TODO(maxlang): Fix error handling more comprehensively.
+      // Tracked in #8699
+      setTimeout(
+        () => each(keys, key => dispatch(loadErrorUIData(key, error))),
+        1000,
+      );
+    });
 }

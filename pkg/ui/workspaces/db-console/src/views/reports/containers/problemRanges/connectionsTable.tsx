@@ -14,7 +14,6 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionTableColumn {
   title: string;
@@ -25,7 +24,8 @@ interface ConnectionTableColumn {
 }
 
 interface ConnectionsTableProps {
-  problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;
+  data: protos.cockroach.server.serverpb.ProblemRangesResponse;
+  error?: Error;
 }
 
 const connectionTableColumns: ConnectionTableColumn[] = [
@@ -103,16 +103,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
 ];
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
-  const { problemRanges } = props;
-  // lastError is already handled by ProblemRanges component.
-  if (
-    isNil(problemRanges) ||
-    isNil(problemRanges.data) ||
-    !isNil(problemRanges.lastError)
-  ) {
+  const { data, error } = props;
+  if (isNil(data) || !isNil(error)) {
     return null;
   }
-  const { data } = problemRanges;
   const ids = flow(
     keys,
     nodeIds => map(nodeIds, id => parseInt(id, 10)),

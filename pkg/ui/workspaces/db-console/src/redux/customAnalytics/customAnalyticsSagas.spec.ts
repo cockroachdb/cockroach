@@ -4,32 +4,32 @@
 // included in the /LICENSE file.
 
 import { Analytics } from "@segment/analytics-node";
-import { expectSaga } from "redux-saga-test-plan";
 
 import { signUpEmailSubscription } from "./customAnalyticsSagas";
-import { signUpForEmailSubscription } from "./customAnanlyticsActions";
 
-describe("customAnalyticsSagas", () => {
-  describe("signUpEmailSubscription generator", () => {
-    it("calls analytics#identify with user email in args ", () => {
-      const analyticsIdentifyFn = jest.spyOn(Analytics.prototype, "identify");
+describe("customAnalytics", () => {
+  describe("signUpEmailSubscription", () => {
+    it("calls analytics#identify with user email and dispatches local setting", async () => {
+      const analyticsIdentifyFn = jest
+        .spyOn(Analytics.prototype, "identify")
+        .mockImplementation(() => new Analytics({ writeKey: "test" }));
       const clusterId = "cluster-1";
       const email = "foo@bar.com";
-      const action = signUpForEmailSubscription(clusterId, email);
+      const dispatch = jest.fn();
 
-      return expectSaga(signUpEmailSubscription, action)
-        .dispatch(action)
-        .run()
-        .then(() => {
-          expect(analyticsIdentifyFn).toHaveBeenCalledWith(
-            expect.objectContaining({
-              userId: clusterId,
-              traits: expect.objectContaining({
-                email,
-              }),
-            }),
-          );
-        });
+      await signUpEmailSubscription(clusterId, email, dispatch);
+
+      expect(analyticsIdentifyFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: clusterId,
+          traits: expect.objectContaining({
+            email,
+          }),
+        }),
+      );
+      expect(dispatch).toHaveBeenCalled();
+
+      analyticsIdentifyFn.mockRestore();
     });
   });
 });

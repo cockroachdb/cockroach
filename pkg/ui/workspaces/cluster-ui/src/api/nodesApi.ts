@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import sortBy from "lodash/sortBy";
 import { useContext, useMemo } from "react";
 
 import { fetchData } from "src/api";
@@ -59,10 +60,17 @@ export const useNodes = (opts?: UseNodesOptions) => {
 
   // Roll up store-level metrics (replicas, capacity, etc.) into each
   // node's top-level metrics map so consumers see aggregated values.
-  const nodeStatuses: INodeStatus[] = useMemo(
-    () => accumulateMetrics(data?.nodes ?? []),
-    [data],
-  );
+  // Also sort each node's store_statuses by store_id for consistent display.
+  const nodeStatuses: INodeStatus[] = useMemo(() => {
+    const nodes = accumulateMetrics(data?.nodes ?? []);
+    for (const ns of nodes) {
+      ns.store_statuses = sortBy(
+        ns.store_statuses,
+        ss => ss.desc?.store_id,
+      );
+    }
+    return nodes;
+  }, [data]);
 
   const { storeIDToNodeID, nodeStatusByID, nodeRegionsByID } = useMemo(() => {
     const nodeStatusByID: Record<NodeID, NodeStatus> = {};

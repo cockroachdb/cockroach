@@ -4,16 +4,9 @@
 // included in the /LICENSE file.
 
 import { Analytics } from "@segment/analytics-node";
-import { call, put, takeEvery } from "redux-saga/effects";
 
-import { PayloadAction } from "src/interfaces/action";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
-
-import {
-  EMAIL_SUBSCRIPTION_SIGN_UP,
-  EmailSubscriptionSignUpPayload,
-} from "./customAnanlyticsActions";
 
 export type AnalyticsClientTarget = "email_sign_up";
 
@@ -34,12 +27,13 @@ export function getAnalyticsClientFor(
   }
 }
 
-export function* signUpEmailSubscription(
-  action: PayloadAction<EmailSubscriptionSignUpPayload>,
-) {
+export async function signUpEmailSubscription(
+  clusterId: string,
+  email: string,
+  dispatch: (action: any) => void,
+): Promise<void> {
   const client = getAnalyticsClientFor("email_sign_up");
-  const { clusterId, email } = action.payload;
-  yield call([client, client.identify], {
+  await client.identify({
     userId: clusterId,
     traits: {
       email,
@@ -47,9 +41,5 @@ export function* signUpEmailSubscription(
       product_updates: "true",
     },
   });
-  yield put(emailSubscriptionAlertLocalSetting.set(true));
-}
-
-export function* customAnalyticsSaga() {
-  yield takeEvery(EMAIL_SUBSCRIPTION_SIGN_UP, signUpEmailSubscription);
+  dispatch(emailSubscriptionAlertLocalSetting.set(true));
 }

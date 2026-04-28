@@ -7,6 +7,8 @@ import {
   Loading,
   api as clusterUiApi,
   useNodesSummary,
+  buildLocalityTree,
+  LocalityTree,
 } from "@cockroachlabs/cluster-ui";
 import filter from "lodash/filter";
 import forEach from "lodash/forEach";
@@ -19,7 +21,6 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { InfoTooltip } from "src/components/infoTooltip";
 import { cockroach } from "src/js/protos";
-import { LocalityTree, selectLocalityTree } from "src/redux/localities";
 import { LivenessStatus } from "src/redux/nodes";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
@@ -172,7 +173,7 @@ export function DataDistributionPage({
   );
 
   const localityTree = useMemo(
-    () => selectLocalityTree.resultFunc(commissioned),
+    () => buildLocalityTree(commissioned),
     [commissioned],
   );
 

@@ -71,7 +71,7 @@ export default function Dropdown({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
-  const selectRef = useRef<Select<DropdownOption>>(null);
+  const selectRef = useRef<any>(null);
 
   const triggerSelectClick = (e: any) => {
     onDropdownClick && onDropdownClick();

@@ -3,13 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useCluster } from "@cockroachlabs/cluster-ui";
 import React, { useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector, useStore } from "react-redux";
 
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
-import { signUpForEmailSubscription } from "src/redux/customAnalytics";
-import { clusterIdSelector } from "src/redux/nodes";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { signUpEmailSubscription } from "src/redux/customAnalytics";
+import { AdminUIState } from "src/redux/state";
 import {
   loadUIData,
   RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
@@ -21,33 +21,30 @@ import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscrip
 import "./emailSubscription.scss";
 
 const EmailSubscription: React.FC = () => {
-  const dispatch: AppDispatch = useDispatch();
+  const store = useStore<AdminUIState>();
   const isHiddenPanel = useSelector((state: AdminUIState) =>
     dismissReleaseNotesSignupForm(state),
   );
-  const clusterId = useSelector((state: AdminUIState) =>
-    clusterIdSelector(state),
-  );
+  const { data: clusterData } = useCluster();
+  const clusterId = clusterData?.cluster_id ?? "";
 
   useEffect(() => {
-    dispatch(loadUIData(RELEASE_NOTES_SIGNUP_DISMISSED_KEY));
+    loadUIData(store.dispatch, store.getState, RELEASE_NOTES_SIGNUP_DISMISSED_KEY);
     return () => {
-      dispatch(emailSubscriptionAlertLocalSetting.set(false));
+      store.dispatch(emailSubscriptionAlertLocalSetting.set(false));
     };
-  }, [dispatch]);
+  }, [store]);
 
   const handleEmailSubscriptionSubmit = (email: string) => {
-    dispatch(signUpForEmailSubscription(clusterId, email));
+    signUpEmailSubscription(clusterId, email, store.dispatch);
   };
 
   const handlePanelHide = () => {
-    dispatch(emailSubscriptionAlertLocalSetting.set(false));
-    dispatch(
-      saveUIData({
-        key: RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
-        value: true,
-      }),
-    );
+    store.dispatch(emailSubscriptionAlertLocalSetting.set(false));
+    saveUIData(store.dispatch, store.getState, {
+      key: RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
+      value: true,
+    });
   };
 
   if (isHiddenPanel) {

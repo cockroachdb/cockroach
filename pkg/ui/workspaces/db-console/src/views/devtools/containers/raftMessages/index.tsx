@@ -3,26 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodesSummary } from "@cockroachlabs/cluster-ui";
 import isString from "lodash/isString";
 import map from "lodash/map";
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useHistory, useRouteMatch } from "react-router-dom";
-import { createSelector } from "reselect";
 
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
   hoverOff as hoverOffAction,
   hoverOn as hoverOnAction,
   hoverStateSelector,
 } from "src/redux/hover";
-import {
-  nodeDisplayNameByIDSelector,
-  nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID,
-  nodeIDsSelector,
-} from "src/redux/nodes";
-import { AdminUIState, AppDispatch } from "src/redux/state";
+import { AppDispatch } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { setMetricsFixedWindow } from "src/redux/timeScale";
 import { nodeIDAttr } from "src/util/constants";
@@ -41,47 +34,29 @@ import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvi
 
 import messagesDashboard from "./messages";
 
-const nodeDropdownOptionsSelector = createSelector(
-  nodeIDsSelector,
-  nodeDisplayNameByIDSelector,
-  (nodeIds, nodeDisplayNameByID): DropdownOption[] => {
-    const base = [{ value: "", label: "Cluster" }];
-    return base.concat(
-      map(nodeIds, id => {
-        return {
-          value: id.toString(),
-          label: nodeDisplayNameByID[id],
-        };
-      }),
-    );
-  },
-);
-
 const RaftMessages: React.FC = () => {
   const dispatch: AppDispatch = useDispatch();
   const history = useHistory();
   const match = useRouteMatch();
 
-  const nodesQueryValid = useSelector(
-    (state: AdminUIState) => state.cachedData.nodes.valid,
-  );
-  const livenessQueryValid = useSelector(
-    (state: AdminUIState) => state.cachedData.nodes.valid,
-  );
+  const {
+    nodeIDs: nodeIdNumbers,
+    nodeDisplayNameByID,
+    storeIDsByNodeID,
+  } = useNodesSummary();
   const hoverState = useSelector(hoverStateSelector);
-  const nodeIds = useSelector(nodeIDsStringifiedSelector);
-  const storeIDsByNodeID = useSelector(selectStoreIDsByNodeID);
-  const nodeDropdownOptions = useSelector(nodeDropdownOptionsSelector);
-  const nodeDisplayNameByID = useSelector(nodeDisplayNameByIDSelector);
 
-  useEffect(() => {
-    if (!nodesQueryValid) {
-      dispatch(refreshNodes());
-    }
-    if (!livenessQueryValid) {
-      dispatch(refreshLiveness());
-    }
-  }, [dispatch, nodesQueryValid, livenessQueryValid]);
+  const nodeIds = nodeIdNumbers;
+
+  const nodeDropdownOptions: DropdownOption[] = useMemo(() => {
+    const base = [{ value: "", label: "Cluster" }];
+    return base.concat(
+      map(nodeIdNumbers, id => ({
+        value: id.toString(),
+        label: nodeDisplayNameByID[id],
+      })),
+    );
+  }, [nodeIdNumbers, nodeDisplayNameByID]);
 
   const nodeChange = useCallback(
     (selected: DropdownOption) => {
