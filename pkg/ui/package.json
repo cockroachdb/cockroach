@@ -63,256 +63,20 @@
         "[1] https://pnpm.io/npmrc#public-hoist-pattern",
         "[2] https://docs.aspect.build/rules/aspect_rules_js/docs/pnpm/#hoisting"
       ],
-      "rc-align@2.4.5": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-animate@2.11.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-animate@3.1.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-calendar@9.15.11": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-cascader@0.17.5": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-checkbox@2.1.8": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-collapse@1.11.8": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-dialog@7.x": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-drawer@3.1.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-dropdown@2.4.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-editor-core@0.8.10": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-editor-mention@1.1.13": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-form@2.4.11": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-hammerjs@0.6.10": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-input-number@4.5.9": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-mentions@0.4.2": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-menu@7.5.5": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-notification@3.3.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-pagination@3.5.0": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-progress@2.5.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-rate@2.5.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-resize-observer@0.1.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-select@9.2.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-slider@8.7.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-steps@3.5.0": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-switch@1.9.2": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-table@6.x": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-tabs@9.x": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-time-picker@3.7.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-tooltip@3.7.3": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-tree-select@2.9.4": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-tree@2.1.4": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-trigger@2.6.5": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-trigger@3.0.0": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-upload@2.9.4": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rc-util@4.21.1": {
-        "peerDependencies": {
-          "react": "16.12.0",
-          "react-dom": "16.12.0"
-        }
-      },
-      "rmc-feedback@2.0.0": {
-        "peerDependencies": {
-          "react": "16.x",
-          "react-dom": "16.x"
-        }
-      },
-      "// more phantom deps": [
-        "Likewise, a few other packages have 'phantom' dependencies."
-      ],
       "@storybook/builder-webpack4@6.3.1": {
         "devDependencies": {
-          "react-dom": "16.12.0"
-        }
-      },
-      "antd@3.x": {
-        "peerDependencies": {
-          "@babel/runtime": "7.x",
-          "identity-obj-proxy": "3.x"
+          "react-dom": "18.2.0"
         }
       },
       "create-react-class@15.7.0": {
         "peerDependencies": {
-          "react": "16.x",
-          "react-dom": "16.x"
+          "react": "18.x",
+          "react-dom": "18.x"
         }
       },
-      "jest-environment-enzyme@7.1.2": {
+      "connected-react-router@6.9.1": {
         "peerDependencies": {
-          "enzyme-adapter-react-16": "1.x"
-        }
-      },
-      "mini-store@2.0.0": {
-        "peerDependencies": {
-          "react": "16.x"
+          "react": "18.x"
         }
       },
       "redux-saga-test-plan@4.0.0-beta.2": {
@@ -321,32 +85,17 @@
           "@redux-saga/symbols": "1.x"
         }
       },
-      "stylus-loader@3.0.2": {
-        "peerDependencies": {
-          "webpack": "*"
-        }
-      },
       "// babel transformations": [
         "Babel transformation that occurs during Jest testing can result in",
         "require('@babel/runtime') appearing in transpiled source. This is",
         "technically a 'phantom' dependency as well, and must be declared here."
       ],
-      "jest-enzyme@7.1.2": {
-        "peerDependencies": {
-          "@babel/runtime": "7.x"
-        }
-      },
       "jest-runner@27.5.1": {
         "peerDependencies": {
           "@babel/runtime": "7.x"
         }
       },
       "jest-environment-jsdom@27.5.1": {
-        "peerDependencies": {
-          "@babel/runtime": "7.x"
-        }
-      },
-      "enzyme-matchers@7.1.2": {
         "peerDependencies": {
           "@babel/runtime": "7.x"
         }
@@ -392,8 +141,8 @@
       }
     },
     "overrides": {
-      "@types/react": "16.14.8",
-      "@types/react-dom": "16.9.3",
+      "@types/react": "18.2.79",
+      "@types/react-dom": "18.2.25",
       "aria-query": "5.0.1",
       "chokidar": "3.5.2",
       "antd>core-js": "2.6.12",
@@ -409,8 +158,8 @@
       "markdown-to-jsx": "6.11.4",
       "node-fetch": "2.6.7",
       "protobufjs": "6.8.6",
-      "react": "16.12.0",
-      "react-dom": "16.12.0",
+      "react": "18.2.0",
+      "react-dom": "18.2.0",
       "redux": "4.1.0",
       "serialize-javascript": "3.1.0",
       "ua-parser-js": "0.7.24",

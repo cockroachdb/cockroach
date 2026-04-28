@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { renderHook } from "@testing-library/react-hooks";
+import { renderHook, waitFor } from "@testing-library/react";
 import Long from "long";
 import React from "react";
 import { SWRConfig } from "swr";
@@ -52,7 +52,7 @@ describe("useTableIndexStats", () => {
       index_recommendations: [],
     });
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useTableIndexStats({
           dbName: "testdb",
@@ -62,11 +62,11 @@ describe("useTableIndexStats", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
-
-    expect(result.current.indexStats.tableIndexes).toEqual([]);
-    expect(result.current.indexStats.lastReset).toBeNull();
-    expect(result.current.indexStats.databaseID).toBe(5);
+    await waitFor(() => {
+      expect(result.current.indexStats.tableIndexes).toEqual([]);
+      expect(result.current.indexStats.lastReset).toBeNull();
+      expect(result.current.indexStats.databaseID).toBe(5);
+    });
   });
 
   it("should transform protobuf response to TableIndex[]", async () => {
@@ -114,7 +114,7 @@ describe("useTableIndexStats", () => {
       ],
     });
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useTableIndexStats({
           dbName: "testdb",
@@ -124,7 +124,9 @@ describe("useTableIndexStats", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
+    await waitFor(() => {
+      expect(result.current.indexStats.tableIndexes).toHaveLength(1);
+    });
 
     const { tableIndexes, lastReset, databaseID } = result.current.indexStats;
 
@@ -175,7 +177,7 @@ describe("useTableIndexStats", () => {
       index_recommendations: [],
     });
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useTableIndexStats({
           dbName: "testdb",
@@ -185,10 +187,10 @@ describe("useTableIndexStats", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
-
-    expect(result.current.indexStats.tableIndexes[0].lastRead).toBeNull();
-    expect(result.current.indexStats.lastReset).toBeNull();
+    await waitFor(() => {
+      expect(result.current.indexStats.tableIndexes[0].lastRead).toBeNull();
+      expect(result.current.indexStats.lastReset).toBeNull();
+    });
   });
 
   it("should filter index recommendations by index_id", async () => {
@@ -239,7 +241,7 @@ describe("useTableIndexStats", () => {
       ],
     });
 
-    const { result, waitForNextUpdate } = renderHook(
+    const { result } = renderHook(
       () =>
         useTableIndexStats({
           dbName: "testdb",
@@ -249,7 +251,9 @@ describe("useTableIndexStats", () => {
       { wrapper },
     );
 
-    await waitForNextUpdate();
+    await waitFor(() => {
+      expect(result.current.indexStats.tableIndexes).toHaveLength(2);
+    });
 
     const { tableIndexes } = result.current.indexStats;
     const idxA = tableIndexes.find(i => i.indexName === "idx_a");
