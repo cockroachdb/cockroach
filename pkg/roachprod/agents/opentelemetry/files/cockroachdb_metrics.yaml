@@ -1106,6 +1106,7 @@ exec_latency_count: exec.latency.count
 exec_latency_sum: exec.latency.sum
 exec_success: exec.success
 exportrequest_delay_total: exportrequest.delay.total
+fault_tolerance_nodes: fault_tolerance.nodes
 follower_reads_success_count: follower_reads.success_count
 gcbytesage: gcbytesage
 go_scheduler_latency: go.scheduler_latency
