@@ -15,12 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -278,13 +278,13 @@ func maybeRewriteIndexAndConstraintID(
 	b.QueryByID(tableID).ForEach(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
-		_ = screl.WalkIndexIDs(e, func(id *catid.IndexID) error {
+		_ = walkutil.Walk(e, func(id *catid.IndexID) error {
 			if id != nil && *id == indexID {
 				*id = actualIndexID
 			}
 			return nil
 		})
-		_ = screl.WalkConstraintIDs(e, func(id *catid.ConstraintID) error {
+		_ = walkutil.Walk(e, func(id *catid.ConstraintID) error {
 			if id != nil && *id == constraintID {
 				*id = actualConstraintID
 			}

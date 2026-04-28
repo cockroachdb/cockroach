@@ -10,7 +10,6 @@ go_library(
         "format.go",
         "node.go",
         "scalars.go",
-        "walk.go",
         ":gen-attr-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl",
@@ -18,15 +17,14 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/types",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
+        "//pkg/util/walkutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -51,6 +49,7 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/sql/types",
         "//pkg/util/iterutil",
+        "//pkg/util/walkutil",
         "@com_github_stretchr_testify//require",
     ],
 )

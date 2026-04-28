@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -259,8 +261,8 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 	return buf.String()
 }
 
-// ForEachExprStringInTableDesc runs a closure for each expression string
-// within a TableDescriptor. The closure takes in a string pointer so that
+// ForEachExprStringInTableDesc runs a closure for each expression within
+// a TableDescriptor. The closure takes in an expression pointer so that
 // it can mutate the TableDescriptor if desired. It also takes SerializedExprTyp
 // to indicate the type of the expression.
 func ForEachExprStringInTableDesc(
@@ -2860,6 +2862,73 @@ func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
 func (desc *Mutable) SetTableLocalityGlobal() {
 	lc := LocalityConfigGlobal()
 	desc.LocalityConfig = &lc
+}
+
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(rewriter catalog.DescriptorRewriteFn) error {
+	desc.Version = 1
+	desc.ModificationTime = hlc.Timestamp{}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(id *catid.DescID) error {
+		newID, err := rewriter(*id)
+		if err != nil {
+			return err
+		}
+		*id = newID
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(t *types.T) error {
+		return descutil.RewriteTypeOIDs(t, rewriter)
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(expr *catpb.Expression) error {
+		if *expr == "" {
+			return nil
+		}
+		newExpr, err := descutil.RewriteExprIDs(*expr, rewriter)
+		if err != nil {
+			return err
+		}
+		*expr = newExpr
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(stmt *catpb.Statement) error {
+		if *stmt == "" {
+			return nil
+		}
+		newStmt, err := descutil.RewriteViewQueryIDs(*stmt, rewriter)
+		if err != nil {
+			return err
+		}
+		*stmt = newStmt
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err := walkutil.Walk(&desc.TableDescriptor, func(body *catpb.RoutineBody) error {
+		if *body == "" {
+			return nil
+		}
+		newBody, err := descutil.RewritePLpgSQLBodyIDs(*body, rewriter)
+		if err != nil {
+			return err
+		}
+		*body = newBody
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

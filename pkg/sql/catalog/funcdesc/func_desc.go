@@ -603,6 +603,11 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(_ catalog.DescriptorRewriteFn) error {
+	return errors.AssertionFailedf("Rewrite is not implemented for function descriptors")
+}
+
 // SetDeclarativeSchemaChangerState implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
 	desc.DeclarativeSchemaChangerState = state

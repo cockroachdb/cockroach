@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -216,7 +217,7 @@ func (b *builderState) checkForConcurrentSchemaChanges(
 // This provides us with all of the ID -> name mappings required to
 // comprehensively decorate any EXPLAIN (DDL) output.
 func (b *builderState) ensureDescriptors(e scpb.Element) {
-	_ = screl.WalkDescIDs(e, func(id *catid.DescID) error {
+	_ = walkutil.Walk(e, func(id *catid.DescID) error {
 		b.ensureDescriptor(*id)
 		return nil
 	})

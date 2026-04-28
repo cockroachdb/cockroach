@@ -140,6 +140,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
+        "//pkg/util/walkutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
