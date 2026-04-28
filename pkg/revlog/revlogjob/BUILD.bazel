@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "revlogjob",
+    srcs = [
+        "driver.go",
+        "producer.go",
+        "tick_manager.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/revlog/revlogjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cloud",
+        "//pkg/kv/kvpb",
+        "//pkg/revlog",
+        "//pkg/revlog/revlogpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "revlogjob_test",
+    srcs = ["driver_test.go"],
+    deps = [
+        ":revlogjob",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/nodelocal",
+        "//pkg/revlog",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
