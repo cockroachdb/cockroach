@@ -33,6 +33,7 @@ type Column struct {
 	defaultExpr                       string
 	computedExpr                      string
 	onUpdateExpr                      string
+	maskingExpr                       string
 	invertedSourceColumnOrdinal       int
 	generatedAsIdentityType           GeneratedAsIdentityType
 	generatedAsIdentitySequenceOption string
@@ -124,6 +125,18 @@ func (c *Column) UseOnUpdate(sd *sessiondata.SessionData) bool {
 // on other columns.
 func (c *Column) OnUpdateExprStr() string {
 	return c.onUpdateExpr
+}
+
+// HasMaskingExpr returns true if the column has a dynamic data masking
+// expression.
+func (c *Column) HasMaskingExpr() bool {
+	return c.maskingExpr != ""
+}
+
+// MaskingExprStr returns the SQL expression string used for dynamic data
+// masking on this column. It is empty if no masking policy is set.
+func (c *Column) MaskingExprStr() string {
+	return c.maskingExpr
 }
 
 // IsComputed returns true if the column is a computed value. ComputedExprStr
@@ -276,6 +289,7 @@ func (c *Column) Init(
 	defaultExpr *string,
 	computedExpr *string,
 	onUpdateExpr *string,
+	maskingExpr *string,
 	generatedAsIdentityType GeneratedAsIdentityType,
 	generatedAsIdentitySequenceOption *string,
 ) {
@@ -309,6 +323,9 @@ func (c *Column) Init(
 	}
 	if onUpdateExpr != nil {
 		c.onUpdateExpr = *onUpdateExpr
+	}
+	if maskingExpr != nil {
+		c.maskingExpr = *maskingExpr
 	}
 	if generatedAsIdentityType != NotGeneratedAsIdentity {
 		if generatedAsIdentitySequenceOption != nil {

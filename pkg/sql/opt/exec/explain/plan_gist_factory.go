@@ -750,6 +750,7 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 		nil, /* defaultExpr */
 		nil, /* computedExpr */
 		nil, /* onUpdateExpr */
+		nil, /* maskingExpr */
 		cat.NotGeneratedAsIdentity,
 		nil, /* generatedAsIdentitySequenceOption */
 	)

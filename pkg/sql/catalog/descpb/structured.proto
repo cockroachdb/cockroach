@@ -206,7 +206,13 @@ message ColumnDescriptor {
   // descriptor represents, if any.
   optional cockroach.sql.catalog.catpb.SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
 
-  // Next id: 22
+  // MaskingExpr is the SQL expression used for dynamic data masking. When
+  // set, unprivileged users see the result of this expression instead of the
+  // raw column value. Users with the UNMASK privilege, table owners, and
+  // admins see the raw data.
+  optional string masking_expr = 22;
+
+  // Next id: 23
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

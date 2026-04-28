@@ -1,0 +1,231 @@
+# Dynamic Data Masking (DDM) tests.
+
+# Disable schema_locked to avoid metamorphic interference with ALTER TABLE.
+statement ok
+SET create_table_with_schema_locked = false
+
+# Create a table with sensitive data.
+statement ok
+CREATE TABLE employees (
+  id INT PRIMARY KEY,
+  name STRING,
+  email STRING,
+  ssn STRING,
+  salary INT
+)
+
+statement ok
+INSERT INTO employees VALUES
+  (1, 'Alice', 'alice@company.com', '123-45-6789', 150000),
+  (2, 'Bob', 'bob@company.com', '987-65-4321', 120000)
+
+# Set masking policies on columns.
+statement ok
+ALTER TABLE employees ALTER COLUMN email SET MASKING FUNCTION regexp_replace(email, '(.).*@', '\1***@')
+
+statement ok
+ALTER TABLE employees ALTER COLUMN ssn SET MASKING FUNCTION '***-**-' || right(ssn, 4)
+
+statement ok
+ALTER TABLE employees ALTER COLUMN salary SET MASKING FUNCTION 0
+
+# Admin (root) should see raw data.
+query ITTTI
+SELECT * FROM employees ORDER BY id
+----
+1  Alice  alice@company.com  123-45-6789  150000
+2  Bob    bob@company.com    987-65-4321  120000
+
+# Create unprivileged role and grant SELECT, then grant role to testuser.
+statement ok
+CREATE ROLE analyst
+
+statement ok
+GRANT SELECT ON employees TO analyst
+
+statement ok
+GRANT analyst TO testuser
+
+# Use testuser and SET ROLE to analyst — should see masked data.
+user testuser
+
+statement ok
+SET ROLE analyst
+
+query ITTTI
+SELECT * FROM employees ORDER BY id
+----
+1  Alice  a***@company.com  ***-**-6789  0
+2  Bob    b***@company.com  ***-**-4321  0
+
+# Verify specific column queries are also masked.
+query T
+SELECT email FROM employees WHERE id = 1
+----
+a***@company.com
+
+query T
+SELECT ssn FROM employees WHERE id = 2
+----
+***-**-4321
+
+query I
+SELECT salary FROM employees WHERE id = 1
+----
+0
+
+# Unmasked columns should still be visible.
+query IT
+SELECT id, name FROM employees ORDER BY id
+----
+1  Alice
+2  Bob
+
+# Switch back to root.
+statement ok
+RESET ROLE
+
+user root
+
+# Test DROP MASKING FUNCTION.
+statement ok
+ALTER TABLE employees ALTER COLUMN salary DROP MASKING FUNCTION
+
+# Now analyst should see raw salary but masked email/ssn.
+user testuser
+
+statement ok
+SET ROLE analyst
+
+query ITTTI
+SELECT * FROM employees WHERE id = 1
+----
+1  Alice  a***@company.com  ***-**-6789  150000
+
+statement ok
+RESET ROLE
+
+user root
+
+# Test masking with JOINs.
+statement ok
+CREATE TABLE departments (
+  dept_id INT PRIMARY KEY,
+  dept_name STRING,
+  manager_id INT
+)
+
+statement ok
+INSERT INTO departments VALUES (1, 'Engineering', 1), (2, 'Marketing', 2)
+
+statement ok
+GRANT SELECT ON departments TO analyst
+
+user testuser
+
+statement ok
+SET ROLE analyst
+
+# Masked columns should stay masked in JOIN results.
+query ITTIT
+SELECT e.id, e.name, e.email, d.dept_id, d.dept_name
+FROM employees e JOIN departments d ON e.id = d.manager_id
+ORDER BY e.id
+----
+1  Alice  a***@company.com  1  Engineering
+2  Bob    b***@company.com  2  Marketing
+
+# Test subquery masking.
+query T
+SELECT email FROM (SELECT * FROM employees WHERE id = 1)
+----
+a***@company.com
+
+# Test that tables without policies are unaffected.
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+CREATE TABLE public_data (
+  id INT PRIMARY KEY,
+  info STRING
+)
+
+statement ok
+INSERT INTO public_data VALUES (1, 'public info')
+
+statement ok
+GRANT SELECT ON public_data TO analyst
+
+user testuser
+
+statement ok
+SET ROLE analyst
+
+query IT
+SELECT * FROM public_data
+----
+1  public info
+
+# Test UNMASK privilege: grant UNMASK to analyst.
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+GRANT SYSTEM UNMASK TO analyst
+
+user testuser
+
+statement ok
+SET ROLE analyst
+
+# With UNMASK privilege, analyst should see raw data.
+query ITTTI
+SELECT * FROM employees ORDER BY id
+----
+1  Alice  alice@company.com  123-45-6789  150000
+2  Bob    bob@company.com    987-65-4321  120000
+
+# Switch back and revoke UNMASK — analyst should see masked data again.
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+REVOKE SYSTEM UNMASK FROM analyst
+
+user testuser
+
+statement ok
+SET ROLE analyst
+
+query ITTTI
+SELECT * FROM employees WHERE id = 1
+----
+1  Alice  a***@company.com  ***-**-6789  150000
+
+# Clean up.
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE employees
+
+statement ok
+DROP TABLE departments
+
+statement ok
+DROP TABLE public_data
+
+statement ok
+REVOKE analyst FROM testuser
+
+statement ok
+DROP ROLE analyst
