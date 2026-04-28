@@ -75,6 +75,7 @@ go_test(
         "descfeed_loop_test.go",
         "driver_test.go",
         "persister_test.go",
+        "resume_internal_test.go",
     ],
     embed = [":revlogjob"],
     deps = [
