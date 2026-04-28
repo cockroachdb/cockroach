@@ -156,19 +156,14 @@ func (p *proc) run(ctx context.Context) error {
 	eventsCh := make(chan rangefeedEvent, 1024)
 	errCh := make(chan error, 1)
 
-	// Open the rangefeed at the lowest persisted resume timestamp
-	// across this producer's spans (or StartHLC on first run). The
-	// rangefeed's catchup scan will redeliver events between this
-	// point and any per-span persisted positions; the producer's
-	// per-span frontier (initialized from resume.SpanResumes) and
-	// the manager's monotonic frontier dedupe correctly.
-	//
-	// TODO(dt): open one rangefeed per (start_ts) group of spans
-	// to skip the redelivery for spans whose persisted ts is above
-	// the slowest's.
-	rfStart := rangefeedStart(p.spec, resume)
+	// Open the rangefeed at spec.StartHLC, with WithInitialScan
+	// enabled and a per-span frontier pre-populated from resume so
+	// that already-caught-up spans skip the init scan and only
+	// newly-introduced spans (added at zero by the descfeed on a
+	// widening) are scanned. See startRangeFeed and
+	// buildRangefeedFrontier.
 	rf, err := startRangeFeed(ctx, cfg.RangeFeedFactory, "revlog",
-		p.spec.Spans, rfStart, eventsCh, errCh)
+		p.spec.Spans, p.spec.StartHLC, resume, eventsCh, errCh)
 	if err != nil {
 		return err
 	}

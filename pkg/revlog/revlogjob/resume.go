@@ -109,26 +109,3 @@ func resumeFromSpec(spec execinfrapb.RevlogSpec) ResumeState {
 	}
 	return r
 }
-
-// rangefeedStart picks the timestamp the producer's rangefeed
-// subscription should start at: the lowest per-span resume position
-// across this producer's spans (the "laggiest" span, which we must
-// catch up from to avoid missing events for that span), clamped to
-// be no lower than spec.StartHLC. With no resume info, returns
-// spec.StartHLC.
-func rangefeedStart(spec execinfrapb.RevlogSpec, resume ResumeState) hlc.Timestamp {
-	start := spec.StartHLC
-	var picked bool
-	for _, sr := range resume.SpanResumes {
-		if sr.Resolved.Less(spec.StartHLC) {
-			// Defensive: the persisted frontier should never be
-			// below StartHLC; if it somehow is, ignore it.
-			continue
-		}
-		if !picked || sr.Resolved.Less(start) {
-			start = sr.Resolved
-			picked = true
-		}
-	}
-	return start
-}
