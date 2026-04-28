@@ -10,6 +10,7 @@ go_library(
         "alter_table_add_column.go",
         "alter_table_add_constraint.go",
         "alter_table_alter_column_add_identity.go",
+        "alter_table_alter_column_drop_identity.go",
         "alter_table_alter_column_drop_not_null.go",
         "alter_table_alter_column_drop_stored.go",
         "alter_table_alter_column_identity.go",

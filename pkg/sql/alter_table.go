@@ -1335,7 +1335,7 @@ func applyColumnMutation(
 
 		// Verify sequence is not depended on by another column.
 		// Use tree.DropDefault behavior to verify without the need to alter other dependencies via tree.DropCascade.
-		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+		if err := params.p.canRemoveAllIdentityOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
 			return err
 		}
 		// Drop the identity flag first, so that it is treated like a normal column.

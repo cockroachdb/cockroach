@@ -1,0 +1,95 @@
+/* setup */
+CREATE TABLE t (
+    i INT,
+    j INT NOT NULL GENERATED ALWAYS AS IDENTITY
+);
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j DROP IDENTITY;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t)}
+ │         ├── 9 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq-)], Expr: nextval(105:::REGCLASS)}
+ │         │    ├── PUBLIC → ABSENT  SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t_j_seq-), Name: "t_j_seq", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (t_j_seq-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t_j_seq-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t_j_seq-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Sequence:{DescID: 105 (t_j_seq-)}
+ │         │    └── PUBLIC → ABSENT  SchemaChild:{DescID: 105 (t_j_seq-), ReferencedDescID: 101 (public)}
+ │         └── 12 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
+ │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+ │              ├── RemoveColumnGeneratedAsIdentity {"ColumnID":2,"TableID":104}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":104}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":104}
+ │              ├── RemoveSequenceOwner {"ColumnID":2,"OwnedSequenceID":105,"TableID":104}
+ │              ├── RemoveOwnerBackReferenceInSequence {"SequenceID":105}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t_j_seq","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+ │    │    ├── 9 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq-)], Expr: nextval(105:::REGCLASS)}
+ │    │    │    ├── ABSENT  → PUBLIC SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq-)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 105 (t_j_seq-), Name: "t_j_seq", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 105 (t_j_seq-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (t_j_seq-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (t_j_seq-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC Sequence:{DescID: 105 (t_j_seq-)}
+ │    │    │    └── ABSENT  → PUBLIC SchemaChild:{DescID: 105 (t_j_seq-), ReferencedDescID: 101 (public)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t)}
+ │         ├── 9 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq-)], Expr: nextval(105:::REGCLASS)}
+ │         │    ├── PUBLIC → ABSENT  SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t_j_seq-), Name: "t_j_seq", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (t_j_seq-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t_j_seq-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t_j_seq-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Sequence:{DescID: 105 (t_j_seq-)}
+ │         │    └── PUBLIC → ABSENT  SchemaChild:{DescID: 105 (t_j_seq-), ReferencedDescID: 101 (public)}
+ │         └── 15 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
+ │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+ │              ├── RemoveColumnGeneratedAsIdentity {"ColumnID":2,"TableID":104}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":104}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":104}
+ │              ├── RemoveSequenceOwner {"ColumnID":2,"OwnedSequenceID":105,"TableID":104}
+ │              ├── RemoveOwnerBackReferenceInSequence {"SequenceID":105}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t_j_seq","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT  → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT           Sequence:{DescID: 105 (t_j_seq-)}
+           │    └── PUBLIC  → ABSENT           TableData:{DescID: 105 (t_j_seq-), ReferencedDescID: 100 (defaultdb)}
+           └── 5 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── CreateGCJobForTable {"DatabaseID":100,"TableID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

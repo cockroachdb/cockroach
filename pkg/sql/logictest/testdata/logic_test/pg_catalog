@@ -6240,7 +6240,7 @@ DROP TABLE pg_attrdef_identity
 # ALTER TABLE ... ADD GENERATED on a plain column must not introduce a
 # pg_attrdef entry; ALTER ... DROP IDENTITY must not leave one behind.
 statement ok
-CREATE TABLE pg_attrdef_alter_identity (a INT PRIMARY KEY, b INT DEFAULT 7) WITH (schema_locked = false)
+CREATE TABLE pg_attrdef_alter_identity (a INT PRIMARY KEY, b INT DEFAULT 7)
 
 statement ok
 ALTER TABLE pg_attrdef_alter_identity ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY
