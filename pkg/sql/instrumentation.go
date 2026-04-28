@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -211,9 +212,18 @@ type instrumentationHelper struct {
 	// stats scanned by this query.
 	nanosSinceStatsForecasted time.Duration
 
-	// stmtHintsCount is the number of hints from system.statement_hints applied
-	// to the statement.
-	stmtHintsCount uint64
+	// stmtHints and stmtHintIDs are the statement hints loaded for this query.
+	// Hint counts are computed from these at output time (rather than at Setup
+	// time) so that hints which fail during application are correctly reflected.
+	stmtHints            []hints.Hint
+	stmtHintIDs          []int64
+	deterministicExplain bool
+
+	// runtimeHintErrors stores per-hint runtime errors, keyed by hint index
+	// into stmtHints. It is lazily allocated on first error. Errors are stored
+	// here rather than on hint.Err to avoid mutating shared hint state across
+	// prepared statement executions.
+	runtimeHintErrors map[int]error
 
 	// retryCount is the number of times the transaction was retried.
 	retryCount uint64
@@ -437,12 +447,9 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
-	ih.stmtHintsCount = 0
-	for _, hint := range stmt.Hints {
-		if hint.Enabled && hint.Err == nil {
-			ih.stmtHintsCount += 1
-		}
-	}
+	ih.stmtHints = stmt.Hints
+	ih.stmtHintIDs = stmt.HintIDs
+	ih.deterministicExplain = cfg.TestingKnobs.DeterministicExplain
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -888,7 +895,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
 	ob.AddTableStatsMode(ih.tableStatsRollout.String())
-	ob.AddStmtHintCount(ih.stmtHintsCount)
+	ob.AddStmtHintCount(ih.stmtHints, ih.runtimeHintErrors)
 	ob.AddRetryCount("transaction", ih.retryCount)
 	ob.AddRetryTime("transaction", phaseTimes.GetTransactionRetryLatency())
 	ob.AddRetryCount("statement", ih.retryStmtCount)
@@ -980,6 +987,15 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	return ob
 }
 
+// recordHintError records a runtime error for the hint at the given index.
+// The map is lazily allocated on first use.
+func (ih *instrumentationHelper) recordHintError(idx int, err error) {
+	if ih.runtimeHintErrors == nil {
+		ih.runtimeHintErrors = make(map[int]error)
+	}
+	ih.runtimeHintErrors[idx] = err
+}
+
 // setExplainAnalyzeResult sets the result for an EXPLAIN ANALYZE or EXPLAIN
 // ANALYZE (DISTSQL) statement (in the former case, distSQLFlowInfos and trace
 // are nil).
@@ -1002,6 +1018,12 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 
 	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 	rows := ob.BuildStringRows()
+	if ih.explainFlags.Verbose && len(ih.stmtHints) > 0 {
+		rows = append(rows, buildStmtHintTreeRows(
+			ih.stmtHints, ih.stmtHintIDs, ih.deterministicExplain,
+			ih.runtimeHintErrors,
+		)...)
+	}
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
 		for i, d := range distSQLFlowInfos {

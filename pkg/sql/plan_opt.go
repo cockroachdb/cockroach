@@ -73,7 +73,10 @@ func (p *planner) prepareUsingOptimizer(
 			return flags, udts, err
 		}
 		// Do not return the error. If semantic analysis failed, try preparing again
-		// without injected hints.
+		// without injected hints. Note: don't bother recording the hint error,
+		// since we'll attempt to re-plan with the hint again during EXECUTE.
+		// TODO(drewk): should we just not cache the plan instead of retrying
+		// without the hint?
 		log.Eventf(ctx, "preparing with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to preparing without injected hints")
 	}
@@ -323,6 +326,16 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		// planning again without injected hints.
 		log.Eventf(ctx, "planning with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to planning without injected hints")
+		// Record the injection error so that EXPLAIN output correctly
+		// reflects this hint as skipped. The error is stored on the
+		// instrumentation helper rather than on the hint itself to avoid
+		// mutating shared hint state across prepared statement executions.
+		for i := range p.stmt.Hints {
+			if p.stmt.Hints[i].HintInjectionDonor != nil && p.stmt.Hints[i].Enabled() {
+				p.instrumentation.recordHintError(i, err)
+				break
+			}
+		}
 	}
 	opc.reset(ctx)
 	return p.makeOptimizerPlanInternal(ctx)
