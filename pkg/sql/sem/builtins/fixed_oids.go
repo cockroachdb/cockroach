@@ -2932,6 +2932,9 @@ var builtinOidsArray = []string{
 	2977: `gcd(a: decimal, b: decimal) -> decimal`,
 	2978: `lcm(a: decimal, b: decimal) -> decimal`,
 	2979: `st_distancespheroid(geometry_a: geometry, geometry_b: geometry, spheroid: string) -> float`,
+	2980: `st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2981: `st_3ddistance(geometry_a: geometry, geometry_b: geometry) -> float`,
+	2982: `_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
