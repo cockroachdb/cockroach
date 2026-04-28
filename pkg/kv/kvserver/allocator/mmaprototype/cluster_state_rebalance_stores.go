@@ -181,12 +181,11 @@ func (re *rebalanceEnv) rebalanceStores(
 	id := re.mmaid
 	ctx = logtags.AddTag(ctx, "mmaid", id)
 
-	// passDetailedLog promotes the outer-loop narrative (rebalanceStores
-	// begins, cluster means, evaluating sN, overload-start/end) at Infof
-	// every outerLogInterval. Gives operators a 10-minute heartbeat of
-	// pass-level context.
+	// Promote the outer-loop narrative to Infof once per outerLogInterval,
+	// only on the first iteration of the production rebalance loop
+	// (passObs != nil).
 	passDetailedLog := log.ExpensiveLogEnabled(ctx, 3) ||
-		re.outerLogEvery.ShouldProcess(re.now)
+		(re.passObs != nil && re.outerLogEvery.ShouldProcess(re.now))
 	passLogf := re.makeLogf(passDetailedLog)
 
 	passLogf(ctx, 2, "rebalanceStores begins")
@@ -300,9 +299,11 @@ func (re *rebalanceEnv) rebalanceStores(
 		ss := re.stores[store.StoreID]
 		// Decide per-shedding-store whether to emit detailed logs: verbose
 		// logging at level 3, or persistently overloaded and not recently
-		// logged.
+		// logged. Gated on passObs != nil so only the first iteration of
+		// the production rebalance loop emits.
 		overloadDur := re.now.Sub(ss.overloadStartTime)
-		persistentOverload := overloadDur >= persistentOverloadThreshold &&
+		persistentOverload := re.passObs != nil &&
+			overloadDur >= persistentOverloadThreshold &&
 			re.now.Sub(ss.lastDetailedLogTimes[localStoreID]) >= detailedLogInterval
 		detailedLog := persistentOverload || log.ExpensiveLogEnabled(ctx, 3)
 		logf := re.makeLogf(detailedLog)
