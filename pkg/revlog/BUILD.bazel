@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "revlog",
     srcs = [
+        "coverage.go",
         "encoding.go",
         "framing.go",
         "paths.go",
@@ -30,6 +31,7 @@ go_library(
 go_test(
     name = "revlog_test",
     srcs = [
+        "coverage_test.go",
         "framing_test.go",
         "revlog_test.go",
     ],
