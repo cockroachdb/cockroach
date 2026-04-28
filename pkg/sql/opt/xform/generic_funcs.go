@@ -62,6 +62,13 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	var replace func(e opt.Expr) opt.Expr
 	replace = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
+		case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
+			// Do not replace placeholders within subqueries. Replacing
+			// placeholders with variables referencing the Values expression
+			// would introduce correlation into an otherwise uncorrelated
+			// subquery, which can prevent lookup join generation. See #169297.
+			return e
+
 		case *memo.PlaceholderExpr:
 			idx := t.Value.(*tree.Placeholder).Idx
 			// Reuse the same column for duplicate placeholder references.
