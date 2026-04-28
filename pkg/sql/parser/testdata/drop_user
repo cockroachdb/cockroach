@@ -65,7 +65,7 @@ DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE 
 parse
 DROP PROVISIONED ROLES WITH LAST LOGIN BEFORE '2025-01-01', SOURCE = 'ldap:ldap.example.com'
 ----
-DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01'
+DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' -- normalized!
 DROP PROVISIONED ROLES WITH SOURCE = ('ldap:ldap.example.com'), LAST LOGIN BEFORE ('2025-01-01') -- fully parenthesized
 DROP PROVISIONED ROLES WITH SOURCE = '_', LAST LOGIN BEFORE '_' -- literals removed
 DROP PROVISIONED ROLES WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2025-01-01' -- identifiers removed
