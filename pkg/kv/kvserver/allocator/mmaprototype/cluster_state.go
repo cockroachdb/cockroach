@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -812,7 +813,12 @@ type storeState struct {
 	// was emitted for this shedding store, keyed by the local store ID that
 	// triggered the log burst. Each local store may evaluate different lease
 	// transfer candidates for the same shedding store, so they get independent
-	// rate-limiting. Reset when the overload interval resets.
+	// rate-limiting. Lazily allocated by rebalanceStores; nil-map indexing
+	// returns the zero time, which the read path treats as "never logged".
+	// `clear`-ed when a fresh overload interval starts (after the previous
+	// interval ended and the grace period expired); not reset on transient
+	// drops below overloadSlow. Only updated when the persistent-overload
+	// branch fires - vmodule=3 promotions do not consume the throttle.
 	lastDetailedLogTimes map[roachpb.StoreID]time.Time
 }
 
@@ -1328,6 +1334,14 @@ type clusterState struct {
 
 	mmaid int // a counter for rebalanceStores calls, for logging
 
+	// outerLogEvery throttles the rebalanceStores outer-loop narrative
+	// (rebalanceStores begins, cluster means, evaluating sN, etc.) to one
+	// Infof emission per outerLogInterval. Only consumed when passObs != nil
+	// (the first iteration of the production rebalance loop), so test and
+	// non-periodic invocations leave the throttle untouched. See
+	// rebalanceStores.
+	outerLogEvery util.EveryN[time.Time]
+
 	// Disk utilization thresholds from cluster settings. These are set via
 	// SetDiskUtilThresholds.
 	//
@@ -1361,6 +1375,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
+		outerLogEvery:        util.Every(outerLogInterval),
 		// Disk utilization thresholds default to 0. We don't plumb cluster
 		// settings here to avoid coupling MMA to settings at construction.
 		// Callers (e.g., newMMAStoreRebalancer) call SetDiskUtilThresholds

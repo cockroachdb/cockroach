@@ -1,7 +1,12 @@
-# Demonstrates the per-shedding-store dynamic verbose logging promotion at
-# vmodule=0 (default operator view): per-range messages stay silent unless
-# the store has been overloaded for >= persistentOverloadThreshold (30min)
-# and hasn't had a detailed-log burst within detailedLogInterval (10min).
+# Demonstrates dynamic-verbose-logging behavior at vmodule=0 (default
+# operator view). Two independent gates promote messages to Infof:
+#
+#   - Outer loop (rebalanceStores narrative: begins, cluster means,
+#     evaluating sN, etc.): emitted at most once per outerLogInterval(10min)
+#     as a heartbeat.
+#   - Per-store burst (detail inside each shedding store's processing):
+#     emitted at most once per detailedLogInterval(10min) while a store has
+#     been continuously overloaded for >= persistentOverloadThreshold(30min).
 
 include path=rebalance_stores_cpu_replica_include.txt
 ----
@@ -12,10 +17,18 @@ tick seconds=300
 ----
 t=10m0s
 
-# t=10m: overloadDur < 30min, detailedLog=false. Only always-Infof entries
-# are captured (sorted shedding stores, result, pass summary).
+# t=10m: outer-loop timer's first fire, so the outer narrative is captured
+# at Infof. Per-store burst is gated by the 30-min persistent-overload
+# threshold and stays silent.
 rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
 ----
+[mmaid=2] rebalanceStores begins
+[mmaid=2] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=2] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=2] store s3 was added to shedding store list
+[mmaid=2] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=2] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] rebalancing pass summary [local=s1]:
@@ -41,14 +54,22 @@ change-id=2 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-# t=40m: overloadDur >= 30min and no prior burst, so detailedLog=true for s3.
-# Per-range messages are promoted to Infof and appear in the captured log.
+# t=40m: 30min after the t=10m outer emission, so the outer-loop timer fires
+# again. overloadDur=40min crosses the 30-min persistent threshold and
+# detailedLogInterval has elapsed, so the per-store burst also fires.
 tick seconds=1800
 ----
 t=40m0s
 
 rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
 ----
+[mmaid=3] rebalanceStores begins
+[mmaid=3] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=3] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=3] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=3] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=3] store s3 was added to shedding store list
+[mmaid=3] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=3] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=3] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=3] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
@@ -96,8 +117,8 @@ change-id=2 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-# t=45m: 5min after the last burst, less than detailedLogInterval(10min), so
-# detailedLog=false again. Captured log shrinks back.
+# t=45m: 5min after the t=40m emissions, both throttles still active. Outer
+# loop and per-store burst silent.
 gc-pending-changes
 ----
 pending(0)
@@ -122,8 +143,8 @@ change-id=4 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-# t=56m: 16min after the last burst, past detailedLogInterval(10min), so the
-# next burst fires. detailedLog=true again, per-range Infof returns.
+# t=56m: 16min after t=40m, both 10-min throttles have expired. Outer loop
+# and per-store burst both fire again.
 gc-pending-changes
 ----
 pending(2)
@@ -140,6 +161,13 @@ t=56m0s
 
 rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
 ----
+[mmaid=5] rebalanceStores begins
+[mmaid=5] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=5] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=5] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=5] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=5] store s3 was added to shedding store list
+[mmaid=5] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=5] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=5] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=5] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
