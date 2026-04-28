@@ -37,9 +37,11 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
+        "//pkg/testutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
