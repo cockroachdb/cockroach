@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -364,6 +365,7 @@ func remapTables(
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
+	typesByID map[descpb.ID]*typedesc.Mutable,
 	descriptorCoverage tree.DescriptorCoverage,
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
@@ -452,6 +454,16 @@ func remapTables(
 			return false, pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 		}
 
+		// Must run before the table's own rewrite is recorded below: any region
+		// enum referenced by an in-flight SET LOCALITY in the table's
+		// declarative schema changer state needs a mapping to the destination
+		// DB's enum (which checkMultiRegionCompatible above guaranteed exists).
+		if err := maybeAddRegionEnumRewriteForSchemaChangeState(
+			ctx, txn, table, parentDB, typesByID, descriptorRewrites,
+		); err != nil {
+			return false, err
+		}
+
 		// Create the table rewrite with the new parent ID. We've done all the
 		// up-front validation that we can.
 		descriptorRewrites[table.ID] = &jobspb.DescriptorRewrite{ParentID: parentID}
@@ -466,6 +478,123 @@ func remapTables(
 		}
 	}
 	return shouldBufferDeprecatedPrivilegeNotice, nil
+}
+
+// maybeAddRegionEnumRewriteForSchemaChangeState records ToExisting rewrites
+// from the source database's region enum and array type IDs to the
+// destination database's existing enum and array type IDs.
+//
+// Without these rewrites, table-level RESTORE of a multi-region table whose
+// in-flight schema change references the region enum (via
+// TableLocalitySecondaryRegion or via the crdb_region column's type closure)
+// would fail downstream with "missing rewrite for ..." because remapTypes
+// does not visit type descriptors not in the restore set.
+//
+// The destination database is required to be multi-region (enforced by
+// checkMultiRegionCompatible upstream).
+func maybeAddRegionEnumRewriteForSchemaChangeState(
+	ctx context.Context,
+	txn descs.Txn,
+	table *tabledesc.Mutable,
+	parentDB catalog.DatabaseDescriptor,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	if !parentDB.IsMultiRegion() {
+		return nil
+	}
+	srcEnum, srcEnumID, srcArrayID := findSourceRegionEnumIDs(table, typesByID)
+	needRewrite := func(srcID descpb.ID) bool {
+		if srcID == descpb.InvalidID {
+			return false
+		}
+		_, ok := descriptorRewrites[srcID]
+		return !ok
+	}
+	if !needRewrite(srcEnumID) && !needRewrite(srcArrayID) {
+		return nil
+	}
+
+	destEnumID, err := parentDB.MultiRegionEnumID()
+	if err != nil {
+		return errors.Wrapf(err,
+			"looking up region enum for table-level restore of %q into database %q",
+			table.GetName(), parentDB.GetName())
+	}
+	destEnumDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Type(ctx, destEnumID)
+	if err != nil {
+		return errors.Wrapf(err,
+			"fetching destination region enum descriptor (id %d) for table-level restore of %q",
+			destEnumID, table.GetName())
+	}
+	// When the source enum descriptor is in scope, verify that every value it
+	// contains is also present in the destination. Otherwise rows whose
+	// crdb_region values exist only in the source would be silently mismapped
+	// after the rewrite. The fallback branch in findSourceRegionEnumIDs (where
+	// srcEnum is nil) has no source descriptor to compare against and skips
+	// this check.
+	if srcEnum != nil {
+		if err := srcEnum.IsCompatibleWith(destEnumDesc); err != nil {
+			return errors.Wrapf(err,
+				"%q is not compatible with type %q existing in cluster",
+				srcEnum.GetName(), destEnumDesc.GetName())
+		}
+	}
+	destArrayID := destEnumDesc.TypeDesc().ArrayTypeID
+
+	addRewrite := func(srcID, destID descpb.ID) {
+		if !needRewrite(srcID) {
+			return
+		}
+		descriptorRewrites[srcID] = &jobspb.DescriptorRewrite{
+			ParentID:   parentDB.GetID(),
+			ID:         destID,
+			ToExisting: true,
+		}
+	}
+	addRewrite(srcEnumID, destEnumID)
+	addRewrite(srcArrayID, destArrayID)
+	return nil
+}
+
+// findSourceRegionEnumIDs returns the source database's region enum descriptor
+// (when in scope), enum ID, and array type ID referenced by the table. Either
+// or both IDs may be descpb.InvalidID and srcEnum may be nil if the
+// corresponding reference is not present.
+//
+// The enum and array IDs come from two sources, in order of preference:
+//   - The first MULTIREGION_ENUM type descriptor in typesByID whose parent
+//     matches the table's parent (covers RBR tables and any case where the
+//     enum descriptor itself is in the restore set). srcEnum is non-nil here.
+//   - Any TableLocalitySecondaryRegion element in the table's declarative
+//     schema changer state (covers RBT-IN-region tables whose enum descriptor
+//     is not in the restore set). srcEnum is nil here, srcArrayID is
+//     InvalidID, and no enum compatibility check can be run against the
+//     destination because the source descriptor is not available.
+func findSourceRegionEnumIDs(
+	table *tabledesc.Mutable, typesByID map[descpb.ID]*typedesc.Mutable,
+) (srcEnum catalog.TypeDescriptor, srcEnumID, srcArrayID descpb.ID) {
+	for _, typ := range typesByID {
+		if typ.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
+			continue
+		}
+		if typ.GetParentID() != table.GetParentID() {
+			continue
+		}
+		return typ, typ.GetID(), typ.ArrayTypeID
+	}
+	if state := table.GetDeclarativeSchemaChangerState(); state != nil {
+		for _, target := range state.Targets {
+			sec, ok := target.Element().(*scpb.TableLocalitySecondaryRegion)
+			if !ok {
+				continue
+			}
+			if sec.RegionEnumTypeID != descpb.InvalidID {
+				return nil, sec.RegionEnumTypeID, descpb.InvalidID
+			}
+		}
+	}
+	return nil, descpb.InvalidID, descpb.InvalidID
 }
 
 func remapTypes(
@@ -1002,7 +1131,7 @@ func allocateDescriptorRewrites(
 	}
 
 	if b, err := remapTables(
-		ctx, p, databasesByID, tablesByID, descriptorCoverage, intoDB, restoreDBNames,
+		ctx, p, databasesByID, tablesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames,
 		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
