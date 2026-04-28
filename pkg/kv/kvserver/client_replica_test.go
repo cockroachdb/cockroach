@@ -2006,18 +2006,17 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 		// falls through to verifyAcquisition, which rejects if we're not the
 		// raft leader. Without this wait, the raft group can be leaderless
 		// after AdminTransferLease initiates a leadership transfer.
-		require.Eventually(t, func() bool {
+		testutils.SucceedsSoon(t, func() error {
 			raftStatus := l.replica1.RaftStatus()
 			if raftStatus == nil {
-				return false
+				return errors.New("raft status not available")
 			}
 			if raftStatus.RaftState == raftpb.StateLeader {
-				return true
+				return nil
 			}
-			t.Logf("replica1 raft state: %s, lead: %d, term: %d",
+			return errors.Newf("replica1 raft state: %s, lead: %d, term: %d",
 				raftStatus.RaftState, raftStatus.Lead, raftStatus.Term)
-			return false
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for raft leadership transfer to replica1")
+		})
 
 		// Pause the cluster's clocks.
 		l.manualClock.Pause()
