@@ -794,13 +794,20 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		return string(bytes)
 	}
 
-	// Helper function to verify the combined statement statistics response.
-	verifyCombinedStmtStats := func() {
-		err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, endpoint, &resp, false, additionalTimeout)
-		require.NoError(t, err)
+	// verifyCombinedStmtStats checks that the combined statement statistics
+	// response contains all expected statements with the correct metadata.
+	// Returns an error instead of failing the test directly so it can be
+	// retried via SucceedsSoon — the combined statements endpoint selects
+	// its source table (persisted vs. in-memory) based on data availability,
+	// and a background stats flush can cause the endpoint to read from the
+	// persisted table before newly executed statements have been persisted.
+	verifyCombinedStmtStats := func() error {
+		if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(
+			firstServerProto, endpoint, &resp, false, additionalTimeout,
+		); err != nil {
+			return err
+		}
 
-		// actualResponseStatsMap maps the query response format to the actual
-		// statement statistics received from the server response.
 		actualResponseStatsMap := make(map[string]serverpb.StatementsResponse_CollectedStatementStatistics)
 		for _, respStatement := range resp.Statements {
 			actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
@@ -808,23 +815,36 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 
 		for respQuery, expectedData := range expectedStatementStatsMap {
 			respStatement, exists := actualResponseStatsMap[respQuery]
-			require.True(t, exists, "Expected statement '%s' not found in response: %v", respQuery, responseToJSON(resp))
+			if !exists {
+				return fmt.Errorf(
+					"expected statement '%s' not found in response: %v",
+					respQuery, responseToJSON(resp),
+				)
+			}
 
 			actualCount := respStatement.Stats.FirstAttemptCount
 			actualFullScan := respStatement.Key.KeyData.FullScan
 			actualDistSQL := respStatement.Key.KeyData.DistSQL
 
-			stmtJSONString := responseToJSON(respStatement)
-
-			require.Equal(t, expectedData.fullScan, actualFullScan, "failed for respStatement: %v", stmtJSONString)
-			require.Equal(t, expectedData.distSQL, actualDistSQL, "failed for respStatement: %v", stmtJSONString)
-			require.Equal(t, expectedData.count, int(actualCount), "failed for respStatement: %v", stmtJSONString)
+			if expectedData.fullScan != actualFullScan {
+				return fmt.Errorf("fullScan: expected %v, got %v for %s",
+					expectedData.fullScan, actualFullScan, respQuery)
+			}
+			if expectedData.distSQL != actualDistSQL {
+				return fmt.Errorf("distSQL: expected %v, got %v for %s",
+					expectedData.distSQL, actualDistSQL, respQuery)
+			}
+			if expectedData.count != int(actualCount) {
+				return fmt.Errorf("count: expected %d, got %d for %s",
+					expectedData.count, int(actualCount), respQuery)
+			}
 		}
+		return nil
 	}
 
 	// Execute and verify the queries that will be executed before the index is created.
 	executeStatements(statementsBeforeIndex)
-	verifyCombinedStmtStats()
+	testutils.SucceedsSoon(t, verifyCombinedStmtStats)
 
 	// Execute the queries that will create the index.
 	executeStatements(statementsCreateIndex)
@@ -849,7 +869,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 
 	// Execute and verify the queries that will be executed after the index is created.
 	executeStatements(statementsAfterIndex)
-	verifyCombinedStmtStats()
+	testutils.SucceedsSoon(t, verifyCombinedStmtStats)
 }
 
 func TestStatusAPICombinedStatements(t *testing.T) {
