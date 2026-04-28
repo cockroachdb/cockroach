@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/dlq"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -24,6 +25,7 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // GithubPoster interface allows MaybePost to be mocked in unit tests that test
@@ -447,4 +449,97 @@ func formatPostRequest(req issues.PostRequest) (string, string, error) {
 	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 
 	return post.String(), u.String(), nil
+}
+
+// dlqGithubIssues wraps a *githubIssues and writes failed posts to a
+// DLQ writer. It implements GithubPoster.
+type dlqGithubIssues struct {
+	inner  *githubIssues
+	writer dlq.DLQWriter
+}
+
+func (d *dlqGithubIssues) MaybePost(
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
+) (*issues.TestFailureIssue, error) {
+	result, err := d.inner.MaybePost(t, issueInfo, l, message, params)
+	if err != nil {
+		entry := d.buildDLQEntry(t, issueInfo, l, message, params, err)
+		if dlqErr := d.writer.Add(context.Background(), entry); dlqErr != nil {
+			l.Printf("failed to write DLQ entry: %v", dlqErr)
+		} else {
+			l.Printf("wrote failed GitHub issue post to DLQ for test %s", t.Name())
+		}
+	}
+	return result, err
+}
+
+func (d *dlqGithubIssues) buildDLQEntry(
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
+	postErr error,
+) *dlq.DLQEntry {
+	// Try to build PostRequest to get computed fields (labels, mentions, etc.).
+	req, reqErr := d.inner.createPostRequest(
+		t.Name(), t.start, t.end, t.spec, t.failures(), message,
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled,
+		params, issueInfo,
+	)
+	opts := issues.DefaultOptionsFromEnv()
+
+	clusterName := ""
+	if issueInfo.cluster != nil {
+		clusterName = issueInfo.cluster.name
+	}
+
+	entry := &dlq.DLQEntry{
+		FailedAt:        timeutil.Now(),
+		FailureError:    postErr.Error(),
+		HelpTestName:    t.Name(),
+		HelpClusterName: clusterName,
+		HelpCloud:       roachtestflags.Cloud.String(),
+		HelpStart:       t.start,
+		HelpEnd:         t.end,
+		HelpRunID:       runID,
+		Org:             opts.Org,
+		Repo:            opts.Repo,
+		SHA:             opts.SHA,
+		Branch:          opts.Branch,
+		BinaryVersion:   opts.GetBinaryVersion(),
+	}
+
+	if opts.TeamCityOptions != nil {
+		entry.TeamCityBuildTypeID = opts.TeamCityOptions.BuildTypeID
+		entry.TeamCityBuildID = opts.TeamCityOptions.BuildID
+		entry.TeamCityServerURL = opts.TeamCityOptions.ServerURL
+		entry.TeamCityTags = opts.TeamCityOptions.Tags
+		entry.TeamCityGoflags = opts.TeamCityOptions.Goflags
+	}
+
+	if reqErr == nil {
+		entry.PackageName = req.PackageName
+		entry.TestName = req.TestName
+		entry.Labels = req.Labels
+		entry.AdoptIssueLabelMatchSet = req.AdoptIssueLabelMatchSet
+		entry.TopLevelNotes = req.TopLevelNotes
+		entry.Message = req.Message
+		entry.ExtraParams = req.ExtraParams
+		entry.Artifacts = req.Artifacts
+		entry.MentionOnCreate = req.MentionOnCreate
+	} else {
+		// Fallback: use raw inputs when createPostRequest fails.
+		l.Printf("DLQ: createPostRequest failed (%v), using raw inputs", reqErr)
+		entry.PackageName = "roachtest"
+		entry.TestName = t.Name()
+		entry.Message = message
+		entry.ExtraParams = params
+		entry.Artifacts = fmt.Sprintf("/%s", t.Name())
+	}
+	return entry
 }

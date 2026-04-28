@@ -24,6 +24,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	roachtestdd "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/dlq"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -212,6 +213,17 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return err
 	}
 
+	var poster GithubPoster = github
+	if bucket := os.Getenv("GITHUB_DLQ_BUCKET"); bucket != "" {
+		w, err := dlq.NewGCSDLQWriter(ctx, bucket)
+		if err != nil {
+			runnerL.Printf("warning: failed to initialize Github DLQ writer, Github DLQ disabled: %v", err)
+		} else {
+			poster = &dlqGithubIssues{inner: github, writer: w}
+			runnerL.Printf("Github DLQ enabled: bucket=%s", bucket)
+		}
+	}
+
 	err = runner.Run(
 		ctx, specs, roachtestflags.Count, parallelism, opt,
 		testOpts{
@@ -221,7 +233,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
 		lopt,
-		github)
+		poster)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
