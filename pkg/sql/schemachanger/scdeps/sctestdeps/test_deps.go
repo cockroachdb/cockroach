@@ -1256,6 +1256,7 @@ func (s *TestState) ValidateConstraint(
 // ValidateEnumTypeValueRemoval implements the validator interface.
 func (s *TestState) ValidateEnumTypeValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,

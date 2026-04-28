@@ -64,12 +64,14 @@ type ValidateConstraintFn func(
 // that an enum value is safe to remove.
 type ValidateEnumTypeValueRemovalFn func(
 	ctx context.Context,
+	job *jobs.Job,
 	codec keys.SQLCodec,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
+	protectedTSManager scexec.ProtectedTimestampManager,
 ) error
 
 // NewFakeSessionDataFn callback function used to create session data
@@ -137,14 +139,15 @@ func (vd validator) ValidateConstraint(
 // with no table rows referencing it.
 func (vd validator) ValidateEnumTypeValueRemoval(
 	ctx context.Context,
+	job *jobs.Job,
 	typeDesc catalog.TypeDescriptor,
 	physicalRep []byte,
 	logicalRep string,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return vd.validateEnumTypeValueRemoval(
-		ctx, vd.codec, typeDesc, physicalRep, logicalRep,
-		vd.makeHistoricalInternalExecTxnRunner(), override,
+		ctx, job, vd.codec, typeDesc, physicalRep, logicalRep,
+		vd.makeHistoricalInternalExecTxnRunner(), override, vd.protectedTimestampProvider,
 	)
 }
 
