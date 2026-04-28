@@ -2428,7 +2428,6 @@ func (cs *clusterState) canShedAndAddLoad(
 	onlyConsiderTargetCPUSummary bool,
 	overloadedDim LoadDimension,
 	logf mmaLogf,
-	detailedLog bool,
 ) (canAddLoad bool) {
 	if overloadedDim == NumLoadDimensions {
 		panic("overloadedDim must not be NumLoadDimensions")
@@ -2447,7 +2446,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
-	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad, detailedLog)
+	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad, !logf.noop)
 	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
 		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
 
@@ -2459,7 +2458,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcNS := cs.nodes[srcSS.NodeID]
 	srcSS.adjusted.load.subtract(delta)
 	srcNS.adjustedCPU -= delta[CPURate]
-	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad, detailedLog)
+	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad, !logf.noop)
 	// Undo the removal.
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
@@ -2467,10 +2466,10 @@ func (cs *clusterState) canShedAndAddLoad(
 	var failureReason redact.StringBuilder
 	defer func() {
 		if canAddLoad {
-			logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			logf.logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else if detailedLog {
-			logf(ctx, 3,
+		} else if !logf.noop {
+			logf.logf(ctx, 3,
 				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
 				&failureReason, delta, targetSLS, srcSLS)
@@ -2479,7 +2478,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
 	if postTransferHighDiskSpaceUtil {
-		if detailedLog {
+		if !logf.noop {
 			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
@@ -2499,7 +2498,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		if detailedLog {
+		if !logf.noop {
 			failureReason.SafeString("overloadUrgent")
 		}
 		return false
@@ -2558,7 +2557,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				logf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				logf.logf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
@@ -2608,7 +2607,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if detailedLog {
+	if !logf.noop {
 		appendSep := func() {
 			if failureReason.Len() != 0 {
 				failureReason.SafeRune(',')
