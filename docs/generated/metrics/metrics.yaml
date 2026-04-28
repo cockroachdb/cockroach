@@ -15993,15 +15993,6 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
-    - name: exportrequest.delay.total
-      exported_name: exportrequest_delay_total
-      description: Amount by which evaluation of Export requests was delayed
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/kv
     - name: follower_reads.success_count
       exported_name: follower_reads_success_count
       description: Number of reads successfully processed by any replica
@@ -16333,6 +16324,15 @@ layers:
       y_axis_label: Attempts
       type: COUNTER
       unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
+    - name: kv.bulk_low_pri_read.delay.total
+      exported_name: kv_bulk_low_pri_read_delay_total
+      description: Amount by which evaluation of bulk low-priority read requests was delayed
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv

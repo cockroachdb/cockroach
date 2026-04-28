@@ -226,7 +226,6 @@ owners:
   exec_error: cockroachdb/kv
   exec_latency: cockroachdb/kv
   exec_success: cockroachdb/kv
-  exportrequest_delay_total: cockroachdb/kv
   follower_reads_success_count: cockroachdb/kv
   gcbytesage: cockroachdb/kv
   go_scheduler_latency: cockroachdb/admission-control
@@ -304,6 +303,7 @@ owners:
   kv_allocator_load_based_replica_rebalancing_existing_not_overfull: cockroachdb/kv
   kv_allocator_load_based_replica_rebalancing_missing_stats_for_existing_store: cockroachdb/kv
   kv_allocator_load_based_replica_rebalancing_should_transfer: cockroachdb/kv
+  kv_bulk_low_pri_read_delay_total: cockroachdb/kv
   kv_closed_timestamp_max_behind_nanos: cockroachdb/kv
   kv_closed_timestamp_policy_change: cockroachdb/kv
   kv_closed_timestamp_policy_latency_info_missing: cockroachdb/kv

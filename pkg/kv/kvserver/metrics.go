@@ -2909,10 +2909,10 @@ var (
 		Visibility:  metric.Metadata_SUPPORT,
 	}
 
-	// Export request counter.
-	metaExportEvalTotalDelay = metric.Metadata{
-		Name:        "exportrequest.delay.total",
-		Help:        "Amount by which evaluation of Export requests was delayed",
+	// Bulk low-priority read request metrics.
+	metaBulkReadEvalTotalDelay = metric.Metadata{
+		Name:        "kv.bulk_low_pri_read.delay.total",
+		Help:        "Amount by which evaluation of bulk low-priority read requests was delayed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -3759,8 +3759,8 @@ type StoreMetrics struct {
 	AddSSTableAsWrites           *metric.Counter
 	AddSSTableProposalTotalDelay *metric.Counter
 
-	// Export request stats.
-	ExportRequestProposalTotalDelay *metric.Counter
+	// Records how much low-priority bulk read request throttling was performed.
+	BulkLowPriReadRequestTotalDelay *metric.Counter
 
 	// Encryption-at-rest stats.
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
@@ -4586,8 +4586,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableApplicationCopies:  metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay: metric.NewCounter(metaAddSSTableEvalTotalDelay),
 
-		// ExportRequest proposal.
-		ExportRequestProposalTotalDelay: metric.NewCounter(metaExportEvalTotalDelay),
+		// Low-priority bulk read request delay counter.
+		BulkLowPriReadRequestTotalDelay: metric.NewCounter(metaBulkReadEvalTotalDelay),
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
