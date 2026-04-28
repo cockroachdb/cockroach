@@ -93,6 +93,9 @@ func (b *BranchSender) Send(
 		return nil, kvpb.NewError(err)
 	}
 	ba = rewriteCPutsForBranch(ba)
+	if pErr := b.checkParentForCPuts(ctx, ba); pErr != nil {
+		return nil, pErr
+	}
 
 	if !batchHasReads(ba) {
 		log.Dev.Infof(ctx, "[BRANCH] passthrough write batch (%d reqs)", len(ba.Requests))
@@ -495,6 +498,104 @@ func rewriteCPutsForBranch(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
 		return ba
 	}
 	return modified
+}
+
+// checkParentForCPuts enforces CPut(nil-expected) semantics — "the key must
+// not have a value" — across both the branch's and the parent's keyspaces.
+//
+// CPut(nil-expected) is the storage-level mechanism behind primary key and
+// unique-secondary-index uniqueness. Without intervention a CPut on a key the
+// branch has never written succeeds against the empty branch keyspace even
+// when the parent has a value at the same key, silently allowing a duplicate
+// row that violates the constraint.
+//
+// For each candidate CPut we first look the key up on the branch with
+// IncludeTombstones. If the branch has any state (live value or tombstone)
+// the storage CPut already produces the right answer — fail on a live value,
+// succeed on a tombstone (the tombstone records an explicit branch-side
+// DELETE, so re-inserting at that key is legitimate). Otherwise we look the
+// key up on the parent at branch_ts; a value there means the CPut would
+// violate uniqueness, and we synthesize the ConditionFailedError the storage
+// layer would have produced if the value lived on the branch so the SQL
+// layer's ConvertBatchError can surface it as a duplicate-key error.
+//
+// CPut(non-nil-expected) is the "update from old to new" shape and is
+// handled separately by rewriteCPutsForBranch; it does not need a parent
+// check because the expected bytes already came from a parent-fallback read.
+func (b *BranchSender) checkParentForCPuts(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+	type cputPos struct {
+		origIdx int
+		key     roachpb.Key
+	}
+	var positions []cputPos
+	for i, ru := range ba.Requests {
+		cput, ok := ru.GetInner().(*kvpb.ConditionalPutRequest)
+		if !ok || len(cput.ExpBytes) > 0 {
+			continue
+		}
+		positions = append(positions, cputPos{origIdx: i, key: cput.Key})
+	}
+	if len(positions) == 0 {
+		return nil
+	}
+
+	branchBa := &kvpb.BatchRequest{Header: kvpb.Header{ReadConsistency: kvpb.CONSISTENT}}
+	for _, p := range positions {
+		var u kvpb.RequestUnion
+		u.MustSetInner(&kvpb.GetRequest{
+			RequestHeader:     kvpb.RequestHeader{Key: p.key},
+			IncludeTombstones: true,
+		})
+		branchBa.Requests = append(branchBa.Requests, u)
+	}
+	branchBr, pErr := b.fallbackDB.NonTransactionalSender().Send(ctx, branchBa)
+	if pErr != nil {
+		return pErr
+	}
+
+	var parentBa *kvpb.BatchRequest
+	var parentToPos []int // index in parentBa.Requests -> index in positions
+	for j, p := range positions {
+		gr := branchBr.Responses[j].GetInner().(*kvpb.GetResponse)
+		if gr.Value != nil {
+			// Branch has a live value or a tombstone — the storage CPut
+			// will give the correct answer without involving the parent.
+			continue
+		}
+		if parentBa == nil {
+			parentBa = newFallbackBatch(b.branchTS)
+		}
+		var u kvpb.RequestUnion
+		u.MustSetInner(&kvpb.GetRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key: rewriteKey(p.key, b.branchCodec, b.parentCodec),
+			},
+		})
+		parentBa.Requests = append(parentBa.Requests, u)
+		parentToPos = append(parentToPos, j)
+	}
+	if parentBa == nil {
+		return nil
+	}
+	parentBr, pErr := b.fallbackDB.NonTransactionalSender().Send(ctx, parentBa)
+	if pErr != nil {
+		return pErr
+	}
+	for k, j := range parentToPos {
+		gr := parentBr.Responses[k].GetInner().(*kvpb.GetResponse)
+		if gr.Value == nil || !gr.Value.IsPresent() {
+			continue
+		}
+		log.Dev.Infof(ctx,
+			"[BRANCH] CPut(nil-expected) on inherited key %s blocked by parent value",
+			positions[j].key)
+		pe := kvpb.NewErrorWithTxn(
+			&kvpb.ConditionFailedError{ActualValue: gr.Value}, ba.Txn,
+		)
+		pe.SetErrorIndex(int32(positions[j].origIdx))
+		return pe
+	}
+	return nil
 }
 
 // rewriteKey strips fromCodec's tenant prefix from key and prepends
