@@ -2076,6 +2076,10 @@ func maybeWriteBackupLock(
 
 // getCompletedSpans inspects a backup manifest and returns all spans and
 // introduced spans that have already been backed up.
+//
+// NB: This function is currently only used for the purposes of filtering.
+// There are circumstances where spans will be added to both completedSpans and completedIntroducedSpans,
+// in order to direct filtering correctly, as these spans overlap both span groups.
 func getCompletedSpans(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -2111,6 +2115,7 @@ func getCompletedSpans(
 
 	// Add the spans for any tables that are excluded from backup to the set of
 	// already-completed spans, as there is nothing to do for them.
+	excludedTableIDs := make(map[descpb.ID]struct{})
 	descs := iterFactory.NewDescIter(ctx)
 	defer descs.Close()
 	for ; ; descs.Next() {
@@ -2120,11 +2125,44 @@ func getCompletedSpans(
 			break
 		}
 
-		if tbl, _, _, _, _ := descpb.GetDescriptors(descs.Value()); tbl != nil && tbl.ExcludeDataFromBackup {
+		tbl, _, _, _, _ := descpb.GetDescriptors(descs.Value())
+		if tbl != nil && tbl.ExcludeDataFromBackup {
+			excludedTableIDs[tbl.ID] = struct{}{}
 			prefix := execCtx.ExecCfg().Codec.TablePrefix(uint32(tbl.ID))
-			completedSpans = append(completedSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+			span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+			completedSpans = append(completedSpans, span)
+			completedIntroducedSpans = append(completedIntroducedSpans, span)
 		}
 	}
+
+	// If this is a revision history backup, also check revisions to exclude from export requests.
+	if backupManifest.MVCCFilter == backuppb.MVCCFilter_All {
+		descRevs := iterFactory.NewDescriptorChangesIter(ctx)
+		defer descRevs.Close()
+		for ; ; descRevs.Next() {
+			if ok, err := descRevs.Valid(); err != nil {
+				return nil, nil, err
+			} else if !ok {
+				break
+			}
+
+			rev := descRevs.Value()
+			if rev.Desc == nil {
+				continue
+			}
+			tbl, _, _, _, _ := descpb.GetDescriptors(rev.Desc)
+			if tbl != nil && tbl.ExcludeDataFromBackup {
+				if _, ok := excludedTableIDs[tbl.ID]; !ok {
+					excludedTableIDs[tbl.ID] = struct{}{}
+					prefix := execCtx.ExecCfg().Codec.TablePrefix(uint32(tbl.ID))
+					span := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+					completedSpans = append(completedSpans, span)
+					completedIntroducedSpans = append(completedIntroducedSpans, span)
+				}
+			}
+		}
+	}
+
 	return completedSpans, completedIntroducedSpans, nil
 }
 
