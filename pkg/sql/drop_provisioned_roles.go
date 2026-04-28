@@ -11,8 +11,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -180,29 +181,25 @@ func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}) {
 
 	// Always filter for users that have a PROVISIONSRC role option
 	// (i.e. are provisioned).
-	provisionFilter := fmt.Sprintf(`EXISTS (
+	provisionFilter := `EXISTS (
 	SELECT 1 FROM system.role_options AS src
 	WHERE src.username = u.username
-		AND src.option = 'PROVISIONSRC'`)
+		AND src.option = 'PROVISIONSRC'`
 
 	if n.options != nil && n.options.Source != nil {
-		sourceStr := tree.AsStringWithFlags(
-			n.options.Source, tree.FmtBareStrings,
-		)
-		provisionFilter += fmt.Sprintf(
-			"\n\t\tAND src.value = %s", lexbase.EscapeSQLString(sourceStr),
-		)
+		provisionFilter += fmt.Sprintf("\n\t\tAND src.value = $%d", argIdx)
+		args = append(args, tree.AsStringWithFlags(n.options.Source, tree.FmtBareStrings))
+		argIdx++
 	}
 	provisionFilter += "\n)"
 	whereExprs = append(whereExprs, provisionFilter)
 
 	if n.options != nil && n.options.LastLoginBefore != nil {
-		tsExpr := tree.AsStringWithFlags(
-			n.options.LastLoginBefore, tree.FmtParsable,
-		)
 		whereExprs = append(whereExprs, fmt.Sprintf(
-			"u.estimated_last_login_time < (%s)::TIMESTAMPTZ", tsExpr,
+			"u.estimated_last_login_time < ($%d)::TIMESTAMPTZ", argIdx,
 		))
+		args = append(args, tree.AsStringWithFlags(n.options.LastLoginBefore, tree.FmtBareStrings))
+		argIdx++
 	}
 
 	whereClause := "\nWHERE " + strings.Join(whereExprs, "\n\tAND ")
@@ -217,17 +214,18 @@ func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}) {
 		whereClause, limitClause,
 	)
 
-	_ = argIdx // args currently embedded via string escaping
+	_ = argIdx
 	return query, args
 }
 
 // userHasDependencies checks whether the given user owns any objects,
-// has grants, default privileges, scheduled jobs, or system
-// privileges that would prevent dropping.
+// has grants, default privileges, row-level security policies,
+// scheduled jobs, or system privileges that would prevent dropping.
 func (n *DropProvisionedRolesNode) userHasDependencies(
 	params runParams, normalizedUsername username.SQLUsername, allDescs nstree.Catalog,
 ) (bool, error) {
-	// Check ownership across all descriptors.
+	// Check ownership, grants, default privileges, and RLS policies
+	// across all descriptors.
 	for _, desc := range allDescs.OrderedDescriptors() {
 		if !descriptorIsVisible(desc, true /* allowAdding */, false /* includeDropped */) {
 			continue
@@ -238,6 +236,47 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 		for _, u := range desc.GetPrivileges().Users {
 			if u.User() == normalizedUsername {
 				return true, nil
+			}
+		}
+
+		// Check default privileges on databases and schemas.
+		var defaultPrivs catalog.DefaultPrivilegeDescriptor
+		if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
+			defaultPrivs = dbDesc.GetDefaultPrivilegeDescriptor()
+		} else if schemaDesc, ok := desc.(catalog.SchemaDescriptor); ok {
+			defaultPrivs = schemaDesc.GetDefaultPrivilegeDescriptor()
+		}
+		if defaultPrivs != nil {
+			hasDep := false
+			_ = defaultPrivs.ForEachDefaultPrivilegeForRole(
+				func(dpForRole catpb.DefaultPrivilegesForRole) error {
+					if dpForRole.IsExplicitRole() &&
+						dpForRole.GetExplicitRole().UserProto.Decode() == normalizedUsername {
+						hasDep = true
+					}
+					for _, privs := range dpForRole.DefaultPrivilegesPerObject {
+						for _, u := range privs.Users {
+							if u.User() == normalizedUsername {
+								hasDep = true
+							}
+						}
+					}
+					return nil
+				},
+			)
+			if hasDep {
+				return true, nil
+			}
+		}
+
+		// Check row-level security policies on tables.
+		if tblDesc, ok := desc.(catalog.TableDescriptor); ok {
+			for _, p := range tblDesc.GetPolicies() {
+				for _, rn := range p.RoleNames {
+					if username.MakeSQLUsernameFromPreNormalizedString(rn) == normalizedUsername {
+						return true, nil
+					}
+				}
 			}
 		}
 	}
