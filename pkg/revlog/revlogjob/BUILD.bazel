@@ -75,6 +75,7 @@ go_test(
         "desc_frontier_gating_test.go",
         "descfeed_internal_test.go",
         "descfeed_loop_test.go",
+        "dispatcher_test.go",
         "driver_multispan_test.go",
         "driver_test.go",
         "main_test.go",

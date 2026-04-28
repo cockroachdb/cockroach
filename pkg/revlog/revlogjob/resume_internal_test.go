@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -200,6 +201,56 @@ func TestResumeStateForPartitionFlushOrders(t *testing.T) {
 	})
 	require.Equal(t, int32(6), got.StartingFlushOrders[tickA])
 	require.Equal(t, int32(2), got.StartingFlushOrders[tickB])
+}
+
+// TestResumeSpecRoundTrip verifies that resumeToSpec /
+// resumeFromSpec are exact inverses — every per-span resume entry
+// and every per-tick StartingFlushOrder survives the round trip
+// across the DistSQL spec wire format.
+func TestResumeSpecRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tickA := hlc.Timestamp{WallTime: 110}
+	tickB := hlc.Timestamp{WallTime: 120}
+	in := ResumeState{
+		SpanResumes: []SpanResume{
+			{
+				Span:     roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				Resolved: hlc.Timestamp{WallTime: 100},
+			},
+			{
+				Span:     roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				Resolved: hlc.Timestamp{WallTime: 105},
+			},
+		},
+		StartingFlushOrders: map[hlc.Timestamp]int32{
+			tickA: 3,
+			tickB: 7,
+		},
+	}
+
+	var spec execinfrapb.RevlogSpec
+	resumeToSpec(&spec, in)
+	out := resumeFromSpec(spec)
+
+	require.Equal(t, in.SpanResumes, out.SpanResumes)
+	require.Equal(t, in.StartingFlushOrders, out.StartingFlushOrders)
+}
+
+// TestResumeSpecRoundTripEmpty verifies the empty-state case: a
+// ResumeState with no SpanResumes and no StartingFlushOrders writes
+// nothing onto the spec and reads back equivalent.
+func TestResumeSpecRoundTripEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var spec execinfrapb.RevlogSpec
+	resumeToSpec(&spec, ResumeState{})
+	require.Empty(t, spec.ResumeStarts)
+	require.Empty(t, spec.TickStartingFlushOrders)
+
+	out := resumeFromSpec(spec)
+	require.Empty(t, out.SpanResumes)
+	require.Empty(t, out.StartingFlushOrders)
 }
 
 // frontierAt looks up the recorded ts for sp in f via Entries().
