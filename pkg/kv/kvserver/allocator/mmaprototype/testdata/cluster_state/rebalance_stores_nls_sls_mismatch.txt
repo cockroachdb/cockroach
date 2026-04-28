@@ -63,7 +63,7 @@ store-id=1
 
 # Before fix: panics in sortTargetCandidateSetAndPick
 # After fix: s1 should not try to shed since sls <= loadNoChange
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:2.7s/s, write-bandwidth:37 MB/s, byte-size:0 B]) (stores-capacity [cpu:8s/s, write-bandwidth:100 MB/s, byte-size:1.0 GB]) (nodes-cpu-load 4000000000) (nodes-cpu-capacity 12000000000)

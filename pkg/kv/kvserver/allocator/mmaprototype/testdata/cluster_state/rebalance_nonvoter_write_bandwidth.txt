@@ -84,7 +84,7 @@ store-id=5 node-id=5 status=ok accepting all reported=[cpu:100ns/s, write-bandwi
 
 # Rebalance from s1 (the leaseholder). s4 should be identified as overloaded
 # on WriteBandwidth, and the non-voter of r1 should be moved from s4 to s5.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)

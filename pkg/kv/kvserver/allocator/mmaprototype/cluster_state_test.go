@@ -733,38 +733,30 @@ func TestClusterState(t *testing.T) {
 
 					// `vmodule` simulates a specific production logging
 					// configuration. The arg is a V level (0, 1, 2, 3, ...);
-					// 0 means vmodule unset. Positive levels are applied as
-					// "*=N" for the duration of the pass. Reading the captured
-					// log shows what an operator running at that vmodule would
-					// actually see.
+					// 0 (the default) means vmodule unset. Positive levels
+					// are applied as "*=N" for the duration of the pass.
+					// Reading the captured log shows what an operator
+					// running at that vmodule would actually see.
 					//
-					// This is implemented by running the pass outside any
-					// tracing span: the default rebalance-stores command runs
-					// inside a verbose recording span, which causes
-					// log.ExpensiveLogEnabled(ctx, 3) to return true and
-					// promotes every per-range message to Infof, masking the
-					// dynamic-verbose-logging behavior.
-					if vmodule, ok := dd.ScanArgOpt[int](t, d, "vmodule"); ok {
-						if vmodule > 0 {
-							prev := log.GetVModule()
-							require.NoError(t, log.SetVModule(fmt.Sprintf("*=%d", vmodule)))
-							defer func() {
-								require.NoError(t, log.SetVModule(prev))
-							}()
-						}
-						bgCtx := context.Background()
-						capture := &mmaLogCapture{}
-						stopIntercept := log.InterceptWith(bgCtx, capture)
-						defer stopIntercept()
-						re.rebalanceStores(bgCtx, storeID)
-						return capture.formatString() + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					// The pass runs outside any tracing span so that
+					// log.ExpensiveLogEnabled(ctx, 3) reflects only the
+					// vmodule setting, not the recording span, which would
+					// otherwise force every per-range message to Infof and
+					// mask the dynamic-verbose-logging behavior.
+					vmodule, _ := dd.ScanArgOpt[int](t, d, "vmodule")
+					if vmodule > 0 {
+						prev := log.GetVModule()
+						require.NoError(t, log.SetVModule(fmt.Sprintf("*=%d", vmodule)))
+						defer func() {
+							require.NoError(t, log.SetVModule(prev))
+						}()
 					}
-
-					re.rebalanceStores(ctx, storeID)
-					rec := finishAndGet()
-					var sb redact.StringBuilder
-					rec.SafeFormatMinimal(&sb)
-					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					bgCtx := context.Background()
+					capture := &mmaLogCapture{}
+					stopIntercept := log.InterceptWith(bgCtx, capture)
+					defer stopIntercept()
+					re.rebalanceStores(bgCtx, storeID)
+					return capture.formatString() + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")

@@ -67,7 +67,7 @@ store-id=3 node-id=3 status=ok accepting all reported=[cpu:100ns/s, write-bandwi
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 store-id=4 node-id=4 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
 
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)
@@ -136,7 +136,7 @@ change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:-1ns/s, write-bandwi
   next=(replica-id=none type=VOTER_FULL)
 
 # Second rebalance pass to verify s4 is now overloadSlow in WB.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)

@@ -5,7 +5,7 @@ ok
 # s1 is overloaded and local, so rebalanceStores should try and succeed to shed
 # leases from it. We set things up so that this runs into the lease transfer count
 # limit and stops after reaching it.
-rebalance-stores store-id=1 fraction-pending-decrease-threshold=1.0 max-lease-transfer-count=2
+rebalance-stores store-id=1 fraction-pending-decrease-threshold=1.0 max-lease-transfer-count=2 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 400) (nodes-cpu-capacity 1000)
