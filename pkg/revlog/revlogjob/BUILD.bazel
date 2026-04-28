@@ -77,6 +77,7 @@ go_test(
         "driver_multispan_test.go",
         "driver_test.go",
         "main_test.go",
+        "metasink_test.go",
         "persister_test.go",
         "progress_persist_test.go",
         "resume_internal_test.go",
@@ -101,6 +102,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -112,6 +114,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
     ],
 )
