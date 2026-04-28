@@ -44,6 +44,46 @@ var candidateInfoPool = newSlicePool[candidateInfo](8)
 var nodeLoadMapPool = newMapPool[roachpb.NodeID, *NodeLoad](8)
 var storeIDStructMapPool = newMapPool[roachpb.StoreID, struct{}](8)
 
+// formatLoadPendingChanges renders the unenacted entries in changes as a
+// compact, deterministic-order summary suitable for a single log line. Each
+// entry is "r{rangeID}{op}s{storeID}{loadDelta}" where op is + (add), -
+// (remove), or ~ (other), separated by spaces. Returns "(none)" when there
+// are no unenacted changes.
+func formatLoadPendingChanges(changes map[changeID]*pendingReplicaChange) redact.RedactableString {
+	type entry struct {
+		id changeID
+		c  *pendingReplicaChange
+	}
+	filtered := make([]entry, 0, len(changes))
+	for id, c := range changes {
+		if !c.enactedAtTime.IsZero() {
+			continue
+		}
+		filtered = append(filtered, entry{id, c})
+	}
+	if len(filtered) == 0 {
+		return redact.Sprint(redact.SafeString("(none)"))
+	}
+	slices.SortFunc(filtered, func(a, b entry) int { return cmp.Compare(a.id, b.id) })
+	var buf redact.StringBuilder
+	for i, e := range filtered {
+		if i > 0 {
+			buf.SafeRune(' ')
+		}
+		var op redact.SafeString
+		switch e.c.replicaChangeType() {
+		case AddReplica, AddLease:
+			op = "+"
+		case RemoveReplica, RemoveLease:
+			op = "-"
+		default:
+			op = "~"
+		}
+		buf.Printf("r%d%ss%d%v", e.c.rangeID, op, e.c.target.StoreID, e.c.loadDelta)
+	}
+	return buf.RedactableString()
+}
+
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
 // Recall that such an invocation is on behalf of a local store, but will
 // iterate over a slice of shedding stores - these are not necessarily local
@@ -252,9 +292,17 @@ func (re *rebalanceEnv) rebalanceStores(
 				passLogf(ctx, 2, "store s%v was added to shedding store list", storeID)
 				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 			} else {
+				var reason redact.RedactableString
+				if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
+					reason = redact.Sprintf("pending decrease %.2f >= threshold %.2f",
+						ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold)
+				} else {
+					reason = redact.Sprintf("pending increase %.2f >= epsilon",
+						ss.maxFractionPendingIncrease)
+				}
 				passLogf(ctx, 2,
-					"skipping overloaded store s%d (worst dim: %s): pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
-					storeID, sls.worstDim, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, ss.maxFractionPendingIncrease)
+					"skipping overloaded store s%d (worst dim: %s): %s; pending: %s",
+					storeID, sls.worstDim, reason, formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
