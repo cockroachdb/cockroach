@@ -44,7 +44,6 @@ export type StmtInsightsResponseRow = {
   session_id: string;
   txn_id: string;
   txn_fingerprint_id: string; // hex string
-  implicit_txn: boolean;
   stmt_id: string;
   stmt_fingerprint_id: string; // hex string
   query: string;
@@ -78,7 +77,6 @@ const stmtColumns = `
 session_id,
 txn_id,
 txn_fingerprint_id,
-implicit_txn,
 stmt_id,
 stmt_fingerprint_id,
 query,
@@ -298,7 +296,6 @@ export function formatStmtInsights(
     return {
       transactionExecutionID: r.txn_id,
       transactionFingerprintID: FixFingerprintHexValue(r.txn_fingerprint_id),
-      implicitTxn: row.implicit_txn,
       databaseName: row.database_name,
       application: row.app_name,
       username: row.user_name,

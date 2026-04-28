@@ -43,7 +43,6 @@ type CreateIndexRecommendationsResponse = {
   db: string;
   query: string;
   querysummary: string;
-  implicittxn: boolean;
   index_recommendations: string[];
 };
 
@@ -129,7 +128,6 @@ function createIndexRecommendationsToSchemaInsight(
           statement: row.query,
           summary: row.querysummary,
           fingerprintID: HexStringToInt64String(row.fingerprint_id),
-          implicit: row.implicittxn,
         },
         query: recQuery,
       });
@@ -178,9 +176,8 @@ SELECT
   encode(fingerprint_id, 'hex') AS fingerprint_id, 
   metadata ->> 'db' AS db, 
   metadata ->> 'query' AS query, 
-  metadata ->> 'querySummary' as querySummary, 
-  metadata ->> 'implicitTxn' AS implicitTxn, 
-  index_recommendations 
+  metadata ->> 'querySummary' as querySummary,
+  index_recommendations
 FROM 
   (
     SELECT 
