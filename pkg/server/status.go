@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -1023,6 +1024,55 @@ func (s *systemStatusServer) Allocator(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	return output, nil
+}
+
+// MMAAllocatorState returns a snapshot of the multi-metric allocator's
+// view of the cluster from the given node. It is intended for diagnostics
+// (e.g. cockroach debug zip) and offline analysis.
+func (s *systemStatusServer) MMAAllocatorState(
+	ctx context.Context, req *serverpb.MMAAllocatorStateRequest,
+) (*serverpb.MMAAllocatorStateResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		// NB: not using srverrors.ServerError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		client, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		return client.MMAAllocatorState(ctx, req)
+	}
+
+	// The mma allocator is one-per-node, shared across this node's stores.
+	// Pick any store and snapshot through Store.MMAllocator.
+	var snap *mmasnappb.ClusterStateSnapshot
+	var snapErr error
+	if err := s.stores.VisitStores(func(store *kvserver.Store) error {
+		if snap == nil && snapErr == nil {
+			snap, snapErr = store.GetStoreConfig().MMAllocator.ClusterStateSnapshot()
+		}
+		return nil
+	}); err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	if snapErr != nil {
+		return nil, srverrors.ServerError(ctx, snapErr)
+	}
+	if snap == nil {
+		return nil, status.Error(codes.Unavailable, "no stores on this node")
+	}
+	return &serverpb.MMAAllocatorStateResponse{Snapshot: snap}, nil
 }
 
 func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.TraceEvent {
