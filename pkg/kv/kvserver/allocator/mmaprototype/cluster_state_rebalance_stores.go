@@ -98,14 +98,15 @@ type rebalanceEnv struct {
 
 // logf logs at the given VEventf level. When re.detailedLog is true, the
 // message is emitted at Infof level instead so it appears in logs without
-// requiring elevated verbosity.
+// requiring elevated verbosity. Depth is used so the log entry is attributed
+// to logf's caller rather than to logf itself.
 func (re *rebalanceEnv) logf(
 	ctx context.Context, level log.Level, format string, args ...interface{},
 ) {
 	if re.detailedLog {
-		log.KvDistribution.Infof(ctx, format, args...)
+		log.KvDistribution.InfofDepth(ctx, 1, format, args...)
 	} else {
-		log.KvDistribution.VEventf(ctx, level, format, args...)
+		log.KvDistribution.VEventfDepth(ctx, 1, level, format, args...)
 	}
 }
 
