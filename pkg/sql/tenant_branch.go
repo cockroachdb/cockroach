@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -172,5 +173,46 @@ func (p *planner) createTenantAsBranch(
 		return errors.Wrap(err, "splitting at branch keyspace boundary")
 	}
 
+	return nil
+}
+
+// releaseBranchPTSRecords releases every protected-timestamp record this
+// branch wrote against its parent at fork time. createTenantAsBranch tags
+// each record with MetaType=branchPTSMetaType and Meta=<branchID-as-string>;
+// we look records up by that pair so we can find them without storing the
+// PTS UUID in the tenant info. A no-op for tenants that aren't branches.
+//
+// Called from DropTenantByID before the branch tenant is marked for GC.
+// The DROP txn flips the parent's view of branch_ts from "protected" back
+// to "GCable", so the parent's accumulated MVCC garbage at and after
+// branch_ts can be reclaimed.
+func releaseBranchPTSRecords(ctx context.Context, p *planner, info *mtinfopb.TenantInfo) error {
+	if !info.IsBranch() {
+		return nil
+	}
+	branchTID, err := roachpb.MakeTenantID(info.ID)
+	if err != nil {
+		return err
+	}
+	rows, err := p.InternalSQLTxn().QueryBufferedEx(
+		ctx, "release-branch-pts", p.Txn(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT id FROM system.protected_ts_records
+		 WHERE meta_type = $1 AND meta = $2`,
+		branchPTSMetaType, []byte(branchTID.String()),
+	)
+	if err != nil {
+		return errors.Wrap(err, "looking up branch PTS records")
+	}
+	pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+	for _, row := range rows {
+		dID, ok := row[0].(*tree.DUuid)
+		if !ok {
+			return errors.AssertionFailedf("unexpected PTS id type %T", row[0])
+		}
+		if err := pts.Release(ctx, dID.UUID); err != nil {
+			return errors.Wrapf(err, "releasing branch PTS record %s", dID.UUID)
+		}
+	}
 	return nil
 }
