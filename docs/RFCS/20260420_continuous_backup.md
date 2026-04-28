@@ -656,28 +656,37 @@ eventually observe the descriptor's removal from KV.
 ##### Schema descriptor rangefeed (control plane)
 
 The coordinator subscribes one rangefeed at startHLC to the
-`system.descriptor` table span. Each event drives all of:
+`system.descriptor` table span. Descriptor change values
+are buffered as they arrive and processed in HLC order on
+each rangefeed checkpoint; the per-checkpoint batch drives
+all of:
 
-1. **Schema-delta write** for any matching descriptor
-   change — `log/schema/descs/<HLC>/<desc-id>.pb` with the
-   new descriptor body, or a nil-payload tombstone for
-   deletions (per `revlog-format.md` §3 / §6).
-2. **Coverage manifest write** when the resolved span set
-   actually changes (CREATE INDEX widens; DROP TABLE
-   narrows). Pure metadata changes (column rename, etc.)
-   produce a schema delta but no coverage change.
-3. **Tick-close gating.** Each rangefeed checkpoint
+1. **Schema-delta write** for each matching descriptor
+   change in the batch — `log/schema/descs/<HLC>/<desc-id>.pb`
+   with the new descriptor body, or a nil-payload
+   tombstone for deletions (per `revlog-format.md` §3 / §6).
+2. **Coverage manifest write** for each distinct scope
+   transition in the batch — one coverage entry per
+   transition at the transition's `T_change`, so reader
+   lookups at any AOST in the batch's window get the right
+   span set. Pure metadata changes (column rename, etc.)
+   produce schema deltas but no coverage entries.
+3. **Replan signal** sent at most once per batch if any
+   change widened the resolved span set. Coalescing churn
+   per checkpoint avoids a long migration causing one
+   replan per descriptor write while still preserving
+   per-transition coverage entries.
+4. **Tick-close gating.** Each rangefeed checkpoint also
    forwards the coordinator's descriptor frontier; the
    tick close loop only seals ticks whose end is below
    `min(data frontier, descriptor frontier)`. Without this
    gate a late-delivered descriptor change inside an
    already-closed tick would mean the recorded coverage /
    schema state was wrong for some events.
-4. **Termination check.** After each in-scope change,
-   `Scope.Terminated` is consulted (cheap — only triggered
-   when the resolved span set goes empty). On true, the
-   writer's outer loop exits successfully (see
-   "Termination" below).
+5. **Termination check.** After processing the batch, if
+   the resolved span set is empty at the checkpoint ts,
+   `Scope.Terminated` is consulted. On true, the writer's
+   outer loop exits successfully (see "Termination" below).
 
 ##### Coverage manifest (artifact)
 
@@ -714,32 +723,45 @@ covered DB allocates a fresh table ID from the cluster's
 counter and its `/Table/<new_id>/...` keyspace lives nowhere
 near any existing producer's subscription.)
 
-The descfeed handles this by signalling the outer flow
-loop. When `Scope.Spans` returns a span set that isn't a
-subset of the previously-covered set, the descfeed:
+When the descfeed's per-checkpoint batch contains a
+widening change, the descfeed:
 
-1. Writes the new coverage entry effective at the descriptor
-   change's HLC.
-2. Sends the new spans on a `replan` channel.
+1. Adds the newly-introduced spans to the manager's
+   per-span frontier at zero so they're visible to the
+   producer's per-span bookkeeping for the next flow.
+2. Computes the restart start time as
+   `min(currentDataFrontier, T_change)` where `T_change`
+   is the earliest widening event in the batch.
+3. Signals the outer flow loop with the new full span set
+   and the restart start time.
 
-The outer loop receives the signal, cancels the running
-inner flow, and re-plans. The new flow:
+The outer loop cancels the running inner flow and re-plans
+with the new spans. The new flow's producers open their
+rangefeed with `WithInitialScan` and a pre-populated
+frontier built from `ResumeStateForPartition`:
 
-- Re-runs `dsp.PartitionSpans` over the now-wider span set.
-- Snapshots the (still-running) TickManager and computes a
-  fresh `ResumeStateForPartition` per producer. For spans
-  the manager already has a frontier for, the new
-  producer's subscription resumes there. For spans new to
-  this iteration, no frontier exists and the resume
-  position defaults to `startHLC` — the rangefeed's
-  catchup scan will fill in events from the new descriptor
-  forward.
-- Bumps the per-tick starting flushorder to
-  `max(prior) + 1` for any open tick the prior incarnation
-  contributed files to. The new producers' files for those
-  ticks land at strictly higher flushorder, so per-key
-  ordering survives the restart — same machinery as
-  crash-recovery resume.
+- Old spans (already at or beyond the rangefeed's start
+  time per the resume state) are skipped by the rangefeed
+  library's per-span init-scan gate — `runInitialScan`
+  walks the frontier and only scans spans whose ts is
+  empty or strictly below the rangefeed's start ts.
+- Newly-introduced spans (at zero in the resume state) are
+  scanned at the rangefeed's start ts; the scan output
+  materializes their pre-existing state, and subsequent
+  events stream in via the normal rangefeed path.
+- The first flow uses the same machinery, with all
+  original-scope spans pre-forwarded to `startHLC` in the
+  resume state so the initial scan is a no-op for them
+  (otherwise we'd init-scan the entire backed-up keyspace
+  and re-export everything).
+
+Per-tick flushorder for any in-flight tick is bumped to
+`max(prior flushorder for the tick) + 1` — same machinery
+as crash-recovery resume (see "Progress checkpointing").
+The new flow's files for the in-flight tick land at
+strictly higher flushorder than the old flow's
+contributions; per-key revision ordering survives the
+restart.
 
 The TickManager and persister are shared across iterations,
 so closed ticks and the high-water keep advancing.
@@ -747,14 +769,78 @@ Open-tick file lists from the prior incarnation get
 included in the eventual close marker through the
 rehydrate path.
 
-There is a brief window between writing the new coverage
-entry and the new producers actually catching up via their
-rangefeed scans where coverage claims spans for which data
-hasn't yet landed. RESTORE during that window would see
-the wider coverage but find no data files for the new
-spans. The window closes once the rangefeed catchup
-completes (typically seconds) and is bounded by however
-long the new-flow startup takes.
+We do **not** wait for the data frontier to pass
+`T_change` before restarting. The initial scan is the
+mechanism that bridges the gap: any pre-`T_change` state
+of a newly-in-scope span is captured by the scan; events
+streamed thereafter cover the rest.
+
+##### Pre-publication captures
+
+A consequence of capturing newly-in-scope spans via initial
+scan at `min(currentDataFrontier, T_change)` — which can be
+strictly less than `T_change` itself — is that the log's
+data files for a newly-introduced span may contain events
+at MVCC timestamps earlier than the coverage entry that
+brought the span into scope. Concretely, a schema change
+that publishes a descriptor at `T_change` may have written
+intermediate KV state during a backfill window before
+`T_change`; rangefeed catch-up after the initial scan
+delivers those pre-`T_change` MVCC versions to the writer,
+and they land in the log under the span's keyspace.
+
+This is correct because:
+
+- At the **catalog layer**, SQL invariants (cross-index
+  consistency, FK validity, table publicness) only hold
+  after the descriptor publication transaction commits at
+  `T_change`. Intermediate KV state during a backfill,
+  IMPORT, or any other "write KV first, publish desc
+  atomically" operation is physically present at the KV
+  layer but not exposed via SQL.
+- The **sum** of all MVCC revisions of the span through
+  `T_change` is, by construction, a valid SQL-ready state:
+  the schema-change machinery is responsible for ensuring
+  that publishing the descriptor coincides with a coherent
+  KV state.
+- Restore is **all-or-nothing** per span. The coverage
+  manifest is a step function: at AOST `T < T_change`, the
+  span is excluded entirely (the prior coverage entry
+  doesn't include it) — the log's pre-`T_change` events
+  for it are never read. At AOST `T ≥ T_change`, the span
+  is included and **every** event in its data files is
+  replayed. The sum produces the SQL-valid state at
+  `T_change`, and subsequent events bring it forward to
+  AOST. There is no AOST that produces a half-published
+  state visible to the user.
+
+This invariant — that a downstream consumer can observe
+raw KV writes including pre-publication backfill state and,
+by replaying through the publication ts, arrive at a
+SQL-valid state — is the same one that **PCR / LDR**
+relies on. PCR's logical replication subscribes a
+rangefeed to source spans, replicates pre-publication
+backfill writes verbatim, and trusts that replay through
+the descriptor's commit ts produces a consistent
+destination state. The continuous backup writer uses the
+same mechanism (rangefeed + initial scan) and the same
+invariant.
+
+A secondary precedent is **BACKUP introduced spans**: when
+an incremental backup discovers a span that came into
+scope between full and incremental, it does a
+revision-history export over `(0, BackupStartTime]` for
+that span, capturing the full MVCC history including any
+pre-publication backfill writes. Restore replays the full
+set; the same invariant produces a SQL-valid state. The
+mechanism differs (bulk export vs. live rangefeed) but
+the underlying property is identical.
+
+Reader contract: see `pkg/revlog/revlog-format.md` §5
+("Coverage vs. data files"). Readers must gate "is this
+span in scope at AOST?" via coverage but must **not**
+clip events for an in-scope span by the HLC of its
+introducing coverage entry.
 
 ##### Termination: scope dissolved
 

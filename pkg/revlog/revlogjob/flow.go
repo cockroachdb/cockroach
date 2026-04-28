@@ -183,18 +183,20 @@ func Run(
 	defer func() { <-descDone }()
 
 	// Outer flow loop. Each iteration plans and runs a DistSQL
-	// flow over the current span set. Termination ends the loop;
-	// a widening signal cancels the running flow, picks up the
-	// new spans, and re-plans. The TickManager and persister are
-	// shared across iterations so per-key ordering survives via
-	// the resume protocol (ResumeStateForPartition).
+	// flow over the current span set with a chosen start ts.
+	// Termination ends the loop; a widening signal cancels the
+	// running flow, picks up the new spans + start ts, and
+	// re-plans. The TickManager and persister are shared across
+	// iterations so per-key ordering survives via the resume
+	// protocol (ResumeStateForPartition).
 	currentSpans := spans
+	currentStartTS := startHLC
 	for {
 		flowCtx, cancelFlow := context.WithCancel(ctx)
 		flowDone := make(chan error, 1)
 		go func() {
 			flowDone <- runOneFlow(
-				flowCtx, execCtx, jobID, manager, currentSpans, startHLC, dest, tickWidth,
+				flowCtx, execCtx, jobID, manager, currentSpans, currentStartTS, dest, tickWidth,
 			)
 		}()
 
@@ -207,12 +209,14 @@ func Run(
 			cancelFlow()
 			<-flowDone
 			return errors.Wrap(err, "descfeed failed")
-		case newSpans := <-sigs.replan:
+		case sig := <-sigs.replan:
 			cancelFlow()
 			<-flowDone
-			log.Dev.Infof(ctx, "revlogjob: replanning flow with %d spans (was %d)",
-				len(newSpans), len(currentSpans))
-			currentSpans = newSpans
+			log.Dev.Infof(ctx,
+				"revlogjob: replanning flow at %s with %d spans (was %d, %d new)",
+				sig.StartTS, len(sig.Spans), len(currentSpans), len(sig.NewSpans))
+			currentSpans = sig.Spans
+			currentStartTS = sig.StartTS
 			// continue outer loop
 		case err := <-flowDone:
 			cancelFlow()
@@ -234,14 +238,18 @@ func Run(
 }
 
 // runOneFlow plans and runs one DistSQL flow over spans. Returns
-// when ctx is cancelled or the flow exits on its own.
+// when ctx is cancelled or the flow exits on its own. flowStartTS
+// is the rangefeed subscription start time the producers will use,
+// which on widening replans is min(currentDataFrontier,
+// earliestWideningTs) — strictly less than or equal to the job's
+// original startHLC for an unchanged-scope flow.
 func runOneFlow(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	manager *TickManager,
 	spans []roachpb.Span,
-	startHLC hlc.Timestamp,
+	flowStartTS hlc.Timestamp,
 	dest string,
 	tickWidth time.Duration,
 ) error {
@@ -277,7 +285,7 @@ func runOneFlow(
 		spec := &execinfrapb.RevlogSpec{
 			JobID:          jobID,
 			Spans:          part.Spans,
-			StartHLC:       startHLC,
+			StartHLC:       flowStartTS,
 			Dest:           dest,
 			TickWidthNanos: int64(tickWidth),
 		}

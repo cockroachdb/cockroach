@@ -158,6 +158,42 @@ Format: a marshaled `revlogpb.Coverage` proto carrying the
 effective HLC, the job's scope spec, and the expanded span
 set, framed per §3.
 
+### Coverage vs. data files
+
+Coverage is a step function over time: at any HLC, the
+coverage entry whose `effective_from` is the largest value
+≤ that HLC defines the in-scope span set. Readers consult
+coverage to decide whether a span is in scope at a given
+AOST. They do **not** clip events by per-span coverage start.
+
+Specifically: data files for a span S **may** contain events
+at MVCC timestamps earlier than the coverage entry that
+brought S into scope. When the writer detects that S has
+newly entered scope (e.g. via a schema change publishing a
+descriptor), it captures S's existing state via an initial
+scan stamped at the writer's current data-frontier
+position, which can be earlier than the descriptor's
+publication timestamp. Subsequent events stream from there
+forward.
+
+A reader replaying for AOST `T` must:
+
+- Consult coverage to decide whether S is in scope at `T`.
+  If not, ignore S entirely. If so, replay every event for S
+  in every data file in the replay window.
+- Not attempt to clip events for S by the HLC of the
+  coverage entry that introduced S. Doing so would skip the
+  initial-scan output that materializes S's pre-entry state,
+  producing an incorrect restored state.
+
+This is correct because restore is all-or-nothing per span:
+either AOST is before the coverage entry that introduced S
+(S is excluded entirely) or AOST is at or after it (S's
+full event history in the log replays, and the sum produces
+the SQL-valid state at AOST). See the "Pre-publication
+captures" section of the continuous backup RFC for the
+underlying invariant.
+
 ---
 
 ## 6. Schema manifest
