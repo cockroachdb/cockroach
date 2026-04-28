@@ -133,7 +133,7 @@ store-id=7 node-id=7 status=ok accepting all reported=[cpu:250ns/s, write-bandwi
 # So even though s7 (470 CPU) would have LOWER absolute load than s1 (700 CPU)
 # after the transfer, and lower load relative to the mean, the HIGH UTILIZATION
 # (94%) triggers the utilization override, making s7 overloadUrgent.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=1.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=1.0 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:541ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:714ns/s, write-bandwidth:unknown/s, byte-size:714 B]) (nodes-cpu-load 541) (nodes-cpu-capacity 714)

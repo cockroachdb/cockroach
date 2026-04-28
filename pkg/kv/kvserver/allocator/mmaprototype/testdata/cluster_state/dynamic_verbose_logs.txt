@@ -1,5 +1,5 @@
-# Demonstrates dynamic-verbose-logging behavior at vmodule=0 (default
-# operator view). Two independent gates promote messages to Infof:
+# Demonstrates dynamic-verbose-logging behavior at the default
+# operator vmodule (0). Two independent gates promote messages to Infof:
 #
 #   - Outer loop (rebalanceStores narrative: begins, cluster means,
 #     evaluating sN, etc.): emitted at most once per outerLogInterval(10min)
@@ -20,7 +20,7 @@ t=10m0s
 # t=10m: outer-loop timer's first fire, so the outer narrative is captured
 # at Infof. Per-store burst is gated by the 30-min persistent-overload
 # threshold and stays silent.
-rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
+rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
@@ -61,7 +61,7 @@ tick seconds=1800
 ----
 t=40m0s
 
-rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
+rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0
 ----
 [mmaid=3] rebalanceStores begins
 [mmaid=3] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
@@ -128,7 +128,7 @@ tick seconds=300
 ----
 t=45m0s
 
-rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
+rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0
 ----
 [mmaid=4] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=4] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=3,4]] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
@@ -161,7 +161,7 @@ tick seconds=1800
 ----
 t=1h15m0s
 
-rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
+rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0
 ----
 [mmaid=5] rebalanceStores begins
 [mmaid=5] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)

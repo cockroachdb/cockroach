@@ -41,7 +41,7 @@ store-id=1
 ----
 
 # First call establishes s3's overload state and enters grace period.
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:75ns/s, write-bandwidth:32 MB/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:100 MB/s, byte-size:1.0 kB]) (nodes-cpu-load 100) (nodes-cpu-capacity 1333)
@@ -139,7 +139,7 @@ t=5m0s
 # I need to piece this together but this doesn't seem right. We're on a low-CPU
 # node and simply trying to move IO between two stores of the same node. This
 # seems like an unambigiously good idea (if we can't move the load elsewhere).
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:75ns/s, write-bandwidth:32 MB/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:100 MB/s, byte-size:1.0 kB]) (nodes-cpu-load 100) (nodes-cpu-capacity 1333)

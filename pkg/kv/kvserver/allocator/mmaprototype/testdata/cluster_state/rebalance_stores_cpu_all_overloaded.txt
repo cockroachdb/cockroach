@@ -58,7 +58,7 @@ tick seconds=300
 ----
 t=5m0s
 
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:950ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:unknown/s, byte-size:1.0 kB]) (nodes-cpu-load 950) (nodes-cpu-capacity 1000)
