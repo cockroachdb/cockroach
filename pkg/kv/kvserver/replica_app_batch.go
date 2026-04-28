@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -494,6 +495,51 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	return nil
 }
 
+var forcedLooseTruncationLogLimiter = log.Every(60 * time.Second)
+
+// shouldUseLooselyCoupledTruncation decides whether the truncation should be
+// enacted via the loosely-coupled path (raftLogTruncator) or applied
+// synchronously using tightly-coupled truncation.
+func shouldUseLooselyCoupledTruncation(
+	ctx context.Context,
+	sv *settings.Values,
+	raftExpectedFirstIndex kvpb.RaftIndex,
+	enginesSeparated bool,
+) bool {
+	// Use loosely-coupled truncations if configured by the setting, or if using
+	// separate engine. Otherwise, perform a tightly-coupled truncation, i.e.
+	// apply it immediately.
+	//
+	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
+	// comment in that proto) and using a single engine. It is possible that a
+	// replica still has a truncation sitting in the raft log that never populated
+	// this field.
+	// TODO(pav-kv): remove the zero check after any below-raft migration.
+	settingEnabled := looselyCoupledTruncationEnabled.Get(sv)
+	if raftExpectedFirstIndex != 0 && settingEnabled {
+		return true
+	}
+	if !enginesSeparated {
+		return false
+	}
+	// Separated engines require loose coupling. If the operator has disabled it
+	// via cluster setting, surface that the override is happening.
+	if !settingEnabled && forcedLooseTruncationLogLimiter.ShouldLog() {
+		log.KvExec.Warningf(ctx,
+			"using loosely-coupled raft log truncation despite "+
+				"kv.raft_log.loosely_coupled_truncation.enabled=false because "+
+				"separated raft and state engines require it")
+	}
+	// In a cluster with separated engines, we expect that every truncation
+	// proposal populates RaftExpectedFirstIndex. Otherwise, a below-raft
+	// migration hasn't happened successfully.
+	if raftExpectedFirstIndex == 0 {
+		logcrash.ReportOrPanic(ctx, sv,
+			"RaftExpectedFirstIndex is zero in a cluster using loosely-coupled truncations")
+	}
+	return true
+}
+
 // stageTruncation stages the raft log truncation command. It prepares the
 // truncation to happen immediately if tightly coupled truncations are used, or
 // queues the truncation into the loosely coupled machinery otherwise.
@@ -501,15 +547,10 @@ func (b *replicaAppBatch) stageTruncation(
 	ctx context.Context, res *kvserverpb.ReplicatedEvalResult,
 ) error {
 	truncatedState := res.GetRaftTruncatedState() // NB: not nil
-	// Use loosely-coupled truncations if configured by the setting. Otherwise,
-	// perform a tightly-coupled truncation, i.e. apply it immediately.
-	//
-	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
-	// comment in that proto). It is possible that a replica still has a
-	// truncation sitting in the raft log that never populated this field.
-	// TODO(pav-kv): remove the zero check after any below-raft migration.
-	useLooselyCoupled := res.RaftExpectedFirstIndex != 0 &&
-		looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
+	useLooselyCoupled := shouldUseLooselyCoupledTruncation(
+		ctx, &b.r.ClusterSettings().SV, res.RaftExpectedFirstIndex,
+		b.r.store.EnginesSeparated(),
+	)
 
 	if useLooselyCoupled {
 		b.r.store.raftTruncator.addPendingTruncation(
