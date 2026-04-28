@@ -424,20 +424,13 @@ func isNonDropIndex(target scpb.TargetStatus) bool {
 
 // getColumnIDFromColumnName looks up a column's ID by its name.
 // If no column with this name exists, 0 will be returned.
+// This function does not check for any privileges on the table.
+// The caller check the privileges as needed.
 func getColumnIDFromColumnName(
-	b BuilderState,
-	tableID catid.DescID,
-	columnName tree.Name,
-	required bool,
-	requiredPrivilege ...privilege.Kind,
+	b BuilderState, tableID catid.DescID, columnName tree.Name, required bool,
 ) catid.ColumnID {
-	priv := privilege.CREATE
-	if len(requiredPrivilege) > 0 {
-		priv = requiredPrivilege[0]
-	}
 	colElems := b.ResolveColumn(tableID, columnName, ResolveParams{
 		IsExistenceOptional: !required,
-		RequiredPrivilege:   priv,
 	})
 
 	if colElems == nil {

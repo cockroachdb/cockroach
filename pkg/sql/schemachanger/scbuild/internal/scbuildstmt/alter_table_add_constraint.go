@@ -381,7 +381,7 @@ func alterTableAddForeignKey(
 	// to the length of originColumns.
 	var referencedColIDs []catid.ColumnID
 	for _, colName := range fkDef.ToCols {
-		colID := getColumnIDFromColumnName(b, referencedTableID, colName, true /*required */, fkPriv)
+		colID := getColumnIDFromColumnName(b, referencedTableID, colName, true /*required */)
 		ensureColCanBeUsedInInboundFK(b, referencedTableID, colID)
 		referencedColIDs = append(referencedColIDs, colID)
 	}
