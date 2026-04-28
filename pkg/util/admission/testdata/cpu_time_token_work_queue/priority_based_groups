@@ -101,6 +101,19 @@ tryGet: input can_burst, returning false
 admit id=6 tenant=10 priority=-30 requested-count=1
 ----
 
+# Synchronization barrier: ensure id=6's goroutine has entered q.Admit()
+# and queued before proceeding. Without this, id=6's goroutine may not
+# have started yet (maybeRetryWithWait trivially matches on empty expected
+# output). If id=6 runs after the granted call below pops group 1 from
+# the heap, it would see an empty heap, take the fast path, and produce
+# spurious tryGet output that contaminates the granted output.
+print
+----
+closed epoch: 0 groupHeap len: 2 top group: 1
+ group-id: 1 used: 101, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 2 used: 201, w: 1, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
+
 gc-groups-and-reset-used
 ----
 
