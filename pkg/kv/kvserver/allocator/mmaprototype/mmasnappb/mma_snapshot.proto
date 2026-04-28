@@ -8,6 +8,8 @@ package cockroach.kv.kvserver.allocator.mmaprototype.mmasnappb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "roachpb/metadata.proto";
 
 // ClusterStateSnapshot is a structured dump of the in-memory cluster state
 // maintained by the multi-metric allocator (mmaprototype.clusterState). It is
@@ -33,4 +35,166 @@ message ClusterStateSnapshot {
   // change_seq_gen is the next changeID that will be assigned to a pending
   // change. Pending changes carry IDs strictly less than this value.
   uint64 change_seq_gen = 4;
+
+  // nodes is keyed by roachpb.NodeID.
+  map<int32, NodeSnapshot> nodes = 5;
+  // stores is keyed by roachpb.StoreID.
+  map<int32, StoreSnapshot> stores = 6;
 }
+
+// NodeSnapshot mirrors mmaprototype.nodeState.
+message NodeSnapshot {
+  // store_ids lists the stores hosted on this node.
+  repeated int32 store_ids = 1 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  // node_load mirrors the embedded mmaprototype.NodeLoad.
+  NodeLoad node_load = 2 [(gogoproto.nullable) = false];
+  // adjusted_cpu starts at NodeCPULoad and is then offset by pending change
+  // deltas. It can be negative.
+  int64 adjusted_cpu = 3 [(gogoproto.customname) = "AdjustedCPU"];
+}
+
+// NodeLoad mirrors mmaprototype.NodeLoad. Load values are in the same units
+// as the corresponding mmaprototype.LoadValue.
+message NodeLoad {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // node_cpu_load is the physical node CPU rate usage observed by this node.
+  int64 node_cpu_load = 2 [(gogoproto.customname) = "NodeCPULoad"];
+  // node_cpu_capacity is the physical node CPU rate capacity reported by
+  // this node.
+  int64 node_cpu_capacity = 3 [(gogoproto.customname) = "NodeCPUCapacity"];
+}
+
+// StoreSnapshot mirrors mmaprototype.storeState.
+message StoreSnapshot {
+  // status mirrors mmaprototype.Status.
+  Status status = 1 [(gogoproto.nullable) = false];
+  // store_load mirrors the embedded mmaprototype.storeLoad.
+  StoreLoad store_load = 2 [(gogoproto.nullable) = false];
+  // store_attributes mirrors the embedded
+  // mmaprototype.storeAttributesAndLocalityWithNodeTier; the locality has the
+  // synthetic node= tier appended.
+  StoreAttributes store_attributes = 3 [(gogoproto.nullable) = false];
+  // adjusted mirrors the anonymous storeState.adjusted struct.
+  StoreAdjusted adjusted = 4 [(gogoproto.nullable) = false];
+  // load_seq_num is incremented whenever the adjusted or reported load on
+  // this store (or its node) is updated. Used as a cache key for load
+  // summaries.
+  uint64 load_seq_num = 5;
+  // max_fraction_pending_increase is the largest |1 - adjusted/reported|
+  // across load dimensions where adjusted > reported.
+  double max_fraction_pending_increase = 6;
+  // max_fraction_pending_decrease is the largest |1 - adjusted/reported|
+  // across load dimensions where adjusted < reported.
+  double max_fraction_pending_decrease = 7;
+  // locality_tiers mirrors the embedded mmaprototype.localityTiers.tiers,
+  // with interned codes resolved to plain strings at snapshot time. The
+  // source-side localityTiers.str field (a concat of internal interner
+  // codes) is omitted: the codes are not exposed in the snapshot, so
+  // consumers can't interpret it.
+  repeated string locality_tiers = 8;
+  // overload_start_time is the time at which this store first started being
+  // observed as overloaded; unset when not overloaded.
+  google.protobuf.Timestamp overload_start_time = 9 [(gogoproto.stdtime) = true];
+  // overload_end_time is the time at which this store stopped being observed
+  // as overloaded; unset while overloaded.
+  google.protobuf.Timestamp overload_end_time = 10 [(gogoproto.stdtime) = true];
+}
+
+// Status mirrors mmaprototype.Status.
+message Status {
+  // health is mmaprototype.Health (uint8 enum).
+  uint32 health = 1;
+  // disposition mirrors mmaprototype.Disposition.
+  Disposition disposition = 2 [(gogoproto.nullable) = false];
+}
+
+// Disposition mirrors mmaprototype.Disposition.
+message Disposition {
+  // lease is mmaprototype.LeaseDisposition (uint8 enum).
+  uint32 lease = 1;
+  // replica is mmaprototype.ReplicaDisposition (uint8 enum).
+  uint32 replica = 2;
+}
+
+// StoreLoad mirrors mmaprototype.storeLoad. Each load vector is a slice of
+// length mmaprototype.NumLoadDimensions (3) holding raw mmaprototype.LoadValue
+// integers in the order [CPURate, WriteBandwidth, ByteSize]; the secondary
+// load vector is of length mmaprototype.NumSecondaryLoadDimensions (2) in the
+// order [LeaseCount, ReplicaCount]. Snapshot-side consumers should treat
+// these as opaque vectors.
+message StoreLoad {
+  // reported_load is the most recent storeLoad.reportedLoad.
+  repeated int64 reported_load = 1;
+  // capacity is the per-dimension store capacity (UnknownCapacity for
+  // WriteBandwidth).
+  repeated int64 capacity = 2;
+  // reported_secondary_load is the most recent storeLoad.reportedSecondaryLoad.
+  repeated int64 reported_secondary_load = 3;
+}
+
+// StoreAttributes mirrors mmaprototype.storeAttributesAndLocalityWithNodeTier
+// (i.e. roachpb.StoreAttributesAndLocality with a synthetic node=<id> tier
+// appended to NodeLocality).
+message StoreAttributes {
+  int32 store_id = 1 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  roachpb.Attributes node_attrs = 3 [(gogoproto.nullable) = false];
+  roachpb.Locality node_locality = 4 [(gogoproto.nullable) = false];
+  roachpb.Attributes store_attrs = 5 [(gogoproto.nullable) = false];
+}
+
+// StoreAdjusted mirrors the anonymous storeState.adjusted struct.
+message StoreAdjusted {
+  // load is the adjusted load vector (storeLoad-style ordering and units).
+  // It can hold negative values transiently while pending changes are
+  // outstanding.
+  repeated int64 load = 1;
+  // secondary_load is the adjusted secondary load vector.
+  repeated int64 secondary_load = 2;
+  // load_pending_change_ids references the canonical entries in
+  // ClusterStateSnapshot.pending_changes (populated by a later commit). The
+  // referenced changes are still affecting this store's adjusted load.
+  repeated uint64 load_pending_change_ids = 3;
+  // replicas mirrors storeState.adjusted.replicas, keyed by roachpb.RangeID.
+  map<int64, ReplicaState> replicas = 4;
+  // top_k_ranges mirrors storeState.adjusted.topKRanges, keyed by the local
+  // leaseholder roachpb.StoreID.
+  map<int32, TopKReplicas> top_k_ranges = 5;
+}
+
+// ReplicaState mirrors mmaprototype.ReplicaState.
+message ReplicaState {
+  // replica_id is the Raft replica identifier. Special mmaprototype-internal
+  // values (-1 unknownReplicaID, -2 noReplicaID) may appear in the context
+  // of pending changes.
+  int32 replica_id = 1 [(gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  // replica_type is the Raft replica type, cast to roachpb.ReplicaType.
+  int32 replica_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaType"];
+  // is_leaseholder is true iff this replica currently holds the range lease.
+  bool is_leaseholder = 3;
+  // lease_disposition is mmaprototype.LeaseDisposition (uint8 enum).
+  uint32 lease_disposition = 4;
+}
+
+// TopKReplicas mirrors mmaprototype.topKReplicas (the post-init heap state).
+// The transient replicaHeap workspace used during construction is not
+// snapshotted.
+message TopKReplicas {
+  // k is the maximum number of replicas retained.
+  int32 k = 1;
+  // dim is the mmaprototype.LoadDimension along which the top-k is selected
+  // (uint8 enum).
+  uint32 dim = 2;
+  // threshold is the minimum LoadValue along dim for inclusion.
+  int64 threshold = 3;
+  // replicas is the post-init list, in decreasing load order.
+  repeated ReplicaLoad replicas = 4 [(gogoproto.nullable) = false];
+}
+
+// ReplicaLoad mirrors mmaprototype.replicaLoad.
+message ReplicaLoad {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // load is the replica's contribution along the parent TopKReplicas.dim.
+  int64 load = 2;
+}
+
