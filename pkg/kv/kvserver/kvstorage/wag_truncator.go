@@ -222,14 +222,9 @@ func (t *WAGTruncator) truncateBatch(ctx context.Context, stateRO StateRO) (bool
 			// We cannot ignore gaps for WAG indices > initIndex.
 			break
 		}
-		// TODO(ibrahim): Right now, the canApplyWAGNode function returns a list of
-		// raftCatchUpTargets that are not needed for the purposes of truncation,
-		// consider refactoring the function to return only the needed info.
-		action, err := canApplyWAGNode(ctx, node, stateRO)
-		if err != nil {
+		if apply, err := canApplyWAGNode(ctx, node, stateRO); err != nil {
 			return false, err
-		}
-		if action.apply {
+		} else if apply {
 			// If an event needs to be applied, the WAG node cannot be deleted yet.
 			break
 		}
@@ -242,7 +237,7 @@ func (t *WAGTruncator) truncateBatch(ctx context.Context, stateRO StateRO) (bool
 			if event.Type != wagpb.EventDestroy && event.Type != wagpb.EventSubsume {
 				continue
 			}
-			if err = t.clearReplicaRaftLogAndSideloaded(ctx,
+			if err := t.clearReplicaRaftLogAndSideloaded(ctx,
 				Raft{RO: t.eng.LogEngine(), WO: b}, event.Addr.RangeID, event.Addr.Index,
 			); err != nil {
 				return false, err
