@@ -26,14 +26,13 @@ source  $root/build/teamcity/util/roachtest_arch_util.sh
 # date at the time of the start of the run (which identifies the version of the
 # code run best).
 stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
-stats_file_name="stats.json"
+stats_file_names=("stats.json" "summary_stats.json" "aggregated_stats.json")
 
 # Provide a default value for EXPORT_OPENMETRICS if it is not set
 EXPORT_OPENMETRICS="${EXPORT_OPENMETRICS:-false}"
 
 if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
-  # Use * to upload aggregated and other stats file
-  stats_file_name="*stats.om"
+  stats_file_names=("stats.om" "summary_stats.om" "aggregated_stats.om")
 fi
 
 COMMIT_SHA=$(git rev-parse --short HEAD)
@@ -64,12 +63,12 @@ function upload_stats {
       remote_artifacts_dir="${remote_artifacts_dir}-fips"
     fi
 
-    # The ${stats_file_name} files need some path translation:
-    #     ${artifacts}/path/to/test/${stats_file_name}
+    # The ${stats_file_names} files need some path translation:
+    #     ${artifacts}/path/to/test/${stats_file_names}
     # to
-    #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/${stats_file_name}
+    #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/${stats_file_names}
     #
-    # `find` below will expand "{}" as ./path/to/test/${stats_file_name}. We need
+    # `find` below will expand "{}" as ./path/to/test/${stats_file_names}. We need
     # to bend over backwards to remove the `./` prefix or gsutil will have
     # a `.` folder in ${stats_dir}, which we don't want.
     (cd "${artifacts}" && \
@@ -86,7 +85,7 @@ function upload_stats {
           fi
           gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
         fi
-      done <<< "$(find . -name "${stats_file_name}" | sed 's/^\.\///')")
+      done <<< "$(find . \( -name "${stats_file_names[0]}" -o -name "${stats_file_names[1]}" -o -name "${stats_file_names[2]}" \) | sed 's/^\.\///')")
   fi
 }
 
@@ -112,7 +111,7 @@ function upload_all {
   upload_stats
 }
 
-# Upload any ${stats_file_name} we can find, and some binaries, no matter what happens.
+# Upload any ${stats_file_names} we can find, and some binaries, no matter what happens.
 trap upload_all EXIT
 
 # Set up the parameters for the roachtest invocation.
