@@ -481,3 +481,59 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 		require.Equal(t, row.pk, pk)
 	}
 }
+
+// TestVectorIndexBackfillWithUnreferencedVirtualColumn is a regression test
+// for a panic in IndexBackfiller.BuildIndexEntriesChunk when a virtual
+// computed column appears in the table at an ordinal before the vector
+// column.
+//
+// The backfiller's rowVals slice is sized by the filtered set of columns
+// produced by makeIndexBackfillColumns, which drops public columns that
+// aren't stored in the source primary index and aren't referenced by any
+// added index. A virtual computed column not referenced by the vector
+// index falls into that bucket. The vector code path was indexing rowVals
+// using the vector column's table-wide ordinal, which sits past the end
+// of rowVals once any earlier column has been filtered out.
+func TestVectorIndexBackfillWithUnreferencedVirtualColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Column ordinals:
+	//   0: id          (primary key, in primary index → kept)
+	//   1: name        (public, in primary index → kept)
+	//   2: upper_name  (public, virtual computed, not in primary index,
+	//                   not referenced by the vector index → filtered out)
+	//   3: vec         (vector column → kept)
+	//
+	// After filtering, ib.cols has length 3 but vec.Ordinal() == 3, so the
+	// previous ib.rowVals[vectorOrd] access went out of bounds.
+	sqlDB.Exec(t, `
+		CREATE TABLE t (
+			id INT PRIMARY KEY,
+			name STRING NOT NULL,
+			upper_name STRING AS (upper(name)) VIRTUAL,
+			vec VECTOR(3)
+		)
+	`)
+	sqlDB.Exec(t, `
+		INSERT INTO t (id, name, vec) VALUES
+		(1, 'a', '[1, 2, 3]'),
+		(2, 'b', '[4, 5, 6]'),
+		(3, 'c', '[7, 8, 9]')
+	`)
+
+	sqlDB.Exec(t, `CREATE VECTOR INDEX vec_idx ON t (vec)`)
+
+	var id int
+	sqlDB.QueryRow(t,
+		`SELECT id FROM t@vec_idx ORDER BY vec <-> '[1, 2, 3]' LIMIT 1`,
+	).Scan(&id)
+	require.Equal(t, 1, id)
+}
