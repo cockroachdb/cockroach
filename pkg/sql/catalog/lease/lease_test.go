@@ -4578,3 +4578,118 @@ func TestLeaseInternalLookupCtxWithLocked(t *testing.T) {
 	require.NoError(t, grp.Wait())
 
 }
+
+// TestObserverNotificationFromRangefeed validates the range feed will generate a notification
+// even if the version is cached via another method.
+func TestObserverNotificationFromRangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	proceedRangefeed := make(chan struct{})
+	knobs := lease.ManagerTestingKnobs{
+		TestingDescriptorUpdateEvent: func(desc *descpb.Descriptor) error {
+			_, _, name, _, err := descpb.GetDescriptorMetadata(desc)
+			if err != nil {
+				return err
+			}
+			if name == "t" {
+				<-proceedRangefeed
+			}
+			return nil
+		},
+	}
+	// Use 2 nodes.
+	nodes := serverutils.StartCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &knobs,
+			},
+		},
+	})
+	defer nodes.Stopper().Stop(context.Background())
+
+	db0 := nodes.Server(0).SQLConn(t)
+	sql0 := sqlutils.MakeSQLRunner(db0)
+	lm1 := nodes.Server(1).LeaseManager().(*lease.Manager)
+
+	sql0.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY)")
+	var tableID descpb.ID
+	sql0.QueryRow(t, "SELECT 't'::regclass::int").Scan(&tableID)
+
+	// Acquire a lease on Node 1 and hold it.
+	ctx := context.Background()
+	ld, err := lm1.Acquire(ctx, lm1.GetReadTimestamp(ctx, nodes.Server(1).Clock().Now()), tableID)
+	require.NoError(t, err)
+
+	// Register observer on Node 1.
+	// The observer will release the lease when it sees a new version.
+	obs := &testObserverRelease{
+		notified: make(chan descpb.DescriptorVersion, 100),
+		targetID: tableID,
+		lease:    ld,
+	}
+	_ = lm1.RegisterLeaseObserver(obs)
+	// Drain initial notifications.
+	timer := time.After(time.Minute)
+drainLoop:
+	for {
+		select {
+		case v := <-obs.notified:
+			t.Logf("Drained version %d", v)
+		case <-timer:
+			break drainLoop
+		}
+	}
+	// Run schema change on Node 0 in a goroutine because it will block
+	// on the two-version invariant waiting for Node 1 to release version 1.
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := db0.Exec("ALTER TABLE t ADD COLUMN v INT")
+		errCh <- err
+	}()
+	// Wait until version 2 is committed on Node 0 and visible to Node 1 via historical read.
+	// This silently pulls version 2 into Node 1's cache.
+	testutils.SucceedsSoon(t, func() error {
+		now := nodes.Server(0).Clock().Now()
+		_, err := nodes.Server(1).SQLConn(t).Query(fmt.Sprintf("SELECT * FROM t AS OF SYSTEM TIME '%s'", now.AsOfSystemTime()))
+		return err
+	})
+	// Release the rangefeed.
+	close(proceedRangefeed)
+	// Wait for rangefeed on Node 1 to see the update and notify the observer.
+	// If the observer is notified, it will release the lease, allowing the
+	// ALTER TABLE to finish.
+	timeout := time.After(30 * time.Second)
+	select {
+	case v := <-obs.notified:
+		t.Logf("Observer notified of version %d", v)
+		if v < 2 {
+			t.Errorf("expected version >= 2, got %d", v)
+		}
+	case <-timeout:
+		t.Fatal("timed out waiting for observer notification on Node 1")
+	}
+	require.NoError(t, <-errCh)
+}
+
+// testObserverRelease is a mock observer similar to schema feed,
+// that will release a version on notification.
+type testObserverRelease struct {
+	notified chan descpb.DescriptorVersion
+	targetID descpb.ID
+	lease    lease.LeasedDescriptor
+	once     sync.Once
+}
+
+// OnNewVersion implements Observer.
+func (o *testObserverRelease) OnNewVersion(
+	ctx context.Context, id descpb.ID, version descpb.DescriptorVersion, timestamp hlc.Timestamp,
+) {
+	if id != o.targetID {
+		return
+	}
+	o.once.Do(func() {
+		if o.lease != nil {
+			o.lease.Release(ctx)
+		}
+	})
+	o.notified <- version
+}
