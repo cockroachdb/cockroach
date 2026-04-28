@@ -7,16 +7,18 @@ package rttanalysis
 
 import "testing"
 
-// BenchmarkAudit is a benchmark for audited table operations.
-// benchmark-ci: benchtime=20x
-func BenchmarkAudit(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("Audit", []RoundTripBenchTestCase{
-		{
-			Name: "select from an audit table",
-			Setup: `CREATE TABLE audit_table(a INT) WITH (schema_locked = false);
+var auditCases = []RoundTripBenchTestCase{
+	{
+		Name: "select from an audit table",
+		Setup: `CREATE TABLE audit_table(a INT) WITH (schema_locked = false);
 							ALTER TABLE audit_table EXPERIMENTAL_AUDIT SET READ WRITE;`,
-			Stmt: "SELECT * from audit_table",
-		},
-	})
+		Stmt: "SELECT * from audit_table",
+	},
+}
+
+// benchmark-ci: benchtime=20x
+func BenchmarkAudit(b *testing.B) { runCPUMemBenchmark(bShim{b}, auditCases, defaultCC) }
+
+func TestBenchmarkExpectation_Audit(t *testing.T) {
+	runExpectation(t, "Audit", auditCases, defaultCC)
 }

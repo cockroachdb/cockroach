@@ -7,15 +7,19 @@ package rttanalysis
 
 import "testing"
 
-// BenchmarkUDFResolution is a benchmark for user-defined function resolution.
+var udfResolutionCases = []RoundTripBenchTestCase{
+	{
+		Name:  "select from udf",
+		Setup: `CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;`,
+		Stmt:  `SELECT f()`,
+	},
+}
+
 // benchmark-ci: benchtime=20x
-func BenchmarkUDFResolution(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("UDFResolution", []RoundTripBenchTestCase{
-		{
-			Name:  "select from udf",
-			Setup: `CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;`,
-			Stmt:  `SELECT f()`,
-		},
-	})
+func BenchmarkUDFResolution(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, udfResolutionCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_UDFResolution(t *testing.T) {
+	runExpectation(t, "UDFResolution", udfResolutionCases, defaultCC)
 }

@@ -13,69 +13,69 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
-// BenchmarkCreateRole is a benchmark for the CREATE ROLE statement.
+var createRoleCases = []RoundTripBenchTestCase{
+	{
+		Name:  "create role with no options",
+		Stmt:  "CREATE ROLE rolea",
+		Reset: "DROP ROLE rolea",
+	},
+	{
+		Name:  "create role with 1 option",
+		Stmt:  "CREATE ROLE rolea LOGIN",
+		Reset: "DROP ROLE rolea",
+	},
+	{
+		Name:  "create role with 2 options",
+		Stmt:  "CREATE ROLE rolea LOGIN CREATEROLE",
+		Reset: "DROP ROLE rolea",
+	},
+	{
+		Name:  "create role with 3 options",
+		Stmt:  "CREATE ROLE rolea LOGIN CREATEROLE VALID UNTIL '2021-01-01'",
+		Reset: "DROP ROLE rolea",
+	},
+}
+
 // benchmark-ci: benchtime=20x
-func BenchmarkCreateRole(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("CreateRole", []RoundTripBenchTestCase{
-		{
-			Name:  "create role with no options",
-			Stmt:  "CREATE ROLE rolea",
-			Reset: "DROP ROLE rolea",
-		},
-		{
-			Name:  "create role with 1 option",
-			Stmt:  "CREATE ROLE rolea LOGIN",
-			Reset: "DROP ROLE rolea",
-		},
-		{
-			Name:  "create role with 2 options",
-			Stmt:  "CREATE ROLE rolea LOGIN CREATEROLE",
-			Reset: "DROP ROLE rolea",
-		},
-		{
-			Name:  "create role with 3 options",
-			Stmt:  "CREATE ROLE rolea LOGIN CREATEROLE VALID UNTIL '2021-01-01'",
-			Reset: "DROP ROLE rolea",
-		},
-	})
+func BenchmarkCreateRole(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, createRoleCases, defaultCC)
 }
 
-// BenchmarkAlterRole is a benchmark for the ALTER ROLE statement.
+func TestBenchmarkExpectation_CreateRole(t *testing.T) {
+	runExpectation(t, "CreateRole", createRoleCases, defaultCC)
+}
+
+var alterRoleCases = []RoundTripBenchTestCase{
+	{
+		Name:  "alter role with 1 option",
+		Setup: "CREATE ROLE rolea",
+		Stmt:  "ALTER ROLE rolea CREATEROLE",
+		Reset: "DROP ROLE rolea",
+	},
+	{
+		Name:  "alter role with 2 options",
+		Setup: "CREATE ROLE rolea",
+		Stmt:  "ALTER ROLE rolea CREATEROLE LOGIN",
+		Reset: "DROP ROLE rolea",
+	},
+	{
+		Name:  "alter role with 3 options",
+		Setup: "CREATE ROLE rolea",
+		Stmt:  "ALTER ROLE rolea CREATEROLE LOGIN PASSWORD '123'",
+		Reset: "DROP ROLE rolea",
+	},
+}
+
 // benchmark-ci: benchtime=20x
-func BenchmarkAlterRole(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("AlterRole", []RoundTripBenchTestCase{
-		{
-			Name:  "alter role with 1 option",
-			Setup: "CREATE ROLE rolea",
-			Stmt:  "ALTER ROLE rolea CREATEROLE",
-			Reset: "DROP ROLE rolea",
-		},
-		{
-			Name:  "alter role with 2 options",
-			Setup: "CREATE ROLE rolea",
-			Stmt:  "ALTER ROLE rolea CREATEROLE LOGIN",
-			Reset: "DROP ROLE rolea",
-		},
-		{
-			Name:  "alter role with 3 options",
-			Setup: "CREATE ROLE rolea",
-			Stmt:  "ALTER ROLE rolea CREATEROLE LOGIN PASSWORD '123'",
-			Reset: "DROP ROLE rolea",
-		},
-	})
+func BenchmarkAlterRole(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, alterRoleCases, defaultCC)
 }
 
-// BenchmarkUseManyRoles is useful for testing the performance of the
-// role membership cache.
-func BenchmarkUseManyRoles(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-	reg.Run(b)
+func TestBenchmarkExpectation_AlterRole(t *testing.T) {
+	runExpectation(t, "AlterRole", alterRoleCases, defaultCC)
 }
-func init() {
 
-	createFunc := `
+const useManyRolesCreateFunc = `
 CREATE OR REPLACE FUNCTION query_table_with_roles(num_roles INT)
 RETURNS VOID AS $$
 DECLARE
@@ -90,43 +90,51 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;`
 
-	reg.Register("UseManyRoles", []RoundTripBenchTestCase{
-		{
-			Name: "use 2 roles",
-			SetupEx: []string{
-				"CREATE ROLE parent_role",
-				createNRoles(2),
-				grantRoleToNRoles("parent_role", 2),
-				"CREATE TABLE tab (a INT)",
-				"GRANT SELECT ON tab TO parent_role",
-				"INSERT INTO tab VALUES (1)",
-				createFunc,
-			},
-			Stmt: "SELECT query_table_with_roles(2)",
-			ResetEx: []string{
-				"RESET ROLE",
-				dropNRoles(2),
-				"DROP ROLE parent_role",
-			},
+var useManyRolesCases = []RoundTripBenchTestCase{
+	{
+		Name: "use 2 roles",
+		SetupEx: []string{
+			"CREATE ROLE parent_role",
+			createNRoles(2),
+			grantRoleToNRoles("parent_role", 2),
+			"CREATE TABLE tab (a INT)",
+			"GRANT SELECT ON tab TO parent_role",
+			"INSERT INTO tab VALUES (1)",
+			useManyRolesCreateFunc,
 		},
-		{
-			Name: "use 25 roles",
-			SetupEx: []string{
-				"CREATE ROLE parent_role",
-				createNRoles(25),
-				grantRoleToNRoles("parent_role", 25),
-				"CREATE TABLE tab (a INT)",
-				"GRANT SELECT ON tab TO parent_role",
-				"INSERT INTO tab VALUES (1)",
-				createFunc,
-			},
-			Stmt: "SELECT query_table_with_roles(25)",
-			ResetEx: []string{
-				dropNRoles(25),
-				"DROP ROLE parent_role",
-			},
+		Stmt: "SELECT query_table_with_roles(2)",
+		ResetEx: []string{
+			"RESET ROLE",
+			dropNRoles(2),
+			"DROP ROLE parent_role",
 		},
-	})
+	},
+	{
+		Name: "use 25 roles",
+		SetupEx: []string{
+			"CREATE ROLE parent_role",
+			createNRoles(25),
+			grantRoleToNRoles("parent_role", 25),
+			"CREATE TABLE tab (a INT)",
+			"GRANT SELECT ON tab TO parent_role",
+			"INSERT INTO tab VALUES (1)",
+			useManyRolesCreateFunc,
+		},
+		Stmt: "SELECT query_table_with_roles(25)",
+		ResetEx: []string{
+			dropNRoles(25),
+			"DROP ROLE parent_role",
+		},
+	},
+}
+
+func BenchmarkUseManyRoles(b *testing.B) {
+	skip.UnderShort(b, "skipping long benchmark")
+	runCPUMemBenchmark(bShim{b}, useManyRolesCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_UseManyRoles(t *testing.T) {
+	runExpectation(t, "UseManyRoles", useManyRolesCases, defaultCC)
 }
 
 func createNRoles(n int) string {

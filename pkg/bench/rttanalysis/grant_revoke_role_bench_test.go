@@ -11,41 +11,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
-// BenchmarkGrantRole is a benchmark for the GRANT <role> statement.
-// benchmark-ci: benchtime=20x
-func BenchmarkGrantRole(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("GrantRole", []RoundTripBenchTestCase{
-		{
-			Name: "grant 1 role",
-			Setup: `CREATE ROLE a;
+var grantRoleCases = []RoundTripBenchTestCase{
+	{
+		Name: "grant 1 role",
+		Setup: `CREATE ROLE a;
 CREATE ROLE b;`,
-			Stmt:  "GRANT a TO b",
-			Reset: "DROP ROLE a,b",
-		},
-		{
-			Name: "grant 2 roles",
-			Setup: `CREATE ROLE a;
+		Stmt:  "GRANT a TO b",
+		Reset: "DROP ROLE a,b",
+	},
+	{
+		Name: "grant 2 roles",
+		Setup: `CREATE ROLE a;
 CREATE ROLE b;
 CREATE ROLE c;`,
-			Stmt:  "GRANT a,b TO c",
-			Reset: "DROP ROLE a,b,c",
-		},
-	})
+		Stmt:  "GRANT a,b TO c",
+		Reset: "DROP ROLE a,b,c",
+	},
 }
 
-// BenchmarkShowGrants is a benchmark for the SHOW GRANTS statement.
 // benchmark-ci: benchtime=20x
-func BenchmarkShowGrants(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-	reg.Run(b)
+func BenchmarkGrantRole(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, grantRoleCases, defaultCC)
 }
 
-func init() {
-	reg.Register("ShowGrants", []RoundTripBenchTestCase{
-		{
-			Name: "grant 2 roles",
-			Setup: `
+func TestBenchmarkExpectation_GrantRole(t *testing.T) {
+	runExpectation(t, "GrantRole", grantRoleCases, defaultCC)
+}
+
+var showGrantsCases = []RoundTripBenchTestCase{
+	{
+		Name: "grant 2 roles",
+		Setup: `
 CREATE DATABASE db;
 CREATE ROLE a;
 CREATE ROLE b;
@@ -56,15 +52,15 @@ GRANT ALL ON DATABASE db TO c;
 GRANT DROP ON DATABASE db TO b;
 GRANT CONNECT ON DATABASE db TO a;
 `,
-			Stmt: "SHOW GRANTS ON DATABASE db FOR c",
-			Reset: `
+		Stmt: "SHOW GRANTS ON DATABASE db FOR c",
+		Reset: `
 DROP DATABASE db;
 DROP ROLE a,b,c;
 `,
-		},
-		{
-			Name: "grant 3 roles",
-			Setup: `
+	},
+	{
+		Name: "grant 3 roles",
+		Setup: `
 CREATE DATABASE db;
 CREATE ROLE a;
 CREATE ROLE b;
@@ -77,15 +73,15 @@ GRANT ALL ON DATABASE db TO c;
 GRANT DROP ON DATABASE db TO b;
 GRANT CONNECT ON DATABASE db TO a;
 `,
-			Stmt: "SHOW GRANTS ON DATABASE db FOR d",
-			Reset: `
+		Stmt: "SHOW GRANTS ON DATABASE db FOR d",
+		Reset: `
 DROP DATABASE db;
 DROP ROLE a,b,c,d;
 `,
-		},
-		{
-			Name: "grant 4 roles",
-			Setup: `
+	},
+	{
+		Name: "grant 4 roles",
+		Setup: `
 CREATE DATABASE db;
 CREATE ROLE a;
 CREATE ROLE b;
@@ -100,36 +96,49 @@ GRANT ALL ON DATABASE db TO c;
 GRANT DROP ON DATABASE db TO b;
 GRANT CONNECT ON DATABASE db TO a;
 `,
-			Stmt: "SHOW GRANTS ON DATABASE db FOR d",
-			Reset: `
+		Stmt: "SHOW GRANTS ON DATABASE db FOR d",
+		Reset: `
 DROP DATABASE db;
 DROP ROLE a,b,c,d,e;
 `,
-		},
-	})
+	},
 }
 
-// BenchmarkRevokeRole is a benchmark for the REVOKE <role> statement.
 // benchmark-ci: benchtime=20x
-func BenchmarkRevokeRole(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("RevokeRole", []RoundTripBenchTestCase{
-		{
-			Name: "revoke 1 role",
-			Setup: `CREATE ROLE a;
+func BenchmarkShowGrants(b *testing.B) {
+	skip.UnderShort(b, "skipping long benchmark")
+	runCPUMemBenchmark(bShim{b}, showGrantsCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_ShowGrants(t *testing.T) {
+	runExpectation(t, "ShowGrants", showGrantsCases, defaultCC)
+}
+
+var revokeRoleCases = []RoundTripBenchTestCase{
+	{
+		Name: "revoke 1 role",
+		Setup: `CREATE ROLE a;
 CREATE ROLE b;
 GRANT a TO b`,
-			Stmt:  "REVOKE a FROM b",
-			Reset: "DROP ROLE a,b",
-		},
-		{
-			Name: "revoke 2 roles",
-			Setup: `CREATE ROLE a;
+		Stmt:  "REVOKE a FROM b",
+		Reset: "DROP ROLE a,b",
+	},
+	{
+		Name: "revoke 2 roles",
+		Setup: `CREATE ROLE a;
 CREATE ROLE b;
 CREATE ROLE c;
 GRANT a,b TO c;`,
-			Stmt:  "REVOKE a,b FROM c",
-			Reset: "DROP ROLE a,b,c",
-		},
-	})
+		Stmt:  "REVOKE a,b FROM c",
+		Reset: "DROP ROLE a,b,c",
+	},
+}
+
+// benchmark-ci: benchtime=20x
+func BenchmarkRevokeRole(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, revokeRoleCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_RevokeRole(t *testing.T) {
+	runExpectation(t, "RevokeRole", revokeRoleCases, defaultCC)
 }
