@@ -180,10 +180,10 @@ func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}) {
 
 	// Always filter for users that have a PROVISIONSRC role option
 	// (i.e. are provisioned).
-	provisionFilter := fmt.Sprintf(`EXISTS (
+	provisionFilter := `EXISTS (
 	SELECT 1 FROM system.role_options AS src
 	WHERE src.username = u.username
-		AND src.option = 'PROVISIONSRC'`)
+		AND src.option = 'PROVISIONSRC'`
 
 	if n.options != nil && n.options.Source != nil {
 		sourceStr := tree.AsStringWithFlags(
