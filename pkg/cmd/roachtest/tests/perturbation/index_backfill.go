@@ -8,7 +8,6 @@ package perturbation
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -30,7 +29,7 @@ var _ perturbation = backfill{}
 func (b backfill) setup() variations {
 	// TODO(#139262): Track down why this test causes stalls and drop the value
 	// to something more reasonable (like 5) once this is done.
-	v := setup(b, math.Inf(1))
+	v := setup(b, noImpactThresholds())
 	return v
 }
 

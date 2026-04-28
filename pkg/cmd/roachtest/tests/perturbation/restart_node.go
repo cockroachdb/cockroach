@@ -7,7 +7,6 @@ package perturbation
 
 import (
 	"context"
-	"math"
 	"math/rand"
 	"time"
 
@@ -26,7 +25,7 @@ var _ perturbation = restart{}
 
 func (r restart) setup() variations {
 	r.cleanRestart = true
-	v := setup(r, math.Inf(1))
+	v := setup(r, noImpactThresholds())
 
 	// TODO(baptist): Remove this setting once #120073 is fixed.
 	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"
