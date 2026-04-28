@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -105,7 +106,7 @@ func startListenRPCAndSQL(
 	// either via the returned startRPCServer() or upon stopping.
 	var serveOnMux sync.Once
 
-	m := cmux.New(ln)
+	m := cmux.NewWithTimeout(ln, time.Minute)
 	// cmux auto-retries Accept() by default. Tell it
 	// to stop doing work if we see a request to shut down.
 	m.HandleError(func(err error) bool {
