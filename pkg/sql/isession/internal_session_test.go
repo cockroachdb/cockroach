@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -580,6 +582,12 @@ func TestSavepoint(t *testing.T) {
 	selectPrepared, err := session.Prepare(ctx, "select", selectStmt, nil)
 	require.NoError(t, err)
 
+	// Savepoint outside a transaction should fail.
+	err = session.Savepoint(ctx, func(ctx context.Context) error {
+		return nil
+	})
+	require.ErrorContains(t, err, "requires an active transaction")
+
 	// Create a a three deep savepoint and rollback the inner two savepoints.
 	err = session.Txn(ctx, func(ctx context.Context) error {
 		return session.Savepoint(ctx, func(ctx context.Context) error {
@@ -655,4 +663,105 @@ func TestModifySession(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "my_test_app", string(tree.MustBeDString(rows[0][0])))
+}
+
+func TestKVSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	codec := s.ApplicationLayer().Codec()
+	kvDB := s.ApplicationLayer().DB()
+
+	idb := s.InternalDB().(descs.DB)
+	session, err := idb.Session(ctx, "test-session")
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	// KVSavepoint outside a transaction should fail.
+	err = session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return nil
+	})
+	require.ErrorContains(t, err, "requires an active transaction")
+
+	db := s.SQLConn(t)
+	_, err = db.Exec("CREATE TABLE defaultdb.kv_sp_test (id INT PRIMARY KEY, val INT)")
+	require.NoError(t, err)
+
+	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.kv_sp_test VALUES ($1, $2)")
+	require.NoError(t, err)
+	insert, err := session.Prepare(ctx, "insert", insertStmt, []*types.T{types.Int, types.Int})
+	require.NoError(t, err)
+
+	// Use high table ID prefixes as scratch keys within the tenant's keyspace.
+	rolledBackKey := codec.TablePrefix(0xFFFF00)
+	committedKey := codec.TablePrefix(0xFFFF01)
+
+	// Open a transaction, do a SQL write, then exercise two KVSavepoints: one
+	// that rolls back and one that commits. The first savepoint also verifies
+	// that prior SQL writes are visible inside the callback (i.e. the Step
+	// before the callback is working).
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		_, err := session.ExecutePrepared(ctx, insert, tree.Datums{
+			tree.NewDInt(1), tree.NewDInt(10),
+		})
+		if err != nil {
+			return err
+		}
+
+		// First savepoint: write to KV, verify the earlier SQL row is visible
+		// via a raw KV scan, then roll back.
+		spErr := session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.Put(ctx, rolledBackKey, []byte("nope")); err != nil {
+				return err
+			}
+			// The SQL INSERT above should be visible here because KVSavepoint
+			// steps the read sequence before invoking the callback.
+			td := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB, codec, "defaultdb", "kv_sp_test",
+			)
+			start := codec.TablePrefix(uint32(td.GetID()))
+			kvs, err := txn.Scan(ctx, start, start.PrefixEnd(), 0)
+			if err != nil {
+				return err
+			}
+			require.NotEmpty(t, kvs)
+			return errors.New("rollback")
+		})
+		require.ErrorContains(t, spErr, "rollback")
+
+		// Second savepoint: write to KV and succeed.
+		if err := session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return txn.Put(ctx, committedKey, []byte("yes"))
+		}); err != nil {
+			return err
+		}
+
+		// One more SQL write to confirm the txn is still healthy.
+		_, err = session.ExecutePrepared(ctx, insert, tree.Datums{
+			tree.NewDInt(2), tree.NewDInt(20),
+		})
+		return err
+	})
+	require.NoError(t, err)
+
+	// The rolled-back KV write should not exist.
+	val, err := kvDB.Get(ctx, rolledBackKey)
+	require.NoError(t, err)
+	require.Nil(t, val.Value)
+
+	// The committed KV write should exist.
+	val, err = kvDB.Get(ctx, committedKey)
+	require.NoError(t, err)
+	require.Equal(t, []byte("yes"), val.ValueBytes())
+
+	// Both SQL rows should be present.
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.CheckQueryResults(t,
+		"SELECT id, val FROM defaultdb.kv_sp_test ORDER BY id",
+		[][]string{{"1", "10"}, {"2", "20"}},
+	)
 }
