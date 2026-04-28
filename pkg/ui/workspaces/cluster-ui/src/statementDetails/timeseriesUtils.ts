@@ -292,23 +292,100 @@ export function generateCanaryVsStableTimeseries(
     }));
 }
 
+// HSL parameters for the latency heat-map palette. These are the single
+// source of truth for both the per-gist bar colors and the legend
+// gradient (LATENCY_LEGEND_GRADIENT below).
+const LATENCY_HUE = 261;
+const LATENCY_SATURATION = 97;
+const LATENCY_LIGHTNESS_MIN = 35; // darkest (highest latency)
+const LATENCY_LIGHTNESS_MAX = 85; // lightest (lowest latency)
+
+const latencyHsl = (lightness: number): string =>
+  `hsl(${LATENCY_HUE}, ${LATENCY_SATURATION}%, ${lightness}%)`;
+
+// LATENCY_LEGEND_GRADIENT is the CSS background value to apply to the
+// legend bar so it stays in lock-step with latencyToColor.
+export const LATENCY_LEGEND_GRADIENT = `linear-gradient(to bottom, ${latencyHsl(
+  LATENCY_LIGHTNESS_MIN,
+)}, ${latencyHsl(LATENCY_LIGHTNESS_MAX)})`;
+
+// latencyToColor maps a latency value to a purple-tone HSL color.
+// Lower latency → lighter (higher lightness), higher → darker.
+function latencyToColor(lat: number, min: number, max: number): string {
+  const t = max === min ? 0.5 : (lat - min) / (max - min);
+  const lightness =
+    LATENCY_LIGHTNESS_MAX - t * (LATENCY_LIGHTNESS_MAX - LATENCY_LIGHTNESS_MIN);
+  return latencyHsl(lightness);
+}
+
+type CollectedStatementGroupedByPlanHash =
+  cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
+
+// computeWeightedAvgLatencyByGist returns the weighted-average run
+// latency per plan gist, in nanoseconds. The weight for each plan is
+// its execution count, so plans that ran more contribute more to the
+// average for their gist. Plans with no executions are skipped.
+//
+// Latencies are returned in nanoseconds so downstream consumers (color
+// mapping in generateCanaryVsStablePlanDistribution, Duration
+// formatting in the legend) all work in the same unit.
+export function computeWeightedAvgLatencyByGist(
+  plans: CollectedStatementGroupedByPlanHash[],
+): Map<string, number> {
+  const latencyByGist = new Map<string, number>();
+  const countByGist = new Map<string, number>();
+  plans.forEach(plan => {
+    const gist = plan.stats?.plan_gists?.[0] || "unknown";
+    const count = longToInt(plan.stats?.count);
+    if (!count || count <= 0) return;
+    const latNanos = (plan.stats?.run_lat?.mean ?? 0) * 1e9;
+    latencyByGist.set(gist, (latencyByGist.get(gist) || 0) + count * latNanos);
+    countByGist.set(gist, (countByGist.get(gist) || 0) + count);
+  });
+  latencyByGist.forEach((totalLat, gist) => {
+    latencyByGist.set(gist, totalLat / countByGist.get(gist));
+  });
+  return latencyByGist;
+}
+
 // generateCanaryVsStablePlanDistribution builds a grouped bar chart
 // with two bars per timestamp: canary (left) and stable (right).
 // Each bar is stacked by plan gist, showing execution counts.
+//
+// Plan gists are sorted by latency ascending (lowest latency at the
+// bottom of the stack) and each gist is assigned a heat-map color
+// (light purple = low latency, dark purple = high latency). The
+// latency range (in nanoseconds) is returned so the caller can render
+// a legend. Gists missing from latencyByGist are treated as 0.
 export function generateCanaryVsStablePlanDistribution(
   stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
-): GroupedBarData {
-  // Collect unique plan gists and assign colors.
+  latencyByGist: Map<string, number>,
+): {
+  data: GroupedBarData;
+  latencyRange?: { minNanos: number; maxNanos: number };
+} {
+  // Collect unique plan gists.
   const planGistSet = new Set<string>();
   stats.forEach(stat => {
     const gist = stat.plan_gist || "unknown";
     planGistSet.add(gist);
   });
-  const planGists = Array.from(planGistSet).sort();
+
+  // Sort plan gists by latency ascending and assign heat-map colors.
+  const planGists = Array.from(planGistSet).sort(
+    (a, b) => (latencyByGist.get(a) || 0) - (latencyByGist.get(b) || 0),
+  );
   const gistColors = new Map<string, string>();
-  planGists.forEach((gist, i) => {
-    gistColors.set(gist, SERIES_PALETTE[i % SERIES_PALETTE.length]);
-  });
+  let latencyRange: { minNanos: number; maxNanos: number } | undefined;
+  if (planGists.length > 0) {
+    const lats = planGists.map(g => latencyByGist.get(g) || 0);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    planGists.forEach((g, i) => {
+      gistColors.set(g, latencyToColor(lats[i], minLat, maxLat));
+    });
+    latencyRange = { minNanos: minLat, maxNanos: maxLat };
+  }
 
   // Group stats by timestamp.
   type GistCounts = {
@@ -349,7 +426,7 @@ export function generateCanaryVsStablePlanDistribution(
     })
     .sort((a, b) => a - b);
 
-  return timestamps.map(ts => {
+  const data: GroupedBarData = timestamps.map(ts => {
     const entry = timeMap.get(ts);
     return {
       timestamp: ts,
@@ -373,4 +450,6 @@ export function generateCanaryVsStablePlanDistribution(
       ],
     };
   });
+
+  return { data, latencyRange };
 }
