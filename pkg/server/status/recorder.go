@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
@@ -144,30 +144,30 @@ type ScrapeMetrics struct {
 
 func newScrapeMetrics() *ScrapeMetrics {
 	return &ScrapeMetrics{
-		NameCount: metric.NewGauge(metric.Metadata{
+		NameCount: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.metric_export.name.count",
 			Help:        "Number of metric families (unique metric names) in the most recent Prometheus scrape",
 			Measurement: "Metric Names",
 			Unit:        metric.Unit_COUNT,
-		}),
-		LineCount: metric.NewGauge(metric.Metadata{
+		})),
+		LineCount: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.metric_export.line.count",
 			Help:        "Total individual time series (all label combinations) in the most recent Prometheus scrape",
 			Measurement: "Time Series",
 			Unit:        metric.Unit_COUNT,
-		}),
-		ChildCount: metric.NewExportedGaugeVec(metric.Metadata{
+		})),
+		ChildCount: metric.NewExportedGaugeVec(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.metric_export.child.count",
 			Help:        "Exported-line-weighted child count per parent metric: histogram children count their expanded Prometheus lines, others count 1",
 			Measurement: "Child Instances",
 			Unit:        metric.Unit_COUNT,
-		}, []string{"metric_name"}),
-		OwnerMetricCount: metric.NewExportedGaugeVec(metric.Metadata{
+		}), []string{"metric_name"}),
+		OwnerMetricCount: metric.NewExportedGaugeVec(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.metric_export.codeowner.metric_count",
 			Help:        "Metric count per CODEOWNER team in the Prometheus scrape (histograms expand to buckets plus count and sum)",
 			Measurement: "Metrics",
 			Unit:        metric.Unit_COUNT,
-		}, []string{"codeowner"}),
+		}), []string{"codeowner"}),
 	}
 }
 
@@ -207,11 +207,10 @@ type MetricsRecorder struct {
 	// recent /_status/vars Prometheus scrape.
 	scrapeMetrics *ScrapeMetrics
 
-	// metricOwners maps scraped metric names to CODEOWNER teams. Loaded
-	// once at construction from the generated metric_owners data. If the
-	// data is unavailable (e.g. in tests), this is nil and owner-based
-	// line counts are skipped.
-	metricOwners *metricscan.MetricOwners
+	// codeOwners resolves source file paths to owning teams via
+	// CODEOWNERS. Used at scrape time to attribute metric counts to
+	// teams by looking up the SourceFile from each metric's Metadata.
+	codeOwners *codeowners.CodeOwners
 
 	// mu synchronizes the reading of node/store registries against the adding of
 	// nodes/stores. Consequently, almost all uses of it only need to take an
@@ -276,11 +275,11 @@ func NewMetricsRecorder(
 	clock hlc.WallClock,
 	settings *cluster.Settings,
 ) *MetricsRecorder {
-	mo, err := metricscan.DefaultMetricOwners()
+	co, err := codeowners.DefaultLoadCodeOwners()
 	if err != nil {
 		log.Ops.Warningf(
 			context.Background(),
-			"could not load metric owners; codeowner line counts will be unavailable: %v", err,
+			"could not load CODEOWNERS; codeowner metric counts will be unavailable: %v", err,
 		)
 	}
 	mr := &MetricsRecorder{
@@ -293,7 +292,7 @@ func NewMetricsRecorder(
 		tenantNameContainer: tenantNameContainer,
 		prometheusExporter:  metric.MakePrometheusExporter(),
 		scrapeMetrics:       newScrapeMetrics(),
-		metricOwners:        mo,
+		codeOwners:          co,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -393,12 +392,12 @@ func (mr *MetricsRecorder) AddNode(
 	mr.mu.startedAt = startedAt
 
 	// Create node ID gauge metric with host as a label.
-	metadata := metric.Metadata{
+	metadata := metric.InitMetadata(metric.Metadata{
 		Name:        "node-id",
 		Help:        "node ID with labels for advertised RPC and HTTP addresses",
 		Measurement: "Node ID",
 		Unit:        metric.Unit_CONST,
-	}
+	})
 
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
@@ -607,12 +606,18 @@ func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
 		)
 	}
 
-	if mr.metricOwners != nil && codeownerMetricCountEnabled.Get(&mr.settings.SV) {
+	if mr.codeOwners != nil && codeownerMetricCountEnabled.Get(&mr.settings.SV) {
+		// Build an exported-name → source-file map from registered metadata.
+		metadataMap := mr.collectMetricSourceFiles()
+
 		ownerCounts := make(map[string]int64)
 		for _, family := range families {
-			owner, ok := mr.metricOwners.Resolve(family.GetName())
-			if !ok {
-				owner = "unknown"
+			owner := "unknown"
+			if sf, ok := metadataMap[family.GetName()]; ok && sf != "" {
+				teams := mr.codeOwners.Match(sf)
+				if len(teams) > 0 {
+					owner = string(teams[0].Name())
+				}
 			}
 			ownerCounts[owner] += countFamilyMetrics(family)
 		}
@@ -625,6 +630,26 @@ func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
 	} else {
 		mr.scrapeMetrics.OwnerMetricCount.Clear()
 	}
+}
+
+// collectMetricSourceFiles returns a map from exported metric name to
+// the repo-relative source file where the metric is defined. The
+// source file is read from each metric's Metadata.SourceFile field.
+func (mr *MetricsRecorder) collectMetricSourceFiles() map[string]string {
+	allMd := make(map[string]metric.Metadata)
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	if mr.mu.nodeRegistry != nil {
+		mr.mu.nodeRegistry.WriteMetricsMetadata(allMd)
+	}
+	for _, reg := range mr.mu.storeRegistries {
+		reg.WriteMetricsMetadata(allMd)
+	}
+	result := make(map[string]string, len(allMd))
+	for name, md := range allMd {
+		result[metric.ExportedName(name)] = md.SourceFile
+	}
+	return result
 }
 
 // ExportToGraphite sends the current metric values to a Graphite server.

@@ -97,14 +97,14 @@ func TestToMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	gaugeMeta := metric.Metadata{Name: "test.gauge", Help: "A test gauge"}
-	counterMeta := metric.Metadata{Name: "test.counter", Help: "A test counter"}
-	stopwatchMeta := metric.Metadata{Name: "test.stopwatch", Help: "A test stopwatch"}
-	labeledGaugeMeta := metric.Metadata{Name: "test.labeled.gauge", Help: "A labeled gauge"}
-	labeledCounterMeta := metric.Metadata{Name: "test.labeled.counter", Help: "A labeled counter"}
-	labeledStopwatchMeta := metric.Metadata{
+	gaugeMeta := metric.InitMetadata(metric.Metadata{Name: "test.gauge", Help: "A test gauge"})
+	counterMeta := metric.InitMetadata(metric.Metadata{Name: "test.counter", Help: "A test counter"})
+	stopwatchMeta := metric.InitMetadata(metric.Metadata{Name: "test.stopwatch", Help: "A test stopwatch"})
+	labeledGaugeMeta := metric.InitMetadata(metric.Metadata{Name: "test.labeled.gauge", Help: "A labeled gauge"})
+	labeledCounterMeta := metric.InitMetadata(metric.Metadata{Name: "test.labeled.counter", Help: "A labeled counter"})
+	labeledStopwatchMeta := metric.InitMetadata(metric.Metadata{
 		Name: "test.labeled.stopwatch", Help: "A labeled stopwatch",
-	}
+	})
 
 	cleanupGauge := clustermetrics.TestingRegisterClusterMetric("test.gauge", gaugeMeta)
 	defer cleanupGauge()

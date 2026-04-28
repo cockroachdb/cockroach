@@ -44,7 +44,7 @@ type RemoteClockMetrics struct {
 const avgLatencyMeasurementAge = 20.0
 
 var (
-	metaClockOffsetMeanNanos = metric.Metadata{
+	metaClockOffsetMeanNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "clock-offset.meannanos",
 		Help:        "Mean clock offset with other nodes",
 		Measurement: "Clock Offset",
@@ -52,14 +52,14 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    "This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.",
-	}
-	metaClockOffsetStdDevNanos = metric.Metadata{
+	})
+	metaClockOffsetStdDevNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "clock-offset.stddevnanos",
 		Help:        "Stddev clock offset with other nodes",
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaClockOffsetMedianNanos = metric.Metadata{
+	})
+	metaClockOffsetMedianNanos = metric.InitMetadata(metric.Metadata{
 		// An outlier resistant measure of centrality, useful for
 		// diagnosing unhealthy nodes.
 		// Demo: https://docs.google.com/spreadsheets/d/1gmzQxEVYDKb_b-Mn50ZTje-LqZw6TZwUxxUPY2rG69M/edit?gid=0#gid=0
@@ -67,8 +67,8 @@ var (
 		Help:        "Median clock offset with other nodes",
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaClockOffsetMedianAbsDevNanos = metric.Metadata{
+	})
+	metaClockOffsetMedianAbsDevNanos = metric.InitMetadata(metric.Metadata{
 		// An outlier resistant measure of dispersion, see
 		// https://en.wikipedia.org/wiki/Median_absolute_deviation
 		// and demo above.
@@ -76,8 +76,8 @@ var (
 		Help:        "Median Absolute Deviation (MAD) with other nodes",
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConnectionRoundTripLatency = metric.Metadata{
+	})
+	metaConnectionRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		// NB: the name is legacy and should not be changed since customers
 		// rely on it.
 		Name: "round-trip-latency",
@@ -94,9 +94,9 @@ rare or short-lived degradations.
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
-	}
+	})
 
-	metaDefaultConnectionRoundTripLatency = metric.Metadata{
+	metaDefaultConnectionRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		Name: "round-trip-default-class-latency",
 		Help: `Distribution of round-trip latencies with other nodes.
 
@@ -104,8 +104,8 @@ Similar to round-trip-latency, but only for default class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaSystemConnectionRoundTripLatency = metric.Metadata{
+	})
+	metaSystemConnectionRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		Name: "round-trip-system-class-latency",
 		Help: `Distribution of round-trip latencies with other nodes.
 
@@ -113,8 +113,8 @@ Similar to round-trip-latency, but only for system class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRangefeedConnectionRoundTripLatency = metric.Metadata{
+	})
+	metaRangefeedConnectionRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		Name: "round-trip-rangefeed-class-latency",
 		Help: `Distribution of round-trip latencies with other nodes.
 
@@ -122,8 +122,8 @@ Similar to round-trip-latency, but only for rangefeed class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaRaftConnectionRoundTripLatency = metric.Metadata{
+	})
+	metaRaftConnectionRoundTripLatency = metric.InitMetadata(metric.Metadata{
 		Name: "round-trip-raft-class-latency",
 		Help: `Distribution of round-trip latencies with other nodes.
 
@@ -131,7 +131,7 @@ Similar to round-trip-latency, but only for raft class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // A stateful trigger that fires once when exceeding a threshold, then must

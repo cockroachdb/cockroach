@@ -18,12 +18,12 @@ import (
 // TODO(ajwerner): Add many more metrics.
 
 var (
-	metaObjects = metric.Metadata{
+	metaObjects = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.schema_changer.object_count",
 		Help:        "Counter of the number of objects in the cluster",
 		Measurement: "Objects",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // SchemaChangerMetrics are metrics corresponding to the schema changer.

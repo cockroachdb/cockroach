@@ -96,62 +96,62 @@ func makeMetrics() Metrics {
 func (m *Metrics) MetricStruct() {}
 
 var (
-	tableMetaHits = metric.Metadata{
+	tableMetaHits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_table_cache.hits",
 		Help:        "counter on the number of cache hits",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	tableMetaMisses = metric.Metadata{
+	})
+	tableMetaMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_table_cache.misses",
 		Help:        "counter on the number of cache misses",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	funcMetaHits = metric.Metadata{
+	})
+	funcMetaHits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_udf_cache.hits",
 		Help:        "counter on the number of cache hits",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	funcMetaMisses = metric.Metadata{
+	})
+	funcMetaMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_udf_cache.misses",
 		Help:        "counter on the number of cache misses",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	schemaMetaHits = metric.Metadata{
+	})
+	schemaMetaHits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_schema_cache.hits",
 		Help:        "counter on the number of cache hits",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	schemaMetaMisses = metric.Metadata{
+	})
+	schemaMetaMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_schema_cache.misses",
 		Help:        "counter on the number of cache misses",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	typeMetaHits = metric.Metadata{
+	})
+	typeMetaHits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_type_cache.hits",
 		Help:        "counter on the number of cache hits",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	typeMetaMisses = metric.Metadata{
+	})
+	typeMetaMisses = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.hydrated_type_cache.misses",
 		Help:        "counter on the number of cache misses",
 		Measurement: "reads",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )
 
 // CacheSize controls the size of the LRU cache.

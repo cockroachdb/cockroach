@@ -208,33 +208,33 @@ func (TableMetadataUpdateJobMetrics) MetricStruct() {}
 
 func newTableMetadataUpdateJobMetrics() metric.Struct {
 	return TableMetadataUpdateJobMetrics{
-		NumRuns: metric.NewCounter(metric.Metadata{
+		NumRuns: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.tablemetadata.update_job.runs",
 			Help:        "The total number of runs of the update table metadata job.",
 			Measurement: "Executions",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
-		UpdatedTables: metric.NewCounter(metric.Metadata{
+		})),
+		UpdatedTables: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.tablemetadata.update_job.table_updates",
 			Help:        "The total number of rows that have been updated in system.table_metadata",
 			Measurement: "Rows Updated",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
-		Errors: metric.NewCounter(metric.Metadata{
+		})),
+		Errors: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "obs.tablemetadata.update_job.errors",
 			Help:        "The total number of errors that have been emitted from the update table metadata job.",
 			Measurement: "Errors",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
+		})),
 		Duration: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: metric.Metadata{
+			Metadata: metric.InitMetadata(metric.Metadata{
 				Name:        "obs.tablemetadata.update_job.duration",
 				Help:        "Time spent running the update table metadata job.",
 				Measurement: "Duration",
-				Unit:        metric.Unit_NANOSECONDS},
+				Unit:        metric.Unit_NANOSECONDS}),
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 			Mode:         metric.HistogramModePrometheus,

@@ -53,7 +53,7 @@ var _ metric.Struct = (*Metrics)(nil)
 func (m *Metrics) MetricStruct() {}
 
 var (
-	metaCAExpiration = metric.Metadata{
+	metaCAExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.ca",
 		Help:         "Expiration for the CA certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -63,8 +63,8 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
-	}
-	metaClientCAExpiration = metric.Metadata{
+	})
+	metaClientCAExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.client-ca",
 		Help:         "Expiration for the client CA certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -74,8 +74,8 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
-	}
-	metaClientExpiration = metric.Metadata{
+	})
+	metaClientExpiration = metric.InitMetadata(metric.Metadata{
 		Name: "security.certificate.expiration.client",
 		Help: "Minimum expiration for client certificates, labeled by SQL user. 0 means no " +
 			"certificate or error. ",
@@ -83,8 +83,8 @@ var (
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client"),
-	}
-	metaUICAExpiration = metric.Metadata{
+	})
+	metaUICAExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.ui-ca",
 		Help:         "Expiration for the UI CA certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -94,8 +94,8 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
-	}
-	metaNodeExpiration = metric.Metadata{
+	})
+	metaNodeExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.node",
 		Help:         "Expiration for the node certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -105,8 +105,8 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
-	}
-	metaNodeClientExpiration = metric.Metadata{
+	})
+	metaNodeClientExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.node-client",
 		Help:         "Expiration for the node's client certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -116,8 +116,8 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
-	}
-	metaUIExpiration = metric.Metadata{
+	})
+	metaUIExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.ui",
 		Help:         "Expiration for the UI certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
@@ -127,96 +127,96 @@ var (
 		HowToUse:     "See Description.",
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
-	}
-	metaTenantCAExpiration = metric.Metadata{
+	})
+	metaTenantCAExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.ca-client-tenant",
 		Help:         "Expiration for the Tenant Client CA certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
-	}
-	metaTenantExpiration = metric.Metadata{
+	})
+	metaTenantExpiration = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.expiration.client-tenant",
 		Help:         "Expiration for the Tenant Client certificate. 0 means no certificate or error.",
 		Measurement:  "Certificate Expiration",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.expiration",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
-	}
+	})
 
-	metaCATTL = metric.Metadata{
+	metaCATTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.ca",
 		Help:         "Seconds till expiration for the CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca"),
-	}
-	metaClientCATTL = metric.Metadata{
+	})
+	metaClientCATTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.client-ca",
 		Help:         "Seconds till expiration for the client CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-ca"),
-	}
-	metaClientTTL = metric.Metadata{
+	})
+	metaClientTTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.client",
 		Help:         "Seconds till expiration for the client certificates, labeled by SQL user. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client"),
-	}
-	metaUICATTL = metric.Metadata{
+	})
+	metaUICATTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.ui-ca",
 		Help:         "Seconds till expiration for the UI CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui-ca"),
-	}
-	metaNodeTTL = metric.Metadata{
+	})
+	metaNodeTTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.node",
 		Help:         "Seconds till expiration for the node certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node"),
-	}
-	metaNodeClientTTL = metric.Metadata{
+	})
+	metaNodeClientTTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.node-client",
 		Help:         "Seconds till expiration for the node's client certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "node-client"),
-	}
-	metaUITTL = metric.Metadata{
+	})
+	metaUITTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.ui",
 		Help:         "Seconds till expiration for the UI certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ui"),
-	}
-	metaTenantCATTL = metric.Metadata{
+	})
+	metaTenantCATTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.ca-client-tenant",
 		Help:         "Seconds till expiration for the Tenant Client CA certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "ca-client-tenant"),
-	}
-	metaTenantTTL = metric.Metadata{
+	})
+	metaTenantTTL = metric.InitMetadata(metric.Metadata{
 		Name:         "security.certificate.ttl.client-tenant",
 		Help:         "Seconds till expiration for the Tenant Client certificate. 0 means expired, no certificate or error.",
 		Measurement:  "Certificate TTL",
 		Unit:         metric.Unit_TIMESTAMP_SEC,
 		LabeledName:  "security.certificate.ttl",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelCertificateType, "client-tenant"),
-	}
+	})
 )
 
 // certClosure defines a way to expose a certificate to the below metric types.

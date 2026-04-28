@@ -1030,22 +1030,22 @@ type DiskStats struct {
 }
 
 var (
-	totalSlots = metric.Metadata{
+	totalSlots = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.total_slots.kv",
 		Help:        "Total slots for kv work",
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
-	}
-	usedSlots = metric.Metadata{
+	})
+	usedSlots = metric.InitMetadata(metric.Metadata{
 		// Note: we append a WorkKind string to this name.
 		Name:        "admission.granter.used_slots.",
 		Help:        "Used slots",
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 	// NB: this metric is independent of whether slots enforcement is happening
 	// or not.
-	kvSlotsExhaustedDuration = metric.Metadata{
+	kvSlotsExhaustedDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.slots_exhausted_duration.kv",
 		Help: "Total duration when KV slots were exhausted, as observed by the slot " +
 			"granter (not waiters). This is reported in nanoseconds from 26.1 onwards, " +
@@ -1055,38 +1055,38 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric indicates when KV slots are exhausted. Extended periods of slot exhaustion may indicate insufficient slot allocation or high request concurrency requiring attention.",
-	}
+	})
 	// We have a metric for both short and long period. These metrics use the
 	// period provided in CPULoad and not wall time. So if the sum of the rate
 	// of these two is < 1sec/sec, the CPULoad ticks are not happening at the
 	// expected frequency (this could happen due to CPU overload).
-	kvCPULoadShortPeriodDuration = metric.Metadata{
+	kvCPULoadShortPeriodDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.cpu_load_short_period_duration.kv",
 		Help: "Total duration when CPULoad was being called with a short period. This is " +
 			"reported in nanoseconds from 26.1 onwards, and was microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	kvCPULoadLongPeriodDuration = metric.Metadata{
+	})
+	kvCPULoadLongPeriodDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.cpu_load_long_period_duration.kv",
 		Help: "Total duration when CPULoad was being called with a long period. This is " +
 			"reported in nanoseconds from 26.1 onwards, and was microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	kvSlotAdjusterIncrements = metric.Metadata{
+	})
+	kvSlotAdjusterIncrements = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.slot_adjuster_increments.kv",
 		Help:        "Number of increments of the total KV slots",
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvSlotAdjusterDecrements = metric.Metadata{
+	})
+	kvSlotAdjusterDecrements = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.slot_adjuster_decrements.kv",
 		Help:        "Number of decrements of the total KV slots",
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTokensExhaustedDuration = metric.Metadata{
+	})
+	kvIOTokensExhaustedDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.io_tokens_exhausted_duration.kv",
 		Help: "Total duration when IO tokens were exhausted, as observed by the token granter " +
 			"(not waiters). This is reported in nanoseconds from 26.1 onwards, and was " +
@@ -1096,8 +1096,8 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric indicates when I/O tokens are exhausted. Extended periods of token exhaustion may indicate I/O bandwidth saturation or high disk utilization requiring attention.",
-	}
-	kvElasticIOTokensExhaustedDuration = metric.Metadata{
+	})
+	kvElasticIOTokensExhaustedDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.elastic_io_tokens_exhausted_duration.kv",
 		Help: "Total duration when Elastic IO tokens were exhausted, as observed by the token " +
 			"granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was " +
@@ -1107,56 +1107,56 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric indicates when elastic I/O tokens are exhausted. Extended periods of elastic token exhaustion may indicate I/O bandwidth saturation affecting elastic workloads.",
-	}
-	kvIOTokensTaken = metric.Metadata{
+	})
+	kvIOTokensTaken = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.io_tokens_taken.kv",
 		Help:        "Total number of tokens taken",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTokensReturned = metric.Metadata{
+	})
+	kvIOTokensReturned = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.io_tokens_returned.kv",
 		Help:        "Total number of tokens returned",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTokensBypassed = metric.Metadata{
+	})
+	kvIOTokensBypassed = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.io_tokens_bypassed.kv",
 		Help:        "Total number of tokens taken by work bypassing admission control (for example, follower writes without flow control)",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvIOTokensAvailable = metric.Metadata{
+	})
+	kvIOTokensAvailable = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.io_tokens_available.kv",
 		Help:        "Number of tokens available",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvElasticIOTokensAvailable = metric.Metadata{
+	})
+	kvElasticIOTokensAvailable = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.granter.elastic_io_tokens_available.kv",
 		Help:        "Number of tokens available",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	kvDiskWriteByteTokensExhaustedDuration = metric.Metadata{
+	})
+	kvDiskWriteByteTokensExhaustedDuration = metric.InitMetadata(metric.Metadata{
 		Name: "admission.granter.disk_write_byte_tokens_exhausted_duration.kv",
 		Help: "Total duration (in nanos) when disk write byte tokens were exhausted, as observed by " +
 			"the token granter (not waiters)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	l0CompactedBytes = metric.Metadata{
+	})
+	l0CompactedBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.l0_compacted_bytes.kv",
 		Help:        "Total bytes compacted out of L0 (used to generate IO tokens)",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
-	l0TokensProduced = metric.Metadata{
+	})
+	l0TokensProduced = metric.InitMetadata(metric.Metadata{
 		Name:        "admission.l0_tokens_produced.kv",
 		Help:        "Total bytes produced for L0 writes",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // TODO(irfansharif): we are lacking metrics for IO tokens and load, including

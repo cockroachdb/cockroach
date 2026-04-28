@@ -20,92 +20,92 @@ const regular, elastic = admissionpb.RegularWorkClass, admissionpb.ElasticWorkCl
 
 var (
 	// TokenCounter metrics.
-	flowTokensAvailable = metric.Metadata{
+	flowTokensAvailable = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.available",
 		Help:        "Flow %s tokens available for %s requests, across all replication streams",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	flowTokensDeducted = metric.Metadata{
+	})
+	flowTokensDeducted = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.deducted",
 		Help:        "Flow %s tokens deducted by %s requests, across all replication streams",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	flowTokensReturned = metric.Metadata{
+	})
+	flowTokensReturned = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.returned",
 		Help:        "Flow %s tokens returned by %s requests, across all replication streams",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	flowTokensUnaccounted = metric.Metadata{
+	})
+	flowTokensUnaccounted = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.unaccounted",
 		Help:        "Flow %s tokens returned by %s requests that were unaccounted for, across all replication streams",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	flowTokensDisconnectReturn = metric.Metadata{
+	})
+	flowTokensDisconnectReturn = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.%s.%s.returned.disconnect",
 		Help:        "Flow %s tokens returned early by %s due disconnects, across all replication stream, this is a subset of returned tokens",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
 	// SendQueue TokenCounter metrics.
-	flowTokensSendQueuePreventionDeduct = metric.Metadata{
+	flowTokensSendQueuePreventionDeduct = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.send.%s.deducted.prevent_send_queue",
 		Help:        "Flow send tokens deducted by %s requests, across all replication streams to prevent forming a send queue",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	flowTokensSendQueueForceFlushDeduct = metric.Metadata{
+	})
+	flowTokensSendQueueForceFlushDeduct = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue",
 		Help:        "Flow send tokens deducted by elastic requests, across all replication streams due to force flushing the stream's send queue",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 
 	// TokenStream metrics.
-	totalStreamCount = metric.Metadata{
+	totalStreamCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.streams.%s.%s.total_count",
 		Help:        "Total number of %s replication streams for %s requests",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
-	}
-	blockedStreamCount = metric.Metadata{
+	})
+	blockedStreamCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.streams.%s.%s.blocked_count",
 		Help:        "Number of %s replication streams with no flow tokens available for %s requests",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// WaitForEval metrics.
-	requestsWaiting = metric.Metadata{
+	requestsWaiting = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.eval_wait.%s.requests.waiting",
 		Help:        "Number of %s requests waiting for flow tokens",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	requestsAdmitted = metric.Metadata{
+	})
+	requestsAdmitted = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.eval_wait.%s.requests.admitted",
 		Help:        "Number of %s requests admitted by the flow controller",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	requestsErrored = metric.Metadata{
+	})
+	requestsErrored = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.eval_wait.%s.requests.errored",
 		Help:        "Number of %s requests that errored out while waiting for flow tokens",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	requestsBypassed = metric.Metadata{
+	})
+	requestsBypassed = metric.InitMetadata(metric.Metadata{
 		Name: "kvflowcontrol.eval_wait.%s.requests.bypassed",
 		Help: "Number of waiting %s requests that bypassed the flow " +
 			"controller due the evaluating replica not being the leader",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	waitDuration = metric.Metadata{
+	})
+	waitDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.eval_wait.%s.duration",
 		Help:        "Latency histogram for time %s requests spent waiting for flow tokens to evaluate",
 		Measurement: "Nanoseconds",
@@ -113,18 +113,18 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows how long requests are waiting for flow tokens before evaluation. Extended wait times may indicate flow control token exhaustion or replication lag.",
-	}
+	})
 
 	// RangeController metrics.
-	rangeFlowControllerCount = metric.Metadata{
+	rangeFlowControllerCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.range_controller.count",
 		Help:        "Gauge of range flow controllers currently open, this should align with the number of leaders",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
 	// SendQueue metrics.
-	sendQueueBytes = metric.Metadata{
+	sendQueueBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.bytes",
 		Help:        "Byte size of all raft entries queued for sending to followers, waiting on available elastic send tokens",
 		Measurement: "Bytes",
@@ -132,31 +132,31 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric indicates the size of queued raft entries waiting for elastic send tokens. Large or growing queue sizes may indicate replication backlog or follower lag.",
-	}
-	sendQueueCount = metric.Metadata{
+	})
+	sendQueueCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.count",
 		Help:        "Count of all raft entries queued for sending to followers, waiting on available elastic send tokens",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
-	}
-	sendQueueForceFlushScheduledCount = metric.Metadata{
+	})
+	sendQueueForceFlushScheduledCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.scheduled.force_flush",
 		Help:        "Gauge of replication streams scheduled to force flush their send queue",
 		Measurement: "Scheduled force flushes",
 		Unit:        metric.Unit_COUNT,
-	}
-	sendQueueDeductedForSchedulerBytes = metric.Metadata{
+	})
+	sendQueueDeductedForSchedulerBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.scheduled.deducted_bytes",
 		Help:        "Gauge of elastic send token bytes already deducted by replication streams waiting on the scheduler",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	sendQueuePreventionCount = metric.Metadata{
+	})
+	sendQueuePreventionCount = metric.InitMetadata(metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.prevent.count",
 		Help:        "Counter of replication streams that were prevented from forming a send queue",
 		Measurement: "Preventions",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // annotateMetricTemplateWithWorkClass uses the given metric template to build

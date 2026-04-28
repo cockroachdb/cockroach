@@ -73,9 +73,9 @@ func ms(i int) time.Time {
 
 func newSplitterMetrics() *LoadSplitterMetrics {
 	return &LoadSplitterMetrics{
-		PopularKeyCount:     metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount:     metric.NewCounter(metric.Metadata{}),
-		ClearDirectionCount: metric.NewCounter(metric.Metadata{}),
+		PopularKeyCount:     metric.NewCounter(metric.InitMetadata(metric.Metadata{})),
+		NoSplitKeyCount:     metric.NewCounter(metric.InitMetadata(metric.Metadata{})),
+		ClearDirectionCount: metric.NewCounter(metric.InitMetadata(metric.Metadata{})),
 	}
 }
 

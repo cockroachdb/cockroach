@@ -40,7 +40,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	g := metric.NewGauge(metric.Metadata{})
+	g := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 		Name:     mon.MakeName("test"),
 		CurCount: g,
@@ -233,7 +233,7 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 
 	skip.UnderDuress(t, "slow test")
 	st := cluster.MakeTestingClusterSettings()
-	g := metric.NewGauge(metric.Metadata{})
+	g := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 		Name:     mon.MakeName("test"),
 		CurCount: g,
@@ -296,7 +296,7 @@ func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	g := metric.NewGauge(metric.Metadata{})
+	g := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 		Name:     mon.MakeName("test"),
 		CurCount: g,

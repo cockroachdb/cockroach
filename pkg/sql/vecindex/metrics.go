@@ -8,19 +8,19 @@ package vecindex
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
-	metaSuccessfulSplits = metric.Metadata{
+	metaSuccessfulSplits = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.vecindex.successful_splits",
 		Help:        "Total number of vector index partitions split without error",
 		Measurement: "Splits",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 
-	metaPendingSplitsMerges = metric.Metadata{
+	metaPendingSplitsMerges = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.vecindex.pending_splits_merges",
 		Help:        "Total number of vector index splits and merges waiting to be processed",
 		Measurement: "Pending Splits/Merges",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // Metrics contain useful metrics for building and mantaining vector indexes.

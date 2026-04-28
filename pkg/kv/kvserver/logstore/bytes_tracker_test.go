@@ -13,7 +13,7 @@ import (
 )
 
 func TestSoftLimiter(t *testing.T) {
-	lim := SoftLimit{Metric: metric.NewGauge(metric.Metadata{}), Limit: 1000}
+	lim := SoftLimit{Metric: metric.NewGauge(metric.InitMetadata(metric.Metadata{})), Limit: 1000}
 	require.Zero(t, lim.Metric.Value())
 	lim.acquire(100)
 	require.Equal(t, int64(100), lim.Metric.Value())
@@ -42,7 +42,7 @@ func TestSoftLimiter(t *testing.T) {
 }
 
 func TestBytesAccount(t *testing.T) {
-	lim := SoftLimit{Metric: metric.NewGauge(metric.Metadata{}), Limit: 1 << 20}
+	lim := SoftLimit{Metric: metric.NewGauge(metric.InitMetadata(metric.Metadata{})), Limit: 1 << 20}
 	a1, a2 := lim.NewAccount(nil), lim.NewAccount(nil)
 	require.True(t, a1.Grow(256<<10))
 
@@ -70,7 +70,7 @@ func TestBytesAccount(t *testing.T) {
 }
 
 func TestSizeHelper(t *testing.T) {
-	lim := SoftLimit{Metric: metric.NewGauge(metric.Metadata{}), Limit: 1 << 20}
+	lim := SoftLimit{Metric: metric.NewGauge(metric.InitMetadata(metric.Metadata{})), Limit: 1 << 20}
 	for _, tt := range []struct {
 		max   uint64
 		sizes []uint64

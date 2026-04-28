@@ -199,7 +199,7 @@ func TestUpdateDiskCounter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			counter := metric.NewCounter(metric.Metadata{Name: "test"})
+			counter := metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test"}))
 			if tt.initial > 0 {
 				counter.Update(tt.initial)
 			}

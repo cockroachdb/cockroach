@@ -432,7 +432,7 @@ func TestLeastUseful(t *testing.T) {
 	is, stopper := newTestInfoStore()
 	defer stopper.Stop(context.Background())
 
-	set := makeNodeSet(3, metric.NewGauge(metric.Metadata{Name: ""}))
+	set := makeNodeSet(3, metric.NewGauge(metric.InitMetadata(metric.Metadata{Name: ""})))
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}

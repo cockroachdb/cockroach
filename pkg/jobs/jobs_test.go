@@ -2653,13 +2653,13 @@ func (fm fakeMetrics) MetricStruct() {}
 
 func makeFakeMetrics() fakeMetrics {
 	return fakeMetrics{
-		N: metric.NewCounter(metric.Metadata{
+		N: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "fake.count",
 			Help:        "utterly fake metric",
 			Measurement: "N",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
+		})),
 	}
 }
 func TestMetrics(t *testing.T) {

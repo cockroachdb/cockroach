@@ -714,10 +714,13 @@ func loadMetricsFromGoFile(goFilePath string) (map[string]YAMLMetric, error) {
 	content := string(data)
 	metrics := make(map[string]YAMLMetric)
 
-	// Pattern to match metric.Metadata blocks
-	// Matches: variableName = metric.Metadata{ ... }
-	// Uses (?s) for DOTALL mode so . matches newlines
-	metadataPattern := regexp.MustCompile(`(?s)(\w+)\s*=\s*metric\.Metadata\s*\{([^}]+)\}`)
+	// Pattern to match metric.Metadata blocks in all supported forms:
+	//   variableName = metric.Metadata{ ... }
+	//   variableName = metric.InitMetadata(metric.Metadata{ ... })
+	// Uses (?s) for DOTALL mode so . matches newlines.
+	metadataPattern := regexp.MustCompile(
+		`(?s)(\w+)\s*=\s*metric\.(?:InitMetadata\(metric\.)?Metadata\s*\{([^}]+)\}`,
+	)
 
 	matches := metadataPattern.FindAllStringSubmatch(content, -1)
 	for _, match := range matches {

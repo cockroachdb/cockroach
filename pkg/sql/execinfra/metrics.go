@@ -42,25 +42,25 @@ func (DistSQLMetrics) MetricStruct() {}
 var _ metric.Struct = DistSQLMetrics{}
 
 var (
-	metaQueriesActive = metric.Metadata{
+	metaQueriesActive = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.queries.active",
 		Help:        "Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)",
 		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueriesTotal = metric.Metadata{
+	})
+	metaQueriesTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.queries.total",
 		Help:        "Number of invocations of the execution engine executed (multiple of which may occur for a single SQL statement)",
 		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistributedCount = metric.Metadata{
+	})
+	metaDistributedCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.distributed_exec.count",
 		Help:        "Number of invocations of the execution engine executed with full or partial distribution (multiple of which may occur for a single SQL statement)",
 		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaContendedQueriesCount = metric.Metadata{
+	})
+	metaContendedQueriesCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.contended_queries.count",
 		Help:        "Number of SQL queries that experienced contention",
 		Measurement: "Queries",
@@ -68,97 +68,97 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.`,
-	}
-	metaCumulativeContentionNanos = metric.Metadata{
+	})
+	metaCumulativeContentionNanos = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.cumulative_contention_nanos",
 		Help:        "Cumulative contention across all queries (in nanoseconds)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaFlowsActive = metric.Metadata{
+	})
+	metaFlowsActive = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.flows.active",
 		Help:        "Number of distributed SQL flows currently active",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaFlowsTotal = metric.Metadata{
+	})
+	metaFlowsTotal = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.flows.total",
 		Help:        "Number of distributed SQL flows executed",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRunnerReqParallelCount = metric.Metadata{
+	})
+	metaRunnerReqParallelCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.parallel_runner.count",
 		Help:        "Number of SetupFlowRequest RPCs executed concurrently via DistSQL runners",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRunnerReqSequentialCount = metric.Metadata{
+	})
+	metaRunnerReqSequentialCount = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.sequential_runner.count",
 		Help:        "Number of SetupFlowRequest RPCs executed sequentially via the main gateway goroutine",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaMemMaxBytes = metric.Metadata{
+	})
+	metaMemMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.mem.distsql.max",
 		Help:        "Memory usage per sql statement for distsql",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaMemCurBytes = metric.Metadata{
+	})
+	metaMemCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.mem.distsql.current",
 		Help:        "Current sql statement memory usage for distsql",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaVecOpenFDs = metric.Metadata{
+	})
+	metaVecOpenFDs = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.vec.openfds",
 		Help:        "Current number of open file descriptors used by vectorized external storage",
 		Measurement: "Files",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDiskCurBytes = metric.Metadata{
+	})
+	metaDiskCurBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.disk.distsql.current",
 		Help:        "Current sql statement disk usage for distsql",
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDiskMaxBytes = metric.Metadata{
+	})
+	metaDiskMaxBytes = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.disk.distsql.max",
 		Help:        "Disk usage per sql statement for distsql",
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaQueriesSpilled = metric.Metadata{
+	})
+	metaQueriesSpilled = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.queries.spilled",
 		Help:        "Number of queries that have spilled to disk",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSpilledBytesWritten = metric.Metadata{
+	})
+	metaSpilledBytesWritten = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.disk.distsql.spilled.bytes.written",
 		Help:        "Number of bytes written to temporary disk storage as a result of spilling",
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaSpilledBytesRead = metric.Metadata{
+	})
+	metaSpilledBytesRead = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.disk.distsql.spilled.bytes.read",
 		Help:        "Number of bytes read from temporary disk storage as a result of spilling",
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaDistErrorLocalRetryAttempts = metric.Metadata{
+	})
+	metaDistErrorLocalRetryAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.dist_query_rerun_locally.count",
 		Help:        "Total number of cases when distributed query error resulted in a local rerun",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDistErrorLocalRetryFailures = metric.Metadata{
+	})
+	metaDistErrorLocalRetryFailures = metric.InitMetadata(metric.Metadata{
 		Name:        "sql.distsql.dist_query_rerun_locally.failure_count",
 		Help:        "Total number of cases when the local rerun of a distributed query resulted in an error",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // See pkg/sql/mem_metrics.go

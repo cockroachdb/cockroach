@@ -532,7 +532,7 @@ func TestParsingErrorHandling(t *testing.T) {
 	tempDir := t.TempDir()
 
 	t.Run("error on initial file parse", func(t *testing.T) {
-		errorCountMetric := metric.NewGauge(metric.Metadata{})
+		errorCountMetric := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 
 		filename := filepath.Join(tempDir, "error_file.idk")
 		require.NoError(t, os.WriteFile(filename, []byte("not yaml"), 0777))
@@ -547,7 +547,7 @@ func TestParsingErrorHandling(t *testing.T) {
 	})
 
 	t.Run("error after update", func(t *testing.T) {
-		errorCountMetric := metric.NewGauge(metric.Metadata{})
+		errorCountMetric := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 
 		// Create access controller and watcher with a valid file
 		filename := filepath.Join(tempDir, "allowlist.yaml")

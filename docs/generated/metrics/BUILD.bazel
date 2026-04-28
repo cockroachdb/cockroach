@@ -1,10 +1,7 @@
 genrule(
     name = "metrics",
-    srcs = [
-        "//pkg/internal/metricscan:metric_owners.yaml",
-    ],
     outs = ["metrics.yaml"],
-    cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --logtostderr=NONE --metric-owners=$(location //pkg/internal/metricscan:metric_owners.yaml) > $@",
+    cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --logtostderr=NONE > $@",
     tools = ["//pkg/cmd/cockroach-short"],
     visibility = [
         ":__pkg__",

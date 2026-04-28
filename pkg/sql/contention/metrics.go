@@ -23,23 +23,23 @@ func (Metrics) MetricStruct() {}
 // NewMetrics returns a new instance of Metrics.
 func NewMetrics() Metrics {
 	return Metrics{
-		ResolverQueueSize: metric.NewGauge(metric.Metadata{
+		ResolverQueueSize: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.contention.resolver.queue_size",
 			Help:        "Length of queued unresolved contention events",
 			Measurement: "Queue length",
 			Unit:        metric.Unit_COUNT,
-		}),
-		ResolverRetries: metric.NewCounter(metric.Metadata{
+		})),
+		ResolverRetries: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.contention.resolver.retries",
 			Help:        "Number of times transaction id resolution has been retried",
 			Measurement: "Retry count",
 			Unit:        metric.Unit_COUNT,
-		}),
-		ResolverFailed: metric.NewCounter(metric.Metadata{
+		})),
+		ResolverFailed: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.contention.resolver.failed_resolutions",
 			Help:        "Number of failed transaction ID resolution attempts",
 			Measurement: "Failed transaction ID resolution count",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 	}
 }

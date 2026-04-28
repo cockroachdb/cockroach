@@ -43,7 +43,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/internal/metricscan",
+        "//pkg/internal/codeowners",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
@@ -148,11 +148,14 @@ go_test(
         "runtime_stats_test.go",
         "runtime_test.go",
     ],
+    data = [
+        "//:TEAMS.yaml",
+        "//.github:CODEOWNERS",
+    ],
     embed = [":status"],
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/internal/metricscan",
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

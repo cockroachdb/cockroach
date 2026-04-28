@@ -363,7 +363,7 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 
 func TestMultiSharedGauge(t *testing.T) {
 	ctx := context.Background()
-	resourceGauge := metric.NewGauge(metric.Metadata{})
+	resourceGauge := metric.NewGauge(metric.InitMetadata(metric.Metadata{}))
 	minAllocation := int64(1000)
 
 	parent := NewMonitor(Options{

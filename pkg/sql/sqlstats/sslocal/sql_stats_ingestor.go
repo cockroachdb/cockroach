@@ -47,20 +47,20 @@ var _ metric.Struct = Metrics{}
 // NewIngesterMetrics builds a new instance of our Metrics struct.
 func NewIngesterMetrics() Metrics {
 	return Metrics{
-		NumProcessed: metric.NewCounter(metric.Metadata{
+		NumProcessed: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.stats.ingester.num_processed",
 			Help:        "Number of items processed by the SQL stats ingester",
 			Measurement: "Items",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_COUNTER,
-		}),
-		QueueSize: metric.NewGauge(metric.Metadata{
+		})),
+		QueueSize: metric.NewGauge(metric.InitMetadata(metric.Metadata{
 			Name:        "sql.stats.ingester.queue_size",
 			Help:        "Current number of items queued in the SQL stats ingester",
 			Measurement: "Items",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  prometheus.MetricType_GAUGE,
-		}),
+		})),
 	}
 }
 

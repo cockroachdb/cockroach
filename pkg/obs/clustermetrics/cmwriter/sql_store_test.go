@@ -61,7 +61,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("counter", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "test.counter"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.counter"}))
 		c.Inc(42)
 
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{c}))
@@ -76,7 +76,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("gauge", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "test.gauge"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.gauge"}))
 		g.Update(100)
 
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{g}))
@@ -91,7 +91,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("counter accumulates on upsert", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "test.counter.accum"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.counter.accum"}))
 		c.Inc(10)
 
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{c}))
@@ -110,7 +110,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("gauge replaces on upsert", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "test.gauge.replace"})
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.gauge.replace"}))
 		g.Update(100)
 
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{g}))
@@ -127,7 +127,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("stopwatch", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "test.stopwatch"}, timeutil.DefaultTimeSource{})
+		sw := cmmetrics.NewWriteStopwatch(metric.InitMetadata(metric.Metadata{Name: "test.stopwatch"}), timeutil.DefaultTimeSource{})
 		sw.SetStartTime()
 
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{sw}))
@@ -142,7 +142,7 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("stopwatch replaces on upsert", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "test.stopwatch.replace"}, timeutil.DefaultTimeSource{})
+		sw := cmmetrics.NewWriteStopwatch(metric.InitMetadata(metric.Metadata{Name: "test.stopwatch.replace"}), timeutil.DefaultTimeSource{})
 
 		// Write initial timestamp.
 		sw.Gauge.Update(1000)
@@ -160,8 +160,8 @@ func TestSQLStore_Write(t *testing.T) {
 
 	t.Run("multiple metrics", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "test.multi.counter"})
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "test.multi.gauge"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.multi.counter"}))
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.multi.gauge"}))
 		c.Inc(7)
 		g.Update(200)
 
@@ -188,7 +188,7 @@ func TestSQLStore_Delete(t *testing.T) {
 
 	t.Run("delete scalar", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.counter"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.del.counter"}))
 		c.Inc(42)
 		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{c}))
 
@@ -202,7 +202,7 @@ func TestSQLStore_Delete(t *testing.T) {
 
 	t.Run("delete labeled metric", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "test.del.gv"}, "region")
+		gv := cmmetrics.NewGaugeVec(metric.InitMetadata(metric.Metadata{Name: "test.del.gv"}), "region")
 
 		// Write two children.
 		var children []cmmetrics.WritableMetric
@@ -229,15 +229,15 @@ func TestSQLStore_Delete(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
 
 		// Deleting a metric that doesn't exist should not error.
-		c := cmmetrics.NewCounter(metric.Metadata{Name: "nonexistent.metric"})
+		c := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "nonexistent.metric"}))
 		require.NoError(t, env.store.Delete(env.ctx, []cmmetrics.WritableMetric{c}))
 	})
 
 	t.Run("delete multiple", func(t *testing.T) {
 		env := newSQLStoreTestEnv(t)
-		c1 := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.m1"})
-		c2 := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.m2"})
-		g := cmmetrics.NewGauge(metric.Metadata{Name: "test.del.m3"})
+		c1 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.del.m1"}))
+		c2 := cmmetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.del.m2"}))
+		g := cmmetrics.NewGauge(metric.InitMetadata(metric.Metadata{Name: "test.del.m3"}))
 		c1.Inc(1)
 		c2.Inc(2)
 		g.Update(3)

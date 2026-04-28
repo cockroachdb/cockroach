@@ -496,8 +496,8 @@ func newCacheAndMetricsAndAccount(
 	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
 ) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggFunctionalGauge, *mon.BoundAccount) {
 	clientcert.CacheTTL = time.Minute
-	expirationMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
-	ttlMetrics := aggmetric.MakeBuilder("user").FunctionalGauge(metric.Metadata{}, func(_ []int64) int64 { return 0 })
+	expirationMetrics := aggmetric.MakeBuilder("user").Gauge(metric.InitMetadata(metric.Metadata{}))
+	ttlMetrics := aggmetric.MakeBuilder("user").FunctionalGauge(metric.InitMetadata(metric.Metadata{}), func(_ []int64) int64 { return 0 })
 	account := mon.NewStandaloneUnlimitedAccount()
 	cache := clientcert.NewCache(clock, account, expirationMetrics, ttlMetrics)
 	return cache, expirationMetrics, ttlMetrics, account

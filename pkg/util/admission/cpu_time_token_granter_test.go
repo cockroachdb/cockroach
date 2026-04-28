@@ -218,7 +218,7 @@ func TestExhaustedDuration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	t0 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	c := metric.NewCounter(metric.Metadata{Name: "test_exhausted_nanos"})
+	c := metric.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test_exhausted_nanos"}))
 	tb := tokenBucket{
 		tokens:            0,
 		exhaustedStart:    t0,

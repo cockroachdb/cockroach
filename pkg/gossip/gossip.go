@@ -129,84 +129,84 @@ const (
 
 // Gossip metrics counter names.
 var (
-	MetaConnectionsIncomingGauge = metric.Metadata{
+	MetaConnectionsIncomingGauge = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.connections.incoming",
 		Help:        "Number of active incoming gossip connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaConnectionsOutgoingGauge = metric.Metadata{
+	})
+	MetaConnectionsOutgoingGauge = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.connections.outgoing",
 		Help:        "Number of active outgoing gossip connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaConnectionsRefused = metric.Metadata{
+	})
+	MetaConnectionsRefused = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.connections.refused",
 		Help:        "Number of refused incoming gossip connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaMessagesSent = metric.Metadata{
+	})
+	MetaMessagesSent = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.messages.sent",
 		Help:        "Number of sent gossip messages",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaMessagesReceived = metric.Metadata{
+	})
+	MetaMessagesReceived = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.messages.received",
 		Help:        "Number of received gossip messages",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaInfosSent = metric.Metadata{
+	})
+	MetaInfosSent = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.infos.sent",
 		Help:        "Number of sent gossip Info objects",
 		Measurement: "Infos",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaInfosReceived = metric.Metadata{
+	})
+	MetaInfosReceived = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.infos.received",
 		Help:        "Number of received gossip Info objects",
 		Measurement: "Infos",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaBytesSent = metric.Metadata{
+	})
+	MetaBytesSent = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.bytes.sent",
 		Help:        "Number of sent gossip bytes",
 		Measurement: "Gossip Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaBytesReceived = metric.Metadata{
+	})
+	MetaBytesReceived = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.bytes.received",
 		Help:        "Number of received gossip bytes",
 		Measurement: "Gossip Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	MetaCallbacksProcessed = metric.Metadata{
+	})
+	MetaCallbacksProcessed = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.callbacks.processed",
 		Help:        "Number of gossip callbacks processed",
 		Measurement: "Callbacks",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaCallbacksPending = metric.Metadata{
+	})
+	MetaCallbacksPending = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.callbacks.pending",
 		Help:        "Number of gossip callbacks waiting to be processed",
 		Measurement: "Callbacks",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaCallbacksProcessingDuration = metric.Metadata{
+	})
+	MetaCallbacksProcessingDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.callbacks.processing_duration",
 		Help:        "Duration of gossip callback processing",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaCallbacksPendingDuration = metric.Metadata{
+	})
+	MetaCallbacksPendingDuration = metric.InitMetadata(metric.Metadata{
 		Name:        "gossip.callbacks.pending_duration",
 		Help:        "Duration of gossip callback queueing to be processed",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
+	})
 )
 
 // KeyNotPresentError is returned by gossip when queried for a key that doesn't

@@ -15,69 +15,69 @@ import (
 var (
 	// logMetricsReg is a singleton instance of the logMetricsRegistry.
 	logMetricsReg          = newLogMetricsRegistry()
-	fluentSinkConnAttempts = metric.Metadata{
+	fluentSinkConnAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "log.fluent.sink.conn.attempts",
 		Help:        "Number of connection attempts experienced by fluent-server logging sinks",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	fluentSinkConnErrors = metric.Metadata{
+	})
+	fluentSinkConnErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "log.fluent.sink.conn.errors",
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	fluentSinkWriteAttempts = metric.Metadata{
+	})
+	fluentSinkWriteAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "log.fluent.sink.write.attempts",
 		Help:        "Number of write attempts experienced by fluent-server logging sinks",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	fluentSinkWriteErrors = metric.Metadata{
+	})
+	fluentSinkWriteErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "log.fluent.sink.write.errors",
 		Help:        "Number of write errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	otlpSinkWriteAttempts = metric.Metadata{
+	})
+	otlpSinkWriteAttempts = metric.InitMetadata(metric.Metadata{
 		Name:        "log.otlp.sink.write.attempts",
 		Help:        "Number of write attempts experienced by otlp-server logging sinks",
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	otlpSinkWriteErrors = metric.Metadata{
+	})
+	otlpSinkWriteErrors = metric.InitMetadata(metric.Metadata{
 		Name:        "log.otlp.sink.write.errors",
 		Help:        "Number of write errors experienced by otlp-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	otlpSinkGRPCTransparentRetries = metric.Metadata{
+	})
+	otlpSinkGRPCTransparentRetries = metric.InitMetadata(metric.Metadata{
 		Name:        "log.otlp.sink.grpc.transparent_retries",
 		Help:        "Number of transparent retries done by otlp-server logging sinks when using GRPC",
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	bufferedSinkMessagesDropped = metric.Metadata{
+	})
+	bufferedSinkMessagesDropped = metric.InitMetadata(metric.Metadata{
 		Name:        "log.buffered.messages.dropped",
 		Help:        "Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
-	logMessageCount = metric.Metadata{
+	})
+	logMessageCount = metric.InitMetadata(metric.Metadata{
 		Name:        "log.messages.count",
 		Help:        "Count of messages logged on the node since startup. Note that this does not measure the fan-out of single log messages to the various configured logging sinks.",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
-	}
+	})
 )
 
 // Inject our singleton logMetricsRegistry into the logging

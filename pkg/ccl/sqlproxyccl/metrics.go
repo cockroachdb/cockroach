@@ -66,167 +66,167 @@ const (
 )
 
 var (
-	metaCurConnCount = metric.Metadata{
+	metaCurConnCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.conns",
 		Help:        "Number of connections being proxied",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRoutingErrCount = metric.Metadata{
+	})
+	metaRoutingErrCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.routing",
 		Help:        "Number of errors encountered when attempting to route clients",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBackendDownCount = metric.Metadata{
+	})
+	metaBackendDownCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.backend_down",
 		Help:        "Number of errors encountered when connecting to backend servers",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaBackendDisconnectCount = metric.Metadata{
+	})
+	metaBackendDisconnectCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.backend_disconnect",
 		Help:        "Number of disconnects initiated by proxied backends",
 		Measurement: "Disconnects",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaIdleDisconnectCount = metric.Metadata{
+	})
+	metaIdleDisconnectCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.idle_disconnect",
 		Help:        "Number of disconnects due to idle timeout",
 		Measurement: "Idle Disconnects",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaClientDisconnectCount = metric.Metadata{
+	})
+	metaClientDisconnectCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.client_disconnect",
 		Help:        "Number of disconnects initiated by clients",
 		Measurement: "Client Disconnects",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAcceptedConnCount = metric.Metadata{
+	})
+	metaAcceptedConnCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.accepted_conns",
 		Help:        "Number of accepted connections",
 		Measurement: "Accepted connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRefusedConnCount = metric.Metadata{
+	})
+	metaRefusedConnCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.err.refused_conn",
 		Help:        "Number of refused connections initiated by a given IP",
 		Measurement: "Refused",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaSuccessfulConnCount = metric.Metadata{
+	})
+	metaSuccessfulConnCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.successful_conns",
 		Help:        "Number of successful connections that were/are being proxied",
 		Measurement: "Successful Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAuthFailedCount = metric.Metadata{
+	})
+	metaAuthFailedCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.authentication_failures",
 		Help:        "Number of authentication failures",
 		Measurement: "Authentication Failures",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaExpiredClientConnCount = metric.Metadata{
+	})
+	metaExpiredClientConnCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.expired_client_conns",
 		Help:        "Number of expired client connections",
 		Measurement: "Expired Client Connections",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaDialTenantLatency = metric.Metadata{
+	})
+	metaDialTenantLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.dial_tenant.latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Help:        "Latency histogram for establishing a tcp connection to a tenant cluster.",
 		Measurement: "Latency",
-	}
-	metaDialTenantRetries = metric.Metadata{
+	})
+	metaDialTenantRetries = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.dial_tenant.retries",
 		Unit:        metric.Unit_COUNT,
 		Help:        "Number of retries dialing a tenant cluster.",
 		Measurement: "Retries",
-	}
+	})
 	// Connection migration metrics.
 	//
 	// attempted = success + error_fatal + error_recoverable
-	metaConnMigrationSuccessCount = metric.Metadata{
+	metaConnMigrationSuccessCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.conn_migration.success",
 		Help:        "Number of successful connection migrations",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConnMigrationErrorFatalCount = metric.Metadata{
+	})
+	metaConnMigrationErrorFatalCount = metric.InitMetadata(metric.Metadata{
 		// When connection migrations errored out, connections will be closed.
 		Name:        "proxy.conn_migration.error_fatal",
 		Help:        "Number of failed connection migrations which resulted in terminations",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConnMigrationErrorRecoverableCount = metric.Metadata{
+	})
+	metaConnMigrationErrorRecoverableCount = metric.InitMetadata(metric.Metadata{
 		// Connections are recoverable, so they won't be closed.
 		Name:        "proxy.conn_migration.error_recoverable",
 		Help:        "Number of failed connection migrations that were recoverable",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConnMigrationAttemptedCount = metric.Metadata{
+	})
+	metaConnMigrationAttemptedCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.conn_migration.attempted",
 		Help:        "Number of attempted connection migrations",
 		Measurement: "Connection Migrations",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaConnMigrationAttemptedLatency = metric.Metadata{
+	})
+	metaConnMigrationAttemptedLatency = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.conn_migration.attempted.latency",
 		Help:        "Latency histogram for attempted connection migrations",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaConnMigrationTransferResponseMessageSize = metric.Metadata{
+	})
+	metaConnMigrationTransferResponseMessageSize = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.conn_migration.transfer_response.message_size",
 		Help:        "Message size for the SHOW TRANSFER STATE response",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaQueryCancelReceivedPGWire = metric.Metadata{
+	})
+	metaQueryCancelReceivedPGWire = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.query_cancel.received.pgwire",
 		Help:        "Number of query cancel requests this proxy received over pgwire",
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueryCancelReceivedHTTP = metric.Metadata{
+	})
+	metaQueryCancelReceivedHTTP = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.query_cancel.received.http",
 		Help:        "Number of query cancel requests this proxy received over HTTP",
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueryCancelIgnored = metric.Metadata{
+	})
+	metaQueryCancelIgnored = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.query_cancel.ignored",
 		Help:        "Number of query cancel requests this proxy ignored",
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueryCancelForwarded = metric.Metadata{
+	})
+	metaQueryCancelForwarded = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.query_cancel.forwarded",
 		Help:        "Number of query cancel requests this proxy forwarded to another proxy",
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaQueryCancelSuccessful = metric.Metadata{
+	})
+	metaQueryCancelSuccessful = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.query_cancel.successful",
 		Help:        "Number of query cancel requests this proxy forwarded to the tenant",
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaAccessControlFileErrorCount = metric.Metadata{
+	})
+	metaAccessControlFileErrorCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.access_control.errors",
 		Help:        "Numbers of access control list files that are currently having errors",
 		Measurement: "Access Control File Errors",
 		Unit:        metric.Unit_COUNT,
-	}
-	metaRoutingMethodCount = metric.Metadata{
+	})
+	metaRoutingMethodCount = metric.InitMetadata(metric.Metadata{
 		Name:        "proxy.sql.routing_method_count",
 		Help:        "Number of occurrences of each proxy routing method",
 		Measurement: "Number of occurrences",
 		Unit:        metric.Unit_COUNT,
-	}
+	})
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.

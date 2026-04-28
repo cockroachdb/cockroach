@@ -80,13 +80,13 @@ func TestMetricMetadata_clusterMetrics(t *testing.T) {
 		NodeID: roachpb.NodeID(1),
 	}
 	recorder.AddNode(metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
-	clustermetrics.TestingRegisterClusterMetric("my.custom.metric", metric.Metadata{
+	clustermetrics.TestingRegisterClusterMetric("my.custom.metric", metric.InitMetadata(metric.Metadata{
 		Name:        "my.custom.metric",
 		Help:        "help text",
 		Measurement: "measurement",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  prometheusgo.MetricType_GAUGE,
-	})
+	}))
 	md, _, _ := recorder.GetMetricsMetadata(true)
 	require.Contains(t, md, "my.custom.metric")
 	recordedNames := recorder.GetRecordedMetricNames(md)
@@ -137,7 +137,7 @@ func TestHistogramMetricComputers(t *testing.T) {
 
 	metricName := "my.metric"
 	h := metric.NewHistogram(metric.HistogramOptions{
-		Metadata: metric.Metadata{Name: metricName},
+		Metadata: metric.InitMetadata(metric.Metadata{Name: metricName}),
 		Buckets:  []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
 		Mode:     metric.HistogramModePrometheus,
 	})

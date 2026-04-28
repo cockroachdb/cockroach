@@ -22,7 +22,7 @@ import (
 )
 
 // LicenseTTLMetadata is the metric metadata for seconds until license expiry.
-var LicenseTTLMetadata = metric.Metadata{
+var LicenseTTLMetadata = metric.InitMetadata(metric.Metadata{
 	// This metric name isn't namespaced for backwards compatibility. The
 	// prior version of this metric was manually inserted into the prometheus
 	// output.
@@ -33,11 +33,11 @@ var LicenseTTLMetadata = metric.Metadata{
 	Visibility:  metric.Metadata_ESSENTIAL,
 	Category:    metric.Metadata_EXPIRATIONS,
 	HowToUse:    "See Description.",
-}
+})
 
 // AdditionalLicenseTTLMetadata is an additional metric for license TTL under
 // a different metric name.
-var AdditionalLicenseTTLMetadata = metric.Metadata{
+var AdditionalLicenseTTLMetadata = metric.InitMetadata(metric.Metadata{
 	Name:        "seconds_until_license_expiry",
 	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
@@ -45,7 +45,7 @@ var AdditionalLicenseTTLMetadata = metric.Metadata{
 	Visibility:  metric.Metadata_ESSENTIAL,
 	Category:    metric.Metadata_EXPIRATIONS,
 	HowToUse:    "See Description.",
-}
+})
 
 // trialLicenseExpiryTimestamp tracks the expiration timestamp of any trial
 // licenses that have been installed on this cluster (past or present).

@@ -175,7 +175,7 @@ func (s *SQLStore) Get(ctx context.Context) ([]cmmetrics.WritableMetric, error) 
 			name := string(tree.MustBeDString(row[0]))
 			typ := string(tree.MustBeDString(row[1]))
 			value := int64(tree.MustBeDInt(row[2]))
-			md := metric.Metadata{Name: name}
+			md := metric.InitMetadata(metric.Metadata{Name: name})
 			switch typ {
 			case "COUNTER":
 				c := cmmetrics.NewCounter(md)

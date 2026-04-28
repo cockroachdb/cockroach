@@ -60,12 +60,12 @@ var _ metric.Struct = MemoryMetrics{}
 const log10int64times1000 = 19 * 1000
 
 func makeMemMetricMetadata(name, help string) metric.Metadata {
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name:        name,
 		Help:        help,
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
-	}
+	})
 }
 
 func makeMemMetricHistogram(

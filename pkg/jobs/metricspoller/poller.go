@@ -113,13 +113,13 @@ func (m pollerMetrics) MetricStruct() {}
 
 func newPollerMetrics() metric.Struct {
 	return pollerMetrics{
-		NumErrors: metric.NewCounter(metric.Metadata{
+		NumErrors: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "jobs.metrics.task_failed",
 			Help:        "Number of metrics poller tasks that failed",
 			Measurement: "errors",
 			Unit:        metric.Unit_COUNT,
 			MetricType:  io_prometheus_client.MetricType_COUNTER,
-		}),
+		})),
 	}
 }
 

@@ -53,7 +53,7 @@ package clustermetrics
 // There's an api for creating, and registering cluster metrics similar to
 // those seen in the util/metrics package.
 //
-//  var counter = clustermetrics.NewCounter(metric.Metadata{Name: "test.counter"})
+//  var counter = clustermetrics.NewCounter(metric.InitMetadata(metric.Metadata{Name: "test.counter"}))
 //  ...
 //  writer.AddMetric(counter) // cmwriter.Writer
 //

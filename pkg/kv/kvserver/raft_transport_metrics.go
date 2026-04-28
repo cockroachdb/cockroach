@@ -24,7 +24,7 @@ type RaftTransportMetrics struct {
 
 func (t *RaftTransport) initMetrics() {
 	t.metrics = &RaftTransportMetrics{
-		SendQueueSize: metric.NewFunctionalGauge(metric.Metadata{
+		SendQueueSize: metric.NewFunctionalGauge(metric.InitMetadata(metric.Metadata{
 			Name: "raft.transport.send-queue-size",
 			Help: `Number of pending outgoing messages in the Raft Transport queue.
 
@@ -34,9 +34,9 @@ messages to at least one peer. Use this metric in conjunction with
 send-queue-bytes.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}, t.queueMessageCount),
+		}), t.queueMessageCount),
 
-		SendQueueBytes: metric.NewFunctionalGauge(metric.Metadata{
+		SendQueueBytes: metric.NewFunctionalGauge(metric.InitMetadata(metric.Metadata{
 			Name: "raft.transport.send-queue-bytes",
 			Help: `The total byte size of pending outgoing messages in the queue.
 
@@ -46,30 +46,30 @@ messages to at least one peer. Use this metric together with send-queue-size, to
 have a fuller picture.`,
 			Measurement: "Bytes",
 			Unit:        metric.Unit_BYTES,
-		}, t.queueByteSize),
+		}), t.queueByteSize),
 
-		MessagesDropped: metric.NewCounter(metric.Metadata{
+		MessagesDropped: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "raft.transport.sends-dropped",
 			Help:        "Number of Raft message sends dropped by the Raft Transport",
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		MessagesSent: metric.NewCounter(metric.Metadata{
+		MessagesSent: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "raft.transport.sent",
 			Help:        "Number of Raft messages sent by the Raft Transport",
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		MessagesRcvd: metric.NewCounter(metric.Metadata{
+		MessagesRcvd: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "raft.transport.rcvd",
 			Help:        "Number of Raft messages received by the Raft Transport",
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		ReverseSent: metric.NewCounter(metric.Metadata{
+		ReverseSent: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name: "raft.transport.reverse-sent",
 			Help: `Messages sent in the reverse direction of a stream.
 
@@ -77,9 +77,9 @@ These messages should be rare. They are mostly informational, and are not actual
 responses to Raft messages. Responses are sent over another stream.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
-		ReverseRcvd: metric.NewCounter(metric.Metadata{
+		ReverseRcvd: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name: "raft.transport.reverse-rcvd",
 			Help: `Messages received from the reverse direction of a stream.
 
@@ -87,14 +87,14 @@ These messages should be rare. They are mostly informational, and are not actual
 responses to Raft messages. Responses are received over another stream.`,
 			Measurement: "Messages",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 
 		// This counts RACv2 piggybacked MsgAppResps.
-		FlowTokenDispatchesDropped: metric.NewCounter(metric.Metadata{
+		FlowTokenDispatchesDropped: metric.NewCounter(metric.InitMetadata(metric.Metadata{
 			Name:        "raft.transport.flow-token-dispatches-dropped",
 			Help:        "Number of flow token dispatches dropped by the Raft Transport",
 			Measurement: "Dispatches",
 			Unit:        metric.Unit_COUNT,
-		}),
+		})),
 	}
 }

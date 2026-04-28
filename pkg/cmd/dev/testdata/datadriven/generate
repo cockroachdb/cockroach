@@ -42,8 +42,6 @@ crdb-checkout/build/bazelutil/check.sh
 exec
 dev generate docs
 ----
-bazel info workspace --color=no
-bazel run //pkg/cmd/gen-metric-owners -- -out=crdb-checkout/pkg/internal/metricscan/metric_owners.yaml
 bazel run //pkg/gen:docs
 export COCKROACH_BAZEL_CHECK_FAST=1
 bazel info workspace --color=no
@@ -52,8 +50,6 @@ crdb-checkout/build/bazelutil/check.sh
 exec
 dev gen go_nocgo docs
 ----
-bazel info workspace --color=no
-bazel run //pkg/cmd/gen-metric-owners -- -out=crdb-checkout/pkg/internal/metricscan/metric_owners.yaml
 bazel run //pkg/gen
 export COCKROACH_BAZEL_CHECK_FAST=1
 bazel info workspace --color=no

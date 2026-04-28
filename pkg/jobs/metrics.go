@@ -88,7 +88,7 @@ func typeToString(jobType jobspb.Type) string {
 
 func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	m := metric.Metadata{
+	m := metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_running", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently running in Resume or OnFailOrCancel state",
 			typeStr),
@@ -100,7 +100,7 @@ func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 			metric.LabelType, typeStr,
 			metric.LabelStatus, "currently_running",
 		),
-	}
+	})
 
 	switch jt {
 	case jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
@@ -130,7 +130,7 @@ func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 
 func makeMetaCurrentlyIdle(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_idle", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently considered Idle and can be freely shut down",
 			typeStr),
@@ -142,12 +142,12 @@ func makeMetaCurrentlyIdle(jt jobspb.Type) metric.Metadata {
 			metric.LabelType, typeStr,
 			metric.LabelStatus, "currently_idle",
 		),
-	}
+	})
 }
 
 func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	m := metric.Metadata{
+	m := metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_paused", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently considered Paused",
 			typeStr),
@@ -159,7 +159,7 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "currently_paused",
 		),
-	}
+	})
 	switch jt {
 	case jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
 		m.Visibility = metric.Metadata_ESSENTIAL
@@ -187,7 +187,7 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 
 func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	m := metric.Metadata{
+	m := metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_completed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which successfully resumed to completion",
 			typeStr),
@@ -199,7 +199,7 @@ func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "completed",
 		),
-	}
+	})
 
 	switch jt {
 	case jobspb.TypeRowLevelTTL:
@@ -212,7 +212,7 @@ func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 
 func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_retry_error", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable error",
 			typeStr),
@@ -224,12 +224,12 @@ func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "retry_error",
 		),
-	}
+	})
 }
 
 func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	m := metric.Metadata{
+	m := metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_failed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a non-retriable error",
 			typeStr),
@@ -241,7 +241,7 @@ func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "failed",
 		),
-	}
+	})
 
 	switch jt {
 	case jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
@@ -262,7 +262,7 @@ func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 
 func makeMetaFailOrCancelCompeted(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_completed", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which successfully completed "+
 			"their failure or cancelation process",
@@ -275,12 +275,12 @@ func makeMetaFailOrCancelCompeted(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "completed",
 		),
-	}
+	})
 }
 
 func makeMetaFailOrCancelRetryError(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.fail_or_cancel_retry_error", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable "+
 			"error on their failure or cancelation process",
@@ -293,12 +293,12 @@ func makeMetaFailOrCancelRetryError(jt jobspb.Type) metric.Metadata {
 			metric.LabelName, typeStr,
 			metric.LabelStatus, "retry_error",
 		),
-	}
+	})
 }
 
 func makeMetaProtectedCount(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.protected_record_count", typeStr),
 		Help:        fmt.Sprintf("Number of protected timestamp records held by %s jobs", typeStr),
 		Measurement: "records",
@@ -308,12 +308,12 @@ func makeMetaProtectedCount(jt jobspb.Type) metric.Metadata {
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, typeStr,
 		),
-	}
+	})
 }
 
 func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	m := metric.Metadata{
+	m := metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.protected_age_sec", typeStr),
 		Help:        fmt.Sprintf("The age of the oldest PTS record protected by %s jobs", typeStr),
 		Measurement: "seconds",
@@ -323,7 +323,7 @@ func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, typeStr,
 		),
-	}
+	})
 
 	switch jt {
 	case jobspb.TypeChangefeed:
@@ -337,7 +337,7 @@ func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
 
 func makeMetaExpiredPTS(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	return metric.InitMetadata(metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.expired_pts_records", typeStr),
 		Help:        fmt.Sprintf("Number of expired protected timestamp records owned by %s jobs", typeStr),
 		Measurement: "records",
@@ -347,43 +347,43 @@ func makeMetaExpiredPTS(jt jobspb.Type) metric.Metadata {
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, typeStr,
 		),
-	}
+	})
 }
 
 var (
-	metaAdoptIterations = metric.Metadata{
+	metaAdoptIterations = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.adopt_iterations",
 		Help:        "number of job-adopt iterations performed by the registry",
 		Measurement: "iterations",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
+	})
 
-	metaClaimedJobs = metric.Metadata{
+	metaClaimedJobs = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.claimed_jobs",
 		Help:        "number of jobs claimed in job-adopt iterations",
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
+	})
 
-	metaResumedClaimedJobs = metric.Metadata{
+	metaResumedClaimedJobs = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.resumed_claimed_jobs",
 		Help:        "number of claimed-jobs resumed in job-adopt iterations",
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
+	})
 
 	// MetaRunningNonIdleJobs is the count of currently running jobs that are not
 	// reporting as being idle.
-	MetaRunningNonIdleJobs = metric.Metadata{
+	MetaRunningNonIdleJobs = metric.InitMetadata(metric.Metadata{
 		Name:        "jobs.running_non_idle",
 		Help:        "number of running jobs that are not idle",
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
-	}
+	})
 )
 
 // MetricStruct implements the metric.Struct interface.

@@ -44,29 +44,29 @@ func TestRegistrySyncer(t *testing.T) {
 
 	// Register test metric metadata so ToMetric() can resolve them.
 	defer cmmetrics.TestingRegisterLabeledClusterMetric(
-		"test.gauge_labeled", metric.Metadata{
+		"test.gauge_labeled", metric.InitMetadata(metric.Metadata{
 			Name: "test.gauge_labeled",
 			Help: "A test gauge",
-		},
+		}),
 		[]string{"store"},
 	)()
-	defer cmmetrics.TestingRegisterClusterMetric("test.counter", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("test.counter", metric.InitMetadata(metric.Metadata{
 		Name: "test.counter",
 		Help: "A test counter",
-	})()
-	defer cmmetrics.TestingRegisterClusterMetric("test.scalar", metric.Metadata{
+	}))()
+	defer cmmetrics.TestingRegisterClusterMetric("test.scalar", metric.InitMetadata(metric.Metadata{
 		Name: "test.scalar",
 		Help: "A scalar gauge for value verification",
-	})()
-	defer clustermetrics.TestingRegisterClusterMetric("test.stopwatch", metric.Metadata{
+	}))()
+	defer clustermetrics.TestingRegisterClusterMetric("test.stopwatch", metric.InitMetadata(metric.Metadata{
 		Name: "test.stopwatch",
 		Help: "A scalar stopwatch",
-	})()
+	}))()
 	defer clustermetrics.TestingRegisterLabeledClusterMetric(
-		"test.stopwatch_labeled", metric.Metadata{
+		"test.stopwatch_labeled", metric.InitMetadata(metric.Metadata{
 			Name: "test.stopwatch_labeled",
 			Help: "A labeled stopwatch",
-		},
+		}),
 		[]string{"store"},
 	)()
 
@@ -248,10 +248,10 @@ func TestRegistrySyncer(t *testing.T) {
 	// ---------------------------------------------------------------
 	// Insert a new metric after the initial scan (via OnUpsert).
 	// ---------------------------------------------------------------
-	defer cmmetrics.TestingRegisterClusterMetric("test.newgauge", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("test.newgauge", metric.InitMetadata(metric.Metadata{
 		Name: "test.newgauge",
 		Help: "A new gauge added after initial scan",
-	})()
+	}))()
 
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
@@ -740,10 +740,10 @@ func TestRegistrySyncerMultiTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer clustermetrics.TestingRegisterClusterMetric("test.mt_gauge", metric.Metadata{
+	defer clustermetrics.TestingRegisterClusterMetric("test.mt_gauge", metric.InitMetadata(metric.Metadata{
 		Name: "test.mt_gauge",
 		Help: "A gauge for multi-tenant isolation testing",
-	})()
+	}))()
 
 	ctx := context.Background()
 
