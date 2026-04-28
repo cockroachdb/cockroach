@@ -9,12 +9,13 @@ import (
 	"strings"
 )
 
-// Source represents a retrieved book chunk with its relevance score.
+// Source represents a retrieved paper chunk with its relevance score.
 type Source struct {
 	Title    string
 	Chunk    string
-	Price    float64
-	Regions  string
+	Authors  string
+	Category string
+	PDFLink  string
 	Distance float64
 }
 
@@ -22,11 +23,11 @@ type Source struct {
 // database search is needed and, if so, the semantic query and structured
 // filters to apply.
 type SearchFilters struct {
-	NeedsSearch   bool     `json:"needs_search"`
-	SemanticQuery string   `json:"semantic_query"`
-	MaxPrice      *float64 `json:"max_price"`
-	MinPrice      *float64 `json:"min_price"`
-	Region        *string  `json:"region"`
+	NeedsSearch   bool    `json:"needs_search"`
+	SemanticQuery string  `json:"semantic_query"`
+	Category      *string `json:"category"`
+	MinYear       *int    `json:"min_year"`
+	MaxYear       *int    `json:"max_year"`
 }
 
 // ChatService ties together CockroachDB semantic search and an Ollama LLM.
@@ -78,7 +79,6 @@ func (s *ChatService) Chat(
 
 	if !filters.NeedsSearch {
 		// No search needed — respond directly from conversation history.
-		//fmt.Print("\n  [No search needed]")
 		messages = s.buildDirectPrompt(userMsg, history)
 	} else {
 		s.printFilters(filters)
@@ -90,12 +90,12 @@ func (s *ChatService) Chat(
 		}
 
 		if len(sources) == 0 {
-			msg := "No matching books found."
-			if filters.MaxPrice != nil || filters.MinPrice != nil || filters.Region != nil {
-				msg += " Try relaxing your price or region filters."
+			msg := "No matching papers found."
+			if filters.Category != nil || filters.MinYear != nil || filters.MaxYear != nil {
+				msg += " Try relaxing your category or year filters."
 			} else {
 				msg += " Make sure the vectorizer has finished embedding all rows" +
-					" (check: SELECT count(*) FROM books_embeddings)."
+					" (check: SELECT count(*) FROM papers_embeddings)."
 			}
 			return msg, nil, nil
 		}
@@ -114,43 +114,48 @@ func (s *ChatService) Chat(
 	return response, sources, nil
 }
 
-const filterExtractionPrompt = `You are a query classifier and parser for a bookstore chat system. Analyze the user's message and return a JSON object.
+const filterExtractionPrompt = `You are a query classifier and parser for a CS research paper archive chat system. The archive contains papers from arXiv across categories like cs.AI, cs.CL, cs.CR, cs.CV, cs.DB, cs.DC, cs.DS, cs.LG, cs.SE, and cs.PL. Analyze the user's message and return a JSON object.
 
-First, decide if the message requires searching the book database. Set "needs_search" to false for:
+First, decide if the message requires searching the paper database. Set "needs_search" to false for:
 - Greetings, small talk, or thank-you messages
 - Follow-up questions that can be answered from the conversation history alone
-- Questions unrelated to books (weather, sports, etc.)
+- Questions unrelated to CS research (weather, sports, etc.)
 - Meta-questions about the chat itself
 
-Set "needs_search" to true when the user is asking about books, topics, prices, or availability.
+Set "needs_search" to true when the user is asking about research topics, papers, authors, or CS concepts.
 
 When "needs_search" is true, also extract:
 - "semantic_query": the main topic/subject to search for (string)
-- "max_price": maximum price in dollars if mentioned (number or null)
-- "min_price": minimum price in dollars if mentioned (number or null)
-- "region": region filter if mentioned (string or null). Valid regions: us-east, us-west, eu-west, eu-central, ap-south, ap-east
+- "category": arXiv CS category if mentioned (string or null). Valid categories: cs.AI, cs.CL, cs.CR, cs.CV, cs.DB, cs.DC, cs.DS, cs.LG, cs.SE, cs.PL
+- "min_year": earliest publication year if mentioned (number or null)
+- "max_year": latest publication year if mentioned (number or null)
+
+For relative time expressions like "last year", "recent", "past 2 years", etc., translate them into min_year/max_year based on today's date. For example, if today is 2026, "last year" means min_year=2025 (do NOT set max_year, so current-year papers are included too). "Recent" or "latest" should generally not set any year filter — just let the semantic search find the best matches.
 
 Examples:
 User: "Hello!"
-{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+{"needs_search": false, "semantic_query": "", "category": null, "min_year": null, "max_year": null}
 
 User: "Thanks, that was helpful"
-{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+{"needs_search": false, "semantic_query": "", "category": null, "min_year": null, "max_year": null}
 
-User: "Can you tell me more about that last book?"
-{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+User: "Can you tell me more about that last paper?"
+{"needs_search": false, "semantic_query": "", "category": null, "min_year": null, "max_year": null}
 
-User: "What is the weather like?"
-{"needs_search": false, "semantic_query": "", "max_price": null, "min_price": null, "region": null}
+User: "What papers are there on transformer architectures?"
+{"needs_search": true, "semantic_query": "transformer architectures", "category": null, "min_year": null, "max_year": null}
 
-User: "What books about algorithms cost less than $50?"
-{"needs_search": true, "semantic_query": "algorithms", "max_price": 50, "min_price": null, "region": null}
+User: "Find me database papers on query optimization"
+{"needs_search": true, "semantic_query": "query optimization", "category": "cs.DB", "min_year": null, "max_year": null}
 
-User: "Recommend a database book available in eu-west"
-{"needs_search": true, "semantic_query": "database", "max_price": null, "min_price": null, "region": "eu-west"}
+User: "Recent machine learning papers on reinforcement learning from 2024"
+{"needs_search": true, "semantic_query": "reinforcement learning", "category": "cs.LG", "min_year": 2024, "max_year": null}
 
-User: "What do you have on machine learning?"
-{"needs_search": true, "semantic_query": "machine learning", "max_price": null, "min_price": null, "region": null}
+User: "What research was done on cryptographic protocols before 2020?"
+{"needs_search": true, "semantic_query": "cryptographic protocols", "category": "cs.CR", "min_year": null, "max_year": 2020}
+
+User: "Papers published in the last year about AI agents"
+{"needs_search": true, "semantic_query": "AI agents", "category": "cs.AI", "min_year": 2025, "max_year": null}
 
 Return ONLY the JSON object, no other text.`
 
@@ -184,20 +189,20 @@ func (s *ChatService) extractFilters(ctx context.Context, userMsg string) (Searc
 func (s *ChatService) printFilters(filters SearchFilters) {
 	var parts []string
 	parts = append(parts, fmt.Sprintf("query=%q", filters.SemanticQuery))
-	if filters.MinPrice != nil {
-		parts = append(parts, fmt.Sprintf("min_price=$%.2f", *filters.MinPrice))
+	if filters.Category != nil {
+		parts = append(parts, fmt.Sprintf("category=%s", *filters.Category))
 	}
-	if filters.MaxPrice != nil {
-		parts = append(parts, fmt.Sprintf("max_price=$%.2f", *filters.MaxPrice))
+	if filters.MinYear != nil {
+		parts = append(parts, fmt.Sprintf("min_year=%d", *filters.MinYear))
 	}
-	if filters.Region != nil {
-		parts = append(parts, fmt.Sprintf("region=%s", *filters.Region))
+	if filters.MaxYear != nil {
+		parts = append(parts, fmt.Sprintf("max_year=%d", *filters.MaxYear))
 	}
-	//fmt.Printf("\n  [Filters: %s]", strings.Join(parts, ", "))
+	fmt.Printf("\n  [Filters: %s]", strings.Join(parts, ", "))
 }
 
-// search finds the top-K most relevant book chunks for the given semantic
-// query, filtered by any price or region constraints. Uses CockroachDB's
+// search finds the top-K most relevant paper chunks for the given semantic
+// query, filtered by any category or year constraints. Uses CockroachDB's
 // embed() builtin and cosine distance operator with SQL WHERE clauses.
 func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Source, error) {
 	// Build the WHERE clause dynamically with parameterized placeholders.
@@ -206,19 +211,19 @@ func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Sour
 	args := []interface{}{filters.SemanticQuery, s.topK}
 	paramIdx := 3
 
-	if filters.MaxPrice != nil {
-		whereClauses = append(whereClauses, fmt.Sprintf("b.price <= $%d", paramIdx))
-		args = append(args, *filters.MaxPrice)
+	if filters.Category != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("p.category = $%d", paramIdx))
+		args = append(args, *filters.Category)
 		paramIdx++
 	}
-	if filters.MinPrice != nil {
-		whereClauses = append(whereClauses, fmt.Sprintf("b.price >= $%d", paramIdx))
-		args = append(args, *filters.MinPrice)
+	if filters.MinYear != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("EXTRACT(YEAR FROM p.published) >= $%d", paramIdx))
+		args = append(args, *filters.MinYear)
 		paramIdx++
 	}
-	if filters.Region != nil {
-		whereClauses = append(whereClauses, fmt.Sprintf("$%d::STRING = ANY(b.region)", paramIdx))
-		args = append(args, *filters.Region)
+	if filters.MaxYear != nil {
+		whereClauses = append(whereClauses, fmt.Sprintf("EXTRACT(YEAR FROM p.published) <= $%d", paramIdx))
+		args = append(args, *filters.MaxYear)
 		paramIdx++
 	}
 
@@ -228,11 +233,10 @@ func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Sour
 	}
 
 	query := fmt.Sprintf(`
-		SELECT b.title, e.chunk, b.price,
-		       array_to_string(b.region, ', ') AS regions,
+		SELECT p.title, e.chunk, p.authors, p.category, p.pdf_link,
 		       e.embedding <=> embed($1) AS distance
-		FROM books b
-		JOIN books_embeddings e ON b.id = e.source_id
+		FROM papers p
+		JOIN papers_embeddings e ON p.id = e.source_id
 		%s
 		ORDER BY distance ASC
 		LIMIT $2
@@ -247,7 +251,10 @@ func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Sour
 	var sources []Source
 	for rows.Next() {
 		var src Source
-		if err := rows.Scan(&src.Title, &src.Chunk, &src.Price, &src.Regions, &src.Distance); err != nil {
+		if err := rows.Scan(
+			&src.Title, &src.Chunk, &src.Authors,
+			&src.Category, &src.PDFLink, &src.Distance,
+		); err != nil {
 			return nil, err
 		}
 		sources = append(sources, src)
@@ -258,7 +265,7 @@ func (s *ChatService) search(ctx context.Context, filters SearchFilters) ([]Sour
 // buildDirectPrompt constructs a prompt for messages that don't require a
 // database search — the LLM responds using only the conversation history.
 func (s *ChatService) buildDirectPrompt(userMsg string, history []Message) []Message {
-	systemPrompt := `You are a helpful bookstore assistant. The user's message does not require looking up books. Respond naturally and conversationally. If the user asks a follow-up about a book previously discussed, use the conversation history to answer. If you don't have enough information, suggest they ask a book-related question.`
+	systemPrompt := `You are a helpful CS research paper archive assistant. The user's message does not require looking up papers. Respond naturally and conversationally. If the user asks a follow-up about a paper previously discussed, use the conversation history to answer. If you don't have enough information, suggest they ask a research-related question.`
 
 	messages := []Message{{Role: "system", Content: systemPrompt}}
 	messages = append(messages, history...)
@@ -272,16 +279,16 @@ func (s *ChatService) buildPrompt(userMsg string, sources []Source, history []Me
 	var contextParts []string
 	for i, src := range sources {
 		contextParts = append(contextParts,
-			fmt.Sprintf("[%d] %s (Price: $%.2f, Available in: %s):\n%s",
-				i+1, src.Title, src.Price, src.Regions, src.Chunk))
+			fmt.Sprintf("[%d] %s\n    Authors: %s\n    Category: %s\n    PDF: %s\n    %s",
+				i+1, src.Title, src.Authors, src.Category, src.PDFLink, src.Chunk))
 	}
 	contextStr := strings.Join(contextParts, "\n\n")
 
-	systemPrompt := fmt.Sprintf(`You are a helpful bookstore assistant that answers questions about books using the provided context. Follow these rules:
+	systemPrompt := fmt.Sprintf(`You are a helpful CS research paper archive assistant that answers questions about computer science research using the provided context. Follow these rules:
 1. Use ONLY the information from the context below to answer.
 2. If the context doesn't contain enough information, say so clearly.
-3. Be concise. Cite which book(s) you used by number (e.g., [1], [2]).
-4. Include price and regional availability when relevant to the question.
+3. Be concise. Cite which paper(s) you used by number (e.g., [1], [2]).
+4. Include the paper's authors and PDF link when relevant to the question.
 5. Do not make up information that is not in the context.
 
 Context:
