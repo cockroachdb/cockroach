@@ -5,6 +5,7 @@ on:
     types: [opened, reopened, synchronize]
     branches:
       - "master"
+      - "basalt-master"
       - "release-*"
       - "staging-*"
       - "!release-1.0*"
@@ -27,6 +28,7 @@ on:
   push:
     branches:
       - "master"
+      - "basalt-master"
       - "release-*"
       - "staging-*"
       - "staging"
