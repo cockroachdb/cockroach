@@ -1,0 +1,37 @@
+# Regression test for the IsCompatibleWith check in
+# maybeAddRegionEnumRewriteForSchemaChangeState. Without it, table-level
+# RESTORE of an RBR table whose source enum has values not present in
+# the destination DB's enum would silently rewrite the source enum ID to
+# the destination's, leaving crdb_region values that no longer map to
+# any region in the destination.
+
+skip-under-duress
+----
+
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+USE d;
+CREATE TABLE t (pk INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW;
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30);
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/test-backup';
+----
+
+# Same node localities but the destination database deliberately has
+# fewer regions than the source.
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE narrow PRIMARY REGION "us-east-1";
+----
+
+exec-sql expect-error-regex=(table-level restore of "t" into database "narrow".*could not find enum value)
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/test-backup' WITH into_db = 'narrow', skip_missing_sequences, skip_missing_udfs;
+----
+regex matches error
