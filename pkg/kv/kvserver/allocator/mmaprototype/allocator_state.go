@@ -424,7 +424,7 @@ const persistentOverloadThreshold = 30 * time.Minute
 
 // detailedLogInterval is the minimum time between detailed log bursts for a
 // single persistently overloaded store.
-const detailedLogInterval = 10 * time.Minute
+const detailedLogInterval = 30 * time.Minute
 
 // outerLogInterval is the minimum time between Infof emissions of the
 // rebalanceStores outer-loop narrative.
