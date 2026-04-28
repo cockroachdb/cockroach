@@ -7,7 +7,7 @@ on:
 
 jobs:
   stale:
-    if: github.repository == 'cockroachdb/cockroach'
+    if: github.repository == 'cockroachlabs/cockroach-private'
     runs-on: ubuntu-latest
     permissions:
       issues: write

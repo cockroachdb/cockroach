@@ -20,7 +20,7 @@ on:
 name: Update pkg/testutils/release/cockroach_releases.yaml
 jobs:
   update-crdb-releases-yaml:
-    if: github.repository == 'cockroachdb/cockroach'
+    if: github.repository == 'cockroachlabs/cockroach-private'
     environment: ${{ github.ref_name == 'master' && 'master' || null }}
     strategy:
       matrix:
