@@ -107,12 +107,12 @@ func (a *allocatorState) IsInConflictWithMMA(
 	}
 	// Lazily compute and cache the load summary for the existing store.
 	if advisor.existingStoreSLS == nil {
-		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID, &advisor.means.storeLoad, &advisor.means.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID, &advisor.means.storeLoad, &advisor.means.nodeLoad, makeStandaloneLogger(ctx))
 		advisor.existingStoreSLS = &summary
 	}
 	existingSLS := advisor.existingStoreSLS
 	// Always compute the candidate's load summary.
-	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad, makeStandaloneLogger(ctx))
 
 	// TODO(wenyihu6): unify the branches below by assigning based on sls.worstDim and cpuOnly.
 	var conflict bool

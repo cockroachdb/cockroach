@@ -132,8 +132,10 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace.traceValue).logf": true,
 
-	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.rebalanceEnv).logf":         true,
-	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.rebalanceEnv).detailedLogf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.logEnv).logf":         true,
+	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.logEnv).detailedLogf": true,
+	"(github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.mmaLogger).logf":       true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype.standaloneInfof":        true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2.LogTracker).errorf": true,
 
