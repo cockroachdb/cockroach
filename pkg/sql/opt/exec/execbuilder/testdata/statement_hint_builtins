@@ -2309,15 +2309,15 @@ SELECT crdb_internal.await_statement_hints_cache()
 
 statement ok
 SELECT information_schema.crdb_rewrite_inline_hints(
-  'SELECT c FROM abc WHERE a = _',
-  'SELECT c FROM abc@abc_c_idx WHERE a = _'
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@abc_c_idx WHERE a = _'
 )
 
 statement ok
 SELECT crdb_internal.await_statement_hints_cache()
 
 statement ok
-PREPARE hint_retry_stmt AS SELECT c FROM abc WHERE a = 10
+PREPARE hint_retry_stmt AS SELECT a FROM abc WHERE a = 10
 
 # First EXECUTE: abc_c_idx doesn't exist, so the hint should fail and fall
 # back to the unhinted plan.
@@ -2340,31 +2340,28 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• project
-│ columns: (c)
-│
-└── • scan
-      columns: (a, c)
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      vectorized batch count: 0
-      KV time: 0µs
-      KV rows decoded: 0
-      KV pairs read: 0
-      KV bytes read: 0 B
-      KV gRPC calls: 0
-      estimated max memory allocated: 0 B
-      MVCC step count (ext/int): 0/0
-      MVCC seek count (ext/int): 0/0
-      actual row count: 0
-      estimated row count: 1 (missing stats)
-      table: abc@abc_pkey
-      spans: /10/0
+• scan
+  columns: (a)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 0
+  KV pairs read: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 0
+  estimated row count: 1 (missing stats)
+  table: abc@abc_pkey
+  spans: /10/0
 ·
 skipped statement hints: 1
  └── REWRITE INLINE HINTS
-     donor: SELECT c FROM abc@abc_c_idx WHERE a = _
+     donor: SELECT a FROM abc@abc_c_idx WHERE a = _
      skip reason: index "abc_c_idx" not found
 
 statement ok
@@ -2404,41 +2401,38 @@ isolation level: serializable
 priority: normal
 quality of service: regular
 ·
-• project
-│ columns: (c)
+• filter
+│ columns: (a)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ estimated row count: 1 (missing stats)
+│ filter: a = 10
 │
-└── • filter
-    │ columns: (a, c)
-    │ sql nodes: <hidden>
-    │ regions: <hidden>
-    │ vectorized batch count: 0
-    │ execution time: 0µs
-    │ actual row count: 0
-    │ estimated row count: 1 (missing stats)
-    │ filter: a = 10
-    │
-    └── • scan
-          columns: (a, c)
-          sql nodes: <hidden>
-          kv nodes: <hidden>
-          regions: <hidden>
-          vectorized batch count: 0
-          KV time: 0µs
-          KV rows decoded: 0
-          KV pairs read: 0
-          KV bytes read: 0 B
-          KV gRPC calls: 0
-          estimated max memory allocated: 0 B
-          MVCC step count (ext/int): 0/0
-          MVCC seek count (ext/int): 0/0
-          actual row count: 0
-          estimated row count: 1,000 (missing stats)
-          table: abc@abc_c_idx
-          spans: FULL SCAN
+└── • scan
+      columns: (a)
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_c_idx
+      spans: FULL SCAN
 ·
 applied statement hints: 1
  └── REWRITE INLINE HINTS
-     donor: SELECT c FROM abc@abc_c_idx WHERE a = _
+     donor: SELECT a FROM abc@abc_c_idx WHERE a = _
 
 statement ok
 SET tracing = off
@@ -2458,7 +2452,7 @@ statement ok
 DROP INDEX abc@abc_c_idx
 
 statement ok
-SELECT information_schema.crdb_delete_statement_hints('SELECT c FROM abc WHERE a = _')
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
 
 statement ok
 SELECT crdb_internal.await_statement_hints_cache()
