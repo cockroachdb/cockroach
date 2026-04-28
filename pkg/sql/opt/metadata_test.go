@@ -100,8 +100,8 @@ func TestMetadata(t *testing.T) {
 
 	// Pass an empty user so that re-validation uses the current session user.
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE, username.SQLUsername{})
-	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
-	if err == nil || depsUpToDate {
+	reason, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
+	if err == nil && reason == "" {
 		t.Fatalf("expected table privilege to be revoked")
 	}
 
@@ -198,8 +198,8 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
-	depsUpToDate, err = md.CheckDependencies(context.Background(), &evalCtx, testCat)
-	if err == nil || depsUpToDate {
+	reason, err = md.CheckDependencies(context.Background(), &evalCtx, testCat)
+	if err == nil && reason == "" {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}
 
