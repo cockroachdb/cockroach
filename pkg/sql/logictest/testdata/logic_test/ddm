@@ -209,7 +209,7 @@ SELECT * FROM employees WHERE id = 1
 ----
 1  Alice  a***@company.com  ***-**-6789  150000
 
-# Clean up.
+# Clean up core test tables.
 statement ok
 RESET ROLE
 
@@ -229,3 +229,1535 @@ REVOKE analyst FROM testuser
 
 statement ok
 DROP ROLE analyst
+
+# ==============================================================================
+# Subtest: virtual computed column rejection
+# ==============================================================================
+subtest virtual_computed_column
+
+statement ok
+CREATE TABLE t_virt (
+  id INT PRIMARY KEY,
+  price INT,
+  tax INT AS (price * 0 + 1) VIRTUAL
+)
+
+statement error column "tax" is a virtual computed column and cannot have a masking function
+ALTER TABLE t_virt ALTER COLUMN tax SET MASKING FUNCTION 0::INT
+
+# Non-virtual columns on the same table should still be maskable.
+statement ok
+ALTER TABLE t_virt ALTER COLUMN price SET MASKING FUNCTION 0
+
+statement ok
+DROP TABLE t_virt
+
+subtest end
+
+# ==============================================================================
+# Subtest: stored computed column masking
+# ==============================================================================
+subtest stored_computed_column
+
+statement ok
+CREATE TABLE t_stored (
+  id INT PRIMARY KEY,
+  price INT,
+  tax INT AS (price * 10) STORED
+)
+
+statement ok
+INSERT INTO t_stored (id, price) VALUES (1, 100), (2, 50)
+
+# Masking a stored computed column should work.
+statement ok
+ALTER TABLE t_stored ALTER COLUMN tax SET MASKING FUNCTION 0
+
+statement ok
+CREATE ROLE viewer_stored
+
+statement ok
+GRANT SELECT ON t_stored TO viewer_stored
+
+statement ok
+GRANT viewer_stored TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_stored
+
+query III
+SELECT * FROM t_stored ORDER BY id
+----
+1  100  0
+2  50   0
+
+statement ok
+RESET ROLE
+
+user root
+
+# Mask the source column too.
+statement ok
+ALTER TABLE t_stored ALTER COLUMN price SET MASKING FUNCTION -1
+
+user testuser
+
+statement ok
+SET ROLE viewer_stored
+
+query III
+SELECT * FROM t_stored ORDER BY id
+----
+1  -1  0
+2  -1  0
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_stored
+
+statement ok
+REVOKE viewer_stored FROM testuser
+
+statement ok
+DROP ROLE viewer_stored
+
+subtest end
+
+# ==============================================================================
+# Subtest: column type coverage
+# ==============================================================================
+subtest column_types
+
+statement ok
+CREATE TABLE t_types (
+  id INT PRIMARY KEY,
+  col_float FLOAT,
+  col_decimal DECIMAL(10,2),
+  col_bool BOOL,
+  col_string STRING
+)
+
+statement ok
+INSERT INTO t_types VALUES (1, 3.14, 99.99, true, 'sensitive')
+
+statement ok
+ALTER TABLE t_types ALTER COLUMN col_float SET MASKING FUNCTION 0.0
+
+statement ok
+ALTER TABLE t_types ALTER COLUMN col_decimal SET MASKING FUNCTION 0.00
+
+statement ok
+ALTER TABLE t_types ALTER COLUMN col_bool SET MASKING FUNCTION false
+
+statement ok
+ALTER TABLE t_types ALTER COLUMN col_string SET MASKING FUNCTION 'REDACTED'
+
+statement ok
+CREATE ROLE viewer_types
+
+statement ok
+GRANT SELECT ON t_types TO viewer_types
+
+statement ok
+GRANT viewer_types TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_types
+
+query IRRBT
+SELECT id, col_float, col_decimal, col_bool, col_string FROM t_types WHERE id = 1
+----
+1  0  0.00  false  REDACTED
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_types
+
+statement ok
+REVOKE viewer_types FROM testuser
+
+statement ok
+DROP ROLE viewer_types
+
+subtest end
+
+# ==============================================================================
+# Subtest: NULL-returning masking expression
+# ==============================================================================
+subtest null_masking
+
+statement ok
+CREATE TABLE t_null_mask (
+  id INT PRIMARY KEY,
+  secret STRING
+)
+
+statement ok
+INSERT INTO t_null_mask VALUES (1, 'top secret'), (2, 'classified')
+
+# A masking expression that always returns NULL.
+statement ok
+ALTER TABLE t_null_mask ALTER COLUMN secret SET MASKING FUNCTION NULL::STRING
+
+statement ok
+CREATE ROLE viewer_null
+
+statement ok
+GRANT SELECT ON t_null_mask TO viewer_null
+
+statement ok
+GRANT viewer_null TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_null
+
+query IT
+SELECT * FROM t_null_mask ORDER BY id
+----
+1  NULL
+2  NULL
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_null_mask
+
+statement ok
+REVOKE viewer_null FROM testuser
+
+statement ok
+DROP ROLE viewer_null
+
+subtest end
+
+# ==============================================================================
+# Subtest: CASE expression in masking function
+# ==============================================================================
+subtest case_expression_masking
+
+statement ok
+CREATE TABLE t_case_mask (
+  id INT PRIMARY KEY,
+  salary INT,
+  department STRING
+)
+
+statement ok
+INSERT INTO t_case_mask VALUES
+  (1, 200000, 'Engineering'),
+  (2, 50000, 'Support')
+
+# Mask salary with a CASE that buckets into ranges.
+statement ok
+ALTER TABLE t_case_mask ALTER COLUMN salary SET MASKING FUNCTION
+  CASE WHEN salary > 100000 THEN 100000 ELSE 0 END
+
+statement ok
+CREATE ROLE viewer_case
+
+statement ok
+GRANT SELECT ON t_case_mask TO viewer_case
+
+statement ok
+GRANT viewer_case TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_case
+
+query IIT
+SELECT id, salary, department FROM t_case_mask ORDER BY id
+----
+1  100000  Engineering
+2  0       Support
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_case_mask
+
+statement ok
+REVOKE viewer_case FROM testuser
+
+statement ok
+DROP ROLE viewer_case
+
+subtest end
+
+# ==============================================================================
+# Subtest: crdb_internal.column_masking_policies introspection
+# ==============================================================================
+subtest introspection
+
+statement ok
+CREATE TABLE t_introspect (
+  id INT PRIMARY KEY,
+  email STRING,
+  ssn STRING,
+  public_col STRING
+)
+
+statement ok
+ALTER TABLE t_introspect ALTER COLUMN email SET MASKING FUNCTION 'REDACTED'
+
+statement ok
+ALTER TABLE t_introspect ALTER COLUMN ssn SET MASKING FUNCTION '***'
+
+# The virtual table should list the two masked columns.
+query TTTTT rowsort
+SELECT * FROM crdb_internal.column_masking_policies
+  WHERE table_name = 't_introspect'
+----
+test  public  t_introspect  email  'REDACTED'
+test  public  t_introspect  ssn    '***'
+
+# Drop one masking function and verify it disappears.
+statement ok
+ALTER TABLE t_introspect ALTER COLUMN ssn DROP MASKING FUNCTION
+
+query TTTTT
+SELECT * FROM crdb_internal.column_masking_policies
+  WHERE table_name = 't_introspect'
+----
+test  public  t_introspect  email  'REDACTED'
+
+statement ok
+DROP TABLE t_introspect
+
+subtest end
+
+# ==============================================================================
+# Subtest: CTE (WITH clause) masking
+# ==============================================================================
+subtest cte_masking
+
+statement ok
+CREATE TABLE t_cte (
+  id INT PRIMARY KEY,
+  secret STRING
+)
+
+statement ok
+INSERT INTO t_cte VALUES (1, 'alpha'), (2, 'beta')
+
+statement ok
+ALTER TABLE t_cte ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_cte
+
+statement ok
+GRANT SELECT ON t_cte TO viewer_cte
+
+statement ok
+GRANT viewer_cte TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_cte
+
+query IT
+WITH cte AS (SELECT * FROM t_cte) SELECT * FROM cte ORDER BY id
+----
+1  ***
+2  ***
+
+# Nested CTE.
+query T
+WITH cte1 AS (SELECT * FROM t_cte WHERE id = 1),
+     cte2 AS (SELECT secret FROM cte1)
+SELECT * FROM cte2
+----
+***
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_cte
+
+statement ok
+REVOKE viewer_cte FROM testuser
+
+statement ok
+DROP ROLE viewer_cte
+
+subtest end
+
+# ==============================================================================
+# Subtest: aggregation on masked columns
+# ==============================================================================
+subtest aggregation_masking
+
+statement ok
+CREATE TABLE t_agg (
+  id INT PRIMARY KEY,
+  salary INT,
+  department STRING
+)
+
+statement ok
+INSERT INTO t_agg VALUES
+  (1, 100000, 'Eng'),
+  (2, 120000, 'Eng'),
+  (3, 80000, 'Sales')
+
+statement ok
+ALTER TABLE t_agg ALTER COLUMN salary SET MASKING FUNCTION 0
+
+statement ok
+CREATE ROLE viewer_agg
+
+statement ok
+GRANT SELECT ON t_agg TO viewer_agg
+
+statement ok
+GRANT viewer_agg TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_agg
+
+# Aggregates should operate on the masked (zero) values.
+query R
+SELECT sum(salary) FROM t_agg
+----
+0
+
+query I
+SELECT max(salary) FROM t_agg
+----
+0
+
+query TR
+SELECT department, sum(salary) FROM t_agg GROUP BY department ORDER BY department
+----
+Eng    0
+Sales  0
+
+query I
+SELECT count(DISTINCT salary) FROM t_agg
+----
+1
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_agg
+
+statement ok
+REVOKE viewer_agg FROM testuser
+
+statement ok
+DROP ROLE viewer_agg
+
+subtest end
+
+# ==============================================================================
+# Subtest: window functions over masked columns
+# ==============================================================================
+subtest window_function_masking
+
+statement ok
+CREATE TABLE t_win (
+  id INT PRIMARY KEY,
+  salary INT,
+  department STRING
+)
+
+statement ok
+INSERT INTO t_win VALUES
+  (1, 100000, 'Eng'),
+  (2, 120000, 'Eng'),
+  (3, 80000, 'Sales')
+
+statement ok
+ALTER TABLE t_win ALTER COLUMN salary SET MASKING FUNCTION 0
+
+statement ok
+CREATE ROLE viewer_win
+
+statement ok
+GRANT SELECT ON t_win TO viewer_win
+
+statement ok
+GRANT viewer_win TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_win
+
+query ITR
+SELECT id, department, sum(salary) OVER (PARTITION BY department) FROM t_win ORDER BY id
+----
+1  Eng    0
+2  Eng    0
+3  Sales  0
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_win
+
+statement ok
+REVOKE viewer_win FROM testuser
+
+statement ok
+DROP ROLE viewer_win
+
+subtest end
+
+# ==============================================================================
+# Subtest: UNION queries with masking
+# ==============================================================================
+subtest union_masking
+
+statement ok
+CREATE TABLE t_union1 (
+  id INT PRIMARY KEY,
+  val STRING
+)
+
+statement ok
+CREATE TABLE t_union2 (
+  id INT PRIMARY KEY,
+  val STRING
+)
+
+statement ok
+INSERT INTO t_union1 VALUES (1, 'secret1')
+
+statement ok
+INSERT INTO t_union2 VALUES (2, 'secret2')
+
+# Only mask one table.
+statement ok
+ALTER TABLE t_union1 ALTER COLUMN val SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_union
+
+statement ok
+GRANT SELECT ON t_union1 TO viewer_union
+
+statement ok
+GRANT SELECT ON t_union2 TO viewer_union
+
+statement ok
+GRANT viewer_union TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_union
+
+query IT rowsort
+SELECT * FROM t_union1 UNION ALL SELECT * FROM t_union2
+----
+1  ***
+2  secret2
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_union1
+
+statement ok
+DROP TABLE t_union2
+
+statement ok
+REVOKE viewer_union FROM testuser
+
+statement ok
+DROP ROLE viewer_union
+
+subtest end
+
+# ==============================================================================
+# Subtest: views on masked tables
+# Views execute with definer (owner) privileges. A view created by root
+# (admin) will bypass masking because root is exempt. This test verifies
+# that behavior.
+# ==============================================================================
+subtest view_masking
+
+statement ok
+CREATE TABLE t_view_base (
+  id INT PRIMARY KEY,
+  email STRING,
+  public_col STRING
+)
+
+statement ok
+INSERT INTO t_view_base VALUES (1, 'user@secret.com', 'hello')
+
+statement ok
+ALTER TABLE t_view_base ALTER COLUMN email SET MASKING FUNCTION 'REDACTED'
+
+# A view created by root uses root's privileges — masking is bypassed.
+statement ok
+CREATE VIEW v_admin_view AS SELECT id, email, public_col FROM t_view_base
+
+statement ok
+CREATE ROLE viewer_view
+
+statement ok
+GRANT SELECT ON v_admin_view TO viewer_view
+
+statement ok
+GRANT viewer_view TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_view
+
+# View owned by admin shows raw data (admin exemption applies to definer).
+query ITT
+SELECT * FROM v_admin_view
+----
+1  user@secret.com  hello
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP VIEW v_admin_view
+
+# Direct query by unprivileged user should still be masked.
+statement ok
+GRANT SELECT ON t_view_base TO viewer_view
+
+user testuser
+
+statement ok
+SET ROLE viewer_view
+
+query ITT
+SELECT * FROM t_view_base
+----
+1  REDACTED  hello
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_view_base
+
+statement ok
+REVOKE viewer_view FROM testuser
+
+statement ok
+DROP ROLE viewer_view
+
+subtest end
+
+# ==============================================================================
+# Subtest: table owner exemption
+# ==============================================================================
+subtest table_owner_exemption
+
+statement ok
+CREATE ROLE owner_role
+
+statement ok
+GRANT owner_role TO testuser
+
+statement ok
+CREATE TABLE t_owner (
+  id INT PRIMARY KEY,
+  secret STRING
+)
+
+statement ok
+INSERT INTO t_owner VALUES (1, 'owner_secret')
+
+statement ok
+ALTER TABLE t_owner ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+# Transfer ownership to the role.
+statement ok
+ALTER TABLE t_owner OWNER TO owner_role
+
+user testuser
+
+statement ok
+SET ROLE owner_role
+
+# Table owner should see raw data despite masking policy.
+query IT
+SELECT * FROM t_owner
+----
+1  owner_secret
+
+statement ok
+RESET ROLE
+
+user root
+
+# Transfer ownership away from owner_role back to root.
+# Grant explicit SELECT so the role can still query after losing ownership.
+statement ok
+GRANT SELECT ON t_owner TO owner_role
+
+statement ok
+ALTER TABLE t_owner OWNER TO root
+
+# Now owner_role is no longer the owner — should see masked data.
+user testuser
+
+statement ok
+SET ROLE owner_role
+
+query IT
+SELECT * FROM t_owner
+----
+1  ***
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_owner
+
+statement ok
+REVOKE owner_role FROM testuser
+
+statement ok
+DROP ROLE owner_role
+
+subtest end
+
+# ==============================================================================
+# Subtest: replace masking expression
+# ==============================================================================
+subtest replace_masking
+
+statement ok
+CREATE TABLE t_replace (
+  id INT PRIMARY KEY,
+  val STRING
+)
+
+statement ok
+INSERT INTO t_replace VALUES (1, 'original')
+
+statement ok
+ALTER TABLE t_replace ALTER COLUMN val SET MASKING FUNCTION 'mask_v1'
+
+statement ok
+CREATE ROLE viewer_replace
+
+statement ok
+GRANT SELECT ON t_replace TO viewer_replace
+
+statement ok
+GRANT viewer_replace TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_replace
+
+query IT
+SELECT * FROM t_replace
+----
+1  mask_v1
+
+statement ok
+RESET ROLE
+
+user root
+
+# Replace the masking expression with a different one.
+statement ok
+ALTER TABLE t_replace ALTER COLUMN val SET MASKING FUNCTION 'mask_v2'
+
+user testuser
+
+statement ok
+SET ROLE viewer_replace
+
+query IT
+SELECT * FROM t_replace
+----
+1  mask_v2
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_replace
+
+statement ok
+REVOKE viewer_replace FROM testuser
+
+statement ok
+DROP ROLE viewer_replace
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with ORDER BY, LIMIT, OFFSET
+# ==============================================================================
+subtest order_limit_offset
+
+statement ok
+CREATE TABLE t_order (
+  id INT PRIMARY KEY,
+  score INT
+)
+
+statement ok
+INSERT INTO t_order VALUES (1, 300), (2, 100), (3, 200)
+
+# Mask score to a constant — ORDER BY on masked column yields stable order.
+statement ok
+ALTER TABLE t_order ALTER COLUMN score SET MASKING FUNCTION 0
+
+statement ok
+CREATE ROLE viewer_order
+
+statement ok
+GRANT SELECT ON t_order TO viewer_order
+
+statement ok
+GRANT viewer_order TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_order
+
+query II
+SELECT * FROM t_order ORDER BY id LIMIT 2
+----
+1  0
+2  0
+
+query II
+SELECT * FROM t_order ORDER BY id LIMIT 2 OFFSET 1
+----
+2  0
+3  0
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_order
+
+statement ok
+REVOKE viewer_order FROM testuser
+
+statement ok
+DROP ROLE viewer_order
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with DISTINCT
+# ==============================================================================
+subtest distinct_masking
+
+statement ok
+CREATE TABLE t_distinct (
+  id INT PRIMARY KEY,
+  category STRING,
+  secret STRING
+)
+
+statement ok
+INSERT INTO t_distinct VALUES
+  (1, 'A', 'alpha'),
+  (2, 'B', 'beta'),
+  (3, 'A', 'gamma')
+
+statement ok
+ALTER TABLE t_distinct ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_distinct
+
+statement ok
+GRANT SELECT ON t_distinct TO viewer_distinct
+
+statement ok
+GRANT viewer_distinct TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_distinct
+
+# DISTINCT on masked column collapses all rows to one value.
+query T
+SELECT DISTINCT secret FROM t_distinct
+----
+***
+
+# DISTINCT on unmasked column still works normally.
+query T rowsort
+SELECT DISTINCT category FROM t_distinct
+----
+A
+B
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_distinct
+
+statement ok
+REVOKE viewer_distinct FROM testuser
+
+statement ok
+DROP ROLE viewer_distinct
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with self-join
+# ==============================================================================
+subtest self_join_masking
+
+statement ok
+CREATE TABLE t_self (
+  id INT PRIMARY KEY,
+  manager_id INT,
+  email STRING
+)
+
+statement ok
+INSERT INTO t_self VALUES
+  (1, NULL, 'boss@co.com'),
+  (2, 1, 'worker@co.com')
+
+statement ok
+ALTER TABLE t_self ALTER COLUMN email SET MASKING FUNCTION 'REDACTED'
+
+statement ok
+CREATE ROLE viewer_self
+
+statement ok
+GRANT SELECT ON t_self TO viewer_self
+
+statement ok
+GRANT viewer_self TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_self
+
+# Both sides of the self-join should be masked.
+query ITIT
+SELECT e.id, e.email, m.id, m.email
+FROM t_self e LEFT JOIN t_self m ON e.manager_id = m.id
+ORDER BY e.id
+----
+1  REDACTED  NULL  NULL
+2  REDACTED  1     REDACTED
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_self
+
+statement ok
+REVOKE viewer_self FROM testuser
+
+statement ok
+DROP ROLE viewer_self
+
+subtest end
+
+# ==============================================================================
+# Subtest: DROP column with masking policy
+# ==============================================================================
+subtest drop_masked_column
+
+statement ok
+CREATE TABLE t_dropcol (
+  id INT PRIMARY KEY,
+  secret STRING,
+  other STRING
+)
+
+statement ok
+ALTER TABLE t_dropcol ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+# Dropping a masked column should succeed.
+statement ok
+ALTER TABLE t_dropcol DROP COLUMN secret
+
+# Verify the masking policy is gone from introspection.
+query I
+SELECT count(*) FROM crdb_internal.column_masking_policies
+  WHERE table_name = 't_dropcol' AND column_name = 'secret'
+----
+0
+
+statement ok
+DROP TABLE t_dropcol
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with multiple tables in a single query
+# ==============================================================================
+subtest multi_table_masking
+
+statement ok
+CREATE TABLE t_multi_a (
+  id INT PRIMARY KEY,
+  secret_a STRING
+)
+
+statement ok
+CREATE TABLE t_multi_b (
+  id INT PRIMARY KEY,
+  secret_b STRING
+)
+
+statement ok
+INSERT INTO t_multi_a VALUES (1, 'alpha_secret')
+
+statement ok
+INSERT INTO t_multi_b VALUES (1, 'beta_secret')
+
+statement ok
+ALTER TABLE t_multi_a ALTER COLUMN secret_a SET MASKING FUNCTION 'MASK_A'
+
+statement ok
+ALTER TABLE t_multi_b ALTER COLUMN secret_b SET MASKING FUNCTION 'MASK_B'
+
+statement ok
+CREATE ROLE viewer_multi
+
+statement ok
+GRANT SELECT ON t_multi_a TO viewer_multi
+
+statement ok
+GRANT SELECT ON t_multi_b TO viewer_multi
+
+statement ok
+GRANT viewer_multi TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_multi
+
+# Both tables should be independently masked.
+query ITIT
+SELECT a.id, a.secret_a, b.id, b.secret_b
+FROM t_multi_a a JOIN t_multi_b b ON a.id = b.id
+----
+1  MASK_A  1  MASK_B
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_multi_a
+
+statement ok
+DROP TABLE t_multi_b
+
+statement ok
+REVOKE viewer_multi FROM testuser
+
+statement ok
+DROP ROLE viewer_multi
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking expression referencing the column itself
+# ==============================================================================
+subtest self_referencing_mask
+
+statement ok
+CREATE TABLE t_selfref (
+  id INT PRIMARY KEY,
+  name STRING,
+  salary INT
+)
+
+statement ok
+INSERT INTO t_selfref VALUES (1, 'Alice', 150000), (2, 'Bob', 80000)
+
+# Masking expression that uses the column value to derive a masked result.
+statement ok
+ALTER TABLE t_selfref ALTER COLUMN name SET MASKING FUNCTION left(name, 1) || '***'
+
+statement ok
+ALTER TABLE t_selfref ALTER COLUMN salary SET MASKING FUNCTION salary * 0
+
+statement ok
+CREATE ROLE viewer_selfref
+
+statement ok
+GRANT SELECT ON t_selfref TO viewer_selfref
+
+statement ok
+GRANT viewer_selfref TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_selfref
+
+query ITI
+SELECT * FROM t_selfref ORDER BY id
+----
+1  A***  0
+2  B***  0
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_selfref
+
+statement ok
+REVOKE viewer_selfref FROM testuser
+
+statement ok
+DROP ROLE viewer_selfref
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with WHERE clause on masked column
+# ==============================================================================
+subtest where_on_masked_column
+
+statement ok
+CREATE TABLE t_where (
+  id INT PRIMARY KEY,
+  salary INT
+)
+
+statement ok
+INSERT INTO t_where VALUES (1, 100000), (2, 50000), (3, 200000)
+
+statement ok
+ALTER TABLE t_where ALTER COLUMN salary SET MASKING FUNCTION 0
+
+statement ok
+CREATE ROLE viewer_where
+
+statement ok
+GRANT SELECT ON t_where TO viewer_where
+
+statement ok
+GRANT viewer_where TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_where
+
+# WHERE on the masked column should filter on the MASKED value (0), not raw.
+query II
+SELECT * FROM t_where WHERE salary = 0 ORDER BY id
+----
+1  0
+2  0
+3  0
+
+# No rows match the raw value since all masked values are 0.
+query II
+SELECT * FROM t_where WHERE salary = 100000
+----
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_where
+
+statement ok
+REVOKE viewer_where FROM testuser
+
+statement ok
+DROP ROLE viewer_where
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with column aliases
+# ==============================================================================
+subtest column_alias
+
+statement ok
+CREATE TABLE t_alias (
+  id INT PRIMARY KEY,
+  email STRING
+)
+
+statement ok
+INSERT INTO t_alias VALUES (1, 'user@example.com')
+
+statement ok
+ALTER TABLE t_alias ALTER COLUMN email SET MASKING FUNCTION 'REDACTED'
+
+statement ok
+CREATE ROLE viewer_alias
+
+statement ok
+GRANT SELECT ON t_alias TO viewer_alias
+
+statement ok
+GRANT viewer_alias TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_alias
+
+# Column alias should still show masked data.
+query IT
+SELECT id, email AS contact FROM t_alias
+----
+1  REDACTED
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_alias
+
+statement ok
+REVOKE viewer_alias FROM testuser
+
+statement ok
+DROP ROLE viewer_alias
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with COALESCE and other scalar functions
+# ==============================================================================
+subtest masking_with_scalar_functions
+
+statement ok
+CREATE TABLE t_scalar (
+  id INT PRIMARY KEY,
+  email STRING
+)
+
+statement ok
+INSERT INTO t_scalar VALUES (1, 'user@example.com'), (2, NULL)
+
+statement ok
+ALTER TABLE t_scalar ALTER COLUMN email SET MASKING FUNCTION 'REDACTED'
+
+statement ok
+CREATE ROLE viewer_scalar
+
+statement ok
+GRANT SELECT ON t_scalar TO viewer_scalar
+
+statement ok
+GRANT viewer_scalar TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_scalar
+
+# COALESCE on a masked column should see the masked value.
+query IT
+SELECT id, COALESCE(email, 'no email') FROM t_scalar ORDER BY id
+----
+1  REDACTED
+2  REDACTED
+
+# length() on masked column operates on masked value.
+query II
+SELECT id, length(email) FROM t_scalar ORDER BY id
+----
+1  8
+2  8
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_scalar
+
+statement ok
+REVOKE viewer_scalar FROM testuser
+
+statement ok
+DROP ROLE viewer_scalar
+
+subtest end
+
+# ==============================================================================
+# Subtest: multiple columns masked with cross-column references
+# ==============================================================================
+subtest cross_column_reference
+
+statement ok
+CREATE TABLE t_cross (
+  id INT PRIMARY KEY,
+  first_name STRING,
+  last_name STRING
+)
+
+statement ok
+INSERT INTO t_cross VALUES (1, 'John', 'Doe'), (2, 'Jane', 'Smith')
+
+# Mask first_name using last_name and vice versa.
+statement ok
+ALTER TABLE t_cross ALTER COLUMN first_name SET MASKING FUNCTION left(first_name, 1) || '. ' || last_name
+
+statement ok
+ALTER TABLE t_cross ALTER COLUMN last_name SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_cross
+
+statement ok
+GRANT SELECT ON t_cross TO viewer_cross
+
+statement ok
+GRANT viewer_cross TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_cross
+
+# first_name mask references last_name — should use the RAW last_name value
+# since the masking expression is evaluated against the original scan output.
+query ITT
+SELECT * FROM t_cross ORDER BY id
+----
+1  J. Doe    ***
+2  J. Smith  ***
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_cross
+
+statement ok
+REVOKE viewer_cross FROM testuser
+
+statement ok
+DROP ROLE viewer_cross
+
+subtest end
+
+# ==============================================================================
+# Subtest: DROP MASKING FUNCTION on column without masking (no-op)
+# ==============================================================================
+subtest drop_nonexistent_masking
+
+statement ok
+CREATE TABLE t_noop (
+  id INT PRIMARY KEY,
+  val STRING
+)
+
+# Dropping masking from a column that has none should succeed silently.
+statement ok
+ALTER TABLE t_noop ALTER COLUMN val DROP MASKING FUNCTION
+
+statement ok
+DROP TABLE t_noop
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking on table with no rows
+# ==============================================================================
+subtest empty_table_masking
+
+statement ok
+CREATE TABLE t_empty (
+  id INT PRIMARY KEY,
+  secret STRING
+)
+
+statement ok
+ALTER TABLE t_empty ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_empty
+
+statement ok
+GRANT SELECT ON t_empty TO viewer_empty
+
+statement ok
+GRANT viewer_empty TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_empty
+
+query IT
+SELECT * FROM t_empty
+----
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_empty
+
+statement ok
+REVOKE viewer_empty FROM testuser
+
+statement ok
+DROP ROLE viewer_empty
+
+subtest end
+
+# ==============================================================================
+# Subtest: masking with EXISTS subquery
+# ==============================================================================
+subtest exists_subquery
+
+statement ok
+CREATE TABLE t_exists_main (
+  id INT PRIMARY KEY,
+  name STRING
+)
+
+statement ok
+CREATE TABLE t_exists_ref (
+  id INT PRIMARY KEY,
+  main_id INT,
+  secret STRING
+)
+
+statement ok
+INSERT INTO t_exists_main VALUES (1, 'Alice'), (2, 'Bob')
+
+statement ok
+INSERT INTO t_exists_ref VALUES (1, 1, 'ref_secret')
+
+statement ok
+ALTER TABLE t_exists_ref ALTER COLUMN secret SET MASKING FUNCTION '***'
+
+statement ok
+CREATE ROLE viewer_exists
+
+statement ok
+GRANT SELECT ON t_exists_main TO viewer_exists
+
+statement ok
+GRANT SELECT ON t_exists_ref TO viewer_exists
+
+statement ok
+GRANT viewer_exists TO testuser
+
+user testuser
+
+statement ok
+SET ROLE viewer_exists
+
+# EXISTS subquery references the masked table.
+query IT
+SELECT m.id, m.name FROM t_exists_main m
+WHERE EXISTS (SELECT 1 FROM t_exists_ref r WHERE r.main_id = m.id)
+----
+1  Alice
+
+# The masked table data itself should be masked.
+query IIT
+SELECT * FROM t_exists_ref
+----
+1  1  ***
+
+statement ok
+RESET ROLE
+
+user root
+
+statement ok
+DROP TABLE t_exists_ref
+
+statement ok
+DROP TABLE t_exists_main
+
+statement ok
+REVOKE viewer_exists FROM testuser
+
+statement ok
+DROP ROLE viewer_exists
+
+subtest end
