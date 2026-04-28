@@ -8,6 +8,7 @@ package isql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
@@ -68,14 +69,10 @@ type Session interface {
 	// Savepoint creates a savepoint within an existing transaction and executes
 	// the given function. If the function returns an error, the savepoint is
 	// rolled back. If the function succeeds, the savepoint is released.
-	// Savepoints must be used within a transaction.
 	//
-	// TODO(jeffswenson): we should have Savepoint return an error if it is called
-	// outside of a transaction or transparently open a transaction. Right now,
-	// using a savepoint outside of a transaction returns an error, but after the
-	// `do` function is executed. For some reason Postgres does not produce an
-	// error if you create a savepoint outside of a transaction, but it does not
-	// remember the savepoint and returns an error when you attempt to release it.
+	// Savepoint must be called within an active transaction (i.e. inside a Txn
+	// callback). It returns an error if the session is not currently in a
+	// transaction.
 	//
 	// Example:
 	// err := session.Txn(ctx, func(ctx context.Context) error {
@@ -87,6 +84,22 @@ type Session interface {
 	// 	return err
 	// }
 	Savepoint(ctx context.Context, do func(context.Context) error) error
+
+	// KVSavepoint provides direct access to the KV transaction owned by the
+	// session. The txn is exposed in the context of a savepoint. The savepoint
+	// is reverted if the handler returns an error and released if the handler
+	// returns nil.
+	//
+	// The txn should only be used for the duration of the handler call and must
+	// not be stored or used after the handler returns.
+	//
+	// Example:
+	//	err := session.Txn(ctx, func(ctx context.Context) error {
+	//		return session.KVSavepoint(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	//			return txn.Put(ctx, key, value)
+	//		})
+	//	})
+	KVSavepoint(ctx context.Context, do func(ctx context.Context, txn *kv.Txn) error) error
 
 	// ModifySession executes a function that mutates the session using the
 	// sessionmutator.SessionDataMutator argument.

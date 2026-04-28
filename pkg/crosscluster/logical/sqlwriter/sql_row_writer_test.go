@@ -75,7 +75,10 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test InsertRow
 	insertRow := makeTestRow(t, desc, 1, "test")
 	insertTimestamp := s.Clock().Now()
-	require.NoError(t, writer.InsertRow(ctx, insertTimestamp, insertRow))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, insertTimestamp, insertRow)
+	})
+	require.NoError(t, err)
 	require.Equal(t,
 		[][]string{{"1", "test", "NULL", hlcToString(insertTimestamp), "1"}},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
@@ -96,7 +99,10 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test DeleteRow - first insert a test row to verify origin data before delete
 	insertRow2 := makeTestRow(t, desc, 2, "to_delete")
 	insertTimestamp2 := s.Clock().Now()
-	require.NoError(t, writer.InsertRow(ctx, insertTimestamp2, insertRow2))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, insertTimestamp2, insertRow2)
+	})
+	require.NoError(t, err)
 
 	// Verify the row exists with correct data and origin metadata
 	require.Equal(t,
@@ -123,7 +129,10 @@ func TestSQLRowWriter(t *testing.T) {
 	// timestamp than the existing row should return a ConditionFailedError.
 	existingRow := makeTestRow(t, desc, 10, "existing")
 	newerTimestamp := s.Clock().Now()
-	require.NoError(t, writer.InsertRow(ctx, newerTimestamp, existingRow))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, newerTimestamp, existingRow)
+	})
+	require.NoError(t, err)
 	err = session.Txn(ctx, func(ctx context.Context) error {
 		return writer.InsertRow(ctx, newerTimestamp.Prev(), makeTestRow(t, desc, 10, "duplicate"))
 	})
