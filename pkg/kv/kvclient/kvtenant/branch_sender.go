@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // BranchSender wraps an inner kv.Sender (typically a DistSender) for a branch
@@ -74,6 +75,25 @@ func NewBranchSender(
 func (b *BranchSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	// Two write-side fixups for CoW semantics, applied to every batch (read or
+	// write) since either kind can carry an Increment or CPut on a key the
+	// branch has never written.
+	//
+	// Increment: MVCCIncrement starts from 0 if the key is missing, so the
+	// branch would allocate ID sequence values that collide with the parent's.
+	// We seed the branch with the parent's current value before the Increment
+	// is dispatched.
+	//
+	// CPut: a CPut whose expected bytes came from a parent-fallback read will
+	// fail against the branch (which has nil for that key). Setting
+	// AllowIfDoesNotExist=true makes the CPut succeed when the branch is empty
+	// — i.e. the branch's first write of a key it previously only saw via the
+	// parent.
+	if err := b.seedIncrements(ctx, ba); err != nil {
+		return nil, kvpb.NewError(err)
+	}
+	ba = rewriteCPutsForBranch(ba)
+
 	if !batchHasReads(ba) {
 		log.Dev.Infof(ctx, "[BRANCH] passthrough write batch (%d reqs)", len(ba.Requests))
 		return b.inner.Send(ctx, ba)
@@ -382,6 +402,101 @@ func encodeBatchResponse(rows []roachpb.KeyValue) [][]byte {
 	return [][]byte{buf}
 }
 
+// seedIncrements ensures every IncrementRequest in ba targets a key that
+// already has a value in the branch's keyspace. For each Increment whose key
+// is unwritten on the branch, it copies the parent's current value at
+// branch_ts into the branch. The Increment then proceeds normally and
+// produces the same value the parent would have, plus the requested delta.
+//
+// This is the CoW fix for sequence keys: descriptor IDs, role IDs, etc. live
+// at fixed sequence keys in the tenant keyspace, are mutated via Increment,
+// and need to start from the parent's current value rather than 0 on a fresh
+// branch.
+//
+// The seeding Get/Put are non-transactional: they're idempotent (repeated
+// seeding writes the same value) and must be visible to all subsequent
+// readers, not just the calling txn. A racing seeder writes the same value,
+// so concurrent CREATE TABLE statements on a branch converge.
+func (b *BranchSender) seedIncrements(ctx context.Context, ba *kvpb.BatchRequest) error {
+	for _, ru := range ba.Requests {
+		inc, ok := ru.GetInner().(*kvpb.IncrementRequest)
+		if !ok {
+			continue
+		}
+		if err := b.maybeSeedIncrement(ctx, inc.Key); err != nil {
+			return errors.Wrapf(err, "seeding increment key %s", inc.Key)
+		}
+	}
+	return nil
+}
+
+// maybeSeedIncrement seeds branchKey with the parent's current value at
+// branch_ts if the branch has no value there yet. A no-op if the branch
+// already has a value, or if the parent has none either (in which case
+// MVCCIncrement starting from zero is the correct behavior).
+func (b *BranchSender) maybeSeedIncrement(ctx context.Context, branchKey roachpb.Key) error {
+	branchKV, err := b.fallbackDB.Get(ctx, branchKey)
+	if err != nil {
+		return errors.Wrap(err, "reading branch key")
+	}
+	if branchKV.Value != nil && branchKV.Value.IsPresent() {
+		return nil
+	}
+
+	parentBa := newFallbackBatch(b.branchTS)
+	parentKey := rewriteKey(branchKey, b.branchCodec, b.parentCodec)
+	var u kvpb.RequestUnion
+	u.MustSetInner(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: parentKey}})
+	parentBa.Requests = append(parentBa.Requests, u)
+	parentBr, pErr := b.fallbackDB.NonTransactionalSender().Send(ctx, parentBa)
+	if pErr != nil {
+		return errors.Wrap(pErr.GoError(), "reading parent key")
+	}
+	parentResp := parentBr.Responses[0].GetInner().(*kvpb.GetResponse)
+	if parentResp.Value == nil || !parentResp.Value.IsPresent() {
+		return nil
+	}
+	parentInt, err := parentResp.Value.GetInt()
+	if err != nil {
+		return errors.Wrap(err, "decoding parent value as int")
+	}
+	log.Dev.Infof(ctx, "[BRANCH] seeding increment key %s with parent value %d", branchKey, parentInt)
+	if err := b.fallbackDB.Put(ctx, branchKey, parentInt); err != nil {
+		return errors.Wrap(err, "writing seed value")
+	}
+	return nil
+}
+
+// rewriteCPutsForBranch returns a batch in which every ConditionalPutRequest
+// with non-nil ExpBytes has AllowIfDoesNotExist set to true. On a branch the
+// expected bytes of any CPut came from a read that fell through to the
+// parent, so the branch keyspace is necessarily empty for that key on the
+// first write — exactly the case AllowIfDoesNotExist was designed for.
+//
+// Returns ba unchanged if there are no CPuts to rewrite.
+func rewriteCPutsForBranch(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
+	var modified *kvpb.BatchRequest
+	for i, ru := range ba.Requests {
+		cput, ok := ru.GetInner().(*kvpb.ConditionalPutRequest)
+		if !ok || len(cput.ExpBytes) == 0 || cput.AllowIfDoesNotExist {
+			continue
+		}
+		if modified == nil {
+			modified = ba.ShallowCopy()
+			modified.Requests = append([]kvpb.RequestUnion(nil), ba.Requests...)
+		}
+		clone := *cput
+		clone.AllowIfDoesNotExist = true
+		var out kvpb.RequestUnion
+		out.MustSetInner(&clone)
+		modified.Requests[i] = out
+	}
+	if modified == nil {
+		return ba
+	}
+	return modified
+}
+
 // rewriteKey strips fromCodec's tenant prefix from key and prepends
 // toCodec's. Returns nil if key is nil.
 func rewriteKey(key roachpb.Key, fromCodec, toCodec keys.SQLCodec) roachpb.Key {
@@ -401,4 +516,3 @@ func rewriteKey(key roachpb.Key, fromCodec, toCodec keys.SQLCodec) roachpb.Key {
 	out = append(out, suffix...)
 	return out
 }
-
