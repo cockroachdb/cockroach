@@ -5,7 +5,7 @@
 #     evaluating sN, etc.): emitted at most once per outerLogInterval(10min)
 #     as a heartbeat.
 #   - Per-store burst (detail inside each shedding store's processing):
-#     emitted at most once per detailedLogInterval(10min) while a store has
+#     emitted at most once per detailedLogInterval(30min) while a store has
 #     been continuously overloaded for >= persistentOverloadThreshold(30min).
 
 include path=rebalance_stores_cpu_replica_include.txt
@@ -117,7 +117,8 @@ change-id=2 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-# t=45m: 5min after the t=40m emissions, both throttles still active. Outer
+# t=45m: 5min after the t=40m emissions, both throttles still active
+# (5min < outerLogInterval 10min, 5min < detailedLogInterval 30min). Outer
 # loop and per-store burst silent.
 gc-pending-changes
 ----
@@ -143,8 +144,9 @@ change-id=4 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-# t=56m: 16min after t=40m, both 10-min throttles have expired. Outer loop
-# and per-store burst both fire again.
+# t=75m: 35min after t=40m, past the 30-min detailedLogInterval (and past
+# the 10-min outerLogInterval). Both throttles expired; outer loop and
+# per-store burst both fire again.
 gc-pending-changes
 ----
 pending(2)
@@ -155,9 +157,9 @@ change-id=4 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100ns/s, write-band
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
-tick seconds=660
+tick seconds=1800
 ----
-t=56m0s
+t=1h15m0s
 
 rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-threshold=1.0 vmodule=0
 ----
@@ -184,7 +186,7 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=5] considering replica-transfer r2 from s3: store load [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=5] candidates for r2:
 	s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))
-[mmaid=5] using level only consider targets <= load threshold (threshold:overloadSlow) for r2 based on overload duration 56m0s
+[mmaid=5] using level only consider targets <= load threshold (threshold:overloadSlow) for r2 based on overload duration 1h15m0s
 [mmaid=5] candidate store 4 was discarded due to (nls=false overloadDim=false pending_thresh=true): sls=(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))
 [mmaid=5] sortTargetCandidateSetAndPick: no candidates due to load
 [mmaid=5] result(failed): no suitable target found among candidates for r2 (threshold overloadSlow; only consider targets <= load threshold)
@@ -199,7 +201,7 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=5] considering replica-transfer r1 from s3: store load [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=5] candidates for r1:
 	s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))
-[mmaid=5] using level only consider targets <= load threshold (threshold:overloadSlow) for r1 based on overload duration 56m0s
+[mmaid=5] using level only consider targets <= load threshold (threshold:overloadSlow) for r1 based on overload duration 1h15m0s
 [mmaid=5] candidate store 4 was discarded due to (nls=false overloadDim=false pending_thresh=true): sls=(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))
 [mmaid=5] sortTargetCandidateSetAndPick: no candidates due to load
 [mmaid=5] result(failed): no suitable target found among candidates for r1 (threshold overloadSlow; only consider targets <= load threshold)
