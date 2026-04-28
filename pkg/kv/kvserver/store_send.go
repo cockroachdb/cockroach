@@ -25,17 +25,23 @@ import (
 // extends the kv.Sender.Send signature with an additional StoreWriteBytes
 // return value for admission control integration.
 type SenderWithWriteBytes interface {
+	// stats can be nil.
+	// TODO: rename to SendWithStats.
 	SendWithWriteBytes(
-		ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
-	) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error)
+		ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo, stats *SomethingStats,
+	) (*kvpb.BatchResponse, *kvpb.Error)
+}
+
+type SomethingStats struct {
+	ScanStats       kvpb.ScanStats
+	StoreWriteBytes kvadmission.StoreWriteBytes
 }
 
 // ToSenderForTesting wraps a SenderWithWriteBytes as a kv.Sender. It releases
 // the StoreWriteBytes after each call.
 func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
 	return kv.SenderFunc(func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		br, writeBytes, pErr := swb.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
-		writeBytes.Release()
+		br, pErr := swb.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{}, nil)
 		return br, pErr
 	})
 }
@@ -59,8 +65,11 @@ func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
-) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	admissionInfo kvadmission.AdmissionInfo,
+	stats *SomethingStats,
+) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
@@ -68,13 +77,14 @@ func (s *Store) SendWithWriteBytes(
 		arg := union.GetInner()
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, kvpb.IsRange(arg)); err != nil {
-			return nil, nil, kvpb.NewError(errors.Wrapf(err,
+			return nil, kvpb.NewError(errors.Wrapf(err,
 				"failed to verify keys for %s", arg.Method()))
 		}
 	}
 
+	// TODO: use stats.ScanStats to accurately deduct tokens after execution.
 	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
-		return nil, nil, kvpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	} else if res != nil {
 		defer res.Release()
 	}
@@ -82,13 +92,13 @@ func (s *Store) SendWithWriteBytes(
 	if ba.BoundedStaleness != nil {
 		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
 		if pErr != nil {
-			return nil, nil, pErr
+			return nil, pErr
 		}
 		ba = newBa
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
-		return nil, nil, kvpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
@@ -101,7 +111,7 @@ func (s *Store) SendWithWriteBytes(
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
 			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Now); err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 		}
 	}
@@ -172,7 +182,7 @@ func (s *Store) SendWithWriteBytes(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			return nil, nil, kvpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			// If we have an uninitialized copy of the range, then we are probably a
@@ -182,7 +192,7 @@ func (s *Store) SendWithWriteBytes(
 			// the client that it should move on and try the next replica. Very
 			// likely, the next replica the client tries will be initialized and will
 			// have useful leaseholder information for the client.
-			return nil, nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
+			return nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
 				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
@@ -194,7 +204,7 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
-		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo)
+		br, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo, stats)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
@@ -204,7 +214,7 @@ func (s *Store) SendWithWriteBytes(
 				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
 			}
 
-			return br, writeBytes, nil
+			return br, nil
 		}
 
 		// Augment error if necessary and return.
@@ -222,7 +232,7 @@ func (s *Store) SendWithWriteBytes(
 			// Range from this Store.
 			rSpan, err := keys.Range(ba.Requests)
 			if err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 
 			// The kvclient thought that a particular range id covers rSpans. It was
@@ -233,7 +243,7 @@ func (s *Store) SendWithWriteBytes(
 			// that the client requested, and all the ranges in between.
 			ri, err := t.MismatchedRange()
 			if err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
 			startKey := ri.Desc.StartKey
@@ -310,7 +320,7 @@ func (s *Store) SendWithWriteBytes(
 		// Unable to retry, exit the retry loop and return an error.
 		break
 	}
-	return nil, nil, pErr
+	return nil, pErr
 }
 
 // maybeThrottleBatch inspects the provided batch and determines whether
@@ -445,8 +455,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 
 	// Pass empty AdmissionInfo since this is an internal request that bypasses
 	// admission control.
-	br, writeBytes, pErr := s.SendWithWriteBytes(ctx, queryResBa, kvadmission.AdmissionInfo{})
-	writeBytes.Release()
+	br, pErr := s.SendWithWriteBytes(ctx, queryResBa, kvadmission.AdmissionInfo{}, nil)
 	if pErr != nil {
 		return ba, pErr
 	}

@@ -226,8 +226,7 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	}
 	// Pass empty AdmissionInfo since this is an internal probe request that
 	// bypasses admission control.
-	_, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
-	writeBytes.Release()
+	_, pErr := r.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{}, nil)
 	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)
 	}
