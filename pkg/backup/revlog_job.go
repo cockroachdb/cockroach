@@ -8,7 +8,6 @@ package backup
 import (
 	"bytes"
 	"context"
-	"math"
 	"strconv"
 	"time"
 
@@ -22,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -184,7 +181,7 @@ func runRevlogJob(
 
 	log.Dev.Infof(ctx, "starting revlog job %d at %s, dest=%s", jobID, details.EndTime, dest)
 
-	return revlogjob.Run(ctx, p, jobID, makeDescSpanResolver(p.ExecCfg().Codec, details),
+	return revlogjob.Run(ctx, p, jobID, makeRevlogScope(p.ExecCfg(), details),
 		details.EndTime, dest, defaultRevlogTickWidth, ptsTargetForRevlogJob(p.ExecCfg().Codec))
 }
 
@@ -204,25 +201,14 @@ func ptsTargetForRevlogJob(codec keys.SQLCodec) *ptpb.Target {
 	return ptpb.MakeTenantsTarget([]roachpb.TenantID{codec.TenantID})
 }
 
-// makeTenantSpanResolver returns a revlogjob.DescSpanResolver, which determines
-// if the revlogjob should watch new spans given the changed descroptor IDs.
-//
-// TODO(dt): currently this just returns the whole span of all possible tables;
-// this works as a placeholder for v0 since it should include this should be
-// updated to be the actual targets the backup is backing up, but should be
-// replaced with something that returns spansForAllTableIndexes based on what
-// the re-resolved targets.
-func makeDescSpanResolver(
-	codec keys.SQLCodec, details jobspb.BackupDetails,
-) revlogjob.DescSpanResolver {
-	return func(
-		ctx context.Context, asOf hlc.Timestamp, changedDescs []catid.DescID,
-	) ([]roachpb.Span, error) {
-		return []roachpb.Span{{
-			Key:    codec.TablePrefix(0),
-			EndKey: codec.TablePrefix(math.MaxUint32).PrefixEnd(),
-		}}, nil
-	}
+// makeRevlogScope builds the revlogjob.Scope the writer uses to
+// answer "what spans should I currently cover?" / "does this
+// descriptor change matter?" / "have all my roots gone away?".
+// The implementation closes over the parent BACKUP's
+// already-resolved targets so the log mirrors the chain it
+// serves; see revlogScope.
+func makeRevlogScope(execCfg *sql.ExecutorConfig, details jobspb.BackupDetails) revlogjob.Scope {
+	return newRevlogScope(execCfg, details)
 }
 
 // revlogJobMarkerExists returns true if the destination already has

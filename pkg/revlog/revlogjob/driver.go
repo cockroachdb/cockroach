@@ -34,6 +34,12 @@ type Driver struct {
 // NewDriver constructs a Driver against the given external storage
 // for a single producer covering the given spans. resume is the
 // per-producer resume slice (zero value = first run).
+//
+// Driver does not subscribe a descriptor rangefeed (it's the
+// in-process / test seam), so it disables the TickManager's
+// descriptor-frontier gating — the close loop fires purely off
+// the data frontier, matching how Driver-based tests have
+// always behaved.
 func NewDriver(
 	es cloud.ExternalStorage,
 	spans []roachpb.Span,
@@ -46,6 +52,7 @@ func NewDriver(
 	if err != nil {
 		return nil, err
 	}
+	manager.DisableDescFrontier()
 	producer, err := NewProducer(es, spans, startHLC, tickWidth, fileIDs, manager, resume)
 	if err != nil {
 		return nil, err

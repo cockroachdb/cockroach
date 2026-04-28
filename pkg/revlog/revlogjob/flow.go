@@ -12,6 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/revlog"
+	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -23,62 +26,42 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Run plans and executes the revlog DistSQL flow. The (current) span
-// set returned by resolveSpans is partitioned across SQL instances
-// via dsp.PartitionSpans (the same primitive backup uses), and one
-// producer processor is planned on each instance that received any
-// spans, watching only its assigned subset. Per-flush metadata
-// streams back to the gateway, where this function decodes each
-// entry and routes it to a TickManager that aggregates checkpoints
-// across the union of all producer subsets and writes manifests as
-// each tick's frontier crosses its end.
+// Run plans and executes the revlog DistSQL flow.
 //
-// resolveSpans is the seam for backup-side scope logic: Run calls it
-// once at startup (with changedDescIDs=nil) to learn the initial
-// span set, and a future descriptor-rangefeed-driven coordinator
-// will re-call it on each schema change. See SpanResolver.
+// One descriptor rangefeed runs across the full job lifetime,
+// driving schema-delta and coverage writes and signalling scope
+// transitions. Inside that, an outer loop runs one DistSQL flow
+// per scope-span generation: each iteration partitions the
+// current spans across SQL instances (one producer per instance),
+// runs to completion, and on a widening signal cancels and
+// re-plans with the new spans. The TickManager spans iterations,
+// so the resume protocol (per-tick flushorder bumped above the
+// prior incarnation's max) keeps per-key ordering intact across
+// restarts. ErrScopeTerminated from the descfeed ends the loop
+// successfully.
 //
 // ptsTarget describes the keyspace covered by the writer's
-// self-managed protected timestamp record (see pts.go). It is the
-// caller's responsibility to construct a target that matches the
-// resolveSpans coverage; revlogjob does not derive one because the
-// codec/tenant context lives outside this package.
-//
-// v1 simplifications:
-//
-//   - resolveSpans is invoked exactly once at startup; mid-job
-//     coverage changes are TODO.
-//   - startHLC, dest, and tickWidth come from the caller. A real
-//     backup-job resumer would derive these from BackupDetails
-//     (TODO).
-//   - On resume, each producer's RevlogSpec carries the persisted
-//     per-span frontier (sliced to its partition) and the
-//     per-tick starting flushorder (max(prior) + 1) so the new
-//     incarnation picks up where the old left off without
-//     duplicating per-tick file work or violating per-key
-//     ordering. The rangefeed itself starts at the lowest
-//     persisted span ts; redelivery between that point and any
-//     higher per-span ts is wasted work — see the open
-//     "one rangefeed per ts-group" TODO in processor.go.
+// self-managed protected timestamp record (see pts.go); it's the
+// caller's responsibility to construct one matching the scope.
 func Run(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
-	resolveSpans DescSpanResolver,
+	scope Scope,
 	startHLC hlc.Timestamp,
 	dest string,
 	tickWidth time.Duration,
 	ptsTarget *ptpb.Target,
 ) error {
-	if resolveSpans == nil {
-		return errors.AssertionFailedf("revlogjob.Run: resolveSpans must be non-nil")
+	if scope == nil {
+		return errors.AssertionFailedf("revlogjob.Run: scope must be non-nil")
 	}
-	spans, err := resolveSpans(ctx, startHLC, nil /* changedDescIDs */)
+	spans, err := scope.Spans(ctx, startHLC)
 	if err != nil {
 		return errors.Wrap(err, "resolving initial span set")
 	}
 	if len(spans) == 0 {
-		return errors.AssertionFailedf("revlogjob.Run: resolveSpans returned no spans")
+		return errors.AssertionFailedf("revlogjob.Run: scope.Spans returned no spans")
 	}
 
 	// The gateway-side TickManager writes manifests as the
@@ -97,6 +80,13 @@ func Run(
 	manager, err := NewTickManager(es, spans, startHLC, tickWidth)
 	if err != nil {
 		return err
+	}
+
+	// One coverage entry effective at startHLC so readers can
+	// resolve "what was watched at T?" for any T >= startHLC even
+	// before any descriptor change writes an incremental entry.
+	if err := writeInitialCoverage(ctx, es, scope, spans, startHLC); err != nil {
+		return errors.Wrap(err, "writing initial coverage manifest")
 	}
 
 	// Load the job record so the PTS manager (below) can persist
@@ -157,6 +147,104 @@ func Run(
 		<-checkpointDone
 	}()
 
+	// descfeed runs across the entire job lifetime; it spans the
+	// inner-flow restarts that scope widening triggers. termCh
+	// closes on clean termination; sigs.replan delivers the new
+	// span set on widening.
+	descCtx, cancelDescFeed := context.WithCancel(ctx)
+	defer cancelDescFeed()
+	sigs := newDescFeedSignals()
+	termCh := make(chan struct{})
+	// descErrCh signals an unexpected descfeed exit to the outer
+	// loop. Buffered so the descfeed goroutine never blocks on it
+	// even if the outer loop has already returned.
+	descErrCh := make(chan error, 1)
+	descDone := make(chan struct{})
+	go func() {
+		defer close(descDone)
+		err := runDescFeed(
+			descCtx, execCtx.ExecCfg().RangeFeedFactory, execCtx.ExecCfg().Codec,
+			scope, manager, es, startHLC, spans, sigs,
+		)
+		switch {
+		case err == nil, errors.Is(err, context.Canceled):
+		case errors.Is(err, ErrScopeTerminated):
+			log.Dev.Infof(ctx, "revlogjob: scope terminated, exiting cleanly")
+			close(termCh)
+		default:
+			// Surface to the outer loop so the job fails (and is
+			// retried by the jobs system) instead of silently
+			// hanging: descFrontier would stall, blocking all
+			// future tick closes.
+			log.Dev.Warningf(ctx, "revlogjob: descfeed exited with error: %v", err)
+			descErrCh <- err
+		}
+	}()
+	defer func() { <-descDone }()
+
+	// Outer flow loop. Each iteration plans and runs a DistSQL
+	// flow over the current span set. Termination ends the loop;
+	// a widening signal cancels the running flow, picks up the
+	// new spans, and re-plans. The TickManager and persister are
+	// shared across iterations so per-key ordering survives via
+	// the resume protocol (ResumeStateForPartition).
+	currentSpans := spans
+	for {
+		flowCtx, cancelFlow := context.WithCancel(ctx)
+		flowDone := make(chan error, 1)
+		go func() {
+			flowDone <- runOneFlow(
+				flowCtx, execCtx, jobID, manager, currentSpans, startHLC, dest, tickWidth,
+			)
+		}()
+
+		select {
+		case <-termCh:
+			cancelFlow()
+			<-flowDone
+			return nil
+		case err := <-descErrCh:
+			cancelFlow()
+			<-flowDone
+			return errors.Wrap(err, "descfeed failed")
+		case newSpans := <-sigs.replan:
+			cancelFlow()
+			<-flowDone
+			log.Dev.Infof(ctx, "revlogjob: replanning flow with %d spans (was %d)",
+				len(newSpans), len(currentSpans))
+			currentSpans = newSpans
+			// continue outer loop
+		case err := <-flowDone:
+			cancelFlow()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				return err
+			}
+			// flow exited cleanly without a termination or
+			// replan signal; treat as parent-ctx cancellation.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return nil
+		case <-ctx.Done():
+			cancelFlow()
+			<-flowDone
+			return ctx.Err()
+		}
+	}
+}
+
+// runOneFlow plans and runs one DistSQL flow over spans. Returns
+// when ctx is cancelled or the flow exits on its own.
+func runOneFlow(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	manager *TickManager,
+	spans []roachpb.Span,
+	startHLC hlc.Timestamp,
+	dest string,
+	tickWidth time.Duration,
+) error {
 	dsp := execCtx.DistSQLPlanner()
 	planCtx, _, err := dsp.SetupAllNodesPlanning(
 		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
@@ -165,25 +253,19 @@ func Run(
 		return err
 	}
 
-	// Partition the span set across SQL instances so each producer
-	// only opens a rangefeed over (and writes files for) its assigned
-	// subset. PartitionSpans returns one entry per instance that
-	// received any spans, so instances with no leaseholders for any
-	// of these spans get no producer.
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, spans, sql.PartitionSpansBoundDefault)
 	if err != nil {
 		return errors.Wrap(err, "partitioning spans across producers")
 	}
 	if len(partitions) == 0 {
 		return errors.AssertionFailedf(
-			"revlogjob.Run: span partitioning yielded no producers for %d spans", len(spans))
+			"revlogjob.runOneFlow: span partitioning yielded no producers for %d spans", len(spans))
 	}
 
-	// Snapshot the (possibly rehydrated) manager state once so each
-	// producer's per-partition resume slice is computed against the
-	// same picture: a producer joining a new partition should see
-	// the same StartingFlushOrders the others see, and the same
-	// per-span resumes for any overlap with its assigned spans.
+	// Snapshot the manager once so every producer in this iteration
+	// sees a consistent ResumeState — and so each iteration after a
+	// widening starts new producers' per-tick flushorder above any
+	// prior incarnation's contributions to the still-open tick.
 	resumeBase, err := manager.Snapshot()
 	if err != nil {
 		return errors.Wrap(err, "snapshotting manager for producer resume")
@@ -226,6 +308,25 @@ func Run(
 	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
 	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return res.Err()
+}
+
+// writeInitialCoverage writes one log/coverage/<startHLC> entry
+// describing the scope's resolved span set at job startup. On
+// resume the same-HLC entry is overwritten with the same content
+// (or rejected by WORM-strict storage; either way the persisted
+// state stays correct).
+func writeInitialCoverage(
+	ctx context.Context,
+	es cloud.ExternalStorage,
+	scope Scope,
+	spans []roachpb.Span,
+	startHLC hlc.Timestamp,
+) error {
+	return revlog.WriteCoverage(ctx, es, revlogpb.Coverage{
+		EffectiveFrom: startHLC,
+		Scope:         scope.String(),
+		Spans:         spans,
+	})
 }
 
 // handleProducerMetadata routes one ProducerMetadata into the
