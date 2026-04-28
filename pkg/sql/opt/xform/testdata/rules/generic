@@ -930,6 +930,161 @@ project
       │    └── (10,)
       └── filters (true)
 
+exec-ddl
+CREATE TABLE u (
+  k INT PRIMARY KEY,
+  i INT
+)
+----
+
+# Regression tests for #169297. GenerateParameterizedJoin should not recurse
+# into subqueries to replace placeholders with Values columns. Doing so would
+# introduce correlation into an otherwise uncorrelated subquery, which can
+# prevent the optimizer from planning a lookup join.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR EXISTS(SELECT 1 FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":16!null
+      ├── flags: disallow merge join
+      ├── key columns: [16] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (16)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,16), (1)==(16), (16)==(1)
+      ├── values
+      │    ├── columns: "$1":16
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(16)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(4), subquery]
+                ├── b:4
+                └── coalesce
+                     ├── subquery
+                     │    └── project
+                     │         ├── columns: column14:14!null
+                     │         ├── cardinality: [0 - 1]
+                     │         ├── has-placeholder
+                     │         ├── key: ()
+                     │         ├── fd: ()-->(14)
+                     │         ├── placeholder-scan u
+                     │         │    ├── columns: u.k:8!null
+                     │         │    ├── cardinality: [0 - 1]
+                     │         │    ├── has-placeholder
+                     │         │    ├── key: ()
+                     │         │    ├── fd: ()-->(8)
+                     │         │    └── span
+                     │         │         └── $1
+                     │         └── projections
+                     │              └── true [as=column14:14]
+                     └── false
+
+# Same as above, but with a scalar Subquery inside an OR.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR i > (SELECT u.i FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":13!null
+      ├── flags: disallow merge join
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (13)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,13), (1)==(13), (13)==(1)
+      ├── values
+      │    ├── columns: "$1":13
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(13)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(2,4), subquery]
+                ├── b:4
+                └── gt
+                     ├── t.i:2
+                     └── subquery
+                          └── project
+                               ├── columns: u.i:9
+                               ├── cardinality: [0 - 1]
+                               ├── has-placeholder
+                               ├── key: ()
+                               ├── fd: ()-->(9)
+                               └── placeholder-scan u
+                                    ├── columns: u.k:8!null u.i:9
+                                    ├── cardinality: [0 - 1]
+                                    ├── has-placeholder
+                                    ├── key: ()
+                                    ├── fd: ()-->(8,9)
+                                    └── span
+                                         └── $1
+
+# Same as above, but with an Any subquery inside an OR.
+opt expect=GenerateParameterizedJoin
+SELECT * FROM t WHERE k = $1 AND (b OR i = ANY(SELECT u.i FROM u WHERE u.k = $1))
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (lookup t)
+      ├── columns: t.k:1!null t.i:2 s:3 b:4 t:5 "$1":13!null
+      ├── flags: disallow merge join
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── parameterized columns: (13)
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,13), (1)==(13), (13)==(1)
+      ├── values
+      │    ├── columns: "$1":13
+      │    ├── cardinality: [1 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(13)
+      │    └── ($1,)
+      └── filters
+           └── or [outer=(2,4), correlated-subquery]
+                ├── b:4
+                └── any: eq
+                     ├── project
+                     │    ├── columns: u.i:9
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── has-placeholder
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(9)
+                     │    └── placeholder-scan u
+                     │         ├── columns: u.k:8!null u.i:9
+                     │         ├── cardinality: [0 - 1]
+                     │         ├── has-placeholder
+                     │         ├── key: ()
+                     │         ├── fd: ()-->(8,9)
+                     │         └── span
+                     │              └── $1
+                     └── t.i:2
+
 # The rule does not match if generic optimizations are disabled.
 opt set=(plan_cache_mode=force_custom_plan) expect-not=ConvertParameterizedLookupJoinToPlaceholderScan
 SELECT t.k FROM (VALUES ($1::INT)) AS v(k) JOIN t ON t.k = v.k
