@@ -169,13 +169,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		runnerLogPath:       runnerLogPath,
 	}
 
-	github := &githubIssues{
-		disable:     runner.config.disableIssue,
-		dryRun:      runner.config.dryRunIssuePosting,
-		issuePoster: issues.Post,
-		teamLoader:  team.DefaultLoadTeams,
-	}
-
 	runnerL.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
@@ -213,15 +206,24 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return err
 	}
 
-	var poster GithubPoster = github
+	// Wire up GitHub issue posting. If a DLQ bucket is configured, wrap the
+	// poster so failed posts (e.g. during a GitHub outage) are persisted to
+	// GCS for later replay. See pkg/cmd/roachtest/dlq.
+	var issuePoster dlq.PostFunc = issues.Post
 	if bucket := os.Getenv("GITHUB_DLQ_BUCKET"); bucket != "" {
-		w, err := dlq.NewGCSDLQWriter(ctx, bucket)
+		wrapped, err := dlq.WrapIssuePoster(ctx, runnerL, bucket, issuePoster)
 		if err != nil {
-			runnerL.Printf("warning: failed to initialize Github DLQ writer, Github DLQ disabled: %v", err)
+			runnerL.Printf("warning: GitHub DLQ writer init failed, DLQ disabled: %v", err)
 		} else {
-			poster = &dlqGithubIssues{inner: github, writer: w}
-			runnerL.Printf("Github DLQ enabled: bucket=%s", bucket)
+			issuePoster = wrapped
+			runnerL.Printf("GitHub DLQ enabled: bucket=%s", bucket)
 		}
+	}
+	github := &githubIssues{
+		disable:     runner.config.disableIssue,
+		dryRun:      runner.config.dryRunIssuePosting,
+		issuePoster: issuePoster,
+		teamLoader:  team.DefaultLoadTeams,
 	}
 
 	err = runner.Run(
@@ -233,7 +235,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
 		lopt,
-		poster)
+		github)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

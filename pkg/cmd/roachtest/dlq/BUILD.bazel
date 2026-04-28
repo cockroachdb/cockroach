@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "dlq",
@@ -11,9 +11,24 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/bazci/githubpost/issues",
-        "//pkg/roachprod/vm",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//iterator",
+    ],
+)
+
+go_test(
+    name = "dlq_test",
+    srcs = [
+        "dlq_test.go",
+        "replay_test.go",
+    ],
+    embed = [":dlq"],
+    deps = [
+        "//pkg/cmd/bazci/githubpost/issues",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
