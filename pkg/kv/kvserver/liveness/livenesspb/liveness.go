@@ -28,6 +28,9 @@ import (
 type NodeVitalityInterface interface {
 	GetNodeVitalityFromCache(roachpb.NodeID) NodeVitality
 	ScanNodeVitalityFromCache() NodeVitalityMap
+	// ScanAllNodeVitalityFromCache is like ScanNodeVitalityFromCache but
+	// includes decommissioned nodes.
+	ScanAllNodeVitalityFromCache() NodeVitalityMap
 	ScanNodeVitalityFromKV(context.Context) (NodeVitalityMap, error)
 }
 
