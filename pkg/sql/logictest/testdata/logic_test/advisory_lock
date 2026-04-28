@@ -111,6 +111,7 @@ COMMIT
 
 user testuser
 
+retry
 query B
 SELECT pg_try_advisory_xact_lock(4242424242)
 ----
@@ -340,6 +341,9 @@ COMMIT
 
 user testuser
 
+# Intent resolution is asynchronous, so after the commit it may be possible
+# that the lock is still held by the other session.
+retry
 query B
 SELECT pg_try_advisory_xact_lock(702345678)
 ----
@@ -377,6 +381,9 @@ COMMIT
 
 user testuser
 
+# Intent resolution is asynchronous, so after the commit it may be possible
+# that the lock is still held by the other session.
+retry
 query B
 SELECT pg_try_advisory_xact_lock_shared(703456789)
 ----
@@ -405,6 +412,7 @@ user testuser
 statement ok
 BEGIN
 
+retry
 query B
 SELECT pg_try_advisory_xact_lock(705678901)
 ----
