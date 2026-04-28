@@ -100,6 +100,8 @@ import {
   generateCanaryVsStableTimeseries,
   generatePlanDistributionTimeseries,
   generateCanaryVsStablePlanDistribution,
+  computeWeightedAvgLatencyByGist,
+  LATENCY_LEGEND_GRADIENT,
 } from "./timeseriesUtils";
 
 const { TabPane } = Tabs;
@@ -825,9 +827,15 @@ export function StatementDetails(
         statementStatisticsPerAggregatedTsAndPlanHash || [],
       );
 
-    const canaryPlanDistData = generateCanaryVsStablePlanDistribution(
-      statementStatisticsPerAggregatedTsAndPlanHash || [],
+    // Color-code the canary vs stable chart by per-gist latency.
+    const latencyByGist = computeWeightedAvgLatencyByGist(
+      statementStatisticsPerPlanHash || [],
     );
+    const { data: canaryPlanDistData, latencyRange: canaryLatencyRange } =
+      generateCanaryVsStablePlanDistribution(
+        statementStatisticsPerAggregatedTsAndPlanHash || [],
+        latencyByGist,
+      );
     const hasCanaryPlanData = canaryPlanDistData.length > 0;
 
     return (
@@ -885,19 +893,42 @@ export function StatementDetails(
           {hasCanaryPlanData && (
             <Row gutter={24}>
               <Col className="gutter-row" span={24}>
-                <GroupedBarChart
-                  data={canaryPlanDistData}
-                  yAxisUnits={AxisUnits.Count}
-                  title="Canary vs Stable Plan Distribution"
-                  tooltip={
-                    <>
-                      Shows plan distribution broken down by canary (newest) vs
-                      stable table statistics.
-                    </>
-                  }
-                  xScale={xScale}
-                  aggregationIntervalMillis={aggregationIntervalMillis}
-                />
+                <div className={cx("canary-chart-wrapper")}>
+                  <GroupedBarChart
+                    data={canaryPlanDistData}
+                    yAxisUnits={AxisUnits.Count}
+                    title="Canary vs Stable Plan Distribution"
+                    tooltip={
+                      <>
+                        Compares plan distribution between canary (newest table
+                        statistics) and stable (second-newest) executions. Left
+                        bars show canary execution counts, right bars show
+                        stable. Color intensity indicates average execution
+                        latency: darker purple = higher latency, lighter purple
+                        = lower latency.
+                      </>
+                    }
+                    xScale={xScale}
+                    aggregationIntervalMillis={aggregationIntervalMillis}
+                  />
+                  {canaryLatencyRange && (
+                    <div
+                      className={cx("latency-legend")}
+                      style={
+                        {
+                          "--latency-gradient": LATENCY_LEGEND_GRADIENT,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <span>{Duration(canaryLatencyRange.maxNanos)}</span>
+                      <div className={cx("latency-legend__bar")} />
+                      <span>{Duration(canaryLatencyRange.minNanos)}</span>
+                      <span className={cx("latency-legend__label")}>
+                        Avg Latency
+                      </span>
+                    </div>
+                  )}
+                </div>
               </Col>
             </Row>
           )}
