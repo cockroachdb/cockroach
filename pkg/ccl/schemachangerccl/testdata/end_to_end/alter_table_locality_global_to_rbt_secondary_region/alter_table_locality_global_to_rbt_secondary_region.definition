@@ -1,6 +1,3 @@
-skip issue-num=168350
-----
-
 setup
 CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
 CREATE TABLE multiregion_db.public.t (  

@@ -110,6 +110,7 @@ func (f SingleNodeTestClusterFactory) Run(
 // Start implements the TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) TestServer {
 	args := base.TestServerArgs{
+		ExternalIODir: t.TempDir(),
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,

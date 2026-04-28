@@ -44,8 +44,6 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 			backupArgs.server.Stopper(t)
 		}
 	}()
-	// Disable schema_locked in backup and restore tests, since the userfiles table
-	// cannot be created with schema_locked by default yet.
 	cumulativeTestForEachPostCommitStage(t, path, factory,
 		func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
 			result := backupSuccessPrepare(t, factory, spec)
@@ -67,8 +65,6 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
-	// Disable schema_locked in backup and restore tests, since the userfiles table
-	// cannot be created with schema_locked by default yet.
 	factory = factory.WithSchemaLockDisabled()
 	var rollbackArgs backupRollbacksTestArgs
 	defer func() {
@@ -104,8 +100,6 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 			backupArgs.server.Stopper(t)
 		}
 	}()
-	// Disable schema_locked in backup and restore tests, since the userfiles table
-	// cannot be created with schema_locked by default yet.
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
 		result := backupSuccessPrepare(t, factory, spec)
 		backupArgs = result.PrepData
@@ -295,7 +289,7 @@ func backupSuccessPrepare(
 				Ordinal: p.Stages[stageIdx].Ordinal,
 			}
 
-			url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d",
+			url := fmt.Sprintf("nodelocal://1/data_%s_%d",
 				key.Phase, key.Ordinal)
 			backupStmt := fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'",
 				dbName,
@@ -334,8 +328,6 @@ func backupSuccessPrepare(
 	db.SetMaxOpenConns(1)
 	dbForBackup.Store(db)
 	tdb := sqlutils.MakeSQLRunner(db)
-	// Setup the test cluster.
-	tdb.Exec(t, "CREATE DATABASE backups")
 	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
 
 	// Skip test if it requires system tenant operations and we're running under a secondary tenant.
@@ -343,7 +335,7 @@ func backupSuccessPrepare(
 
 	// Determine which database contains the schema change before enabling knobs.
 	// Some tests create a separate database (e.g. "db"), others use defaultdb.
-	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb', 'backups')")
+	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb')")
 	if len(rows) > 0 {
 		dbName = rows[0][0]
 	} else {
@@ -524,7 +516,7 @@ func backupRollbacksPrepare(
 				// is identical to pre-rollback state due to how rollback initialization works.
 				// Restoring this backup wouldn't test anything meaningful.
 				if p.InRollback && stageIdx > 0 {
-					url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d_%d",
+					url := fmt.Sprintf("nodelocal://1/data_%s_%d_%d",
 						activeKey.Phase, activeKey.Ordinal, stageIdx)
 					if _, ok := scenario.urlsSamples[url]; !ok {
 						scenario.urlsSamples[url] = struct{}{}
@@ -565,9 +557,6 @@ func backupRollbacksPrepare(
 	db.SetMaxOpenConns(1)
 	tdb := sqlutils.MakeSQLRunner(db)
 
-	// Create backups database for userfile before discovery.
-	tdb.Exec(t, "CREATE DATABASE backups")
-
 	// Phase 1: Discovery — run the schema change to completion to discover stages.
 	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
 
@@ -589,7 +578,7 @@ func backupRollbacksPrepare(
 
 	// Discover the database name and CREATE DATABASE statement.
 	// Some tests create a separate database (e.g. "db"), others use defaultdb.
-	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb', 'backups')")
+	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb')")
 	dbName := "defaultdb"
 	var createDatabaseStmt string
 	if len(rows) > 0 {
