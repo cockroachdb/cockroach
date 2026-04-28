@@ -161,8 +161,9 @@ func ensureTypeMetadataIsHydrated(
 		for i := 0; i < n; i++ {
 			exprStr := d.GetCheckConstraintExpr(i)
 			checks[i] = types.DomainCheckConstraint{
-				Name: d.GetCheckConstraintName(i),
-				Expr: exprStr,
+				Name:         d.GetCheckConstraintName(i),
+				Expr:         exprStr,
+				ConstraintID: d.GetCheckConstraintID(i),
 			}
 			// Pre-parse the CHECK expression so that eval-time validation can
 			// skip the parse step. Errors are intentionally ignored; the
@@ -172,10 +173,12 @@ func ensureTypeMetadataIsHydrated(
 			}
 		}
 		tm.DomainData = &types.DomainMetadata{
-			BaseType:         d.GetBaseType(),
-			NotNull:          d.IsNotNull(),
-			DefaultExpr:      d.GetDefaultExpr(),
-			CheckConstraints: checks,
+			BaseType:              d.GetBaseType(),
+			NotNull:               d.IsNotNull(),
+			NotNullConstraintName: d.GetNotNullConstraintName(),
+			NotNullConstraintID:   d.GetNotNullConstraintID(),
+			DefaultExpr:           d.GetDefaultExpr(),
+			CheckConstraints:      checks,
 		}
 	}
 }

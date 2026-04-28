@@ -349,6 +349,12 @@ type DomainMetadata struct {
 	BaseType *T
 	// NotNull is true if the domain has a NOT NULL constraint.
 	NotNull bool
+	// NotNullConstraintName is the name of the NOT NULL constraint.
+	// Empty if the domain has no NOT NULL constraint.
+	NotNullConstraintName string
+	// NotNullConstraintID uniquely identifies the NOT NULL constraint.
+	// Zero if the domain has no NOT NULL constraint.
+	NotNullConstraintID catid.ConstraintID
 	// DefaultExpr is the default expression for the domain, serialized as
 	// a string. Empty if no default is specified.
 	DefaultExpr string
@@ -362,6 +368,8 @@ type DomainCheckConstraint struct {
 	Name string
 	// Expr is the CHECK expression, serialized as a string.
 	Expr string
+	// ConstraintID uniquely identifies this constraint within the domain.
+	ConstraintID catid.ConstraintID
 	// ParsedExpr is the cached parsed expression tree from hydration.
 	// Typed as any to avoid an import cycle with tree. At runtime this
 	// holds a tree.Expr obtained via parserutils.ParseExpr. It may be nil
