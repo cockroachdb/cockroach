@@ -122,3 +122,32 @@ query II
 SELECT row_count, distinct_count FROM [SHOW STATISTICS FOR TABLE t141448] WHERE column_names = ARRAY['b'];
 ----
 3  1
+
+subtest table_stats_cache_settings
+
+# Verify the table statistics cache capacity setting.
+query I
+SHOW CLUSTER SETTING sql.stats.table_statistics_cache.capacity
+----
+256
+
+statement ok
+SET CLUSTER SETTING sql.stats.table_statistics_cache.capacity = 128
+
+query I
+SHOW CLUSTER SETTING sql.stats.table_statistics_cache.capacity
+----
+128
+
+statement ok
+RESET CLUSTER SETTING sql.stats.table_statistics_cache.capacity
+
+query I
+SHOW CLUSTER SETTING sql.stats.table_statistics_cache.capacity
+----
+256
+
+statement error cannot be set to a negative value
+SET CLUSTER SETTING sql.stats.table_statistics_cache.capacity = -1
+
+subtest end
