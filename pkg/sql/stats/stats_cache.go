@@ -12,12 +12,14 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -35,11 +37,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+)
+
+// TableStatsCacheSize controls the maximum number of table statistics entries
+// in the cache.
+var TableStatsCacheSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.table_statistics_cache.capacity",
+	"the maximum number of table statistics entries stored in the LRU cache. "+
+		"Each cache entry corresponds to a single table.",
+	256,
+	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 // A TableStatistic object holds a statistic for a particular column or group
@@ -60,6 +75,8 @@ type TableStatisticsCache struct {
 	mu struct {
 		syncutil.Mutex
 		cache *cache.UnorderedCache
+		// acc tracks the memory usage of cache entries under the monitor.
+		acc mon.BoundAccount
 		// Used for testing; keeps track of how many times we actually read stats
 		// from the system table.
 		numInternalQueries int64
@@ -67,6 +84,7 @@ type TableStatisticsCache struct {
 	db       descs.DB
 	settings *cluster.Settings
 	stopper  *stop.Stopper
+	mon      *mon.BytesMonitor
 
 	// tableStatisticsLocksTableID is the table ID of
 	// system.table_statistics_locks table, and it's populated right before the
@@ -119,21 +137,159 @@ type cacheEntry struct {
 
 	// err is populated if the internal query to retrieve stats hit an error.
 	err error
+
+	// estimatedMemUsage is the estimated memory footprint of this entry,
+	// computed when the entry is populated. Used to maintain the
+	// BoundAccount in the TableStatisticsCache.
+	estimatedMemUsage int64
 }
 
-// NewTableStatisticsCache creates a new TableStatisticsCache that can hold
-// statistics for <cacheSize> tables.
+// cacheEntryOverhead is the fixed overhead per cacheEntry struct.
+const cacheEntryOverhead = int64(unsafe.Sizeof(cacheEntry{}))
+
+// tableStatOverhead is the fixed overhead per TableStatistic struct.
+const tableStatOverhead = int64(unsafe.Sizeof(TableStatistic{}))
+
+// histogramBucketOverhead is the fixed overhead per HistogramBucket.
+const histogramBucketOverhead = int64(unsafe.Sizeof(cat.HistogramBucket{}))
+
+// estimateStatsSliceSize returns the estimated memory footprint of a slice of
+// TableStatistic pointers. We estimate the in-memory Go struct size rather
+// than using proto.Size(), which returns the wire-format size. Additionally,
+// the proto's HistogramData.Buckets are nil'd after decoding, and the decoded
+// histogram lives in the non-proto Histogram field.
+func estimateStatsSliceSize(stats []*TableStatistic) int64 {
+	// Slice header + pointer array.
+	size := int64(cap(stats)) * int64(unsafe.Sizeof((*TableStatistic)(nil)))
+	for _, s := range stats {
+		size += tableStatOverhead
+		size += int64(cap(s.ColumnIDs)) * int64(unsafe.Sizeof(descpb.ColumnID(0)))
+		size += int64(len(s.Name))
+		size += int64(len(s.PartialPredicate))
+		size += int64(cap(s.Histogram)) * histogramBucketOverhead
+		for i := range s.Histogram {
+			if s.Histogram[i].UpperBound != nil {
+				size += int64(s.Histogram[i].UpperBound.Size())
+			}
+		}
+	}
+	return size
+}
+
+// estimateSize returns the estimated memory footprint of the cache entry.
+func (e *cacheEntry) estimateSize() int64 {
+	size := cacheEntryOverhead
+	size += estimateStatsSliceSize(e.stats)
+	// userDefinedTypes map overhead.
+	size += int64(len(e.userDefinedTypes)) *
+		int64(unsafe.Sizeof(descpb.ColumnID(0))+unsafe.Sizeof((*types.T)(nil)))
+	return size
+}
+
+// shrinkEntryLocked decreases the bound account by the entry's estimated size.
+//
+// Requires: caller must hold sc.mu.
+func (sc *TableStatisticsCache) shrinkEntryLocked(e *cacheEntry) {
+	if sc.mon == nil {
+		return
+	}
+	sc.mu.acc.Shrink(context.Background(), e.estimatedMemUsage)
+	e.estimatedMemUsage = 0
+}
+
+// adjustEntryMemLocked re-estimates the entry's memory footprint and
+// reserves or releases the delta relative to its previous estimate. If
+// the new size is larger and cannot be reserved, LRU entries are evicted
+// until the cumulative freed memory exceeds the growth delta, ensuring a
+// net decrease even under concurrent memory pressure. If eviction is
+// insufficient, the entry is removed.
+//
+// Requires: caller must hold sc.mu.
+func (sc *TableStatisticsCache) adjustEntryMemLocked(
+	ctx context.Context, tableID descpb.ID, e *cacheEntry,
+) {
+	if sc.mon == nil {
+		return
+	}
+	// The entry may have been evicted from the cache (e.g. by Clear or LRU
+	// eviction) while the mutex was released for the DB fetch. If so, skip
+	// the adjustment to avoid accounting for an entry that is no longer
+	// tracked.
+	if v, ok := sc.mu.cache.StealthyGet(tableID); !ok || v.(*cacheEntry) != e {
+		return
+	}
+	newSize := e.estimateSize()
+	if err := sc.mu.acc.Resize(ctx, e.estimatedMemUsage, newSize); err != nil {
+		delta := newSize - e.estimatedMemUsage
+		var freed int64
+		for freed < delta && sc.mu.cache.Len() > 1 {
+			lru := sc.mu.cache.LRUEntry()
+			if lru.Value.(*cacheEntry) == e {
+				break
+			}
+			freed += lru.Value.(*cacheEntry).estimatedMemUsage
+			// DelEntry triggers OnEvictedEntry → shrinkEntryLocked.
+			sc.mu.cache.DelEntry(lru)
+		}
+		if freed >= delta {
+			if err = sc.mu.acc.Resize(ctx, e.estimatedMemUsage, newSize); err == nil {
+				e.estimatedMemUsage = newSize
+				return
+			}
+		}
+		log.Ops.Warningf(ctx,
+			"table statistics cache unable to account for entry for table %d (%d bytes): %v",
+			tableID, newSize, err,
+		)
+		// OnEvictedEntry will shrink by e.estimatedMemUsage (the old value).
+		sc.mu.cache.Del(tableID)
+		return
+	}
+	e.estimatedMemUsage = newSize
+}
+
+// NewTableStatisticsCache creates a new TableStatisticsCache. The maximum
+// number of entries is controlled by the
+// sql.stats.table_statistics_cache.capacity cluster setting. If parentMon
+// is non-nil, the cache's memory usage is tracked under it.
 func NewTableStatisticsCache(
-	cacheSize int, settings *cluster.Settings, db descs.DB, stopper *stop.Stopper,
+	ctx context.Context,
+	settings *cluster.Settings,
+	db descs.DB,
+	stopper *stop.Stopper,
+	parentMon *mon.BytesMonitor,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		db:       db,
 		settings: settings,
 		stopper:  stopper,
 	}
+
+	if parentMon != nil {
+		tableStatsCache.mon = mon.NewMonitorInheritWithLimit(
+			mon.MakeName("table-statistics-cache"),
+			0, /* limit */
+			parentMon,
+			true, /* longLiving */
+		)
+		tableStatsCache.mon.StartNoReserved(ctx, parentMon)
+		tableStatsCache.mu.acc = tableStatsCache.mon.MakeBoundAccount()
+		if stopper != nil {
+			stopper.AddCloser(stop.CloserFn(func() {
+				tableStatsCache.Stop()
+			}))
+		}
+	}
+
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
-		Policy:      cache.CacheLRU,
-		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(s int, key, value interface{}) bool {
+			return s > int(TableStatsCacheSize.Get(&settings.SV))
+		},
+		OnEvictedEntry: func(entry *cache.Entry) {
+			e := entry.Value.(*cacheEntry)
+			tableStatsCache.shrinkEntryLocked(e)
+		},
 	})
 	return tableStatsCache
 }
@@ -142,8 +298,25 @@ func NewTableStatisticsCache(
 func (sc *TableStatisticsCache) Clear() {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	// Clear triggers OnEvictedEntry for each entry, which calls
+	// shrinkEntryLocked to decrement the bound account. Empty afterwards
+	// to correct any accounting drift.
 	sc.mu.cache.Clear()
+	sc.mu.acc.Empty(context.Background())
 	defer sc.generation.Add(1)
+}
+
+// Stop stops the monitor associated with the cache, if any.
+func (sc *TableStatisticsCache) Stop() {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	// Clear the cache first so that OnEvictedEntry calls shrinkEntryLocked
+	// for each entry, properly releasing the bytes tracked by the account.
+	sc.mu.cache.Clear()
+	sc.mu.acc.Clear(context.Background())
+	if sc.mon != nil {
+		sc.mon.Stop(context.Background())
+	}
 }
 
 // GetGeneration returns the current generation, which will change if any
@@ -494,6 +667,8 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
 		sc.mu.cache.Del(tableID)
+	} else {
+		sc.adjustEntryMemLocked(ctx, tableID, e)
 	}
 
 	return stats, err
@@ -563,7 +738,11 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
+		// OnEvictedEntry will shrink by e.estimatedMemUsage.
 		sc.mu.cache.Del(tableID)
+	} else {
+		// Reserve or release the delta between old and new sizes.
+		sc.adjustEntryMemLocked(ctx, tableID, e)
 	}
 }
 
