@@ -54,7 +54,7 @@
     "highlight.js": "^10.6.0",
     "history": "4.10.1",
     "list.js": "^2.3.1",
-    "lodash": "^4.17.21",
+    "lodash": "^4.18.1",
     "long": "^4.0.0",
     "mini-create-react-context": "^0.3.2",
     "moment": "^2.19.3",
