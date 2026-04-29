@@ -310,6 +310,19 @@ func projectVertexToEdge(c DistanceCalculator, vertex Point, edge Edge) bool {
 	return false
 }
 
+// linePolygonInteriorCrosser is an optional interface a DistanceCalculator
+// may implement to short-circuit line-to-polygon distance when the line
+// passes through the polygon's interior. Required for 3D distance: a
+// line may cross a tilted polygon's plane at a point inside the polygon
+// (distance 0) without sharing a 2D-projected boundary edge, so the
+// generic onShapeEdgesToShapeEdges path cannot detect it. 2D
+// calculators do not need this: 2D edge crossing already finds such
+// intersections via NewEdgeCrosser. Implementations must update the
+// DistanceUpdater accordingly when they return true.
+type linePolygonInteriorCrosser interface {
+	LineCrossesPolygonInterior(line LineString, polygon Polygon) bool
+}
+
 // onLineStringToPolygon updates the distance between a polyline and a polygon.
 // Returns true if the calling function should early exit.
 func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
@@ -325,6 +338,18 @@ func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
 	//   check each point in the LineString.
 	// BoundingBoxIntersects: if the bounding box of the two shapes do not intersect,
 	//   then the distance is always from the LineString to the exterior ring.
+
+	// 3D-only: detect line edges that cross the polygon's plane at a
+	// point inside the polygon. This produces distance 0 even when no
+	// polygon boundary edge is touched.
+	if !c.DistanceUpdater().IsMaxDistance() {
+		if lpc, ok := c.(linePolygonInteriorCrosser); ok {
+			if lpc.LineCrossesPolygonInterior(a, b) {
+				return true
+			}
+		}
+	}
+
 	if c.DistanceUpdater().IsMaxDistance() ||
 		!c.BoundingBoxIntersects() ||
 		!c.PointIntersectsLinearRing(a.Vertex(0), b.LinearRing(0)) {
