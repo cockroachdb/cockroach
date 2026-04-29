@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "inmemstorage",
+    srcs = ["inmemstorage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/inmemstorage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/ioctx",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "inmemstorage_test",
+    srcs = ["inmemstorage_test.go"],
+    deps = [
+        ":inmemstorage",
+        "//pkg/cloud",
+        "//pkg/util/ioctx",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
