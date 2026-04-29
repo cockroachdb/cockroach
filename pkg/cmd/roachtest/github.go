@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -48,15 +49,31 @@ type githubIssues struct {
 // worker / test
 // separate from githubIssues because githubIssues is shared amongst all workers
 type githubIssueInfo struct {
-	cluster      *clusterImpl
+	cluster      testCluster
 	vmCreateOpts *vm.CreateOpts
 }
 
 // newGithubIssueInfo constructor for newGithubIssueInfo
-func newGithubIssueInfo(cluster *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
+func newGithubIssueInfo(cluster testCluster, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
+	if isNilTestCluster(cluster) {
+		cluster = nil
+	}
 	return &githubIssueInfo{
 		cluster:      cluster,
 		vmCreateOpts: vmCreateOpts,
+	}
+}
+
+func isNilTestCluster(cluster testCluster) bool {
+	if cluster == nil {
+		return true
+	}
+	v := reflect.ValueOf(cluster)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -302,7 +319,7 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	if issueInfo.cluster != nil {
-		issueClusterName = issueInfo.cluster.name
+		issueClusterName = issueInfo.cluster.Name()
 	}
 
 	issueMessage := messagePrefix + message

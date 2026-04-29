@@ -864,7 +864,7 @@ type workerStatus struct {
 		// The cluster that the worker is currently operating on. If the worker is
 		// currently running a test, the test is using this cluster. Nil if the
 		// worker does not currently have a cluster.
-		c *clusterImpl
+		c testCluster
 	}
 }
 
@@ -880,13 +880,13 @@ func (w *workerStatus) SetStatus(status string) {
 	w.mu.Unlock()
 }
 
-func (w *workerStatus) Cluster() *clusterImpl {
+func (w *workerStatus) Cluster() testCluster {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.c
 }
 
-func (w *workerStatus) SetCluster(c *clusterImpl) {
+func (w *workerStatus) SetCluster(c testCluster) {
 	w.mu.Lock()
 	w.mu.c = c
 	w.mu.Unlock()
