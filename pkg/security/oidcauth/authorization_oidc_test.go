@@ -317,7 +317,15 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusFound, resp.StatusCode)
 
-			stateCookie := resp.Cookies()[0]
+			// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+			var stateCookie *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == secretCookieName {
+					stateCookie = c
+					break
+				}
+			}
+			require.NotNil(t, stateCookie, "expected oidc_secret cookie")
 			loc, err := url.Parse(resp.Header.Get("Location"))
 			require.NoError(t, err)
 			state := loc.Query().Get("state")
@@ -546,7 +554,15 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 
 			resp, err := cl.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
 			require.NoError(t, err)
-			cookie := resp.Cookies()[0]
+			// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+			var cookie *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == secretCookieName {
+					cookie = c
+					break
+				}
+			}
+			require.NotNil(t, cookie, "expected oidc_secret cookie")
 			loc, _ := url.Parse(resp.Header.Get("Location"))
 			state := loc.Query().Get("state")
 
@@ -651,7 +667,15 @@ func TestOIDCAuthorization_RoleGrantAndRevoke(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusFound, resp.StatusCode)
 
-		stateCookie := resp.Cookies()[0]
+		// Find by name; in shared-process multi-tenant mode the tenant cookie precedes oidc_secret.
+		var stateCookie *http.Cookie
+		for _, c := range resp.Cookies() {
+			if c.Name == secretCookieName {
+				stateCookie = c
+				break
+			}
+		}
+		require.NotNil(t, stateCookie, "expected oidc_secret cookie")
 		loc, err := url.Parse(resp.Header.Get("Location"))
 		require.NoError(t, err)
 		state := loc.Query().Get("state")
