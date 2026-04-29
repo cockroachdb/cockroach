@@ -524,8 +524,10 @@ func (vihb *VectorIndexHelperBase) initBase(
 // that are replaced at write time.
 type VectorIndexHelper struct {
 	VectorIndexHelperBase
-	// vectorOrd is the ordinal of the vector column in the table.
-	vectorOrd int
+	// rowValsIdx is the index into the IndexBackfiller's rowVals slice
+	// (equivalently, into ib.cols) at which this vector column's value
+	// lives.
+	rowValsIdx int
 	// centroid is an all zeros centroid of the appropriate dimension for the
 	// vector column. It's used to encode the vector in the reader. The writer
 	// will re-encode the vector with the centroid for the partition selected.
@@ -549,13 +551,9 @@ func NewVectorIndexHelper(
 	sourceIndexID catid.IndexID,
 	vecIndexManager *vecindex.Manager,
 ) (*VectorIndexHelper, error) {
-	vectorCol, err := catalog.MustFindColumnByID(desc, idx.VectorColumnID())
-	if err != nil {
-		return nil, err
-	}
-
 	var sourceIndex catalog.Index
 	if sourceIndexID != 0 {
+		var err error
 		sourceIndex, err = catalog.MustFindIndexByID(desc, sourceIndexID)
 		if err != nil {
 			return nil, err
@@ -565,7 +563,6 @@ func NewVectorIndexHelper(
 	}
 
 	vih := &VectorIndexHelper{
-		vectorOrd:   vectorCol.Ordinal(),
 		centroid:    make(vector.T, idx.GetVecConfig().Dims),
 		indexPrefix: rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
 		evalCtx:     evalCtx,
@@ -1010,8 +1007,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // constructExprs is a helper to construct the index and column expressions
@@ -1199,8 +1195,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // Close releases the resources used by the IndexBackfiller. It can be called
@@ -1315,7 +1310,9 @@ func (ib *IndexBackfiller) initIndexes(
 	return nil
 }
 
-// init completes the initialization of an IndexBackfiller.
+// init completes the initialization of an IndexBackfiller. It must be
+// called after both initIndexes and initCols have run, since it resolves
+// each VectorIndexHelper's rowValsIdx from colIdxMap.
 //
 // The IndexBackfiller takes ownership of the monitor which must be non-nil.
 // It'll be closed when the backfiller is closed.
@@ -1324,7 +1321,7 @@ func (ib *IndexBackfiller) init(
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	mon *mon.BytesMonitor,
-) {
+) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
 	ib.colExprs = colExprs
@@ -1344,9 +1341,24 @@ func (ib *IndexBackfiller) init(
 		ib.types[i] = ib.cols[i].GetType()
 	}
 
+	// Resolve each vector helper's index into rowVals. The helpers are
+	// constructed during initIndexes, before colIdxMap exists; the lookup
+	// has to happen here.
+	for indexID, helper := range ib.VectorIndexes {
+		colID := helper.vectorIndex.VectorColumnID()
+		idx, ok := ib.colIdxMap.Get(colID)
+		if !ok {
+			return errors.AssertionFailedf(
+				"vector column %d for index %d not present in backfill column set",
+				colID, indexID)
+		}
+		helper.rowValsIdx = idx
+	}
+
 	// Create a bound account associated with the index backfiller monitor.
 	ib.mon = mon
 	ib.muBoundAccount.boundAccount = mon.MakeBoundAccount()
+	return nil
 }
 
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
@@ -1545,13 +1557,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				firstVectorIndex = false
 			}
 
-			if ib.rowVals[vectorIndexHelper.vectorOrd] == tree.DNull {
+			if ib.rowVals[vectorIndexHelper.rowValsIdx] == tree.DNull {
 				ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.DNull
 				ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.DNull
 				continue
 			}
 
-			vectorValue := tree.MustBeDPGVector(ib.rowVals[vectorIndexHelper.vectorOrd]).T
+			vectorValue := tree.MustBeDPGVector(ib.rowVals[vectorIndexHelper.rowValsIdx]).T
 			encodedVector, err := vector.Encode([]byte{}, vectorValue)
 			if err != nil {
 				return nil, nil, memUsedPerChunk, err
