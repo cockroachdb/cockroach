@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	// To ensure the streaming replication cluster setting is defined.
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -194,7 +194,6 @@ func TestClusterAPI(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
 			// Override server license check.
 			if enterpriseOn {
-				defer ccl.TestingEnableEnterprise()()
 			}
 
 			if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = $1`, reportingOn); err != nil {

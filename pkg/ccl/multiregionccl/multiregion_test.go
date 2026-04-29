@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -33,7 +33,6 @@ import (
 func TestMultiRegionNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingDisableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{},
@@ -57,7 +56,6 @@ func TestMultiRegionNoLicense(t *testing.T) {
 func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "times out under race")
 
@@ -80,8 +78,6 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-
-	defer ccl.TestingDisableEnterprise()()
 
 	// Test certain commands are still supported with enterprise disabled
 	t.Run("no new multi-region items", func(t *testing.T) {
@@ -126,7 +122,6 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 1 /* numServers */, base.TestingKnobs{},
@@ -153,8 +148,6 @@ func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
 	// Can unset global_reads with enterprise license enabled.
 	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = false`)
 	require.NoError(t, err)
-
-	defer ccl.TestingDisableEnterprise()()
 
 	// Can set global_reads with enterprise license disabled.
 	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
