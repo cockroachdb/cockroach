@@ -6,11 +6,13 @@
 package mmaprototype
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -127,11 +129,11 @@ var snapshotFieldDispositions = map[reflect.Type]map[string]fieldDisposition{
 	reflect.TypeOf(rangeState{}): {
 		"localRangeOwner":                    {ProtoField: "LocalRangeOwner"},
 		"replicas":                           {ProtoField: "Replicas"},
-		"conf":                               {OmitReason: "TODO(mma-snapshot): normalized span config not yet snapshotted"},
+		"conf":                               {ProtoField: "ConfID"},
 		"hasNormalizationError":              {ProtoField: "HasNormalizationError"},
 		"load":                               {ProtoField: "Load"},
 		"pendingChanges":                     {ProtoField: "PendingChangeIds"},
-		"constraints":                        {OmitReason: "TODO(mma-snapshot): analyzed constraints not yet snapshotted"},
+		"constraints":                        {OmitReason: "derivable cache (analyzeConstraints over conf + replicas)"},
 		"lastFailedChange":                   {ProtoField: "LastFailedChange"},
 		"diversityIncreaseLastFailedAttempt": {ProtoField: "DiversityIncreaseLastFailedAttempt"},
 	},
@@ -172,6 +174,18 @@ var snapshotFieldDispositions = map[reflect.Type]map[string]fieldDisposition{
 	reflect.TypeOf(replicaLoad{}): {
 		"RangeID": {ProtoField: "RangeID"},
 		"load":    {ProtoField: "Load"},
+	},
+	// normalizedSpanConfig is not snapshotted field-by-field: its content is
+	// un-interned into a roachpb.SpanConfig and stored in the deduplicated
+	// ClusterStateSnapshot.SpanConfigs table. Registered here so the
+	// reachability walk recognizes it as covered.
+	reflect.TypeOf(normalizedSpanConfig{}): {
+		"numVoters":        {OmitReason: "un-interned to roachpb.SpanConfig.NumVoters in ClusterStateSnapshot.SpanConfigs"},
+		"numReplicas":      {OmitReason: "un-interned to roachpb.SpanConfig.NumReplicas in ClusterStateSnapshot.SpanConfigs"},
+		"constraints":      {OmitReason: "un-interned to roachpb.SpanConfig.Constraints in ClusterStateSnapshot.SpanConfigs"},
+		"voterConstraints": {OmitReason: "un-interned to roachpb.SpanConfig.VoterConstraints in ClusterStateSnapshot.SpanConfigs"},
+		"leasePreferences": {OmitReason: "un-interned to roachpb.SpanConfig.LeasePreferences in ClusterStateSnapshot.SpanConfigs"},
+		"interner":         {OmitReason: "un-interner used at snapshot time; not state"},
 	},
 }
 
@@ -325,6 +339,83 @@ func TestSnapshotProtoRoundTrip(t *testing.T) {
 	require.NoError(t, protoutil.Unmarshal(buf, &got))
 	require.EqualValues(t, snap.MMAID, got.MMAID)
 	require.InDelta(t, snap.DiskUtilRefuseThreshold, got.DiskUtilRefuseThreshold, 1e-9)
+}
+
+// TestSnapshotSpanConfigDedup verifies that ranges with structurally
+// identical normalized span configs share a snapshot ConfID, while ranges
+// with different configs get different ids.
+func TestSnapshotSpanConfigDedup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cs := newClusterState(ts, newStringInterner())
+	cs.diskUtilRefuseThreshold = 0.9
+	cs.diskUtilShedThreshold = 0.9
+
+	// Three stores on three nodes. setStore creates the node entries too.
+	for i := 1; i <= 3; i++ {
+		sal := StoreAttributesAndLocality{
+			StoreID: roachpb.StoreID(i),
+			NodeID:  roachpb.NodeID(i),
+		}
+		cs.setStore(sal.withNodeTier())
+	}
+	for i := 1; i <= 3; i++ {
+		cs.processStoreLoadMsg(ctx, &StoreLoadMsg{
+			NodeID:   roachpb.NodeID(i),
+			StoreID:  roachpb.StoreID(i),
+			Load:     LoadVector{1, 0, 0},
+			Capacity: LoadVector{1000, 1000, 1000},
+		}, nil)
+	}
+
+	replicas := []StoreIDAndReplicaState{
+		{StoreID: 1, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   1,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: true},
+		}}},
+		{StoreID: 2, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   2,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+		{StoreID: 3, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   3,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+	}
+	rangeMsg := func(id roachpb.RangeID, conf roachpb.SpanConfig) RangeMsg {
+		return RangeMsg{
+			RangeID:                  id,
+			Replicas:                 replicas,
+			MaybeSpanConfIsPopulated: true,
+			MaybeSpanConf:            conf,
+		}
+	}
+	confA := roachpb.SpanConfig{NumReplicas: 3}
+	confB := roachpb.SpanConfig{NumReplicas: 5}
+	cs.processStoreLeaseholderMsg(ctx, &StoreLeaseholderMsg{
+		StoreID: 1,
+		Ranges: []RangeMsg{
+			rangeMsg(1, confA),
+			rangeMsg(2, confA), // structurally identical to range 1
+			rangeMsg(3, confB),
+		},
+	}, nil)
+
+	snap := cs.Snapshot()
+	require.Len(t, snap.SpanConfigs, 2,
+		"expected 2 distinct conf entries, got %d", len(snap.SpanConfigs))
+	r1 := snap.Ranges[1]
+	r2 := snap.Ranges[2]
+	r3 := snap.Ranges[3]
+	require.NotZero(t, r1.ConfID)
+	require.Equal(t, r1.ConfID, r2.ConfID,
+		"ranges with identical span configs should share a ConfID")
+	require.NotEqual(t, r1.ConfID, r3.ConfID,
+		"range with a different span config should have a different ConfID")
+	// The dedup table content must match what the ranges reference.
+	require.EqualValues(t, 3, snap.SpanConfigs[r1.ConfID].NumReplicas)
+	require.EqualValues(t, 5, snap.SpanConfigs[r3.ConfID].NumReplicas)
 }
 
 // TestSnapshotCoversAllFields enforces three invariants on every owned

@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Snapshot returns a structured proto representation of cs suitable for
@@ -35,6 +37,7 @@ func (cs *clusterState) Snapshot() *mmasnappb.ClusterStateSnapshot {
 		Ranges:                  make(map[int64]*mmasnappb.RangeSnapshot, len(cs.ranges)),
 		PendingChanges:          make(map[uint64]*mmasnappb.PendingReplicaChange, len(cs.pendingChanges)),
 	}
+	reg := newSpanConfigRegistry()
 	for id, n := range cs.nodes {
 		out.Nodes[int32(id)] = snapshotNode(n)
 	}
@@ -42,11 +45,12 @@ func (cs *clusterState) Snapshot() *mmasnappb.ClusterStateSnapshot {
 		out.Stores[int32(id)] = snapshotStore(s, cs)
 	}
 	for id, r := range cs.ranges {
-		out.Ranges[int64(id)] = snapshotRange(r)
+		out.Ranges[int64(id)] = snapshotRange(r, cs, reg)
 	}
 	for id, c := range cs.pendingChanges {
 		out.PendingChanges[uint64(id)] = snapshotPendingReplicaChange(c)
 	}
+	out.SpanConfigs = reg.byID
 	return out
 }
 
@@ -159,7 +163,9 @@ func snapshotTopKReplicas(t *topKReplicas) *mmasnappb.TopKReplicas {
 	return out
 }
 
-func snapshotRange(r *rangeState) *mmasnappb.RangeSnapshot {
+func snapshotRange(
+	r *rangeState, cs *clusterState, reg *spanConfigRegistry,
+) *mmasnappb.RangeSnapshot {
 	replicas := make([]mmasnappb.StoreIDAndReplicaState, len(r.replicas))
 	for i, sr := range r.replicas {
 		replicas[i] = mmasnappb.StoreIDAndReplicaState{
@@ -179,7 +185,41 @@ func snapshotRange(r *rangeState) *mmasnappb.RangeSnapshot {
 		PendingChangeIds:                   pendingIDs,
 		LastFailedChange:                   nullableTime(r.lastFailedChange),
 		DiversityIncreaseLastFailedAttempt: nullableTime(r.diversityIncreaseLastFailedAttempt),
+		ConfID:                             reg.intern(snapshotNormalizedSpanConfig(r.conf, cs.localityTierInterner.si)),
 	}
+}
+
+// snapshotNormalizedSpanConfig un-interns conf back into the
+// roachpb.SpanConfig view that MMA effectively sees. Only the fields
+// normalizedSpanConfig captures (NumVoters, NumReplicas, Constraints,
+// VoterConstraints, LeasePreferences) are populated; all other SpanConfig
+// fields remain at their zero value, faithful to MMA's input.
+//
+// Returns nil if conf is nil.
+func snapshotNormalizedSpanConfig(
+	conf *normalizedSpanConfig, interner *stringInterner,
+) *roachpb.SpanConfig {
+	if conf == nil {
+		return nil
+	}
+	out := &roachpb.SpanConfig{
+		NumVoters:   conf.numVoters,
+		NumReplicas: conf.numReplicas,
+	}
+	for _, c := range conf.constraints {
+		out.Constraints = append(out.Constraints, c.unintern(interner))
+	}
+	for _, c := range conf.voterConstraints {
+		out.VoterConstraints = append(out.VoterConstraints, c.unintern(interner))
+	}
+	for _, lp := range conf.leasePreferences {
+		var rp roachpb.LeasePreference
+		for _, c := range lp.constraints {
+			rp.Constraints = append(rp.Constraints, c.unintern(interner))
+		}
+		out.LeasePreferences = append(out.LeasePreferences, rp)
+	}
+	return out
 }
 
 func snapshotRangeLoad(rl RangeLoad) mmasnappb.RangeLoad {
@@ -210,6 +250,47 @@ func snapshotReplicaChange(rc ReplicaChange) mmasnappb.ReplicaChange {
 		Prev:               snapshotReplicaStateValue(rc.prev),
 		Next:               snapshotReplicaIDAndType(rc.next),
 	}
+}
+
+// spanConfigRegistry deduplicates roachpb.SpanConfig values across all the
+// ranges in a snapshot. Ranges with structurally identical normalized span
+// configs share an id, keeping the snapshot small even when thousands of
+// ranges share the same config.
+//
+// Lifetime is the single Snapshot call: the registry is built up while
+// walking ranges and then drained into ClusterStateSnapshot.SpanConfigs.
+type spanConfigRegistry struct {
+	byBytes map[string]uint32
+	byID    map[uint32]*roachpb.SpanConfig
+}
+
+func newSpanConfigRegistry() *spanConfigRegistry {
+	return &spanConfigRegistry{
+		byBytes: map[string]uint32{},
+		byID:    map[uint32]*roachpb.SpanConfig{},
+	}
+}
+
+// intern returns 0 if c is nil, else a 1-based id that is stable for the
+// lifetime of the registry. Identical (post-marshal) span configs share an
+// id.
+func (r *spanConfigRegistry) intern(c *roachpb.SpanConfig) uint32 {
+	if c == nil {
+		return 0
+	}
+	b, err := protoutil.Marshal(c)
+	if err != nil {
+		// Marshaling a roachpb.SpanConfig built from MMA's own state should
+		// never fail; treat as a programmer error.
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "marshal SpanConfig"))
+	}
+	if id, ok := r.byBytes[string(b)]; ok {
+		return id
+	}
+	id := uint32(len(r.byID)) + 1
+	r.byID[id] = c
+	r.byBytes[string(b)] = id
+	return id
 }
 
 // nullableTime returns nil if t is the zero time.Time, else &t. Used to

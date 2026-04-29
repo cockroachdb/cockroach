@@ -10,6 +10,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "roachpb/metadata.proto";
+import "roachpb/span_config.proto";
 
 // ClusterStateSnapshot is a structured dump of the in-memory cluster state
 // maintained by the multi-metric allocator (mmaprototype.clusterState). It is
@@ -48,6 +49,12 @@ message ClusterStateSnapshot {
   // references elsewhere in the snapshot use the same changeID as a
   // pointer into this map.
   map<uint64, PendingReplicaChange> pending_changes = 8;
+  // span_configs is the dedup table for normalized span configs referenced
+  // by RangeSnapshot.conf_id. Keys are snapshot-local uint32 ids assigned
+  // at snapshot time. Identical (post-normalization) span configs share an
+  // id; a node with 10k ranges and ~10 distinct configs has ~10 entries
+  // here.
+  map<uint32, roachpb.SpanConfig> span_configs = 9;
 }
 
 // NodeSnapshot mirrors mmaprototype.nodeState.
@@ -218,9 +225,8 @@ message ReplicaLoad {
   int64 load = 2;
 }
 
-// RangeSnapshot mirrors mmaprototype.rangeState. The span config and
-// analyzed-constraints state owned by the constraint subsystem are not yet
-// snapshotted; subsequent commits add them.
+// RangeSnapshot mirrors mmaprototype.rangeState. The analyzed-constraints
+// cache is omitted because it is recomputable from conf and replicas.
 message RangeSnapshot {
   // local_range_owner is the local store that last claimed leaseholdership of
   // this range in a StoreLeaseholderMsg. Used by GC.
@@ -245,6 +251,12 @@ message RangeSnapshot {
   // diversity-increasing change attempt failed. Unset if no such attempt has
   // failed.
   google.protobuf.Timestamp diversity_increase_last_failed_attempt = 7 [(gogoproto.stdtime) = true];
+  // conf_id references ClusterStateSnapshot.span_configs. Zero means the
+  // range had no span config attached (rangeState.conf was nil, typically
+  // because RangeMsg.MaybeSpanConfIsPopulated was false on the first
+  // message). The dedup table is populated such that any two ranges with
+  // structurally identical normalized span configs share a conf_id.
+  uint32 conf_id = 8 [(gogoproto.customname) = "ConfID"];
 }
 
 // StoreIDAndReplicaState mirrors mmaprototype.StoreIDAndReplicaState (a
