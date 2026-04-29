@@ -11,6 +11,7 @@ package kvserver
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,10 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -159,11 +162,19 @@ import (
 //	sorted by range ID. If sort-keys is set to true, ranges are sorted by their
 //	descriptor's start key instead.
 //
+// disable-state-flush
+// ----
+//
+//	Disables state engine flushes. After this command, mutate() commits only
+//	the log engine batch, simulating a crash before the state engine batch is
+//	applied. WAG nodes are still written to the log engine.
+//
 // restart
 // ----
 //
-//	Simulates the node restart. It causes all uninitialized replicas to be
-//	forgotten because we don't load them on server startup.
+//	Simulates a node restart. Runs WAG replay to recover any state that was
+//	lost due to a crash (see disable-state-flush), then reloads all replica
+//	state from storage.
 func TestReplicaLifecycleDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -171,6 +182,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 	// Disable some metamorphic values for deterministic output.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 	batcheval.DisableMetamorphicSplitScansRightForStatsFirst(t)
+
+	// Enable verbose logging across all files. logCapture in restart
+	// filters down to entries from the files listed in capturedFiles.
+	testutils.SetVModule(t, "*=2")
 
 	datadriven.Walk(t, "testdata/replica_lifecycle", func(t *testing.T, path string) {
 		tc := newTestCtx()
@@ -507,7 +522,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
 					}, b.WagWriter(), destroyInfo, rs.desc.NextReplicaID))
 				})
-				rs.replica = nil // clear the replica from the range state
+				// Reload from storage so the in-memory view reflects what's
+				// persisted (in crash mode, the destroy's state batch was
+				// dropped, so the replica is still alive in the state engine).
+				tc.updateReplicaStateFromStorage(ctx, t, rs, false /* justCreated */)
 				return output
 
 			case "append-raft-entries":
@@ -616,9 +634,12 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 				return sb.String()
 
-			case "restart":
-				tc.restart()
+			case "disable-state-flush":
+				tc.crashMode = true
 				return "ok"
+
+			case "restart":
+				return tc.restart(ctx, t)
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -636,16 +657,18 @@ type rangeState struct {
 	gcHint          roachpb.GCHint
 	abortspan       *abortspan.AbortSpan
 	lastGCTimestamp hlc.Timestamp
-	replica         *replicaInfo // replica on n1/s1.
+	replica         *replicaInfo      // replica on n1/s1.
+	tombstone       roachpb.ReplicaID // NextReplicaID from RangeTombstone
 }
 
 // replicaInfo contains the basic info about a replica, used for managing its
 // engine (both raft log and state machine) state.
 type replicaInfo struct {
 	roachpb.FullReplicaID
-	hs      raftpb.HardState
-	ts      kvserverpb.RaftTruncatedState
-	lastIdx kvpb.RaftIndex
+	hs           raftpb.HardState
+	ts           kvserverpb.RaftTruncatedState
+	lastIdx      kvpb.RaftIndex
+	appliedIndex kvpb.RaftIndex
 }
 
 // initialized returns true iff the replica is initialized.
@@ -685,6 +708,14 @@ type testCtx struct {
 	eng    kvstorage.Engines
 	wagSeq wag.Seq
 	bf     kvstorage.BatchFactory
+
+	// crashMode, when true, causes mutate() to commit only the log engine
+	// batch, simulating a crash before the state engine batch is applied.
+	// Enabled by disable-state-flush and cleared by restart.
+	//
+	// TODO(mira): replace the "drop the state batch" crash approximation with vfs.CrashClone
+	// of the state engine's FS, so the write path in mutate() is unchanged.
+	crashMode bool
 }
 
 // newTestCtx constructs and returns a new testCtx.
@@ -756,7 +787,13 @@ func (tc *testCtx) mutate(t *testing.T, write func(b *kvstorage.Batch[storage.Ba
 	raftOutput, err := print.DecodeWriteBatch(raftRepr)
 	require.NoError(t, err)
 
-	require.NoError(t, b.Commit(false /* sync */))
+	if tc.crashMode {
+		// In crash mode, commit only the log engine batch. The state engine
+		// batch is dropped, simulating a crash after writing the WAG node.
+		require.NoError(t, b.Raft().Commit(true /* sync */))
+	} else {
+		require.NoError(t, b.Commit(false /* sync */))
+	}
 
 	// TODO(arul): There may be double new lines in the output (see tryTxn in
 	// debug_print.go) that we need to strip out for the benefit of the
@@ -866,15 +903,22 @@ func (tc *testCtx) updateReplicaStateFromStorage(
 	require.NoError(t, err)
 	mark, err := sl.LoadReplicaMark(ctx, tc.eng.StateEngine())
 	require.NoError(t, err)
-	require.True(t, mark.Exists())
+	rs.tombstone = mark.NextReplicaID
+	if !mark.Exists() {
+		rs.replica = nil
+		return
+	}
+	as, err := sl.LoadRangeAppliedState(ctx, tc.eng.StateEngine())
+	require.NoError(t, err)
 	rs.replica = &replicaInfo{
 		FullReplicaID: roachpb.FullReplicaID{
 			RangeID:   rs.desc.RangeID,
 			ReplicaID: mark.ReplicaID,
 		},
-		hs:      hs,
-		ts:      ts,
-		lastIdx: ts.Index,
+		hs:           hs,
+		ts:           ts,
+		lastIdx:      ts.Index,
+		appliedIndex: as.RaftAppliedIndex,
 	}
 }
 
@@ -914,18 +958,61 @@ func (rs *rangeState) String() string {
 	if rs.replica != nil {
 		sb.WriteString(fmt.Sprintf("\n		replica (n1/s1): %s", rs.replica))
 	}
+	if rs.tombstone != 0 {
+		sb.WriteString(fmt.Sprintf("\n		tombstone: next_replica_id=%d", rs.tombstone))
+	}
 	if (rs.lease != roachpb.Lease{}) {
 		sb.WriteString(fmt.Sprintf("\n		lease: %s", rs.lease))
 	}
 	return sb.String()
 }
 
-// restart imitates the node restart. It causes all uninitialized replicas to be
-// forgotten because we don't load them on server startup.
-func (tc *testCtx) restart() {
+// restart imitates a node restart. WAG replay recovers any state engine
+// writes that were dropped under crash mode (see disable-state-flush). All
+// replica state is then reloaded from storage, and uninitialized replicas
+// are forgotten (they aren't loaded on real startup).
+func (tc *testCtx) restart(ctx context.Context, t *testing.T) string {
+	t.Helper()
+	// Re-init the WAG sequencer and replay any unapplied WAG nodes.
+	require.NoError(t, tc.wagSeq.Init(ctx, tc.eng.LogEngine()))
+	var capture logCapture
+	defer log.InterceptWith(ctx, &capture)()
+	require.NoError(t, kvstorage.ReplayWAG(
+		ctx,
+		kvstorage.RaftRO(tc.eng.LogEngine()),
+		kvstorage.StateRW(tc.eng.StateEngine()),
+		tc.newReplayBatch,
+	))
+	// Reload replica state from storage for all ranges, then forget
+	// uninitialized replicas (matching real startup behavior).
 	for _, rs := range tc.ranges {
+		tc.updateReplicaStateFromStorage(ctx, t, rs, false /* justCreated */)
 		if rs.replica != nil && !rs.replica.initialized() {
 			rs.replica = nil
+		}
+	}
+	tc.crashMode = false
+	return strings.Join(capture, "\n")
+}
+
+// capturedFiles lists files whose log entries are captured into the test
+// output by logCapture.
+var capturedFiles = []string{"wag_replay"}
+
+// logCapture is a log.Interceptor that collects log entries emitted by the
+// allowlisted files in capturedFiles.
+type logCapture []string
+
+// Intercept implements log.Interceptor.
+func (c *logCapture) Intercept(jsonBytes []byte) {
+	var e logpb.Entry
+	if err := json.Unmarshal(jsonBytes, &e); err != nil {
+		return
+	}
+	for _, f := range capturedFiles {
+		if strings.Contains(e.File, "/"+f+".go") {
+			*c = append(*c, e.Message)
+			return
 		}
 	}
 }
@@ -942,10 +1029,50 @@ func (r *replicaInfo) String() string {
 	}
 
 	sb.WriteString(hs)
+	sb.WriteString(fmt.Sprintf(" AppliedIndex=%d", r.appliedIndex))
 	sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
 	sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
 	return sb.String()
 }
+
+// newReplayBatch returns a ReplayBatch that advances the applied index for
+// each raft entry without decoding the entry payload. On Commit, it persists
+// the updated applied state to the state engine.
+func (tc *testCtx) newReplayBatch(
+	ctx context.Context, rangeID roachpb.RangeID, _ roachpb.RKey,
+) (kvstorage.ReplayBatch, error) {
+	sl := kvstorage.MakeStateLoader(rangeID)
+	as, err := sl.LoadRangeAppliedState(ctx, tc.eng.StateEngine())
+	if err != nil {
+		return nil, err
+	}
+	return &testReplayBatch{
+		sl:       sl,
+		stateEng: tc.eng.StateEngine(),
+		as:       as,
+	}, nil
+}
+
+type testReplayBatch struct {
+	sl       kvstorage.StateLoader
+	stateEng storage.Engine
+	as       *kvserverpb.RangeAppliedState
+}
+
+func (b *testReplayBatch) AppliedIndex() kvpb.RaftIndex {
+	return b.as.RaftAppliedIndex
+}
+
+func (b *testReplayBatch) ApplyEntry(_ context.Context, ent raftpb.Entry) (bool, error) {
+	b.as.RaftAppliedIndex = kvpb.RaftIndex(ent.Index)
+	return true, nil
+}
+
+func (b *testReplayBatch) Commit(ctx context.Context) error {
+	return b.sl.SetRangeAppliedState(ctx, b.stateEng, b.as)
+}
+
+func (b *testReplayBatch) Close() {}
 
 // writeLegacySplitTriggerKeys simulates the legacy split trigger behavior where
 // some unreplicated keys of the RHS were written to the evaluated batch (now
