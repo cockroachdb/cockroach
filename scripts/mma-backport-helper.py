@@ -110,7 +110,45 @@ IGNORED_PRS: dict[int, str] = {
     166924: "author-based: server: use liveness cache for high-frequency scan callers",
     167297: "author-based: intentresolver: expose intent budget constants as env vars",
     166760: "author-based: kvcoord: fix a potential persistent failure loop in `DistSender`",
-    167289: "author-based: kvserver: stop treating split/merge trigger errors as replica corruption"
+    167289: "author-based: kvserver: stop treating split/merge trigger errors as replica corruption",
+    # Admission/AC SQL CPU token workstream (separate from MMA).
+    166745: "admission: plumb SQL CPU time token admission through SQLCPUProvider",
+    166792: "admission: integrate SQL CPU admission with CTT WorkQueue",
+    168231: "admission: add local token reservation to SQLCPUHandle",
+    168298: "admission: introduce CPU time token AC mode setting",
+    168383: "admission: add maxCPU burst qualification for resource groups",
+    168438: "admission: rename from tenantID to groupID",
+    168439: "admission: add resource group routing and per-group burst refill",
+    168829: "admission: add modeStrategy interface with serverlessStrategy",
+    169195: "admission: add composite groupKey type",
+    # SQL/UI/docs/CI unrelated to MMA.
+    166529: "sql: add WITH ZONE option to SHOW RANGES",
+    167927: "sql: rename zone_config_conformant to zone_config_needs_split",
+    167463: "docs: remove unused metrics.html",
+    168260: "ui/cluster-ui: fix empty cluster settings page",
+    168261: "ui/db-console: add 'Changed only' filter to cluster settings page",
+    168121: "roachtest: add CLAUDE.md with basic usage instructions",
+    168452: "ci: fix lint_test panic in affected-targets unit test runs",
+    168444: "ci: opt T-kv into auto-investigate for test failures",
+    # Roachtest/test infra not MMA-specific.
+    167120: "timeutil: fix timer pool vs synctest incompatibility",
+    167989: "roachtest: increase HTTP timeout in follower-reads test",
+    168156: "kvserver: deflake TestTenantCtx",
+    168243: "roachtest: bump post-test assertion timeout to 20m",
+    168248: "roachtest: extract artifact collection to artifactsutil",
+    167920: "roachtest: add WaitForFullReplication helper",
+    168047: "kvserver: isolate subtests in TestReplicaLatchingOptimisticEvaluation",
+    167616: "kvserver: skip TestStoreRangeSplitAndMergeWithGlobalReads under duress",
+    # Other unrelated kvserver/storage.
+    167295: "kvserver: remove ReplicaCorruptionError (follows ignored #167289)",
+    165577: "storage: add MultiEngineCompactionScheduler",
+    167853: "kvserver: add rate limiting for low-priority bulk read operations like TTL",
+    # Touches non-mma kvserver/load/allocator code, not mma-specific.
+    167861: "kvserver: improve store.capacity allocations",
+    # Test deflake, not mma-relevant.
+    167655: "storeliveness: skip flaky multi-store tests under duress",
+    # Roachtest-only scoring change, no production impact.
+    167696: "roachtest/perturbation: simplify scoring to impact ratios",
 }
 
 # Regexes to extract PR numbers from merge commit subjects.
