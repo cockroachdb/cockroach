@@ -162,7 +162,7 @@ import "C"
 		"pkg/cli",
 		"pkg/cli/clisqlshell",
 		"pkg/server/status",
-		"pkg/ccl/gssapiccl",
+		"pkg/security/gssapiauth",
 		"pkg/geo/geoproj",
 	}
 

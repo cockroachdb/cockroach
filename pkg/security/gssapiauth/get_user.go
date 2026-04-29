@@ -7,7 +7,7 @@
 
 //go:build gss
 
-package gssapiccl
+package gssapiauth
 
 // This file contains the code that calls out to the GSSAPI library
 // to retrieve the current user.

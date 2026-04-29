@@ -401,7 +401,6 @@
 /pkg/bench/rttanalysis       @cockroachdb/sql-foundations
 /pkg/blobs/                  @cockroachdb/disaster-recovery
 /pkg/build/                  @cockroachdb/dev-inf
-/pkg/ccl/gssapiccl/          @cockroachdb/product-security
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 #!/pkg/ccl/serverccl/        @cockroachdb/unowned
@@ -575,6 +574,7 @@
 /pkg/security/x509.go        @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/distinguishedname/ @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/gssapiauth/    @cockroachdb/product-security
 /pkg/security/jwtauth/       @cockroachdb/cloud-identity @cockroachdb/product-security
 /pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/ldapauth/      @cockroachdb/security-engineering @cockroachdb/product-security
