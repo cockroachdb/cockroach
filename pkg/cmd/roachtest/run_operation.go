@@ -495,7 +495,7 @@ func (r *opsRunner) runOperation(
 
 	cSpec := spec.ClusterSpec{NodeCount: r.nodeCount}
 	c := &dynamicClusterImpl{
-		&clusterImpl{
+		&roachprodCluster{
 			name:       r.clusterName,
 			cloud:      roachtestflags.Cloud,
 			spec:       cSpec,
@@ -510,7 +510,7 @@ func (r *opsRunner) runOperation(
 	}
 
 	if r.workloadClusterName != "" {
-		op.workLoadCluster = &clusterImpl{
+		op.workLoadCluster = &roachprodCluster{
 			name: r.workloadClusterName,
 			spec: spec.ClusterSpec{NodeCount: r.workloadNodes},
 			l:    r.logger,

@@ -48,7 +48,7 @@ type operationImpl struct {
 		status string
 	}
 
-	workLoadCluster *clusterImpl
+	workLoadCluster *roachprodCluster
 }
 
 func (o *operationImpl) ClusterCockroach() string {

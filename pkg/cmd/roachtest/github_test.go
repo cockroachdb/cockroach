@@ -151,7 +151,7 @@ func TestCreatePostRequest(t *testing.T) {
 		}
 		ti.ReplaceL(nilLogger())
 
-		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
+		testClusterImpl := &roachprodCluster{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
 		vo := vm.DefaultCreateOpts()
 		vmOpts := &vo
 		teamLoadFn := validTeamsFn
