@@ -152,8 +152,9 @@ func registerDjango(r registry.Registry) {
 					# s390x doesn't have a prebuilt wheel for bcrypt, so we need
 					# to build it from source. This requires rust.
 					# Install rust and set the default toolchain to stable.
-					curl https://sh.rustup.rs -sSf | sh -s -- -y
+					bash -o pipefail -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'
 					source $HOME/.cargo/env
+					cargo --version
 
 					# s390x doesn't have a prebuilt wheel for pillow, so we need
 					# to build it from source. This requires libjpeg-dev.
