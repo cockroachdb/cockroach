@@ -63,7 +63,7 @@ func registerRustSqlx(r registry.Registry) {
 
 		// Use /tmp for local runs, /mnt/data1 for remote.
 		sqlxDir := "/mnt/data1/sqlx"
-		cargoPath := "/home/ubuntu/.cargo/bin/cargo"
+		cargoPath := "$HOME/.cargo/bin/cargo"
 		if c.IsLocal() {
 			sqlxDir = "/tmp/sqlx"
 			cargoPath = "cargo"
@@ -92,8 +92,8 @@ func registerRustSqlx(r registry.Registry) {
 		if !c.IsLocal() {
 			if err := repeatRunE(
 				ctx, t, c, node,
-				"install rust and cargo",
-				`curl https://sh.rustup.rs -sSf | sh -s -- -y`,
+				"install and verify rust and cargo",
+				`bash -o pipefail -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y && $HOME/.cargo/bin/cargo --version'`,
 			); err != nil {
 				t.Fatal(err)
 			}
