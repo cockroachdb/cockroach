@@ -8,9 +8,12 @@ package txnapply
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -19,6 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var leaseReleaseInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.lease_release_interval",
+	"how often applier goroutines release descriptor leases held by tombstone updaters",
+	5*time.Second,
+	settings.PositiveDuration,
 )
 
 // ReplicationError is returned by a writer goroutine when a source transaction
@@ -95,6 +106,7 @@ type Checkpoint struct{ Timestamp hlc.Timestamp }
 // timestamp order.
 type Applier struct {
 	id          ldrdecoder.ApplierID
+	settings    *cluster.Settings
 	depResolver DependencyResolverClient
 
 	mu struct {
@@ -147,6 +159,7 @@ type Applier struct {
 func NewApplier(
 	ctx context.Context,
 	id ldrdecoder.ApplierID,
+	settings *cluster.Settings,
 	writers []txnwriter.TransactionWriter,
 	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
@@ -170,6 +183,7 @@ func NewApplier(
 	}
 	a := &Applier{
 		id:                id,
+		settings:          settings,
 		depResolver:       depResolver,
 		txnWriters:        writers,
 		newCPUHandle:      newCPUHandle,
@@ -379,14 +393,20 @@ func (a *Applier) writer(
 	defer handle.Close()
 	ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
 	defer handle.RegisterGoroutine().Close(ctx)
+	ticker := time.NewTicker(leaseReleaseInterval.Get(&a.settings.SV))
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-ticker.C:
+			ticker.Reset(leaseReleaseInterval.Get(&a.settings.SV))
+			txnWriter.ReleaseLeases(ctx)
 		case transaction := <-ready:
-			// TODO(jeffswenson): build up a batch to apply by pulling from the ready
-			// channel.
-			results, err := txnWriter.ApplyBatch(ctx, []ldrdecoder.Transaction{transaction})
+			// TODO(jeffswenson): build up a batch to apply by pulling from the
+			// ready channel.
+			results, err := txnWriter.ApplyBatch(
+				ctx, []ldrdecoder.Transaction{transaction})
 			if err != nil {
 				return err
 			}

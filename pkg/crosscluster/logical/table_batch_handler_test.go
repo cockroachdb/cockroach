@@ -12,11 +12,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -244,4 +248,45 @@ func TestBatchHandlerDuplicateBatchEntries(t *testing.T) {
 	runner.CheckQueryResults(t, `SELECT id, value FROM test_table ORDER BY id`, [][]string{
 		{"2", "newer-update"},
 	})
+}
+
+func newTxnBatchHandler(
+	t *testing.T, s serverutils.ApplicationLayerInterface, tableName string,
+) (BatchHandler, catalog.TableDescriptor) {
+	ctx := context.Background()
+	desc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), tree.Name(tableName))
+
+	decoder, err := ldrdecoder.NewCoalescingDecoder(
+		ctx,
+		s.InternalDB().(descs.DB),
+		s.ClusterSettings(),
+		[]ldrdecoder.TableMapping{{
+			SourceDescriptor: desc,
+			DestID:           desc.GetID(),
+		}},
+	)
+	require.NoError(t, err)
+
+	writer, err := txnwriter.NewTransactionWriter(
+		ctx,
+		s.InternalDB().(isql.DB),
+		s.LeaseManager().(*lease.Manager),
+		s.Codec(),
+		s.ClusterSettings(),
+	)
+	require.NoError(t, err)
+
+	return &txnBatchHandler{
+		decoder:  decoder,
+		writer:   writer,
+		settings: s.ClusterSettings(),
+	}, desc
+}
+
+func TestBatchHandlerExhaustiveTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testBatchHandlerExhaustive(t, newTxnBatchHandler)
 }
