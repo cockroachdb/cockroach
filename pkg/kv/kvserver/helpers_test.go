@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -96,7 +97,7 @@ func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, err
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, now)
+		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, fs.UnknownReadCategory, now)
 		if err != nil {
 			return false
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -118,7 +119,7 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(ctx, readWriter, start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, readWriter, fs.ReplicationReadCategory, start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +22,7 @@ func EngineStats(t *testing.T, engine storage.Reader, nowNanos int64) *enginepb.
 	t.Helper()
 
 	stats, err := storage.ComputeStats(
-		context.Background(), engine, keys.LocalMax, keys.MaxKey, nowNanos)
+		context.Background(), engine, fs.UnknownReadCategory, keys.LocalMax, keys.MaxKey, nowNanos)
 	require.NoError(t, err)
 	return &stats
 }

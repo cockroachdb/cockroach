@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -6998,7 +6999,7 @@ func TestReplicaDestroy(t *testing.T) {
 		UnreplicatedByRangeID: true,
 	}
 	require.NoError(t, rditer.IterateReplicaKeySpans(
-		ctx, tc.repl.Desc(), engSnapshot, selOpts,
+		ctx, tc.repl.Desc(), engSnapshot, fs.ReplicationReadCategory, selOpts,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {

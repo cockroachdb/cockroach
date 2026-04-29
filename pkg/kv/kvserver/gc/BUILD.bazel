@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/sqlliveness/slbase",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",

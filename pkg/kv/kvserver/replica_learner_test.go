@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2235,7 +2236,7 @@ func getExpectedSnapshotSizeBytes(
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: false,
 	}
-	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
+	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.ReplicationReadCategory, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
 		var err error
 		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 			hasPoint, hasRange := iter.HasPointAndRange()
