@@ -62,7 +62,7 @@ store-id=4 node-id=4 status=ok accepting all reported=[cpu:100ns/s, write-bandwi
 # On the first rebalance-stores invocation the lease shedding grace
 # period is active, and we don't move replicas.
 
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)

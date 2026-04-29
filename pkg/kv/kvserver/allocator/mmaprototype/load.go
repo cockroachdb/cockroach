@@ -434,7 +434,7 @@ func (mm *meansMemo) clear() {
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
 	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
-	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
+	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad, mmaLogger) storeLoadSummary
 }
 
 // getMeans returns the means for an expression.
@@ -459,7 +459,7 @@ func (mm *meansMemo) getStoreLoadSummary(
 	if ok {
 		return summary
 	}
-	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad)
+	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
 }
@@ -736,6 +736,7 @@ func loadSummaryForDimension(
 	capacity LoadValue,
 	meanLoad LoadValue,
 	meanUtil float64,
+	ml mmaLogger,
 ) (summary loadSummary) {
 	summ := loadLow
 	reason := ""
@@ -782,7 +783,7 @@ func loadSummaryForDimension(
 	}
 
 	defer func() {
-		if !log.ExpensiveLogEnabled(ctx, 3) {
+		if !ml.V(ctx, 3) {
 			return
 		}
 
@@ -808,7 +809,7 @@ func loadSummaryForDimension(
 				redact.SafeFloat(meanUtil*100), capacity)
 		}
 		buf.SafeRune(']')
-		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
+		ml.logf(ctx, 3, "%s", buf.RedactableString())
 	}()
 
 	// Treat nearing full capacity as urgent regardless of relative position.

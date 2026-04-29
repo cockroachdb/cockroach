@@ -67,7 +67,7 @@ store-id=3 node-id=3 status=ok accepting all reported=[cpu:100ns/s, write-bandwi
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 store-id=4 node-id=4 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
 
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)
@@ -136,7 +136,7 @@ change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:-1ns/s, write-bandwi
   next=(replica-id=none type=VOTER_FULL)
 
 # Second rebalance pass to verify s4 is now overloadSlow in WB.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:100ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) (stores-capacity [cpu:2µs/s, write-bandwidth:unknown/s, byte-size:1.0 MB]) (nodes-cpu-load 100) (nodes-cpu-capacity 2000)
@@ -154,7 +154,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] load summary for dim=CPURate (n4): loadNormal, reason: load is within 5% of mean [load=101 meanLoad=100 fractionUsed=5.05% meanUtil=5.00% capacity=2000]
 [mmaid=2] evaluating s4: node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=2] overload-continued s4 ((store=overloadSlow worst=WriteBandwidth cpu=loadNormal writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.09,0.00(false))) - within grace period
-[mmaid=2] skipping overloaded store s4 (worst dim: WriteBandwidth): pending decrease 0.00 >= threshold 10.00 or pending increase 0.09 >= epsilon
+[mmaid=2] skipping overloaded store s4 (worst dim: WriteBandwidth): pending increase 0.09 >= epsilon; pending: r1+s4[cpu:1ns/s, write-bandwidth:880 kB/s, byte-size:0 B]
 [mmaid=2] sorted shedding stores: (s2: overloadSlow)
 [mmaid=2] start processing shedding store s2: cpu node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=2] top-K[WriteBandwidth] ranges for s2 with lease on local s1: r1:[cpu:1ns/s, write-bandwidth:800 kB/s, byte-size:0 B]

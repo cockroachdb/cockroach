@@ -7,7 +7,7 @@ ok
 # for a lack of options. Note that this is is far from what could happen in production,
 # since the first moved replica already pushes the pending fraction to above 1.0, and we'd
 # never set it that high outside of tests (this test specifies 10 just to side step the limit).
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0 vmodule=3
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
