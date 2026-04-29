@@ -518,6 +518,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
+	p.stmtResultBuffering = res
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
@@ -1455,6 +1456,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
+	p.stmtResultBuffering = res
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {

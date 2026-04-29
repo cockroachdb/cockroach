@@ -4092,6 +4092,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.statsCollector = ex.statsCollector
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
+	p.stmtResultBuffering = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.routineMetadataForwarder = nil

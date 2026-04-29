@@ -298,6 +298,13 @@ type planner struct {
 	// instead.
 	noticeSender noticeSender
 
+	// stmtResultBuffering exposes the current statement's result writer so a
+	// side-effecting builtin can flush its results immediately and prevent
+	// transparent connExecutor rewind across the side effect. Set in
+	// execStmtInOpenState after resetPlanner; nil between statements and for
+	// the internal executor.
+	stmtResultBuffering resultBufferingDisabler
+
 	queryCacheSession querycache.Session
 
 	// evalCatalogBuiltins is used as part of the eval.Context.
@@ -1350,6 +1357,13 @@ func (p *planner) advisoryXactLockImpl(
 			return false, nil
 		}
 		return false, err
+	}
+	// The acquire is a visible side effect; flush the statement's result so
+	// the connExecutor cannot transparently rewind past it on a subsequent
+	// serializable push (e.g. a deadlock break would otherwise be masked by
+	// auto-retry and the losing client would see no error).
+	if w := p.stmtResultBuffering; w != nil {
+		w.DisableBuffering()
 	}
 	return true, nil
 }
