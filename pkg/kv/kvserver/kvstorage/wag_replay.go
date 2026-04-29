@@ -16,6 +16,38 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// The following diagram illustrates the replica lifecycle for each replica
+// (with ID r) on a store. A WAG event can generally be replayed
+// safely if it brings the replica's applied state from one valid state to
+// another following the allowed transitions. The WAG application logic below
+// (canApply) asserts on these transitions (assertValidTransition).
+//
+// For each transition from one state to another, let i be the applied index of
+// the old state, and i' be the applied index of the new state. Some transitions
+// include a restriction on these indices.
+//
+//                                                                 EventApply
+//                                                                 EventSplit
+//                                                                 EventMerge
+//                                                                 (i' > i)
+//                                                                  ┌────────┐
+// ┌─────────────────┐             ┌──────────────┐ EventInit ┌─────▼──────┐ │
+// │ Nonexistent     │ EventCreate │ Uninitialized│ (i' > i)  │ Initialized│ │
+// │ !mark.Exists(r) ├────────────▶│ mark.Is(r)   ├──────────▶│ mark.Is(r) ├─┘
+// └─────────────────┘             │ i == 0       │           │ i >= 10    │
+//                                 └────┬─────────┘           └──┬─────────┘
+//                         EventDestroy │                        │ EventDestroy
+//                         (i' == 0)    │                        │ EventSubsume
+//                                      └───────────────┬────────┘ (i' >= i)
+//                                                      │
+//                                            ┌─────────▼─────────┐
+//                                            │ Destroyed         │
+//                                            │ mark.Destroyed(r) │
+//                                            └───────────────────┘
+//
+// TODO(mira): Clarify the snapshot transition. We may need a distinct event
+// type for it.
+
 // persistedRangeState describes the applied state of a range in the state
 // machine, as needed by the WAG replay decision logic.
 type persistedRangeState struct {
@@ -51,66 +83,97 @@ type raftCatchUpTarget struct {
 	index     kvpb.RaftIndex
 }
 
+func assert(cond bool, msg string, e wagpb.Event, s persistedRangeState) {
+	if !cond {
+		panic(errors.AssertionFailedf("%s: event %s, state %+v", msg, e, s))
+	}
+}
+
+// assertValidTransition validates that an event being applied is a valid
+// forward transition from the current replica state (see lifecycle diagram
+// above). Events from the past of the replica's lifecycle are stale and
+// skipped by canApply before reaching this function.
+func (s persistedRangeState) assertValidTransition(e wagpb.Event) {
+	if mark, id := s.mark, e.Addr.ReplicaID; mark.Destroyed(id) {
+		assert(false, "replica is destroyed", e, s)
+	} else if !mark.Is(id) {
+		// Nonexistent: only EventCreate (at index 0) is valid.
+		assert(e.Type == wagpb.EventCreate && e.Addr.Index == 0,
+			"replica must start with EventCreate at index 0", e, s)
+	} else if s.appliedIndex == 0 {
+		// Uninitialized: only EventInit (at non-zero index) and EventDestroy
+		// (at index 0) are valid.
+		assert(
+			(e.Type == wagpb.EventInit && e.Addr.Index > 0) ||
+				(e.Type == wagpb.EventDestroy && e.Addr.Index == 0),
+			"invalid forward transition from uninitialized replica", e, s,
+		)
+	} else {
+		// Initialized: neither EventInit nor EventCreate are valid transitions.
+		// All transitions satisfy i' >= i, with strict inequality for
+		// everything except Destroy/Subsume.
+		assert(e.Type != wagpb.EventInit && e.Type != wagpb.EventCreate,
+			"EventInit or EventCreate on initialized replica", e, s)
+		if e.Type == wagpb.EventDestroy || e.Type == wagpb.EventSubsume {
+			assert(e.Addr.Index >= s.appliedIndex, "destroying below applied index", e, s)
+		} else {
+			assert(e.Addr.Index > s.appliedIndex, "applied index must advance", e, s)
+		}
+	}
+}
+
 // canApply reports whether a WAG event can be applied to the state machine,
 // given the current applied state for the event's RangeID. It compares the
-// event against the state machine's current position for this range. See
-// canApplyWAGNode for the node-level wrapper.
+// event against the state machine's current position for this range.
 //
-// The decision is based on where the event's replica ID falls relative to
-// the current ReplicaMark, giving three cases:
-//
-//   - Destroyed: the replica ID is below the mark's tombstone or current
-//     replica ID, meaning it can never (re-)appear. Skip.
-//   - Current: the replica ID matches the mark's current replica. Compare
-//     raft indices to determine whether the event has already been applied.
-//   - New: the replica ID is above the mark's current replica and not
-//     destroyed. Apply.
-//
-// TODO(mira): Some of the cases below are not possible for all event types.
-// E.g. For a new replica with event.Addr.ReplicaID > state.mark.ReplicaID,
-// we'd expect an EventCreate, not another type of event. Assert on these.
-func (state persistedRangeState) canApply(event wagpb.Event) bool {
-	// The WAG protocol ensures that any WAG node event has a non-zero ReplicaID.
-	if event.Addr.ReplicaID == 0 {
-		panic(errors.AssertionFailedf("WAG event for r%d has zero ReplicaID", event.Addr.RangeID))
-	}
+// See the replica lifecycle diagram above, and canApplyWAGNode for the
+// node-level wrapper.
+func (s persistedRangeState) canApply(e wagpb.Event) (apply bool) {
+	assert(e.Addr.ReplicaID != 0, "event with zero ReplicaID", e, s)
 	switch {
-	case state.mark.Destroyed(event.Addr.ReplicaID):
+	case s.mark.Destroyed(e.Addr.ReplicaID):
 		// Old replica (destroyed or never existed); skip.
-		return false
-	case state.mark.Is(event.Addr.ReplicaID):
-		// Current replica. Destroy/Subsume events always need applying here —
-		// if their mutation had already been applied, the tombstone would have
-		// been bumped and the Destroyed case would have matched.
-		if event.Type == wagpb.EventDestroy || event.Type == wagpb.EventSubsume {
-			return true
+		apply = false
+	case s.mark.Is(e.Addr.ReplicaID):
+		// Current replica (initialized or not).
+		//
+		// Destroy/Subsume events always need applying here — if their mutation had
+		// already been applied, the tombstone would have been bumped and the
+		// Destroyed case would have matched.
+		if e.Type == wagpb.EventDestroy || e.Type == wagpb.EventSubsume {
+			apply = true
+		} else {
+			// For other events, compare raft indices.
+			apply = e.Addr.Index > s.appliedIndex
 		}
-		// For other events, compare raft indices.
-		return event.Addr.Index > state.appliedIndex
-	case event.Addr.ReplicaID > state.mark.ReplicaID:
-		// New replica not yet seen on this store; apply.
-		return true
+	case e.Addr.ReplicaID > s.mark.ReplicaID:
+		// New replica: must enter the lifecycle via EventCreate.
+		apply = true
 	default:
-		panic(errors.AssertionFailedf("unhandled: event %s, state %+v", event, state))
+		panic(errors.AssertionFailedf("unhandled: event %s, state %+v", e, s))
 	}
+	if apply {
+		s.assertValidTransition(e)
+	}
+	return apply
 }
 
 // raftCatchUp returns the raft index the replica must be caught up to before
 // this WAG event can be applied. Zero means no catch-up is needed.
-func raftCatchUp(event wagpb.Event) kvpb.RaftIndex {
-	switch event.Type {
+func raftCatchUp(e wagpb.Event) kvpb.RaftIndex {
+	switch e.Type {
 	case wagpb.EventCreate, wagpb.EventInit:
 		// No prior raft log; no catch-up.
 		return 0
 	case wagpb.EventApply, wagpb.EventSubsume, wagpb.EventDestroy:
 		// Subsume, Destroy: the replica must be fully caught up before destruction.
-		return event.Addr.Index
+		return e.Addr.Index
 	case wagpb.EventSplit, wagpb.EventMerge:
 		// The replica must be caught up to the command just before the
-		// split/merge at event.Index.
-		return event.Addr.Index - 1
+		// split/merge at e.Index.
+		return e.Addr.Index - 1
 	default:
-		panic(errors.AssertionFailedf("unexpected event type %d", event.Type))
+		panic(errors.AssertionFailedf("unexpected event type %d", e.Type))
 	}
 }
 
@@ -122,19 +185,19 @@ func raftCatchUp(event wagpb.Event) kvpb.RaftIndex {
 // since they are written and applied atomically.
 func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (bool, error) {
 	var apply bool
-	for i, event := range node.Events {
-		state, err := loadPersistedRangeState(ctx, stateRO, event.Addr.RangeID)
+	for i, e := range node.Events {
+		s, err := loadPersistedRangeState(ctx, stateRO, e.Addr.RangeID)
 		if err != nil {
-			return false, errors.Wrapf(err, "loading state for r%d", event.Addr.RangeID)
+			return false, errors.Wrapf(err, "loading state for r%d", e.Addr.RangeID)
 		}
 		// A given RangeID appears at most once in the events list, so the decision
 		// of whether an event can be applied is independent for each event.
-		if evApply := state.canApply(event); i == 0 {
+		if evApply := s.canApply(e); i == 0 {
 			apply = evApply
 		} else if evApply != apply {
 			return false, errors.Newf(
 				"partial apply: event[0]=%s (apply=%t), event[%d]=%s (apply=%t)",
-				node.Events[0], apply, i, event, evApply,
+				node.Events[0], apply, i, e, evApply,
 			)
 		}
 	}
@@ -147,10 +210,10 @@ func canApplyWAGNode(ctx context.Context, node wagpb.Node, stateRO StateRO) (boo
 // already determined that the node needs applying via canApplyWAGNode.
 func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
 	return func(yield func(raftCatchUpTarget) bool) {
-		for _, event := range node.Events {
-			if catchUp := raftCatchUp(event); catchUp > 0 && !yield(raftCatchUpTarget{
-				rangeID:   event.Addr.RangeID,
-				replicaID: event.Addr.ReplicaID,
+		for _, e := range node.Events {
+			if catchUp := raftCatchUp(e); catchUp > 0 && !yield(raftCatchUpTarget{
+				rangeID:   e.Addr.RangeID,
+				replicaID: e.Addr.ReplicaID,
 				index:     catchUp,
 			}) {
 				return
