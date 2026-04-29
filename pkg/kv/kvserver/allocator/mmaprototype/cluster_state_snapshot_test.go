@@ -327,7 +327,8 @@ func TestSnapshotProtoRoundTrip(t *testing.T) {
 	cs.diskUtilShedThreshold = 0.95
 	cs.mmaid = 42
 
-	snap := cs.Snapshot()
+	snap, err := cs.Snapshot()
+	require.NoError(t, err)
 	require.NotNil(t, snap)
 	require.EqualValues(t, 42, snap.MMAID)
 	require.InDelta(t, 0.925, snap.DiskUtilRefuseThreshold, 1e-9)
@@ -339,6 +340,28 @@ func TestSnapshotProtoRoundTrip(t *testing.T) {
 	require.NoError(t, protoutil.Unmarshal(buf, &got))
 	require.EqualValues(t, snap.MMAID, got.MMAID)
 	require.InDelta(t, snap.DiskUtilRefuseThreshold, got.DiskUtilRefuseThreshold, 1e-9)
+}
+
+// TestSnapshotRecoversFromPanic verifies that Snapshot's deferred recover
+// converts an unexpected panic anywhere in the conversion path into an
+// error rather than tearing down the caller. This guards against bugs in
+// the snapshot code (or in any owned struct's accessors) tanking the
+// server, since the snapshot is purely read-only with respect to
+// clusterState.
+func TestSnapshotRecoversFromPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cs := newClusterState(ts, newStringInterner())
+	// Add a store so snapshotStore runs — it dereferences
+	// cs.localityTierInterner via snapshotLocalityTiers.
+	cs.setStore(StoreAttributesAndLocality{StoreID: 1, NodeID: 1}.withNodeTier())
+	// Sabotage the interner. setStore is done so this won't fault earlier.
+	cs.localityTierInterner = nil
+
+	snap, err := cs.Snapshot()
+	require.Nil(t, snap)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "panic in clusterState.Snapshot")
 }
 
 // TestSnapshotSpanConfigDedup verifies that ranges with structurally
@@ -402,7 +425,8 @@ func TestSnapshotSpanConfigDedup(t *testing.T) {
 		},
 	}, nil)
 
-	snap := cs.Snapshot()
+	snap, err := cs.Snapshot()
+	require.NoError(t, err)
 	require.Len(t, snap.SpanConfigs, 2,
 		"expected 2 distinct conf entries, got %d", len(snap.SpanConfigs))
 	r1 := snap.Ranges[1]

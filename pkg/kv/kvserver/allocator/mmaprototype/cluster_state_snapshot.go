@@ -26,7 +26,36 @@ import (
 // recorded omission reason, so adding a new field to clusterState (or any
 // owned struct it transitively references) forces a deliberate decision about
 // snapshot inclusion.
-func (cs *clusterState) Snapshot() *mmasnappb.ClusterStateSnapshot {
+//
+// Snapshot is purely read-only with respect to cs, so a panic anywhere in
+// the snapshotting code is safe to recover from: a bug here must never tank
+// the server. Any panic is captured and returned as an assertion-failure
+// error, leaving cs untouched. (Callers under lock are responsible for
+// holding the lock; the recover does not release locks.)
+func (cs *clusterState) Snapshot() (snap *mmasnappb.ClusterStateSnapshot, retErr error) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		// The snapshot writes nothing back to cs, so dropping the in-flight
+		// proto and returning an error is safe regardless of where the panic
+		// originated.
+		if err, ok := r.(error); ok {
+			retErr = errors.HandleAsAssertionFailure(
+				errors.Wrap(err, "panic in clusterState.Snapshot"))
+		} else {
+			retErr = errors.AssertionFailedf(
+				"panic in clusterState.Snapshot: %v", r)
+		}
+		snap = nil
+	}()
+	return cs.snapshot(), nil
+}
+
+// snapshot is the unrecovered body of Snapshot. It is split out so the
+// recover deferred in Snapshot wraps a single function call.
+func (cs *clusterState) snapshot() *mmasnappb.ClusterStateSnapshot {
 	out := &mmasnappb.ClusterStateSnapshot{
 		MMAID:                   int32(cs.mmaid),
 		DiskUtilRefuseThreshold: cs.diskUtilRefuseThreshold,
