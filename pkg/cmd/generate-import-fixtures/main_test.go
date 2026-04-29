@@ -113,5 +113,5 @@ func TestShardFiles(t *testing.T) {
 
 func TestAvailableFormats(t *testing.T) {
 	result := availableFormats()
-	require.Equal(t, "avro", result)
+	require.Equal(t, "avro, parquet", result)
 }
