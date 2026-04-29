@@ -14,10 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
@@ -92,7 +94,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				},
 			},
 			ldrConfig: ldrConfig{},
-			run:       TestLDRBasic,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRBasic,
 		},
 		{
 			name: "ldr/kv0/workload=both/basic/validated",
@@ -107,7 +112,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				},
 			},
 			ldrConfig: ldrConfig{mode: ModeValidated},
-			run:       TestLDRBasic,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRBasic,
 		},
 		{
 			name: "ldr/kv0/workload=both/update_heavy/immediate",
@@ -122,7 +130,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				},
 			},
 			ldrConfig: ldrConfig{mode: ModeValidated},
-			run:       TestLDRUpdateHeavy,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRUpdateHeavy,
 		},
 		{
 			name: "ldr/kv0/workload=both/update_heavy/validated",
@@ -137,7 +148,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				},
 			},
 			ldrConfig: ldrConfig{mode: ModeValidated},
-			run:       TestLDRUpdateHeavy,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRUpdateHeavy,
 		},
 		{
 			name: "ldr/kv0/workload=both/shutdown_node",
@@ -151,7 +165,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 					spec.VolumeSize(100),
 				},
 			},
-			run: TestLDROnNodeShutdown,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDROnNodeShutdown,
 		},
 		{
 			name: "ldr/kv0/workload=both/network_partition",
@@ -165,7 +182,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 					spec.VolumeSize(100),
 				},
 			},
-			run: TestLDROnNetworkPartition,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDROnNetworkPartition,
 		},
 		{
 			name: "ldr/kv0/workload=both/schema_change",
@@ -179,7 +199,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 					spec.VolumeSize(100),
 				},
 			},
-			run: TestLDRSchemaChange,
+			// PR #158351 added --always-inc-key-seq to the kv workload
+			// in v26.2; predecessors can't parse this flag via IMPORT.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRSchemaChange,
 		},
 		{
 			name: "ldr/tpcc",
@@ -251,9 +274,10 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
 				mc := multiCluster{
-					c:    c,
-					rng:  rng,
-					spec: sp.clusterSpec,
+					c:                   c,
+					rng:                 rng,
+					spec:                sp.clusterSpec,
+					mixedVersionMinimum: sp.mixedVersionMinimum,
 				}
 				setup, cleanup := mc.Start(ctx, t)
 				defer cleanup()
@@ -840,6 +864,11 @@ type ldrTestSpec struct {
 	run                        func(context.Context, test.Test, cluster.Cluster, multiClusterSetup, ldrConfig)
 	ldrConfig                  ldrConfig
 	requiresDeprecatedWorkload bool
+
+	// mixedVersionMinimum, if set, is the minimum predecessor version
+	// required for mixed version testing. If no supported predecessor
+	// meets this minimum, mixed version testing is skipped.
+	mixedVersionMinimum clusterversion.Key
 }
 
 type mode int
@@ -893,9 +922,10 @@ func (mcs *multiClusterSpec) RightNodesList() option.NodeListOption {
 }
 
 type multiCluster struct {
-	spec multiClusterSpec
-	rng  *rand.Rand
-	c    cluster.Cluster
+	spec                multiClusterSpec
+	rng                 *rand.Rand
+	c                   cluster.Cluster
+	mixedVersionMinimum clusterversion.Key
 }
 
 type multiClusterSetup struct {
@@ -910,13 +940,17 @@ func (mcs *multiClusterSetup) CRDBNodes() option.NodeListOption {
 }
 
 func (mc *multiCluster) StartCluster(
-	ctx context.Context, t test.Test, desc string, nodes option.NodeListOption, initTarget int,
+	ctx context.Context,
+	t test.Test,
+	desc string,
+	nodes option.NodeListOption,
+	initTarget int,
+	settings install.ClusterSettings,
 ) (*clusterInfo, func()) {
 	startOps := option.NewStartOpts(option.NoBackupSchedule)
 	startOps.RoachprodOpts.InitTarget = initTarget
 	roachtestutil.SetDefaultAdminUIPort(mc.c, &startOps.RoachprodOpts)
-	clusterSettings := install.MakeClusterSettings()
-	mc.c.Start(ctx, t.L(), startOps, clusterSettings, nodes)
+	mc.c.Start(ctx, t.L(), startOps, settings, nodes)
 
 	node := nodes.SeededRandNode(mc.rng)
 
@@ -962,8 +996,50 @@ func (mc *multiCluster) Start(ctx context.Context, t test.Test) (multiClusterSet
 	rightCluster := mc.c.Range(mc.spec.leftNodes+1, mc.spec.leftNodes+mc.spec.rightNodes)
 	workloadNode := mc.c.WorkloadNode()
 
-	left, cleanupLeft := mc.StartCluster(ctx, t, "left", leftCluster, mc.spec.LeftClusterStart())
-	right, cleanupRight := mc.StartCluster(ctx, t, "right", rightCluster, mc.spec.RightClusterStart())
+	leftSettings := install.MakeClusterSettings()
+	rightSettings := install.MakeClusterSettings()
+	leftVersion, rightVersion := "current", "current"
+
+	predecessorVersion, err := clusterupgrade.RandomReplicationPeerVersion(
+		mc.rng, mc.mixedVersionMinimum,
+	)
+	require.NoError(t, err)
+
+	if predecessorVersion != nil {
+		predecessorStr := predecessorVersion.String()
+		switch mc.rng.Intn(4) {
+		case 0:
+			t.L().Printf("using predecessor version %s for left cluster", predecessorStr)
+			binaryPath, err := clusterupgrade.UploadCockroach(
+				ctx, t, t.L(), mc.c, leftCluster, predecessorVersion,
+			)
+			require.NoError(t, err)
+			leftSettings.Binary = binaryPath
+			leftVersion = predecessorStr
+		case 1:
+			t.L().Printf("using predecessor version %s for right cluster", predecessorStr)
+			binaryPath, err := clusterupgrade.UploadCockroach(
+				ctx, t, t.L(), mc.c, rightCluster, predecessorVersion,
+			)
+			require.NoError(t, err)
+			rightSettings.Binary = binaryPath
+			rightVersion = predecessorStr
+		default:
+			// Both clusters run the current version.
+		}
+	}
+
+	t.L().Printf(
+		"left cluster version: %s, right cluster version: %s",
+		leftVersion, rightVersion,
+	)
+
+	left, cleanupLeft := mc.StartCluster(
+		ctx, t, "left", leftCluster, mc.spec.LeftClusterStart(), leftSettings,
+	)
+	right, cleanupRight := mc.StartCluster(
+		ctx, t, "right", rightCluster, mc.spec.RightClusterStart(), rightSettings,
+	)
 
 	return multiClusterSetup{
 			workloadNode: workloadNode,
