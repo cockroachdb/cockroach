@@ -3,7 +3,7 @@
 query T
 EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • virtual table
@@ -14,7 +14,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • filter
 │ filter: table_name = 'foo'

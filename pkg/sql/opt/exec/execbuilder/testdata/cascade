@@ -847,7 +847,7 @@ CREATE TABLE delrng3 (
 query T
 EXPLAIN DELETE FROM delrng1 WHERE p = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -904,7 +904,7 @@ INSERT INTO self SELECT x, x-1 FROM generate_series(2, 100) AS g(x)
 query T
 EXPLAIN DELETE FROM self WHERE a = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -988,7 +988,7 @@ UPDATE loop_a SET cascade_delete = 'loop_b-pk3' WHERE id = 'loop_a-pk1';
 query T
 EXPLAIN DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1226,7 +1226,7 @@ CREATE TABLE t5 (
 query T
 EXPLAIN DELETE FROM t3 WHERE id3 = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1408,7 +1408,7 @@ CREATE TABLE c138974 (k INT PRIMARY KEY, parent_k INT REFERENCES p138974(k) ON D
 query T
 EXPLAIN DELETE FROM p138974 WHERE v = 1;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

@@ -449,7 +449,7 @@ FROM system.statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -697,7 +697,7 @@ FROM crdb_internal.statement_statistics_persisted
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -1203,7 +1203,7 @@ FROM system.transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union
@@ -1445,7 +1445,7 @@ FROM crdb_internal.transaction_statistics_persisted
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • union

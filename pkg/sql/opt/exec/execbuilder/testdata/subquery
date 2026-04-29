@@ -10,7 +10,7 @@ CREATE TABLE abc2 (a INT PRIMARY KEY, b INT, c INT)
 query T
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • split
 │ index: abc@abc_pkey
@@ -25,7 +25,7 @@ ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 query T
 EXPLAIN ALTER RANGE RELOCATE FROM 11 TO 22 FOR VALUES ((SELECT 1))
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate range
 │ replicas: VOTERS
@@ -38,7 +38,7 @@ distribution: local
 query T
 EXPLAIN ALTER RANGE 22 RELOCATE FROM ((SELECT 1)) TO ((SELECT 2))
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • relocate range
 │ replicas: VOTERS
@@ -51,7 +51,7 @@ distribution: local
 query T
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -74,7 +74,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -141,7 +141,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc2 WHERE b < 0)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (semi)
@@ -175,7 +175,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ estimated row count: 3
@@ -188,7 +188,7 @@ distribution: local
 query T
 EXPLAIN VALUES (1), ((SELECT random()::INT))
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -221,7 +221,7 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -253,7 +253,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT * FROM abc WHERE a = (SELECT 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -266,7 +266,7 @@ query T
 EXPLAIN (VERBOSE)
 SELECT * FROM abc WHERE a >= (SELECT 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -285,7 +285,7 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT);
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (semi)
@@ -313,7 +313,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (semi)
@@ -341,7 +341,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • merge join (anti)
@@ -369,7 +369,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (anti)
@@ -397,7 +397,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -423,7 +423,7 @@ vectorized: true
 query T
 EXPLAIN (verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • apply join (semi)
@@ -459,7 +459,7 @@ EXPLAIN (VERBOSE)
 SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
 ----
-distribution: local
+distribution: local (routineProhibited)
 vectorized: true
 ·
 • filter
@@ -479,7 +479,7 @@ EXPLAIN (VERBOSE)
 SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) ELSE 0 END AS prev_i
 FROM corr
 ----
-distribution: local
+distribution: local (routineProhibited)
 vectorized: true
 ·
 • render
@@ -513,7 +513,7 @@ EXPLAIN (VERBOSE)
 SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
 ----
-distribution: local
+distribution: local (routineProhibited)
 vectorized: true
 ·
 • filter
@@ -535,7 +535,7 @@ SELECT *,
   CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
 FROM corr
 ----
-distribution: local
+distribution: local (routineProhibited)
 vectorized: true
 ·
 • render

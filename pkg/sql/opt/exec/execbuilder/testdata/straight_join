@@ -44,7 +44,7 @@ ALTER TABLE t2 INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 INNER JOIN t2 ON t1.x = t2.y
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • lookup join (inner)
@@ -71,7 +71,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 INNER STRAIGHT JOIN t2 ON t1.x = t2.y
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • lookup join (inner)
@@ -98,7 +98,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 INNER STRAIGHT JOIN t1 ON t1.x = t2.y
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -124,7 +124,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 INNER JOIN t2 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -149,7 +149,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t2 INNER STRAIGHT JOIN t1 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -174,7 +174,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 INNER STRAIGHT JOIN t2 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (inner)
@@ -203,7 +203,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 LEFT JOIN t2 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (right outer)
@@ -228,7 +228,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 LEFT STRAIGHT JOIN t2 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (left outer)
@@ -253,7 +253,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t1 RIGHT STRAIGHT JOIN t2 ON t1.x = t2.z
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • hash join (right outer)

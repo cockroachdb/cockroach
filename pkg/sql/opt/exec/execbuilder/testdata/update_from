@@ -7,7 +7,7 @@ CREATE TABLE abc (a int primary key, b int, c int)
 query T
 EXPLAIN UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = other.a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: abc
@@ -31,7 +31,7 @@ CREATE TABLE new_abc (a int, b int, c int)
 query T
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = other.a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: abc
@@ -63,7 +63,7 @@ WHERE
 RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: abc
@@ -84,7 +84,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -125,7 +125,7 @@ vectorized: true
 query T
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as other ("a", "b", "c") WHERE abc.a = other.a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: abc
@@ -153,7 +153,7 @@ CREATE TABLE ac (a INT, c INT)
 query T
 EXPLAIN UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: abc
@@ -194,7 +194,7 @@ WHERE
 RETURNING
   *
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: abc

@@ -99,7 +99,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • sort
 │ order: +a
@@ -162,7 +162,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
@@ -210,7 +210,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT * FROM json_tab WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
@@ -239,7 +239,7 @@ SELECT a FROM json_tab
 WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
 ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • sort
 │ order: +a
@@ -311,7 +311,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • filter
 │ filter: (b @> '[1]') OR (sqrt(a::DECIMAL) = 2)
@@ -426,7 +426,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • filter
 │ filter: ((b @> ARRAY[2]) AND (a = 3)) OR (a = b[0])

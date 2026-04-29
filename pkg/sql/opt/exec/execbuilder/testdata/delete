@@ -60,7 +60,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 query T
 EXPLAIN DELETE FROM unindexed
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete range
   from: unindexed
@@ -69,7 +69,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: unindexed
@@ -90,7 +90,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: unindexed
@@ -111,7 +111,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete range
   from: unindexed
@@ -125,7 +125,7 @@ EXPLAIN DELETE FROM unindexed WHERE true ORDER BY k DESC
 query T
 EXPLAIN DELETE FROM unindexed WHERE k > 0 LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: unindexed
@@ -141,7 +141,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: indexed
@@ -157,7 +157,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: indexed
@@ -174,7 +174,7 @@ distribution: local
 query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: indexed
@@ -195,7 +195,7 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
 query T
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • delete
@@ -287,7 +287,7 @@ SET avoid_full_table_scans_in_mutations = false
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -314,7 +314,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz@{NO_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -345,7 +345,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz@{AVOID_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -380,7 +380,7 @@ SET avoid_full_table_scans_in_mutations = true
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -415,7 +415,7 @@ CREATE TABLE b (b INT PRIMARY KEY)
 query T
 EXPLAIN (TYPES) DELETE FROM a USING b WHERE b > 1 RETURNING a, b, NULL
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • render
@@ -595,7 +595,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE k = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: t139160
@@ -622,7 +622,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE i = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: t139160
@@ -649,7 +649,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE i = 2 RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: t139160
@@ -681,7 +681,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE u = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: t139160
@@ -708,7 +708,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE u = 3 RETURNING v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: t139160
@@ -740,7 +740,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4);
 query T
 EXPLAIN DELETE FROM t139160 WHERE v = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete
 │ from: t139160
@@ -768,7 +768,7 @@ CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 query T
 EXPLAIN DELETE FROM t139105 WHERE k = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • delete range
   from: t139105
@@ -968,7 +968,7 @@ DELETE FROM entity_address WHERE id IN (
     SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
 );
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

@@ -7,7 +7,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND v < 8 AND w > 30 ORDER BY v LIMIT 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -41,7 +41,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -70,7 +70,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -84,7 +84,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -101,7 +101,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -119,7 +119,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -137,7 +137,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -171,7 +171,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -187,7 +187,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -203,7 +203,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • filter
@@ -221,7 +221,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -244,7 +244,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 ORDER BY v LIMIT 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -269,7 +269,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, w FROM (SELECT * FROM t WHERE v >= 1 AND v <= 100 ORDER BY k LIMIT 10) ORDER BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1595,7 +1595,7 @@ CREATE TABLE t_47283(k INT PRIMARY KEY, a INT)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • limit
@@ -1669,7 +1669,7 @@ EXPLAIN
   LIMIT
     5;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 5
@@ -1746,7 +1746,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v, w LIMIT 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -1784,7 +1784,7 @@ ANALYZE b;
 query T retry
 EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 5
@@ -1803,7 +1803,7 @@ distribution: local
 query T
 EXPLAIN SELECT oid, typname FROM pg_type ORDER BY oid LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • limit
 │ count: 10
@@ -1815,7 +1815,7 @@ distribution: local
 query T
 EXPLAIN SELECT oid, typname FROM pg_type LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • virtual table
   table: pg_type@primary
@@ -1826,7 +1826,7 @@ distribution: local
 query T
 EXPLAIN SELECT oid, typname FROM pg_type WHERE OID BETWEEN 1 AND 1000 ORDER BY oid LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • limit
 │ count: 10
@@ -1840,7 +1840,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM generate_series(1, 10) ORDER BY row_number() OVER () LIMIT 1;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • top-k
 │ estimated row count: 1

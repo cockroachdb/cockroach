@@ -101,7 +101,7 @@ CREATE TABLE xyz (
 query T
 EXPLAIN UPDATE xyz SET y = x
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: xyz
@@ -117,7 +117,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -145,7 +145,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -168,7 +168,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -207,7 +207,7 @@ SET avoid_full_table_scans_in_mutations = false
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -239,7 +239,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE xyz@{NO_FULL_SCAN} SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -275,7 +275,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE xyz@{AVOID_FULL_SCAN} SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -315,7 +315,7 @@ SET avoid_full_table_scans_in_mutations = true
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET x = 5 WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -393,7 +393,7 @@ CREATE TABLE kv (
 query T
 EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv
@@ -415,7 +415,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv
@@ -440,7 +440,7 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -515,7 +515,7 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "prim
 query T
 EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -558,7 +558,7 @@ vectorized: true
 query T
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv
@@ -576,7 +576,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv
@@ -592,7 +592,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv SET v = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv
@@ -619,7 +619,7 @@ CREATE TABLE kv3 (
 query T
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv3
@@ -641,7 +641,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: kv3
@@ -664,7 +664,7 @@ SET enable_implicit_select_for_update = false
 query T
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv
@@ -681,7 +681,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv
@@ -696,7 +696,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv SET v = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv
@@ -713,7 +713,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • update
@@ -740,7 +740,7 @@ vectorized: true
 query T
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv
@@ -758,7 +758,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv3
@@ -778,7 +778,7 @@ distribution: local
 query T
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: kv3
@@ -814,7 +814,7 @@ CREATE TABLE computed (
 query T
 EXPLAIN UPDATE computed SET b=b*2 WHERE b BETWEEN 1 and 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: computed
@@ -840,7 +840,7 @@ CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b),
 query T
 EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • update
@@ -905,7 +905,7 @@ SET enable_implicit_select_for_update = false
 query T
 EXPLAIN UPDATE tu SET c=c+1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: tu
@@ -933,7 +933,7 @@ CREATE TABLE t121322_c (c int PRIMARY KEY)
 query T
 EXPLAIN UPDATE t121322_ab SET b = (SELECT sum(c) FROM t121322_c) WHERE a = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1296,7 +1296,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T
 EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t139160
@@ -1354,7 +1354,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T
 EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t139160
@@ -1419,7 +1419,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T
 EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t139160
@@ -1484,7 +1484,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T
 EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: t139160
@@ -1548,7 +1548,7 @@ INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
 query T
 EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • update
 │ table: t139160
@@ -1824,7 +1824,7 @@ UPDATE entity_address SET id = 'bar' WHERE id IN (
     SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
 );
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

@@ -214,7 +214,7 @@ SET vectorize=on
 query T
 EXPLAIN ALTER TABLE kv RENAME TO kv2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • alter table
 

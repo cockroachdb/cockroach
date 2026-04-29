@@ -58,7 +58,7 @@ output row: [8 3.5355339059327376220]
 query T
 EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -82,7 +82,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -110,7 +110,7 @@ EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
 query T
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • sort
 │ order: +variance,+k
@@ -125,7 +125,7 @@ distribution: local
 query T
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -154,7 +154,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -187,7 +187,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -212,7 +212,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -248,7 +248,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -290,7 +290,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -323,7 +323,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -356,7 +356,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -381,7 +381,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT avg(k) OVER () FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -401,7 +401,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -421,7 +421,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -456,7 +456,7 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -500,7 +500,7 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │ columns: (avg)
@@ -545,7 +545,7 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project

@@ -35,7 +35,7 @@ CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b))
 query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -71,7 +71,7 @@ trying planning with injected hints
 query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -115,7 +115,7 @@ regions: <hidden>
 query T
 EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: xy@xy_y_idx
@@ -155,7 +155,7 @@ trying planning with injected hints
 query T
 EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • hash join
@@ -244,7 +244,7 @@ trying planning with injected hints
 query T
 EXPLAIN SELECT a FROM abc@abc_pkey WHERE b = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • scan
@@ -306,7 +306,7 @@ falling back to planning without injected hints
 query T
 EXPLAIN SELECT a + 1 FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1 (0 applied, 1 skipped)
 ·
 • render
@@ -374,7 +374,7 @@ falling back to planning without injected hints
 query T
 EXPLAIN SELECT c FROM xy JOIN abc ON c = y WHERE x = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1 (0 applied, 1 skipped)
 ·
 • hash join
@@ -945,7 +945,7 @@ DEALLOCATE ALL
 query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • lookup join
 │ table: xy@xy_pkey
@@ -969,7 +969,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • hash join
@@ -1041,7 +1041,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 2 (1 applied, 1 skipped)
 ·
 • lookup join
@@ -1130,7 +1130,7 @@ falling back to planning without injected hints
 query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 3 (0 applied, 3 skipped)
 ·
 • lookup join
@@ -1202,7 +1202,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 5 (1 applied, 4 skipped)
 ·
 • merge join
@@ -1315,7 +1315,7 @@ SELECT * FROM abc
 JOIN (SELECT i FROM generate_series(1, 1) g(i))
 ON b = i
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • merge join
@@ -1426,7 +1426,7 @@ true
 query T
 EXPLAIN UPDATE abc SET c = c + 1 WHERE a > 5 AND b = 6
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • update
 │ table: abc
@@ -1457,7 +1457,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN UPDATE abc SET c = c + 1 WHERE a > 5 AND b = 6
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 statement hints: 1
 ·
 • update
@@ -1478,7 +1478,7 @@ statement hints: 1
 query T
 EXPLAIN DELETE FROM abc WHERE a > 5 AND b = 6
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • delete
 │ from: abc
@@ -1502,7 +1502,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN DELETE FROM abc WHERE a > 5 AND b = 6
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 statement hints: 1
 ·
 • delete
@@ -1545,7 +1545,7 @@ USE test
 query T
 EXPLAIN SELECT x FROM xy WHERE x = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1567,7 +1567,7 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
 query T
 EXPLAIN SELECT x FROM xy WHERE x = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1579,7 +1579,7 @@ distribution: local
 query T
 EXPLAIN SELECT x FROM test.public.xy WHERE x = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1615,7 +1615,7 @@ USE defaultdb
 query T
 EXPLAIN SELECT x FROM xy WHERE x = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1656,7 +1656,7 @@ USE test
 query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1677,7 +1677,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1699,7 +1699,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1 (0 applied, 1 skipped)
 ·
 • scan
@@ -1718,7 +1718,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1744,7 +1744,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abc@abc_pkey
@@ -1769,7 +1769,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1790,7 +1790,7 @@ SHOW disable_optimizer_rules;
 query T
 EXPLAIN SELECT a FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -1817,7 +1817,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 2 (1 applied, 1 skipped)
 ·
 • index join
@@ -1839,7 +1839,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -1864,7 +1864,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • index join
 │ table: abc@abc_pkey
@@ -1999,7 +1999,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 statement hints: 1
 ·
@@ -2022,7 +2022,7 @@ applied statement hints: 1
 query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 1
 ·
 • filter
@@ -2051,7 +2051,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 statement hints: 1
 ·
@@ -2088,7 +2088,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 statement hints: 2 (1 applied, 1 skipped)
 ·
 • index join
@@ -2103,7 +2103,7 @@ statement hints: 2 (1 applied, 1 skipped)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE b = 5
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 statement hints: 2 (1 applied, 1 skipped)
 ·
@@ -2154,7 +2154,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a = 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 statement hints: 1 (0 applied, 1 skipped)
 ·

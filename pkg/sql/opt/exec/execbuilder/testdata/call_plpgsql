@@ -10,7 +10,7 @@ $$
 query T
 EXPLAIN CALL foo(0);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • call
   estimated row count: 0
@@ -19,7 +19,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) CALL foo(1);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • call
@@ -126,7 +126,7 @@ call
 query T
 EXPLAIN (DISTSQL) CALL foo(3);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • call
   estimated row count: 0

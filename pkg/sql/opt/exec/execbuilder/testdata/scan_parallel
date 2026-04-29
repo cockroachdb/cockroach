@@ -45,7 +45,7 @@ SET distsql = off
 query T
 EXPLAIN SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -77,7 +77,7 @@ SET CLUSTER SETTING sql.local_scans.concurrency_limit = 0
 query T
 EXPLAIN SELECT * FROM data WHERE a IN (0, 2, 4, 6, 8)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats

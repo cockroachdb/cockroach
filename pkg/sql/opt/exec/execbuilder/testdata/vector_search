@@ -33,7 +33,7 @@ CREATE TABLE t_multi_col (
 query T
 EXPLAIN SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column7
@@ -53,7 +53,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 vectorized: true
 ·
 • project
@@ -89,7 +89,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 5;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 vectorized: true
 ·
 • project
@@ -125,7 +125,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_multi_col WHERE a = 1 AND b = 2 ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 vectorized: true
 ·
 • project
@@ -166,7 +166,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t_multi_col WHERE (a, b) IN ((1, 2), (3, 4), (5, 6)) ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 vectorized: true
 ·
 • project
@@ -208,7 +208,7 @@ vectorized: true
 query T
 EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <=> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column7
@@ -229,7 +229,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <#> '[1, 2, 3]' LIMIT 1;
 ----
-distribution: local
+distribution: local (vectorSearchProhibited)
 ·
 • top-k
 │ order: +column7
@@ -253,7 +253,7 @@ distribution: local
 query T
 EXPLAIN INSERT INTO t VALUES (1, '[1, 2, 3]');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 ·
 • insert
 │ into: t(k, v)
@@ -270,7 +270,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) INSERT INTO t VALUES (2, '[1, 2, 3]');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • insert
@@ -295,7 +295,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t SET v = '[1, 2, 3]' WHERE k = 1;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • update
@@ -342,7 +342,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE k = 1;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • delete
@@ -371,7 +371,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_multi_col VALUES (1, 2, 1, 2, 3, '[1, 2, 3]');
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • insert
@@ -401,7 +401,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_multi_col SET v = '[1, 2, 3]' WHERE a = 1 AND b = 2;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • update
@@ -459,7 +459,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPDATE t_multi_col SET a = 2 WHERE a = 1;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • update
@@ -517,7 +517,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_multi_col WHERE a = 1 AND b = 2;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, vectorSearchProhibited)
 vectorized: true
 ·
 • delete

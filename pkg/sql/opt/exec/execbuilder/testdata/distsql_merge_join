@@ -138,7 +138,7 @@ start_key                    end_key                       replicas  lease_holde
 query T
 EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -158,7 +158,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -189,7 +189,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -211,7 +211,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckt9v0zAQx9_5K
 query T
 EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -242,7 +242,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -266,7 +266,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckl9v2jwUxu_fT
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • merge join (inner)
@@ -295,7 +295,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -323,7 +323,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFv2j4Qx99_f
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -355,7 +355,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -377,7 +377,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckl1v0zAUhu_5F
 query T
 EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -410,7 +410,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -667,7 +667,7 @@ EXPLAIN (DISTSQL)
   SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
     pid1 >= 10 AND pid1 <= 39
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • group (scalar)
 │
@@ -981,7 +981,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9v4jgUxd_3U
 query T
 EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid1)
@@ -1001,7 +1001,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckm-LEz8Qx5__X
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ equality: (pid1) = (pid2)
@@ -1024,7 +1024,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckl9r2zwUxu_fT
 query T
 EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • hash join
 │ equality: (pa1) = (ca1)
@@ -1091,7 +1091,7 @@ EXPLAIN (DISTSQL)
   JOIN parent1 USING (pid1)
 ORDER BY pid1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join
 │ table: parent1@parent1_pkey
@@ -1122,7 +1122,7 @@ EXPLAIN (DISTSQL)
   JOIN child1 USING (pid1)
   JOIN grandchild1 USING (pid1, cid1)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join
 │ table: parent1@parent1_pkey

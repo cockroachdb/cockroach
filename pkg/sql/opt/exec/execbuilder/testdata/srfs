@@ -5,7 +5,7 @@ subtest generate_series
 query T
 EXPLAIN SELECT * FROM generate_series(1, 3)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • project set
 │ estimated row count: 10
@@ -15,7 +15,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • cross join
 │ estimated row count: 100
@@ -33,7 +33,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM ROWS FROM (cos(1))
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • project set
 │ estimated row count: 1
@@ -43,7 +43,7 @@ distribution: local
 query T
 EXPLAIN SELECT generate_series(1, 3)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • project set
 │ estimated row count: 10
@@ -56,7 +56,7 @@ subtest multiple_SRFs
 query T
 EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • project set
 │ estimated row count: 10
@@ -72,7 +72,7 @@ CREATE TABLE u (b string)
 query T
 EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • cross join (inner)
@@ -112,7 +112,7 @@ CREATE TABLE data (a INT PRIMARY KEY)
 query T
 EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -141,7 +141,7 @@ query T
 EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y, z])
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -187,7 +187,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -224,7 +224,7 @@ query T
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -262,7 +262,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -327,7 +327,7 @@ EXPLAIN (VERBOSE) SELECT
 FROM
   groups g
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -381,7 +381,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 0))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project set
@@ -414,7 +414,7 @@ ORDER BY a0.created_at
    LIMIT 10
   OFFSET 0;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • top-k
@@ -463,7 +463,7 @@ EXPLAIN (VERBOSE)
     FROM
         (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project

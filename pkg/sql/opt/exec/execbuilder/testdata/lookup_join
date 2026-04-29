@@ -58,7 +58,7 @@ SET parallelize_multi_key_lookup_joins_only_on_mr_mutations = false;
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -136,7 +136,7 @@ subtest end
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -156,7 +156,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -174,7 +174,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -194,7 +194,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 9223372036854775807
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -214,7 +214,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b WHERE a > 1 AND e > 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -234,7 +234,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e >= 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -254,7 +254,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b WHERE a > 1 AND e < 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -273,7 +273,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -293,7 +293,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -312,7 +312,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b WHERE a >= e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -331,7 +331,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a > e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -350,7 +350,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def@desc_idx ON f = b AND a > e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -369,7 +369,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a::DECIMAL >= e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -398,7 +398,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL >= e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -428,7 +428,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal ON f = b AND a >= e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -449,7 +449,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def_e_decimal@desc_idx ON f = b AND a::DECIMAL > e
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -603,7 +603,7 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • distinct
@@ -647,7 +647,7 @@ ALTER TABLE authors INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • distinct
@@ -692,7 +692,7 @@ start_key                end_key       replicas  lease_holder
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • distinct
 │ estimated row count: 96
@@ -723,7 +723,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck19v2jwUxu_fT
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -752,7 +752,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • cross join (inner)
@@ -774,7 +774,7 @@ vectorized: true
 query T
 EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join
 │ estimated row count: 99
@@ -1308,7 +1308,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -1329,7 +1329,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • merge join (inner)
@@ -1357,7 +1357,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • sort
@@ -1386,7 +1386,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (semi)
@@ -1404,7 +1404,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (anti)
@@ -1422,7 +1422,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (semi)
@@ -1442,7 +1442,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (anti)
@@ -1462,7 +1462,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (semi)
@@ -1481,7 +1481,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (anti)
@@ -2218,7 +2218,7 @@ CREATE TABLE t59615 (
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join (left outer)
 │ table: t59615@t59615_pkey
@@ -2234,7 +2234,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
   SELECT * FROM t59615 t WHERE u.y = t.y
 )
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join (anti)
 │ table: t59615@t59615_pkey
@@ -2261,7 +2261,7 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) LEFT JOIN lookup_expr t
 ON u.w = t.w AND u.x = t.x
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2279,7 +2279,7 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
   SELECT * FROM lookup_expr t WHERE u.w = t.w AND u.x = t.x
 )
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2332,7 +2332,7 @@ SET variable_inequality_lookup_join_enabled=false
 query T
 EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • sort
 │ estimated row count: 33
@@ -2358,7 +2358,7 @@ RESET variable_inequality_lookup_join_enabled
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2378,7 +2378,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2399,7 +2399,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2420,7 +2420,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2440,7 +2440,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -2472,7 +2472,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -2505,7 +2505,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2525,7 +2525,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2546,7 +2546,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -2579,7 +2579,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -2611,7 +2611,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2632,7 +2632,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2657,7 +2657,7 @@ SET optimizer_plan_lookup_joins_with_reverse_scans = false
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • sort
