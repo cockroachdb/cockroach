@@ -1793,7 +1793,13 @@ func (r *testRunner) postTestAssertions(
 				// NB: the consistency checks should run at the system tenant level.
 				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName(install.SystemInterfaceName))
 				defer db.Close()
-				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
+				t.L().Printf("checking for replica divergence")
+				if err := timeutil.RunWithTimeout(
+					ctx, "consistency check", 20*time.Minute,
+					func(ctx context.Context) error {
+						return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
+					},
+				); err != nil {
 					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
 				}
 			}()
