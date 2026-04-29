@@ -327,3 +327,90 @@ message StreamIngestionStats {
   // has been recorded yet.
   ReplicationLagInfo replication_lag_info = 5;
 }
+
+// LDRTxnID uniquely identifies a transaction in the transactional LDR
+// pipeline. Ordering is based on the timestamp. The applier_id identifies
+// which applier owns this transaction.
+message LDRTxnID {
+  option (gogoproto.goproto_stringer) = false;
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  int32 applier_id = 2 [(gogoproto.customname) = "ApplierID"];
+}
+
+// EncodedScheduledTransaction is the wire format for a scheduled transaction
+// sent from the coordinator processor to an applier processor. It carries the
+// raw KV bytes (not decoded datums) so that the applier can decode them
+// locally.
+message EncodedScheduledTransaction {
+  LDRTxnID txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  repeated StreamEvent.KV encoded_kvs = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "EncodedKVs"];
+  repeated LDRTxnID dependencies = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp event_horizon = 4 [(gogoproto.nullable) = false];
+}
+
+// EncodedCheckpoint is the wire format for a checkpoint timestamp sent from
+// the coordinator to an applier processor.
+message EncodedCheckpoint {
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+}
+
+// LDRApplierEvent is a union type for events the coordinator sends to applier
+// processors over the DistSQL wire.
+message LDRApplierEvent {
+  oneof event {
+    EncodedScheduledTransaction scheduled_txn = 1;
+    EncodedCheckpoint checkpoint = 2;
+  }
+}
+
+// DepResolverWait requests the dep resolver to register the waiting applier
+// as a waiter on each of the listed transactions.
+message DepResolverWait {
+  int32 waiting_id = 1 [(gogoproto.customname) = "WaitingID"];
+  repeated LDRTxnID wait_txns = 2 [(gogoproto.nullable) = false];
+}
+
+// DepResolverWaitHorizon requests the dep resolver to register the waiting
+// applier as blocked until all transactions from depend_id up to txn_horizon
+// have been applied.
+message DepResolverWaitHorizon {
+  int32 waiting_id = 1 [(gogoproto.customname) = "WaitingID"];
+  int32 depend_id = 2 [(gogoproto.customname) = "DependID"];
+  util.hlc.Timestamp txn_horizon = 3 [(gogoproto.nullable) = false];
+}
+
+// DepResolverReady notifies the dep resolver that a transaction has been
+// applied, allowing it to resolve any waiters on that transaction.
+message DepResolverReady {
+  LDRTxnID ready_txn = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp resolved_time = 2 [(gogoproto.nullable) = false];
+}
+
+// DepResolverForwardUpdate carries a DependencyUpdate that should be
+// forwarded to the co-located applier via the loopback backchannel.
+message DepResolverForwardUpdate {
+  LDRTxnID txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  util.hlc.Timestamp resolved_time = 2 [(gogoproto.nullable) = false];
+}
+
+// LDRDepResolverEventType discriminates the event carried by
+// LDRDepResolverEvent. Exactly one set of fields is valid per type.
+enum LDRDepResolverEventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  DEP_RESOLVER_EVENT_UNKNOWN = 0;
+  DEP_RESOLVER_EVENT_WAIT = 1;
+  DEP_RESOLVER_EVENT_WAIT_HORIZON = 2;
+  DEP_RESOLVER_EVENT_READY = 3;
+  DEP_RESOLVER_EVENT_FORWARD_UPDATE = 4;
+}
+
+// LDRDepResolverEvent is the wire format for messages sent from an applier
+// processor to a dep resolver processor via DistSQL routing. The type field
+// discriminates which sub-message is populated; only one should be set.
+message LDRDepResolverEvent {
+  LDRDepResolverEventType type = 5;
+  DepResolverWait wait = 1 [(gogoproto.nullable) = false];
+  DepResolverWaitHorizon wait_horizon = 2 [(gogoproto.nullable) = false];
+  DepResolverReady ready = 3 [(gogoproto.nullable) = false];
+  DepResolverForwardUpdate forward_update = 4 [(gogoproto.nullable) = false];
+}

@@ -825,6 +825,18 @@ func (m *MergeLoopbackSpec) summary() (string, []string) {
 	return "MergeLoopback", nil
 }
 
+func (m *TxnLDRCoordinatorSpec) summary() (string, []string) {
+	return "TxnLDRCoordinator", nil
+}
+
+func (m *TxnLDRApplierSpec) summary() (string, []string) {
+	return "TxnLDRApplier", nil
+}
+
+func (m *TxnLDRDepResolverSpec) summary() (string, []string) {
+	return "TxnLDRDepResolver", nil
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

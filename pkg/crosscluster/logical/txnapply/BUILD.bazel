@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/repstream/streampb",
         "//pkg/util/container/heap",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
