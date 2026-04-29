@@ -161,6 +161,8 @@ func (ex *connExecutor) descIDsInSchemaChangeJobs() (catalog.DescriptorIDSet, er
 			}
 			descIDsInJobs.Add(t.DroppedDatabaseID)
 			descIDsInJobs.Add(t.DescID)
+		case jobspb.TypeSchemaChangeDetails:
+			descIDsInJobs.Add(t.TypeID)
 		}
 		return nil
 	}); err != nil {
