@@ -592,12 +592,9 @@ func (s *ClusterSpec) RoachprodOpts(
 			var err error
 			switch cloud {
 			case AWS:
-				// We always pass true for shouldSupportLocalSSD here because the machine type selection
-				// logic should not depend on the user's preference for local SSDs.
-				// The actual decision to use provisioned local SSDs is handled in the disk configuration logic
-				// at the provider level, and EBS volume have priority over local SSDs.
-				// This means that if both EBS and local SSDs are available, EBS will be used.
-				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, true, requestedArch)
+				machineType, selectedArch, err = SelectAWSMachineType(
+					s.CPUs, s.Mem, s.mayUseLocalSSD(params.Defaults.PreferLocalSSD), requestedArch,
+				)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, requestedArch)
 			case Azure:
@@ -794,6 +791,27 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
+}
+
+// mayUseLocalSSD returns whether this spec could end up using local SSDs.
+// This is used to determine whether to select a machine type that supports
+// local SSDs (e.g. on AWS, machine families with a "d" suffix). When local
+// SSDs definitely won't be used, selecting a non-local-SSD machine type
+// avoids unnecessary capacity constraints.
+func (s *ClusterSpec) mayUseLocalSSD(defaultPreferLocalSSD bool) bool {
+	if s.VolumeType != "" && s.VolumeType != "local-ssd" {
+		return false
+	}
+	if s.LocalSSD == LocalSSDDisable {
+		return false
+	}
+	if s.VolumeSize != 0 {
+		return false
+	}
+	return s.VolumeType == "local-ssd" ||
+		s.LocalSSD == LocalSSDPreferOn ||
+		s.RandomizeVolumeType ||
+		defaultPreferLocalSSD
 }
 
 func (s *ClusterSpec) isLocalSSDAvailable(
