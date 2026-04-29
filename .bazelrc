@@ -49,6 +49,8 @@ common --@aspect_rules_ts//ts:skipLibCheck=honor_tsconfig
 common --@aspect_rules_ts//ts:default_to_tsc_transpiler
 build --enable_platform_specific_config
 build --define gotags=bazel,gss
+build --credential_helper=*.googleapis.com=%workspace%/build/bazelutil/credential-helper
+build --credential_helper=storage.googleapis.com=%workspace%/build/bazelutil/credential-helper
 build --experimental_proto_descriptor_sets_include_source_info
 build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
 build --symlink_prefix=_bazel/

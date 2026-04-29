@@ -28,7 +28,7 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-const gcpBucket = "cockroach-godeps"
+const gcpBucket = "cockroach-godeps-private"
 
 type versionedDependency struct {
 	Path    string

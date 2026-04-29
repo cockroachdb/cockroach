@@ -84,6 +84,8 @@ jobs:
         uses: actions/checkout@v4
       - run: ./build/github/get-engflow-keys.sh
         shell: bash
+      - run: ./build/github/set-bazel-storage-access-token.sh
+        shell: bash
       - name: Unique Build ID
         run: echo "BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_ENV
       - name: Compare and Post
