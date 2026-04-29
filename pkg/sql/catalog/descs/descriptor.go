@@ -553,6 +553,17 @@ func getDescriptorByName(
 		if flags.layerFilters.withoutStorage {
 			return nil, err
 		}
+		// Evict the stale name→ID mapping from the SystemDatabaseCache so
+		// that the next lookup goes to KV and self-heals. This handles PCR
+		// reader tenants where SetupOrAdvanceStandbyReaderCatalog rewrites
+		// the namespace but the cache still holds the bootstrap ID.
+		if db != nil && db.GetID() == keys.SystemDatabaseID && sc != nil {
+			tc.cr.InvalidateSystemCacheEntry(descpb.NameInfo{
+				ParentID:       db.GetID(),
+				ParentSchemaID: sc.GetID(),
+				Name:           name,
+			})
+		}
 		// In all other cases, having an ID should imply having a descriptor.
 		return nil, errors.Wrapf(
 			err,
