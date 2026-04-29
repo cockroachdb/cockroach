@@ -923,8 +923,8 @@ func (cfg *Config) CreateEngines(ctx context.Context, stopper *stop.Stopper) (En
 			scheduler, err := storage.NewMultiEngineCompactionScheduler(
 				storage.SchedulerOptions{
 					GetMaxConcurrency: func() int {
-						// TODO(sep-raft-log): expose as cluster settings.
-						return storage.DefaultMaxConcurrentCompactions
+						_, upper := storage.CompactionConcurrencyRange(&cfg.Settings.SV)
+						return upper
 					},
 					LogEngineDeprioritizationRatio: func() float64 {
 						return logEngDepri
