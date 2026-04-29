@@ -235,6 +235,19 @@ func (s *snapWriter) flushWAG(ing snapIngestion) error {
 	})
 }
 
+// testingFlushWAG flushes the staged WAG node to the raft engine batch so that
+// tests can inspect it. The WAG events are cleared after flushing.
+func (s *snapWriter) testingFlushWAG(ing snapIngestion) error {
+	if !s.eng.Separated() || s.wagWriter.Empty() {
+		return nil
+	}
+	if err := s.flushWAG(ing); err != nil {
+		return err
+	}
+	s.wagWriter.Clear()
+	return nil
+}
+
 // close closes the underlying storage batches, if any. Must be called exactly
 // once, at the end of the snapWriter lifetime.
 func (s *snapWriter) close() {

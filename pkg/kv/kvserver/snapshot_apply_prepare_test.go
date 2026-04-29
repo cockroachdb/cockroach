@@ -161,6 +161,7 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		return str
 	}
 	var sb redact.StringBuilder
+	var paths []string
 	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
@@ -178,8 +179,10 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		if str == "" {
 			return nil
 		}
-		_, err := sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
+		idx := len(paths) + 1
+		_, err := sb.WriteString(fmt.Sprintf(">> sst %d:\n%s", idx, str))
 		require.NoError(t, err)
+		paths = append(paths, fmt.Sprintf("%05d.sst", idx))
 		return nil
 	}
 
@@ -204,6 +207,10 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		},
 	}))
 	if eng.Separated() {
+		require.NoError(t, sw.testingFlushWAG(snapIngestion{
+			paths:      paths,
+			exciseSpan: snapDesc.KeySpan().AsRawSpanWithNoLocals(),
+		}))
 		sb.Printf(">> raft:\n%s", printBatch(sw.raftWO))
 	}
 
