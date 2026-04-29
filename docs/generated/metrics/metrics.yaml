@@ -11716,6 +11716,17 @@ layers:
       how_to_use: This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.
       visibility: ESSENTIAL
       owner: cockroachdb/admission-control
+    - name: admission.granter.disk_write_byte_tokens_exhausted_duration.kv
+      exported_name: admission_granter_disk_write_byte_tokens_exhausted_duration_kv
+      description: Total duration (in nanos) when disk write byte tokens were exhausted, as observed by the token granter (not waiters)
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when disk write byte tokens are exhausted, meaning disk bandwidth admission control is actively throttling elastic writes. Extended periods of exhaustion may indicate the provisioned disk bandwidth is insufficient for the workload.
+      visibility: ESSENTIAL
+      owner: cockroachdb/admission-control
     - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
       exported_name: admission_granter_elastic_io_tokens_exhausted_duration_kv
       description: Total duration when Elastic IO tokens were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
@@ -14471,15 +14482,38 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/admission-control
-    - name: admission.granter.disk_write_byte_tokens_exhausted_duration.kv
-      exported_name: admission_granter_disk_write_byte_tokens_exhausted_duration_kv
-      description: Total duration (in nanos) when disk write byte tokens were exhausted, as observed by the token granter (not waiters)
-      y_axis_label: Nanoseconds
+    - name: admission.granter.disk_write_byte_tokens_used.elastic.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_elastic_kv
+      description: Total disk write byte tokens consumed by elastic work
+      y_axis_label: Tokens
       type: COUNTER
-      unit: NANOSECONDS
+      unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      owner: cockroachdb/admission-control
+    - name: admission.granter.disk_write_byte_tokens_used.regular.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_regular_kv
+      description: Total disk write byte tokens consumed by regular work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.granter.disk_write_byte_tokens_used.snapshot.kv
+      exported_name: admission_granter_disk_write_byte_tokens_used_snapshot_kv
+      description: Total disk write byte tokens consumed by snapshot ingest work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.granter.disk_write_byte_tokens_utilization.kv
+      exported_name: admission_granter_disk_write_byte_tokens_utilization_kv
+      description: Utilization of disk write byte tokens, computed as tokens consumed over tokens allocated in the previous adjustment interval. Values above 1.0 indicate over-utilization; values near 0 indicate the disk bandwidth limiter is not a bottleneck
+      y_axis_label: Utilization
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.granter.elastic_io_tokens_available.kv
       exported_name: admission_granter_elastic_io_tokens_available_kv
       description: Number of tokens available

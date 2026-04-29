@@ -285,14 +285,16 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	snapshotReq := makeSnapshotQueue(snapshotGranter, snapshotQMetrics)
 	kvg.snapshotRequester = snapshotReq
 	ioll := &ioLoadListener{
-		storeID:               storeID,
-		settings:              sgc.settings,
-		kvRequester:           storeReq,
-		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
-		kvGranter:             kvg,
-		l0CompactedBytes:      sgcMetrics.L0CompactedBytes,
-		l0TokensProduced:      sgcMetrics.L0TokensProduced,
+		storeID:                 storeID,
+		settings:                sgc.settings,
+		kvRequester:             storeReq,
+		perWorkTokenEstimator:   makeStorePerWorkTokenEstimator(),
+		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
+		kvGranter:               kvg,
+		l0CompactedBytes:        sgcMetrics.L0CompactedBytes,
+		l0TokensProduced:        sgcMetrics.L0TokensProduced,
+		diskWriteByteTokensUtil: sgcMetrics.KVDiskWriteByteTokensUtil,
+		diskWriteByteTokensUsed: sgcMetrics.KVDiskWriteByteTokensUsed,
 	}
 	coord := &storeGrantCoordinator{
 		granter:        kvg,
@@ -385,6 +387,8 @@ type StoreGrantCoordinatorMetrics struct {
 	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
 
 	KVDiskWriteByteTokensExhaustedDuration *metric.Counter
+	KVDiskWriteByteTokensUtil              *metric.GaugeFloat64
+	KVDiskWriteByteTokensUsed              [admissionpb.NumStoreWorkTypes]*metric.Counter
 
 	L0CompactedBytes *metric.Counter
 	L0TokensProduced *metric.Counter
@@ -408,6 +412,13 @@ func makeStoreGrantCoordinatorMetrics(registry *metric.Registry) StoreGrantCoord
 		metric.NewCounter(kvElasticIOTokensExhaustedDuration),
 	}
 	m.KVDiskWriteByteTokensExhaustedDuration = metric.NewCounter(kvDiskWriteByteTokensExhaustedDuration)
+	m.KVDiskWriteByteTokensUtil = metric.NewGaugeFloat64(kvDiskWriteByteTokensUtil)
+	m.KVDiskWriteByteTokensUsed[admissionpb.RegularStoreWorkType] =
+		metric.NewCounter(kvDiskWriteByteTokensUsedRegular)
+	m.KVDiskWriteByteTokensUsed[admissionpb.SnapshotIngestStoreWorkType] =
+		metric.NewCounter(kvDiskWriteByteTokensUsedSnapshot)
+	m.KVDiskWriteByteTokensUsed[admissionpb.ElasticStoreWorkType] =
+		metric.NewCounter(kvDiskWriteByteTokensUsedElastic)
 	registry.AddMetricStruct(m)
 	return m
 }
