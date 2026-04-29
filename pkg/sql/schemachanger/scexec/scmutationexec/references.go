@@ -644,6 +644,10 @@ func (i *immediateVisitor) RemoveObjectParent(
 			return err
 		}
 		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	case catalog.Table, catalog.Type:
+		// Schemas don't maintain back-references to tables or types.
+	default:
+		return errors.AssertionFailedf("unexpected descriptor type %v for RemoveObjectParent", obj.DescriptorType())
 	}
 	return nil
 }
