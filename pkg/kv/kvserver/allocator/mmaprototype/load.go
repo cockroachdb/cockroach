@@ -459,7 +459,7 @@ func (mm *meansMemo) getStoreLoadSummary(
 	if ok {
 		return summary
 	}
-	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad, makeStandaloneLogger(ctx))
+	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
 }
@@ -783,7 +783,7 @@ func loadSummaryForDimension(
 	}
 
 	defer func() {
-		if ml.noop {
+		if !ml.V(ctx, 3) {
 			return
 		}
 

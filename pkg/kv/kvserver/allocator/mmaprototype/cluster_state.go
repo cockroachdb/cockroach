@@ -1771,7 +1771,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			ss.adjusted.topKRanges[msg.StoreID] = topk
 		}
 		topk.startInit()
-		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad, makeStandaloneLogger(ctx))
+		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 		if ss.StoreID == localss.StoreID {
 			topk.dim = CPURate
 		} else {
@@ -2468,7 +2468,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		if canAddLoad {
 			ml.logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else if !ml.noop {
+		} else if ml.V(ctx, 3) {
 			ml.logf(ctx, 3,
 				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
@@ -2478,7 +2478,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
 	if postTransferHighDiskSpaceUtil {
-		if !ml.noop {
+		if ml.V(ctx, 3) {
 			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
@@ -2498,7 +2498,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		if !ml.noop {
+		if ml.V(ctx, 3) {
 			failureReason.SafeString("overloadUrgent")
 		}
 		return false
@@ -2607,7 +2607,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if !ml.noop {
+	if ml.V(ctx, 3) {
 		appendSep := func() {
 			if failureReason.Len() != 0 {
 				failureReason.SafeRune(',')

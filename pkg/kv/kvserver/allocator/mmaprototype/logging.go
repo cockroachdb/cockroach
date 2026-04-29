@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -14,105 +14,60 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// mmaLogger bridges callers in MMA rebalancing code to a logging
-// destination. The destination is either VEventf (verbose-only) or
-// Infof (the per-shedding-store burst), captured in internalLogf.
+// mmaLogger bridges callers in MMA rebalancing code to one of two logging
+// destinations:
 //
-// When noop is true, internalLogf is nil and the logf method is a
-// no-op. Hot-path callers should additionally inspect noop directly to
-// skip building expensive arg lists, since variadic interface{} args are
-// constructed at the call site before logf has a chance to short-circuit:
+//   - verboseToInfof=true: logf always emits via InfofDepth. Used for the
+//     outer-loop heartbeat and the per-shedding-store burst, where the
+//     decision to promote has already been made by the caller.
+//   - verboseToInfof=false: logf emits via VEventfDepth(level), gated by
+//     vmodule/verbose-span at the call site of logf itself (not at the
+//     site of makeMMALogger). This is what callees in arbitrary files
+//     want: a vmodule setting on file F enables verbose output for logf
+//     calls in F regardless of where the logger was constructed.
 //
-//	if !ml.noop {
+// Hot-path callers should guard expensive arg construction with V(ctx,
+// level) using the same level they will pass to logf, since variadic
+// interface{} args are constructed at the call site before logf has a
+// chance to short-circuit:
+//
+//	if ml.V(ctx, 3) {
 //	    ml.logf(ctx, 3, "expensive %v", expensive)
 //	}
 //
 // Cold callers can call ml.logf unconditionally.
 type mmaLogger struct {
-	noop         bool
-	internalLogf func(ctx context.Context, depth int, level log.Level, format string, args ...interface{})
+	verboseToInfof bool
 }
 
-// logf invokes internalLogf if this bridge is not a no-op, otherwise
-// returns immediately. The hard-coded depth=1 lifts attribution past
-// this method so internalLogf attributes the entry to the caller of
-// logf rather than to logf itself.
+// makeMMALogger constructs a bridge. Pass verboseToInfof=true to promote
+// every logf call to Infof; pass false to route logf through VEventfDepth
+// gated per-call by vmodule/verbose-span at the emission site.
+func makeMMALogger(verboseToInfof bool) mmaLogger {
+	return mmaLogger{verboseToInfof: verboseToInfof}
+}
+
+// V reports whether a logf at the given level would emit. True when the
+// logger is in always-Infof mode, or when vmodule/verbose-span enables
+// `level` at the caller's source location. Depth=1 lifts the vmodule
+// lookup past V itself so attribution lands on the caller's file.
+func (ml mmaLogger) V(ctx context.Context, level log.Level) bool {
+	return ml.verboseToInfof || log.ExpensiveLogEnabledVDepth(ctx, 1, level)
+}
+
+// logf emits at Infof when the logger is in verboseToInfof mode, otherwise
+// at VEventfDepth(level) gated by vmodule/verbose-span at the caller of
+// logf. Depth arithmetic lifts attribution past this method so the entry
+// is attributed to the caller of logf.
 func (ml mmaLogger) logf(ctx context.Context, level log.Level, format string, args ...interface{}) {
-	if ml.noop {
+	if ml.verboseToInfof {
+		log.KvDistribution.InfofDepth(ctx, 1, format, args...)
 		return
 	}
-	ml.internalLogf(ctx, 1, level, format, args...)
-}
-
-// standaloneInfof emits at Infof. Used as the internalLogf for the
-// makeStandaloneLogger bridge below so the call site is a named
-// function (lint-allowlisted) rather than an anonymous closure. The
-// depth argument is added to the InfofDepth depth so that attribution
-// reaches the caller of mmaLogger.logf rather than logf itself.
-func standaloneInfof(
-	ctx context.Context, depth int, _ log.Level, format string, args ...interface{},
-) {
-	log.KvDistribution.InfofDepth(ctx, 1+depth, format, args...)
-}
-
-// makeStandaloneLogger returns a bridge for callers outside a rebalanceEnv
-// that still want detailed logging in load.go (and its callees) gated
-// by V(3). Returns a noop bridge when V(3) is off.
-func makeStandaloneLogger(ctx context.Context) mmaLogger {
-	if !log.ExpensiveLogEnabled(ctx, 3) {
-		return mmaLogger{noop: true}
+	if !log.ExpensiveLogEnabledVDepth(ctx, 1, level) {
+		return
 	}
-	return mmaLogger{internalLogf: standaloneInfof}
-}
-
-// logEnv carries the logf/detailedLogf methods that mmaLogger wraps.
-// It exists as a distinct type from rebalanceEnv so that calling code
-// can't accidentally invoke `re.logf(...)` directly and bypass the
-// mmaLogger gating; the conversion to *logEnv only happens inside
-// makeLogger.
-type logEnv rebalanceEnv
-
-// logf is the verbose-only internalLogf for the bridge: emits via
-// VEventfDepth at the requested level. Adds 1 to depth to step past
-// this method itself.
-func (le *logEnv) logf(
-	ctx context.Context, depth int, level log.Level, format string, args ...interface{},
-) {
-	log.KvDistribution.VEventfDepth(ctx, 1+depth, level, format, args...)
-}
-
-// detailedLogf is the Infof-promoting internalLogf for the bridge: it
-// always emits at Infof, ignoring the level argument. Adds 1 to depth
-// to step past this method itself.
-func (le *logEnv) detailedLogf(
-	ctx context.Context, depth int, _ log.Level, format string, args ...interface{},
-) {
-	log.KvDistribution.InfofDepth(ctx, 1+depth, format, args...)
-}
-
-// makeLogger builds the bridge to use for a single rebalancing pass or
-// shedding-store iteration:
-//
-//   - detailedLog=true: route to detailedLogf (Infof). Used for the
-//     outer-loop heartbeat and the per-shedding-store burst.
-//   - detailedLog=false but any per-file vmodule level is set, or a
-//     verbose tracing span is attached to ctx: route to logf
-//     (VEventf at level). The V(1) inside ExpensiveLogEnabled is the
-//     lowest verbose level, so any positive vmodule setting (file-
-//     specific or *=N) activates this path; ExpensiveLogEnabled
-//     additionally covers the verbose-span case.
-//   - otherwise: noop bridge; emits nothing and allows hot-path callers
-//     to skip arg construction.
-func (re *rebalanceEnv) makeLogger(ctx context.Context, detailedLog bool) mmaLogger {
-	le := (*logEnv)(re)
-	switch {
-	case detailedLog:
-		return mmaLogger{internalLogf: le.detailedLogf}
-	case log.ExpensiveLogEnabled(ctx, 1):
-		return mmaLogger{internalLogf: le.logf}
-	default:
-		return mmaLogger{noop: true}
-	}
+	log.KvDistribution.VEventfDepth(ctx, 1, level, format, args...)
 }
 
 // formatLoadPendingChanges renders the unenacted entries in changes as a
