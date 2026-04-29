@@ -177,6 +177,55 @@ inner-join (cross)
  │         └── y:9 = 10 [outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
  └── filters (true)
 
+# Regression test for #164666. A placeholder equality like i = $1 should
+# propagate into correlated subqueries referencing the same column.
+norm expect=InlineConstVar
+SELECT k FROM a WHERE i = $1 AND EXISTS(SELECT 1 FROM xy WHERE y = a.i)
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── has-placeholder
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           ├── i:2 = $1 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+           └── coalesce [subquery]
+                ├── subquery
+                │    └── project
+                │         ├── columns: column14:14!null
+                │         ├── cardinality: [0 - 1]
+                │         ├── has-placeholder
+                │         ├── key: ()
+                │         ├── fd: ()-->(14)
+                │         ├── limit
+                │         │    ├── columns: y:9!null
+                │         │    ├── cardinality: [0 - 1]
+                │         │    ├── has-placeholder
+                │         │    ├── key: ()
+                │         │    ├── fd: ()-->(9)
+                │         │    ├── select
+                │         │    │    ├── columns: y:9!null
+                │         │    │    ├── has-placeholder
+                │         │    │    ├── fd: ()-->(9)
+                │         │    │    ├── limit hint: 1.00
+                │         │    │    ├── scan xy
+                │         │    │    │    ├── columns: y:9
+                │         │    │    │    └── limit hint: 100.00
+                │         │    │    └── filters
+                │         │    │         └── y:9 = $1 [outer=(9), constraints=(/9: (/NULL - ]), fd=()-->(9)]
+                │         │    └── 1
+                │         └── projections
+                │              └── true [as=column14:14]
+                └── false
+
 # --------------------------------------------------
 # InlineProjectConstants
 # --------------------------------------------------
