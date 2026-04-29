@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
@@ -48,7 +47,7 @@ type elasticCPUInternalWorkQueue interface {
 	requester
 	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
 	SetTenantWeights(tenantWeights map[uint64]uint32)
-	adjustGroupUsed(groupID roachpb.TenantID, additionalUsed int64)
+	adjustGroupUsed(gKey groupKey, additionalUsed int64)
 }
 
 func makeElasticCPUWorkQueue(
@@ -106,7 +105,7 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 
 	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
 	_, difference := h.overLimitInner()
-	e.workQueue.adjustGroupUsed(h.tenantID, difference.Nanoseconds())
+	e.workQueue.adjustGroupUsed(tenantGroupKey(h.tenantID.ToUint64()), difference.Nanoseconds())
 	if h.bypassedAdmission {
 		e.metrics.bypassedAdmissionCumNanos.Add(difference.Nanoseconds())
 	}

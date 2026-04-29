@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -598,4 +599,138 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 		"second deduction should have covered shortfall, skipping Admit")
 
 	h.Close()
+}
+
+// TestSetMaxCPUGroupsRGOnly verifies that SetMaxCPUGroups inputs
+// are interpreted as resource group IDs (rgKind) only. A
+// numerically equal tenant-keyed container must not inherit the
+// flag — that's the cross-namespace collision the kind discriminator
+// in q.mu.groups is meant to prevent. The lookup-time guard in
+// getMaxCPULocked enforces this even though q.mu.maxCPUGroups
+// itself is uint64-keyed.
+func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	// Create a tenant-keyed container with id=1.
+	q.setUseResourceGroup(false)
+	tenantHandle := newSQLCPUAdmissionHandle(
+		WorkInfo{
+			TenantID: roachpb.MustMakeTenantID(1),
+			Priority: admissionpb.NormalPri,
+		}, true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+
+	// Create an rg-keyed container with id=1 (highResourceGroupID).
+	q.setUseResourceGroup(true)
+	rgHandle := newSQLCPUAdmissionHandle(
+		WorkInfo{
+			TenantID: roachpb.MustMakeTenantID(99),
+			Priority: admissionpb.NormalPri,
+		}, true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, rgHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+
+	// Both containers should now coexist with the same numeric ID.
+	q.mu.Lock()
+	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(1)]
+	rgContainer, rgOK := q.mu.groups[rgGroupKey(1)]
+	q.mu.Unlock()
+	require.True(t, tenantOK, "tenant 1 container should exist")
+	require.True(t, rgOK, "rg 1 container should exist")
+	require.NotSame(t, tenantContainer, rgContainer,
+		"tenant 1 and rg 1 must be distinct *groupInfo entries")
+
+	// Set maxCPU on group 1. It should affect the rg container only.
+	q.SetMaxCPUGroups(map[uint64]bool{1: true})
+
+	q.mu.Lock()
+	tenantMaxCPU := tenantContainer.cpuTimeBurstBucket.maxCPU
+	rgMaxCPU := rgContainer.cpuTimeBurstBucket.maxCPU
+	q.mu.Unlock()
+
+	require.False(t, tenantMaxCPU,
+		"tenant container must not inherit the rg-keyed maxCPU flag "+
+			"(getMaxCPULocked's isRg guard is the enforcement)")
+	require.True(t, rgMaxCPU,
+		"rg container should pick up the maxCPU flag")
+
+	tenantHandle.Close()
+	rgHandle.Close()
+}
+
+// admitOnce drives a single slow-path Admit on a new SQLCPUHandle
+// for (tenantID, pri) and returns the handle. The caller is
+// responsible for Close.
+func admitOnce(
+	t *testing.T, ctx context.Context, q *WorkQueue, tenantID uint64, pri admissionpb.WorkPriority,
+) *SQLCPUHandle {
+	t.Helper()
+	h := newSQLCPUAdmissionHandle(
+		WorkInfo{TenantID: roachpb.MustMakeTenantID(tenantID), Priority: pri},
+		true, &sqlCPUProviderImpl{}, q)
+	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	return h
+}
+
+// requireGroupUsed returns q.mu.groups[key].used, failing the test
+// if the entry does not exist.
+func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
+	t.Helper()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	g, ok := q.mu.groups[key]
+	require.Truef(t, ok, "group %v should exist in q.mu.groups", key)
+	return g.used
+}
+
+// hasGroup reports whether q.mu.groups has an entry for key.
+func hasGroup(q *WorkQueue, key groupKey) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	_, ok := q.mu.groups[key]
+	return ok
+}
+
+// TestSQLCPUHandleCloseAfterModeFlip verifies that a mode flip
+// between Admit and Close still routes the drained reservation to
+// the original (Admit-time) container. The reservationSourceGroup
+// field captures the key at Admit time precisely so this scenario
+// stays correct: re-deriving from the WorkQueue's current
+// useResourceGroup would route to a freshly-created container that
+// never received the tokens.
+func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+	// Start in serverless mode: Admit creates a tenant-keyed container.
+	q.setUseResourceGroup(false)
+
+	h := admitOnce(t, ctx, q, 7, admissionpb.NormalPri)
+	tenantKey := tenantGroupKey(7)
+	require.Equal(t, tenantKey, h.mu.reservationSourceGroup)
+	usedBefore := requireGroupUsed(t, q, tenantKey)
+
+	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
+	// route to rgGroupKey(highResourceGroupID), but Close should still
+	// target the tenant-keyed container that holds the prior tokens.
+	q.setUseResourceGroup(true)
+
+	_ = tg.buf.stringAndReset()
+	h.Close()
+	require.Contains(t, tg.buf.String(), "returnGrant")
+
+	require.Less(t, requireGroupUsed(t, q, tenantKey), usedBefore,
+		"tenant container's used must decrement; if not, Close "+
+			"re-derived the container key from the post-flip mode")
+	require.False(t, hasGroup(q, rgGroupKey(highResourceGroupID)),
+		"rg container must not have been created by Close (it would "+
+			"mean Close re-derived from current mode rather than using "+
+			"reservationSourceGroup)")
 }
