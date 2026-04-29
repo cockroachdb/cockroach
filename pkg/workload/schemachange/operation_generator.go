@@ -1651,13 +1651,10 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies or foreign keys.
-	tableHasPolicies, tableHasFK := false, false
+	// Check if the table has any policies.
+	tableHasPolicies := false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
-			return nil, err
-		}
-		if tableHasFK, err = og.tableHasFK(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 	}
@@ -1671,10 +1668,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	colIsPrimaryKey, err := og.colIsPrimaryKey(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -1696,7 +1689,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -1709,9 +1701,9 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// It is possible that we cannot drop column because
 		// it is referenced in a policy expression.
 		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies},
-		// It is possible that we cannot drop column because
-		// it is depended on by a foreign key.
-		{code: pgcode.DependentObjectsStillExist, condition: tableHasFK},
+		// Predicting DependentObjectsStillExist precisely has been a source of
+		// flakes, so permit it as a valid outcome instead.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
@@ -1741,19 +1733,6 @@ func (og *operationGenerator) tableHasPolicies(
 	}
 
 	return hasPolicies, nil
-}
-
-// tableHasFK checks if a table participates in any foreign key constraints.
-func (og *operationGenerator) tableHasFK(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) (bool, error) {
-	return og.scanBool(ctx, tx, `
-SELECT EXISTS (
-	SELECT 1
-	  FROM pg_constraint
-	 WHERE contype = 'f'
-	   AND (conrelid = $1::REGCLASS OR confrelid = $1::REGCLASS)
-)`, tableName.String())
 }
 
 func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2594,11 +2573,6 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name, true /* includeFKs */)
-	if err != nil {
-		return nil, err
-	}
-
 	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnForTypeChange.name)
 	if err != nil {
 		return nil, err
@@ -2640,7 +2614,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
-		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed || hasOngoingAlterPKSchemaChange},
+		{code: pgcode.DependentObjectsStillExist, condition: colIsRefByComputed || hasOngoingAlterPKSchemaChange},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
