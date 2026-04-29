@@ -169,10 +169,7 @@ func (ex *connExecutor) descIDsInSchemaChangeJobs() (catalog.DescriptorIDSet, er
 
 	// If there is no declarative schema changer job, then we are done. Otherwise,
 	// we need to check which descriptor has the jobID in its schema change state.
-	// By default, we only wait for one version if there is no job, but for DML injection
-	// stricter timing is needed.
-	if ex.extraTxnState.schemaChangerState.jobID == jobspb.InvalidJobID ||
-		ex.server.cfg.TestingKnobs.ForceWaitForOneVersionWithJobs {
+	if ex.extraTxnState.schemaChangerState.jobID == jobspb.InvalidJobID {
 		return descIDsInJobs, nil
 	}
 	// Get descriptor IDs with declarative schema changer jobs.
