@@ -16,16 +16,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldUseLooselyCoupledTruncation(t *testing.T) {
+func TestUseLooselyCoupledTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	tests := []struct {
+		enginesSeparated       bool
 		settingEnabled         bool
 		raftExpectedFirstIndex kvpb.RaftIndex
 		wantLoose              bool
 	}{
+		// Separated engines use loosely coupled truncations unconditionally.
+		{enginesSeparated: true, settingEnabled: false, raftExpectedFirstIndex: 0, wantLoose: true},
+		{enginesSeparated: true, settingEnabled: false, raftExpectedFirstIndex: 5, wantLoose: true},
+		{enginesSeparated: true, settingEnabled: true, raftExpectedFirstIndex: 0, wantLoose: true},
+		{enginesSeparated: true, settingEnabled: true, raftExpectedFirstIndex: 5, wantLoose: true},
+		// Other tests assume single engine.
 		{settingEnabled: false, raftExpectedFirstIndex: 0, wantLoose: false},
 		{settingEnabled: false, raftExpectedFirstIndex: 5, wantLoose: false},
 		{settingEnabled: true, raftExpectedFirstIndex: 0, wantLoose: false},
@@ -35,8 +42,9 @@ func TestShouldUseLooselyCoupledTruncation(t *testing.T) {
 	for _, tc := range tests {
 		t.Run("", func(t *testing.T) {
 			looselyCoupledTruncationEnabled.Override(ctx, &st.SV, tc.settingEnabled)
-			got := useLooselyCoupledTruncation(&st.SV, tc.raftExpectedFirstIndex)
-			require.Equal(t, tc.wantLoose, got)
+			require.Equal(t, tc.wantLoose, useLooselyCoupledTruncation(
+				&st.SV, tc.raftExpectedFirstIndex, tc.enginesSeparated,
+			))
 		})
 	}
 }

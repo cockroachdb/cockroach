@@ -498,7 +498,14 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 // useLooselyCoupledTruncation returns true if the truncation must be enacted
 // via the loosely-coupled path (raftLogTruncator). Otherwise, it should be
 // applied synchronously using the tightly-coupled path.
-func useLooselyCoupledTruncation(sv *settings.Values, raftExpectedFirstIndex kvpb.RaftIndex) bool {
+func useLooselyCoupledTruncation(
+	sv *settings.Values, raftExpectedFirstIndex kvpb.RaftIndex, enginesSeparated bool,
+) bool {
+	if enginesSeparated {
+		// With separated engines, loosely-coupled truncation is mandatory: the
+		// synchronous path cannot atomically truncate across two engines.
+		return true
+	}
 	// Use loosely-coupled truncations if configured by the setting. Otherwise,
 	// perform a tightly-coupled truncation, i.e. apply it immediately.
 	//
@@ -517,7 +524,7 @@ func (b *replicaAppBatch) stageTruncation(
 ) error {
 	truncatedState := res.GetRaftTruncatedState() // NB: not nil
 	useLooselyCoupled := useLooselyCoupledTruncation(
-		&b.r.ClusterSettings().SV, res.RaftExpectedFirstIndex,
+		&b.r.ClusterSettings().SV, res.RaftExpectedFirstIndex, b.r.store.EnginesSeparated(),
 	)
 
 	if useLooselyCoupled {
