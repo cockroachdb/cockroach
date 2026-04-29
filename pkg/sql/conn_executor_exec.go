@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -2639,7 +2640,20 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 			return err
 		}
 
-		if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
+		// Apply the statement timeout so the wait for older descriptor leases
+		// to drain (inside CheckTwoVersionInvariant's retry loop) cannot hang
+		// indefinitely. The schema-change KV writes are rolled back inside
+		// CheckTwoVersionInvariant before the wait begins, so timing out here
+		// does not leave anything in flight; the user can simply retry.
+		err := ex.runWithStatementTimeout(ctx, func(ctx context.Context) error {
+			return ex.checkDescriptorTwoVersionInvariant(ctx)
+		}, func() error {
+			return ex.planner.noticeSender.SendNotice(ex.Ctx(), pgnotice.Newf(
+				"The statement has timed out while waiting for older descriptor "+
+					"leases to be released. The schema change was not applied."),
+				true /* immediateFlush */)
+		})
+		if err != nil {
 			return err
 		}
 	}

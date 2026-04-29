@@ -125,15 +125,24 @@ func CheckTwoVersionInvariant(
 			return err
 		}
 		if count == 0 {
-			break
+			return &twoVersionInvariantViolationError{ids: withNewVersion}
 		}
 		if onRetryBackoff != nil {
 			onRetryBackoff()
 		}
 	}
-	return &twoVersionInvariantViolationError{
-		ids: withNewVersion,
+	// base.DefaultRetryOptions sets neither MaxRetries nor MaxDuration, so
+	// r.Next() returning false here implies ctx was cancelled (e.g. statement
+	// timeout). Surface ctx.Err() so callers can map it to a timeout error
+	// rather than masking the cancellation behind the retryable violation
+	// sentinel. If the loop ever exits without cancellation (e.g. due to a
+	// future change in retry options), fall back to the violation sentinel so
+	// the txn restarts cleanly rather than committing with the invariant
+	// possibly violated.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	return &twoVersionInvariantViolationError{ids: withNewVersion}
 }
 
 // CheckSpanCountLimit checks whether committing the set of uncommitted tables
