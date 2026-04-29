@@ -86,3 +86,54 @@ func TestSystemDatabaseCacheUpdate(t *testing.T) {
 		require.Equal(t, tsNew, gotTS)
 	})
 }
+
+func TestSystemDatabaseCacheRemoveNameEntry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	v := clusterversion.ClusterVersion{Version: st.Version.LatestVersion()}
+
+	privKey := descpb.NameInfo{
+		ParentID:       keys.SystemDatabaseID,
+		ParentSchemaID: keys.SystemPublicSchemaID,
+		Name:           "privileges",
+	}
+
+	const staleID = descpb.ID(1000000052)
+	const correctID = descpb.ID(52)
+	tsStale := hlc.Timestamp{WallTime: 100}
+	tsCorrect := hlc.Timestamp{WallTime: 200}
+
+	upsert := func(c *SystemDatabaseCache, id descpb.ID, ts hlc.Timestamp) {
+		var mc nstree.MutableCatalog
+		mc.UpsertNamespaceEntry(privKey, id, ts)
+		c.update(v, mc.Catalog)
+	}
+
+	t.Run("remove stale entry allows re-population", func(t *testing.T) {
+		c := NewSystemDatabaseCache(keys.SystemSQLCodec, st)
+		upsert(c, staleID, tsStale)
+		gotID, _ := c.lookupDescriptorID(v, privKey)
+		require.Equal(t, staleID, gotID)
+
+		c.removeNameEntry(v, privKey)
+		gotID, _ = c.lookupDescriptorID(v, privKey)
+		require.Equal(t, descpb.InvalidID, gotID)
+
+		upsert(c, correctID, tsCorrect)
+		gotID, _ = c.lookupDescriptorID(v, privKey)
+		require.Equal(t, correctID, gotID)
+	})
+
+	t.Run("remove non-existent entry is a no-op", func(t *testing.T) {
+		c := NewSystemDatabaseCache(keys.SystemSQLCodec, st)
+		c.removeNameEntry(v, privKey)
+		gotID, _ := c.lookupDescriptorID(v, privKey)
+		require.Equal(t, descpb.InvalidID, gotID)
+	})
+
+	t.Run("remove on nil cache is safe", func(t *testing.T) {
+		var c *SystemDatabaseCache
+		c.removeNameEntry(v, privKey)
+	})
+}
