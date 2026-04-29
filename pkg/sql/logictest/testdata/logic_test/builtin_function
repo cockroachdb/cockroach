@@ -5065,3 +5065,24 @@ statement error pgcode 22023 stddev cannot be negative
 SELECT random_normal(0, -1)
 
 subtest end
+
+# Regression tests for desired-type heuristic in overload resolution (#102716).
+# INT / INT returns DECIMAL, not INT. Previously the desired-type filter would
+# eliminate all division overloads, producing confusing errors. Now the error
+# correctly identifies the outer type mismatch.
+subtest division_desired_type
+
+statement error unknown signature: repeat\(string, decimal\)
+SELECT repeat('a', 1/1)
+
+statement error unknown signature: to_english\(decimal\)
+SELECT to_english(1/1)
+
+# BIT_LENGTH returns a scalar, not an array. Previously the desired-type filter
+# would eliminate overloads (since none return INT[]), producing a confusing
+# "unknown signature" error. Now the error correctly identifies the array
+# mismatch.
+query error op ANY <right> requires array, tuple or subquery on right side
+SELECT 1 > ANY(BIT_LENGTH(''))
+
+subtest end

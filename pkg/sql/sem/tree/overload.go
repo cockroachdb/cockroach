@@ -1206,8 +1206,11 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type,
-	// if a desired type was provided.
+	// if a desired type was provided. If the filter eliminates all candidates
+	// (e.g., int division has no overload returning int), we roll back so that
+	// subsequent heuristics still have candidates to work with.
 	if desired.Family() != types.AnyFamily {
+		before := s.overloadIdxs
 		s.overloadIdxs = filterOverloads(s.overloadIdxs, s.overloads, func(
 			o overloadImpl,
 		) bool {
@@ -1220,6 +1223,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			}
 			return true
 		})
+		if len(s.overloadIdxs) == 0 {
+			s.overloadIdxs = before
+		}
 		if ok, err := checkReturn(ctx, semaCtx, s); ok {
 			return err
 		}

@@ -272,3 +272,30 @@ statement ok
 DROP FUNCTION f(xy);
 
 subtest end
+
+# Regression test for desired-type heuristic incorrectly eliminating all
+# overloads for division. INT / INT has no overload returning INT (they all
+# return DECIMAL), so the desired-type filter used to eliminate all candidates,
+# causing "unsupported binary operator" errors.
+subtest division_desired_type
+
+statement ok
+CREATE FUNCTION f_div() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+    result INT;
+  BEGIN
+    result := x / 5;
+    RETURN result;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f_div();
+----
+2
+
+statement ok
+DROP FUNCTION f_div;
+
+subtest end
