@@ -149,10 +149,12 @@ func (re *rebalanceEnv) rebalanceStores(
 
 	// Promote the outer-loop narrative to Infof once per outerLogInterval,
 	// only on the first iteration of the production rebalance loop
-	// (passObs != nil). makeLogger falls back to verbose VEventf when V(3)
-	// is on, or to a no-op bridge otherwise.
-	passDetailedLog := re.passObs != nil && re.outerLogEvery.ShouldProcess(re.now)
-	passML := re.makeLogger(ctx, passDetailedLog)
+	// (passObs != nil). When not promoted, the bridge falls back to
+	// VEventfDepth at each call site, gated by vmodule/verbose-span at
+	// the source location of the logf call (not at this construction
+	// site).
+	passVerboseToInfof := re.passObs != nil && re.outerLogEvery.ShouldProcess(re.now)
+	passML := makeMMALogger(passVerboseToInfof)
 
 	passML.logf(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
@@ -274,13 +276,14 @@ func (re *rebalanceEnv) rebalanceStores(
 		// Decide per-shedding-store whether to promote detailed logs to
 		// Infof: persistently overloaded and not recently logged. Gated
 		// on passObs != nil so only the first iteration of the production
-		// rebalance loop emits. makeLogger falls back to verbose VEventf
-		// when V(3) is on, or to a no-op bridge otherwise.
+		// rebalance loop emits. When not promoted, the bridge falls back
+		// to VEventfDepth at each call site, gated by vmodule/verbose-
+		// span at the source location of the logf call.
 		overloadDur := re.now.Sub(ss.overloadStartTime)
 		persistentOverload := re.passObs != nil &&
 			overloadDur >= persistentOverloadThreshold &&
 			re.now.Sub(ss.lastDetailedLogTimes[localStoreID]) >= detailedLogInterval
-		ml := re.makeLogger(ctx, persistentOverload)
+		ml := makeMMALogger(persistentOverload)
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
 		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
@@ -379,7 +382,7 @@ func (re *rebalanceEnv) rebalanceStore(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
 	// Debug logging.
-	if !ml.noop {
+	if ml.V(ctx, 2) {
 		if n > 0 {
 			var buf redact.StringBuilder
 			buf.Printf("top-K[%d] ranges for s%d with lease on local s%d:", topKRanges.dim,
@@ -601,7 +604,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, postMeansExclusions, store.StoreID, re.passObs, ml)
 		ml.logf(ctx, 3, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
-		if !ml.noop {
+		if ml.V(ctx, 3) {
 			var buf redact.StringBuilder
 			buf.Printf("candidates for r%d:", rangeID)
 			for _, c := range cands.candidates {
@@ -819,7 +822,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// NB: intentionally log before re-adding the current leaseholder so
 		// we don't list it as a candidate.
 		// TODO(tbg): allocates 207x/op (logging and candidate building).
-		if !ml.noop {
+		if ml.V(ctx, 3) {
 			ml.logf(ctx, 3, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 		}
 		// Now candsPL is ready for computing the means.
@@ -836,11 +839,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
 			re.passObs.leaseShed(noHealthyCandidate)
-			if !ml.noop {
-				ml.logf(ctx, 3,
-					"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
-					ss.NodeID, ss.StoreID, rangeID)
-			}
+			ml.logf(ctx, 3,
+				"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
+				ss.NodeID, ss.StoreID, rangeID)
 			continue
 		}
 		// INVARIANT: candsPL has at least one candidate other than store.StoreID,
@@ -886,12 +887,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng,
 			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.leaseShed, ml)
 		if targetStoreID == 0 {
-			if !ml.noop {
-				ml.logf(
-					ctx, 3,
-					"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
-					ss.NodeID, ss.StoreID, rangeID)
-			}
+			ml.logf(ctx, 3,
+				"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
+				ss.NodeID, ss.StoreID, rangeID)
 			continue
 		}
 		targetSS := re.stores[targetStoreID]
