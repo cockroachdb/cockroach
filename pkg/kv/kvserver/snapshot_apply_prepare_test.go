@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -186,8 +187,13 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		eng:      eng,
 		writeSST: writeSST,
 	}
+	if eng.Separated() {
+		sw.wagWriter = wag.MakeWriter(&wag.Seq{})
+	}
 	require.NoError(t, sw.prepareSnapApply(ctx, snapWrite{
 		sl:         sl.StateLoader,
+		replicaID:  id,
+		snapIndex:  100,
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
 		desc:       snapDesc,

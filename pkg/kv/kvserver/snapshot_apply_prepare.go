@@ -8,8 +8,11 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -123,6 +126,10 @@ type snapWriter struct {
 	// eng encapsulates the storage engines of the Store. It knows whether the
 	// raft/log and state engines are separated, or the same engine must be used.
 	eng kvstorage.Engines
+	// wagWriter stages WAG lifecycle events for the snapshot application. When
+	// engines are separated, the WAG node is written to the raft engine batch
+	// during commit. When engines are not separated, it is a zero-value no-op.
+	wagWriter wag.Writer
 	// batch is the pending write batch when the snapshot is applied using a batch
 	// rather than ingestion, or nil if the snapshot is applied using ingestion.
 	//
@@ -170,14 +177,16 @@ func (s *snapWriter) applyAsBatch() kvstorage.StateWO {
 }
 
 // commit commits the snapshot application to storage. If engines are separated,
-// it first commits/syncs the raft engine batch, and then commits the state
-// machine mutation (as ingestion or batch). Otherwise, it commits the entire
-// mutation to a single engine (as ingestion or batch).
+// it first flushes the WAG node and commits/syncs the raft engine batch, and
+// then commits the state machine mutation (as ingestion or batch). Otherwise,
+// it commits the entire mutation to a single engine (as ingestion or batch).
 func (s *snapWriter) commit(
 	ctx context.Context, ing snapIngestion,
 ) (pebble.IngestOperationStats, error) {
 	if s.eng.Separated() {
-		// TODO(sep-raft-log): populate the WAG node.
+		if err := s.flushWAG(ing); err != nil {
+			return pebble.IngestOperationStats{}, err
+		}
 		if err := s.raftWO.Commit(true /* sync */); err != nil {
 			return pebble.IngestOperationStats{}, err
 		}
@@ -210,6 +219,22 @@ func (s *snapWriter) commit(
 	return stats, nil
 }
 
+// flushWAG writes the staged WAG node to the raft engine batch. Must only be
+// called when engines are separated.
+func (s *snapWriter) flushWAG(ing snapIngestion) error {
+	if s.batch != nil {
+		// Snapshot applied as a batch: the WAG mutation carries the batch repr.
+		return s.wagWriter.Flush(s.raftWO, s.batch.Repr())
+	}
+	// Snapshot applied as an ingestion: write the WAG node directly with an
+	// Ingestion mutation, since there is no state engine batch to reference.
+	return s.wagWriter.FlushIngestion(s.raftWO, wagpb.Ingestion{
+		SSTs:           ing.paths,
+		SharedTables:   ing.shared,
+		ExternalTables: ing.external,
+	})
+}
+
 // close closes the underlying storage batches, if any. Must be called exactly
 // once, at the end of the snapWriter lifetime.
 func (s *snapWriter) close() {
@@ -224,6 +249,8 @@ func (s *snapWriter) close() {
 // snapWrite contains the data needed to prepare a snapshot write to storage.
 type snapWrite struct {
 	sl         logstore.StateLoader
+	replicaID  roachpb.FullReplicaID // identity of the replica receiving the snapshot
+	snapIndex  kvpb.RaftIndex        // raft index at which the snapshot initializes the replica
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
 	desc       *roachpb.RangeDescriptor // corresponds to the range descriptor in the snapshot
@@ -311,6 +338,17 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 			return err
 		}
 	}
+
+	// Stage the WAG event for the snapshot application. A snapshot initializes
+	// the state machine at the snapshot's raft index, regardless of whether the
+	// replica was previously initialized (catch-up snapshot) or not (initial
+	// snapshot).
+	//
+	// TODO(sep-raft-log): consider if we need a dedicated event for catch-up
+	// snapshots, or another event that guarantees replay to the previous applied
+	// index.
+	s.wagWriter.AddEvent(wagpb.MakeAddr(sw.replicaID, sw.snapIndex), wagpb.EventInit)
+
 	return nil
 }
 
@@ -347,21 +385,16 @@ func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyRe
 		if raftWO == nil {
 			raftWO = w
 		}
-		// TODO(sep-raft-log): plumb the WAG writer from the snapshot application
-		// path. Snapshot WAG population is not yet wired up (see the TODO in
-		// snapWriter.commit), so pass a nil writer for now.
 		return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
 			State: kvstorage.State{RO: s.eng.StateEngine(), WO: kvstorage.StateWO(w)},
 			Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: raftWO},
-		}, nil /* w */, sub)
+		}, &s.wagWriter, sub)
 	})
 }
 
 // snapIngestion encodes the parameters needed to run a Pebble ingestion for
-// applying a snapshot.
-//
-// TODO(sep-raft-log): this information needs to be stored in the corresponding
-// WAG node. Use the proto counterparts of this type (see wagpb.Ingestion).
+// applying a snapshot. When engines are separated, the ingestion metadata is
+// stored in the corresponding WAG node (see wagpb.Ingestion).
 type snapIngestion struct {
 	paths      []string
 	shared     []kvserverpb.SnapshotRequest_SharedTable

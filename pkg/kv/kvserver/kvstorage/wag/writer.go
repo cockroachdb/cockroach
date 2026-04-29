@@ -66,6 +66,20 @@ func (w *Writer) Flush(raftBatch storage.Writer, stateBatchRepr []byte) error {
 	})
 }
 
+// FlushIngestion writes the staged WAG node to the raft engine, with the
+// mutation described as a Pebble ingestion rather than a batch. This is used
+// when the state machine mutation is applied as an SST ingestion (e.g. snapshot
+// application). No-ops if no events were staged.
+func (w *Writer) FlushIngestion(raftBatch storage.Writer, ing wagpb.Ingestion) error {
+	if w.disabled() || len(w.events) == 0 {
+		return nil
+	}
+	return Write(raftBatch, w.seq.Next(), wagpb.Node{
+		Events:   w.events,
+		Mutation: wagpb.Mutation{Ingestion: &ing},
+	})
+}
+
 // Clear empties the staged WAG events.
 func (w *Writer) Clear() {
 	clear(w.events)
