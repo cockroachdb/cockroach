@@ -38,9 +38,10 @@ import (
 // the boundary.
 //
 // Concurrency: Flush is the only writer of the per-tick state and
-// the frontier, but Snapshot (used by the checkpoint loop) and
-// LastClosed (used by the per-job-info readers) read them from
-// other goroutines. mu serializes all three.
+// the frontier, but Checkpoint and ResumeForPartition (used by the
+// checkpoint loop and the flow planner) and LastClosed (used by
+// the per-job-info readers) read them from other goroutines. mu
+// serializes all of them.
 type TickManager struct {
 	es        cloud.ExternalStorage
 	tickWidth time.Duration
@@ -228,7 +229,7 @@ func (m *TickManager) DataFrontier() hlc.Timestamp {
 // span.Frontier semantics; the merged ts is the supplied ts, so
 // callers must pass spans they know are not already tracked at a
 // higher ts (or accept the conservative reset). Safe to call
-// concurrently with Flush, Snapshot, and the close loop.
+// concurrently with Flush, Checkpoint, and the close loop.
 func (m *TickManager) AddSpansAt(spans []roachpb.Span, ts hlc.Timestamp) error {
 	if len(spans) == 0 {
 		return nil
@@ -241,36 +242,19 @@ func (m *TickManager) AddSpansAt(spans []roachpb.Span, ts hlc.Timestamp) error {
 	return nil
 }
 
-// Snapshot captures the manager's checkpoint state for persistence
-// (see Persister). Holds mu briefly to copy frontier entries and
-// per-tick file lists; the returned State is independent of the
-// manager and may outlive subsequent Flushes.
-func (m *TickManager) Snapshot() (State, error) {
+// Checkpoint hands the manager's live (highWater, frontier,
+// openTicks) to the Persister under the manager's lock. The
+// frontier is passed by reference: the persister iterates
+// frontier.Entries() inside its txn and never retains it past
+// Store's return. The openTicks map is a freshly-copied snapshot
+// so the persister can serialize it without contending with
+// subsequent Flushes. Holds mu for the duration of the
+// persister.Store call (one InternalDB.Txn for the production
+// jobPersister); contention with Flush is bounded by
+// checkpointInterval (see progress.go).
+func (m *TickManager) Checkpoint(ctx context.Context, p Persister) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	// Rebuild the frontier into a fresh one so the caller (and the
-	// persister it hands the snapshot to) doesn't share storage with
-	// the live manager. The walk is bounded by the number of spans,
-	// not the volume of events flushed.
-	spans := make([]roachpb.Span, 0)
-	tsBySpan := make(map[string]hlc.Timestamp)
-	for sp, ts := range m.mu.frontier.Entries() {
-		spans = append(spans, sp)
-		tsBySpan[sp.String()] = ts
-	}
-	snapFrontier, err := span.MakeFrontier(spans...)
-	if err != nil {
-		return State{}, errors.Wrap(err, "snapshotting frontier")
-	}
-	for _, sp := range spans {
-		if ts := tsBySpan[sp.String()]; ts.IsSet() {
-			if _, err := snapFrontier.Forward(sp, ts); err != nil {
-				return State{}, errors.Wrap(err, "snapshotting frontier")
-			}
-		}
-	}
-
 	openTicks := make(map[hlc.Timestamp][]revlogpb.File, len(m.mu.pending))
 	for tickEnd, pt := range m.mu.pending {
 		if len(pt.files) == 0 {
@@ -280,12 +264,61 @@ func (m *TickManager) Snapshot() (State, error) {
 		copy(files, pt.files)
 		openTicks[tickEnd] = files
 	}
+	return p.Store(ctx, m.mu.lastClosed, m.mu.frontier, openTicks)
+}
 
-	return State{
-		HighWater: m.mu.lastClosed,
-		Frontier:  snapFrontier,
-		OpenTicks: openTicks,
-	}, nil
+// ResumeForPartition derives the per-producer ResumeState for a
+// partition's assigned spans from the manager's live frontier and
+// open-tick file lists. Holds mu for the duration of the
+// derivation. Used by runOneFlow to populate each producer's
+// RevlogSpec with a consistent restart position.
+func (m *TickManager) ResumeForPartition(spans []roachpb.Span) ResumeState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return resumeStateForPartitionLocked(m.mu.frontier, m.mu.pending, spans)
+}
+
+// resumeStateForPartitionLocked is the locked-region body of
+// ResumeForPartition. Mirrors the public ResumeStateForPartition
+// (which derives the same info from a loaded State) but reads
+// directly from the live manager state, avoiding any
+// stringly-keyed copy.
+func resumeStateForPartitionLocked(
+	frontier span.ReadOnlyFrontier, pending map[hlc.Timestamp]*pendingTick, spans []roachpb.Span,
+) ResumeState {
+	var resumes []SpanResume
+	for _, sp := range spans {
+		var minTS hlc.Timestamp
+		var found bool
+		for esp, ts := range frontier.Entries() {
+			if !sp.Overlaps(esp) || !ts.IsSet() {
+				continue
+			}
+			if !found || ts.Less(minTS) {
+				minTS = ts
+				found = true
+			}
+		}
+		if found {
+			resumes = append(resumes, SpanResume{Span: sp, Resolved: minTS})
+		}
+	}
+	var flushOrders map[hlc.Timestamp]int32
+	for tickEnd, pt := range pending {
+		var next int32
+		for _, f := range pt.files {
+			if f.FlushOrder >= next {
+				next = f.FlushOrder + 1
+			}
+		}
+		if next > 0 {
+			if flushOrders == nil {
+				flushOrders = make(map[hlc.Timestamp]int32, len(pending))
+			}
+			flushOrders[tickEnd] = next
+		}
+	}
+	return ResumeState{SpanResumes: resumes, StartingFlushOrders: flushOrders}
 }
 
 // Flush applies one producer's flush report (TickSink). Files are
@@ -303,7 +336,7 @@ func (m *TickManager) Flush(ctx context.Context, msg *revlogpb.Flush) error {
 	}
 	// Fire the hook outside the locked region so it observes the
 	// final post-close frontier and so its work doesn't serialize
-	// against Snapshot / LastClosed readers. We deliberately fire
+	// against Checkpoint / LastClosed readers. We deliberately fire
 	// on *any* forward movement (even sub-tick movement that didn't
 	// close any tick) — the PTS hook in particular wants to track
 	// the resolved frontier, not the closed-tick boundary.

@@ -20,13 +20,23 @@ import (
 
 // memPersister is an in-memory revlogjob.Persister for unit tests
 // that exercise the orchestration code without spinning up a job
-// registry.
+// registry. Store walks the live frontier into a flat list of
+// (span, ts) entries; Load rebuilds a fresh frontier from that
+// list so the loaded State doesn't share storage with whatever
+// frontier was passed to Store.
 type memPersister struct {
-	state revlogjob.State
-	found bool
+	highWater    hlc.Timestamp
+	frontierEnts []memFrontierEntry
+	openTicks    map[hlc.Timestamp][]revlogpb.File
+	found        bool
 	// stores counts how many times Store was called. Useful for
 	// driving synctest-bubbled checkpoint-loop tests.
 	stores int
+}
+
+type memFrontierEntry struct {
+	Span     roachpb.Span
+	Resolved hlc.Timestamp
 }
 
 var _ revlogjob.Persister = (*memPersister)(nil)
@@ -35,21 +45,51 @@ func (m *memPersister) Load(_ context.Context) (revlogjob.State, bool, error) {
 	if !m.found {
 		return revlogjob.State{}, false, nil
 	}
-	return m.state, true, nil
+	state := revlogjob.State{
+		HighWater: m.highWater,
+		OpenTicks: m.openTicks,
+	}
+	if len(m.frontierEnts) > 0 {
+		f, err := span.MakeFrontier()
+		if err != nil {
+			return revlogjob.State{}, false, err
+		}
+		for _, e := range m.frontierEnts {
+			if err := f.AddSpansAt(e.Resolved, e.Span); err != nil {
+				return revlogjob.State{}, false, err
+			}
+		}
+		state.Frontier = f
+	}
+	return state, true, nil
 }
 
-func (m *memPersister) Store(_ context.Context, state revlogjob.State) error {
-	m.state = state
+func (m *memPersister) Store(
+	_ context.Context,
+	highWater hlc.Timestamp,
+	frontier span.ReadOnlyFrontier,
+	openTicks map[hlc.Timestamp][]revlogpb.File,
+) error {
+	m.highWater = highWater
+	m.openTicks = openTicks
+	m.frontierEnts = m.frontierEnts[:0]
+	if frontier != nil {
+		for sp, ts := range frontier.Entries() {
+			m.frontierEnts = append(m.frontierEnts,
+				memFrontierEntry{Span: sp, Resolved: ts})
+		}
+	}
 	m.found = true
 	m.stores++
 	return nil
 }
 
-// TestSnapshotRoundTrip verifies that a fresh TickManager rehydrated
-// from another TickManager's Snapshot reproduces the same
+// TestCheckpointRoundTrip verifies that the manager's live state
+// flows through Checkpoint → Persister.Store → Persister.Load →
+// Rehydrate into a fresh manager that reports the same
 // observable state: HighWater (LastClosed), per-tick file lists,
 // and per-span frontier.
-func TestSnapshotRoundTrip(t *testing.T) {
+func TestCheckpointRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -58,27 +98,31 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	require.NoError(t, d.OnCheckpoint(ctx, allSpan, ts(115)))
 	d.OnValue(ctx, roachpb.Key("b"), ts(125), []byte("v_b"), nil)
 	// Don't checkpoint past the second tick — leaves it in pending
-	// state on the manager so Snapshot has both a closed tick and
-	// an open tick to capture.
+	// state on the manager so the Checkpoint captures both a
+	// closed tick (HighWater) and an open tick.
 
-	snap, err := d.Manager.Snapshot()
+	p := &memPersister{}
+	require.NoError(t, d.Manager.Checkpoint(ctx, p))
+
+	loaded, found, err := p.Load(ctx)
 	require.NoError(t, err)
-
-	// HighWater = last-closed tick end.
-	require.Equal(t, ts(110), snap.HighWater)
-	// Frontier reached ts(115).
-	require.Equal(t, ts(115), snap.Frontier.Frontier())
+	require.True(t, found)
+	require.Equal(t, ts(110), loaded.HighWater)
+	require.Equal(t, ts(115), loaded.Frontier.Frontier())
 
 	// Build a fresh manager, rehydrate, and verify it reports the
 	// same LastClosed and that the frontier round-trips.
 	d2, _ := newTestDriver(t, ts(100))
-	require.NoError(t, d2.Manager.Rehydrate(snap))
+	require.NoError(t, d2.Manager.Rehydrate(loaded))
 	require.Equal(t, ts(110), d2.Manager.LastClosed())
 
-	snap2, err := d2.Manager.Snapshot()
+	p2 := &memPersister{}
+	require.NoError(t, d2.Manager.Checkpoint(ctx, p2))
+	loaded2, found2, err := p2.Load(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(110), snap2.HighWater)
-	require.Equal(t, ts(115), snap2.Frontier.Frontier())
+	require.True(t, found2)
+	require.Equal(t, ts(110), loaded2.HighWater)
+	require.Equal(t, ts(115), loaded2.Frontier.Frontier())
 }
 
 // TestRehydrateOpenTicksAreClosedWithPriorFiles verifies that a
@@ -197,7 +241,7 @@ func TestResumeProducerBumpsFlushOrder(t *testing.T) {
 }
 
 // TestPersisterRoundTrip exercises the in-memory Persister contract:
-// Store followed by Load returns the same state.
+// Store followed by Load returns equivalent state.
 func TestPersisterRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -210,19 +254,16 @@ func TestPersisterRoundTrip(t *testing.T) {
 
 	frontier, err := span.MakeFrontierAt(ts(50), allSpan)
 	require.NoError(t, err)
-	want := revlogjob.State{
-		HighWater: ts(40),
-		Frontier:  frontier,
-		OpenTicks: map[hlc.Timestamp][]revlogpb.File{
-			ts(50): {{FileID: 1, FlushOrder: 0}, {FileID: 2, FlushOrder: 1}},
-		},
+	defer frontier.Release()
+	openTicks := map[hlc.Timestamp][]revlogpb.File{
+		ts(50): {{FileID: 1, FlushOrder: 0}, {FileID: 2, FlushOrder: 1}},
 	}
-	require.NoError(t, p.Store(ctx, want))
+	require.NoError(t, p.Store(ctx, ts(40), frontier, openTicks))
 
 	got, found, err = p.Load(ctx)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, want.HighWater, got.HighWater)
-	require.Equal(t, want.OpenTicks, got.OpenTicks)
-	require.Equal(t, want.Frontier.Frontier(), got.Frontier.Frontier())
+	require.Equal(t, ts(40), got.HighWater)
+	require.Equal(t, openTicks, got.OpenTicks)
+	require.Equal(t, ts(50), got.Frontier.Frontier())
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/revlog/revlogpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
@@ -114,16 +115,23 @@ func (p *jobPersister) Load(ctx context.Context) (State, bool, error) {
 }
 
 // Store atomically writes the three pieces of checkpoint state
-// under one transaction. Order of writes within the txn doesn't
+// under one transaction. The frontier is iterated by
+// jobfrontier.Store directly inside the txn, so its raw byte
+// keys land in InfoStorage without ever passing through a
+// stringly-keyed Go map. Order of writes within the txn doesn't
 // matter — they all commit or none do — but the Set is last so
 // that a hypothetical caller observing partial commits would never
 // see the user-visible HighWater jump ahead of the actual
-// underlying state. (Today we always commit the whole txn or none,
-// so this is belt-and-suspenders.)
-func (p *jobPersister) Store(ctx context.Context, state State) error {
+// underlying state.
+func (p *jobPersister) Store(
+	ctx context.Context,
+	highWater hlc.Timestamp,
+	frontier span.ReadOnlyFrontier,
+	openTicks map[hlc.Timestamp][]revlogpb.File,
+) error {
 	return p.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		ticks := make([]revlogpb.OpenTick, 0, len(state.OpenTicks))
-		for tickEnd, files := range state.OpenTicks {
+		ticks := make([]revlogpb.OpenTick, 0, len(openTicks))
+		for tickEnd, files := range openTicks {
 			ticks = append(ticks, revlogpb.OpenTick{
 				TickEnd: tickEnd,
 				Files:   files,
@@ -135,9 +143,9 @@ func (p *jobPersister) Store(ctx context.Context, state State) error {
 		); err != nil {
 			return errors.Wrap(err, "writing open-ticks blob")
 		}
-		if state.Frontier != nil {
+		if frontier != nil {
 			if err := jobfrontier.Store(
-				ctx, txn, p.jobID, flushedFrontierKey, state.Frontier,
+				ctx, txn, p.jobID, flushedFrontierKey, frontier,
 			); err != nil {
 				return errors.Wrap(err, "writing flushed frontier")
 			}
@@ -145,7 +153,7 @@ func (p *jobPersister) Store(ctx context.Context, state State) error {
 		// Continuous backup is unbounded, so there's no meaningful
 		// completion fraction to report — pass NaN to leave it null.
 		if err := jobs.ProgressStorage(p.jobID).Set(
-			ctx, txn, math.NaN(), state.HighWater,
+			ctx, txn, math.NaN(), highWater,
 		); err != nil {
 			return errors.Wrap(err, "writing job progress")
 		}

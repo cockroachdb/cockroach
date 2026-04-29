@@ -132,7 +132,7 @@ func Run(
 	// of the DistSQL flow and exits when checkpointCtx is cancelled
 	// either by the deferred cleanup below or by parent ctx
 	// cancellation (job pause / cancel / fail). It only reads from
-	// manager (via Snapshot); it never mutates flow state, so it's
+	// manager (via Checkpoint); it never mutates flow state, so it's
 	// safe to run concurrently with the DistSQL flow.
 	checkpointCtx, cancelCheckpoint := context.WithCancel(ctx)
 	checkpointDone := make(chan struct{})
@@ -270,15 +270,13 @@ func runOneFlow(
 			"revlogjob.runOneFlow: span partitioning yielded no producers for %d spans", len(spans))
 	}
 
-	// Snapshot the manager once so every producer in this iteration
-	// sees a consistent ResumeState — and so each iteration after a
-	// widening starts new producers' per-tick flushorder above any
-	// prior incarnation's contributions to the still-open tick.
-	resumeBase, err := manager.Snapshot()
-	if err != nil {
-		return errors.Wrap(err, "snapshotting manager for producer resume")
-	}
-
+	// Each producer in this iteration gets its restart position
+	// derived from the manager under the manager's lock. Per
+	// partition is fine — partition counts are O(nodes), not
+	// O(spans) — and avoids exposing a copy of the live frontier.
+	// On a widening this also gives every new producer a per-tick
+	// starting flushorder above any prior incarnation's
+	// contribution to the still-open tick.
 	plan := planCtx.NewPhysicalPlan()
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(partitions))
 	for i, part := range partitions {
@@ -289,7 +287,7 @@ func runOneFlow(
 			Dest:           dest,
 			TickWidthNanos: int64(tickWidth),
 		}
-		resumeToSpec(spec, ResumeStateForPartition(resumeBase, part.Spans))
+		resumeToSpec(spec, manager.ResumeForPartition(part.Spans))
 		corePlacement[i].SQLInstanceID = part.SQLInstanceID
 		corePlacement[i].Core.Revlog = spec
 	}

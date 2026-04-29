@@ -18,36 +18,62 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 // countingPersister is a small in-memory Persister that counts
-// Store invocations and snapshots the most recent state. The
-// counter is read from the test goroutine while Store runs on the
-// checkpointer goroutine, so accesses are guarded by a mutex (the
-// synctest bubble enforces ordering but not memory model
-// synchronization).
+// Store invocations and snapshots the most recent (highWater,
+// frontier-as-resolved-spans, openTicks). Frontier entries are
+// captured by walking Entries() during the Store call (the
+// frontier itself is owned by the caller and may move after Store
+// returns). The counter is read from the test goroutine while
+// Store runs on the checkpointer goroutine, so accesses are
+// guarded by a mutex (the synctest bubble enforces ordering but
+// not memory model synchronization).
 type countingPersister struct {
 	mu     syncutil.Mutex
 	stores int
-	last   State
+	last   recordedStore
+}
+
+type recordedStore struct {
+	highWater hlc.Timestamp
+	frontier  []frontierEntry
+	openTicks map[hlc.Timestamp][]revlogpb.File
+}
+
+type frontierEntry struct {
+	span roachpb.Span
+	ts   hlc.Timestamp
 }
 
 func (p *countingPersister) Load(context.Context) (State, bool, error) {
 	return State{}, false, nil
 }
 
-func (p *countingPersister) Store(_ context.Context, s State) error {
+func (p *countingPersister) Store(
+	_ context.Context,
+	highWater hlc.Timestamp,
+	frontier span.ReadOnlyFrontier,
+	openTicks map[hlc.Timestamp][]revlogpb.File,
+) error {
+	rec := recordedStore{highWater: highWater, openTicks: openTicks}
+	if frontier != nil {
+		for sp, ts := range frontier.Entries() {
+			rec.frontier = append(rec.frontier, frontierEntry{span: sp, ts: ts})
+		}
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.stores++
-	p.last = s
+	p.last = rec
 	return nil
 }
 
-func (p *countingPersister) snapshot() (int, State) {
+func (p *countingPersister) snapshot() (int, recordedStore) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.stores, p.last
@@ -102,8 +128,8 @@ func TestRunCheckpointerSyncTest(t *testing.T) {
 			require.Equal(t, i, stores, "after %d intervals", i)
 		}
 		_, last := p.snapshot()
-		require.Equal(t, hlc.Timestamp{WallTime: 100 * int64(time.Second)}, last.HighWater)
-		require.Len(t, last.OpenTicks, 1)
+		require.Equal(t, hlc.Timestamp{WallTime: 100 * int64(time.Second)}, last.highWater)
+		require.Len(t, last.openTicks, 1)
 
 		// Cancellation drains the loop without further stores.
 		cancel()

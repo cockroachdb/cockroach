@@ -20,14 +20,14 @@ import (
 // resume after a crash loses at most one interval of work.
 const checkpointInterval = 30 * time.Second
 
-// runCheckpointer periodically snapshots TickManager state and
-// hands it to the Persister. It returns when ctx is cancelled (job
+// runCheckpointer periodically asks TickManager to checkpoint its
+// state to the Persister. It returns when ctx is cancelled (job
 // pause / cancel / fail / completion).
 //
 // Failures during a single checkpoint are logged and skipped
 // rather than fatal: persistence is best-effort progress
 // reporting, not a correctness gate. The next interval retries
-// from the then-current snapshot.
+// from the then-current state.
 func runCheckpointer(ctx context.Context, persister Persister, manager *TickManager) error {
 	ticker := time.NewTicker(checkpointInterval)
 	defer ticker.Stop()
@@ -36,18 +36,9 @@ func runCheckpointer(ctx context.Context, persister Persister, manager *TickMana
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := checkpointOnce(ctx, persister, manager); err != nil {
+			if err := manager.Checkpoint(ctx, persister); err != nil {
 				log.Dev.Warningf(ctx, "revlogjob: checkpoint persist failed: %v", err)
 			}
 		}
 	}
-}
-
-// checkpointOnce snapshots and persists once. Extracted for tests.
-func checkpointOnce(ctx context.Context, persister Persister, manager *TickManager) error {
-	state, err := manager.Snapshot()
-	if err != nil {
-		return err
-	}
-	return persister.Store(ctx, state)
 }

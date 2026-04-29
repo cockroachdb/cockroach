@@ -12,8 +12,11 @@ import (
 )
 
 // ResumeStateForPartition derives the per-producer ResumeState for
-// a partition's assigned spans from the rehydrated TickManager
-// state.
+// a partition's assigned spans from a loaded checkpoint State —
+// the post-Rehydrate version of TickManager.ResumeForPartition,
+// suitable for tests that build State by hand. Production code
+// should call manager.ResumeForPartition instead, which reads the
+// live frontier under the manager's lock.
 //
 // The persisted Frontier may have spans that don't line up with the
 // new partition's spans (e.g. partitioning changed across the
