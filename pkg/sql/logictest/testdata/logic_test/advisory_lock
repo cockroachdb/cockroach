@@ -476,4 +476,458 @@ user root
 statement ok
 COMMIT
 
+subtest advisory_xact_lock_savepoint_rollback
+
+# Characterize how transaction advisory locks interact with savepoint
+# rollback. Locks taken before the savepoint must still be held; locks
+# taken inside the savepoint follow CRDB's KV concurrency layer rules
+# for replicated locks (see pkg/kv/kvserver/concurrency/lock_table.go).
+# The earlier lock_namespace subtest moves both connections to other
+# databases; pin both back to defaultdb so locks share a keyspace.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(940001)
+
+statement ok
+SAVEPOINT s
+
+statement ok
+SELECT pg_advisory_xact_lock(940002)
+
+statement ok
+ROLLBACK TO SAVEPOINT s
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+# Lock acquired before the savepoint must still be held.
+query B
+SELECT pg_try_advisory_xact_lock(940001)
+----
+false
+
+# Lock acquired inside the savepoint: CRDB keeps the replicated lock
+# even after ROLLBACK TO SAVEPOINT. This diverges from PostgreSQL,
+# which decrements its per-savepoint advisory lock counter and releases
+# the lock. The KV concurrency layer documents this on the replicated
+# lock release path; see pkg/kv/kvserver/concurrency/lock_table.go
+# (search for "savepoint rollbacks are rare enough").
+query B
+SELECT pg_try_advisory_xact_lock(940002)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+subtest advisory_xact_lock_upgrade_shared_to_exclusive
+
+# Same txn upgrades a shared lock to exclusive on the same key. After
+# the upgrade, no sibling may take the key in any mode until commit.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(950001)
+
+statement ok
+SELECT pg_advisory_xact_lock(950001)
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(950001)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(950001)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(950001)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_upgrade_blocked_by_concurrent_shared
+
+# A session that already holds shared on a key cannot upgrade to
+# exclusive while another session also holds shared on the same key.
+# The earlier upgrade subtest exercised the case where the upgrader is
+# the sole shared holder; this is the case where the upgrade has to
+# observe a sibling shared holder.
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(950101)
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(950101)
+
+# Upgrade must fail (non-blocking try) because testuser still holds
+# shared on the same key.
+query B
+SELECT pg_try_advisory_xact_lock(950101)
+----
+false
+
+statement ok
+ROLLBACK
+
+user testuser
+
+statement ok
+ROLLBACK
+
+# Once both shared holders release, a fresh acquisition succeeds.
+user root
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(950101)
+----
+true
+
+statement ok
+COMMIT
+
+subtest advisory_xact_lock_downgrade_exclusive_to_shared
+
+# Same txn takes shared on a key it already holds exclusively. Effective
+# strength must remain exclusive: a sibling's shared try must fail.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(950002)
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(950002)
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(950002)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+subtest advisory_xact_multi_key_release
+
+# A single txn holds locks across all three lockspaces (single bigint,
+# bigint shared, two-int4 packed). Commit must release every key
+# atomically; a sibling can re-acquire all three immediately.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(960001)
+
+statement ok
+SELECT pg_advisory_xact_lock_shared(960002)
+
+statement ok
+SELECT pg_advisory_xact_lock(960003::INT4, 960004::INT4)
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(960001)
+----
+true
+
+query B
+SELECT pg_try_advisory_xact_lock_shared(960002)
+----
+true
+
+query B
+SELECT pg_try_advisory_xact_lock(960003::INT4, 960004::INT4)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
+subtest advisory_xact_lock_read_only_txn
+
+# Characterize behavior of advisory lock acquisition inside a SQL
+# read-only transaction. The acquisition takes a replicated KV lock,
+# which may or may not be permitted under READ ONLY. PostgreSQL allows
+# advisory locks in read-only transactions.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN TRANSACTION READ ONLY
+
+statement ok
+SELECT pg_advisory_xact_lock(970001)
+
+# A sibling session must observe the lock as held; otherwise the
+# acquisition above silently no-op'd and the test is vacuous.
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(970001)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+subtest advisory_xact_lock_boundary_keys
+
+# Extreme key values must round-trip through the encoder and conflict
+# only with themselves.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(0)
+
+statement ok
+SELECT pg_advisory_xact_lock(9223372036854775807)
+
+statement ok
+SELECT pg_advisory_xact_lock(-9223372036854775808)
+
+statement ok
+SELECT pg_advisory_xact_lock(0::INT4, 0::INT4)
+
+statement ok
+SELECT pg_advisory_xact_lock(2147483647::INT4, 2147483647::INT4)
+
+statement ok
+SELECT pg_advisory_xact_lock((-2147483648)::INT4, (-2147483648)::INT4)
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(0)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(9223372036854775807)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(-9223372036854775808)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(0::INT4, 0::INT4)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock(2147483647::INT4, 2147483647::INT4)
+----
+false
+
+query B
+SELECT pg_try_advisory_xact_lock((-2147483648)::INT4, (-2147483648)::INT4)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+subtest advisory_xact_lock_retained_on_savepoint_error
+
+# A statement error inside a savepoint scope must not release advisory
+# locks acquired before the savepoint.
+
+user root
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_advisory_xact_lock(990001)
+
+statement ok
+SAVEPOINT s
+
+statement error division by zero
+SELECT 1/0
+
+statement ok
+ROLLBACK TO SAVEPOINT s
+
+user testuser
+
+statement ok
+SET database = defaultdb
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(990001)
+----
+false
+
+statement ok
+ROLLBACK
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+BEGIN
+
+query B
+SELECT pg_try_advisory_xact_lock(990001)
+----
+true
+
+statement ok
+COMMIT
+
+user root
+
 subtest end
