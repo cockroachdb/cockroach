@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -400,6 +401,7 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 169157)
 
 	dir := datapathutils.TestDataPath(t, "cpu_time_token_work_queue")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
