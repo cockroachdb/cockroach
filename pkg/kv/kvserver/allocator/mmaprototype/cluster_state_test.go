@@ -767,7 +767,7 @@ func TestClusterState(t *testing.T) {
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
 					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
-					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh, mmaLogger{internalLogf: log.KvDistribution.VEventfDepth})
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh, makeMMALogger(false /* verboseToInfof */))
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
@@ -780,7 +780,7 @@ func TestClusterState(t *testing.T) {
 					for _, replica := range replicas {
 						replicasSet.insert(replica)
 					}
-					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet, mmaLogger{internalLogf: log.KvDistribution.VEventfDepth})
+					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet, makeMMALogger(false /* verboseToInfof */))
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)

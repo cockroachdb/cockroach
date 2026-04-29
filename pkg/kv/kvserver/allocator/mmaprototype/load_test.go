@@ -235,7 +235,7 @@ func TestLoadSummaryForDimension(t *testing.T) {
 			got := loadSummaryForDimension(
 				ctx, dummyStoreID, dummyNodeID,
 				tc.dim, tc.load, tc.capacity, tc.meanLoad, tc.meanUtil,
-				mmaLogger{noop: true},
+				makeMMALogger(false /* verboseToInfof */),
 			)
 			require.Equal(t, tc.expected, got,
 				"dim=%v load=%d meanLoad=%d capacity=%d",
