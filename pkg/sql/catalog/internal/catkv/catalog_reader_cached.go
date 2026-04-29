@@ -492,6 +492,11 @@ func (c *cachedCatalogReader) ensure(ctx context.Context, read nstree.Catalog) e
 
 }
 
+// InvalidateSystemCacheEntry is part of the CatalogReader interface.
+func (c *cachedCatalogReader) InvalidateSystemCacheEntry(key descpb.NameInfo) {
+	c.systemDatabaseCache.removeNameEntry(c.version, key)
+}
+
 func (c *cachedCatalogReader) setByIDState(id descpb.ID, s byIDStateValue) {
 	if c.byIDState == nil {
 		c.byIDState = make(map[descpb.ID]byIDStateValue)
