@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -725,6 +727,10 @@ func TestDataDriven(t *testing.T) {
 								h := simulator.History()
 								run.hs = append(run.hs, h)
 
+								if rewrite {
+									writeMMASnapshots(t, simulator, plotDir, testName, sample+1)
+								}
+
 								for i, stmt := range assertions {
 									if holds, reason := stmt.Assert(ctx, h); !holds {
 										assertionEverFailed[i] = true
@@ -918,5 +924,26 @@ type modeHistory struct {
 func writeStateStrToFile(t *testing.T, topFile string, stateStr string, rewrite bool) {
 	if rewrite {
 		require.NoError(t, os.WriteFile(topFile, []byte(stateStr), 0644))
+	}
+}
+
+// writeMMASnapshots writes one JSON file per node containing the MMA
+// allocator's view of the cluster at the moment the simulation ended. The
+// snapshot is intended as a representative artifact for tooling that
+// consumes mmaprototype.Allocator.ClusterStateSnapshot in production
+// (debug-zip, status RPC, mma-investigator).
+func writeMMASnapshots(
+	t *testing.T, simulator *asim.Simulator, plotDir, testName string, sample int,
+) {
+	require.NoError(t, os.MkdirAll(plotDir, 0755))
+	m := &jsonpb.Marshaler{Indent: "  "}
+	for _, node := range simulator.State().Nodes() {
+		snap, err := node.MMAllocator().ClusterStateSnapshot()
+		require.NoError(t, err)
+		s, err := m.MarshalToString(snap)
+		require.NoError(t, err)
+		path := filepath.Join(plotDir,
+			fmt.Sprintf("%s_%d_n%d_mma_snapshot.json", testName, sample, node.NodeID()))
+		require.NoError(t, os.WriteFile(path, []byte(s), 0644))
 	}
 }
