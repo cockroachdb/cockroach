@@ -288,7 +288,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 		Owner:             OwnerUnitTest,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			encAtRest := c.(*clusterImpl).encAtRest
+			encAtRest := c.(interface{ EncryptedAtRest() bool }).EncryptedAtRest()
 			t.L().Printf("encryption-at-rest=%t", encAtRest)
 			if encAtRest {
 				atomic.StoreInt32(&sawEncrypted, 1)
