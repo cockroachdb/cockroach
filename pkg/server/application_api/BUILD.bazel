@@ -42,6 +42,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/crosscluster",
         "//pkg/jobs",

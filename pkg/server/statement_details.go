@@ -31,7 +31,6 @@ import (
 
 const (
 	mergeAggStmtMetadataColumnLatest = "merge_aggregated_stmt_metadata(metadata)"
-	mergeAggStmtMetadata_V23_2       = "crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))"
 )
 
 func (s *statusServer) StatementDetails(

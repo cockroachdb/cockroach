@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -1548,6 +1550,126 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				}
 			}
 
+		})
+	}
+}
+
+// TestCombinedStatementStatsQueryVersionGating exercises the V26_3 version gate
+// in getQuery / getActivityQuery. Both query variants must execute against the
+// statement_statistics_persisted and statement_activity views during a rolling
+// upgrade. The test runs a CombinedStatementStats RPC against a test server
+// pinned at each side of the gate, with one request shaped to read from the
+// persisted view and one shaped to read from the activity view — covering all
+// four (version × source view) combinations.
+func TestCombinedStatementStatsQueryVersionGating(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// We only care that the queries run; they don't need stress coverage.
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+
+	// V26_2 is the latest version that still pre-dates the V26_3 gate while
+	// having every system table the views depend on (notably system.statements,
+	// added in V26_2_AddSystemStatementsTable).
+	versions := []struct {
+		name    string
+		version roachpb.Version
+	}{
+		{"pre_v26_3", clusterversion.V26_2.Version()},
+		{"v26_3", clusterversion.V26_3.Version()},
+	}
+
+	mockTs := timeutil.Unix(1696906800, 0)
+
+	for _, v := range versions {
+		t.Run(v.name, func(t *testing.T) {
+			// Use MinSupported as the binary's min so that ClusterVersionOverride
+			// can pin the cluster below Latest. MakeTestingClusterSettings sets
+			// MinSupported to Latest, which would reject a pre-V26_3 override.
+			st := cluster.MakeTestingClusterSettingsWithVersions(
+				clusterversion.Latest.Version(),
+				clusterversion.MinSupported.Version(),
+				false, /* initializeVersion */
+			)
+			statsKnobs := sqlstats.CreateTestingKnobs()
+			statsKnobs.StubTimeNow = func() time.Time { return mockTs }
+			statsKnobs.SynchronousSQLStats = true
+			// Disable flushing so the only rows in the persisted/activity
+			// tables are the ones we insert below.
+			persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &st.SV, false)
+
+			ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ClusterVersionOverride:         v.version,
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
+					SQLStatsKnobs: statsKnobs,
+				},
+			})
+			defer ts.Stopper().Stop(ctx)
+
+			srv := ts.ApplicationLayer()
+			conn := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+			conn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+			conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+
+			// Insert a matching row into the persisted and activity tables (and
+			// their txn counterparts) so each RPC code path returns data and
+			// the SQL is fully evaluated rather than short-circuited on empty
+			// input.
+			ie := srv.InternalExecutor().(*sql.InternalExecutor)
+			stmt := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+			stmt.ID = 1
+			stmt.AggregatedTs = mockTs
+			stmt.Key.TransactionFingerprintID = 1
+			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(
+				ctx, ie, []appstatspb.CollectedStatementStatistics{stmt}, 1 /* nodeID */))
+			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtActivity(
+				ctx, ie, &stmt, nil /* aggInterval */))
+
+			txn := sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+			txn.StatementFingerprintIDs = []appstatspb.StmtFingerprintID{1}
+			txn.TransactionFingerprintID = 1
+			txn.AggregatedTs = mockTs
+			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(
+				ctx, ie, []appstatspb.CollectedTransactionStatistics{txn}, 1 /* nodeID */))
+			require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnActivity(
+				ctx, ie, &txn, nil /* aggInterval */))
+
+			client := srv.GetStatusClient(t)
+
+			// Without a Start time, the activity-table check in
+			// activityTablesHaveFullData short-circuits to false and the RPC
+			// reads from statement_statistics_persisted via getQuery.
+			t.Run("persisted", func(t *testing.T) {
+				resp, err := client.CombinedStatementStats(ctx,
+					&serverpb.CombinedStatementsStatsRequest{
+						Limit:     100,
+						FetchMode: createStmtFetchMode(serverpb.StatsSortOptions_SERVICE_LAT),
+					})
+				require.NoError(t, err)
+				require.Equal(t, server.CrdbInternalStmtStatsPersisted, resp.StmtsSourceTable)
+				require.NotZero(t, len(resp.Statements))
+			})
+
+			// With a Start time at the activity row's aggregated_ts, the
+			// activity table is selected and the RPC reads from
+			// statement_activity via getActivityQuery.
+			t.Run("activity", func(t *testing.T) {
+				resp, err := client.CombinedStatementStats(ctx,
+					&serverpb.CombinedStatementsStatsRequest{
+						Start:     mockTs.Unix(),
+						Limit:     100,
+						FetchMode: createStmtFetchMode(serverpb.StatsSortOptions_SERVICE_LAT),
+					})
+				require.NoError(t, err)
+				require.Equal(t, server.CrdbInternalStmtStatsCached, resp.StmtsSourceTable)
+				require.NotZero(t, len(resp.Statements))
+			})
 		})
 	}
 }
