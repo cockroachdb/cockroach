@@ -626,6 +626,49 @@ func TestPerfLogging(t *testing.T) {
                 RESET transaction_rows_read_err;
             `,
 		},
+
+		// Tests for the failed query log.
+		{
+			// A failing query is not logged when the setting is off.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = true`,
+		},
+		{
+			// Runtime error: division by zero (SQLSTATE 22012).
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT ‹1› / ‹0›".*"SQLSTATE":"22012","ErrorText":"division by zero"`,
+			logExpected: true,
+		},
+		{
+			// Planning-time error: undefined relation (SQLSTATE 42P01).
+			query:       `SELECT * FROM nonexistent_table_for_failed_query_test`,
+			errRe:       `does not exist`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT \* FROM .*nonexistent_table_for_failed_query_test".*"SQLSTATE":"42P01"`,
+			logExpected: true,
+		},
+		{
+			// Successful queries do not emit failed_query events.
+			query:       `SELECT 1`,
+			errRe:       ``,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = DEFAULT`,
+		},
+		{
+			// Once disabled, failures are no longer logged.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
 	}
 
 	// Make file sinks for the SQL perf logs.
@@ -644,6 +687,8 @@ func TestPerfLogging(t *testing.T) {
 			"large_row_internal",
 			"slow_query",
 			"slow_query_internal",
+			"failed_query",
+			"failed_query_internal",
 		},
 		func(entry logpb.Entry) (logpb.Entry, error) {
 			entry.Message = entry.Message[entry.StructuredStart:entry.StructuredEnd]

@@ -749,6 +749,49 @@ message SlowQueryInternal {
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// Category: SQL Failed Query Log
+// Channel: SQL_EXEC
+//
+// Events in this category report SQL statement executions that ended in
+// an error. They are intended for operators who want to observe query
+// failures (for example, statements rejected by a guardrail like
+// `server.max_open_transactions_per_gateway`) without paying the cost of
+// `sql.log.all_statements.enabled`, which logs every statement.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+
+// FailedQuery is recorded when a non-internal SQL statement ends in an
+// error and the cluster setting `sql.log.failed_query.enabled` is set.
+// The error message and SQLSTATE code are reported in the embedded
+// `CommonSQLExecDetails` (fields `ErrorText` and `SQLSTATE`).
+message FailedQuery {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Category: SQL Failed Query Log (Internal)
+// Channel: SQL_EXEC
+//
+// Events in this category report failed SQL statement executions by
+// internal executors, i.e., when CockroachDB internally issues SQL
+// statements.
+//
+// Note: these events are not written to `system.eventlog`.
+
+// FailedQueryInternal is recorded when an internal SQL statement ends in
+// an error and the cluster setting
+// `sql.log.failed_query.internal_queries.enabled` is set. The primary
+// setting `sql.log.failed_query.enabled` must also be set for this event
+// to be emitted.
+message FailedQueryInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
 // LargeRowInternal is recorded when an internal query tries to write a row
 // larger than cluster settings `sql.guardrails.max_row_size_log` or
 // `sql.guardrails.max_row_size_err` to the database.

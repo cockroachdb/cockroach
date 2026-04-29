@@ -1077,6 +1077,180 @@ and the cluster setting `sql.log.all_statements.enabled` is set.
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 | `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
 
+## SQL Failed Query Log
+
+Events in this category report SQL statement executions that ended in
+an error. They are intended for operators who want to observe query
+failures (for example, statements rejected by a guardrail like
+`server.max_open_transactions_per_gateway`) without paying the cost of
+`sql.log.all_statements.enabled`, which logs every statement.
+
+Note: these events are not written to `system.eventlog`, even
+when the cluster setting `system.eventlog.enabled` is set. They
+are only emitted via external logging.
+
+Events in this category are logged to the `SQL_EXEC` channel.
+
+
+### `failed_query`
+
+An event of type `failed_query` is recorded when a non-internal SQL statement ends in an
+error and the cluster setting `sql.log.failed_query.enabled` is set.
+The error message and SQLSTATE code are reported in the embedded
+`CommonSQLExecDetails` (fields `ErrorText` and `SQLSTATE`).
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | partially |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
+
+## SQL Failed Query Log (Internal)
+
+Events in this category report failed SQL statement executions by
+internal executors, i.e., when CockroachDB internally issues SQL
+statements.
+
+Note: these events are not written to `system.eventlog`.
+
+Events in this category are logged to the `SQL_EXEC` channel.
+
+
+### `failed_query_internal`
+
+An event of type `failed_query_internal` is recorded when an internal SQL statement ends in
+an error and the cluster setting
+`sql.log.failed_query.internal_queries.enabled` is set. The primary
+setting `sql.log.failed_query.enabled` must also be set for this event
+to be emitted.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | partially |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
+
+### `large_row_internal`
+
+An event of type `large_row_internal` is recorded when an internal query tries to write a row
+larger than cluster settings `sql.guardrails.max_row_size_log` or
+`sql.guardrails.max_row_size_err` to the database.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `RowSize` |  | no |
+| `TableID` |  | no |
+| `FamilyID` |  | no |
+| `PrimaryKey` |  | yes |
+
+### `txn_rows_read_limit_internal`
+
+An event of type `txn_rows_read_limit_internal` is recorded when an internal transaction tries to
+read more rows than cluster setting `sql.defaults.transaction_rows_read_log`
+or `sql.defaults.transaction_rows_read_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statements within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
+
+### `txn_rows_written_limit_internal`
+
+An event of type `txn_rows_written_limit_internal` is recorded when an internal transaction tries to
+write more rows than cluster setting
+`sql.defaults.transaction_rows_written_log` or
+`sql.defaults.transaction_rows_written_err`. There will only be a single
+record for a single transaction (unless it is retried) even if there are more
+mutation statements within the transaction that haven't been executed yet.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
+
 ## SQL Logical Schema Changes
 
 Events in this category pertain to DDL (Data Definition Language)
@@ -3169,26 +3343,6 @@ are only emitted via external logging.
 Events in this category are logged to the `SQL_EXEC` channel.
 
 
-### `large_row_internal`
-
-An event of type `large_row_internal` is recorded when an internal query tries to write a row
-larger than cluster settings `sql.guardrails.max_row_size_log` or
-`sql.guardrails.max_row_size_err` to the database.
-
-
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `RowSize` |  | no |
-| `TableID` |  | no |
-| `FamilyID` |  | no |
-| `PrimaryKey` |  | yes |
-
 ### `slow_query_internal`
 
 An event of type `slow_query_internal` is recorded when a query triggers the "slow query" condition,
@@ -3224,63 +3378,6 @@ the "slow query" condition.
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 | `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 | `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
-
-### `txn_rows_read_limit_internal`
-
-An event of type `txn_rows_read_limit_internal` is recorded when an internal transaction tries to
-read more rows than cluster setting `sql.defaults.transaction_rows_read_log`
-or `sql.defaults.transaction_rows_read_err`. There will only be a single
-record for a single transaction (unless it is retried) even if there are more
-mutation statements within the transaction that haven't been executed yet.
-
-
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
-| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
-| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
-| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
-| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
-
-### `txn_rows_written_limit_internal`
-
-An event of type `txn_rows_written_limit_internal` is recorded when an internal transaction tries to
-write more rows than cluster setting
-`sql.defaults.transaction_rows_written_log` or
-`sql.defaults.transaction_rows_written_err`. There will only be a single
-record for a single transaction (unless it is retried) even if there are more
-mutation statements within the transaction that haven't been executed yet.
-
-
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
-| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
-| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
-| `TxnID` | TxnID is the ID of the transaction that hit the row count limit. | no |
-| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
 ## SQL User and Role operations
 
