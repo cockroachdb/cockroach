@@ -828,7 +828,7 @@ type clusterType int
 
 const (
 	localCluster clusterType = iota
-	roachprodCluster
+	roachprodClusterType
 )
 
 type loggingOpt struct {

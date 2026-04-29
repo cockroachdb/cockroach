@@ -67,7 +67,7 @@ func nilLogger() *logger.Logger {
 
 func defaultClusterOpt() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
@@ -79,7 +79,7 @@ func defaultClusterOpt() clustersOpt {
 // cluster provisioning error.
 func clusterOptWithProvisioningError() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,

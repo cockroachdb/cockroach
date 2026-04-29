@@ -759,9 +759,11 @@ type clusterImpl struct {
 	preStartVirtualClusterHooks []install.PreStartHook
 }
 
+type roachprodCluster = clusterImpl
+
 var (
-	_ cluster.Cluster = (*clusterImpl)(nil)
-	_ testCluster     = (*clusterImpl)(nil)
+	_ cluster.Cluster = (*roachprodCluster)(nil)
+	_ testCluster     = (*roachprodCluster)(nil)
 )
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -995,13 +997,20 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 // i.e. unit tests that don't want to actually access a provider.
 var create = roachprod.Create
 
-// newCluster creates a new roachprod cluster.
+// newCluster creates a new cluster for the roachtest runner.
 //
 // setStatus is called with status messages indicating the stage of cluster
 // creation.
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
+	ctx context.Context, cfg clusterConfig, setStatus func(string),
+) (testCluster, *vm.CreateOpts, error) {
+	return f.newRoachprodCluster(ctx, cfg, setStatus)
+}
+
+// newRoachprodCluster creates a new roachprod-backed cluster.
+func (f *clusterFactory) newRoachprodCluster(
 	ctx context.Context, cfg clusterConfig, setStatus func(string),
 ) (testCluster, *vm.CreateOpts, error) {
 	if ctx.Err() != nil {
