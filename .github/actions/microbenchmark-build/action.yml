@@ -20,6 +20,8 @@ runs:
       shell: bash
     - run: ./build/github/get-engflow-keys.sh
       shell: bash
+    - run: ./build/github/set-bazel-storage-access-token.sh
+      shell: bash
     - run: |
         echo "FETCH_DEPTH=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> "${GITHUB_ENV}"
       shell: bash

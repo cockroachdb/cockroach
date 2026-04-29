@@ -44,6 +44,7 @@ jobs:
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/set-bazel-storage-access-token.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/maybe-stress.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
@@ -71,6 +72,7 @@ jobs:
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/set-bazel-storage-access-token.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/maybe-stressrace.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
