@@ -143,6 +143,9 @@ IGNORED_PRS: dict[int, str] = {
     167295: "kvserver: remove ReplicaCorruptionError (follows ignored #167289)",
     165577: "storage: add MultiEngineCompactionScheduler",
     167853: "kvserver: add rate limiting for low-priority bulk read operations like TTL",
+    # Already backported via combined asim PR #167468 (script can't see them: subject doesn't ref these PR numbers).
+    167051: "already backported via #167468 (release-26.2: asim changes)",
+    167110: "already backported via #167468 (release-26.2: asim changes)",
     # Touches non-mma kvserver/load/allocator code, not mma-specific.
     167861: "kvserver: improve store.capacity allocations",
     # Test deflake, not mma-relevant.
