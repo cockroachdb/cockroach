@@ -358,6 +358,63 @@ func (s *serverlessStrategy) refillBurst(tokens tokenCounts, refillRates rates) 
 	}
 }
 
+// rmStrategy implements modeStrategy for Resource Manager mode, which uses a
+// single WorkQueue with N resource groups and a single utilization target.
+type rmStrategy struct {
+	queue workQueueIForAllocator
+	// canBurstTarget is the canBurst utilization target (e.g. 1.0 when
+	// KVCPUTimeUtilTarget=0.75 + KVCPUTimeUtilBurstDeltaRM=0.25). Set by
+	// computeTargets each interval; used by refillBurst to recover the 100% CPU
+	// rate by dividing the cycle's canBurst allocation by canBurstTarget and
+	// forwards to WorkQueue.refillRMGroupBurstBuckets.
+	canBurstTarget float64
+}
+
+var _ modeStrategy = &rmStrategy{}
+
+func (s *rmStrategy) mode() cpuTimeTokenMode {
+	return resourceManagerMode
+}
+
+func (s *rmStrategy) computeTargets(sv *settings.Values) targetUtilizations {
+	if numResourceTiers != 2 {
+		panic(errors.AssertionFailedf(
+			"rmStrategy.computeTargets requires numResourceTiers=2 but got %d",
+			numResourceTiers))
+	}
+	var targets targetUtilizations
+	noBurstTarget := KVCPUTimeUtilTarget.Get(sv)
+	burstDelta := KVCPUTimeUtilBurstDeltaRM.Get(sv)
+	targets[0][noBurst] = noBurstTarget
+	targets[0][canBurst] = noBurstTarget + burstDelta
+	s.canBurstTarget = targets[0][canBurst]
+	// Mirror tier-0 to tier-1. RM mode does not route KV admission work to
+	// tier-1; SQL CPU work still uses tier-1 via GetCTTWorkQueue, and the
+	// granter deducts every consumed token from both tiers' buckets (see
+	// tookWithoutPermissionLocked). Equal refill rates keep tier-1 in sync
+	// with tier-0 and preserve the granter's invariant that the lower-ordinal
+	// tier holds >= tokens than the higher. Read more in cpuTimeTokenGranter.
+	targets[1] = targets[0]
+	return targets
+}
+
+func (s *rmStrategy) refillBurst(tokens tokenCounts, refillRates rates) {
+	// Cold-start guard: skip if computeTargets has not run yet (canBurstTarget
+	// is the zero value). Setting validators rule out negative values, so
+	// == 0 catches the only reachable bad state.
+	if s.canBurstTarget == 0 {
+		return
+	}
+	// Recover the 100% CPU rate by dividing out canBurstTarget; valid
+	// because cpuTimeTokenLinearModel is linear in target.
+	//
+	// TODO(wenyihu6): instead of computing by division, plumb rate100 from the
+	// model so this division (and canBurstTarget storage) can go away.
+	rate100 := float64(tokens[0][canBurst]) / s.canBurstTarget
+	cap100 := float64(refillRates[0][canBurst]) / s.canBurstTarget
+	s.queue.refillRMGroupBurstBuckets(rate100, cap100)
+}
+
 // rates stores a token count per second, for example, the refill
 // rates at which we add tokens per second, one per bucket in
 // cpuTimeTokenGranter.
@@ -510,11 +567,11 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 // granter and burst buckets. If the mode cluster setting has changed,
 // the strategy is swapped before computing targets.
 func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
-	// Check for mode transition. a.strategy is only accessed by the
-	// filler goroutine, so we can update it immediately. offMode is
-	// skipped because it is not a real strategy - the constructor
-	// defaults offMode to serverlessMode, and GetKVWorkQueue handles
-	// the off case before reaching activeMode routing.
+	// a.strategy is only accessed by the filler goroutine, so we can
+	// update it immediately. offMode is skipped because it is not a
+	// real strategy - the constructor defaults offMode to
+	// serverlessMode, and GetKVWorkQueue handles the off case before
+	// reaching activeMode routing.
 	modeChanged := false
 	newMode := cpuTimeTokenACMode.Get(&a.settings.SV)
 	if newMode != offMode && newMode != a.strategy.mode() {
@@ -575,19 +632,14 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 	return a.strategy.mode()
 }
 
-// newStrategy constructs the modeStrategy for the given mode.
-// offMode is not a valid argument - callers must guard against it
-// (resetInterval skips the swap, the constructor maps off to
-// serverless). Queue side effects are not applied here;
-// resetInterval applies them after the refill is complete.
+// newStrategy constructs the modeStrategy for the given mode. offMode is not a
+// valid argument - callers must guard against it (resetInterval skips the swap,
+// the constructor maps off to serverless). Queue side effects are not applied
+// here; resetInterval applies them after the refill is complete.
 //
-// No explicit bucket reset is needed on mode switch. The granter's
-// tier-1 buckets stay alive across transitions, and the delta
-// mechanism in resetInterval (deltaRefillRates) adjusts all bucket
-// token counts to converge to the new mode's rates within one
-// interval (1s). In-flight work in queue[1] during a serverless-to-RM
-// switch may stall (no new refill routed there), but will time out
-// via the WorkQueue's normal deadline handling.
+// No bucket reset is needed on a mode switch. The granter's tier-1 buckets stay
+// alive across transitions, and resetInterval's delta mechanism converges all
+// bucket counts to the new mode's rates within one interval (1s).
 func (a *cpuTimeTokenAllocator) newStrategy(mode cpuTimeTokenMode) modeStrategy {
 	switch mode {
 	case offMode:
@@ -595,18 +647,22 @@ func (a *cpuTimeTokenAllocator) newStrategy(mode cpuTimeTokenMode) modeStrategy 
 	case serverlessMode:
 		return &serverlessStrategy{queues: a.queues}
 	case resourceManagerMode:
-		// TODO(wenyihu6): implement this
-		panic(errors.AssertionFailedf("resourceManagerMode not implemented yet"))
+		return &rmStrategy{queue: a.queues[0]}
 	default:
 		panic(errors.AssertionFailedf("unknown cpuTimeTokenMode: %d", mode))
 	}
 }
 
 // configureQueue applies mode-specific settings to the WorkQueue.
-// Called at the end of resetInterval after refill is complete.
+// Called from the constructor after the initial strategy is installed and from
+// resetInterval on a strategy swap.
 //
-// TODO(wenyihu6): This will become unnecessary once serverless
-// tenants are modeled as resource groups in a single WorkQueue.
+// TODO(wenyihu6): in a follow-on change, this should also trigger an apply of
+// the configHolder snapshot to groupInfo so that derived per-group state
+// (weight, MaxCPU, burstFrac) lands before the cycle's refill runs.
+//
+// TODO(wenyihu6): becomes unnecessary once serverless tenants are
+// modeled as resource groups in a single WorkQueue.
 func (a *cpuTimeTokenAllocator) configureQueue() {
 	a.queues[0].setUseResourceGroup(a.strategy.mode() == resourceManagerMode)
 }
@@ -636,10 +692,31 @@ func refillGranter(
 	granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
 }
 
-// workQueueIForAllocator abstracts the burst bucket refill methods in
-// WorkQueue, to enable unit testing.
+// workQueueIForAllocator abstracts the WorkQueue methods called from
+// the allocator/strategy layer, to enable unit testing.
+//
+// TODO(wenyihu6): the two refill methods exist because the modes have
+// different per-tick semantics (serverless: uniform per-tenant +
+// burstBucketCapacity update; RM: per-group scaled, no capacity
+// update). Folding them into a single method would force WorkQueue to
+// dispatch internally on q.mu.useResourceGroup, which can race with the
+// strategy during a mode swap. Two methods keep the dispatch on the
+// strategy side, where the active mode is the source of truth.
+// Stop-gap; should go away when we unify serverless and RM.
 type workQueueIForAllocator interface {
 	refillBurstBuckets(toAdd int64, capacity int64)
+	// refillRMGroupBurstBuckets is the future per-group RM-mode refill
+	// entry point: the implementation will refill every configured RM
+	// group's burst bucket under q.mu, using per-group burstFracs scaled
+	// against rate100/cap100. rate100 may be negative when resetInterval
+	// forwards a delta and refill rates have decreased since the previous
+	// interval; cap100 is the current rate and should be non-negative.
+	// Currently a no-op stub on WorkQueue; safe because RM mode is off
+	// by default.
+	refillRMGroupBurstBuckets(rate100, cap100 float64)
+	// setUseResourceGroup toggles RM-style group derivation.
+	// TODO(wenyihu6): on false -> true, snapshot the configHolder and
+	// apply derived state to groupInfo (see WorkQueue.setUseResourceGroup).
 	setUseResourceGroup(enabled bool)
 }
 

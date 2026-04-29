@@ -1449,6 +1449,20 @@ func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capaci
 	q.refillBurstBucketLocked(group, toAdd, capacity)
 }
 
+// refillRMGroupBurstBuckets is the per-group RM-mode refill entry point
+// called by rmStrategy.refillBurst. rate100 may be negative when
+// resetInterval forwards a delta; cap100 is the current rate and should
+// be non-negative.
+//
+// No-op stub today; RM mode is off by default, so the stub has no production
+// effect. Per-group refill cannot be implemented yet because per-resource-group
+// configuration (weight, MaxCPU, burstFrac) is not yet plumbed onto groupInfo.
+//
+// TODO(wenyihu6): once that storage lands, wire this to iterate groupInfos
+// and refill each bucket scaled by burstFrac.
+func (q *WorkQueue) refillRMGroupBurstBuckets(rate100, cap100 float64) {
+}
+
 // refillBurstBucketLocked refills a group's burst bucket and fixes its
 // heap position if the burst qualification changed. q.mu must be held.
 func (q *WorkQueue) refillBurstBucketLocked(group *groupInfo, toAdd int64, capacity int64) {
