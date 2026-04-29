@@ -16,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/set-bazel-storage-access-token.sh
       - name: Run flaky-test-notifier
         env:
           SNOWFLAKE_USER: SNOWFLAKE_FLAKY_TEST_NOTIFIER_USER

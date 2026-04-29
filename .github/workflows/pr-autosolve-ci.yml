@@ -210,6 +210,7 @@ jobs:
         if: steps.loop_check.outputs.proceed == 'true'
         run: |
           ./build/github/get-engflow-keys.sh
+          ./build/github/set-bazel-storage-access-token.sh
           ENGFLOW_ARGS=$(./build/github/engflow-args.sh)
           echo "build $ENGFLOW_ARGS --config=crosslinux" > .bazelrc.user
 
