@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -808,6 +809,17 @@ type storeState struct {
 	overloadStartTime time.Time
 	// When overloaded this is equal to time.Time{}.
 	overloadEndTime time.Time
+	// lastDetailedLogTimes tracks the last time detailed (Infof-level) logging
+	// was emitted for this shedding store, keyed by the local store ID that
+	// triggered the log burst. Each local store may evaluate different lease
+	// transfer candidates for the same shedding store, so they get independent
+	// rate-limiting. Lazily allocated by rebalanceStores; nil-map indexing
+	// returns the zero time, which the read path treats as "never logged".
+	// `clear`-ed when a fresh overload interval starts (after the previous
+	// interval ended and the grace period expired); not reset on transient
+	// drops below overloadSlow. Only updated when the persistent-overload
+	// branch fires - vmodule=3 promotions do not consume the throttle.
+	lastDetailedLogTimes map[roachpb.StoreID]time.Time
 }
 
 // The time duration between a change happening at a store, and when the
@@ -1322,6 +1334,14 @@ type clusterState struct {
 
 	mmaid int // a counter for rebalanceStores calls, for logging
 
+	// outerLogEvery throttles the rebalanceStores outer-loop narrative
+	// (rebalanceStores begins, cluster means, evaluating sN, etc.) to one
+	// Infof emission per outerLogInterval. Only consumed when passObs != nil
+	// (the first iteration of the production rebalance loop), so test and
+	// non-periodic invocations leave the throttle untouched. See
+	// rebalanceStores.
+	outerLogEvery util.EveryN[time.Time]
+
 	// Disk utilization thresholds from cluster settings. These are set via
 	// SetDiskUtilThresholds.
 	//
@@ -1355,6 +1375,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
+		outerLogEvery:        util.Every(outerLogInterval),
 		// Disk utilization thresholds default to 0. We don't plumb cluster
 		// settings here to avoid coupling MMA to settings at construction.
 		// Callers (e.g., newMMAStoreRebalancer) call SetDiskUtilThresholds
@@ -1750,7 +1771,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			ss.adjusted.topKRanges[msg.StoreID] = topk
 		}
 		topk.startInit()
-		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
+		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad, makeMMALogger(false /* verboseToInfof */))
 		if ss.StoreID == localss.StoreID {
 			topk.dim = CPURate
 		} else {
@@ -2406,6 +2427,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
 	overloadedDim LoadDimension,
+	ml mmaLogger,
 ) (canAddLoad bool) {
 	if overloadedDim == NumLoadDimensions {
 		panic("overloadedDim must not be NumLoadDimensions")
@@ -2424,7 +2446,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
-	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad, ml)
 	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
 		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
 
@@ -2436,19 +2458,18 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcNS := cs.nodes[srcSS.NodeID]
 	srcSS.adjusted.load.subtract(delta)
 	srcNS.adjustedCPU -= delta[CPURate]
-	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
+	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad, ml)
 	// Undo the removal.
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
 	var failureReason redact.StringBuilder
-	populateFailureReason := log.ExpensiveLogEnabled(ctx, 3)
 	defer func() {
 		if canAddLoad {
-			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			ml.logf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else if populateFailureReason {
-			log.KvDistribution.VEventf(ctx, 3,
+		} else if ml.V(ctx, 3) {
+			ml.logf(ctx, 3,
 				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
 				&failureReason, delta, targetSLS, srcSLS)
@@ -2457,7 +2478,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
 	if postTransferHighDiskSpaceUtil {
-		if populateFailureReason {
+		if ml.V(ctx, 3) {
 			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
@@ -2477,7 +2498,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		if populateFailureReason {
+		if ml.V(ctx, 3) {
 			failureReason.SafeString("overloadUrgent")
 		}
 		return false
@@ -2536,7 +2557,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				log.KvDistribution.VEventf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				ml.logf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
@@ -2586,7 +2607,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if populateFailureReason {
+	if ml.V(ctx, 3) {
 		appendSep := func() {
 			if failureReason.Len() != 0 {
 				failureReason.SafeRune(',')
@@ -2624,11 +2645,11 @@ func (cs *clusterState) canShedAndAddLoad(
 }
 
 func (cs *clusterState) computeLoadSummary(
-	ctx context.Context, storeID roachpb.StoreID, msl *meanStoreLoad, mnl *meanNodeLoad,
+	ctx context.Context, storeID roachpb.StoreID, msl *meanStoreLoad, mnl *meanNodeLoad, ml mmaLogger,
 ) storeLoadSummary {
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
-	return computeLoadSummary(ctx, ss, ns, msl, mnl)
+	return computeLoadSummary(ctx, ss, ns, msl, mnl, ml)
 }
 
 // TODO(wenyihu6): check to make sure obs here is correct
@@ -2653,14 +2674,19 @@ func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 }
 
 func computeLoadSummary(
-	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
+	ctx context.Context,
+	ss *storeState,
+	ns *nodeState,
+	msl *meanStoreLoad,
+	mnl *meanNodeLoad,
+	ml mmaLogger,
 ) storeLoadSummary {
 	sls := loadLow
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
 		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
-			msl.load[i], msl.util[i])
+			msl.load[i], msl.util[i], ml)
 		if ls > sls {
 			sls = ls
 			worstDim = LoadDimension(i)
@@ -2675,7 +2701,7 @@ func computeLoadSummary(
 	// TODO(wenyihu6): the unit mismatch between physical NodeCPULoad and
 	// store-level pending deltas will be resolved with the introduction of
 	// physical load modeling.
-	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU)
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU, ml)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,

@@ -4,7 +4,7 @@ include path=rebalance_stores_cpu_replica_include.txt
 ok
 
 # One replica moves to s4, then we hit the pending fraction limit.
-rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=0.01
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=0.01 vmodule=3
 ----
 [mmaid=2] rebalanceStores begins
 [mmaid=2] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)

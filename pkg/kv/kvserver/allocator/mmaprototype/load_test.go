@@ -46,7 +46,7 @@ func (p *testLoadInfoProvider) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeL
 }
 
 func (p *testLoadInfoProvider) computeLoadSummary(
-	context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad,
+	context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad, mmaLogger,
 ) storeLoadSummary {
 	fmt.Fprintf(&p.b, "called computeLoadSummary: returning seqnum %d", p.returnedLoadSeqNum)
 	return storeLoadSummary{
@@ -235,6 +235,7 @@ func TestLoadSummaryForDimension(t *testing.T) {
 			got := loadSummaryForDimension(
 				ctx, dummyStoreID, dummyNodeID,
 				tc.dim, tc.load, tc.capacity, tc.meanLoad, tc.meanUtil,
+				makeMMALogger(false /* verboseToInfof */),
 			)
 			require.Equal(t, tc.expected, got,
 				"dim=%v load=%d meanLoad=%d capacity=%d",

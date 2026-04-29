@@ -7,6 +7,7 @@ package mmaprototype
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"path/filepath"
@@ -21,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
@@ -364,6 +368,46 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	return storeLoadPendingChangeList
 }
 
+// mmaLogCapture captures log entries emitted from the mmaprototype package
+// during a test. It implements log.Interceptor and is installed via
+// log.InterceptWith. Entries from other packages are filtered out so that
+// concurrent log activity in the process does not leak into the test output.
+type mmaLogCapture struct {
+	mu      syncutil.Mutex
+	entries []logpb.Entry
+}
+
+// Intercept implements log.Interceptor.
+func (m *mmaLogCapture) Intercept(jsonBytes []byte) {
+	var e logpb.Entry
+	if err := json.Unmarshal(jsonBytes, &e); err != nil {
+		return
+	}
+	if !strings.Contains(e.File, "/mmaprototype/") {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries = append(m.entries, e)
+}
+
+// formatString writes captured entries one per line as "[tags] message".
+// File names and line numbers are intentionally dropped to match the
+// SafeFormatMinimal style used by the trace path and to keep the output
+// stable across edits to the source files.
+func (m *mmaLogCapture) formatString() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var sb strings.Builder
+	for _, e := range m.entries {
+		if e.Tags != "" {
+			fmt.Fprintf(&sb, "[%s] ", e.Tags)
+		}
+		fmt.Fprintf(&sb, "%s\n", e.Message)
+	}
+	return sb.String()
+}
+
 // safeTrace returns the trace output and asserts that all values in it are
 // properly marked as redaction-safe. The allocator logs only operational data
 // (store IDs, load values, etc.) which should never be redacted. If any
@@ -687,11 +731,32 @@ func TestClusterState(t *testing.T) {
 						re.fractionPendingIncreaseOrDecreaseThreshold = f
 					}
 
-					re.rebalanceStores(ctx, storeID)
-					rec := finishAndGet()
-					var sb redact.StringBuilder
-					rec.SafeFormatMinimal(&sb)
-					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					// `vmodule` simulates a specific production logging
+					// configuration. The arg is a V level (0, 1, 2, 3, ...);
+					// 0 (the default) means vmodule unset. Positive levels
+					// are applied as "*=N" for the duration of the pass.
+					// Reading the captured log shows what an operator
+					// running at that vmodule would actually see.
+					//
+					// The pass runs outside any tracing span so that
+					// log.ExpensiveLogEnabled(ctx, 3) reflects only the
+					// vmodule setting, not the recording span, which would
+					// otherwise force every per-range message to Infof and
+					// mask the dynamic-verbose-logging behavior.
+					vmodule, _ := dd.ScanArgOpt[int](t, d, "vmodule")
+					if vmodule > 0 {
+						prev := log.GetVModule()
+						require.NoError(t, log.SetVModule(fmt.Sprintf("*=%d", vmodule)))
+						defer func() {
+							require.NoError(t, log.SetVModule(prev))
+						}()
+					}
+					bgCtx := context.Background()
+					capture := &mmaLogCapture{}
+					stopIntercept := log.InterceptWith(bgCtx, capture)
+					defer stopIntercept()
+					re.rebalanceStores(bgCtx, storeID)
+					return capture.formatString() + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")
@@ -702,7 +767,7 @@ func TestClusterState(t *testing.T) {
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
 					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
-					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh)
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh, makeMMALogger(false /* verboseToInfof */))
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
@@ -715,7 +780,7 @@ func TestClusterState(t *testing.T) {
 					for _, replica := range replicas {
 						replicasSet.insert(replica)
 					}
-					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet)
+					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet, makeMMALogger(false /* verboseToInfof */))
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)

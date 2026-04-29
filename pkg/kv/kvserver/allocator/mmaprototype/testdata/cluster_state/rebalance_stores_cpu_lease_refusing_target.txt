@@ -43,7 +43,7 @@ ok refusing=leases
 
 # s1 tries to shed leases but s2 is filtered out, leaving only [1 3].
 # Since s1 and s3 are equally loaded, no lease transfer occurs.
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:700ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 700) (nodes-cpu-capacity 1000)

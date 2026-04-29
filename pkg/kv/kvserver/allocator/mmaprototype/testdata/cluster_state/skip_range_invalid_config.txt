@@ -51,7 +51,7 @@ range-id=1 local-store=1 load=[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 
 
 # Rebalance from store 1. The rebalancer attempts to shed load from s1 but
 # cannot find a suitable candidate.
-rebalance-stores store-id=1
+rebalance-stores store-id=1 vmodule=3
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:55ns/s, write-bandwidth:55 B/s, byte-size:55 B]) (stores-capacity [cpu:200ns/s, write-bandwidth:200 B/s, byte-size:200 B]) (nodes-cpu-load 55) (nodes-cpu-capacity 200)
