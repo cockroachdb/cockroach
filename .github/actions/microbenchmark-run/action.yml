@@ -18,6 +18,8 @@ runs:
       shell: bash
     - run: ./build/github/get-engflow-keys.sh
       shell: bash
+    - run: ./build/github/set-bazel-storage-access-token.sh
+      shell: bash
     - name: Run benchmarks
       run: ./build/github/microbenchmarks/run.sh
       shell: bash
