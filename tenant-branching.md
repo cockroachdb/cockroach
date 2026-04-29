@@ -34,7 +34,6 @@ This is a working PoC, not a production design. In scope:
 
 Out of scope (and explicitly broken in some cases):
 
-- Schema changes on the branch.
 - Branch of a branch.
 - Branch deletion.
 - Multi-region or multi-node correctness.
@@ -171,9 +170,9 @@ what a user would expect), or **Untested**.
 | Subsystem                          | Behavior on a branch                                                                                                                                                                                          | Status                                    |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | User tables and rows               | Reads return branch writes layered over parent at fork_ts; writes land in the branch's keyspace and stay isolated.                                                                                            | Works                                     |
-| Schema (descriptors)               | Reads see parent's descriptors at fork_ts via fallthrough. `ALTER TABLE` issues a CPut against the empty branch keyspace and fails because the expected value is parent's descriptor and actual is nil.       | Broken                                    |
-| `CREATE TABLE` on a branch         | Descriptor-ID allocation reads and writes a sequence whose counter lives in the parent's keyspace. The branch's `Increment` writes a fresh key starting at 0 and allocates IDs that collide with parent's.    | Broken                                    |
-| Sequences (user)                   | Reads return parent's sequence state at fork_ts. The branch's `Increment` writes a fresh counter starting at 0 in the branch's keyspace; both sides allocate the same next value.                             | Broken                                    |
+| Schema (descriptors)               | Reads see parent's descriptors at fork_ts via fallthrough. `ALTER TABLE` issues a CPut whose expected bytes came from the parent read; `BranchSender` sets `AllowIfDoesNotExist = true` on the CPut so the first write against the empty branch keyspace succeeds. Subsequent CPuts on the same descriptor see the branch's value and use the normal conditional check. | Works                                     |
+| `CREATE TABLE` on a branch         | Descriptor-ID allocation issues an `Increment` that `BranchSender` seeds with the parent's current value at fork_ts before dispatch. The branch's allocated IDs are strictly above what the parent had at fork_ts; no collision with parent descriptors. | Works                                     |
+| Sequences (user)                   | Same `Increment` seeding mechanism as descriptor IDs. Branch's sequence values continue from parent's value at fork_ts. Branch and parent diverge after the fork; uniqueness is per-tenant, not across the pair. | Works                                     |
 | Cluster settings                   | Reads see parent's settings as of fork_ts via fallthrough. Branch-side overrides are `Put`-based, so they should land in the branch's keyspace, but post-fork setting changes on the parent do not propagate. | Untested                                  |
 | Jobs system                        | Job rows live in `system.jobs`. Reads fall through to parent, so a branch sees parent's job history. Job claims and updates use CPut-style operations and likely fail for the same reason `ALTER` does.       | Untested                                  |
 | Privileges and roles               | Stored on descriptors and in `system.users` / `system.role_members`. Reads see parent's. Mutations use CPut and would fail.                                                                                   | Untested                                  |
@@ -282,20 +281,44 @@ sections.
 
 ### Writes
 
-Writes pass through unmodified. `BranchSender` inspects the batch for any
-read requests; if there are none, it forwards directly to `DistSender`.
+Most writes pass through unmodified. `BranchSender` forwards `Put`,
+`Delete`, and similar requests directly to `DistSender`; the branch's
+keyspace is empty for any key the branch hasn't written, so a `Put`
+just lands.
 
-The "copy" in copy-on-write is lazy and read-side. A write to a key
-materializes that key in the branch's keyspace; the next read sees the
-branch's value and skips the fallback. Until then, reads for that key fall
-through to the parent.
+Two write types have read-modify-write semantics built into the request
+and need first-write CoW so they produce the right outcome on a branch.
+`BranchSender` interposes targeted logic for them before forwarding:
 
-There's no first-write CoW interception. We don't read the parent on first
-write to materialize a copy locally. This is the right default for
-table-row writes (`Put` overwrites without caring about prior state) and
-the wrong default for any operation that uses `CPut` or otherwise expects
-a specific prior value. See the schema-change failure mode in "What doesn't
-work."
+- `Increment` requests (sequence keys: descriptor IDs, role IDs,
+  user-defined sequences). `MVCCIncrement` starts from 0 if the key has
+  no prior value. On a fresh branch the sequence keys are empty, so an
+  unmodified `Increment` would allocate IDs that collide with what the
+  parent already issued. Before dispatch, `BranchSender` scans the batch
+  for `Increment`s and, for any whose target key has no value on the
+  branch, copies the parent's current value at fork_ts into the branch
+  via a non-transactional `Put`. The `Increment` then proceeds normally
+  and produces parent_value + delta.
+- `ConditionalPut` (`CPut`) requests with non-nil expected bytes. The
+  schema changer reads a descriptor (gets the parent's via fallthrough)
+  and follows up with a `CPut` whose expected value is what it read.
+  Without intervention, the `CPut` targets the empty branch keyspace and
+  the conditional check fails. `BranchSender` sets
+  `AllowIfDoesNotExist = true` on every such `CPut`. The flag, which
+  already existed in `kvpb` for unrelated reasons, makes the `CPut`
+  succeed if the expected bytes match OR the key does not exist. The
+  "key does not exist" branch is exactly the first-write case; the
+  "key exists but doesn't match" failure mode is preserved.
+
+These two interceptions are narrow on purpose. Other write types don't
+read prior state, so they pass through. See the more-detailed write-up
+under "First-write CoW for `Increment` and `CPut`" in "More details"
+below.
+
+The "copy" in copy-on-write is still mostly lazy and read-side: a key
+materializes in the branch's keyspace on first write (or first read
+where seeding kicks in for sequence keys), and subsequent reads see the
+branch's value and skip the fallback.
 
 ### The three-state read problem
 
@@ -527,20 +550,6 @@ changes. None of these are tested.
 Each item names the symptom, the root cause, and the section that explains
 it.
 
-**Schema changes on a branch (`ALTER TABLE`).** The schema changer reads a
-descriptor and follows up with a `CPut` whose expected value is the
-descriptor it just read. The read goes through `BranchSender`'s fallthrough
-and returns the parent's descriptor. The `CPut` targets the branch's
-keyspace, where the descriptor key is nil. `CPut(expValue = parent's
-descriptor, actual = nil)` fails. Root cause: pure read-side CoW with no
-first-write interception. See "Writes" in the CoW section.
-
-**`CREATE TABLE` on a branch.** Descriptor ID allocation reads and writes a
-sequence whose counter lives in the parent's keyspace. The branch's
-`Increment` writes a fresh key starting from 0, allocating IDs that collide
-with what the parent has already assigned. Root cause: same as above. The
-branch never owns the catalog or any cross-cutting catalog state.
-
 **Branch of a branch.** `BranchSender` does a single fallback hop, and the
 metadata only carries one parent ID. Recursive fallback or a chain isn't
 wired. The `CREATE` path explicitly rejects branching from a branch. See
@@ -563,10 +572,6 @@ produce range tombstones, so this only matters if someone wires a
 tombstones once they age past `gc.ttlseconds`. Once collected, the branch's
 read path falls through to the parent and the deleted row reappears. See
 "Tombstone GC and the regression."
-
-**Sequences.** The branch and parent share the same sequence state at
-fork_ts. Both will allocate the same next value. See "What the branch
-starts with."
 
 **Multi-range parent fallback at fork_ts.** When the fallback batch spans
 ranges, `CrossRangeTxnWrapperSender` auto-wraps it into a transaction and
@@ -696,11 +701,10 @@ perspective the row is gone.
 This is the load-bearing property that makes deletions work without a
 first-write CoW step. Without it, the branch would need to read the
 parent on every delete, copy the value into its own keyspace, and then
-write the tombstone over its own copy. We get that behavior for free from
-MVCC. It is also the reason every other write-path failure in this design
-(schema changes, `CREATE TABLE`, anything CPut-based) feels arbitrary by
-contrast: those operations need the prior value, deletions don't, so
-deletions slip through the no-first-write-CoW gap unscathed.
+write the tombstone over its own copy. We get that behavior for free
+from MVCC. The two write types that genuinely need first-write CoW
+(`Increment` and `CPut`) get explicit interception instead; see
+"First-write CoW for `Increment` and `CPut`" below.
 
 ### What PROTECT_AFTER actually preserves for the branch
 
@@ -882,3 +886,90 @@ There's also a practical reason: there is no kv.Sender slot below
 DistSender. DistSender is the boundary between the kv client and the
 network. A wrapper below DistSender would have to live inside the gRPC
 transport layer, which is the wrong shape for a kv.Sender.
+
+### First-write CoW for `Increment` and `CPut`
+
+The original PoC implemented copy-on-write on the read side only. Two
+write paths needed targeted first-write CoW to work correctly on a
+branch: `Increment` (used for descriptor IDs, role IDs, and user
+sequences) and `CPut` (used by the schema changer and several other
+catalog mutators). Both have read-modify-write semantics built into the
+request, so the branch's empty keyspace produces the wrong outcome
+without intervention.
+
+**Increment seeding.** Sequence keys live in the tenant's keyspace.
+`MVCCIncrement` adds a delta to the existing value, or starts at 0 if
+the key is unwritten. On a fresh branch every sequence key is unwritten,
+so the first `Increment` would return delta and allocate values that
+collide with what the parent already issued (descriptors with the same
+numeric IDs as the parent's, etc.).
+
+`BranchSender.seedIncrements` scans every batch for `IncrementRequest`s.
+For each one whose target key has no value on the branch, it reads the
+parent's value at fork_ts and writes it to the branch via a
+non-transactional `Put`. The `Increment` then proceeds normally and
+produces parent_value + delta. Subsequent `Increment`s on the same key
+see the seeded value on the branch and skip the seeding step.
+
+The seeding writes are non-transactional and idempotent on purpose. The
+parent's value at fork_ts is fixed, so two concurrent seeders write the
+same bytes; the second write is wasteful but harmless. The seeding has
+to be visible to all subsequent readers (not just the calling txn),
+otherwise concurrent `CREATE TABLE` statements on the branch would race
+and allocate the same descriptor ID.
+
+There's a per-batch overhead: every batch with at least one `Increment`
+incurs an extra `Get` against the branch to check whether the key needs
+seeding. After the branch has been touched the `Get` returns the seeded
+value and seeding is skipped, but the `Get` itself still happens. A
+"this key has been seeded" cache would eliminate the lookup on the hot
+path.
+
+We considered seeding all known sequence keys at branch creation time
+instead. Rejected: the set of `Increment`-driven keys is open
+(`DescIDSequence`, `RoleIDSequence`, every user-defined sequence) and
+fragile to maintain as new ones are added. Per-`Increment` seeding is
+general.
+
+**CPut weakening.** `ConditionalPut` writes a new value if the key's
+current value matches the expected bytes (or the key is missing and
+`AllowIfDoesNotExist` is set). The schema changer uses `CPut` on
+descriptors with the descriptor's prior bytes as the expected value:
+"write the new descriptor only if it hasn't been changed since I read
+it." On a branch, the read fell through to the parent, so the expected
+bytes are parent's descriptor bytes; the `CPut` then targets the branch
+keyspace, where the descriptor key is empty on the first write.
+`CPut(expBytes = parent's, actual = nil)` fails the conditional check.
+
+The fix is one line: `BranchSender.rewriteCPutsForBranch` sets
+`AllowIfDoesNotExist = true` on every `CPut` with non-nil expected
+bytes. The flag, which already existed in `kvpb` (`api.proto:369`) for
+unrelated reasons, makes the `CPut` succeed if the expected bytes match
+OR if the key does not exist. The "key does not exist" branch is the
+first-write case. The "key exists but doesn't match expected" failure
+mode is preserved, so genuine concurrent-modification conflicts on the
+branch still fail correctly.
+
+The relaxation is narrow but real. A `CPut` against a key that was
+deleted on the branch (current value is nil because of a tombstone,
+expected bytes is non-nil) will now succeed where it would have failed
+on a non-branch tenant. For schema-change `CPut`s on descriptors this
+is fine in practice: descriptors aren't deleted out from under live
+mutations. For other `CPut` callers on a branch, the semantics are
+slightly looser than on a regular tenant.
+
+We considered intercepting `CPut` by rewriting it to a `Put` when the
+expected bytes match the parent's value. Rejected: that needs an extra
+`Get` against the parent on every `CPut` to verify the match, and it
+ends up encoding the same idea as `AllowIfDoesNotExist` with more code.
+
+**Why these two and not a general first-write CoW.**
+
+A general first-write CoW would intercept every write, read the parent
+to materialize the prior value into the branch, and then dispatch the
+write. That's an extra RPC per write on every key. The two cases above
+are the only built-in request types that have read-modify-write
+semantics; for everything else (`Put` overwrites, `Delete` writes a
+standalone tombstone, etc.) the parent's value doesn't need to be
+locally present for the write to behave correctly. Targeted
+interception keeps the cost on the writes that need it.
