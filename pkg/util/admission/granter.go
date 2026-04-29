@@ -1144,6 +1144,36 @@ var (
 			"the token granter (not waiters)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse: "This metric indicates when disk write byte tokens are exhausted, " +
+			"meaning disk bandwidth admission control is actively throttling elastic writes. " +
+			"Extended periods of exhaustion may indicate the provisioned disk bandwidth is " +
+			"insufficient for the workload.",
+	}
+	kvDiskWriteByteTokensUsedRegular = metric.Metadata{
+		Name:         "admission.granter.disk_write_byte_tokens_used.regular.kv",
+		Help:         "Total disk write byte tokens consumed by regular work",
+		Measurement:  "Tokens",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "admission.granter.disk_write_byte_tokens_used.kv",
+		StaticLabels: metric.MakeLabelPairs("work_type", "regular"),
+	}
+	kvDiskWriteByteTokensUsedElastic = metric.Metadata{
+		Name:         "admission.granter.disk_write_byte_tokens_used.elastic.kv",
+		Help:         "Total disk write byte tokens consumed by elastic work",
+		Measurement:  "Tokens",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "admission.granter.disk_write_byte_tokens_used.kv",
+		StaticLabels: metric.MakeLabelPairs("work_type", "elastic"),
+	}
+	kvDiskWriteByteTokensUsedSnapshot = metric.Metadata{
+		Name:         "admission.granter.disk_write_byte_tokens_used.snapshot.kv",
+		Help:         "Total disk write byte tokens consumed by snapshot ingest work",
+		Measurement:  "Tokens",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "admission.granter.disk_write_byte_tokens_used.kv",
+		StaticLabels: metric.MakeLabelPairs("work_type", "snapshot"),
 	}
 	l0CompactedBytes = metric.Metadata{
 		Name:        "admission.l0_compacted_bytes.kv",
@@ -1161,9 +1191,5 @@ var (
 
 // TODO(irfansharif): we are lacking metrics for IO tokens and load, including
 // metrics from helper classes used by ioLoadListener, like the code in
-// disk_bandwidth.go and store_token_estimation.go. Additionally, what we have
-// below is per node, while we want such metrics per store. We should add
-// these metrics via StoreGrantCoordinators.SetPebbleMetricsProvider, which is
-// used to construct the per-store GrantCoordinator. These metrics should be
-// embedded in kvserver.StoreMetrics. We should also separate the metrics
-// related to cpu slots from the IO metrics.
+// store_token_estimation.go. We should also separate the metrics related to cpu
+// slots from the IO metrics.

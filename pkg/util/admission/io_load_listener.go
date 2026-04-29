@@ -237,8 +237,9 @@ type ioLoadListener struct {
 	perWorkTokenEstimator storePerWorkTokenEstimator
 	diskBandwidthLimiter  *diskBandwidthLimiter
 
-	l0CompactedBytes *metric.Counter
-	l0TokensProduced *metric.Counter
+	l0CompactedBytes        *metric.Counter
+	l0TokensProduced        *metric.Counter
+	diskWriteByteTokensUsed [admissionpb.NumStoreWorkTypes]*metric.Counter
 }
 
 type ioLoadListenerState struct {
@@ -732,6 +733,16 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		// here represents that.
 		io.diskReadTokens = 0
 	}
+	// Update disk bandwidth metrics.
+	for i := 0; i < admissionpb.NumStoreWorkTypes; i++ {
+		// Clamp to zero: used tokens can be slightly negative if tokens taken
+		// in one interval are returned in the next. Counters cannot be
+		// decremented.
+		if diskTokensUsed[i].writeByteTokens > 0 {
+			io.diskWriteByteTokensUsed[i].Inc(diskTokensUsed[i].writeByteTokens)
+		}
+	}
+
 	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
 
