@@ -604,6 +604,10 @@
 # filter, leading to an additional column being kept on just the right side).
 # If extraneous, these Projects may be cleaned up later by rules like
 # EliminateProject.
+#
+# Note: The projections could reference columns from an outer scope, e.g. due
+# to an apply-join or routine. We intersect with the UnionAll's output to ensure
+# that $needed only contains columns from the UnionAll.
 [PruneUnionAllCols, Normalize]
 (Project
     $union:(UnionAll $left:* $right:* $colmap:*)
@@ -611,9 +615,12 @@
     $passthrough:* &
         (CanPruneCols
             $union
-            $needed:(UnionCols
-                (ProjectionOuterCols $projections)
-                $passthrough
+            $needed:(IntersectionCols
+                (UnionCols
+                    (ProjectionOuterCols $projections)
+                    $passthrough
+                )
+                (OutputCols $union)
             )
         )
 )
