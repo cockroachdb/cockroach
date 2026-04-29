@@ -98,20 +98,75 @@ func maybeCreateRevlogSiblingJob(
 		return nil
 	}
 
-	// Step 2: build the sibling BACKUP job's record. We copy the
-	// parent's details so the sibling shares destination, encryption,
-	// etc., then flip the flags so the resumer takes the revlog fork.
-	siblingDetails := parentDetails
-	siblingDetails.CreateRevlogJob = false
-	siblingDetails.RevLogJob = true
-	// CRITICAL: clear the parent's PTS record from the sibling's
-	// details. Otherwise the sibling's OnFailOrCancel would Release
-	// the parent BACKUP's PTS by ID — orphaning the parent and
-	// possibly letting GC remove data the parent still needs. The
-	// sibling will install its own PTS during its own resumer
-	// execution (per the v1 self-managed PTS design in the RFC's
-	// "PTS — v1 self-managed; future cluster-coordinated" concern).
-	siblingDetails.ProtectedTimestampRecord = nil
+	// Step 2: build the sibling BACKUP job's record. We construct a
+	// fresh BackupDetails populated with only the fields the revlog
+	// code path actually reads, rather than cloning the parent's
+	// details and trying to nil out the dangerous bits.
+	//
+	// Cloning is unsafe: backupResumer.OnFailOrCancel runs for both
+	// the parent and the sibling (they share the resumer), and it
+	// uses several BackupDetails fields to drive cleanup —
+	// details.URI for deleteCheckpoint, details.ProtectedTimestampRecord
+	// for releaseProtectedTimestamp, details.ScheduleID for schedule
+	// notifications, details.UpdatesClusterMonitoringMetrics for
+	// metric updates. A cloned sibling pointed at any of those
+	// would, on cancel/failure, clobber the parent's checkpoint dir,
+	// release the parent's PTS, mis-notify the parent's schedule, or
+	// poison the parent's metric tile.
+	//
+	// Allowlist instead. New BackupDetails fields default to "not in
+	// the revlog sibling" — safe by construction. The cost is that
+	// adding a field the revlog *does* need requires updating this
+	// list, but that bug surfaces immediately as a missing-feature
+	// failure, whereas the cloning bugs are silent until something
+	// fails.
+	siblingDetails := jobspb.BackupDetails{
+		// Dispatch flag: backupResumer.Resume keys off this to take
+		// the revlog fork.
+		RevLogJob: true,
+
+		// Destination: revlog writes under CollectionURI/log/. The
+		// per-run URI/URIsByLocalityKV are deliberately omitted —
+		// they describe the parent's per-run data destination and
+		// are what deleteCheckpoint would clobber.
+		CollectionURI: parentDetails.CollectionURI,
+
+		// startHLC for the rangefeed (revlogjob.Run reads this as
+		// the rangefeed subscription start).
+		EndTime: parentDetails.EndTime,
+
+		// Scope inputs: revlogScope closes over these to decide
+		// what's in-scope by identity.
+		FullCluster:                parentDetails.FullCluster,
+		ResolvedTargets:            parentDetails.ResolvedTargets,
+		ResolvedCompleteDbs:        parentDetails.ResolvedCompleteDbs,
+		SpecificTenantIds:          parentDetails.SpecificTenantIds,
+		IncludeAllSecondaryTenants: parentDetails.IncludeAllSecondaryTenants,
+
+		// ProtectedTimestampRecord intentionally left zero. The
+		// sibling installs its own PTS during its resumer execution
+		// (v1 self-managed PTS, see pkg/revlog/revlogjob/pts.go).
+		// Inheriting the parent's would be catastrophic: the
+		// sibling's OnFailOrCancel would Release the parent's PTS
+		// by ID, orphaning the parent and letting GC remove data it
+		// still needs.
+
+		// ScheduleID + SchedulePTSChainingRecord intentionally
+		// omitted: the sibling is not part of the parent's schedule
+		// chain. Inheriting these would cause the sibling's
+		// terminal state to mis-notify the parent's schedule.
+
+		// UpdatesClusterMonitoringMetrics intentionally omitted:
+		// the sibling's success/failure should not write to the
+		// parent's monitoring tile.
+
+		// EncryptionOptions / EncryptionInfo intentionally omitted
+		// today (revlog v1 doesn't honor encryption).
+		// TODO(dt): populate these when adding encryption support so
+		// the revlog writes encrypted SSTs when the parent's
+		// destination is encrypted; required before BACKUP ... WITH
+		// ENCRYPTION ... REVISION STREAM is supported.
+	}
 
 	siblingJobID := jobRegistry.MakeJobID()
 	siblingRecord := jobs.Record{
