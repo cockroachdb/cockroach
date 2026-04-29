@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/revlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -291,4 +292,60 @@ func TestDescFeedOnePerDistinctTransition(t *testing.T) {
 	require.Equal(t, startHLC, sig.StartTS)
 	// NewSpans is the union of add1 and add2 (sorted).
 	require.ElementsMatch(t, []roachpb.Span{add1, add2}, sig.NewSpans)
+}
+
+// TestDescFeedTombstoneWritesDeltaWithoutWidening pins down the
+// out-of-scope tombstone policy: a tombstone for a descriptor whose
+// post-deletion span set is unchanged still writes the schema delta
+// (so a reader sees the deletion), but doesn't widen scope and
+// doesn't trigger a replan.
+//
+// The intentional behavior — documented in handleBatchedValue — is
+// that tombstones bypass scope.Matches because the prior version's
+// row was in scope for us to observe it, and tombstones are tiny.
+// This test locks the contract in so a future "filter tombstones
+// through Matches" change can't silently lose deletions.
+func TestDescFeedTombstoneWritesDeltaWithoutWidening(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	startHLC := hlc.Timestamp{WallTime: int64(100 * time.Second)}
+	prior := []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}}
+	scope := &fakeScope{
+		// matches returns false for any non-tombstone — a tombstone's
+		// desc==nil short-circuits the Matches call entirely.
+		matches: func(*descpb.Descriptor) bool { return false },
+		spansAt: []scopeSpansAt{
+			{at: hlc.Timestamp{}, spans: prior},
+		},
+	}
+	state, _, es, sigs := newDescFeedTestState(t, startHLC, scope, prior)
+
+	tombstoneTs := hlc.Timestamp{WallTime: int64(150 * time.Second)}
+	const tombstoneID = descpb.ID(42)
+	state.bufferValue(tombstoneValue(t, tombstoneID, tombstoneTs))
+	require.NoError(t, state.processBatch(ctx,
+		hlc.Timestamp{WallTime: int64(160 * time.Second)}))
+
+	// No replan — span set didn't change.
+	select {
+	case sig := <-sigs.replan:
+		t.Fatalf("did not expect replan signal, got %+v", sig)
+	default:
+	}
+	require.Equal(t, prior, state.lastSpans, "lastSpans must be unchanged")
+
+	// Schema delta was written: iterate the schema-changes log and
+	// expect exactly one entry for the tombstoned ID at tombstoneTs
+	// with a nil descriptor.
+	var seen []revlog.SchemaChange
+	for ch, err := range revlog.IterSchemaChanges(ctx, es,
+		hlc.Timestamp{}, hlc.Timestamp{WallTime: int64(200 * time.Second)}) {
+		require.NoError(t, err)
+		seen = append(seen, ch)
+	}
+	require.Len(t, seen, 1)
+	require.Equal(t, tombstoneID, seen[0].DescID)
+	require.Equal(t, tombstoneTs, seen[0].ChangedAt)
+	require.Nil(t, seen[0].Descriptor, "tombstone schema delta must record nil descriptor")
 }
