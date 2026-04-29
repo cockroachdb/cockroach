@@ -4,6 +4,7 @@ on:
     types: [opened, ready_for_review, reopened, synchronize]
     branches:
       - "master"
+      - "basalt-master"
       - "release-*"
       - "staging-*"
       - "!release-1.0*"
