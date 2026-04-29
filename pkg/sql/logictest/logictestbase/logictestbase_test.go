@@ -7,6 +7,8 @@ package logictestbase
 
 import (
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -604,5 +606,241 @@ func TestIsEquivalentTo(t *testing.T) {
 			EquivalentConfigs: []string{"local-vec-off"},
 		}
 		require.False(t, cfg.IsEquivalentTo("does-not-exist"))
+	})
+}
+
+func writeTestFile(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+	return path
+}
+
+func TestIsNightlyOnlyConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		configName string
+		expected   bool
+	}{
+		{name: "in default set", configName: "local-meta", expected: false},
+		{name: "in nightly set", configName: "local", expected: true},
+		{name: "in neither set", configName: "5node", expected: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			idx, ok := findLogicTestConfig(tc.configName)
+			require.True(t, ok, "config %q must exist", tc.configName)
+			require.Equal(t, tc.expected, IsNightlyOnlyConfig(idx))
+		})
+	}
+
+	t.Run("all default configs are not nightly-only", func(t *testing.T) {
+		for _, idx := range DefaultConfigSets[DefaultConfigSet] {
+			require.False(t, IsNightlyOnlyConfig(idx),
+				"default config %s should not be nightly-only", idx.Name())
+		}
+	})
+
+	t.Run("all nightly configs are nightly-only", func(t *testing.T) {
+		for _, idx := range DefaultConfigSets[NightlyDefaultConfigSet] {
+			require.True(t, IsNightlyOnlyConfig(idx),
+				"nightly config %s should be nightly-only", idx.Name())
+		}
+	})
+}
+
+func TestReadTestFileConfigs(t *testing.T) {
+	defaults := makeConfigSet("local", "fakedist", "local-meta")
+	defaultNames := defaults.ConfigNames()
+
+	dir := t.TempDir()
+
+	tests := []struct {
+		name                      string
+		fileContent               string
+		expectedConfigNames       []string
+		expectedNonMetaBatchSizes bool
+		expectedBlockedNil        bool
+		expectedBlockedConfigs    map[string]struct{}
+		expectedUsesDefaults      bool
+	}{
+		{
+			name:                 "no directive",
+			fileContent:          "statement ok\nSELECT 1\n",
+			expectedConfigNames:  defaultNames,
+			expectedBlockedNil:   true,
+			expectedUsesDefaults: true,
+		},
+		{
+			name:                 "explicit default-configs alias",
+			fileContent:          "# LogicTest: default-configs\n",
+			expectedConfigNames:  DefaultConfigSets[DefaultConfigSet].ConfigNames(),
+			expectedUsesDefaults: true,
+		},
+		{
+			name:                "single named config",
+			fileContent:         "# LogicTest: local\n",
+			expectedConfigNames: []string{"local"},
+		},
+		{
+			name:                "blocklist only applies to defaults",
+			fileContent:         "# LogicTest: !3node-tenant\n",
+			expectedConfigNames: defaultNames,
+			expectedBlockedConfigs: map[string]struct{}{
+				"3node-tenant": {},
+			},
+			expectedUsesDefaults: true,
+		},
+		{
+			name:                "named config plus blocklist",
+			fileContent:         "# LogicTest: local !fakedist\n",
+			expectedConfigNames: []string{"local"},
+			expectedBlockedConfigs: map[string]struct{}{
+				"fakedist": {},
+			},
+		},
+		{
+			name:                "config set alias",
+			fileContent:         "# LogicTest: 5node-default-configs\n",
+			expectedConfigNames: []string{"5node", "5node-disk"},
+		},
+		{
+			name:                      "metamorphic-batch-sizes blocklist",
+			fileContent:               "# LogicTest: !metamorphic-batch-sizes\n",
+			expectedConfigNames:       defaultNames,
+			expectedNonMetaBatchSizes: true,
+			expectedBlockedConfigs: map[string]struct{}{
+				"metamorphic-batch-sizes": {},
+			},
+			expectedUsesDefaults: true,
+		},
+		{
+			name:        "blocklist config set alias expands",
+			fileContent: "# LogicTest: !3node-tenant-default-configs\n",
+			expectedBlockedConfigs: map[string]struct{}{
+				"3node-tenant":             {},
+				"3node-tenant-multiregion": {},
+			},
+			expectedUsesDefaults: true,
+		},
+		{
+			name:                 "non-comment before directive returns defaults",
+			fileContent:          "statement ok\n# LogicTest: local\n",
+			expectedConfigNames:  defaultNames,
+			expectedBlockedNil:   true,
+			expectedUsesDefaults: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTestFile(t, dir, strings.ReplaceAll(tc.name, " ", "_"), tc.fileContent)
+			configs, nonMetaBatch, blocked, usesDefaults :=
+				ReadTestFileConfigs(t, path, defaults)
+
+			require.Equal(t, tc.expectedUsesDefaults, usesDefaults, "usesDefaults")
+			require.Equal(t, tc.expectedNonMetaBatchSizes, nonMetaBatch, "nonMetaBatchSizes")
+
+			if tc.expectedConfigNames != nil {
+				require.Equal(t, tc.expectedConfigNames, configs.ConfigNames(), "config names")
+			}
+
+			if tc.expectedBlockedNil {
+				require.Nil(t, blocked, "blockedConfigs should be nil")
+			} else if tc.expectedBlockedConfigs != nil {
+				require.Equal(t, tc.expectedBlockedConfigs, blocked, "blockedConfigs")
+			}
+		})
+	}
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		configs, nonMetaBatch, blocked, usesDefaults :=
+			ReadTestFileConfigs(t, "/nonexistent/path/test.test", defaults)
+		require.Nil(t, configs)
+		require.False(t, nonMetaBatch)
+		require.Nil(t, blocked)
+		require.False(t, usesDefaults)
+	})
+}
+
+func TestEnumerateConfigs(t *testing.T) {
+	defaultConfigs := DefaultConfigSets[DefaultConfigSet]
+	nightlyConfigs := DefaultConfigSets[NightlyDefaultConfigSet]
+	unionSet := make(map[ConfigIdx]bool, len(defaultConfigs)+len(nightlyConfigs))
+	for _, idx := range defaultConfigs {
+		unionSet[idx] = true
+	}
+	for _, idx := range nightlyConfigs {
+		unionSet[idx] = true
+	}
+
+	t.Run("default and nightly sets are disjoint", func(t *testing.T) {
+		defaultSet := make(map[ConfigIdx]bool, len(defaultConfigs))
+		for _, idx := range defaultConfigs {
+			defaultSet[idx] = true
+		}
+		for _, idx := range nightlyConfigs {
+			require.False(t, defaultSet[idx],
+				"config %s is in both DefaultConfigSet and NightlyDefaultConfigSet", idx.Name())
+		}
+	})
+
+	t.Run("no directive enumerates under all union configs", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeTestFile(t, dir, "test_nodirective", "statement ok\nSELECT 1\n")
+
+		result, err := EnumerateConfigs(filepath.Join(dir, "test_*"))
+		require.NoError(t, err)
+
+		for idx := range unionSet {
+			require.Contains(t, result[idx], path,
+				"config %s should include the file", idx.Name())
+		}
+		for i, paths := range result {
+			if !unionSet[ConfigIdx(i)] {
+				require.NotContains(t, paths, path,
+					"config %s should not include the file", ConfigIdx(i).Name())
+			}
+		}
+	})
+
+	t.Run("explicit config enumerates only under named config", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeTestFile(t, dir, "test_explicit", "# LogicTest: 5node\n")
+
+		result, err := EnumerateConfigs(filepath.Join(dir, "test_*"))
+		require.NoError(t, err)
+
+		fiveNodeIdx, ok := findLogicTestConfig("5node")
+		require.True(t, ok)
+		require.Contains(t, result[fiveNodeIdx], path)
+
+		for i, paths := range result {
+			if ConfigIdx(i) != fiveNodeIdx {
+				require.NotContains(t, paths, path,
+					"config %s should not include the file", ConfigIdx(i).Name())
+			}
+		}
+	})
+
+	t.Run("blocklist removes config from union defaults", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeTestFile(t, dir, "test_blocklist", "# LogicTest: !3node-tenant\n")
+
+		result, err := EnumerateConfigs(filepath.Join(dir, "test_*"))
+		require.NoError(t, err)
+
+		blockedIdx, ok := findLogicTestConfig("3node-tenant")
+		require.True(t, ok)
+		require.NotContains(t, result[blockedIdx], path,
+			"blocked config should not include the file")
+
+		for idx := range unionSet {
+			if idx == blockedIdx {
+				continue
+			}
+			require.Contains(t, result[idx], path,
+				"config %s should include the file", idx.Name())
+		}
 	})
 }

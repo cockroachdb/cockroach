@@ -4684,6 +4684,7 @@ func (t *logicTest) runFile(path string, config logictestbase.TestClusterConfig)
 var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
+var logicTestsNightly = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_NIGHTLY", false)
 
 // TestServerArgs contains the parameters that callers of RunLogicTest might
 // want to specify for the test clusters to be created with.
@@ -4741,7 +4742,7 @@ func RunLogicTest(
 
 	// Check whether the test can only be run in non-metamorphic mode, and
 	// collect the blocklist from the test file header for metamorphic resolution.
-	_, nonMetamorphicBatchSizes, blockedConfigs :=
+	_, nonMetamorphicBatchSizes, blockedConfigs, usesDefaults :=
 		logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
 	config := logictestbase.LogicTestConfigs[configIdx]
 
@@ -4778,6 +4779,9 @@ func RunLogicTest(
 	}
 	if logicTestsConfigFilter != "" && config.Name != logicTestsConfigFilter {
 		skip.IgnoreLint(t, "config does not match env var")
+	}
+	if !logicTestsNightly && usesDefaults && logictestbase.IsNightlyOnlyConfig(configIdx) {
+		skip.IgnoreLint(t, "nightly-only config; set COCKROACH_LOGIC_TESTS_NIGHTLY=true to run")
 	}
 
 	var cc *corpus.Collector

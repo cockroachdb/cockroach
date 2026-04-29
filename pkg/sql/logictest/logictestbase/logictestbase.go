@@ -964,6 +964,13 @@ func (l *LineScanner) Text() string {
 // DefaultConfigSet is an alias for the set of default configs.
 const DefaultConfigSet = "default-configs"
 
+// NightlyDefaultConfigSet is a config set alias for the 13 original
+// deterministic configs that were the default before metamorphic meta
+// configs replaced them. Tests using the default config set are also
+// generated under these configs, but gated behind the
+// COCKROACH_LOGIC_TESTS_NIGHTLY env var so they only run in nightly CI.
+const NightlyDefaultConfigSet = "nightly-default-configs"
+
 // DefaultConfigSets are sets of configs that have an alias which can be used
 // instead of specific config names.
 //
@@ -976,6 +983,26 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-meta",
 		"3node-meta",
 		"local-mixed-meta",
+	),
+
+	// Nightly-only configs: the 13 original deterministic configs that
+	// ran before metamorphic meta configs. Tests using the default config
+	// set are generated for these configs but skipped unless
+	// COCKROACH_LOGIC_TESTS_NIGHTLY=true.
+	NightlyDefaultConfigSet: makeConfigSet(
+		"local",
+		"local-legacy-schema-changer",
+		"local-vec-off",
+		"local-read-committed",
+		"local-repeatable-read",
+		"local-prepared",
+		"fakedist",
+		"fakedist-vec-off",
+		"fakedist-disk",
+		"3node-tenant",
+		"local-mixed-25.4",
+		"local-mixed-26.1",
+		"local-mixed-26.2",
 	),
 
 	// Special alias for all 5 node configs.
@@ -1086,7 +1113,9 @@ func ReadBackupRestoreProbabilityOverride(
 // configuration names. The test file is run against each of those
 // configurations. It also returns the set of blocked config names
 // (expanded from any config-set aliases) for use by metamorphic
-// resolution.
+// resolution, and whether the file uses the default config set (either
+// because it has no directive, or because the directive consists only of
+// blocklist entries, or because it explicitly references DefaultConfigSet).
 //
 // Example:
 //
@@ -1095,10 +1124,15 @@ func ReadBackupRestoreProbabilityOverride(
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(
 	t logger, path string, defaults ConfigSet,
-) (_ ConfigSet, nonMetamorphicBatchSizes bool, blockedConfigs map[string]struct{}) {
+) (
+	_ ConfigSet,
+	nonMetamorphicBatchSizes bool,
+	blockedConfigs map[string]struct{},
+	usesDefaults bool,
+) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, nil, false
 	}
 	defer file.Close()
 
@@ -1119,12 +1153,13 @@ func ReadTestFileConfigs(
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			cs, nonMetamorphicBatchSizes, blockedConfigs := processConfigs(t, path, defaults, fields[2:])
-			return cs, nonMetamorphicBatchSizes, blockedConfigs
+			cs, nonMetamorphicBatchSizes, blockedConfigs, usesDefaults :=
+				processConfigs(t, path, defaults, fields[2:])
+			return cs, nonMetamorphicBatchSizes, blockedConfigs, usesDefaults
 		}
 	}
 	// No directive found, return the default config.
-	return defaults, false, nil
+	return defaults, false, nil, true
 }
 
 // getBlocklistIssueNo takes a blocklist directive with an optional issue number
@@ -1147,11 +1182,17 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 // processConfigs, given a list of configNames, returns the list of
 // corresponding logicTestConfigIdxs, a boolean indicating whether
 // metamorphic settings related to batch sizes should be overridden with
-// default production values, and the set of blocked config names (expanded
-// from any config-set aliases).
+// default production values, the set of blocked config names (expanded
+// from any config-set aliases), and whether the returned configs include
+// the default config set.
 func processConfigs(
 	t logger, path string, defaults ConfigSet, configNames []string,
-) (_ ConfigSet, nonMetamorphicBatchSizes bool, blockedConfigs map[string]struct{}) {
+) (
+	_ ConfigSet,
+	nonMetamorphicBatchSizes bool,
+	blockedConfigs map[string]struct{},
+	usesDefaults bool,
+) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -1192,7 +1233,7 @@ func processConfigs(
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist), nonMetamorphicBatchSizes, blockedConfigs
+		return applyBlocklistToConfigs(defaults, blocklist), nonMetamorphicBatchSizes, blockedConfigs, true
 	}
 
 	var configs ConfigSet
@@ -1210,13 +1251,16 @@ func processConfigs(
 			if !ok {
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
+			if configName == DefaultConfigSet {
+				usesDefaults = true
+			}
 			configs = append(configs, applyBlocklistToConfigs(configSet, blocklist)...)
 		} else {
 			configs = append(configs, idx)
 		}
 	}
 
-	return dedupConfigs(configs), nonMetamorphicBatchSizes, blockedConfigs
+	return dedupConfigs(configs), nonMetamorphicBatchSizes, blockedConfigs, usesDefaults
 }
 
 // dedupConfigs removes duplicate config indices from a ConfigSet, preserving
@@ -1306,11 +1350,30 @@ func ConfigExists(name string) bool {
 	return config || alias
 }
 
-// EnumerateConfigs produces the list of all configuration/file pairs from the
-// input list of file globs. The return value is a list of the same length as
-// LogicTestConfigs, and each sub-list is the path to a file run under that
-// configuration.
+// EnumerateConfigs produces the list of all configuration/file pairs from
+// the input list of file globs. The return value is a list of the same
+// length as LogicTestConfigs, and each sub-list is the path to a file
+// run under that configuration. Test files are enumerated against the
+// union of DefaultConfigSet and NightlyDefaultConfigSet; nightly-only
+// configs are skipped at runtime via IsNightlyOnlyConfig.
 func EnumerateConfigs(globs ...string) ([][]string, error) {
+	configDefaults := DefaultConfigSets[DefaultConfigSet]
+	nightlyDefaults := DefaultConfigSets[NightlyDefaultConfigSet]
+	union := make(ConfigSet, 0, len(configDefaults)+len(nightlyDefaults))
+	union = append(union, configDefaults...)
+	seen := make(map[ConfigIdx]bool, len(configDefaults))
+	for _, idx := range configDefaults {
+		seen[idx] = true
+	}
+	for _, idx := range nightlyDefaults {
+		if !seen[idx] {
+			union = append(union, idx)
+		}
+	}
+	return enumerateConfigsWithDefaults(union, globs...)
+}
+
+func enumerateConfigsWithDefaults(defaults ConfigSet, globs ...string) ([][]string, error) {
 	var paths []string
 	for _, g := range globs {
 		match, err := filepath.Glob(g)
@@ -1322,9 +1385,8 @@ func EnumerateConfigs(globs ...string) ([][]string, error) {
 
 	logger := stdlogger{}
 	configPaths := make([][]string, len(LogicTestConfigs))
-	configDefaults := DefaultConfigSets[DefaultConfigSet]
 	for _, path := range paths {
-		configs, _, _ := ReadTestFileConfigs(logger, path, configDefaults)
+		configs, _, _, _ := ReadTestFileConfigs(logger, path, defaults)
 		for _, idx := range configs {
 			configPaths[idx] = append(configPaths[idx], path)
 		}
@@ -1333,4 +1395,20 @@ func EnumerateConfigs(globs ...string) ([][]string, error) {
 		sort.Strings(paths)
 	}
 	return configPaths, nil
+}
+
+// IsNightlyOnlyConfig returns true if the given config is in the
+// NightlyDefaultConfigSet but not in the DefaultConfigSet.
+func IsNightlyOnlyConfig(configIdx ConfigIdx) bool {
+	for _, idx := range DefaultConfigSets[DefaultConfigSet] {
+		if idx == configIdx {
+			return false
+		}
+	}
+	for _, idx := range DefaultConfigSets[NightlyDefaultConfigSet] {
+		if idx == configIdx {
+			return true
+		}
+	}
+	return false
 }

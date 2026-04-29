@@ -83,7 +83,9 @@ func (t *testdir) addLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.logicTestsConfigPaths = append(t.logicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.logicTestsConfigPaths = append(t.logicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -92,7 +94,9 @@ func (t *testdir) addExecBuildLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.execBuildLogicTestsConfigPaths = append(t.execBuildLogicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.execBuildLogicTestsConfigPaths = append(t.execBuildLogicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -105,7 +109,9 @@ func (t *testdir) addSqliteLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.sqliteLogicTestsConfigPaths = append(t.sqliteLogicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.sqliteLogicTestsConfigPaths = append(t.sqliteLogicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -222,7 +228,6 @@ func (t *testdir) dumpConfig(configIdx int) error {
 			dumpTestForFile(f, configPaths.testPrefix, relativeFile, "runSqliteLogicTest")
 		}
 	}
-
 	return buildFileTpl.Execute(buildF, tplCfg)
 }
 
