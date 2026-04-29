@@ -9,10 +9,15 @@ import (
 	"bytes"
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/revlog/revlogjob"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -134,15 +139,76 @@ func maybeCreateRevlogSiblingJob(
 	return nil
 }
 
+// defaultRevlogTickWidth is the working tick width for the v1 revlog
+// writer. See revlog-format.md §2.
+//
+// TODO(dt): expose as a cluster setting / per-job knob.
+const defaultRevlogTickWidth = 10 * time.Second
+
 // runRevlogJob is the BACKUP-resumer hook for the sibling revlog
-// (continuous backup) job. The actual revlog writer lives in
-// pkg/revlog/revlogjob and will be wired in by a follow-up commit;
-// this stub returns an unimplemented error so the syntax + sibling-
-// job machinery here can land independently of the writer.
+// (continuous backup) job. It derives the producer's span resolver,
+// startHLC, and destination from the parent BACKUP's details and
+// hands them off to revlogjob.Run, which builds the DistSQL flow
+// (one producer per node, gateway-side TickManager writing manifests
+// from collected ProducerMetadata).
+//
+// v1 simplifications:
+//
+//   - The span resolver returns the entire tenant keyspace on every
+//     call (no descriptor-driven filtering). TODO(dt): consult
+//     the parent's ResolvedTargets and current descriptor state so
+//     the log only covers what the parent backed up. This is the
+//     intended seam — the resolver can close over BackupDetails and
+//     a descriptor-fetching helper, and use the changedDescIDs hint
+//     once the coordinator's descriptor rangefeed is in place
+//     (RFC §1 "Span coverage tracking").
+//   - tickWidth is hardcoded.
+//   - no resumption / persisted progress: a restarted sibling job
+//     re-launches the rangefeed at startHLC and re-flushes from
+//     there. The format is idempotent on file_id so duplicate
+//     output is safe.
 func runRevlogJob(
-	_ context.Context, _ sql.JobExecContext, _ jobspb.JobID, _ jobspb.BackupDetails,
+	ctx context.Context, p sql.JobExecContext, jobID jobspb.JobID, details jobspb.BackupDetails,
 ) error {
-	return errors.New("BACKUP ... WITH REVISION STREAM is not yet implemented")
+	dest := details.CollectionURI
+	if dest == "" {
+		return errors.AssertionFailedf("revlog job must have a CollectionURI")
+	}
+	if len(details.SpecificTenantIds) > 0 || details.IncludeAllSecondaryTenants {
+		// TODO(dt): support tenant rev logs.
+		return errors.AssertionFailedf("revlog job does not support SpecificTenantIds")
+	}
+
+	log.Dev.Infof(ctx, "starting revlog job %d at %s, dest=%s", jobID, details.EndTime, dest)
+
+	return revlogjob.Run(ctx, p, jobID, makeRevlogScope(p.ExecCfg(), details),
+		details.EndTime, dest, defaultRevlogTickWidth, ptsTargetForRevlogJob(p.ExecCfg().Codec))
+}
+
+// ptsTargetForRevlogJob returns the protected-timestamp target the
+// revlog writer's self-managed PTS record should cover. v1 paints
+// the entire keyspace the writer reads — for the system tenant a
+// cluster-wide target, for an application tenant a single-tenant
+// target — matching makeTenantSpanResolver above.
+//
+// TODO(dt): once makeTenantSpanResolver narrows to descriptor-
+// scoped spans, narrow this target to MakeSchemaObjectsTarget over
+// the same descriptor set so GC isn't pinned cluster-wide.
+func ptsTargetForRevlogJob(codec keys.SQLCodec) *ptpb.Target {
+	if codec.ForSystemTenant() {
+		return ptpb.MakeClusterTarget()
+	}
+	return ptpb.MakeTenantsTarget([]roachpb.TenantID{codec.TenantID})
+}
+
+// makeRevlogScope builds the revlogjob.Scope the writer uses to
+// answer "what spans should I currently cover?" / "does this
+// descriptor change matter?" / "have all my roots gone away?".
+// The implementation closes over the parent BACKUP's
+// already-resolved targets so the log mirrors the chain it
+// serves; see revlogScope.
+func makeRevlogScope(execCfg *sql.ExecutorConfig, details jobspb.BackupDetails) revlogjob.Scope {
+	return newRevlogScope(execCfg, details)
 }
 
 // revlogJobMarkerExists returns true if the destination already has
