@@ -42,7 +42,7 @@ func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
-	_ *StoreWorkStats,
+	stats *StoreWorkStats,
 	_ kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
@@ -51,6 +51,8 @@ func (r *Replica) executeReadOnlyBatch(
 ) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
+
+	ss := stats.ScanStats()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
@@ -165,7 +167,7 @@ func (r *Replica) executeReadOnlyBatch(
 				r.store.metrics.VirtualResolveIntentCount.Inc(1)
 			}
 			_, err = evaluateCommand(
-				ctx, rwNoAssert, rec, nil /* ms */, nil /* ss */, h, req,
+				ctx, rwNoAssert, rec, nil /* ms */, ss, h, req,
 				reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
 			)
 			if err != nil {
@@ -222,7 +224,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	var result result.Result
-	ba, br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
+	ba, br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ss, ba, g, &st, ui, evalPath)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -521,6 +523,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	ctx context.Context,
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -608,7 +611,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		}
 		now := timeutil.Now()
 		br, res, pErr = evaluateBatch(
-			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ba, g,
+			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ss, ba, g,
 			st, ui, evalPath, false, /* omitInRangefeeds */
 		)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())

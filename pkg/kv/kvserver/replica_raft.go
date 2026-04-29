@@ -130,7 +130,8 @@ func (r *Replica) evalAndPropose(
 ) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := raftlog.MakeCmdIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
+	ss := stats.ScanStats()
+	proposal, pErr := r.requestToProposal(ctx, idKey, ss, ba, g, st, ui)
 	ba = proposal.Request // may have been updated
 	log.Event(proposal.Context(), "evaluated request")
 

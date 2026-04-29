@@ -1729,6 +1729,19 @@ func (n *Node) batchInternal(
 		stats.Release()
 	}()
 
+	// Record the scan stats if tracing is enabled.
+	ss := stats.ScanStats()
+	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+		defer func() {
+			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
+				// Only record non-empty ScanStats.
+				ss.NodeID = n.Descriptor.NodeID
+				ss.Region, _ = n.Descriptor.Locality.Find("region")
+				sp.RecordStructured(ss)
+			}
+		}()
+	}
+
 	// If a proxy attempt is requested, we copy the request to prevent evaluation
 	// from modifying the request. There are places on the server that can modify
 	// the request, and we can't keep these modifications if we later proxy it.
