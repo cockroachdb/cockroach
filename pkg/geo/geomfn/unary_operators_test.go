@@ -253,6 +253,32 @@ func TestMinimumClearanceLine(t *testing.T) {
 	}
 }
 
+func TestPerimeter3D(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected float64
+	}{
+		{"POLYGON Z((0 0 0, 10 0 0, 10 10 5, 0 10 5, 0 0 0))", 42.3606797749979},
+		{"POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))", 40},
+		{"LINESTRING Z(0 0 0, 10 0 0)", 0},
+		{"POINT Z(0 0 0)", 0},
+		{"MULTIPOLYGON Z(((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0)),((2 2 0, 3 2 0, 3 3 1, 2 3 1, 2 2 0)))", 8.82842712474619},
+	}
+
+	// Get reference value for multipolygon from PostGIS.
+	// Calculate manually: first polygon is flat (perimeter=4), second has Z offsets.
+	// For now, just test against PostGIS output.
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g := geo.MustParseGeometry(tc.wkt)
+			ret, err := Perimeter3D(g)
+			require.NoError(t, err)
+			require.InDelta(t, tc.expected, ret, 1e-10)
+		})
+	}
+}
+
 func TestLength3D(t *testing.T) {
 	testCases := []struct {
 		wkt      string

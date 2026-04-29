@@ -2935,6 +2935,15 @@ var builtinOidsArray = []string{
 	2980: `st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
 	2981: `st_3ddistance(geometry_a: geometry, geometry_b: geometry) -> float`,
 	2982: `_st_3ddwithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2983: `_st_3dintersects(geometry_a: geometry, geometry_b: geometry) -> bool`,
+	2984: `st_3ddfullywithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2985: `_st_3ddfullywithin(geometry_a: geometry, geometry_b: geometry, distance: float) -> bool`,
+	2986: `st_3dintersects(geometry_a: geometry, geometry_b: geometry) -> bool`,
+	2987: `st_3dmaxdistance(geometry_a: geometry, geometry_b: geometry) -> float`,
+	2988: `st_3dclosestpoint(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2989: `st_3dlongestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2990: `st_3dshortestline(geometry_a: geometry, geometry_b: geometry) -> geometry`,
+	2991: `st_3dperimeter(geometry: geometry) -> float`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

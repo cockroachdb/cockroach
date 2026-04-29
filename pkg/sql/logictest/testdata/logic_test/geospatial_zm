@@ -444,9 +444,34 @@ SELECT ST_3DDistance('POINT Z(1 2 3)'::geometry, 'POINT Z(1 2 3)'::geometry)
 ----
 0
 
-# 2D geometry fallback (no Z means Z=0).
+# When either input lacks a Z dimension, ST_3DDistance falls back to 2D
+# distance (matching PostGIS's lwgeom_mindistance3d_tolerance).
 query R
 SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+# Mixed 2D/3D: PostGIS treats the missing Z as "any value" and degrades
+# the comparison to 2D, so the Z difference is not counted.
+query R
+SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+0
+
+query B
+SELECT ST_3DDWithin('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry, 0)
+----
+true
+
+# XYM input has its M dimension stripped, leaving an XY geometry, so the
+# comparison falls back to 2D and the M value is ignored.
+query R
+SELECT ST_3DDistance('POINT M(0 0 5)'::geometry, 'POINT M(0 0 0)'::geometry)
+----
+0
+
+query R
+SELECT ST_3DDistance('POINT M(0 0 5)'::geometry, 'POINT(3 4)'::geometry)
 ----
 5
 
@@ -531,6 +556,67 @@ SELECT ST_3DDistance(
   ST_SetSRID('POINT Z(1 1 1)'::geometry, 3857)
 )
 
+# Vertical polygon whose 2D footprint collapses to a line in XY.
+# Distance is the perpendicular drop to the polygon's plane (5), and the
+# shortest line endpoint on the polygon side is the perpendicular foot.
+# The 2D bounding box of the polygon has zero y-extent and does not
+# overlap the point's bbox, so a 2D fast-reject would incorrectly skip
+# the perpendicular-foot check; the 3D calculator's BoundingBoxIntersects
+# always returns true to avoid this.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'POINT Z(5 5 5)'::geometry
+)
+----
+5
+
+query R
+SELECT ST_3DDistance(
+  'POINT Z(5 5 5)'::geometry,
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry
+)
+----
+5
+
+query T
+SELECT ST_AsText(ST_3DShortestLine(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'POINT Z(5 5 5)'::geometry
+))
+----
+LINESTRING Z (5 -0 5, 5 5 5)
+
+# Line crosses through the polygon's interior at (5, 0, 5). Distance is
+# 0 even though no boundary edge is touched; the line-plane intersection
+# point lies inside the outer ring.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'LINESTRING Z(5 -3 5, 5 3 5)'::geometry
+)
+----
+0
+
+# Line crosses the polygon's plane outside the outer ring: not zero.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'LINESTRING Z(50 -3 5, 50 3 5)'::geometry
+)
+----
+40
+
+# Line crosses the polygon's plane inside a hole: distance is to the
+# hole boundary, not zero.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0), (3 0 3, 7 0 3, 7 0 7, 3 0 7, 3 0 3))'::geometry,
+  'LINESTRING Z(5 -3 5, 5 3 5)'::geometry
+)
+----
+2
+
 subtest end
 
 subtest st_3ddwithin
@@ -582,6 +668,214 @@ SELECT ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, -1)
 # _st_3ddwithin alias works.
 query B
 SELECT _ST_3DDWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry, 1)
+----
+true
+
+subtest end
+
+subtest st_3dperimeter
+
+query R
+SELECT ST_3DPerimeter('POLYGON Z((0 0 0, 10 0 0, 10 10 5, 0 10 5, 0 0 0))'::geometry)
+----
+42.3606797749979
+
+# 2D polygon returns 2D perimeter.
+query R
+SELECT ST_3DPerimeter('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'::geometry)
+----
+40
+
+# Non-polygon types return 0.
+query R
+SELECT ST_3DPerimeter('LINESTRING Z(0 0 0, 10 0 0)'::geometry)
+----
+0
+
+subtest end
+
+subtest st_3dshortestline
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (0 0 5, 0 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT Z(5 3 4)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 3 4, 5 0 0)
+
+# Both inputs lack Z: falls back to the 2D shortest line (returning a 2D
+# LineString), matching PostGIS's lw_dist3d_distanceline.
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+LINESTRING (5 0, 5 0)
+
+# Mixed 2D/3D: PostGIS treats the missing Z as "any value" via the
+# vertical-line trick. The 2D side's Z is chosen to optimize the metric
+# at the closest 2D XY pair.
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 0 0, 5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('POINT(5 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (5 5 0, 5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DShortestLine('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT(5 5)'::geometry))
+----
+LINESTRING Z (5 0 0, 5 5 0)
+
+subtest end
+
+subtest st_3dlongestline
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+LINESTRING Z (0 0 5, 10 0 0)
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+LINESTRING (5 0, 0 0)
+
+query T
+SELECT ST_AsText(ST_3DLongestLine('POINT(0 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 100)'::geometry))
+----
+LINESTRING Z (0 0 0, 10 0 100)
+
+subtest end
+
+subtest st_3dclosestpoint
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 3 4)'::geometry))
+----
+POINT Z (5 0 0)
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT Z(0 0 5)'::geometry, 'LINESTRING Z(0 0 0, 10 0 0)'::geometry))
+----
+POINT Z (0 0 5)
+
+# Both 2D: returns a 2D point.
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT(5 0)'::geometry, 'LINESTRING(0 0, 10 0)'::geometry))
+----
+POINT (5 0)
+
+# Mixed 2D/3D: the vertical-line trick assigns the missing Z to match
+# the 3D side at the closest XY.
+query T
+SELECT ST_AsText(ST_3DClosestPoint('POINT(5 0)'::geometry, 'LINESTRING Z(0 0 0, 10 0 100)'::geometry))
+----
+POINT Z (5 0 50)
+
+query T
+SELECT ST_AsText(ST_3DClosestPoint('LINESTRING Z(0 0 0, 10 0 100)'::geometry, 'POINT(5 0)'::geometry))
+----
+POINT Z (5 0 50)
+
+subtest end
+
+subtest st_3dmaxdistance
+
+query R
+SELECT ST_3DMaxDistance('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+1.7320508075688772
+
+query R
+SELECT ST_3DMaxDistance('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 5 5)'::geometry)
+----
+8.660254037844387
+
+query R
+SELECT ST_3DMaxDistance('POINT EMPTY'::geometry, 'POINT Z(1 1 1)'::geometry)
+----
+NULL
+
+# When either input lacks Z, ST_3DMaxDistance falls back to 2D distance,
+# matching PostGIS. The missing Z is not implicitly treated as 0.
+query R
+SELECT ST_3DMaxDistance('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+0
+
+# XYM input has its M dimension stripped, leaving an XY geometry, so the
+# comparison falls back to 2D.
+query R
+SELECT ST_3DMaxDistance('POINT M(0 0 100)'::geometry, 'POINT M(0 0 0)'::geometry)
+----
+0
+
+query R
+SELECT ST_3DMaxDistance('POINT M(0 0 5)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+subtest end
+
+subtest st_3ddfullywithin
+
+query B
+SELECT ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 1)
+----
+true
+
+query B
+SELECT ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 0.5)
+----
+false
+
+query B
+SELECT _ST_3DDFullyWithin('LINESTRING Z(0 0 0, 1 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry, 1)
+----
+true
+
+query error dwithin distance cannot be less than zero
+SELECT ST_3DDFullyWithin('POINT Z(0 0 0)'::geometry, 'POINT Z(1 1 1)'::geometry, -1)
+
+# Mixed 2D/3D falls back to 2D ST_DFullyWithin.
+query B
+SELECT ST_3DDFullyWithin('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry, 0)
+----
+true
+
+subtest end
+
+subtest st_3dintersects
+
+query B
+SELECT ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry)
+----
+true
+
+query B
+SELECT ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 1)'::geometry)
+----
+false
+
+query B
+SELECT ST_3DIntersects('LINESTRING Z(0 0 0, 10 0 0)'::geometry, 'POINT Z(5 0 0)'::geometry)
+----
+true
+
+query B
+SELECT _ST_3DIntersects('POINT Z(0 0 0)'::geometry, 'POINT Z(0 0 0)'::geometry)
+----
+true
+
+# ST_3DIntersects delegates to DWithin3D and inherits its 2D fallback:
+# when either input lacks Z, the comparison happens in 2D.
+query B
+SELECT ST_3DIntersects('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
 ----
 true
 
