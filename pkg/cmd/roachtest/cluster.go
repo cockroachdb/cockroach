@@ -653,8 +653,49 @@ type nodeSelector interface {
 	Merge(option.NodeListOption) option.NodeListOption
 }
 
-// clusterImpl implements cluster.Cluster.
+// testCluster is the roachtest runner's internal view of a cluster. Test
+// bodies continue to receive the public cluster.Cluster interface.
+type testCluster interface {
+	cluster.Cluster
+	fmt.Stringer
 
+	setTest(test.Test)
+
+	Destroy(context.Context, closeLoggerOpt, *logger.Logger)
+	Save(context.Context, string, *logger.Logger)
+	WipeForReuse(context.Context, *logger.Logger, spec.ClusterSpec) error
+	MaybeExtendCluster(context.Context, *logger.Logger, *registry.TestSpec) error
+
+	PutCockroach(context.Context, *logger.Logger, *testImpl) error
+	PutDeprecatedWorkload(context.Context, *logger.Logger, *testImpl) error
+
+	FetchLogs(context.Context, *logger.Logger) error
+	FetchDmesg(context.Context, *logger.Logger) error
+	FetchJournalctl(context.Context, *logger.Logger) error
+	FetchCores(context.Context, *logger.Logger) error
+	FetchPebbleCheckpoints(context.Context, *logger.Logger) error
+	FetchVMSpecs(context.Context, *logger.Logger) error
+	CopyRoachprodState(context.Context) error
+
+	HealthStatus(context.Context, *logger.Logger, option.NodeListOption) ([]*HealthStatusResult, error)
+	GetHostErrorVMs(context.Context, *logger.Logger) ([]string, error)
+
+	addLabels(map[string]string) error
+	removeLabels([]string) error
+	clusterTag() string
+
+	SetArchitecture(vm.CPUArch)
+	SetEncryptedAtRest(bool)
+	EncryptedAtRest() bool
+	SetGoCoverDir(string)
+	Logger() *logger.Logger
+	SetLogger(*logger.Logger)
+	ResetClusterSettings()
+	SetClusterSetting(string, string)
+	SetGrafanaTags([]string)
+}
+
+// clusterImpl implements cluster.Cluster.
 // It is safe for concurrent use by multiple goroutines.
 type clusterImpl struct {
 	name  string
@@ -712,6 +753,11 @@ type clusterImpl struct {
 	preStartVirtualClusterHooks []install.PreStartHook
 }
 
+var (
+	_ cluster.Cluster = (*clusterImpl)(nil)
+	_ testCluster     = (*clusterImpl)(nil)
+)
+
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
@@ -720,6 +766,50 @@ func (c *clusterImpl) Name() string {
 // Spec returns the spec underlying the cluster.
 func (c *clusterImpl) Spec() spec.ClusterSpec {
 	return c.spec
+}
+
+func (c *clusterImpl) clusterTag() string {
+	return c.tag
+}
+
+func (c *clusterImpl) SetArchitecture(arch vm.CPUArch) {
+	c.arch = arch
+}
+
+func (c *clusterImpl) SetEncryptedAtRest(enabled bool) {
+	c.encAtRest = enabled
+}
+
+func (c *clusterImpl) EncryptedAtRest() bool {
+	return c.encAtRest
+}
+
+func (c *clusterImpl) SetGoCoverDir(dir string) {
+	c.goCoverDir = dir
+}
+
+func (c *clusterImpl) Logger() *logger.Logger {
+	return c.l
+}
+
+func (c *clusterImpl) SetLogger(l *logger.Logger) {
+	c.l = l
+}
+
+func (c *clusterImpl) ResetClusterSettings() {
+	c.clusterSettings = map[string]string{}
+	c.virtualClusterSettings = map[string]string{}
+}
+
+func (c *clusterImpl) SetClusterSetting(name, value string) {
+	if c.clusterSettings == nil {
+		c.clusterSettings = map[string]string{}
+	}
+	c.clusterSettings[name] = value
+}
+
+func (c *clusterImpl) SetGrafanaTags(tags []string) {
+	c.grafanaTags = tags
 }
 
 // status is used to communicate the test's status. It's a no-op until the
