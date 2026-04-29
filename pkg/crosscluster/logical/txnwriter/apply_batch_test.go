@@ -29,6 +29,7 @@ func newTxnWriter(t *testing.T, s serverutils.ApplicationLayerInterface) Transac
 		context.Background(),
 		s.InternalDB().(isql.DB),
 		s.LeaseManager().(*lease.Manager),
+		s.Codec(),
 		s.ClusterSettings(),
 	)
 	require.NoError(t, err)
@@ -499,9 +500,6 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
-			// TODO(jeffswenson): check the resulting origin time of the tombstone to
-			// ensure we updated the tombstone value. Right now this "works" because the
-			// writer skips the tombstone update case.
 			sqlDB.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT count(*) FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"0"}},

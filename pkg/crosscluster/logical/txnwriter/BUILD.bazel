@@ -12,6 +12,8 @@ go_library(
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/sqlwriter",
+        "//pkg/keys",
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -19,6 +21,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

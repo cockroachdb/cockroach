@@ -166,18 +166,24 @@ const (
 	// writerTypeCRUD is the shiny new sql writer that uses explicit reads,
 	// inserts, updates, and deletes instead of upserts.
 	LDRWriterTypeCRUD LDRWriterType = "crud"
+	// LDRWriterTypeTxn uses the transaction writer which applies rows using the
+	// SQL layer with explicit CRUD operations and savepoint-based conflict
+	// handling.
+	LDRWriterTypeTxn LDRWriterType = "txn"
 )
 
 var LDRImmediateModeWriter = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.immediate_mode_writer",
 	"the writer to use when in immediate mode",
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL)),
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL), string(LDRWriterTypeTxn)),
 	settings.WithValidateString(func(sv *settings.Values, val string) error {
-		if val != string(LDRWriterTypeSQL) && val != string(LDRWriterTypeLegacyKV) && val != string(LDRWriterTypeCRUD) {
-			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)
+		switch LDRWriterType(val) {
+		case LDRWriterTypeSQL, LDRWriterTypeLegacyKV, LDRWriterTypeCRUD, LDRWriterTypeTxn:
+			return nil
+		default:
+			return errors.Newf("immediate mode writer must be 'sql', 'legacy-kv', 'crud', or 'txn', got '%s'", val)
 		}
-		return nil
 	}),
 )
 

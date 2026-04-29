@@ -16,6 +16,8 @@ go_library(
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/txnpb",
         "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/util/container/heap",
         "//pkg/util/container/nudge",
         "//pkg/util/ctxgroup",
@@ -37,6 +39,7 @@ go_test(
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/settings/cluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

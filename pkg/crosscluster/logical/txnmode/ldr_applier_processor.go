@@ -136,6 +136,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 			ctx,
 			p.FlowCtx.Cfg.DB,
 			p.FlowCtx.Cfg.LeaseManager.(*lease.Manager),
+			p.FlowCtx.Codec(),
 			p.FlowCtx.Cfg.Settings,
 		)
 		if err != nil {
@@ -148,7 +149,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 	}
 
 	p.applier, err = txnapply.NewApplier(
-		ctx, applierID, writers, p.depResolver, p.spec.AllApplierIds,
+		ctx, applierID, p.FlowCtx.Cfg.Settings, writers, p.depResolver, p.spec.AllApplierIds,
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")

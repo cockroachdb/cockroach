@@ -720,6 +720,11 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 			if err != nil {
 				return err
 			}
+		case sqlclustersettings.LDRWriterTypeTxn:
+			rp, err = newTxnBatchHandlerFromConfig(ctx, flowCtx, lrw.spec.Discard, lrw.configByTable)
+			if err != nil {
+				return err
+			}
 		default:
 			return errors.AssertionFailedf("unknown logical replication writer type: %s", lrw.spec.WriterType)
 		}
