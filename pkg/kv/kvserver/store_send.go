@@ -117,10 +117,10 @@ func (s *Store) SendWithWorkStats(
 		}
 	}
 
-	if throttled, err := s.maybeThrottleBatch(ctx, ba); err != nil {
+	if throttled, err := s.maybeThrottleBatch(ctx, ba, stats); err != nil {
 		return nil, kvpb.NewError(err)
 	} else {
-		defer func() { throttled.performAccounting(br) }()
+		defer func() { throttled.performAccounting(stats) }()
 	}
 
 	if ba.BoundedStaleness != nil {
@@ -367,20 +367,24 @@ type batchThrottleCallback struct {
 	// set whenever a request for low-priority bulk reads was throttled and
 	// needs to account for tokens corresponding to actually read data.
 	limiters *batcheval.Limiters
+	// baseline contains the number of bytes accumulated into ScanStats before
+	// request evaluation. This is tracked so we can correctly attribute the
+	// statistics for this instance of evaluation.
+	baseline uint64
 }
 
 // maybeThrottleBatch inspects the provided batch and determines whether
 // throttling should be applied to avoid overloading the Store. If so, the
 // method blocks and returns a struct containing the information needed to
 // perform accounting for rate limiters. The caller must call
-// (batchThrottleCallback).performAccounting with the BatchResponse after the
+// (batchThrottleCallback).performAccounting with the StoreWorkStats after the
 // evaluation completes.
 //
 // Of note is that request throttling is all performed above evaluation and
 // before a request acquires latches on a range. Otherwise, the request could
 // inadvertently block others while being throttled.
 func (s *Store) maybeThrottleBatch(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, stats *StoreWorkStats,
 ) (batchThrottleCallback, error) {
 	if !ba.IsSingleRequest() {
 		return batchThrottleCallback{}, nil
@@ -445,15 +449,21 @@ func (s *Store) maybeThrottleBatch(
 			log.KvExec.Infof(ctx, "bulk low-priority read operation was delayed by %v", waited)
 		}
 
-		return batchThrottleCallback{reservation: res, limiters: &s.limiters}, nil
+		// Calculate the baseline stats from the given parameters.
+		var baseline uint64
+		if ss := stats.ScanStats(); ss != nil {
+			baseline = ss.BlockBytes - ss.BlockBytesInCache
+		}
+
+		return batchThrottleCallback{reservation: res, limiters: &s.limiters, baseline: baseline}, nil
 	}
 
 	return batchThrottleCallback{}, nil
 }
 
 // performAccounting must be called after maybeThrottleBatch with the returned
-// batchThrottleCallback and the BatchResponse.
-func (b batchThrottleCallback) performAccounting(br *kvpb.BatchResponse) {
+// batchThrottleCallback and the StoreWorkStats.
+func (b batchThrottleCallback) performAccounting(stats *StoreWorkStats) {
 	if b.reservation != nil {
 		b.reservation.Release()
 	}
@@ -467,11 +477,9 @@ func (b batchThrottleCallback) performAccounting(br *kvpb.BatchResponse) {
 	// token bucket falling too much into -ve, because we have pagination in the
 	// TTL layer and also a ConcurrentRequestLimiter to ensure the bucket
 	// doesn't fall arbitrarily into debt.
-	var bytesRead int64
-	if br != nil {
-		for _, resp := range br.Responses {
-			bytesRead += resp.GetInner().Header().NumBytes
-		}
+	var bytesRead uint64
+	if ss := stats.ScanStats(); ss != nil {
+		bytesRead = (ss.BlockBytes - ss.BlockBytesInCache) - b.baseline
 	}
 
 	b.limiters.BulkIOReadRate.Lock()
