@@ -23,20 +23,26 @@ func TestShouldUseLooselyCoupledTruncation(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	tests := []struct {
 		settingEnabled         bool
+		enginesSeparated       bool
 		raftExpectedFirstIndex kvpb.RaftIndex
 		wantLoose              bool
 	}{
-		{settingEnabled: false, raftExpectedFirstIndex: 0, wantLoose: false},
-		{settingEnabled: false, raftExpectedFirstIndex: 5, wantLoose: false},
-		{settingEnabled: true, raftExpectedFirstIndex: 0, wantLoose: false},
-		{settingEnabled: true, raftExpectedFirstIndex: 5, wantLoose: true},
+		{settingEnabled: false, enginesSeparated: false, raftExpectedFirstIndex: 0, wantLoose: false},
+		{settingEnabled: false, enginesSeparated: false, raftExpectedFirstIndex: 5, wantLoose: false},
+		{settingEnabled: false, enginesSeparated: true, raftExpectedFirstIndex: 0, wantLoose: true},
+		{settingEnabled: false, enginesSeparated: true, raftExpectedFirstIndex: 5, wantLoose: true},
+		{settingEnabled: true, enginesSeparated: false, raftExpectedFirstIndex: 0, wantLoose: false},
+		{settingEnabled: true, enginesSeparated: false, raftExpectedFirstIndex: 5, wantLoose: true},
+		{settingEnabled: true, enginesSeparated: true, raftExpectedFirstIndex: 0, wantLoose: true},
+		{settingEnabled: true, enginesSeparated: true, raftExpectedFirstIndex: 5, wantLoose: true},
 	}
 
 	for _, tc := range tests {
 		t.Run("", func(t *testing.T) {
 			looselyCoupledTruncationEnabled.Override(ctx, &st.SV, tc.settingEnabled)
-			got := shouldUseLooselyCoupledTruncation(&st.SV, tc.raftExpectedFirstIndex)
-			require.Equal(t, tc.wantLoose, got)
+			require.Equal(t, tc.wantLoose, shouldUseLooselyCoupledTruncation(
+				&st.SV, tc.raftExpectedFirstIndex, tc.enginesSeparated,
+			))
 		})
 	}
 }
