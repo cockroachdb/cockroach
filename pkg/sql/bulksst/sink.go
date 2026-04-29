@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -110,6 +111,9 @@ var _ BulkSink = (*SSTSink)(nil)
 // Parameters:
 //   - distributedMergeFilePrefix: Base URI for SST files (e.g., "nodelocal://1/job/123/map")
 //   - processorID: Unique ID for this processor, used to create per-processor subdirectories
+//   - instanceID: SQL instance ID of the writer, embedded in SST filenames so
+//     two instances cannot collide on the same path when their nodelocal://
+//     prefixes happen to map to a shared physical directory (see #168559).
 //   - writeAsOf: Timestamp to write on all KV pairs
 //   - checkDuplicates: Whether to detect and reject duplicate keys during flush
 func NewSSTSink(
@@ -118,6 +122,7 @@ func NewSSTSink(
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	clock *hlc.Clock,
 	distributedMergeFilePrefix string,
+	instanceID base.SQLInstanceID,
 	writeAsOf hlc.Timestamp,
 	processorID int32,
 	checkDuplicates bool,
@@ -136,7 +141,7 @@ func NewSSTSink(
 		return nil, err
 	}
 
-	fileAllocator := NewExternalFileAllocator(es, prefix, clock)
+	fileAllocator := NewExternalFileAllocator(es, prefix, clock, instanceID)
 	writer := NewUnsortedSSTBatcher(settings, fileAllocator)
 	writer.SetWriteTS(writeAsOf)
 	writer.SetCheckDuplicates(checkDuplicates)

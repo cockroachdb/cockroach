@@ -67,19 +67,7 @@ func TestDistributedMergeThreeNodes(t *testing.T) {
 	ctx := context.Background()
 	instanceCount := 3
 
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	args := base.TestClusterArgs{
-		ServerArgsPerNode: map[int]base.TestServerArgs{},
-	}
-	for i := 0; i < 3; i++ {
-		args.ServerArgsPerNode[i] = base.TestServerArgs{
-			ExternalIODir: fmt.Sprintf("%s/node-%d", dir, i),
-		}
-	}
-
-	tc := serverutils.StartCluster(t, instanceCount, args)
+	tc := serverutils.StartCluster(t, instanceCount, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	// Pick a random node to connect to
@@ -121,7 +109,7 @@ func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
 	defer cleanupJob()
 
 	tsa := newTestServerAllocator(t, ctx, execCfg)
-	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock())
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock(), base.SQLInstanceID(1))
 	batcher := bulksst.NewUnsortedSSTBatcher(srv.ClusterSettings(), fileAllocator)
 	writeSSTs(t, ctx, batcher, 3)
 	ssts := importToMerge(fileAllocator.GetFileList())
@@ -160,7 +148,7 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 	defer jobCleanup()
 
 	targetFileSize.Override(ctx, &s.ClusterSettings().SV, 1<<20)
-	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock(), base.SQLInstanceID(1))
 	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
 
 	prefix := "merge-multi/"
@@ -316,7 +304,7 @@ func testMergeProcessors(
 	// Override the target size of our merged SSTs to ensure we are flushing
 	// correctly.
 	targetFileSize.Override(ctx, &s.ClusterSettings().SV, 30)
-	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock(), base.SQLInstanceID(1))
 	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
 	ls := writeSSTs(t, ctx, batcher, 13)
 
@@ -513,7 +501,7 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 	targetFileSize.Override(ctx, &srv.ClusterSettings().SV, 150)
 
 	tsa := newTestServerAllocator(t, ctx, execCfg)
-	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock())
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock(), base.SQLInstanceID(1))
 	batcher := bulksst.NewUnsortedSSTBatcher(srv.ClusterSettings(), fileAllocator)
 
 	ts := hlc.Timestamp{WallTime: 1}
@@ -708,7 +696,7 @@ func TestKVWritePreexistingKeyConflictDetection(t *testing.T) {
 	// Step 1: First merge to populate KV with some keys.
 	// Write keys [key-0, key-1, key-2] to an SST and ingest into KV.
 	writeTS1 := hlc.Timestamp{WallTime: 1}
-	fileAllocator1 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	fileAllocator1 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock(), base.SQLInstanceID(1))
 	batcher1 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator1)
 	writeSpecificKeys(t, ctx, batcher1, []int{0, 1, 2}, writeTS1, s.Codec())
 
@@ -737,7 +725,7 @@ func TestKVWritePreexistingKeyConflictDetection(t *testing.T) {
 	// Step 2: Second merge with overlapping keys and EnforceUniqueness=true.
 	// Write keys [key-2, key-3, key-4] to an SST - key-2 overlaps with existing data.
 	writeTS2 := hlc.Timestamp{WallTime: 2}
-	fileAllocator2 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	fileAllocator2 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock(), base.SQLInstanceID(1))
 	batcher2 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator2)
 	writeSpecificKeys(t, ctx, batcher2, []int{2, 3, 4}, writeTS2, s.Codec())
 
@@ -873,7 +861,7 @@ func TestCrossSSTDuplicateHandling(t *testing.T) {
 			prefixURI1 := "nodelocal://1/merge/sst1/"
 			store1, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, prefixURI1, username.RootUserName())
 			require.NoError(t, err)
-			fileAllocator1 := bulksst.NewExternalFileAllocator(store1, prefixURI1, s.Clock())
+			fileAllocator1 := bulksst.NewExternalFileAllocator(store1, prefixURI1, s.Clock(), base.SQLInstanceID(1))
 			batcher1 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator1)
 			writeSpecificKeys(t, ctx, batcher1, []int{0, 1, 2}, writeTS, s.Codec())
 
@@ -881,7 +869,7 @@ func TestCrossSSTDuplicateHandling(t *testing.T) {
 			prefixURI2 := "nodelocal://1/merge/sst2/"
 			store2, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, prefixURI2, username.RootUserName())
 			require.NoError(t, err)
-			fileAllocator2 := bulksst.NewExternalFileAllocator(store2, prefixURI2, s.Clock())
+			fileAllocator2 := bulksst.NewExternalFileAllocator(store2, prefixURI2, s.Clock(), base.SQLInstanceID(1))
 			batcher2 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator2)
 			if tc.useDifferentValues {
 				writeSpecificKeysWithValuePrefix(
@@ -980,7 +968,7 @@ func TestMergeMemoryMonitorSelection(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 			tsa := newTestServerAllocator(t, ctx, execCfg)
-			fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+			fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock(), base.SQLInstanceID(1))
 			batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
 			writeTS := hlc.Timestamp{WallTime: 1}
 			writeSpecificKeys(t, ctx, batcher, []int{0, 1, 2}, writeTS, s.Codec())

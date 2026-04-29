@@ -55,7 +55,7 @@ func createLocalBatcher(
 	)
 	t.Cleanup(func() { externalStorage.Close() })
 
-	fileAllocator := bulksst.NewExternalFileAllocator(externalStorage, "", s.Clock())
+	fileAllocator := bulksst.NewExternalFileAllocator(externalStorage, "", s.Clock(), base.SQLInstanceID(1))
 	if batchSize > 0 {
 		bulksst.BatchSize.Override(ctx, &s.ClusterSettings().SV, batchSize)
 	}
@@ -79,7 +79,7 @@ func createExternalBatcher(
 	)
 	t.Cleanup(func() { externalStorage.Close() })
 
-	allocator := bulksst.NewExternalFileAllocator(externalStorage, baseURI, s.Clock())
+	allocator := bulksst.NewExternalFileAllocator(externalStorage, baseURI, s.Clock(), base.SQLInstanceID(1))
 	if batchSize > 0 {
 		bulksst.BatchSize.Override(ctx, &s.ClusterSettings().SV, batchSize)
 	}
@@ -426,6 +426,34 @@ func TestExternalFileAllocator(t *testing.T) {
 		require.Greater(t, fileList2.TotalSize, size1)
 
 		require.NoError(t, batcher.CloseWithError(ctx))
+	})
+
+	// Regression test for #168559: two allocators sharing the same external
+	// storage, baseURI, and clock must produce non-colliding filenames when
+	// they belong to different SQL instances. Without the instance-ID prefix,
+	// concurrent writers on the same HLC tick would overwrite each other.
+	t.Run("Instance ID disambiguates filenames", func(t *testing.T) {
+		tempDir := t.TempDir()
+		es := nodelocal.TestingMakeNodelocalStorage(
+			tempDir, s.ClusterSettings(), cloudpb.ExternalStorage{},
+		)
+		t.Cleanup(func() { es.Close() })
+
+		baseURI := "shared/"
+		a1 := bulksst.NewExternalFileAllocator(es, baseURI, s.Clock(), base.SQLInstanceID(1))
+		a2 := bulksst.NewExternalFileAllocator(es, baseURI, s.Clock(), base.SQLInstanceID(2))
+
+		w1, uri1, err := a1.AddFile(ctx)
+		require.NoError(t, err)
+		require.NoError(t, w1.Finish())
+
+		w2, uri2, err := a2.AddFile(ctx)
+		require.NoError(t, err)
+		require.NoError(t, w2.Finish())
+
+		require.NotEqual(t, uri1, uri2, "different instance IDs must yield different URIs")
+		require.Contains(t, uri1, "n1-", "instance 1 filename should contain n1- prefix")
+		require.Contains(t, uri2, "n2-", "instance 2 filename should contain n2- prefix")
 	})
 }
 
