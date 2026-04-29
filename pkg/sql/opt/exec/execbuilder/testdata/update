@@ -1214,41 +1214,54 @@ regions: <hidden>
     └── • limit
         │ count: 1
         │
-        └── • lookup join
+        └── • cross join
             │ sql nodes: <hidden>
             │ regions: <hidden>
-            │ KV time: 0µs
-            │ KV rows decoded: 0
             │ execution time: 0µs
             │ actual row count: 0
             │ estimated row count: 10
-            │ table: t137352@t137352_pkey
-            │ equality: (k) = (k)
-            │ equality cols are key
             │
-            └── • lookup join
-                │ sql nodes: <hidden>
-                │ kv nodes: <hidden>
-                │ regions: <hidden>
-                │ KV time: 0µs
-                │ KV rows decoded: 0
-                │ execution time: 0µs
-                │ actual row count: 0
-                │ estimated row count: 10
-                │ table: t137352@t137352_a_idx
-                │ equality: (k) = (a)
-                │ pred: a = 1
-                │
-                └── • scan
-                      sql nodes: <hidden>
-                      kv nodes: <hidden>
-                      regions: <hidden>
-                      KV time: 0µs
-                      KV rows decoded: 1
-                      actual row count: 1
-                      estimated row count: 1
-                      table: t137352@t137352_pkey
-                      spans: [/1 - /1]
+            ├── • lookup join
+            │   │ sql nodes: <hidden>
+            │   │ regions: <hidden>
+            │   │ KV time: 0µs
+            │   │ KV rows decoded: 0
+            │   │ execution time: 0µs
+            │   │ actual row count: 0
+            │   │ estimated row count: 10
+            │   │ table: t137352@t137352_pkey
+            │   │ equality: (k) = (k)
+            │   │ equality cols are key
+            │   │
+            │   └── • lookup join
+            │       │ sql nodes: <hidden>
+            │       │ kv nodes: <hidden>
+            │       │ regions: <hidden>
+            │       │ KV time: 0µs
+            │       │ KV rows decoded: 0
+            │       │ execution time: 0µs
+            │       │ actual row count: 0
+            │       │ estimated row count: 10
+            │       │ table: t137352@t137352_a_idx
+            │       │ equality: ($1) = (a)
+            │       │
+            │       └── • values
+            │             sql nodes: <hidden>
+            │             regions: <hidden>
+            │             execution time: 0µs
+            │             actual row count: 1
+            │             size: 1 column, 1 row
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  KV time: 0µs
+                  KV rows decoded: 1
+                  actual row count: 1
+                  estimated row count: 1
+                  table: t137352@t137352_pkey
+                  spans: [/1 - /1]
 
 statement count 1
 DELETE FROM t137352 WHERE true;
