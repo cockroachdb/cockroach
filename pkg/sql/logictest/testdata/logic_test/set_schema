@@ -520,3 +520,33 @@ ALTER TABLE "MixedCase"."DuplicateTable" SET SCHEMA "Another-Schema"
 user testuser
 
 subtest end
+
+subtest array_type_name_conflict
+
+user root
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS ocean
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS stream
+
+statement ok
+CREATE TYPE ocean.salmon AS ENUM ('sockeye', 'king', 'atlantic');
+
+statement ok
+CREATE TYPE stream."_salmon" AS ENUM ('steelhead', 'cherry');
+
+# The companion array type "_salmon" collides.
+statement error pq: type "test.stream._salmon" already exists
+ALTER TYPE ocean.salmon SET SCHEMA stream
+
+statement ok
+SELECT 'sockeye'::ocean.salmon
+
+statement ok
+SELECT ARRAY['sockeye']::ocean._salmon
+
+user testuser
+
+subtest end

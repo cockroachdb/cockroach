@@ -367,16 +367,25 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return nil
 	}
 
-	err = p.performRenameTypeDesc(
-		ctx, typeDesc, typeDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
-
+	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, n.desc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
 
-	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, n.desc.ArrayTypeID)
-	if err != nil {
+	if err := descs.CheckObjectNameCollision(
+		ctx,
+		p.Descriptors(),
+		p.txn,
+		typeDesc.GetParentID(),
+		desiredSchemaID,
+		tree.NewUnqualifiedTypeName(arrayDesc.GetName()),
+	); err != nil {
+		return err
+	}
+
+	if err := p.performRenameTypeDesc(
+		ctx, typeDesc, typeDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
 		return err
 	}
 
