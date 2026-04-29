@@ -556,6 +556,67 @@ SELECT ST_3DDistance(
   ST_SetSRID('POINT Z(1 1 1)'::geometry, 3857)
 )
 
+# Vertical polygon whose 2D footprint collapses to a line in XY.
+# Distance is the perpendicular drop to the polygon's plane (5), and the
+# shortest line endpoint on the polygon side is the perpendicular foot.
+# The 2D bounding box of the polygon has zero y-extent and does not
+# overlap the point's bbox, so a 2D fast-reject would incorrectly skip
+# the perpendicular-foot check; the 3D calculator's BoundingBoxIntersects
+# always returns true to avoid this.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'POINT Z(5 5 5)'::geometry
+)
+----
+5
+
+query R
+SELECT ST_3DDistance(
+  'POINT Z(5 5 5)'::geometry,
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry
+)
+----
+5
+
+query T
+SELECT ST_AsText(ST_3DShortestLine(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'POINT Z(5 5 5)'::geometry
+))
+----
+LINESTRING Z (5 -0 5, 5 5 5)
+
+# Line crosses through the polygon's interior at (5, 0, 5). Distance is
+# 0 even though no boundary edge is touched; the line-plane intersection
+# point lies inside the outer ring.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'LINESTRING Z(5 -3 5, 5 3 5)'::geometry
+)
+----
+0
+
+# Line crosses the polygon's plane outside the outer ring: not zero.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0))'::geometry,
+  'LINESTRING Z(50 -3 5, 50 3 5)'::geometry
+)
+----
+40
+
+# Line crosses the polygon's plane inside a hole: distance is to the
+# hole boundary, not zero.
+query R
+SELECT ST_3DDistance(
+  'POLYGON Z((0 0 0, 10 0 0, 10 0 10, 0 0 10, 0 0 0), (3 0 3, 7 0 3, 7 0 7, 3 0 7, 3 0 3))'::geometry,
+  'LINESTRING Z(5 -3 5, 5 3 5)'::geometry
+)
+----
+2
+
 subtest end
 
 subtest st_3ddwithin
