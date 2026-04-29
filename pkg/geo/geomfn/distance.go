@@ -556,8 +556,9 @@ func (u *geomMaxDistanceUpdater) FlipGeometries() {
 }
 
 // MinDistance3D returns the 3D minimum distance between geometries A and B.
-// For 2D geometries, Z is treated as 0, so this degrades to 2D distance.
-// This returns a geo.EmptyGeometryError if either A or B is EMPTY.
+// If either input lacks a Z dimension this falls back to 2D distance,
+// matching PostGIS's lwgeom_mindistance3d_tolerance.
+// Returns a geo.EmptyGeometryError if either A or B is EMPTY.
 func MinDistance3D(a geo.Geometry, b geo.Geometry) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
@@ -566,12 +567,16 @@ func MinDistance3D(a geo.Geometry, b geo.Geometry) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if !hasZ(a) || !hasZ(b) {
+		return MinDistance(a, b)
+	}
 	return minDistance3DInternal(a, b, 0, geo.EmptyBehaviorOmit)
 }
 
 // DWithin3D determines if any part of geometry A is within D units of
 // geometry B using 3D Euclidean distance.
-// DWithin3D is equivalent to ST_3DDistance(a, b) <= d.
+// DWithin3D is equivalent to ST_3DDistance(a, b) <= d. If either input
+// lacks a Z dimension this falls back to 2D, matching PostGIS.
 func DWithin3D(a geo.Geometry, b geo.Geometry, d float64) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
@@ -581,15 +586,18 @@ func DWithin3D(a geo.Geometry, b geo.Geometry, d float64) (bool, error) {
 			pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero",
 		)
 	}
+	a, b, err := normalizeFor3D(a, b)
+	if err != nil {
+		return false, err
+	}
+	if !hasZ(a) || !hasZ(b) {
+		return DWithin(a, b, d, geo.FnInclusive)
+	}
 	// Use the 2D bounding box as a conservative fast-reject filter.
 	// If 2D bounding boxes don't overlap by d, the 3D distance is at
 	// least as large.
 	if !a.CartesianBoundingBox().Buffer(d, d).Intersects(b.CartesianBoundingBox()) {
 		return false, nil
-	}
-	a, b, err := normalizeFor3D(a, b)
-	if err != nil {
-		return false, err
 	}
 	dist, err := minDistance3DInternal(a, b, d, geo.EmptyBehaviorError)
 	if err != nil {
@@ -602,9 +610,8 @@ func DWithin3D(a geo.Geometry, b geo.Geometry, d float64) (bool, error) {
 }
 
 // normalizeFor3D drops the M dimension from inputs so that coord[2] is
-// always Z (or the coord has no Z at all). This matches PostGIS semantics:
-// M is not used in 3D distance calculations, and missing Z is treated as
-// "any value" (effectively 2D distance, since both sides degrade together).
+// always Z (or the coord has no Z at all). After normalization each
+// geometry has layout XY or XYZ.
 func normalizeFor3D(a, b geo.Geometry) (geo.Geometry, geo.Geometry, error) {
 	a, err := stripMDimension(a)
 	if err != nil {
@@ -631,6 +638,15 @@ func stripMDimension(g geo.Geometry) (geo.Geometry, error) {
 		return ForceLayout(g, geom.XYZ)
 	}
 	return g, nil
+}
+
+// hasZ returns whether the geometry has a Z dimension.
+func hasZ(g geo.Geometry) bool {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return false
+	}
+	return t.Layout().ZIndex() != -1
 }
 
 // minDistance3DInternal finds the 3D minimum distance between two geometries.

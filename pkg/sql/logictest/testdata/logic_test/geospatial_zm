@@ -444,9 +444,34 @@ SELECT ST_3DDistance('POINT Z(1 2 3)'::geometry, 'POINT Z(1 2 3)'::geometry)
 ----
 0
 
-# 2D geometry fallback (no Z means Z=0).
+# When either input lacks a Z dimension, ST_3DDistance falls back to 2D
+# distance (matching PostGIS's lwgeom_mindistance3d_tolerance).
 query R
 SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT(3 4)'::geometry)
+----
+5
+
+# Mixed 2D/3D: PostGIS treats the missing Z as "any value" and degrades
+# the comparison to 2D, so the Z difference is not counted.
+query R
+SELECT ST_3DDistance('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry)
+----
+0
+
+query B
+SELECT ST_3DDWithin('POINT(0 0)'::geometry, 'POINT Z(0 0 5)'::geometry, 0)
+----
+true
+
+# XYM input has its M dimension stripped, leaving an XY geometry, so the
+# comparison falls back to 2D and the M value is ignored.
+query R
+SELECT ST_3DDistance('POINT M(0 0 5)'::geometry, 'POINT M(0 0 0)'::geometry)
+----
+0
+
+query R
+SELECT ST_3DDistance('POINT M(0 0 5)'::geometry, 'POINT(3 4)'::geometry)
 ----
 5
 
