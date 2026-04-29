@@ -155,6 +155,23 @@ func (c *SystemDatabaseCache) update(version clusterversion.ClusterVersion, in n
 	}
 }
 
+// removeNameEntry removes a single namespace entry from the cache. This is
+// used to evict a stale name→ID mapping when the ID is discovered to not
+// correspond to a live descriptor (e.g. after SetupOrAdvanceStandbyReaderCatalog
+// rewrites the namespace on a PCR reader tenant).
+func (c *SystemDatabaseCache) removeNameEntry(
+	version clusterversion.ClusterVersion, key descpb.NameInfo,
+) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cached := c.mu.m[version.Version]; cached != nil {
+		cached.DeleteByName(key)
+	}
+}
+
 // nameCandidatesForUpdate is a helper function for update which returns a
 // subset of namespace entries in the given nstree.Catalog which could
 // potentially be upserted into the cache.
