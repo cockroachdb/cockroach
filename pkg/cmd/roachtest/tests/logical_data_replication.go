@@ -258,7 +258,12 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				createTables: true,
 			},
 			requiresDeprecatedWorkload: true,
-			run:                        TestLDRConflict,
+			// The conflict workload generates tables with expression-based
+			// indexes that use virtual computed columns as index keys. Prior
+			// to 26.2, virtual computed columns in secondary indexes were
+			// unconditionally rejected during LDR stream creation.
+			mixedVersionMinimum: clusterversion.V26_2,
+			run:                 TestLDRConflict,
 		},
 		{
 			name: "ldr/kv0/workload=source/single_key_update_benchmark",
