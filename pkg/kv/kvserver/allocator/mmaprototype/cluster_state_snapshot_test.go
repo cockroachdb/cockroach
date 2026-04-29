@@ -8,9 +8,13 @@ package mmaprototype
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // fieldDisposition records how one declared field of an mmaprototype-owned
@@ -50,8 +54,8 @@ var snapshotFieldDispositions = map[reflect.Type]map[string]fieldDisposition{
 		"scratchDisj":             {OmitReason: "transient workspace"},
 		"pendingChanges":          {ProtoField: "PendingChanges"},
 		"changeSeqGen":            {ProtoField: "ChangeSeqGen"},
-		"constraintMatcher":       {OmitReason: "TODO(mma-snapshot): constraint matcher not yet snapshotted"},
-		"localityTierInterner":    {OmitReason: "TODO(mma-snapshot): locality interner not yet snapshotted"},
+		"constraintMatcher":       {OmitReason: "derived index over StoreAttributes (already in StoreSnapshot) and the constraint patterns referenced by snapshotted span configs"},
+		"localityTierInterner":    {OmitReason: "dedup table; all interned codes are resolved to plain strings at snapshot time, so no consumer ever needs the table"},
 		"meansMemo":               {OmitReason: "recomputable cache (loadInfoProvider back-ref)"},
 		"mmaid":                   {ProtoField: "MMAID"},
 		"diskUtilRefuseThreshold": {ProtoField: "DiskUtilRefuseThreshold"},
@@ -220,6 +224,104 @@ func typeLabel(t reflect.Type) string {
 	return t.String()
 }
 
+// TestSnapshotDispositionsCoverReachable walks the source-side type graph
+// starting at clusterState and visits every type reachable through fields
+// that are NOT marked OmitReason. Every owned struct (declared in the
+// mmaprototype package) discovered by the walk must be registered in
+// snapshotFieldDispositions; otherwise the walk would silently omit its
+// fields from coverage.
+//
+// Combined with TestSnapshotCoversAllFields, this gives the property that
+// any new owned struct introduced into the snapshotted graph fails the
+// suite until either (a) it is registered with explicit dispositions, or
+// (b) the field that pulled it in is marked omitted.
+func TestSnapshotDispositionsCoverReachable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ownedPkg := reflect.TypeOf(clusterState{}).PkgPath()
+	visited := map[reflect.Type]bool{}
+	var unregistered []reflect.Type
+	var visit func(t reflect.Type)
+	visit = func(t reflect.Type) {
+		// Unwrap pointer/slice/array wrappers; recurse through map keys and
+		// values.
+		for {
+			switch t.Kind() {
+			case reflect.Ptr, reflect.Slice, reflect.Array:
+				t = t.Elem()
+				continue
+			case reflect.Map:
+				visit(t.Key())
+				t = t.Elem()
+				continue
+			}
+			break
+		}
+		if t.Kind() != reflect.Struct {
+			return
+		}
+		// Treat the type as owned if it is registered in the dispositions
+		// (covers the unnamed storeState.adjusted struct), or its declared
+		// package matches mmaprototype.
+		_, registered := snapshotFieldDispositions[t]
+		owned := registered || t.PkgPath() == ownedPkg
+		if !owned {
+			return
+		}
+		if visited[t] {
+			return
+		}
+		visited[t] = true
+		if !registered {
+			unregistered = append(unregistered, t)
+			return
+		}
+		for fieldName, d := range snapshotFieldDispositions[t] {
+			if d.OmitReason != "" {
+				continue
+			}
+			f, ok := t.FieldByName(fieldName)
+			if !ok {
+				// TestSnapshotCoversAllFields reports stale entries; nothing
+				// to recurse into here.
+				continue
+			}
+			visit(f.Type)
+		}
+	}
+	visit(reflect.TypeOf(clusterState{}))
+	for _, ut := range unregistered {
+		t.Errorf("type %s is reachable from clusterState through non-omitted "+
+			"fields but has no entry in snapshotFieldDispositions; either "+
+			"register it or mark the field that pulls it in as omitted",
+			typeLabel(ut))
+	}
+}
+
+// TestSnapshotProtoRoundTrip exercises the converter end-to-end on a small
+// hand-built clusterState and confirms the result round-trips through the
+// protobuf wire format.
+func TestSnapshotProtoRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cs := newClusterState(ts, newStringInterner())
+	cs.diskUtilRefuseThreshold = 0.925
+	cs.diskUtilShedThreshold = 0.95
+	cs.mmaid = 42
+
+	snap := cs.Snapshot()
+	require.NotNil(t, snap)
+	require.EqualValues(t, 42, snap.MMAID)
+	require.InDelta(t, 0.925, snap.DiskUtilRefuseThreshold, 1e-9)
+	require.InDelta(t, 0.95, snap.DiskUtilShedThreshold, 1e-9)
+
+	buf, err := protoutil.Marshal(snap)
+	require.NoError(t, err)
+	var got mmasnappb.ClusterStateSnapshot
+	require.NoError(t, protoutil.Unmarshal(buf, &got))
+	require.EqualValues(t, snap.MMAID, got.MMAID)
+	require.InDelta(t, snap.DiskUtilRefuseThreshold, got.DiskUtilRefuseThreshold, 1e-9)
+}
+
 // TestSnapshotCoversAllFields enforces three invariants on every owned
 // struct registered in snapshotFieldDispositions:
 //
@@ -257,9 +359,23 @@ func TestSnapshotCoversAllFields(t *testing.T) {
 						typeLabel(typ), name)
 				}
 			}
+			// A type with no ProtoField entries (every field carries an
+			// OmitReason) is not mirrored by a single proto target. Skip the
+			// proto target check in that case; the type is still registered
+			// so the reachability walk recognizes it.
+			anyProto := false
+			for _, d := range dispositions {
+				if d.ProtoField != "" {
+					anyProto = true
+					break
+				}
+			}
+			if !anyProto {
+				return
+			}
 			protoT, ok := snapshotProtoTargets[typ]
 			if !ok {
-				t.Fatalf("%s has dispositions but no entry in snapshotProtoTargets",
+				t.Fatalf("%s has ProtoField dispositions but no entry in snapshotProtoTargets",
 					typeLabel(typ))
 			}
 			for name, d := range dispositions {

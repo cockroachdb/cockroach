@@ -69,6 +69,7 @@ go_test(
         "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
