@@ -642,7 +642,8 @@ func (t *inspectProgressTracker) flushProgress(ctx context.Context) error {
 		cachedInspectProgress = t.mu.cachedProgress.GetInspect()
 	}()
 
-	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return t.job.DeprecatedNoTxn().Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		// Only write if any part of the inspect progress has changed.
 		currentInspectProgress := md.Progress.GetInspect()
 		if currentInspectProgress != nil &&

@@ -140,7 +140,8 @@ func (j *tableMetadataUpdateJobResumer) updateProgress(
 // markAsRunning updates the last_start_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
-	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()
@@ -160,7 +161,8 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 // markAsCompleted updates the last_completed_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
-	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()

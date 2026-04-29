@@ -463,8 +463,9 @@ func (p *planner) markTableMutationJobsSuccessful(
 			}
 			return err
 		}
-		if err := mutationJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := mutationJob.DeprecatedWithTxn(p.InternalSQLTxn()).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
 			status := md.State
 			switch status {

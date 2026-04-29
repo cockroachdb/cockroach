@@ -404,8 +404,9 @@ func finalizeAlterChangefeed(
 	if err != nil {
 		return err
 	}
-	if err := j.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.DeprecatedWithTxn(p.InternalSQLTxn()).Update(ctx, func(
+		txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
 		ju.UpdatePayload(&newPayload)
 		if newProgress != nil {

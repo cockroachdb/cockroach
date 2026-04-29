@@ -2423,7 +2423,8 @@ func TestChangefeedCanResumeWhenClusterIDMissing(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			return job.NoTxn().Update(context.Background(), func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			return job.DeprecatedNoTxn().Update(context.Background(), func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 				md.Payload.CreationClusterID = uuid.Nil
 				ju.UpdatePayload(md.Payload)
 				return nil

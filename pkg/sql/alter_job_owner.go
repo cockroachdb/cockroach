@@ -100,7 +100,8 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return legacyJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return legacyJob.DeprecatedWithTxn(p.InternalSQLTxn()).Update(ctx, func(_ isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		md.Payload.UsernameProto = newOwner.EncodeProto()
 		ju.UpdatePayload(md.Payload)
 		return nil

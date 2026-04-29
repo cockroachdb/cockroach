@@ -396,8 +396,12 @@ func (n noopJobRegistry) CheckPausepoint(name string) error {
 	return nil
 }
 
-func (n noopJobRegistry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc jobs.UpdateFn,
+func (n noopJobRegistry) DeprecatedUpdateJobWithTxn(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	txn isql.Txn,
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	updateFunc jobs.DeprecatedUpdateFn,
 ) error {
 	return nil
 }

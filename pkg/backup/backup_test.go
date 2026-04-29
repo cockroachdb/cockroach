@@ -5998,7 +5998,8 @@ func TestBatchedInsertStats(t *testing.T) {
 			// Reset the job state, for the next iteration of the test.
 			details := job.Details().(jobspb.RestoreDetails)
 			details.StatsInserted = false
-			require.NoError(t, job.NoTxn().SetDetails(ctx, details))
+			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+			require.NoError(t, job.DeprecatedNoTxn().SetDetails(ctx, details))
 			var err error
 			job, err = registry.LoadJob(ctx, job.ID())
 			require.NoError(t, err)

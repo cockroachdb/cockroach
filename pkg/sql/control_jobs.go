@@ -62,8 +62,9 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
-			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := reg.DeprecatedUpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
+			func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 				if err := jobsauth.Authorize(params.ctx, params.p,
 					md.ID, md.Payload.UsernameProto.Decode(), jobsauth.ControlAccess, globalPrivileges); err != nil {
 					return err

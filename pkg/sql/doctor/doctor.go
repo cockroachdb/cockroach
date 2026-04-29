@@ -58,10 +58,10 @@ func (nsr *NamespaceTableRow) GetID() descpb.ID {
 type NamespaceTable []NamespaceTableRow
 
 // JobsTable represents data read from `system.jobs`.
-type JobsTable []jobs.JobMetadata
+type JobsTable []jobs.DeprecatedJobMetadata
 
 // GetJobMetadata implements the jobs.JobMetadataGetter interface.
-func (jt JobsTable) GetJobMetadata(jobID jobspb.JobID) (*jobs.JobMetadata, error) {
+func (jt JobsTable) GetJobMetadata(jobID jobspb.JobID) (*jobs.DeprecatedJobMetadata, error) {
 	for i := range jt {
 		md := &jt[i]
 		if md.ID == jobID {

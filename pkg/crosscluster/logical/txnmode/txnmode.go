@@ -407,7 +407,8 @@ func (p *TxnLdrCoordinator) stageCheckpoint(ctx context.Context, applier *txnapp
 }
 
 func (p *TxnLdrCoordinator) checkpoint(ctx context.Context, frontier hlc.Timestamp) error {
-	return p.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return p.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
