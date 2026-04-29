@@ -76,6 +76,32 @@ var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// failedQueryLogEnabled, when set, causes every non-internal SQL statement
+// that ends in error to be emitted on the SQL_EXEC log channel as a
+// `failed_query` event. It is intended as an "errors-only" counterpart to
+// `sql.log.all_statements.enabled`: operators get reliable per-failure
+// visibility (and can derive a custom metric from the log stream) without
+// paying the cost of logging every successful statement.
+var failedQueryLogEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.failed_query.enabled",
+	"when set to true, every SQL statement that ends in an error is logged "+
+		"to a secondary logger on each node as a `failed_query` event",
+	false,
+	settings.WithPublic)
+
+// failedQueryLogInternalEnabled gates the same logging for the internal
+// executor. It mirrors `sql.log.slow_query.internal_queries.enabled` and has
+// no effect unless `sql.log.failed_query.enabled` is also set.
+var failedQueryLogInternalEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.failed_query.internal_queries.enabled",
+	"when set to true, internal queries that end in an error are logged to a "+
+		"separate `failed_query_internal` event. Must have "+
+		"`sql.log.failed_query.enabled` set for this setting to have any effect.",
+	false,
+	settings.WithPublic)
+
 var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.log.admin_audit.enabled",
@@ -168,6 +194,8 @@ func (p *planner) maybeLogStatementInternal(
 	slowLogFullTableScans := slowQueryLogFullTableScans.Get(&p.execCfg.Settings.SV)
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
+	failedQueryLogEnabled := failedQueryLogEnabled.Get(&p.execCfg.Settings.SV)
+	failedQueryLogInternalEnabled := failedQueryLogInternalEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
 	logConsoleQuery := telemetryInternalConsoleQueriesEnabled.Get(&p.execCfg.Settings.SV) &&
 		strings.HasPrefix(p.SessionData().ApplicationName, internalConsoleAppName)
@@ -189,8 +217,14 @@ func (p *planner) maybeLogStatementInternal(
 	_, isZoneConfigChange := p.stmt.AST.(tree.ZoneConfigStatement)
 	shouldLogZoneConfigAudit := isZoneConfigChange && execType != executorTypeInternal
 
+	// failedQueryLogActive captures whether we may need to emit a failed_query
+	// event for this statement. The setting can be on without an error, in
+	// which case this evaluates to false and we still short-circuit below.
+	failedQueryLogActive := failedQueryLogEnabled && err != nil
+
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled &&
-		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled && !shouldLogZoneConfigAudit {
+		!shouldLogToAdminAuditLog && !telemetryLoggingEnabled && !shouldLogZoneConfigAudit &&
+		!failedQueryLogActive {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -269,6 +303,24 @@ func (p *planner) maybeLogStatementInternal(
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
 			event := &eventpb.SlowQueryInternal{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			log.StructuredEvent(ctx, severity.INFO, event)
+		}
+	}
+
+	if failedQueryLogActive {
+		commonSQLEventDetails := p.getCommonSQLEventDetails()
+		switch {
+		case execType == executorTypeExec:
+			event := &eventpb.FailedQuery{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			log.StructuredEvent(ctx, severity.INFO, event)
+		case execType == executorTypeInternal && failedQueryLogInternalEnabled:
+			event := &eventpb.FailedQueryInternal{
 				CommonSQLEventDetails: commonSQLEventDetails,
 				CommonSQLExecDetails:  execDetails,
 			}
