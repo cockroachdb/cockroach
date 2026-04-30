@@ -49,6 +49,16 @@ var SplitAndScatterWithStats = settings.RegisterBoolSetting(
 	true,
 )
 
+var splitAndScatterBackfillEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"schemachanger.backfiller.split_and_scatter_backfill.enabled",
+	"when disabled, the schema changer will skip split and scatter "+
+		"operations during index backfills; this can be useful to reduce "+
+		"range count in clusters running many schema changes on empty tables, "+
+		"but will cause slower backfills on tables that already have data",
+	true,
+)
+
 // NewIndexSplitAndScatter creates a new scexec.IndexSpanSplitter implementation.
 func NewIndexSplitAndScatter(execCfg *ExecutorConfig) scexec.IndexSpanSplitter {
 	return &indexSplitAndScatter{
@@ -201,6 +211,9 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	indexToBackfill catalog.Index,
 	copyIndexSource catalog.Index,
 ) error {
+	if !splitAndScatterBackfillEnabled.Get(is.sv) {
+		return nil
+	}
 	// If we are asked to copy a source indexes splits, then there is
 	// no need split along partitioning.
 	if copyIndexSource == nil {

@@ -21,6 +21,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestIndexSplitAndScatterDisabled verifies that the session variable and
+// cluster setting for enable_split_and_scatter_backfill control whether
+// splits are created during CREATE INDEX.
+func TestIndexSplitAndScatterDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var splitCount atomic.Int64
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeIndexSplitAndScatter: func(splitPoints [][]byte) {
+					splitCount.Add(int64(len(splitPoints)))
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE TABLE t_split_test (k INT PRIMARY KEY, v INT)")
+
+	// By default, CREATE INDEX creates splits even on an empty table.
+	splitCount.Store(0)
+	runner.Exec(t, "CREATE INDEX idx_default ON t_split_test (v)")
+	require.Greater(t, splitCount.Load(), int64(0),
+		"expected splits by default")
+
+	// Disable via cluster setting
+	runner.Exec(t, "SET CLUSTER SETTING schemachanger.backfiller.split_and_scatter_backfill.enabled = false")
+	splitCount.Store(0)
+	runner.Exec(t, "CREATE INDEX idx ON t_split_test (v, k)")
+	require.Equal(t, int64(0), splitCount.Load(),
+		"expected no splits when session variable is false")
+	runner.Exec(t, "CREATE INDEX idx_hash ON t_split_test (v, k) USING HASH")
+	require.Equal(t, int64(0), splitCount.Load(),
+		"expected no splits when session variable is false")
+}
+
 // TestIndexSplitAndScatterWithStats tests the creation of indexes on tables with statistics,
 // where the splits will be generated using statistics on the table.
 func TestIndexSplitAndScatterWithStats(t *testing.T) {
