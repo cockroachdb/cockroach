@@ -743,30 +743,28 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
-		foundLocalReplica := false
+		foundLocalLeaseholder := false
 		for _, repl := range rstate.replicas {
 			if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
 				continue
 			}
 			if !repl.IsLeaseholder {
-				// NB: due to REQUIREMENT(change-computation), the top-k
-				// ranges for ss reflect the latest adjusted state, including
-				// pending changes. Thus, this store must be a replica and the
-				// leaseholder, hence this assertion, and other assertions
-				// below. Additionally, the code above ignored the range if it
-				// has pending changes, which while not necessary for the
-				// is-leaseholder assertion, makes the case where we assert
-				// even narrower.
-				log.KvDistribution.Fatalf(ctx,
-					"internal state inconsistency: replica considered for lease shedding has no pending"+
-						" changes but is not leaseholder: %+v", rstate)
+				// Stale top-k entry: a pending lease transfer updated adjusted
+				// state but the top-k hasn't been recomputed yet. Skip.
+				break
 			}
-			foundLocalReplica = true
+			foundLocalLeaseholder = true
 			break
 		}
-		if !foundLocalReplica {
-			log.KvDistribution.Fatalf(
-				ctx, "internal state inconsistency: local store is not a replica: %+v", rstate)
+		if !foundLocalLeaseholder {
+			// The local store is not a leaseholder (or not a replica) for this
+			// range in the adjusted state. This can happen when the top-k
+			// contains stale entries from before a pending change was applied.
+			log.KvDistribution.VWarningf(ctx, 1,
+				"skipping r%d: local store s%d not leaseholder in adjusted state",
+				rangeID, localStoreID)
+			re.passObs.leaseShed(rangeTransient)
+			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
