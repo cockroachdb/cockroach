@@ -53,7 +53,7 @@ UPDATE t SET a = 2 WHERE a = 1
 
 skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
@@ -62,7 +62,7 @@ test           public       t           /Table/106/1/1/0  Shared         Unrepli
 
 onlyif config local-read-committed
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability  isolation_level  granted  contended
 test           public       t           /Table/106/1/1/0  Shared         Replicated  READ_COMMITTED   true     true
@@ -71,7 +71,7 @@ test           public       t           /Table/106/1/1/0  Shared         Replica
 
 onlyif config local-repeatable-read
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability  isolation_level  granted  contended
 test           public       t           /Table/106/1/1/0  Shared         Replicated  REPEATABLE_READ  true     true
@@ -123,7 +123,7 @@ SELECT * FROM t WHERE a = 2 FOR SHARE
 user testuser2
 
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 
@@ -150,14 +150,14 @@ SET enable_shared_locking_for_serializable = true
 
 skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
 
 onlyif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 
@@ -173,7 +173,7 @@ user root
 
 skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
@@ -181,7 +181,7 @@ test           public       t           /Table/106/1/2/0  Shared         Unrepli
 
 onlyif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE database_name = 'test'
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 
