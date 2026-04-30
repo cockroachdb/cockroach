@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -643,6 +644,10 @@ func (i *immediateVisitor) RemoveObjectParent(
 			return err
 		}
 		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	case catalog.Table, catalog.Type:
+		// Schemas don't maintain back-references to tables or types.
+	default:
+		return errors.AssertionFailedf("unexpected descriptor type %v for RemoveObjectParent", obj.DescriptorType())
 	}
 	return nil
 }
@@ -878,6 +883,15 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			}
 		}
 		sc.AddFunction(obj.GetName(), ol)
+	case *tabledesc.Mutable:
+		sc, err := i.checkOutSchema(ctx, op.ObjParent.SchemaID)
+		if err != nil {
+			return err
+		}
+		t.UnexposedParentSchemaID = sc.GetID()
+	default:
+		return errors.AssertionFailedf("unexpected descriptor type %T for SetObjectParentID", obj)
 	}
+
 	return nil
 }
