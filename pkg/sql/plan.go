@@ -169,6 +169,11 @@ type mutationPlanNode interface {
 	// in BatchResponse headers during the execution of this mutation. It should
 	// only be called once Next returns false.
 	kvCPUTime() int64
+
+	// localKVCPUTime returns the cumulative goroutine CPU time (in nanoseconds)
+	// spent in KV calls during the execution of this mutation, as measured by
+	// the grunning library. It should only be called once Next returns false.
+	localKVCPUTime() int64
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do
