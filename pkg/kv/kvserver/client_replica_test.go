@@ -4900,11 +4900,12 @@ func TestProposalOverhead(t *testing.T) {
 		args.Cmd.ReplicatedEvalResult.WriteTimestamp.Logical = 0
 		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
 		// We don't want to print the WriteBatch because it's explicitly
-		// excluded from the size computation. Nil'ing it out does not
-		// affect the memory held by the caller because neither `args` nor
-		// `args.Cmd` are pointers.
-		args.Cmd.WriteBatch = nil
-		t.Log(pretty.Sprint(args.Cmd))
+		// excluded from the size computation. args.Cmd is a pointer to the
+		// real RaftCommand that will be applied, so log a shallow copy
+		// rather than mutating it.
+		cmdCopy := *args.Cmd
+		cmdCopy.WriteBatch = nil
+		t.Log(pretty.Sprint(&cmdCopy))
 		return nil
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -4923,38 +4924,56 @@ func TestProposalOverhead(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.Server(0).DB()
-	// NB: the expected overhead reflects the space overhead currently present
+	// NB: the expected overheads reflect the space overhead currently present
 	// in Raft commands. This test will fail if that overhead changes. Try to
-	// make this number go down and not up. It slightly undercounts because our
-	// proposal filter is called before MaxLeaseIndex or ClosedTimestamp are
-	// filled in. The difference between the user and system overhead is that
-	// users ranges do not have rangefeeds on by default whereas system ranges
-	// do.
+	// make these numbers go down and not up. They slightly undercount because
+	// our proposal filter is called before MaxLeaseIndex or ClosedTimestamp
+	// are filled in. The difference between the rangefeed-disabled and
+	// rangefeed-enabled overheads is the logical op log carried alongside the
+	// Raft command when the kv.rangefeed.enabled cluster setting is on (see
+	// (*Replica).newBatchedEngine in replica_write.go). The setting is
+	// overridden explicitly in each subtest rather than relying on the
+	// default, so the test remains stable if the default flips.
 	const (
-		expectedUserOverhead uint32 = 42
+		expectedUserOverhead              uint32 = 42
+		expectedUserOverheadWithRangefeed uint32 = 63
 	)
-	t.Run("user-key overhead", func(t *testing.T) {
-		userKey := tc.ScratchRange(t)
-		testutils.SucceedsSoon(t, func() error {
-			repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(userKey))
-			if repl == nil {
-				return errors.New("scratch range replica not found")
-			}
-			conf, err := repl.LoadSpanConfig(ctx)
-			if err != nil {
-				return err
-			}
-			if conf.RangefeedEnabled {
-				return errors.New("waiting for span configs to apply")
-			}
-			return nil
-		})
+
+	// Wait until the scratch range has its explicit span config applied. Until
+	// then, isRangefeedEnabled() returns true regardless of the cluster
+	// setting because spanConfigExplicitlySet is false (see
+	// (*Replica).isRangefeedEnabledRLocked in replica.go).
+	userKey := tc.ScratchRange(t)
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(userKey))
+		if repl == nil {
+			return errors.New("scratch range replica not found")
+		}
+		conf, err := repl.LoadSpanConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if conf.RangefeedEnabled {
+			return errors.New("waiting for span configs to apply")
+		}
+		return nil
+	})
+
+	runOverheadSubtest := func(t *testing.T, rangefeedEnabled bool, expected uint32) {
+		st := tc.Server(0).ClusterSettings()
+		kvserver.RangefeedEnabled.Override(ctx, &st.SV, rangefeedEnabled)
 		k := roachpb.Key(encoding.EncodeStringAscending(userKey, "foo"))
 		key.Store(k)
 		require.NoError(t, db.Put(ctx, k, "v"))
-		require.Equal(t, expectedUserOverhead, atomic.LoadUint32(&overhead))
-	})
+		require.Equal(t, expected, atomic.LoadUint32(&overhead))
+	}
 
+	t.Run("user-key overhead, rangefeeds disabled", func(t *testing.T) {
+		runOverheadSubtest(t, false /* rangefeedEnabled */, expectedUserOverhead)
+	})
+	t.Run("user-key overhead, rangefeeds enabled", func(t *testing.T) {
+		runOverheadSubtest(t, true /* rangefeedEnabled */, expectedUserOverheadWithRangefeed)
+	})
 }
 
 // TestDiscoverIntentAcrossLeaseTransferAwayAndBack tests a scenario where a

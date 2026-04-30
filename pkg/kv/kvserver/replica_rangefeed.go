@@ -45,7 +45,7 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
-	false,
+	true,
 	settings.WithPublic)
 
 // RangeFeedRefreshInterval controls the frequency with which we deliver closed
