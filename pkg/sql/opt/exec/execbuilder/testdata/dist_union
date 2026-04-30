@@ -9,7 +9,7 @@ CREATE TABLE uniontest (
 query T
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • union
 │
@@ -26,7 +26,7 @@ distribution: local
 query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • union all
 │
@@ -44,7 +44,7 @@ distribution: local
 query T
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • union
 │
@@ -60,7 +60,7 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query T
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • sort
@@ -94,7 +94,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • project
@@ -124,7 +124,7 @@ query T
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT * FROM (VALUES ('', '', 'x'), ('', '', 'x'))) EXCEPT (VALUES ('', '', 'x')))
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 vectorized: true
 ·
 • render

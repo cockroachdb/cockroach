@@ -191,7 +191,7 @@ SET vectorize=on
 query T
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • alter database
 

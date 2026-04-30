@@ -11,7 +11,7 @@ CREATE TABLE a (
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b LIKE '%foo%'
@@ -27,7 +27,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b ILIKE '%foo%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b ILIKE '%foo%'
@@ -43,7 +43,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
@@ -63,7 +63,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
@@ -83,7 +83,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%zoo%'
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: b LIKE '%foo%zoo%'
@@ -104,7 +104,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%fo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b LIKE '%fo'
@@ -119,7 +119,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b LIKE b
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b LIKE b
@@ -133,7 +133,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b % 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b % 'foo'
@@ -154,7 +154,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b % 'foob'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b % 'foob'
@@ -175,7 +175,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b % 'fo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b % 'fo'
@@ -195,7 +195,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE 'blah' % b
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: 'blah' % b
@@ -216,7 +216,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b % b
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b % b
@@ -231,7 +231,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b = 'foobar'
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • filter
 │ filter: b = 'foobar'
@@ -251,7 +251,7 @@ distribution: local
 query T
 EXPLAIN SELECT * FROM a WHERE b = 'foo'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: b = 'foo'
@@ -274,7 +274,7 @@ CREATE TABLE b (
 query T
 EXPLAIN SELECT * FROM b WHERE a % 'foob'
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • filter
 │ filter: a % 'foob'

@@ -334,6 +334,11 @@ type planTop struct {
 	// results.
 	avoidBuffering bool
 
+	// distributionReason records why the plan is local. Empty when the
+	// plan is distributed or when the reason is not meaningful (e.g.
+	// trivial plans).
+	distributionReason string
+
 	// If we are collecting query diagnostics, flow information, including
 	// diagrams, are saved here.
 	distSQLFlowInfos []flowInfo
@@ -519,7 +524,7 @@ func (p *planTop) savePlanInfo() {
 	generic := p.flags.IsSet(planFlagGeneric)
 	optimized := p.flags.IsSet(planFlagOptimized)
 	p.instrumentation.RecordPlanInfo(
-		distribution, vectorized, containsMutation, generic, optimized,
+		distribution, p.distributionReason, vectorized, containsMutation, generic, optimized,
 	)
 }
 

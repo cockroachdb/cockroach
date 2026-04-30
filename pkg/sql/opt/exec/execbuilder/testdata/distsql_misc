@@ -348,7 +348,7 @@ EXPLAIN SELECT
 FROM
         t98373@[0]
 ----
-distribution: local
+distribution: local (funcDistSQLBlocklist)
 vectorized: false
 ·
 • render
@@ -364,7 +364,7 @@ EXPLAIN(DISTSQL) SELECT
 FROM
         t98373@[0]
 ----
-distribution: local
+distribution: local (funcDistSQLBlocklist)
 vectorized: false
 ·
 • render

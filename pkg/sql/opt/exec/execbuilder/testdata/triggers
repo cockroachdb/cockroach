@@ -25,7 +25,7 @@ CREATE TRIGGER t BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FU
 query T
 EXPLAIN INSERT INTO xy VALUES (1, 2);
 ----
-distribution: local
+distribution: local (routineProhibited, unsupportedPlanNode)
 ·
 • insert
 │ into: xy(x, y, rowid)
@@ -48,7 +48,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) DELETE FROM xy WHERE y = 2;
 ----
-distribution: local
+distribution: local (routineProhibited, unsupportedPlanNode)
 vectorized: true
 ·
 • delete
@@ -230,7 +230,7 @@ CREATE TRIGGER t AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUN
 query T
 EXPLAIN INSERT INTO xy VALUES (1, 2);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -257,7 +257,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE) UPDATE xy SET x = 3 WHERE y = 2;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -509,7 +509,7 @@ CREATE TRIGGER t2 AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FU
 query T
 EXPLAIN (VERBOSE) DELETE FROM xy WHERE y = 2;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -595,7 +595,7 @@ CREATE TRIGGER t AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 query T
 EXPLAIN (VERBOSE, TYPES) INSERT INTO xy VALUES (1, 2);
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root

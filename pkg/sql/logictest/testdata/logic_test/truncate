@@ -164,7 +164,7 @@ SET vectorize=on
 query T
 EXPLAIN TRUNCATE TABLE tt
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • truncate
 

@@ -27,7 +27,7 @@ start_key           end_key       replicas  lease_holder
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • filter
 │ filter: (v > 10) AND (v < 50)
@@ -42,7 +42,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUV1r2zAUfd-vE
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • sort
 │ order: +v
@@ -61,7 +61,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklGLm0AUhd_7K
 query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • sort
 │ order: +v

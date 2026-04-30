@@ -2190,7 +2190,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	innerPlansMustUseLeafTxn bool,
 ) error {
-	subqueryDistribution, blockers := planner.getPlanDistribution(ctx, subqueryPlan.plan, notPostquery)
+	subqueryDistribution, blockers, _ := planner.getPlanDistribution(ctx, subqueryPlan.plan, notPostquery)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
@@ -2814,7 +2814,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	postqueryDistribution, blockers := planner.getPlanDistribution(ctx, postqueryPlan, postqueryInfo)
+	postqueryDistribution, blockers, _ := planner.getPlanDistribution(ctx, postqueryPlan, postqueryInfo)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {
 		distribute = FullDistribution

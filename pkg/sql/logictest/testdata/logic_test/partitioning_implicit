@@ -256,7 +256,7 @@ CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
 query T
 EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -733,7 +733,7 @@ subtest unique-checks
 query T
 EXPLAIN INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -802,7 +802,7 @@ subtest upsert
 query T
 EXPLAIN UPSERT INTO t VALUES (3, 3, 3, 3, 3, 3, 3)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │

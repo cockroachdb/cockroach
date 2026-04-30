@@ -3137,10 +3137,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
-	distributePlan, blockers := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
+	distributePlan, blockers, distReason := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
+		// If distribution was forced local by the pausable portal override,
+		// use a more specific reason.
+		if distributePlan == physicalplan.LocalPlan {
+			distReason = "pausable portal"
+		}
 	}
+	planner.curPlan.distributionReason = distReason
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {

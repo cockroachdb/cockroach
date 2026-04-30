@@ -271,7 +271,7 @@ skipif config fakedist-vec-off local-vec-off
 query T
 EXPLAIN (PLAN) select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • render
 │

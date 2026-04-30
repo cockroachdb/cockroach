@@ -10,7 +10,7 @@ CREATE TABLE kv (
 query T
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -38,7 +38,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -66,7 +66,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -94,7 +94,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -139,7 +139,7 @@ CREATE TABLE indexed (
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -186,7 +186,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1), (2), (3), (4)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -242,7 +242,7 @@ VALUES (1, 2, 3)
 ON CONFLICT (a)
 DO UPDATE SET b = 2, c = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -307,7 +307,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed@secondary VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -368,7 +368,7 @@ SET avoid_full_table_scans_in_mutations = false
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed@{NO_FULL_SCAN} VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -420,7 +420,7 @@ EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,NO_FULL_SCAN} VALUE
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed@{AVOID_FULL_SCAN} VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -467,7 +467,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,AVOID_FULL_SCAN} VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -530,7 +530,7 @@ SET avoid_full_table_scans_in_mutations = true
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -581,7 +581,7 @@ VALUES (1, 2, 3)
 ON CONFLICT (a)
 DO UPDATE SET b = 2, c = 3
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 vectorized: true
 ·
 • upsert
@@ -651,7 +651,7 @@ INSERT INTO [$t_id AS t]@{NO_FULL_SCAN}
 VALUES (1, 2, 3)
 ON CONFLICT DO NOTHING
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -702,7 +702,7 @@ DROP INDEX indexed@secondary CASCADE
 query T
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -782,7 +782,7 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -879,7 +879,7 @@ ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 query T
 EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -921,7 +921,7 @@ query T
 EXPLAIN (VERBOSE)
 INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -982,7 +982,7 @@ EXPLAIN (VERBOSE)
 INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
 ON CONFLICT (b, c) DO UPDATE SET b=5
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • upsert
@@ -1119,7 +1119,7 @@ CREATE TABLE t121322_c (c int PRIMARY KEY)
 query T
 EXPLAIN UPSERT INTO t121322_ab SELECT 1, (SELECT sum(c) FROM t121322_c)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • root
 │
@@ -1316,7 +1316,7 @@ CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 query T
 EXPLAIN UPSERT INTO t139105 VALUES (1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • upsert
 │ into: t139105(k, v)
@@ -1356,7 +1356,7 @@ CPut /Table/126/3/1/0 -> /BYTES/0x892302
 query T
 EXPLAIN UPSERT INTO t139160 VALUES (1, 2, 3, 4)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode, rowLevelLockingProhibited)
 ·
 • upsert
 │ into: t139160(k, i, u, v)
@@ -1389,7 +1389,7 @@ CPut /Table/126/3/3/0 -> /BYTES/0x892304
 query T
 EXPLAIN INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • upsert
 │ into: t139160(k, i, u, v)

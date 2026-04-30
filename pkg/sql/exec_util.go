@@ -2403,11 +2403,11 @@ func shouldDistributeGivenRecAndMode(
 // completed but is quite annoying to do at the moment.
 func (p *planner) getPlanDistribution(
 	ctx context.Context, plan planMaybePhysical, info postqueryInfo,
-) (physicalplan.PlanDistribution, distSQLBlockers) {
+) (physicalplan.PlanDistribution, distSQLBlockers, string) {
 	if plan.isPhysicalPlan() {
 		// TODO(#47473): store the distSQLBlockers for DistSQL spec factory
 		// too.
-		return plan.physPlan.Distribution, 0
+		return plan.physPlan.Distribution, 0, ""
 	}
 
 	// Check DistSQL-supportability as the first order of business in order to
@@ -2437,29 +2437,29 @@ func (p *planner) getPlanDistribution(
 		if log.ExpensiveLogEnabled(ctx, 1) {
 			log.VEventf(ctx, 1, "query not supported for distSQL: %s", blockers)
 		}
-		return physicalplan.LocalPlan, blockers
+		return physicalplan.LocalPlan, blockers, blockers.String()
 	}
 
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
 	if p.Descriptors().HasUncommittedDescriptors() {
-		return physicalplan.LocalPlan, 0
+		return physicalplan.LocalPlan, 0, "uncommitted descriptors"
 	}
 
 	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
-		return physicalplan.LocalPlan, 0
+		return physicalplan.LocalPlan, 0, "distributing disabled"
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.planNode.(*zeroNode); ok {
-		return physicalplan.LocalPlan, 0
+		return physicalplan.LocalPlan, 0, ""
 	}
 
 	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
-		return physicalplan.FullyDistributedPlan, 0
+		return physicalplan.FullyDistributedPlan, 0, ""
 	}
-	return physicalplan.LocalPlan, 0
+	return physicalplan.LocalPlan, 0, "auto, no recommendation"
 }
 
 // golangFillQueryArguments transforms Go values into datums.

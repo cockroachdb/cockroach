@@ -16,7 +16,7 @@ regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(
 regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -68,7 +68,7 @@ regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(
 regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -120,7 +120,7 @@ bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 1), covar_pop(1
 regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
 regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -189,7 +189,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (streaming)
@@ -210,7 +210,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (hash)
@@ -233,7 +233,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -259,7 +259,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT count(k) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -276,7 +276,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -295,7 +295,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -317,7 +317,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -353,7 +353,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -384,7 +384,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -416,7 +416,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -448,7 +448,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -486,7 +486,7 @@ CREATE TABLE abc (
 query T
 EXPLAIN (TYPES) SELECT min(a) FROM abc
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -504,7 +504,7 @@ vectorized: true
 query T
 EXPLAIN SELECT min(a), max(a) FROM abc
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -555,7 +555,7 @@ INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -573,7 +573,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -591,7 +591,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT max(x) FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -609,7 +609,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -629,7 +629,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -649,7 +649,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -670,7 +670,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE z = 7
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -691,7 +691,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -723,7 +723,7 @@ output row: [1]
 query T
 EXPLAIN (TYPES) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -746,7 +746,7 @@ vectorized: true
 query T
 EXPLAIN SELECT min(x), max(z) FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -783,7 +783,7 @@ distribution: local
 query T
 EXPLAIN SELECT min(x), max(z), sum(x) FROM xyz
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -797,7 +797,7 @@ distribution: local
 query T
 EXPLAIN SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -809,7 +809,7 @@ distribution: local
 query T
 EXPLAIN SELECT min(x), max(x) FROM xyz WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -823,7 +823,7 @@ distribution: local
 query T
 EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -879,7 +879,7 @@ distribution: local
 query T
 EXPLAIN SELECT min(z), max(y), count(x) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • group (scalar)
 │
@@ -892,7 +892,7 @@ distribution: local
 query T
 EXPLAIN SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -939,7 +939,7 @@ distribution: local
 query T
 EXPLAIN SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • root
 │
@@ -1077,7 +1077,7 @@ output row: [9 4.5 6.33333333333333]
 query T
 EXPLAIN (TYPES) SELECT variance(x) FROM xyz WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1153,7 +1153,7 @@ INSERT INTO ab VALUES
 query T
 EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1176,7 +1176,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -1199,7 +1199,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1232,7 +1232,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE v > 10
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (hash)
@@ -1270,7 +1270,7 @@ CREATE TABLE filter_test (
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1298,7 +1298,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1326,7 +1326,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY kv.*;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1342,7 +1342,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1379,7 +1379,7 @@ CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1400,7 +1400,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1433,7 +1433,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1466,7 +1466,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1492,7 +1492,7 @@ CREATE TABLE xy(x STRING, y STRING);
 query T
 EXPLAIN (TYPES) SELECT (b, a) r FROM ab GROUP BY (b, a)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1508,7 +1508,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1657,7 +1657,7 @@ vectorized: true
 query T
 EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -1695,7 +1695,7 @@ SET allow_ordinal_column_references=true
 query T
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1721,7 +1721,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1750,7 +1750,7 @@ SET allow_ordinal_column_references=false
 query T
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1772,7 +1772,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT array_cat_agg(arr) FROM (SELECT * FROM kv ORDER BY v)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1794,7 +1794,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • project
@@ -1814,7 +1814,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1832,7 +1832,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1854,7 +1854,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1880,7 +1880,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1917,7 +1917,7 @@ CREATE TABLE uvw (u INT, v INT, w INT, INDEX uvw(u, v, w))
 query T
 EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (streaming)
@@ -1937,7 +1937,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • group (scalar)
@@ -1974,7 +1974,7 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -2011,7 +2011,7 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -2048,7 +2048,7 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -2085,7 +2085,7 @@ EXPLAIN (VERBOSE)
     ORDER BY
         company_id
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • sort
@@ -2126,7 +2126,7 @@ SET testing_optimizer_disable_rule_probability = 1.000000;
 query T
 EXPLAIN SELECT a, sum_int(c) AS s FROM t124101 GROUP BY a, c ORDER BY a, a, s, c LIMIT 2;
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • limit
 │ count: 2

@@ -9,7 +9,7 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY 
 query T
 EXPLAIN SELECT z FROM t WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -19,7 +19,7 @@ distribution: local
 query T
 EXPLAIN SELECT crdb_internal_mvcc_timestamp, z FROM t WHERE x = 1
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -35,7 +35,7 @@ ALTER TABLE t ADD COLUMN w INT
 query T
 EXPLAIN SELECT x, crdb_internal_mvcc_timestamp FROM t
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -52,7 +52,7 @@ SELECT id FROM system.namespace WHERE name = 't'
 query T
 EXPLAIN SELECT * FROM [$t_id(4294967295) AS _]
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats

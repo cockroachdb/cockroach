@@ -108,7 +108,7 @@ EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.a = t2.b
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • hash join
 │ estimated row count: 10,000
@@ -142,7 +142,7 @@ EXPLAIN (VEC) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
 query T
 EXPLAIN (DISTSQL) SELECT * FROM t1, t2 WHERE t1.b = 1 AND t1.a = t2.a
 ----
-distribution: local
+distribution: local (single flow moved to gateway)
 ·
 • merge join
 │ estimated row count: 3,333

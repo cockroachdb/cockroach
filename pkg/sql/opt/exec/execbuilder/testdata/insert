@@ -306,7 +306,7 @@ CREATE TABLE select_t (x INT, v INT)
 query T
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -337,7 +337,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert
@@ -363,7 +363,7 @@ vectorized: true
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -380,7 +380,7 @@ distribution: local
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -399,7 +399,7 @@ distribution: local
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -418,7 +418,7 @@ distribution: local
 query T
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert
 │ into: insert_t(x, v, rowid)
@@ -439,7 +439,7 @@ query T
 EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • render
@@ -479,7 +479,7 @@ vectorized: true
 query T
 EXPLAIN (PLAN) INSERT INTO kv@a VALUES (1,1), (2,2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: kv(k, v)
@@ -502,7 +502,7 @@ ALTER TABLE mutation DROP COLUMN y
 query T
 EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • project
@@ -529,7 +529,7 @@ ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
 query T
 EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -553,7 +553,7 @@ ROLLBACK
 query T
 EXPLAIN INSERT INTO kv VALUES (1, (SELECT v FROM kv))
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • root
 │
@@ -584,7 +584,7 @@ CREATE FUNCTION foo() RETURNS VARCHAR LANGUAGE SQL AS 'SELECT v FROM kv'
 query T
 EXPLAIN INSERT INTO kv VALUES (1, foo())
 ----
-distribution: local
+distribution: local (routineProhibited, unsupportedPlanNode)
 ·
 • insert
 │ into: kv(k, v)
@@ -605,7 +605,7 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -678,7 +678,7 @@ CREATE TABLE t62270_child (c UUID DEFAULT (gen_random_uuid()), p INT REFERENCES 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t62270_child (p) VALUES (1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path

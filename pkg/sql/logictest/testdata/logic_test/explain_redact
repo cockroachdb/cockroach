@@ -62,7 +62,7 @@ scan q
 query T
 EXPLAIN (REDACT) INSERT INTO p VALUES (1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 ·
 • insert fast path
   into: p(p, q)
@@ -72,7 +72,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • insert fast path
@@ -175,7 +175,7 @@ insert p
 query T
 EXPLAIN (REDACT) SELECT * FROM p WHERE p = 11
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -185,7 +185,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM p WHERE p = 11
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -260,7 +260,7 @@ scan p
 query T
 EXPLAIN (REDACT) SELECT * FROM q WHERE q > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 ·
 • scan
   missing stats
@@ -270,7 +270,7 @@ distribution: local
 query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan

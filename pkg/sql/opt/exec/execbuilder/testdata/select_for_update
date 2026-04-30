@@ -19,7 +19,7 @@ CREATE VIEW v AS SELECT a FROM t AS t2
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -32,7 +32,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -47,7 +47,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -65,7 +65,7 @@ SET enable_shared_locking_for_serializable = true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -78,7 +78,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -91,7 +91,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -104,7 +104,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -117,7 +117,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -130,7 +130,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -146,7 +146,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -163,7 +163,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -176,7 +176,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -189,7 +189,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -202,7 +202,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -215,7 +215,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -228,7 +228,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -241,7 +241,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -254,7 +254,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -270,7 +270,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -291,7 +291,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -307,7 +307,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -320,7 +320,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -333,7 +333,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -353,7 +353,7 @@ EXPLAIN (VERBOSE) SELECT * FROM [$t_id AS t] FOR UPDATE OF t2
 query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -366,7 +366,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF v
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -392,7 +392,7 @@ EXPLAIN (VERBOSE) SELECT * FROM v FOR UPDATE OF t2
 query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -408,7 +408,7 @@ EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v
 query T
 EXPLAIN (VERBOSE) SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -429,7 +429,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -442,7 +442,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -455,7 +455,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -468,7 +468,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -484,7 +484,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) FOR UPDATE OF t
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -497,7 +497,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -510,7 +510,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -526,7 +526,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE OF t
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -539,7 +539,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -568,7 +568,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -601,7 +601,7 @@ EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) FOR UPDATE OF t
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -631,7 +631,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -660,7 +660,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -693,7 +693,7 @@ EXPLAIN (VERBOSE) SELECT (SELECT a FROM t) AS r FOR UPDATE OF t
 query T
 EXPLAIN (VERBOSE) SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -723,7 +723,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -736,7 +736,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -748,7 +748,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -761,7 +761,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • scan
@@ -773,7 +773,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -802,7 +802,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -831,7 +831,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -860,7 +860,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -900,7 +900,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -916,7 +916,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • render
@@ -932,7 +932,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -962,7 +962,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
-distribution: local
+distribution: local (unsupportedPlanNode)
 vectorized: true
 ·
 • root
@@ -995,7 +995,7 @@ query T
 EXPLAIN (VERBOSE) WITH sfu AS (SELECT a FROM t FOR UPDATE)
 SELECT c FROM u
 ----
-distribution: local
+distribution: local (distributing disabled)
 vectorized: true
 ·
 • root
@@ -1030,7 +1030,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1063,7 +1063,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1095,7 +1095,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1127,7 +1127,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1160,7 +1160,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1196,7 +1196,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1229,7 +1229,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1262,7 +1262,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1295,7 +1295,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1332,7 +1332,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1374,7 +1374,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1406,7 +1406,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1438,7 +1438,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1475,7 +1475,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1517,7 +1517,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1554,7 +1554,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • cross join (inner)
@@ -1578,7 +1578,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • cross join (inner)
@@ -1601,7 +1601,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • cross join (inner)
@@ -1625,7 +1625,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • cross join (inner)
@@ -1652,7 +1652,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • cross join (inner)
@@ -1687,7 +1687,7 @@ CREATE TABLE indexed (
 query T
 EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b = 2 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • index join
@@ -1708,7 +1708,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • index join
@@ -1733,7 +1733,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1758,7 +1758,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1784,7 +1784,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)
@@ -1828,7 +1828,7 @@ CREATE TABLE inverted (
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)
@@ -1858,7 +1858,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • filter
@@ -1893,7 +1893,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1944,7 +1944,7 @@ CREATE TABLE zigzag (
 query T
 EXPLAIN (VERBOSE) SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -1966,7 +1966,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2003,7 +2003,7 @@ RESET enable_zigzag_join
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2017,7 +2017,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2031,7 +2031,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2045,7 +2045,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2059,7 +2059,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2073,7 +2073,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2087,7 +2087,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2101,7 +2101,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2118,7 +2118,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 NOWAIT
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -2136,7 +2136,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2150,7 +2150,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2164,7 +2164,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2178,7 +2178,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2192,7 +2192,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2206,7 +2206,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2220,7 +2220,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2234,7 +2234,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2251,7 +2251,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 NOWAIT
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -2273,7 +2273,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2287,7 +2287,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2301,7 +2301,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2315,7 +2315,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2329,7 +2329,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2343,7 +2343,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2357,7 +2357,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2371,7 +2371,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2388,7 +2388,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -2406,7 +2406,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2420,7 +2420,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2434,7 +2434,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2448,7 +2448,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2462,7 +2462,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2476,7 +2476,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2490,7 +2490,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2504,7 +2504,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2521,7 +2521,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 SKIP LOCKED
 query T
 EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • render
@@ -2541,7 +2541,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT a, b FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2555,7 +2555,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • index join
@@ -2578,7 +2578,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 2 LIMIT 1 FOR UPDATE SKIP LOCKED
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • limit
@@ -2696,7 +2696,7 @@ SET optimizer_use_lock_op_for_serializable = true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 5 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2710,7 +2710,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • scan
@@ -2725,7 +2725,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 AND b % 2 = 0 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2753,7 +2753,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT b, a FROM u WHERE b = 5 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2775,7 +2775,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 5 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • index join
@@ -2796,7 +2796,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2819,7 +2819,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b AND u.c < t.b WHERE t.a = 5 FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2850,7 +2850,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT t.*, u.b, u.a FROM t JOIN u ON u.b = t.b WHERE t.a = 5 FOR UPDATE OF u
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2878,7 +2878,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF t
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2908,7 +2908,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t1
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -2938,7 +2938,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t2
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)
@@ -2972,7 +2972,7 @@ CREATE TABLE xyz (
 query T
 EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -2997,7 +2997,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT y, z FROM xyz WHERE x = 1 FOR UPDATE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -3014,7 +3014,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE z = 2 FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • project
@@ -3049,7 +3049,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • index join
@@ -3070,7 +3070,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT t.*, x FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (semi)
@@ -3100,7 +3100,7 @@ vectorized: true
 query T
 EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
 ----
-distribution: local
+distribution: local (rowLevelLockingProhibited)
 vectorized: true
 ·
 • lookup join (inner)

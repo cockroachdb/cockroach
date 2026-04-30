@@ -190,7 +190,7 @@ query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a
 ----
-distribution: local
+distribution: local (invertedFilterProhibited)
 ·
 • sort
 │ estimated row count: 1
