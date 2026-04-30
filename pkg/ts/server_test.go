@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -1629,6 +1630,99 @@ func TestServerDumpChildMetrics(t *testing.T) {
 		require.Greater(t, kvCount, 0, "should have raw KVs")
 		require.True(t, seenMetrics["child"], "should have seen child metrics in raw dump")
 	})
+}
+
+// TestServerDumpHistogramChildMetrics exercises the dump path for labeled
+// histogram child metrics. The CLI expands histogram metric names with
+// quantile/count/sum suffixes (e.g. "cr.node.foo-p99"), but labeled histogram
+// children are stored as "cr.node.foo{labels}-anysuffix" -- labels are
+// inserted before the suffix. The dump server must strip the histogram suffix
+// when looking up the base in AllowedChildMetrics and use the base as the
+// scan prefix; otherwise labeled histogram children are missed entirely
+// because '{' (0x7B) > '-' (0x2D) puts them outside the [name-suffix,
+// name-suffix|) span.
+func TestServerDumpHistogramChildMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// changefeed.sink_backpressure_nanos is a histogram in the
+	// AllowedChildMetrics list.
+	parentBase := "cr.node.changefeed.sink_backpressure_nanos"
+
+	// Store the parent histogram series (one per quantile/computer suffix).
+	var parentSeries []tspb.TimeSeriesData
+	for _, c := range metric.HistogramMetricComputers {
+		parentSeries = append(parentSeries, tspb.TimeSeriesData{
+			Name:   parentBase + c.Suffix,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 1.0},
+			},
+		})
+	}
+	require.NoError(t, tsdb.StoreData(ctx, ts.Resolution10s, parentSeries))
+
+	// Store labeled histogram child series in production format:
+	// "<basename>{labels}<suffix>" -- labels appear BEFORE the suffix.
+	var childSeries []tspb.TimeSeriesData
+	for _, c := range metric.HistogramMetricComputers {
+		childSeries = append(childSeries, tspb.TimeSeriesData{
+			Name:   fmt.Sprintf(`%s{scope="default"}%s`, parentBase, c.Suffix),
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 2.0},
+			},
+		})
+	}
+	require.NoError(t, tsdb.StoreData(ctx, ts.Resolution1m, childSeries))
+
+	// The CLI passes histogram-expanded names ("<base>-<suffix>"), one per
+	// quantile, mirroring GetInternalTimeseriesNamesFromServer.
+	var requestNames []string
+	for _, c := range metric.HistogramMetricComputers {
+		requestNames = append(requestNames, parentBase+c.Suffix)
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
+		Names:      requestNames,
+		StartNanos: 100 * 1e9,
+		EndNanos:   300 * 1e9,
+	})
+	require.NoError(t, err)
+
+	seen := make(map[string]struct{})
+	for {
+		msg, err := dumpClient.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		seen[msg.Name] = struct{}{}
+	}
+
+	// Each labeled histogram child must appear in the dump output.
+	for _, c := range metric.HistogramMetricComputers {
+		want := fmt.Sprintf(`%s{scope="default"}%s`, parentBase, c.Suffix)
+		require.Contains(t, seen, want,
+			"missing labeled histogram child %s; got %v", want, seen)
+	}
 }
 
 func BenchmarkServerQuery(b *testing.B) {
