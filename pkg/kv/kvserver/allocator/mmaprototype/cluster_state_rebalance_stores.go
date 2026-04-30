@@ -136,6 +136,34 @@ type sheddingStore struct {
 	storeLoadSummary
 }
 
+// classifyOverload returns the overload classification for the given store,
+// derived from how long the store has been overloaded and whether its CPU
+// dimension is currently above overloadSlow.
+//
+// withinLeaseSheddingGracePeriod is true when the store is overloaded on the
+// CPU dimension but still within the initial grace period where the overloaded
+// store is expected to shed its own leases. For remote stores, MMA skips
+// shedding during this period. For the local store, MMA proceeds with shedding
+// and the lease_grace metrics track whether that self-shedding succeeds.
+//
+// iLevel selects how strict MMA is about target stores during replica
+// shedding: it relaxes as overloadDur grows past the corresponding grace
+// thresholds.
+func classifyOverload(
+	ss *storeState, sls storeLoadSummary, now time.Time,
+) (withinLeaseSheddingGracePeriod bool, iLevel ignoreLevel, overloadDur time.Duration) {
+	overloadDur = now.Sub(ss.overloadStartTime)
+	iLevel = ignoreLoadNoChangeAndHigher
+	if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
+		iLevel = ignoreHigherThanLoadThreshold
+	} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
+		iLevel = ignoreLoadThresholdAndHigher
+	}
+	withinLeaseSheddingGracePeriod = sls.dimSummary[CPURate] >= overloadSlow &&
+		overloadDur < leaseSheddingGraceDuration
+	return withinLeaseSheddingGracePeriod, iLevel, overloadDur
+}
+
 // Called periodically, say every 10s.
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
@@ -415,21 +443,8 @@ func (re *rebalanceEnv) rebalanceStore(
 	// of load from s1 => s2 unless s1 is not seeing any load shedding for
 	// some interval of time. We need a way to capture this information in a
 	// simple but effective manner. For now, we capture this using these
-	// grace duration thresholds.
-	iLevel := ignoreLoadNoChangeAndHigher
-	overloadDur := re.now.Sub(ss.overloadStartTime)
-	if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
-		iLevel = ignoreHigherThanLoadThreshold
-	} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
-		iLevel = ignoreLoadThresholdAndHigher
-	}
-	// withinLeaseSheddingGracePeriod is true when the store is overloaded but
-	// still within the initial grace period where the overloaded store is
-	// expected to shed its own leases. For remote stores, MMA skips shedding
-	// during this period. For the local store, MMA proceeds with shedding and
-	// the lease_grace metrics track whether that self-shedding succeeds.
-	withinLeaseSheddingGracePeriod := store.dimSummary[CPURate] >= overloadSlow &&
-		overloadDur < leaseSheddingGraceDuration
+	// grace duration thresholds (see classifyOverload).
+	withinLeaseSheddingGracePeriod, iLevel, _ := classifyOverload(ss, store.storeLoadSummary, re.now)
 	re.passObs.storeOverloaded(ss.StoreID, withinLeaseSheddingGracePeriod, iLevel)
 	defer func() {
 		re.passObs.finishStore()
