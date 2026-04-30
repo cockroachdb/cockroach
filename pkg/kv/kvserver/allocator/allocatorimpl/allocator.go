@@ -1914,7 +1914,7 @@ func (a Allocator) RebalanceTarget(
 	// continues to correspond to the original candidate set and source store,
 	// even as candidates are removed.
 	for {
-		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(ctx, a.randGen, results, a.as)
 		if target == nil {
 			return zero, zero, "", false
 		}
@@ -2555,7 +2555,7 @@ func (a *Allocator) TransferLeaseTarget(
 		for _, s := range sl.Stores {
 			targetStores = append(targetStores, s.StoreID)
 		}
-		handle := a.as.BuildMMARebalanceAdvisor(source.StoreID, targetStores)
+		handle := a.as.BuildMMARebalanceAdvisor(ctx, source.StoreID, targetStores)
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
@@ -2836,8 +2836,8 @@ func (t TransferLeaseDecision) String() string {
 // be disabled. Count-based rebalancing is disabled only when
 // LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
 // count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
-func (a *Allocator) CountBasedRebalancingDisabled() bool {
-	return kvserverbase.GetLoadBasedRebalancingMode(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
+func (a *Allocator) CountBasedRebalancingDisabled(ctx context.Context) bool {
+	return kvserverbase.GetLoadBasedRebalancingMode(ctx, a.st) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
@@ -2961,7 +2961,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	// lease transfers are disabled. The MMA handles load-based rebalancing
 	// directly, so locality-driven lease transfers would conflict with its
 	// decisions.
-	if kvserverbase.LoadBasedRebalancingModeIsMMA(&a.st.SV) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, a.st) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 	// Only use load-based rebalancing if it's enabled and we have both
@@ -3147,7 +3147,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
 	// Return false early if count based rebalancing is disabled.
-	if a.CountBasedRebalancingDisabled() {
+	if a.CountBasedRebalancingDisabled(ctx) {
 		return false
 	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease

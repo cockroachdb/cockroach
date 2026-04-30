@@ -124,7 +124,7 @@ type StoreRebalancer struct {
 	processTimeoutFn        func(replica CandidateReplica) time.Duration
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
-	disabled                func() bool
+	disabled                func(ctx context.Context) bool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -167,9 +167,9 @@ func NewStoreRebalancer(
 			}
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
-		disabled: func() bool {
-			mode := kvserverbase.GetLoadBasedRebalancingMode(&st.SV)
-			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(&st.SV) ||
+		disabled: func(ctx context.Context) bool {
+			mode := kvserverbase.GetLoadBasedRebalancingMode(ctx, st)
+			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, st) ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -215,8 +215,8 @@ type RebalanceContext struct {
 
 // RebalanceMode returns the mode of the store rebalancer. See
 // kvserverbase.GetLoadBasedRebalancingMode.
-func (sr *StoreRebalancer) RebalanceMode() kvserverbase.LBRebalancingMode {
-	return kvserverbase.GetLoadBasedRebalancingMode(&sr.st.SV)
+func (sr *StoreRebalancer) RebalanceMode(ctx context.Context) kvserverbase.LBRebalancingMode {
+	return kvserverbase.GetLoadBasedRebalancingMode(ctx, sr.st)
 }
 
 // RebalanceDimension returns the dimension the store rebalancer is balancing.
@@ -288,7 +288,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-timer.C:
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
-			if sr.disabled() {
+			if sr.disabled(ctx) {
 				continue
 			}
 			// Once the rebalance mode and rebalance objective are defined for
@@ -304,7 +304,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 
 			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
 			options := sr.scorerOptions(sCtx, objective.ToDimension())
-			rctx := sr.NewRebalanceContext(sCtx, options, hottestRanges, sr.RebalanceMode())
+			rctx := sr.NewRebalanceContext(sCtx, options, hottestRanges, sr.RebalanceMode(sCtx))
 			sr.rebalanceStore(sCtx, rctx)
 		}
 	})
