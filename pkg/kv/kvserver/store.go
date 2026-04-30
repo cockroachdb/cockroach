@@ -1166,7 +1166,7 @@ type Store struct {
 	diskMonitor *disk.Monitor
 }
 
-var _ SenderWithWriteBytes = &Store{}
+var _ SenderWithWorkStats = &Store{}
 var _ IncomingRaftMessageHandler = &Store{}
 var _ OutgoingRaftMessageHandler = &Store{}
 

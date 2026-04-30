@@ -9,7 +9,6 @@ package kvadmission
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -163,7 +162,7 @@ type Controller interface {
 	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
+	AdmittedKVWorkDone(Handle, admission.StoreWorkDoneInfo)
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
 	// catchup scans (typically CPU-intensive and affecting scheduling
@@ -457,7 +456,7 @@ func (n *controllerImpl) AdmitKVWork(
 }
 
 // AdmittedKVWorkDone implements the Controller interface.
-func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
+func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, doneInfo admission.StoreWorkDoneInfo) {
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.cpuKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
@@ -473,10 +472,6 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		ah.cpuAdmissionQueue.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
-		var doneInfo admission.StoreWorkDoneInfo
-		if writeBytes != nil {
-			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
-		}
 		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
@@ -660,30 +655,6 @@ func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
 	f.NumEntries += from.NumEntries
 	f.WriteBytes += from.WriteBytes
 	f.IngestedBytes += from.IngestedBytes
-}
-
-// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
-// "work is done" is specific to admission control and doesn't need to leak
-// everywhere.
-type StoreWriteBytes admission.StoreWorkDoneInfo
-
-var storeWriteBytesPool = sync.Pool{
-	New: func() interface{} { return &StoreWriteBytes{} },
-}
-
-// NewStoreWriteBytes constructs a new StoreWriteBytes.
-func NewStoreWriteBytes() *StoreWriteBytes {
-	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
-	*wb = StoreWriteBytes{}
-	return wb
-}
-
-// Release returns the *StoreWriteBytes to the pool.
-func (wb *StoreWriteBytes) Release() {
-	if wb == nil {
-		return
-	}
-	storeWriteBytesPool.Put(wb)
 }
 
 func workInfoForBatch(

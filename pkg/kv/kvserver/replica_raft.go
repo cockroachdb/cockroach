@@ -92,6 +92,10 @@ var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWith
 // caller should relinquish all ownership of it. If it does return an error, the
 // caller retains full ownership over the guard.
 //
+// Any bytes that will be scanned or written by the replica during the
+// application of the Raft command will be accumulated into the *StoreWorkStats
+// parameter.
+//
 // evalAndPropose takes ownership of the supplied token; the caller should
 // tok.Move() it into this method. It will be used to untrack the request once
 // it comes out of the proposal buffer.
@@ -107,8 +111,6 @@ var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWith
 //     terminate execution, although it is given no guarantee that the proposal
 //     won't still go on to commit and apply at some later time.
 //   - the proposal's ID.
-//   - the bytes that will be written by the replica during the application of
-//     the Raft command.
 //   - any error obtained during the creation or proposal of the command, in
 //     which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
@@ -118,17 +120,18 @@ func (r *Replica) evalAndPropose(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
+	stats *StoreWorkStats,
 	admissionInfo kvadmission.AdmissionInfo,
 ) (
 	chan proposalResult,
 	abandonToken,
 	kvserverbase.CmdIDKey,
-	*kvadmission.StoreWriteBytes,
 	*kvpb.Error,
 ) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := raftlog.MakeCmdIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
+	ss := stats.ScanStats()
+	proposal, pErr := r.requestToProposal(ctx, idKey, ss, ba, g, st, ui)
 	ba = proposal.Request // may have been updated
 	log.Event(proposal.Context(), "evaluated request")
 
@@ -136,7 +139,7 @@ func (r *Replica) evalAndPropose(
 	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, nil, "", nil, pErr
+		return nil, nil, "", pErr
 	}
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to
@@ -151,7 +154,7 @@ func (r *Replica) evalAndPropose(
 	//    in an error.
 	if proposal.command == nil {
 		if proposal.Local.RequiresRaft() {
-			return nil, nil, "", nil, kvpb.NewError(errors.AssertionFailedf(
+			return nil, nil, "", kvpb.NewError(errors.AssertionFailedf(
 				"proposal resulting from batch %s erroneously bypassed Raft", ba))
 		}
 		intents := proposal.Local.DetachEncounteredIntents()
@@ -170,7 +173,7 @@ func (r *Replica) evalAndPropose(
 		proposal.ec = makeUnreplicatedEndCmds(r, g, *st)
 		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
-		return proposalCh, nil, "", nil, nil
+		return proposalCh, nil, "", nil
 	}
 
 	// Make it a truly replicated proposal. We measure the replication latency
@@ -193,12 +196,13 @@ func (r *Replica) evalAndPropose(
 	// typical lag in consensus is expected to be small compared to the time
 	// granularity of admission control doing token and size estimation (which
 	// is 15s). Also, admission control corrects for gaps in reporting.
-	writeBytes := kvadmission.NewStoreWriteBytes()
-	if proposal.command.WriteBatch != nil {
-		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
-	}
-	if proposal.command.ReplicatedEvalResult.AddSSTable != nil {
-		writeBytes.IngestedBytes = int64(len(proposal.command.ReplicatedEvalResult.AddSSTable.Data))
+	if stats != nil {
+		if proposal.command.WriteBatch != nil {
+			stats.WriteBytes += int64(len(proposal.command.WriteBatch.Data))
+		}
+		if proposal.command.ReplicatedEvalResult.AddSSTable != nil {
+			stats.IngestedBytes += int64(len(proposal.command.ReplicatedEvalResult.AddSSTable.Data))
+		}
 	}
 	// If the request requested that Raft consensus be performed asynchronously,
 	// return a proposal result immediately on the proposal's done channel.
@@ -210,7 +214,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", writeBytes, kvpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", kvpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -289,7 +293,7 @@ func (r *Replica) evalAndPropose(
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
 	if maxSize := uint64(kvserverbase.MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
-		return nil, nil, "", nil, kvpb.NewError(errors.Errorf(
+		return nil, nil, "", kvpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
@@ -300,7 +304,7 @@ func (r *Replica) evalAndPropose(
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
-		return nil, nil, "", nil, kvpb.NewError(err)
+		return nil, nil, "", kvpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
@@ -324,13 +328,13 @@ func (r *Replica) evalAndPropose(
 			// SeedID not set, since this is not a reproposal.
 		}
 		if pErr = filter(filterArgs); pErr != nil {
-			return nil, nil, "", nil, pErr
+			return nil, nil, "", pErr
 		}
 	}
 
 	pErr = r.propose(ctx, proposal, tok.Move(ctx))
 	if pErr != nil {
-		return nil, nil, "", nil, pErr
+		return nil, nil, "", pErr
 	}
 	// We've successfully handed the proposal to the replication layer, so this
 	// method should not finish the trace span if we forked one off above.
@@ -342,7 +346,7 @@ func (r *Replica) evalAndPropose(
 	// the command may not be applied (or even processed): the process crashes
 	// or the local replica is removed from the range.
 
-	return proposalCh, abandonToken(proposal), idKey, writeBytes, nil
+	return proposalCh, abandonToken(proposal), idKey, nil
 }
 
 // abandonToken is an interface used for allowing callers to "abandon" an

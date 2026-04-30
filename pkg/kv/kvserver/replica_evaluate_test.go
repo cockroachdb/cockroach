@@ -939,6 +939,7 @@ func TestEvaluateBatch(t *testing.T) {
 				d.eng,
 				d.MockEvalCtx.EvalContext(),
 				&d.ms,
+				&d.ss,
 				&d.ba,
 				nil,
 				nil,
@@ -958,6 +959,7 @@ type data struct {
 	idKey    kvserverbase.CmdIDKey
 	eng      storage.Engine
 	ms       enginepb.MVCCStats
+	ss       kvpb.ScanStats
 	readOnly bool
 }
 

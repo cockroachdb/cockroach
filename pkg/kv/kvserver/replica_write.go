@@ -79,11 +79,11 @@ func (r *Replica) executeWriteBatch(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
+	stats *StoreWorkStats,
 	admissionInfo kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
 	_ concurrency.Guard,
-	_ *kvadmission.StoreWriteBytes,
 	pErr *kvpb.Error,
 ) {
 	startTime := timeutil.Now()
@@ -120,14 +120,14 @@ func (r *Replica) executeWriteBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedRWOrAdmin(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	// Check the breaker. Note that we do this after
 	// checkExecutionCanProceedBeforeStorageSnapshot, so that NotLeaseholderError
 	// has precedence.
 	if err := r.signallerForBatch(ba).Err(); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
@@ -182,16 +182,16 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, nil, kvpb.NewError(errors.Wrapf(err, "aborted before proposing"))
+		return nil, g, kvpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose. If we return with an error from executeWriteBatch, we
 	// also return the guard which the caller reassumes ownership of.
-	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx), admissionInfo)
+	ch, abandonTok, _, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx), stats, admissionInfo)
 	if pErr != nil {
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
@@ -309,7 +309,7 @@ func (r *Replica) executeWriteBatch(
 				propResult.Reply, propResult.Err = ba.CreateReply(), nil
 			}
 
-			return propResult.Reply, nil, writeBytes, propResult.Err
+			return propResult.Reply, nil, propResult.Err
 
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
@@ -349,7 +349,7 @@ func (r *Replica) executeWriteBatch(
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
-			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultError(
+			return nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultError(
 				errors.Wrapf(ctx.Err(), "after %.2fs of attempting command", dur.Seconds()),
 			))
 
@@ -359,7 +359,7 @@ func (r *Replica) executeWriteBatch(
 			r.abandon(abandonTok)
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
+			return nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
 				"server shutdown"))
 		}
 	}
@@ -422,6 +422,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -445,7 +446,7 @@ func (r *Replica) evaluateWriteBatch(
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
 	if ba, ok = r.canAttempt1PCEvaluation(ctx, ba, g); ok {
-		res := r.evaluate1PC(ctx, idKey, ba, g, st)
+		res := r.evaluate1PC(ctx, idKey, ss, ba, g, st)
 		switch res.success {
 		case onePCSucceeded:
 			return ba, res.batch, res.stats, res.br, res.res, nil
@@ -482,7 +483,7 @@ func (r *Replica) evaluateWriteBatch(
 	// For transactional writes, we propagate the flag from the txn.
 	omitInRangefeeds := ba.Txn != nil && ba.Txn.OmitInRangefeeds
 	ba, batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
+		ctx, idKey, rec, ms, ss, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
 	return ba, batch, *ms, br, res, pErr
 }
 
@@ -524,6 +525,7 @@ type onePCResult struct {
 func (r *Replica) evaluate1PC(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -567,10 +569,10 @@ func (r *Replica) evaluate1PC(
 	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
 		_, batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
+			ctx, idKey, rec, ms, ss, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
+			ctx, idKey, rec, ms, ss, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -694,6 +696,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -718,7 +721,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui, omitInRangefeeds)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ss, ba, g, st, ui, omitInRangefeeds)
 
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
@@ -745,6 +748,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -753,7 +757,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	batch, opLogger := r.newBatchedEngine(g)
 	now := timeutil.Now()
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ss, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 	if pErr == nil {
 		if opLogger != nil {
