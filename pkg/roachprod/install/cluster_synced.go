@@ -1091,7 +1091,9 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 			cmd := fmt.Sprintf("test -e %s", vm.OSInitializedFile)
 			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
 			opts := cmdOptsWithDebugDisabled()
-			for j := 0; j < 600; j++ {
+			timeout := 5 * time.Minute
+			deadline := time.Now().Add(timeout)
+			for time.Now().Before(deadline) {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
 					return nil, err
@@ -1103,7 +1105,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 				}
 				return res, nil
 			}
-			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
+			res.Err = errors.Wrapf(res.Err, "timed out after %v", timeout)
 			logContent, err := c.runCmdOnSingleNode(ctx, nil, node, fmt.Sprintf("tail -n %d %s", 20, vm.StartupLogs), cmdOptsWithDebugDisabled())
 			if err = errors.CombineErrors(err, logContent.Err); err != nil {
 				l.Printf("could not fetch startup logs: %v", err)
