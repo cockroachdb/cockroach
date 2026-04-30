@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -189,6 +190,13 @@ func (a *allocatorState) shouldLogUnregisteredMetrics() bool {
 
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
 	return a.cs.loadSummaryForAllStores(ctx)
+}
+
+// ClusterStateSnapshot implements the Allocator interface.
+func (a *allocatorState) ClusterStateSnapshot() (*mmasnappb.ClusterStateSnapshot, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cs.Snapshot()
 }
 
 // SetStore implements the Allocator interface.
