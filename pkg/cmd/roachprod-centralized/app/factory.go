@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/bearer"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
@@ -25,9 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	ccrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/cockroachdb"
 	cmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/memory"
+	renvironments "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments"
+	ecrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments/cockroachdb"
+	ememstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments/memory"
 	rhealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health"
 	hcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/cockroachdb"
 	hmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/memory"
+	provisioningsrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings"
+	provcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings/cockroachdb"
+	provmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings/memory"
 	rtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
 	tcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/cockroachdb"
 	tmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/memory"
@@ -36,8 +44,15 @@ import (
 	sauthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	sclusters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters"
 	dnsregistry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/dns/registry"
+	senvironments "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
+	sprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings"
+	sprovhooks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks"
+	sprovssh "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/ssh"
+	sprovtemplates "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
+	sprovartifacts "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts"
+	sprovtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
 	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
@@ -45,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database"
 	crdbmigrator "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database/cockroachdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,11 +69,13 @@ import (
 
 // Services holds all the application services
 type Services struct {
-	Task     *stasks.Service
-	Health   *shealth.Service
-	Clusters *sclusters.Service
-	DNS      *spublicdns.Service
-	Auth     *sauth.Service
+	Task          *stasks.Service
+	Health        *shealth.Service
+	Clusters      *sclusters.Service
+	DNS           *spublicdns.Service
+	Auth          *sauth.Service
+	Environments  *senvironments.Service
+	Provisionings *sprovisionings.Service
 }
 
 // NewServicesFromConfig creates and initializes all services from configuration
@@ -65,6 +83,7 @@ func NewServicesFromConfig(
 	cfg *configtypes.Config, l *logger.Logger, mode health.Mode,
 ) (*Services, error) {
 	appCtx := context.Background()
+	storageClientFactory := makeStorageClientFactory(appCtx)
 
 	// Generate instance ID to be used by both task and health services
 	instanceID := shealth.GenerateInstanceID()
@@ -74,6 +93,8 @@ func NewServicesFromConfig(
 	var tasksRepository rtasks.ITasksRepository
 	var healthRepository rhealth.IHealthRepository
 	var authRepository rauth.IAuthRepository
+	var environmentsRepository renvironments.IEnvironmentsRepository
+	var provisioningsRepository provisioningsrepo.IProvisioningsRepository
 
 	switch strings.ToLower(cfg.Database.Type) {
 	case "cockroachdb":
@@ -128,9 +149,29 @@ func NewServicesFromConfig(
 			return nil, errors.Wrap(err, "error running auth migrations")
 		}
 
+		// Run database migrations for environments repository
+		if err := database.RunMigrationsForRepository(appCtx, l, db, "environments", ecrdbstore.GetEnvironmentsMigrations(), crdbmigrator.NewMigrator()); err != nil {
+			l.Error("failed to run environments migrations",
+				slog.Any("error", err),
+				slog.String("repository", "environments"),
+			)
+			return nil, errors.Wrap(err, "error running environments migrations")
+		}
+
+		// Run database migrations for provisionings repository
+		if err := database.RunMigrationsForRepository(appCtx, l, db, "provisionings", provcrdbstore.GetProvisioningsMigrations(), crdbmigrator.NewMigrator()); err != nil {
+			l.Error("failed to run provisionings migrations",
+				slog.Any("error", err),
+				slog.String("repository", "provisionings"),
+			)
+			return nil, errors.Wrap(err, "error running provisionings migrations")
+		}
+
 		healthRepository = hcrdbstore.NewHealthRepository(db)
 		clustersRepository = ccrdbstore.NewClustersRepository(db)
 		authRepository = authcrdbstore.NewAuthRepository(db)
+		environmentsRepository = ecrdbstore.NewEnvironmentsRepository(db)
+		provisioningsRepository = provcrdbstore.NewProvisioningsRepository(db)
 
 		tasksRepository = tcrdbstore.NewTasksRepository(db, tcrdbstore.Options{
 			HealthTimeout: time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
@@ -168,6 +209,8 @@ func NewServicesFromConfig(
 		healthRepository = hmemstore.NewHealthRepository()
 		clustersRepository = cmemstore.NewClustersRepository()
 		authRepository = authmemstore.NewAuthRepository()
+		environmentsRepository = ememstore.NewEnvironmentsRepository()
+		provisioningsRepository = provmemstore.NewProvisioningsRepository()
 
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
@@ -186,6 +229,12 @@ func NewServicesFromConfig(
 		return nil, errors.Wrap(err, "error creating DNS provider registry")
 	}
 
+	// Create the task log store based on configuration.
+	taskLogStore, err := newLogStore(appCtx, l, cfg, storageClientFactory)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating task log store")
+	}
+
 	// Create the task service.
 	// This service is responsible for managing tasks, which are used to perform
 	// operations like syncing clusters or DNS.
@@ -193,6 +242,7 @@ func NewServicesFromConfig(
 	taskService := stasks.NewService(
 		tasksRepository,
 		instanceID,
+		taskLogStore,
 		staskstypes.Options{
 			Workers:        cfg.Tasks.Workers,
 			WorkersEnabled: cfg.Tasks.Workers > 0,
@@ -274,6 +324,140 @@ func NewServicesFromConfig(
 		BootstrapSCIMToken:       cfg.Bootstrap.SCIMToken,
 	})
 
+	// Create the environments service.
+	environmentsService := senvironments.NewService(environmentsRepository)
+	if cfg.Secrets.GCPProject != "" {
+		if err := environmentsService.RegisterGCPResolver(
+			appCtx, cfg.Secrets.GCPProject, cfg.Secrets.Prefix,
+		); err != nil {
+			l.Error("failed to register GCP secret resolver",
+				slog.Any("error", err))
+			return nil, errors.Wrap(err, "error registering GCP secret resolver")
+		}
+	}
+
+	// Create the provisionings service (conditionally).
+	var provisioningsService *sprovisionings.Service
+	if cfg.Provisionings.Enabled {
+		defaultLifetime, err := time.ParseDuration(cfg.Provisionings.DefaultLifetime)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings default lifetime %q", cfg.Provisionings.DefaultLifetime)
+		}
+		lifetimeExtension, err := time.ParseDuration(cfg.Provisionings.LifetimeExtension)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings lifetime extension %q", cfg.Provisionings.LifetimeExtension)
+		}
+		gcWatcherInterval, err := time.ParseDuration(cfg.Provisionings.GCWatcherInterval)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings GC watcher interval %q", cfg.Provisionings.GCWatcherInterval)
+		}
+		artifactBackend := strings.ToLower(cfg.Provisionings.Artifacts.Backend)
+		if artifactBackend == "" {
+			artifactBackend = "repository"
+		}
+		switch artifactBackend {
+		case "repository", "gcs":
+		default:
+			return nil, fmt.Errorf("unsupported provisionings artifact backend: %s (must be 'repository' or 'gcs')", artifactBackend)
+		}
+
+		// Create the backend for terraform state storage.
+		var provBackend sprovtemplates.Backend
+		if cfg.Provisionings.GCSStateBucket != "" {
+			if cfg.Provisionings.GCSStateSAKeyPath == "" {
+				return nil, errors.New(
+					"provisionings.gcs_state_sa_key_path is required when gcs_state_bucket is set",
+				)
+			}
+			gcsClient, err := storageClientFactory()
+			if err != nil {
+				return nil, errors.Wrap(err, "create GCS client for provisioning state backend")
+			}
+			provBackend = sprovtemplates.NewGCSBackend(
+				gcsClient,
+				cfg.Provisionings.GCSStateBucket,
+				cfg.Provisionings.GCSStateSAKeyPath,
+			)
+		} else {
+			provBackend = sprovtemplates.NewLocalBackend()
+		}
+
+		var artifactStore sprovartifacts.Store
+		if cfg.Provisionings.Artifacts.GCSBucket != "" {
+			gcsClient, err := storageClientFactory()
+			if err != nil {
+				return nil, errors.Wrap(err, "create GCS client for provisioning artifacts")
+			}
+			artifactStore = sprovartifacts.NewGCSStore(
+				gcsClient,
+				cfg.Provisionings.Artifacts.GCSBucket,
+				cfg.Provisionings.Artifacts.GCSPrefix,
+			)
+		}
+		if artifactBackend == "gcs" && artifactStore == nil {
+			return nil, errors.New(
+				"provisionings.artifacts.gcs_bucket is required when artifacts.backend is set to gcs",
+			)
+		}
+		l.Info("using provisioning artifact backend",
+			slog.String("backend", artifactBackend),
+			slog.String("bucket", cfg.Provisionings.Artifacts.GCSBucket),
+			slog.String("prefix", cfg.Provisionings.Artifacts.GCSPrefix),
+		)
+
+		// Create hook infrastructure for post-provisioning actions.
+		hookRegistry := sprovhooks.NewRegistry()
+		hookSSHClient := sprovssh.NewSSHClient()
+		hookRegistry.Register("run-command",
+			sprovhooks.NewRunCommandExecutor(hookSSHClient),
+		)
+
+		// Register ssh-keys-setup executor if GCP project is configured.
+		if cfg.Provisionings.SSHKeysGCPProject != "" {
+			// TODO(golgeek): Close gcpProjectsClient on application shutdown.
+			// The compute.ProjectsClient has a Close() method that should be
+			// called during graceful shutdown.
+			gcpProjectsClient, gcpErr := sprovhooks.NewGCPProjectsClient(appCtx)
+			if gcpErr != nil {
+				return nil, errors.Wrap(gcpErr,
+					"create GCP projects client for SSH keys provider")
+			}
+			keysProvider := sprovhooks.NewGCPMetadataKeysProvider(
+				gcpProjectsClient, cfg.Provisionings.SSHKeysGCPProject, l,
+			)
+			hookRegistry.Register("ssh-keys-setup",
+				sprovhooks.NewSSHKeysSetupExecutor(hookSSHClient, keysProvider),
+			)
+		}
+
+		// cluster-register executor — clusters service satisfies ClusterRegistrar
+		// via Go structural typing (no import cycle).
+		hookRegistry.Register("cluster-register",
+			sprovhooks.NewClusterRegisterExecutor(clustersService),
+		)
+
+		hookOrchestrator := sprovhooks.NewOrchestrator(hookRegistry)
+
+		provisioningsService = sprovisionings.NewService(
+			provisioningsRepository,
+			environmentsService,
+			taskService,
+			sprovtypes.Options{
+				TemplatesDir:      cfg.Provisionings.TemplatesDir,
+				WorkingDirBase:    cfg.Provisionings.WorkingDirBase,
+				TofuBinary:        cfg.Provisionings.TofuBinary,
+				ArtifactBackend:   artifactBackend,
+				WorkersEnabled:    cfg.Tasks.Workers > 0,
+				DefaultLifetime:   defaultLifetime,
+				LifetimeExtension: lifetimeExtension,
+				GCWatcherInterval: gcWatcherInterval,
+			},
+			provBackend,
+			artifactStore,
+			hookOrchestrator,
+		)
+	}
+
 	// Configure Okta token validator if bearer authentication is configured
 	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
 	if authType == auth.AuthenticationTypeBearer && cfg.Api.Authentication.Bearer.OktaIssuer != "" {
@@ -294,22 +478,31 @@ func NewServicesFromConfig(
 	}
 
 	return &Services{
-		Task:     taskService,
-		Health:   healthService,
-		Clusters: clustersService,
-		DNS:      dnsService,
-		Auth:     authService,
+		Task:          taskService,
+		Health:        healthService,
+		Clusters:      clustersService,
+		DNS:           dnsService,
+		Auth:          authService,
+		Environments:  environmentsService,
+		Provisionings: provisioningsService,
 	}, nil
 }
 
 func (s *Services) ToSlice() []services.IService {
-	return []services.IService{
+	slice := []services.IService{
 		s.Task,
 		s.Health,
 		s.Clusters,
 		s.DNS,
 		s.Auth,
+		s.Environments,
 	}
+	// Provisionings service is optional, so we only add it to the slice
+	// if it's not nil.
+	if s.Provisionings != nil {
+		slice = append(slice, s.Provisionings)
+	}
+	return slice
 }
 
 // NewAuthenticatorFromConfig creates the appropriate authenticator based on configuration.
@@ -354,5 +547,59 @@ func NewAuthenticatorFromConfig(
 
 	default:
 		return nil, fmt.Errorf("invalid authentication type: %s (must be 'disabled', 'jwt', or 'bearer')", cfg.Api.Authentication.Type)
+	}
+}
+
+// newLogStore creates a log store based on the task log configuration.
+func newLogStore(
+	ctx context.Context,
+	l *logger.Logger,
+	cfg *configtypes.Config,
+	storageClientFactory func() (*storage.Client, error),
+) (logstore.ILogStore, error) {
+	backend := strings.ToLower(cfg.Tasks.Logs.Backend)
+	switch backend {
+	case "memory", "":
+		l.Info("using in-memory task log store")
+		return logstore.NewMemoryLogStore(), nil
+
+	case "gcs":
+		if cfg.Tasks.Logs.GCSBucket == "" {
+			return nil, fmt.Errorf("tasks.logs.gcs_bucket is required when backend=gcs")
+		}
+		client, err := storageClientFactory()
+		if err != nil {
+			return nil, errors.Wrap(err, "create GCS client for task logs")
+		}
+		prefix := cfg.Tasks.Logs.GCSPrefix
+		if prefix == "" {
+			prefix = "tasks"
+		}
+		l.Info("using GCS task log store",
+			slog.String("bucket", cfg.Tasks.Logs.GCSBucket),
+			slog.String("prefix", prefix),
+		)
+		return logstore.NewGCSLogStore(client, cfg.Tasks.Logs.GCSBucket, prefix), nil
+
+	case "noop":
+		l.Info("using no-op task log store (logs discarded)")
+		return logstore.NewNoopLogStore(), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported task log backend: %s (must be 'memory', 'gcs', or 'noop')", backend)
+	}
+}
+
+func makeStorageClientFactory(ctx context.Context) func() (*storage.Client, error) {
+	var (
+		once   sync.Once
+		client *storage.Client
+		err    error
+	)
+	return func() (*storage.Client, error) {
+		once.Do(func() {
+			client, err = storage.NewClient(ctx)
+		})
+		return client, err
 	}
 }

@@ -12,6 +12,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/cmd/roachprod-centralized/utils/logstore",
         "//pkg/util/uuid",
     ],
 )

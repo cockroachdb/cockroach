@@ -36,6 +36,7 @@ import (
 	"github.com/marusama/semaphore"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/maps"
+	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	cloudbilling "google.golang.org/api/cloudbilling/v1beta"
 	"google.golang.org/api/option"
@@ -187,12 +188,22 @@ func NewProvider(options ...Option) (*Provider, error) {
 
 	// If withSDKSupport is enabled, initialize the GCE clients.
 	if p.withSDKSupport {
-		creds, _, err := roachprodutil.GetGCECredentials(
-			context.Background(),
-			roachprodutil.IAPTokenSourceOptions{},
-		)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get credentials")
+
+		var err error
+		var creds *google.Credentials
+		if p.credentialsFile != "" {
+			creds, err = loadGCPCredentials(p.credentialsFile)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get credentials from credentialsFile")
+			}
+		} else {
+			creds, _, err = roachprodutil.GetGCECredentials(
+				context.Background(),
+				roachprodutil.IAPTokenSourceOptions{},
+			)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get credentials")
+			}
 		}
 
 		instancesClient, err := compute.NewInstancesRESTClient(
@@ -217,9 +228,9 @@ func NewProvider(options ...Option) (*Provider, error) {
 		// If the DNS provider was initialized in this function (with the default one using gcloud),
 		// update it to use the SDK version.
 		if dnsProviderInitializedInInit {
-			p.dnsProvider, err = NewSDKDNSProvider(
-				(&SDKDNSProviderOpts{}).NewFromGCEDNSProviderOpts(p.dnsProviderOpts),
-			)
+			sdkDNSOpts := (&SDKDNSProviderOpts{}).NewFromGCEDNSProviderOpts(p.dnsProviderOpts)
+			sdkDNSOpts.CredentialsFile = p.credentialsFile
+			p.dnsProvider, err = NewSDKDNSProvider(sdkDNSOpts)
 			if err != nil {
 				return nil, errors.Wrap(err, "unable to init dns client")
 			}
@@ -227,6 +238,29 @@ func NewProvider(options ...Option) (*Provider, error) {
 	}
 
 	return p, nil
+}
+
+// loadGCPCredentials loads GCP service account credentials from the given
+// file path. Only credentials of type "service_account" are accepted; other
+// credential types (e.g. authorized_user, external_account) are rejected to
+// avoid loading unexpected credential configurations from a tampered file.
+func loadGCPCredentials(credentialsFile string) (*google.Credentials, error) {
+	if credentialsFile == "" {
+		return nil, errors.New("credentials file path is empty")
+	}
+
+	data, err := os.ReadFile(credentialsFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read credentials file %q", credentialsFile)
+	}
+	creds, err := google.CredentialsFromJSONWithType(
+		context.Background(), data, google.ServiceAccount,
+		"https://www.googleapis.com/auth/cloud-platform",
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse service account credentials from %q", credentialsFile)
+	}
+	return creds, nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -502,16 +536,18 @@ type Provider struct {
 
 	// ComputeClients
 	withSDKSupport                 bool
+	credentialsFile                string
 	computeInstancesClient         *compute.InstancesClient
 	computeInstanceTemplatesClient *compute.InstanceTemplatesClient
 }
 
 type dnsOpts struct {
-	DNSProject    string
-	PublicZone    string
-	PublicDomain  string
-	ManagedZone   string
-	ManagedDomain string
+	DNSProject      string
+	PublicZone      string
+	PublicDomain    string
+	ManagedZone     string
+	ManagedDomain   string
+	CredentialsFile string
 }
 
 func NewDNSProviderDefaultOptions() dnsOpts {

@@ -55,6 +55,11 @@ type Config struct {
 	InstanceHealthTimeoutSeconds int `env:"INSTANCE_HEALTH_TIMEOUT_SECONDS" default:"3" description:"Timeout in seconds to consider an instance healthy"`
 	Tasks                        struct {
 		Workers int `env:"WORKERS" default:"1" description:"Number of workers processing tasks"`
+		Logs    struct {
+			Backend   string `env:"BACKEND" default:"memory" description:"Log store backend (memory, gcs, noop)"`
+			GCSBucket string `env:"GCS_BUCKET" default:"" description:"GCS bucket for task logs"`
+			GCSPrefix string `env:"GCS_PREFIX" default:"tasks" description:"GCS object prefix for task logs"`
+		} `env:"LOGS" description:"Task log storage configuration"`
 	} `env:"TASKS" description:"Tasks configuration"`
 	Database struct {
 		URL         string `env:"URL" default:"" description:"Database connection URL"`
@@ -67,6 +72,27 @@ type Config struct {
 	Bootstrap      struct {
 		SCIMToken string `env:"SCIM_TOKEN" default:"" description:"Bootstrap SCIM service account token (used on first startup when no service accounts exist)"`
 	} `env:"BOOTSTRAP" description:"Bootstrap configuration for initial setup"`
+	Secrets struct {
+		GCPProject string `env:"GCP_PROJECT" default:"" description:"GCP project for auto-writing secrets to Secret Manager"`
+		Prefix     string `env:"PREFIX" default:"" description:"Optional prefix for secrets written to Secret Manager"`
+	} `env:"SECRETS" description:"Secret management configuration"`
+	Provisionings struct {
+		Enabled           bool   `env:"ENABLED" default:"false" description:"Enable terraform provisioning"`
+		TemplatesDir      string `env:"TEMPLATES_DIR" default:"" description:"Path to terraform templates directory"`
+		WorkingDirBase    string `env:"WORKING_DIR_BASE" default:"/tmp/roachprod-provisionings" description:"Base dir for terraform working dirs"`
+		TofuBinary        string `env:"TOFU_BINARY" default:"tofu" description:"Path to OpenTofu binary"`
+		GCSStateBucket    string `env:"GCS_STATE_BUCKET" default:"" description:"GCS bucket for terraform state backend"`
+		GCSStateSAKeyPath string `env:"GCS_STATE_SA_KEY_PATH" default:"" description:"Path to SA key JSON for GCS state backend auth"`
+		Artifacts         struct {
+			Backend   string `env:"BACKEND" default:"repository" description:"Provisioning artifact storage backend (repository, gcs)"`
+			GCSBucket string `env:"GCS_BUCKET" default:"" description:"GCS bucket for provisioning artifacts"`
+			GCSPrefix string `env:"GCS_PREFIX" default:"artifacts/provisionings" description:"GCS object prefix for provisioning artifacts"`
+		} `env:"ARTIFACTS" description:"Provisioning artifact storage configuration"`
+		DefaultLifetime   string `env:"DEFAULT_LIFETIME" default:"12h" description:"Default provisioning lifetime when template doesn't specify one"`
+		LifetimeExtension string `env:"LIFETIME_EXTENSION" default:"12h" description:"Amount to extend lifetime by"`
+		GCWatcherInterval string `env:"GC_WATCHER_INTERVAL" default:"5m" description:"Interval for GC watcher polling"`
+		SSHKeysGCPProject string `env:"SSH_KEYS_GCP_PROJECT" default:"" description:"GCP project for SSH keys metadata lookup"`
+	} `env:"PROVISIONINGS" description:"Terraform provisioning configuration"`
 }
 
 // CloudProvider represents a cloud provider configuration.

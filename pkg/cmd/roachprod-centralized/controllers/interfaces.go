@@ -7,6 +7,7 @@ package controllers
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gin-gonic/gin"
 )
 
@@ -59,4 +60,14 @@ type IPaginatedResult interface {
 	IResultDTO
 	// GetPaginationMetadata returns the pagination information for list responses.
 	GetPaginationMetadata() *PaginationMetadata
+}
+
+// ITaskResult extends IResultDTO for responses that include a task reference.
+// When a result DTO implements this interface, the Render method will automatically
+// extract and populate the task_id field in the API response.
+type ITaskResult interface {
+	IResultDTO
+	// GetTaskID returns the ID of the task created as part of this operation,
+	// or nil if no task was created.
+	GetTaskID() *uuid.UUID
 }

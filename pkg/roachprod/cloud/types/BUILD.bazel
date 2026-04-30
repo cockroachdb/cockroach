@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "types",
@@ -11,5 +11,15 @@ go_library(
         "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
+    ],
+)
+
+go_test(
+    name = "types_test",
+    srcs = ["types_test.go"],
+    embed = [":types"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//assert",
     ],
 )

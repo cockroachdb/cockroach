@@ -220,6 +220,74 @@ Tasks flow through a simple state machine:
 
 **Note**: Failed tasks are not automatically retried. Retry logic must be implemented at the application level.
 
+## Linkage vs Locking
+
+The tasks model separates two different concerns:
+
+- `reference`: soft-link to a domain entity (for example, `provisionings#<uuid>`)
+- `concurrency_key`: worker lock scope used for execution mutual exclusion
+
+This keeps domain coordination logic independent from worker-level locking.
+
+### Data Model and Indexes
+
+Relevant `tasks` table columns:
+
+- `reference VARCHAR(512) NULL`
+- `concurrency_key VARCHAR(512) NULL`
+
+Relevant indexes:
+
+- `idx_tasks_reference` (partial index on `reference IS NOT NULL`) for service lookups
+- `idx_tasks_concurrency_key_running_unique` (unique partial index on `concurrency_key` where `state='running'`)
+
+Effect:
+
+- multiple tasks can be `pending` for the same key
+- at most one task can be `running` for the same `concurrency_key`
+
+### Runtime Behavior
+
+When a task is created through `CreateTask()`:
+
+1. If `concurrency_key` is already set, it is preserved.
+2. If empty, the service calls `ResolveConcurrencyKey()`.
+3. If the resolved key is non-empty, it is persisted to `concurrency_key`.
+
+Default behavior in base `tasks.Task`:
+
+- `ResolveConcurrencyKey()` returns `Type`
+- this gives one-running-task-per-type locking by default
+
+Task types can override this:
+
+- return a per-entity key for finer lock scope
+- return empty string to opt out of lock-key auto-population
+
+At claim time, workers filter candidates to avoid keys that already have a
+running task. A unique index also protects race windows across concurrent
+claimers.
+
+### Current Usage Patterns
+
+- Provisioning tasks (`provision`/`destroy`):
+  - set `reference = "provisionings#<uuid>"`
+  - override `ResolveConcurrencyKey()` to return the same per-provisioning key
+  - result: one running provisioning task per provisioning, while different provisionings run in parallel
+
+- `public_dns_manage_records`:
+  - overrides `ResolveConcurrencyKey()` to return empty string
+  - result: multiple record-batch tasks can run concurrently
+
+- Other task types:
+  - use default per-type locking unless they override `ResolveConcurrencyKey()`
+
+### Guidance for New Task Types
+
+- Use `reference` for domain linkage, filtering, and audit.
+- Use `concurrency_key` (via `ResolveConcurrencyKey()`) for execution lock policy.
+- Do not use `reference` to encode lock behavior.
+
 ## Creating a New Task Type
 
 ### Step 1: Define the Task Struct
@@ -627,4 +695,4 @@ tasksService := NewService(repo, instanceID, Options{
 
 ---
 
-*Last Updated: October 2, 2025*
+*Last Updated: February 17, 2026*

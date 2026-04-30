@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -63,7 +64,7 @@ func (r *CRDBTasksRepo) GetTasks(
 	qb := filters.NewSQLQueryBuilderWithTypeHint(
 		reflect.TypeOf(tasks.Task{}),
 	)
-	baseSelectQuery := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error FROM tasks"
+	baseSelectQuery := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key FROM tasks"
 	baseCountQuery := "SELECT count(*) FROM tasks"
 
 	// Default sort: creation_datetime DESC
@@ -118,7 +119,7 @@ func (r *CRDBTasksRepo) GetTasks(
 func (r *CRDBTasksRepo) GetTask(
 	ctx context.Context, l *logger.Logger, taskID uuid.UUID,
 ) (tasks.ITask, error) {
-	query := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error FROM tasks WHERE id = $1"
+	query := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key FROM tasks WHERE id = $1"
 
 	row := r.db.QueryRowContext(ctx, query, taskID.String())
 	task, err := r.scanTask(row)
@@ -135,8 +136,10 @@ func (r *CRDBTasksRepo) GetTask(
 // CreateTask creates a new task in the database.
 func (r *CRDBTasksRepo) CreateTask(ctx context.Context, l *logger.Logger, task tasks.ITask) error {
 	query := `
-		INSERT INTO tasks (id, type, state, consumer_id, creation_datetime, update_datetime, payload, error)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO tasks (
+			id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	now := timeutil.Now()
@@ -155,6 +158,18 @@ func (r *CRDBTasksRepo) CreateTask(ctx context.Context, l *logger.Logger, task t
 		payload = nil // Explicitly nil, not []byte(nil)
 	}
 
+	// Handle reference - use nil for tasks without a reference
+	var reference interface{}
+	if ref := task.GetReference(); ref != "" {
+		reference = ref
+	}
+
+	// Handle concurrency key - use nil for tasks without a key.
+	var concurrencyKey interface{}
+	if key := task.GetConcurrencyKey(); key != "" {
+		concurrencyKey = key
+	}
+
 	_, err := r.db.ExecContext(ctx, query,
 		task.GetID().String(),
 		task.GetType(),
@@ -162,8 +177,10 @@ func (r *CRDBTasksRepo) CreateTask(ctx context.Context, l *logger.Logger, task t
 		consumerID, // NULL for new tasks
 		task.GetCreationDatetime(),
 		task.GetUpdateDatetime(),
-		payload, // NULL for tasks without options, JSONB bytes otherwise
-		nil,     // Error is NULL for new tasks
+		payload,   // NULL for tasks without options, JSONB bytes otherwise
+		nil,       // Error is NULL for new tasks
+		reference, // NULL for tasks without a foreign reference
+		concurrencyKey,
 	)
 
 	if err != nil {
@@ -219,6 +236,34 @@ func (r *CRDBTasksRepo) UpdateError(
 	return nil
 }
 
+// UpdatePayload replaces the serialized payload for a task.
+func (r *CRDBTasksRepo) UpdatePayload(
+	ctx context.Context, l *logger.Logger, taskID uuid.UUID, payload []byte,
+) error {
+	query := "UPDATE tasks SET payload = $1, update_datetime = $2 WHERE id = $3"
+
+	var p interface{}
+	if len(payload) > 0 {
+		p = payload
+	}
+
+	result, err := r.db.ExecContext(ctx, query, p, timeutil.Now(), taskID.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to update task payload")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return rtasks.ErrTaskNotFound
+	}
+
+	return nil
+}
+
 // GetStatistics returns task statistics grouped by state.
 func (r *CRDBTasksRepo) GetStatistics(
 	ctx context.Context, l *logger.Logger,
@@ -257,23 +302,36 @@ func (r *CRDBTasksRepo) GetStatistics(
 }
 
 // PurgeTasks deletes tasks that are in the specified state and older than the given duration.
+// Returns the IDs of tasks that were purged.
 func (r *CRDBTasksRepo) PurgeTasks(
 	ctx context.Context, l *logger.Logger, olderThan time.Duration, state tasks.TaskState,
-) (int, error) {
-	query := "DELETE FROM tasks WHERE state = $1 AND update_datetime < $2"
+) ([]uuid.UUID, error) {
+	query := "DELETE FROM tasks WHERE state = $1 AND update_datetime < $2 RETURNING id"
 	cutoff := timeutil.Now().Add(-olderThan)
 
-	result, err := r.db.ExecContext(ctx, query, string(state), cutoff)
+	rows, err := r.db.QueryContext(ctx, query, string(state), cutoff)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to purge tasks")
+		return nil, errors.Wrap(err, "purge tasks")
+	}
+	defer rows.Close()
+
+	var purgedIDs []uuid.UUID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "scan purged task ID")
+		}
+		taskID, err := uuid.FromString(id)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse purged task ID")
+		}
+		purgedIDs = append(purgedIDs, taskID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate purged task IDs")
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to get purged count")
-	}
-
-	return int(rowsAffected), nil
+	return purgedIDs, nil
 }
 
 // GetTasksForProcessing implements distributed task processing with fixed interval polling.
@@ -304,21 +362,32 @@ func (r *CRDBTasksRepo) GetTasksForProcessing(
 	}
 }
 
-// claimNextTask atomically claims the next pending task.
+// claimNextTask atomically claims the next pending or yielded task.
+// Both pending and yielded tasks compete fairly by update_datetime so that
+// children created just before a parent yields are naturally scheduled first.
 func (r *CRDBTasksRepo) claimNextTask(
 	ctx context.Context, l *logger.Logger, instanceID string,
 ) (tasks.ITask, bool, error) {
 	query := `
-		UPDATE tasks
-		SET state = $1, consumer_id = $2, update_datetime = $3
-		WHERE id = (
-			SELECT id FROM tasks
-			WHERE state = $4
-			ORDER BY creation_datetime
-			LIMIT 1
-		)
-		RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error
-	`
+			UPDATE tasks
+			SET state = $1, consumer_id = $2, update_datetime = $3
+			WHERE id = (
+				SELECT candidate.id FROM tasks AS candidate
+				WHERE candidate.state IN ($4, $6)
+				AND (
+					candidate.concurrency_key IS NULL
+					OR NOT EXISTS (
+						SELECT 1
+						FROM tasks AS running
+						WHERE running.concurrency_key = candidate.concurrency_key
+						AND running.state = $5
+					)
+				)
+				ORDER BY candidate.update_datetime
+				LIMIT 1
+			)
+			RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key
+		`
 
 	now := timeutil.Now()
 	row := r.db.QueryRowContext(ctx, query,
@@ -326,6 +395,8 @@ func (r *CRDBTasksRepo) claimNextTask(
 		instanceID,
 		now,
 		string(tasks.TaskStatePending),
+		string(tasks.TaskStateRunning),
+		string(tasks.TaskStateYielded),
 	)
 
 	task, err := r.scanTask(row)
@@ -333,10 +404,27 @@ func (r *CRDBTasksRepo) claimNextTask(
 		if errors.Is(err, gosql.ErrNoRows) {
 			return nil, false, nil // No tasks available
 		}
+		// Another worker won the per-key running lock.
+		if isConcurrencyKeyRunningConflict(err) {
+			l.Debug("skipping task claim due to running task lock",
+				slog.String("instance_id", instanceID),
+				slog.Any("error", err),
+			)
+			return nil, false, nil
+		}
 		return nil, false, errors.Wrap(err, "failed to claim task")
 	}
 
 	return task, true, nil
+}
+
+// isConcurrencyKeyRunningConflict reports whether err is a UNIQUE violation from
+// idx_tasks_concurrency_key_running_unique.
+func isConcurrencyKeyRunningConflict(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate key value") &&
+		(strings.Contains(msg, "idx_tasks_concurrency_key_running_unique") ||
+			strings.Contains(msg, "idx_tasks_reference_running_unique"))
 }
 
 // cleanupStaleTasks removes tasks whose consumer (worker) is no longer healthy.
@@ -389,7 +477,7 @@ func (r *CRDBTasksRepo) GetMostRecentCompletedTaskOfType(
 	ctx context.Context, l *logger.Logger, taskType string,
 ) (tasks.ITask, error) {
 	query := `
-		SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error
+		SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key
 		FROM tasks
 		WHERE type = $1 AND state = $2
 		ORDER BY update_datetime DESC
@@ -421,8 +509,21 @@ func (r *CRDBTasksRepo) scanTask(
 	var creationTime, updateTime time.Time
 	var payload []byte
 	var taskError gosql.NullString
+	var reference gosql.NullString
+	var concurrencyKey gosql.NullString
 
-	err := scanner.Scan(&id, &taskType, &state, &consumerID, &creationTime, &updateTime, &payload, &taskError)
+	err := scanner.Scan(
+		&id,
+		&taskType,
+		&state,
+		&consumerID,
+		&creationTime,
+		&updateTime,
+		&payload,
+		&taskError,
+		&reference,
+		&concurrencyKey,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -443,6 +544,12 @@ func (r *CRDBTasksRepo) scanTask(
 	}
 	if taskError.Valid {
 		task.Error = taskError.String
+	}
+	if reference.Valid {
+		task.Reference = reference.String
+	}
+	if concurrencyKey.Valid {
+		task.ConcurrencyKey = concurrencyKey.String
 	}
 
 	return task, nil

@@ -48,6 +48,14 @@ const (
 	CLIENT_USERAGENT = "roachprod-client/" + CLIENT_VERSION
 )
 
+// apiResponse is the generic API response wrapper matching the server's
+// ApiResponse JSON structure.
+type apiResponse[T any] struct {
+	Data   T      `json:"data,omitempty"`
+	TaskID string `json:"task_id,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 var (
 	// ErrDisabled is returned when an operation is attempted on a disabled client.
 	ErrDisabled = errors.New("centralized API client is disabled")

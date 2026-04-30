@@ -83,6 +83,8 @@ type Cluster struct {
 	CostPerHour float64
 
 	CloudProviders []string
+
+	ManagedByProvisioning bool `json:"managed_by_provisioning,omitempty"`
 }
 
 // Clouds returns the names of all of the various cloud providers used
@@ -116,6 +118,21 @@ func (c *Cluster) GCAt() time.Time {
 	// taking the GC time into account to accurately reflect when the cluster
 	// will be destroyed.
 	return c.ExpiresAt().Add(time.Hour - 1).Truncate(time.Hour)
+}
+
+// IsProvisioningManaged returns true if this cluster should be treated as
+// provisioning-managed. It prefers the persisted field when true, and falls
+// back to VM labels for backward compatibility with already-persisted rows.
+func (c *Cluster) IsProvisioningManaged() bool {
+	if c.ManagedByProvisioning {
+		return true
+	}
+	for _, m := range c.VMs {
+		if m.Labels[vm.TagProvisioningIdentifier] != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // LifetimeRemaining TODO(peter): document

@@ -116,6 +116,8 @@ func (s *MemTasksRepo) CreateTask(ctx context.Context, l *logger.Logger, task ta
 }
 
 // UpdateState updates the state of a task in the in-memory tasks map.
+// When a task transitions to yielded, it is re-enqueued for processing
+// via a goroutine to avoid blocking the unbuffered channel under the lock.
 func (s *MemTasksRepo) UpdateState(
 	ctx context.Context, l *logger.Logger, taskID uuid.UUID, state tasks.TaskState,
 ) error {
@@ -125,6 +127,13 @@ func (s *MemTasksRepo) UpdateState(
 		return rtasks.ErrTaskNotFound
 	}
 	s.tasks[taskID].SetState(state)
+	s.tasks[taskID].SetUpdateDatetime(timeutil.Now())
+
+	if state == tasks.TaskStateYielded && s._fireEvents.Load() {
+		go func() {
+			s._tasksQueuedForProcessing <- taskID
+		}()
+	}
 	return nil
 }
 
@@ -138,6 +147,20 @@ func (s *MemTasksRepo) UpdateError(
 		return rtasks.ErrTaskNotFound
 	}
 	s.tasks[taskID].SetError(errorMsg)
+	return nil
+}
+
+// UpdatePayload replaces the serialized payload for a task.
+func (s *MemTasksRepo) UpdatePayload(
+	ctx context.Context, l *logger.Logger, taskID uuid.UUID, payload []byte,
+) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if _, ok := s.tasks[taskID]; !ok {
+		return rtasks.ErrTaskNotFound
+	}
+	_ = s.tasks[taskID].SetPayload(payload)
+	s.tasks[taskID].SetUpdateDatetime(timeutil.Now())
 	return nil
 }
 
@@ -168,27 +191,25 @@ func (s *MemTasksRepo) GetStatistics(
 
 // PurgeTasks deletes tasks from the in-memory tasks map that are
 // from the specified state and older than the specified duration.
+// Returns the IDs of tasks that were purged.
 func (s *MemTasksRepo) PurgeTasks(
 	ctx context.Context, l *logger.Logger, olderThan time.Duration, state tasks.TaskState,
-) (int, error) {
+) ([]uuid.UUID, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	deleted := 0
+	var purgedIDs []uuid.UUID
 	for _, task := range s.tasks {
-
-		// We only delete tasks that have been processed
 		if task.GetState() != state {
 			continue
 		}
-
 		if timeutil.Since(task.GetUpdateDatetime()) > olderThan {
+			purgedIDs = append(purgedIDs, task.GetID())
 			delete(s.tasks, task.GetID())
-			deleted++
 		}
 	}
 
-	return deleted, nil
+	return purgedIDs, nil
 }
 
 // GetTasksForProcessing returns tasks that are pending. The tasks are sent
@@ -253,12 +274,13 @@ func (s *MemTasksRepo) GetMostRecentCompletedTaskOfType(
 }
 
 // maybeEnqueueTaskForProcessing queues a task for processing if it is pending
-// and the _fireEvents flag is set (aka GetTasksForProcessing() was called).
+// or yielded and the _fireEvents flag is set (aka GetTasksForProcessing() was called).
 func (s *MemTasksRepo) maybeEnqueueTaskForProcessing(task tasks.ITask) {
 	if !s._fireEvents.Load() {
 		return
 	}
-	if task.GetState() != tasks.TaskStatePending {
+	state := task.GetState()
+	if state != tasks.TaskStatePending && state != tasks.TaskStateYielded {
 		return
 	}
 	s._tasksQueuedForProcessing <- task.GetID()

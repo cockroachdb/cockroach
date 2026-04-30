@@ -123,11 +123,12 @@ func NewDNSProviderWithExec(execFn ExecFn, opts DNSProviderOpts) *dnsProvider {
 
 // DNSProviderOpts are the options for the DNS provider.
 type DNSProviderOpts struct {
-	DNSProject    string
-	PublicZone    string
-	PublicDomain  string
-	ManagedZone   string
-	ManagedDomain string
+	DNSProject      string
+	PublicZone      string
+	PublicDomain    string
+	ManagedZone     string
+	ManagedDomain   string
+	CredentialsFile string
 }
 
 // NewFromGCEDNSProviderOpts creates a new DNSProviderOpts from a gce.dnsOpts.

@@ -91,6 +91,7 @@ func UpdateTaskMetrics(
 	allStates := []mtasks.TaskState{
 		mtasks.TaskStatePending,
 		mtasks.TaskStateRunning,
+		mtasks.TaskStateYielded,
 		mtasks.TaskStateDone,
 		mtasks.TaskStateFailed,
 	}

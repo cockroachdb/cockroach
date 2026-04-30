@@ -41,6 +41,15 @@ Tasks:
   # For production, use multiple workers based on load:
   # Workers: 5
 
+# Provisioning configuration
+Provisionings:
+  Artifacts:
+    Backend: repository  # Use repository-backed artifacts locally
+    # For production on Cloud Run:
+    # Backend: gcs
+    # GCSBucket: "your-provisioning-artifacts-bucket"
+    # GCSPrefix: "artifacts/provisionings"
+
 # Cloud provider configuration
 # Add your cloud providers here. Multiple providers of the same type are supported.
 CloudProviders:
