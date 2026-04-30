@@ -11,85 +11,80 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 )
 
-// BenchmarkVirtualTableQueries is a benchmark for the crdb_internal virtual tables.
-// It is used to test the performance of the crdb_internal virtual tables used by
-// SHOW CREATE ALL ROUTINES, SHOW CREATE ALL TRIGGERS, and scheduled telemetry logging.
-// Limit the number of iterations to 20x to avoid timing out on CI.
-// benchmark-ci: benchtime=20x
-func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
-func init() {
-	reg.Register("VirtualTableQueries", []RoundTripBenchTestCase{
-		// This benchmark should perform exactly one kv operation to fetch all of
-		// the descriptors.
-		{
-			Name: "select crdb_internal.tables with 1 fk",
-			Setup: `
+var virtualTableQueriesCases = []RoundTripBenchTestCase{
+	// This benchmark should perform exactly one kv operation to fetch all of
+	// the descriptors.
+	{
+		Name: "select crdb_internal.tables with 1 fk",
+		Setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
-			Stmt: `SELECT * FROM "".crdb_internal.tables`,
-		},
-		{
-			// We expect this to perform exactly one kv operation to fetch all of
-			// the descriptors.
-			Name: "select crdb_internal.invalid_objects with 1 fk",
-			Setup: `
+		Stmt: `SELECT * FROM "".crdb_internal.tables`,
+	},
+	// We expect this to perform exactly one kv operation to fetch all of
+	// the descriptors.
+	{
+		Name: "select crdb_internal.invalid_objects with 1 fk",
+		Setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 `,
-			Stmt: `SELECT * FROM "".crdb_internal.invalid_objects`,
-		},
-		// This checks that descriptors are still cached after they are written. We
-		// expect the second and third selects not to go to KV because the
-		// descriptors were cached after the first lookup.
-		{
-			Name: "virtual table cache with schema change",
-			Setup: `
+		Stmt: `SELECT * FROM "".crdb_internal.invalid_objects`,
+	},
+	// This checks that descriptors are still cached after they are written. We
+	// expect the second and third selects not to go to KV because the
+	// descriptors were cached after the first lookup.
+	{
+		Name: "virtual table cache with schema change",
+		Setup: `
 SET autocommit_before_ddl = false;
 SET create_table_with_schema_locked = false;
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT);`,
-			Stmt: `
+		Stmt: `
 SELECT * FROM crdb_internal.tables;
 ALTER TABLE t1 ADD COLUMN j INT;
 SELECT * FROM crdb_internal.table_columns;
 CREATE INDEX idx ON t2 (j);
 SELECT * FROM crdb_internal.index_columns;`,
-			Reset: "RESET autocommit_before_ddl;" +
-				"RESET create_table_with_schema_locked;",
-		},
-		// This checks that catalog point lookups following a virtual table scan
-		// access cached descriptors.
-		{
-			Name: "virtual table cache with point lookups",
-			Setup: `
+		Reset: "RESET autocommit_before_ddl;" +
+			"RESET create_table_with_schema_locked;",
+	},
+	// This checks that catalog point lookups following a virtual table scan
+	// access cached descriptors.
+	{
+		Name: "virtual table cache with point lookups",
+		Setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT);`,
-			Stmt: `
+		Stmt: `
 SELECT * FROM crdb_internal.tables;
 SELECT * FROM t1;
 SELECT * FROM t2;`,
-		},
-		// This test checks the performance of the crdb_internal virtual tables used by
-		// SHOW CREATE ALL ROUTINES.
-		{
-			Name:  "show_create_all_routines",
-			Setup: buildNFunctions(100),
-			Stmt:  `SHOW CREATE ALL ROUTINES;`,
-		},
-		// This test checks the performance of the crdb_internal virtual tables used by
-		// SHOW CREATE ALL TRIGGERS.
-		{
-			Name:    "show_create_all_triggers",
-			SetupEx: buildNTablesWithTriggers(100),
-			Stmt:    `SHOW CREATE ALL TRIGGERS;`,
-		},
-		// This test checks the performance of the query to capture index usage
-		// stats that is executed by scheduled telemetry logging.
-		{
-			Name:    "capture_index_usage_stats",
-			SetupEx: buildNTablesWithIndexes(20, 5),
-			Stmt:    scheduledlogging.CaptureIndexUsageStatsStmt,
-		},
-	})
+	},
+	{
+		Name:  "show_create_all_routines",
+		Setup: buildNFunctions(100),
+		Stmt:  `SHOW CREATE ALL ROUTINES;`,
+	},
+	{
+		Name:    "show_create_all_triggers",
+		SetupEx: buildNTablesWithTriggers(100),
+		Stmt:    `SHOW CREATE ALL TRIGGERS;`,
+	},
+	{
+		Name:    "capture_index_usage_stats",
+		SetupEx: buildNTablesWithIndexes(20, 5),
+		Stmt:    scheduledlogging.CaptureIndexUsageStatsStmt,
+	},
+}
+
+// benchmark-ci: benchtime=20x
+func BenchmarkVirtualTableQueries(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, virtualTableQueriesCases, defaultCC)
+}
+
+func TestBenchmarkExpectation_VirtualTableQueries(t *testing.T) {
+	runExpectation(t, "VirtualTableQueries", virtualTableQueriesCases, defaultCC)
 }

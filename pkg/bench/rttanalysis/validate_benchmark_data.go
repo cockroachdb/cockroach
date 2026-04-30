@@ -12,19 +12,19 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -56,44 +56,60 @@ var (
 		"if set, expectations that are not a range get a ±1 tolerance")
 )
 
-// RunBenchmarkExpectationTests runs tests to validate or rewrite the contents
-// of the benchmark expectations file.
-func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
+// runExpectation is the entry point for each per-group test function. It
+// handles common skips and delegates to runBenchmarkExpectationTest.
+func runExpectation(
+	t *testing.T, groupName string, cases []RoundTripBenchTestCase, cc ClusterConstructor,
+) {
+	defer jobs.TestingSetIDsToIgnore(map[jobspb.JobID]struct{}{3001: {}, 3002: {}})()
+	skip.UnderDuress(t)
+	skip.UnderShort(t)
+	if runtime.GOARCH == "s390x" {
+		skip.IgnoreLint(t, "test prone to crashing under s390x (see #154317)")
+	}
+	runBenchmarkExpectationTest(t, groupName, cases, cc)
+}
+
+// runBenchmarkExpectationTest runs one benchmark group's test cases and
+// validates (or rewrites) the results against the expectations file.
+//
+// When using --rewrite, each test group reads, merges, and writes the shared
+// expectations file independently. Run all groups sequentially (the default)
+// to avoid file races.
+//
+// TODO(butler): create the cluster once per group and reuse it across test
+// cases to reduce test runtime.
+func runBenchmarkExpectationTest(
+	t *testing.T, groupName string, cases []RoundTripBenchTestCase, cc ClusterConstructor,
+) {
 	if metamorphic.IsMetamorphicBuild() {
 		execTestSubprocess(t)
 		return
 	}
 
-	// Only create the scope after we've checked if we need to exec the subprocess.
 	scope := log.Scope(t)
 	defer scope.Close(t)
 
 	defer func() {
 		if t.Failed() {
 			t.Log("see the -rewrite flag to re-run the benchmarks and adjust the expectations")
-			t.Log("usage: ./dev test --rewrite pkg/bench/rttanalysis -f=TestBenchmarkExpectation/ --test-args '-rewrite-iterations=N'")
+			t.Log("usage: ./dev test --rewrite pkg/bench/rttanalysis -f=TestBenchmarkExpectation_ --test-args '-rewrite-iterations=N'")
 		}
 	}()
 
 	var results resultSet
-	var wg sync.WaitGroup
-	concurrency := min(4, ((system.NumCPU()-1)/r.numNodes)+1) //arbitrary
-	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
-	for b, cases := range r.r {
-		wg.Add(1)
-		go func(b string, cases []RoundTripBenchTestCase) {
-			defer wg.Done()
-			t.Run(b, func(t *testing.T) {
-				runs := 1
-				if isRewrite {
-					runs = *rewriteIterations
-				}
-				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs, limiter)
-			})
-		}(b, cases)
+	runs := 1
+	if isRewrite {
+		runs = *rewriteIterations
 	}
-	wg.Wait()
+
+	skip.UnderMetamorphic(t, "changes the RTTs")
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			runRoundTripBenchmarkTestCase(t, scope, &results, tc, cc, runs, groupName)
+		})
+	}
 
 	if isRewrite {
 		writeExpectationsFile(t,
@@ -195,31 +211,21 @@ func execTestSubprocess(t *testing.T) {
 }
 
 type resultSet struct {
-	mu struct {
-		syncutil.Mutex
-		results []benchmarkResult
-	}
+	results []benchmarkResult
 }
 
 func (s *resultSet) add(result benchmarkResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.results = append(s.mu.results, result)
+	s.results = append(s.results, result)
 }
 
 func (s *resultSet) iterate(f func(res benchmarkResult)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, res := range s.mu.results {
+	for _, res := range s.results {
 		f(res)
 	}
 }
 
-func (s *resultSet) toSlice() (res []benchmarkResult) {
-	s.iterate(func(result benchmarkResult) {
-		res = append(res, result)
-	})
-	return res
+func (s *resultSet) toSlice() []benchmarkResult {
+	return s.results
 }
 
 func resultsToExpectations(t *testing.T, results []benchmarkResult) benchmarkExpectations {

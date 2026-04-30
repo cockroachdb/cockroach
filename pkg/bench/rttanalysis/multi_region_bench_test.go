@@ -20,9 +20,7 @@ import (
 
 const numNodes = 4
 
-// RunRoundTripBenchmarkMultiRegion sets up a multi-region db run the RoundTripBenchTestCase test cases
-// and counts how many round trips the Stmt specified by the test case performs.
-var multiRegionReg = NewRegistry(numNodes, MakeClusterConstructor(func(
+var multiRegionCC = MakeClusterConstructor(func(
 	tb testing.TB, knobs base.TestingKnobs,
 ) (*gosql.DB, *gosql.DB, func()) {
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -53,9 +51,7 @@ var multiRegionReg = NewRegistry(numNodes, MakeClusterConstructor(func(
 		cleanup()
 		testuserCleanup()
 	}
-}))
-
-func TestMultiRegionBenchmarkExpectation(t *testing.T) { multiRegionReg.RunExpectations(t) }
+})
 
 const (
 	multipleTableFixture = `
@@ -74,7 +70,6 @@ CREATE TABLE test42 (p int) LOCALITY REGIONAL BY TABLE IN "us-east2";
 `
 )
 
-// multipleTableFixtures creates multiple tables with different localities.
 func multipleTableFixtures(n int) string {
 	b := strings.Builder{}
 
@@ -105,58 +100,58 @@ USE test;`)
 	return b.String()
 }
 
-// BenchmarkAlterRegions is a benchmark for adding and dropping regions in a multi-region database.
-// benchmark-ci: benchtime=20x
-func BenchmarkAlterRegions(b *testing.B) { multiRegionReg.Run(b) }
-func init() {
-	multiRegionReg.Register("AlterRegions", []RoundTripBenchTestCase{
-		{
-			Name:  "alter empty database add region",
-			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1"`,
-			Stmt:  `ALTER DATABASE test ADD REGION "us-east2"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter empty database drop region",
-			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
-			Stmt:  `ALTER DATABASE test DROP REGION "us-east2"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter populated database drop region",
-			Setup: multipleTableFixture,
-			Stmt:  `ALTER DATABASE test DROP REGION "us-east3"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter populated database add region",
-			Setup: multipleTableFixture,
-			Stmt:  `ALTER DATABASE test ADD REGION "us-east4"`,
-			Reset: "DROP DATABASE test",
-		},
-	})
+var alterRegionsCases = []RoundTripBenchTestCase{
+	{
+		Name:  "alter empty database add region",
+		Setup: `CREATE DATABASE test PRIMARY REGION "us-east1"`,
+		Stmt:  `ALTER DATABASE test ADD REGION "us-east2"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter empty database drop region",
+		Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+		Stmt:  `ALTER DATABASE test DROP REGION "us-east2"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter populated database drop region",
+		Setup: multipleTableFixture,
+		Stmt:  `ALTER DATABASE test DROP REGION "us-east3"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter populated database add region",
+		Setup: multipleTableFixture,
+		Stmt:  `ALTER DATABASE test ADD REGION "us-east4"`,
+		Reset: "DROP DATABASE test",
+	},
 }
 
-// BenchmarkAlterPrimaryRegion is a benchmark for setting and altering the primary region of a multi-region database.
 // benchmark-ci: benchtime=20x
-func BenchmarkAlterPrimaryRegion(b *testing.B) { multiRegionReg.Run(b) }
-func init() {
-	multiRegionReg.Register("AlterPrimaryRegion", []RoundTripBenchTestCase{
-		{
-			Name:  "alter empty database set initial primary region",
-			Setup: "CREATE DATABASE test",
-			Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east1"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter empty database alter primary region",
-			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
-			Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east2"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter populated database set initial primary region",
-			Setup: `
+func BenchmarkAlterRegions(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, alterRegionsCases, multiRegionCC)
+}
+
+func TestMultiRegionBenchmarkExpectation_AlterRegions(t *testing.T) {
+	runExpectation(t, "AlterRegions", alterRegionsCases, multiRegionCC)
+}
+
+var alterPrimaryRegionCases = []RoundTripBenchTestCase{
+	{
+		Name:  "alter empty database set initial primary region",
+		Setup: "CREATE DATABASE test",
+		Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east1"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter empty database alter primary region",
+		Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+		Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east2"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter populated database set initial primary region",
+		Setup: `
 CREATE DATABASE test;
 USE test;
 CREATE TABLE test1 (p int);
@@ -170,142 +165,162 @@ CREATE TABLE test8 (p int);
 CREATE TABLE test9 (p int);
 CREATE TABLE test10 (p int);
 `,
-			Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east1"`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter populated database alter primary region",
-			Setup: multipleTableFixture,
-			Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east2"`,
-			Reset: "DROP DATABASE test",
-		},
-	})
+		Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east1"`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter populated database alter primary region",
+		Setup: multipleTableFixture,
+		Stmt:  `ALTER DATABASE test SET PRIMARY REGION "us-east2"`,
+		Reset: "DROP DATABASE test",
+	},
 }
 
-// BenchmarkAlterSurvivalGoals is a benchmark for altering the survival goals of a multi-region database.
 // benchmark-ci: benchtime=20x
-func BenchmarkAlterSurvivalGoals(b *testing.B) { multiRegionReg.Run(b) }
-func init() {
-	multiRegionReg.Register("AlterSurvivalGoals", []RoundTripBenchTestCase{
-		{
-			Name:  "alter empty database from zone to region",
-			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3"`,
-			Stmt:  `ALTER DATABASE test SURVIVE REGION FAILURE`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter empty database from region to zone",
-			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3" SURVIVE ZONE FAILURE`,
-			Stmt:  `ALTER DATABASE test SURVIVE ZONE FAILURE`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "alter populated database from zone to region",
-			Setup: multipleTableFixture,
-			Stmt:  `ALTER DATABASE test SURVIVE REGION FAILURE`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter populated database from region to zone",
-			Setup: multipleTableFixture + `
+func BenchmarkAlterPrimaryRegion(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, alterPrimaryRegionCases, multiRegionCC)
+}
+
+func TestMultiRegionBenchmarkExpectation_AlterPrimaryRegion(t *testing.T) {
+	runExpectation(t, "AlterPrimaryRegion", alterPrimaryRegionCases, multiRegionCC)
+}
+
+var alterSurvivalGoalsCases = []RoundTripBenchTestCase{
+	{
+		Name:  "alter empty database from zone to region",
+		Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3"`,
+		Stmt:  `ALTER DATABASE test SURVIVE REGION FAILURE`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter empty database from region to zone",
+		Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3" SURVIVE ZONE FAILURE`,
+		Stmt:  `ALTER DATABASE test SURVIVE ZONE FAILURE`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "alter populated database from zone to region",
+		Setup: multipleTableFixture,
+		Stmt:  `ALTER DATABASE test SURVIVE REGION FAILURE`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter populated database from region to zone",
+		Setup: multipleTableFixture + `
 ALTER DATABASE test SURVIVE REGION FAILURE`,
-			Stmt:  `ALTER DATABASE test SURVIVE ZONE FAILURE`,
-			Reset: "DROP DATABASE test",
-		},
-	})
+		Stmt:  `ALTER DATABASE test SURVIVE ZONE FAILURE`,
+		Reset: "DROP DATABASE test",
+	},
 }
 
-// BenchmarkAlterTableLocality is a benchmark for altering the locality of a table in a multi-region database.
 // benchmark-ci: benchtime=20x
-func BenchmarkAlterTableLocality(b *testing.B) { multiRegionReg.Run(b) }
-func init() {
-	multiRegionReg.Register("AlterTableLocality", []RoundTripBenchTestCase{
-		{
-			Name: "alter from global to regional by table",
-			Setup: `
+func BenchmarkAlterSurvivalGoals(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, alterSurvivalGoalsCases, multiRegionCC)
+}
+
+func TestMultiRegionBenchmarkExpectation_AlterSurvivalGoals(t *testing.T) {
+	runExpectation(t, "AlterSurvivalGoals", alterSurvivalGoalsCases, multiRegionCC)
+}
+
+var alterTableLocalityCases = []RoundTripBenchTestCase{
+	{
+		Name: "alter from global to regional by table",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL IN PRIMARY REGION`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter from regional by table to global",
-			Setup: `
+		Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL IN PRIMARY REGION`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter from regional by table to global",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL IN PRIMARY REGION;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter from global to rbr",
-			Setup: `
+		Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter from global to rbr",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter from regional by table to rbr",
-			Setup: `
+		Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter from regional by table to rbr",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter from rbr to regional by table",
-			Setup: `
+		Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter from rbr to regional by table",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name: "alter from rbr to global",
-			Setup: `
+		Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name: "alter from rbr to global",
+		Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
 CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 `,
-			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
-			Reset: "DROP DATABASE test",
-		},
-	})
+		Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
+		Reset: "DROP DATABASE test",
+	},
 }
 
-// BenchmarkMultiRegionVirtualTableQueries is a benchmark for virtual table queries in a multi-region setup.
 // benchmark-ci: benchtime=20x
-func BenchmarkMultiRegionVirtualTableQueries(b *testing.B) { multiRegionReg.Run(b) }
-func init() {
-	multiRegionReg.Register("MultiRegionVirtualTableQueries", []RoundTripBenchTestCase{
-		{
-			Name:  "select from crdb_internal.zones (10 tables)",
-			Setup: multipleTableFixtures(10),
-			Stmt:  `select * from crdb_internal.zones`,
-			Reset: "DROP DATABASE test",
-		},
-		{
-			Name:  "select from crdb_internal.zones (50 tables)",
-			Setup: multipleTableFixtures(50),
-			Stmt:  `select * from crdb_internal.zones`,
-			Reset: "DROP DATABASE test",
-		},
+func BenchmarkAlterTableLocality(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, alterTableLocalityCases, multiRegionCC)
+}
 
-		{
-			Name:  "select from crdb_internal.zones (100 tables)",
-			Setup: multipleTableFixtures(100),
-			Stmt:  `select * from crdb_internal.zones`,
-			Reset: "DROP DATABASE test",
-		},
-	})
+func TestMultiRegionBenchmarkExpectation_AlterTableLocality(t *testing.T) {
+	runExpectation(t, "AlterTableLocality", alterTableLocalityCases, multiRegionCC)
+}
+
+var multiRegionVirtualTableQueriesCases = []RoundTripBenchTestCase{
+	{
+		Name:  "select from crdb_internal.zones (10 tables)",
+		Setup: multipleTableFixtures(10),
+		Stmt:  `select * from crdb_internal.zones`,
+		Reset: "DROP DATABASE test",
+	},
+	{
+		Name:  "select from crdb_internal.zones (50 tables)",
+		Setup: multipleTableFixtures(50),
+		Stmt:  `select * from crdb_internal.zones`,
+		Reset: "DROP DATABASE test",
+	},
+
+	{
+		Name:  "select from crdb_internal.zones (100 tables)",
+		Setup: multipleTableFixtures(100),
+		Stmt:  `select * from crdb_internal.zones`,
+		Reset: "DROP DATABASE test",
+	},
+}
+
+// benchmark-ci: benchtime=20x
+func BenchmarkMultiRegionVirtualTableQueries(b *testing.B) {
+	runCPUMemBenchmark(bShim{b}, multiRegionVirtualTableQueriesCases, multiRegionCC)
+}
+
+func TestMultiRegionBenchmarkExpectation_MultiRegionVirtualTableQueries(t *testing.T) {
+	runExpectation(t, "MultiRegionVirtualTableQueries", multiRegionVirtualTableQueriesCases, multiRegionCC)
 }
