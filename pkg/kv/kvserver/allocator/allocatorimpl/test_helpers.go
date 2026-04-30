@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -43,6 +44,11 @@ func CreateTestAllocatorWithKnobs(
 	allocSyncKnobs *mmaintegration.TestingKnobs,
 ) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	st := cluster.MakeTestingClusterSettings()
+	// Pin the rebalancing mode to the pre-MMA default so tests that pre-date
+	// MMA do not inadvertently exercise the multi-metric paths through the
+	// auto-resolved default. Tests that intentionally exercise MMA should
+	// override this setting explicitly after construction.
+	kvserverbase.OverrideLoadBasedRebalancingMode(ctx, &st.SV, kvserverbase.LBRebalancingLeasesAndReplicas)
 	stopper, g, manual, storePool, _, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, deterministic,
 		func() int { return numNodes },

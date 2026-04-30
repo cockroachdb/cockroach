@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -55,6 +56,15 @@ import (
 func MakeAllocatorSync(
 	sp *storepool.StorePool, st *cluster.Settings,
 ) *mmaintegration.AllocatorSync {
+	// Pin the rebalancing mode to the pre-MMA default so tests that pre-date
+	// MMA do not inadvertently exercise multi-metric paths through the
+	// auto-resolved default. The MMA prototype state in these tests is not
+	// initialized via SetStore, so any code path that reaches it would panic.
+	if st != nil {
+		kvserverbase.OverrideLoadBasedRebalancingMode(
+			context.Background(), &st.SV, kvserverbase.LBRebalancingLeasesAndReplicas,
+		)
+	}
 	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st, nil)
