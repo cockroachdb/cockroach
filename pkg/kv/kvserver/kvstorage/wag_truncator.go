@@ -277,7 +277,13 @@ func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
 func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
 ) error {
-	if err := storage.ClearRangeWithHeuristic(
+	if logstore.UseRaftLogSingleDelete {
+		if err := clearRaftLogWithSingleDelete(
+			ctx, raft.RO, raft.WO, rangeID, lastIndex,
+		); err != nil {
+			return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
+		}
+	} else if err := storage.ClearRangeWithHeuristic(
 		ctx, raft.RO, raft.WO,
 		keys.RaftLogPrefix(rangeID),           /* start */
 		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
@@ -304,4 +310,40 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	// We must sync the sideloaded storage after truncation to avoid leaking the
 	// files in case of a node crash.
 	return ss.Sync()
+}
+
+// clearRaftLogWithSingleDelete clears raft log entries using SingleDelete for
+// each point key. Unlike the regular truncation path, this always uses point
+// deletions and never falls back to a range tombstone, because range tombstones
+// are incompatible with SingleDelete.
+func clearRaftLogWithSingleDelete(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	rangeID roachpb.RangeID,
+	lastIndex kvpb.RaftIndex,
+) error {
+	start := keys.RaftLogPrefix(rangeID)
+	end := keys.RaftLogKey(rangeID, lastIndex+1)
+	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
+	for ; ok; ok, err = iter.NextEngineKey() {
+		key, kerr := iter.UnsafeEngineKey()
+		if kerr != nil {
+			return kerr
+		}
+		if err := w.SingleClearEngineKey(key); err != nil {
+			return err
+		}
+	}
+	return err
 }
