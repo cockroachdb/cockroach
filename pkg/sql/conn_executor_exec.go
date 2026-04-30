@@ -4744,7 +4744,7 @@ func (ex *connExecutor) execWithProfiling(
 		}
 		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
 		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+			stmtNoConstants, ex.sessionData().Database,
 		)
 		labels := make([]string, 0, 12)
 		labels = append(labels,

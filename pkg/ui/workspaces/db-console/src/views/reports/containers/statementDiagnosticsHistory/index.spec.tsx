@@ -34,7 +34,6 @@ describe("StatementDiagnosticsHistoryView", () => {
       key: {
         key_data: {
           query: "SELECT * FROM table",
-          implicit_txn: true,
         },
       },
     })),
@@ -114,7 +113,6 @@ describe("StatementDiagnosticsHistoryView", () => {
       key: {
         key_data: {
           query: "SELECT * FROM table",
-          implicit_txn: true,
         },
       },
     };

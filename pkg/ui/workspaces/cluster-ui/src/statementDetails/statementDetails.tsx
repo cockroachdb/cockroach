@@ -189,13 +189,6 @@ function NodeLink(props: { node: string }) {
   );
 }
 
-function renderTransactionType(implicitTxn: boolean) {
-  if (implicitTxn) {
-    return "Implicit";
-  }
-  return "Explicit";
-}
-
 export function StatementDetails(
   props: StatementDetailsProps,
 ): React.ReactElement {
@@ -436,7 +429,6 @@ export function StatementDetails(
       full_scan_count: fullScanCount,
       vec_count: vecCount,
       total_count: totalCount,
-      implicit_txn: implicitTxn,
     } = statementDetails.statement.metadata;
     const statementStatisticsPerAggregatedTs =
       statementDetails.statement_statistics_per_aggregated_ts;
@@ -593,10 +585,6 @@ export function StatementDetails(
                 <SummaryCardItem
                   label="Vectorized execution?"
                   value={RenderCount(vecCount, totalCount)}
-                />
-                <SummaryCardItem
-                  label="Transaction type"
-                  value={renderTransactionType(implicitTxn)}
                 />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
               </SummaryCard>

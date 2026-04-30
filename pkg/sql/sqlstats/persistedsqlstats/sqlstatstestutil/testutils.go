@@ -216,7 +216,6 @@ func InsertMockedIntoSystemStmtActivity(
 			StmtType:       "",
 			AppNames:       []string{stmtStats.Key.App},
 			Databases:      []string{stmtStats.Key.Database},
-			ImplicitTxn:    false,
 			DistSQLCount:   0,
 			FullScanCount:  0,
 			VecCount:       0,

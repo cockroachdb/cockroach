@@ -377,7 +377,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		statements          []string
 		fingerprints        []string
 		curFingerprintCount int64
-		implicit            bool
 	}
 
 	testCases := []tc{
@@ -389,7 +388,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 				"SELECT _",
 			},
 			curFingerprintCount: 2, /* 1 stmt + 1 txn */
-			implicit:            true,
 		},
 		{
 			statements: []string{
@@ -405,7 +403,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 				"COMMIT",
 			},
 			curFingerprintCount: 7, /* 4 stmt + 1 txn + prev count */
-			implicit:            false,
 		},
 		{
 			statements: []string{
@@ -421,7 +418,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 				"COMMIT",
 			},
 			curFingerprintCount: 7, /* prev count */
-			implicit:            false,
 		},
 		{
 			statements: []string{
@@ -439,7 +435,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 				"COMMIT",
 			},
 			curFingerprintCount: 13, /* 5 stmt + 1 txn + prev count */
-			implicit:            false,
 		},
 	}
 
@@ -480,11 +475,10 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		txnFingerprintIDHash := util.MakeFNV64()
 		statsCollector.StartTransaction()
 		for _, fingerprint := range testCase.fingerprints {
-			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
+			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, "defaultdb")
 			statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 				FingerprintID: stmtFingerprintID,
 				Query:         fingerprint,
-				ImplicitTxn:   testCase.implicit,
 			})
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
@@ -606,7 +600,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			// Collect stats for the simulated transaction.
 			txnFingerprintIDHash := util.MakeFNV64()
 			for _, fingerprint := range txn.stmtFingerprints {
-				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
+				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, "defaultdb")
 				statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 					FingerprintID: stmtFingerprintID,
 					Query:         fingerprint,

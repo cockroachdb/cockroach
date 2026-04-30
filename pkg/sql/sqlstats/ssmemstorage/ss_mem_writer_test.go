@@ -344,7 +344,6 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	stmt1Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(1),
 		Query:                    "SELECT * FROM table1",
-		ImplicitTxn:              true,
 		Database:                 "testdb",
 		TransactionFingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
@@ -352,7 +351,6 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	stmt2Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(2),
 		Query:                    "SELECT * FROM table2",
-		ImplicitTxn:              true,
 		Database:                 "testdb",
 		TransactionFingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
@@ -387,7 +385,6 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	stmt3Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(3),
 		Query:                    "SELECT * FROM table3",
-		ImplicitTxn:              true,
 		Database:                 "testdb",
 		TransactionFingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
@@ -411,7 +408,6 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	stmt4Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(4),
 		Query:                    "SELECT * FROM table4",
-		ImplicitTxn:              true,
 		Database:                 "testdb",
 		TransactionFingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
