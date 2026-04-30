@@ -1,0 +1,133 @@
+Branch split point: 44c386148e7 release: add update-workflow-branches command and TeamCity scripts (#159216)
+
+Pass 1: path-based (directories touched)...
+Pass 2: title-based (commit message keywords)...
+Pass 3: author-based (MMA team members)...
+Building merge order index...
+================================================================
+MMA Backport Candidates: master -> release-26.2
+================================================================
+
+Total MMA-related PRs on master since branch split: 60
+Already backported: 10
+Ignored (skipped):  50
+NOT YET backported: 0
+
+----------------------------------------------------------------
+PRs ignored (add/remove in IGNORED_PRS dict)
+----------------------------------------------------------------
+  #165450  4c123b411ff  kvnemesis: add MVCC GC operation to KVNemesis
+       reason: author-based: kvnemesis: add MVCC GC operation to KVNemesis
+  #166328  9fc2f395971  replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+       reason: author-based: replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+  #166419  7b2d2cff0dc  roachtest: enable Go execution traces in kv/restart/nodes=12
+       reason: author-based: roachtest: enable Go execution traces in kv/restart/nodes=12
+  #166421  630fc2d636f  roachtest: enable Go execution traces in kv/splits
+       reason: author-based: roachtest: enable Go execution traces in kv/splits
+  #166532  0e4c792e661  investigate: analyze heap profiles on OOM failures
+       reason: author-based: investigate: analyze heap profiles on OOM failures
+  #166423  7fdcb3c57fa  roachtest: add Datadog Logs link to GitHub issues
+       reason: author-based: roachtest: add Datadog Logs link to GitHub issues
+  #166560  3b786c5c307  tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+       reason: author-based: tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+  #166745  57c21590cc0  admission: plumb SQL CPU time token admission through SQLCPUProvider
+       reason: admission: plumb SQL CPU time token admission through SQLCPUProvider
+  #167051  3122e1b1742  asim: add sma-count and mma-only configs to skewed disk balance test
+       reason: already backported via #167468 (release-26.2: asim changes)
+  #166792  5f484ad0d8d  admission: integrate SQL CPU admission with CTT WorkQueue
+       reason: admission: integrate SQL CPU admission with CTT WorkQueue
+  #167110  72f5c45a5db  asim: document thrashing sources in skewed disk balance test
+       reason: already backported via #167468 (release-26.2: asim changes)
+  #167100  cc104061783  engflow-artifacts: rewrite protobuf parsing with proper schema
+       reason: author-based: engflow-artifacts: rewrite protobuf parsing with proper schema
+  #167211  043bbc66afc  CLAUDE.md: improve PR description guidance
+       reason: author-based: CLAUDE.md: improve PR description guidance
+  #166156  1d52a673164  intentresolver: chunk intent resolution to limit in-flight requests
+       reason: author-based: intentresolver: chunk intent resolution to limit in-flight requests
+  #166698  c2e82219150  kvserver: introduce stageDestroyReplica and pendingReplicaDestruction
+       reason: author-based: kvserver: introduce stageDestroyReplica and pendingReplicaDestruction
+  #166924  0c0f9c2bd16  server: use liveness cache for high-frequency scan callers
+       reason: author-based: server: use liveness cache for high-frequency scan callers
+  #167297  6394b41096b  intentresolver: expose intent budget constants as env vars
+       reason: author-based: intentresolver: expose intent budget constants as env vars
+  #166760  c279baa28e2  kvcoord: fix a potential persistent failure loop in `DistSender`
+       reason: author-based: kvcoord: fix a potential persistent failure loop in `DistSender`
+  #167289  461753032b1  kvserver: stop treating split/merge trigger errors as replica corruption
+       reason: author-based: kvserver: stop treating split/merge trigger errors as replica corruption
+  #167120  de52b5c9a99  timeutil: fix timer pool vs synctest incompatibility
+       reason: timeutil: fix timer pool vs synctest incompatibility
+  #167616  de13bf2c301  kvserver: skip TestStoreRangeSplitAndMergeWithGlobalReads under duress
+       reason: kvserver: skip TestStoreRangeSplitAndMergeWithGlobalReads under duress
+  #167655  a68374e2719  storeliveness: skip flaky multi-store tests under duress
+       reason: storeliveness: skip flaky multi-store tests under duress
+  #167463  57c74456a2b  docs: remove unused metrics.html
+       reason: docs: remove unused metrics.html
+  #166529  4a011da7d2e  sql: add WITH ZONE option to SHOW RANGES
+       reason: sql: add WITH ZONE option to SHOW RANGES
+  #167861  8b897c7f9dc  kvserver: improve store.capacity allocations
+       reason: kvserver: improve store.capacity allocations
+  #167927  42999aff1c1  sql: rename zone_config_conformant to zone_config_needs_split
+       reason: sql: rename zone_config_conformant to zone_config_needs_split
+  #167897  839d4a5a7cc  kvserverbase: add COCKROACH_DISABLE_MMA env var override
+       reason: already backported (b5f05189765, d3ea3080d22, 5bae83c8aac on release-26.2; cherry-picks lack PR ref)
+  #167295  f19780c8f0a  kvserver: remove ReplicaCorruptionError
+       reason: kvserver: remove ReplicaCorruptionError (follows ignored #167289)
+  #165577  a3ab149c214  storage: add MultiEngineCompactionScheduler
+       reason: storage: add MultiEngineCompactionScheduler
+  #167939  5ad75098f1b  allocator: disable follow-the-workload when MMA is enabled
+       reason: already backported via #168475 (release-26.2: allocator: disable follow-the-workload when MMA is enabled)
+  #168047  2058731abcf  kvserver: isolate subtests in TestReplicaLatchingOptimisticEvaluation…
+       reason: kvserver: isolate subtests in TestReplicaLatchingOptimisticEvaluation
+  #167989  a5419f09af4  roachtest: increase HTTP timeout in follower-reads test
+       reason: roachtest: increase HTTP timeout in follower-reads test
+  #168121  cd06503a6b5  roachtest: add CLAUDE.md with basic usage instructions
+       reason: roachtest: add CLAUDE.md with basic usage instructions
+  #168156  67790cf6e02  kvserver: deflake TestTenantCtx
+       reason: kvserver: deflake TestTenantCtx
+  #168243  2c3125fb1bc  roachtest: bump post-test assertion timeout to 20m
+       reason: roachtest: bump post-test assertion timeout to 20m
+  #168248  d721884544f  roachtest: extract artifact collection to artifactsutil
+       reason: roachtest: extract artifact collection to artifactsutil
+  #167920  e8766fc6d9e  roachtest: add WaitForFullReplication helper
+       reason: roachtest: add WaitForFullReplication helper
+  #168231  872d1c4c12c  admission: add local token reservation to SQLCPUHandle
+       reason: admission: add local token reservation to SQLCPUHandle
+  #168260  87c538de686  ui/cluster-ui: fix empty cluster settings page
+       reason: ui/cluster-ui: fix empty cluster settings page
+  #168298  eb8b75426e6  admission: introduce CPU time token AC mode setting
+       reason: admission: introduce CPU time token AC mode setting
+  #168452  8aca45b68b9  ci: fix lint_test panic in affected-targets unit test runs
+       reason: ci: fix lint_test panic in affected-targets unit test runs
+  #168444  17f510cfba0  ci: opt T-kv into auto-investigate for test failures
+       reason: ci: opt T-kv into auto-investigate for test failures
+  #168383  7b5db8f7a08  admission: add maxCPU burst qualification for resource groups
+       reason: admission: add maxCPU burst qualification for resource groups
+  #168261  79c8e71012c  ui/db-console: add "Changed only" filter to cluster settings page
+       reason: ui/db-console: add 'Changed only' filter to cluster settings page
+  #168438  8b6d3d2a14f  admission: rename from tenantID to groupID
+       reason: admission: rename from tenantID to groupID
+  #168439  6bf1e7400bb  admission: add resource group routing and per-group burst refill
+       reason: admission: add resource group routing and per-group burst refill
+  #168829  f4184f40c73  admission: add modeStrategy interface with serverlessStrategy
+       reason: admission: add modeStrategy interface with serverlessStrategy
+  #167696  51c340e4d27  roachtest/perturbation: simplify scoring to impact ratios
+       reason: roachtest/perturbation: simplify scoring to impact ratios
+  #167853  3a8907692f6  kvserver: add rate limiting for low-priority bulk read operations like TTL
+       reason: kvserver: add rate limiting for low-priority bulk read operations like TTL
+  #169195  0f45d1da541  admission: add composite groupKey type
+       reason: admission: add composite groupKey type
+
+----------------------------------------------------------------
+PRs already backported (for reference)
+----------------------------------------------------------------
+  #166076  d71ec96bd45  storeliveness: fix flaky TestTransportClusterSettingToggle
+  #166148  d8f2867dd26  allocator/mmaprototype: add test for non-voter WB rebalancing
+  #166422  3fecb16a94a  roachtest: bump user_login.timeout in follower-reads insufficient-quorum
+  #162182  7ae2fd949c0  mmaprototype: balance CPU on utilization
+  #166306  4324c93284f  server: add cluster setting to disable GC assist
+  #166418  a9516dda64e  roachtest: fix acceptance/cli/node-status quorum loss
+  #166531  9e4eb90c76d  sql: fix TestReadCommittedReadTimestampNotSteppedOnCommit for write buffering
+  #166669  3aa8ac691bc  singleflight,stop: fix trace.StartRegion crash with oversized strings
+  #166658  70c832b9804  perturbation: rate-limit backfill pre-fill to avoid OOM on target node
+  #167307  bcc11cc1ac4  kvserver: fix TestReplicaRemovalDuringCPut hang on failure
+
