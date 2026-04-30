@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataDrivenTest(t *testing.T) {
@@ -82,6 +84,80 @@ func TestDataDrivenTest(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+// TestStmtStatsQueryColumns verifies that the query, query_summary,
+// and database columns are populated in crdb_internal.cluster_statement_statistics
+// and in the persisted views that join with system.statements.
+func TestStmtStatsQueryColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				SynchronousSQLStats: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	appName := "TestStmtStatsQueryColumns"
+
+	// Execute a statement with a known app name and database.
+	execConn := s.SQLConn(t)
+	defer execConn.Close()
+	execDB := sqlutils.MakeSQLRunner(execConn)
+	execDB.Exec(t, "SET APPLICATION_NAME = $1", appName)
+	execDB.Exec(t, "CREATE DATABASE testdb")
+	execDB.Exec(t, "USE testdb")
+	execDB.Exec(t, "SELECT 1")
+
+	obsDB := sqlutils.MakeSQLRunner(conn)
+
+	// Verify in-memory cluster_statement_statistics has the new columns populated.
+	var query, querySummary, database string
+	obsDB.QueryRow(t,
+		`SELECT query, query_summary, database
+		 FROM crdb_internal.cluster_statement_statistics
+		 WHERE app_name = $1 AND query LIKE '%SELECT _'`, appName,
+	).Scan(&query, &querySummary, &database)
+
+	require.NotEmpty(t, query, "query column should be populated")
+	require.Contains(t, query, "SELECT")
+	require.NotEmpty(t, querySummary, "query_summary column should be populated")
+	require.Equal(t, "testdb", database, "database column should match the database used")
+
+	// Flush stats to disk so the persisted views have data.
+	s.SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
+
+	// Verify statement_statistics_persisted populates query/query_summary/database
+	// via the JOIN with system.statements.
+	var pQuery, pQuerySummary, pDatabase string
+	obsDB.QueryRow(t,
+		`SELECT query, query_summary, database
+		 FROM crdb_internal.statement_statistics_persisted
+		 WHERE app_name = $1 AND query LIKE '%SELECT _'`, appName,
+	).Scan(&pQuery, &pQuerySummary, &pDatabase)
+
+	require.NotEmpty(t, pQuery, "persisted: query column should be populated")
+	require.Contains(t, pQuery, "SELECT")
+	require.NotEmpty(t, pQuerySummary, "persisted: query_summary column should be populated")
+	require.Equal(t, "testdb", pDatabase, "persisted: database column should match")
+
+	// Verify the merged statement_statistics view also has the columns.
+	var mQuery, mQuerySummary, mDatabase string
+	obsDB.QueryRow(t,
+		`SELECT query, query_summary, database
+		 FROM crdb_internal.statement_statistics
+		 WHERE app_name = $1 AND query LIKE '%SELECT _'`, appName,
+	).Scan(&mQuery, &mQuerySummary, &mDatabase)
+
+	require.NotEmpty(t, mQuery, "merged view: query column should be populated")
+	require.NotEmpty(t, mQuerySummary, "merged view: query_summary column should be populated")
+	require.Equal(t, "testdb", mDatabase, "merged view: database column should match")
 }
 
 func GetStats(t *testing.T, conn *sqlutils.SQLRunner, appName string, dbName string) string {
