@@ -6035,44 +6035,20 @@ func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*op
 		{expectedCode, true},
 	})
 
-	// If the the TRUNCATE is not cascaded, then the operation can fail
-	// if foreign key references exist.
+	// A non-CASCADE TRUNCATE is rejected when an inbound foreign key references
+	// one of the truncated tables. Rather than checking for inbound FK
+	// dependencies, always allow the rejection as a potential outcome.
 	if expectedCode == pgcode.SuccessfulCompletion &&
 		stmt.DropBehavior != tree.DropCascade {
-		tableSet := map[string]struct{}{}
-		fkSet := map[string]struct{}{}
-		// Gather the set of tables handled by this statement, and
-		// any foreign keys that reference these tables.
-		for _, table := range stmt.Tables {
-			tableSet[table.FQString()] = struct{}{}
-			fkReferenceTables, err := og.getTableForeignKeyReferences(ctx, tx, &table)
-			if err != nil {
-				return nil, err
-			}
-			for _, fk := range fkReferenceTables {
-				fkSet[fk.FQString()] = struct{}{}
-			}
+		op.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		// Pre-v26.1 binaries returned Uncategorized for this rejection; the
+		// pgcode was changed in #154382.
+		versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+		if err != nil {
+			return nil, err
 		}
-		// Check if any of the foreign keys that reference these
-		// tables are not truncated. If they are, then the TRUNCATE
-		// will fail with an error.
-		for fk := range fkSet {
-			if _, hasTable := tableSet[fk]; !hasTable {
-				// In mixed version workloads, we can see either pgcode.Uncategorized
-				// (pre-v26.1) or pgcode.FeatureNotSupported (v26.1+) depending on which
-				// node handles the TRUNCATE. The pgcode was changed in #154382 (v26.1).
-				versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
-				if err != nil {
-					return nil, err
-				}
-				if versionBefore261 {
-					op.expectedExecErrors.add(pgcode.Uncategorized)
-					op.potentialExecErrors.add(pgcode.FeatureNotSupported)
-				} else {
-					op.expectedExecErrors.add(pgcode.FeatureNotSupported)
-				}
-				break
-			}
+		if versionBefore261 {
+			op.potentialExecErrors.add(pgcode.Uncategorized)
 		}
 	}
 	return op, nil
