@@ -1,40 +1,64 @@
 ---
-name: reduce-unoptimized-query-oracle
-description: Reduce an unoptimized-query-oracle test failure log to the simplest possible reproduction case. Use when you have unoptimized-query-oracle*.log files from a failed roachtest and need to find the minimal SQL to reproduce the bug.
+name: reduce-randomized-test
+description: Reduce a randomized SQL test failure (unoptimized-query-oracle, costfuzz, tlp, or sqlsmith) to the simplest possible reproduction case. Use when you have log files from a failed randomized roachtest and need to find the minimal SQL to reproduce the bug.
 disable-model-invocation: true
 ---
 
-# Reduce Unoptimized Query Oracle Test Failure
+# Reduce Randomized SQL Test Failure
 
-Reduce an unoptimized-query-oracle test failure log to the simplest possible
+Reduce a randomized SQL test failure log to the simplest possible
 reproduction case.
 
-The unoptimized-query-oracle roachtest runs a series of random SQL statements to
-create a random dataset, and then executes a random "Query of Interest" twice,
-with different optimization settings. If the two executions return different
-results, it indicates a bug in CockroachDB.
+This skill handles four randomized SQL roachtests:
+- **unoptimized-query-oracle**: Compares query results with optimized vs
+  unoptimized execution paths.
+- **costfuzz**: Compares query results with normal vs randomly perturbed
+  optimizer costs.
+- **tlp** (Ternary Logic Partitioning): Compares unpartitioned vs
+  partitioned query results.
+- **sqlsmith**: Generates random SQL to find internal errors, panics, and
+  crashes (no oracle comparison).
 
 ## When to Use
 
 Use this skill when:
-- You have a test failure from the unoptimized-query-oracle roachtest.
+- You have a test failure from one of the four randomized SQL roachtests.
 - You need to find the minimal SQL to reproduce the test failure.
 
-## Step 1: Locate artifacts
+## Test Type Reference
 
-**Ask the user where the artifacts directory is.**
+| Property | unoptimized-query-oracle | costfuzz | tlp | sqlsmith |
+|---|---|---|---|---|
+| Log files | `unoptimized-query-oracle{NNN}.log` | `costfuzz{NNN}.log` | `tlp{NNN}.log` | `sqlsmith.log` |
+| Failure log | `*.failure.log` | `*.failure.log` | (none) | (none) |
+| Multi-region? | Some variants | Some variants | Never | Some variants |
+| Demo nodes | 1 or 9 | 1 or 9 | 1 | 1 or 9 |
+| Oracle reduce mode | `-unoptimized-query-oracle` | `-costfuzz` | `-tlp` | N/A |
+| Error reduce mode | `-contains` | `-contains` | `-contains` | `-contains` |
+| Log tail structure | SET/RESET + query pairs | 4 stmts (control, SET seed, SET perturbation, perturbed) | 2 stmts (unpartitioned + partitioned) | 1 stmt (the failing one) |
+
+## Step 1: Determine Test Type and Locate Artifacts
+
+**Ask the user which test type they are reducing and where the artifacts
+directory is.**
 
 Find the relevant files in the artifacts directory:
-- **Test parameters**: `params.log` (the parameters from the roachtest)
-- **Test log**: `test.log` (the log from the roachtest)
-- **Failure log**: `failure*.log` (the failure log from the roachtest)
-- **Full SQL log**: `unoptimized-query-oracle*.log` (the SQL statements that led to failure)
-- **Query of interest log**: `unoptimized-query-oracle*.failure.log` (containing
-  the query of interest and possibly more information about the failure)
+
+- **Test parameters**: `params.log`
+- **Test log**: `test.log`
+- **Failure log**: `failure*.log`
+- **Full SQL log** (varies by test type):
+  - unoptimized-query-oracle: `unoptimized-query-oracle*.log`
+  - costfuzz: `costfuzz*.log`
+  - tlp: `tlp*.log`
+  - sqlsmith: `sqlsmith.log` (single file, not numbered)
+- **Query of interest log** (unoptimized-query-oracle and costfuzz only):
+  `{testname}*.failure.log` (contains the query of interest and possibly
+  more information about the failure)
 - **Cockroach log**: `logs/1.unredacted/cockroach.log` or
   `logs/unredacted/cockroach.log` (contains the git commit)
 
-## Step 2: Determine test configuration
+## Step 2: Determine Test Configuration
 
 Determine the git commit from `cockroach.log`:
 ```bash
@@ -71,10 +95,13 @@ Important environment variables include:
 But there might be more important environment variables, so best to get all of
 them.
 
-Determine if this is a multi-region test or single-region test by checking:
-- the test name (e.g., `seed-multi-region` in `test.log` indicates multi-region)
-- or the presence of `\connect` lines in the full SQL log
-If both of these are missing, it's a single-region test.
+Determine if this is a multi-region test or single-region test:
+- **tlp**: Always single-region.
+- **unoptimized-query-oracle / costfuzz**: Check the test name (e.g.,
+  `seed-multi-region` or `rand-multi-region` indicates multi-region), or
+  check for `\connect` lines in the full SQL log.
+- **sqlsmith**: Check the test name for `seed-multi-region`.
+- If none of the above indicators are present, it's a single-region test.
 
 ## Step 3: Check Out and Build
 
@@ -117,9 +144,10 @@ repository root for holding temp files.
 
 ## Step 5: Initial Reproduction
 
-Determine the correct demo command based on test type:
-- **Multi-region test**: Use `--nodes=9`
-- **Single-region test**: Omit `--nodes` option
+Determine the correct demo command based on test type and configuration:
+- **Multi-region test** (unoptimized-query-oracle, costfuzz, sqlsmith): Use
+  `--nodes=9`
+- **Single-region test** / **tlp**: Omit `--nodes` option
 
 Use a command like this to try reproducing the test failure from the full SQL
 log file. This command could take up to 20 minutes to finish.
@@ -129,19 +157,25 @@ log file. This command could take up to 20 minutes to finish.
 ```
 
 **Check that the output reproduces the test failure described in the failure
-log.** There are many possible failure modes. Look for one of the following,
-which should match the failure log:
+log.** The failure mode depends on the test type:
 
-1. **Different results** between the two executions of the "Query of Interest"
-   (which is the randomly generated SELECT statement repeated twice near the end
-   of the log, wrapped in various SET and RESET staements). These different
-   results could take the form of different result sets, or could also be an
-   error in one case and no error in the other case. This is an **"oracle"
-   failure**.
-2. Or, `internal error` or **assertion failure**. Note the error message for the
-   reduce step.
-3. Or, a **panic**. Note the error message for the reduce step.
-4. Or, a **timeout**. Note the statement that timed out.
+### unoptimized-query-oracle / costfuzz
+1. **Different results** between the two executions of the query (an
+   **"oracle" failure**). These could be different result sets, or an error
+   in one case and no error in the other.
+2. Or, `internal error` or **assertion failure**.
+3. Or, a **panic**.
+4. Or, a **timeout**.
+
+### tlp
+1. **Different results** between the unpartitioned and partitioned queries
+   (a **TLP mismatch**).
+2. Or, `internal error` or **assertion failure**.
+
+### sqlsmith
+1. `internal error` or **assertion failure**.
+2. Or, a **panic**.
+3. Or, a **node crash** (check node logs).
 
 ### Troubleshooting
 
@@ -150,7 +184,7 @@ tests. If no failure happens on the first run, try up to 10 times before
 concluding it doesn't reproduce.
 
 It can be helpful at this point to compare the output with the `failure*.log`
-which should show the failure from the original test run.
+(if one exists) which should show the failure from the original test run.
 
 **If the initial run fails to reproduce after 10 times, pause here and report to
 the user that the failure cannot be reproduced, and show the command that was
@@ -167,11 +201,25 @@ Build the reduce tool:
 
 ### Prepare the Full SQL Log File again
 
-For multi-region tests, remove `\connect` lines (they cause syntax errors in the
-`reduce` tool):
+For multi-region tests (unoptimized-query-oracle, costfuzz, sqlsmith), remove
+`\connect` lines (they cause syntax errors in the `reduce` tool):
 ```bash
 grep -v '^\\connect' <full-sql-log-file> > <cleaned-log>
 ```
+
+### Choose the Reduce Mode
+
+The reduce tool supports four mutually exclusive modes. Choose based on the
+test type and failure mode:
+
+**For oracle/mismatch failures (different results):**
+- unoptimized-query-oracle: use `-unoptimized-query-oracle`
+- costfuzz: use `-costfuzz`
+- tlp: use `-tlp`
+- sqlsmith: N/A (sqlsmith has no oracle comparison; always use `-contains`)
+
+**For internal errors / assertion failures / panics / crashes:**
+- All test types: use `-contains "<error-regex>"`
 
 ### Run Reduce
 
@@ -181,14 +229,24 @@ directory, because it looks for `./cockroach` in the current directory.
 Use the `-multi-region` option for multi-region tests, or omit it for
 single-region tests.
 
-**For "oracle" failures (different results):**
+**For oracle/mismatch failures:**
+
+unoptimized-query-oracle:
 ```bash
 ./bin/reduce -unoptimized-query-oracle -multi-region -chunk 25 -v -file <cleaned-log> 2>&1 | tee reduce-output.log
 ```
-The `-unoptimized-query-oracle` option checks whether the two executions of the
-"Query of Interest" produce the same results.
 
-**For internal errors/assertion failures/panics:**
+costfuzz:
+```bash
+./bin/reduce -costfuzz -multi-region -chunk 25 -v -file <cleaned-log> 2>&1 | tee reduce-output.log
+```
+
+tlp (always single-region):
+```bash
+./bin/reduce -tlp -chunk 25 -v -file <cleaned-log> 2>&1 | tee reduce-output.log
+```
+
+**For internal errors/assertion failures/panics (all test types):**
 ```bash
 ./bin/reduce -contains "<error-regex>" -multi-region -chunk 25 -v -file <cleaned-log> 2>&1 | tee reduce-output.log
 ```
@@ -219,11 +277,12 @@ the reduce tool itself, if the test failure is not reproducing.
 **IMPORTANT:** Many bugs are nondeterministic. Before manual simplification,
 create a reusable test script and determine the reproduction rate.
 
-Create a small test script (adjust as needed):
+### For error/panic/crash failures (all test types)
+
+Create a small test script:
 ```bash
 cat > test_repro.sh << 'EOF'
 #!/bin/bash
-# Test if reduced_v2.sql reproduces the error (exits on first success, up to 10 attempts)
 for i in {1..10}; do
   if ./cockroach demo --multitenant=false --nodes=9 --insecure \
      --set=errexit=false --no-example-database --format=tsv \
@@ -238,9 +297,40 @@ echo "FAILED"
 EOF
 chmod +x test_repro.sh
 ```
-For "oracle" failures, instead of checking for an error pattern, the test script
-probably needs to isolate and diff the results of the two executions of the
-"Query of Interest".
+
+### For oracle/mismatch failures
+
+For oracle failures, the test script needs to isolate and diff the results
+of the two query executions. The approach depends on the test type:
+
+**unoptimized-query-oracle:** The output contains sentinel-separated sections.
+Check if the unoptimized and optimized results differ:
+```bash
+cat > test_repro.sh << 'EOF'
+#!/bin/bash
+for i in {1..10}; do
+  output=$(./cockroach demo --multitenant=false --nodes=9 --insecure \
+     --set=errexit=false --no-example-database --format=tsv \
+     -f reduced_v2.sql 2>&1)
+  # Check for the sentinel-based difference or use a known error pattern
+  if echo "$output" | grep -q "<distinctive-pattern>"; then
+    echo "Run $i: REPRODUCED"
+    exit 0
+  else
+    echo "Run $i: no error"
+  fi
+done
+echo "FAILED"
+EOF
+chmod +x test_repro.sh
+```
+
+Alternatively, use the reduce tool itself as a test (it will report whether
+the input is "interesting"):
+```bash
+./bin/reduce -unoptimized-query-oracle -v -file reduced_v2.sql -goroutines 1 -chunk 0 2>&1 | head -5
+```
+If it says the original is interesting, the bug reproduces.
 
 Run the test script to determine the reproduction rate. It's not always 100%.
 
@@ -291,21 +381,44 @@ This reduces the number of permission checks.
 4. **Query joins** - Simplify WHERE clause
 5. **Columns from CREATE TABLE** - Remove columns not referenced in the failing query
 6. **Weird characters** - Remove or replace non-ASCII characters from names and data
-7. other SQL simplifications
+7. Other SQL simplifications
 
-**For "oracle" failures, when editing the Query of Interest, be sure to edit
-_BOTH_ copies of the Query of Interest so that they are identical.** Otherwise
-it won't be an apples-to-apples comparison when diffing the result sets.
+### Test-Type-Specific Simplification Tips
+
+**unoptimized-query-oracle:**
+- When editing the Query of Interest, be sure to edit _BOTH_ copies so they
+  are identical.
+- The `SET testing_optimizer_random_seed` value often cannot be changed, as it
+  determines which optimizer rules are disabled.
+- `SET testing_optimizer_disable_rule_probability` affects query plan selection.
+- Specific RESET/SET sequences for optimizer settings (distsql, vectorize)
+  are usually required.
+
+**costfuzz:**
+- When editing the query, be sure to edit _BOTH_ copies (control and
+  perturbed) so they are identical.
+- `SET testing_optimizer_random_seed` and `SET testing_optimizer_cost_perturbation`
+  are usually required.
+- `RESET testing_optimizer_random_seed` and `RESET testing_optimizer_cost_perturbation`
+  at the end are usually required.
+
+**tlp:**
+- The two queries (unpartitioned and partitioned) are NOT identical -- they
+  have different structures. Simplify them carefully, keeping the TLP
+  relationship intact.
+- If you need to simplify manually (outside the reduce tool), it's often
+  easier to focus on simplifying the unpartitioned query and the WHERE
+  predicate used for partitioning.
+
+**sqlsmith:**
+- There is no oracle comparison, so simplification focuses on keeping the
+  error/panic/crash reproducible.
+- Try removing statements from the middle of the log first.
+- The last statement in the log is usually the one that triggered the error.
 
 ### Common Required Elements
 
 These often cannot be removed:
-- **Optimizer random seed**: `SET testing_optimizer_random_seed = <value>` - this
-  specific value often cannot be changed, as it determines which optimizer rules
-  are disabled
-- **Optimizer rule probability**: `SET testing_optimizer_disable_rule_probability`
-  - affects query plan selection
-- Specific RESET/SET sequences for optimizer settings, such as distsql and vectorize
 - Certain indexes (affect query plans)
 - Multi-node setup (`--nodes=9`) for distributed query bugs (though try
   single-node first - it may work and is simpler)
