@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -121,6 +123,7 @@ func CreateUninitializedReplica(
 	ctx context.Context,
 	stateRW State,
 	raftRO RaftRO,
+	w *wag.Writer,
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
@@ -149,6 +152,7 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	_ = CreateUninitReplicaTODO
+	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate)
 	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
