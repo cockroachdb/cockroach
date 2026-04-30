@@ -31,6 +31,10 @@ minimal latency disruption and no manual intervention; supports
 For more details, see our [product overview](https://www.cockroachlabs.com/product/overview/), [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
 https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
 
+
+
+
+
 ## Docs
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
