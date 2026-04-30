@@ -210,6 +210,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					} else {
 						err = kvstorage.CreateUninitializedReplica(
 							ctx, kvstorage.WrapState(b.State()), kvstorage.RaftRO(tc.eng.LogEngine()),
+							b.WagWriter(),
 							1, /* StoreID */
 							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
 						)

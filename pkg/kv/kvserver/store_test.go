@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -123,8 +124,9 @@ type testStoreOpts struct {
 	// If createSystemRanges is not set, the store will have a single range. If
 	// set, the store will have all the system ranges that are generally created
 	// for a cluster at boostrap.
-	createSystemRanges bool
-	bootstrapVersion   roachpb.Version // defaults to TestingClusterVersion
+	createSystemRanges  bool
+	bootstrapVersion    roachpb.Version // defaults to TestingClusterVersion
+	useSeparatedEngines bool
 }
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
@@ -225,7 +227,14 @@ func createTestStoreWithoutStart(
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
 	cfg.SpanConfigsDisabled = true
-	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	var eng kvstorage.Engines
+	if opts.useSeparatedEngines {
+		eng = kvstorage.MakeSeparatedEnginesForTesting(
+			storage.NewDefaultInMemForTesting(), storage.NewDefaultInMemForTesting(),
+		)
+	} else {
+		eng = kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	}
 	stopper.AddCloser(&eng)
 	require.Nil(t, cfg.Transport)
 
@@ -4429,6 +4438,53 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.True(t, mark.Is(7))
+}
+
+// TestStoreGetOrCreateReplicaWritesWAGNode tests that creating an uninitialized
+// replica via getOrCreateReplica writes a WAG EventCreate node to the log
+// engine.
+func TestStoreGetOrCreateReplicaWritesWAGNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	cfg.TestingKnobs.DontCloseTimestamps = true
+	cfg.TestingKnobs.DisableMergeWaitForReplicasInit = true
+	store := createTestStoreWithConfig(
+		ctx, t, stopper, testStoreOpts{useSeparatedEngines: true}, &cfg,
+	)
+
+	id := roachpb.FullReplicaID{RangeID: 42, ReplicaID: 7}
+	repl, created, err := store.getOrCreateReplica(ctx, id, &roachpb.ReplicaDescriptor{
+		NodeID:    store.NodeID(),
+		StoreID:   store.StoreID(),
+		ReplicaID: id.ReplicaID,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	repl.raftMu.Unlock()
+
+	// Scan the log engine for WAG nodes and verify an EventCreate was written
+	// for the replica we just created.
+	var it wag.Iterator
+	var found bool
+	for _, node := range it.Iter(ctx, store.LogEngine()) {
+		for _, ev := range node.Events {
+			if ev.Addr.RangeID == id.RangeID {
+				require.Equal(t, wagpb.EventCreate, ev.Type)
+				require.Equal(t, id.ReplicaID, ev.Addr.ReplicaID)
+				require.EqualValues(t, 0, ev.Addr.Index)
+				found = true
+			}
+		}
+	}
+	require.NoError(t, it.Error())
+	require.True(t, found, "expected to find an EventCreate WAG node for r%d", id.RangeID)
 }
 
 // TestSplitPreApplyInitializesTruncatedState ensures that the Raft truncated
