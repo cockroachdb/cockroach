@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -160,6 +161,7 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		return str
 	}
 	var sb redact.StringBuilder
+	var paths []string
 	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
@@ -177,8 +179,10 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		if str == "" {
 			return nil
 		}
-		_, err := sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
+		idx := len(paths) + 1
+		_, err := sb.WriteString(fmt.Sprintf(">> sst %d:\n%s", idx, str))
 		require.NoError(t, err)
+		paths = append(paths, fmt.Sprintf("%05d.sst", idx))
 		return nil
 	}
 
@@ -186,8 +190,13 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		eng:      eng,
 		writeSST: writeSST,
 	}
+	if eng.Separated() {
+		sw.wagWriter = wag.MakeWriter(&wag.Seq{})
+	}
 	require.NoError(t, sw.prepareSnapApply(ctx, snapWrite{
 		sl:         sl.StateLoader,
+		replicaID:  id,
+		snapIndex:  100,
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
 		desc:       snapDesc,
@@ -198,6 +207,10 @@ func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 		},
 	}))
 	if eng.Separated() {
+		require.NoError(t, sw.testingFlushWAG(snapIngestion{
+			paths:      paths,
+			exciseSpan: snapDesc.KeySpan().AsRawSpanWithNoLocals(),
+		}))
 		sb.Printf(">> raft:\n%s", printBatch(sw.raftWO))
 	}
 
