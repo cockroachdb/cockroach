@@ -9,7 +9,7 @@
 
 //go:build gss
 
-package gssapiccl
+package gssapiauth
 
 import (
 	"context"

@@ -11,7 +11,6 @@ package ccl
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
@@ -23,6 +22,10 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
+	// TODO(ssd): gssapiauth is no longer CCL; relocate this blank import out
+	// of ccl_init.go to a more appropriate place (e.g. a server-level init
+	// point).
+	_ "github.com/cockroachdb/cockroach/pkg/security/gssapiauth"
 )
 
 // TestingEnableEnterprise is a no-op. It was deprecated when the core license

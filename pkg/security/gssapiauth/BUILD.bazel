@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 # keep
 go_library(
-    name = "gssapiccl",
+    name = "gssapiauth",
     srcs = select({
         "@io_bazel_rules_go//go/platform:linux": [
             "get_user.go",
@@ -17,7 +17,7 @@ go_library(
         "//conditions:default": [],
     }),
     cgo = True,
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/gssapiauth",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:linux": [
