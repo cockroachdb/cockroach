@@ -556,7 +556,6 @@ func TestConnectorRetriesError(t *testing.T) {
 		{codes.FailedPrecondition, true},
 	} {
 		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
-
 			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 			}
@@ -610,4 +609,65 @@ func TestConnectorRetriesError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConnectorGossipSubscriptionBreaksOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	s, err := rpc.NewServer(ctx, rpcContext)
+	require.NoError(t, err)
+
+	var gossipSubCalls atomic.Int32
+	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
+		gossipSubCalls.Add(1)
+		if err := stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get())); err != nil {
+			return err
+		}
+		errEvent := &kvpb.GossipSubscriptionEvent{
+			Error: kvpb.NewErrorf("subscription terminated due to slow consumption"),
+		}
+		if err := stream.Send(errEvent); err != nil {
+			return err
+		}
+		<-stream.Context().Done()
+		return stream.Context().Err()
+	}
+	kvpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	require.NoError(t, err)
+	stopper.AddCloser(stop.CloserFn(s.Stop))
+	err = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
+		<-stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(ln.Close())
+	})
+	require.NoError(t, err)
+	err = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
+		netutil.FatalIfUnexpected(s.Serve(ln))
+	})
+	require.NoError(t, err)
+
+	cfg := ConnectorConfig{
+		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+		RPCContext:      rpcContext,
+		RPCRetryOptions: rpcRetryOpts,
+	}
+	addrs := []string{ln.Addr().String()}
+	c := newConnector(cfg, addrs)
+	c.rpcDialTimeout = 5 * time.Millisecond
+
+	require.NoError(t, c.Start(ctx))
+
+	testutils.SucceedsSoon(t, func() error {
+		if gossipSubCalls.Load() < 2 {
+			return fmt.Errorf("waiting for reconnection after error event")
+		}
+		return nil
+	})
 }
