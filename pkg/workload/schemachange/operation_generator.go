@@ -4930,12 +4930,23 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	// The server only blocks ALTER FUNCTION RENAME on trigger/policy back-refs
+	// starting in v26.3. In a mixed-version cluster the rename succeeds against
+	// older servers, so don't classify those functions as "with deps" or the
+	// workload will incorrectly expect a feature_not_supported error.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
 	}
-	for _, f := range triggerPolicyDeps {
-		functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -5040,12 +5051,24 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		return nil, err
 	}
 
+	// The server only blocks ALTER FUNCTION SET SCHEMA on trigger/policy
+	// back-refs starting in v26.3. In a mixed-version cluster the statement
+	// succeeds against older servers, so don't classify those functions as
+	// "with deps" or the workload will incorrectly expect a
+	// feature_not_supported error.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
 	}
-	for _, f := range triggerPolicyDeps {
-		functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
