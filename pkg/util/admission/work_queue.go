@@ -1618,6 +1618,8 @@ func (q *WorkQueue) SetOverrideAllToBypassAdmission(override bool) {
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
 // => weight map. A nil map will result in all tenants having the same weight.
+// Only tenantKind entries in groupWeights.active are written; any non-tenant
+// entries already in active are preserved across the swap.
 //
 // TODO(wenyihu): rename to SetGroupWeights.
 func (q *WorkQueue) SetTenantWeights(groupWeights map[uint64]uint32) {
@@ -1650,10 +1652,17 @@ func (q *WorkQueue) SetTenantWeights(groupWeights map[uint64]uint32) {
 		}
 		q.mu.groupWeights.inactive[tenantGroupKey(k)] = w
 	}
-	// Establish the new active map.
+	// Establish the new active map. Before swapping, copy any
+	// non-tenant entries from active into inactive so that the swap
+	// does not lose them.
 	func() {
 		q.mu.Lock()
 		defer q.mu.Unlock()
+		for k, v := range q.mu.groupWeights.active {
+			if k.kind != tenantKind {
+				q.mu.groupWeights.inactive[k] = v
+			}
+		}
 		q.mu.groupWeights.active, q.mu.groupWeights.inactive =
 			q.mu.groupWeights.inactive, q.mu.groupWeights.active
 	}()
