@@ -396,6 +396,21 @@ func registerSysbench(r registry.Registry) {
 				return true
 			},
 		},
+		// DRPC-only variant: default cluster settings with DRPC enabled,
+		// to isolate DRPC's performance impact. The baseline for comparison
+		// is sysbench/*/nodes=3/cpu=8 (default settings, no DRPC).
+		{n: 3, cpus: 8,
+			transform: func(opts *sysbenchOptions) bool {
+				if !coreThree(opts.workload) {
+					return false
+				}
+				opts.extra = extraSetup{
+					nameSuffix: "-drpc",
+					useDRPC:    true,
+				}
+				return true
+			},
+		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 			concPerCPU := d.n*3 - 1
