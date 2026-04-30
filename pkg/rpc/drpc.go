@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -44,8 +45,8 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 // TODO(server): unexport this once dial methods are added in rpccontext.
 func DialDRPC(
 	rpcCtx *Context, cm *drpcmetrics.ClientMetrics,
-) func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
-	return func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
+) func(ctx context.Context, target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (drpc.Conn, error) {
+	return func(ctx context.Context, target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (drpc.Conn, error) {
 		transport := tcpTransport
 		if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 			transport = loopbackTransport
@@ -73,9 +74,24 @@ func DialDRPC(
 			ShouldRecord: shouldRecordFunc,
 		})
 
+		// drpcpool transparently re-dials when a cached conn dies, so we
+		// cannot rely on a one-time peer-level handshake the way gRPC does
+		// (via onlyOnceDialer + initial heartbeat in pkg/rpc/context.go).
+		// Identity must be checked on every fresh conn entering the pool;
+		// conns that fail validation are closed and never cached.
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
-			return drpcclient.DialContext(ctx, target, drpcDialOptions...)
+			conn, err := drpcclient.DialContext(ctx, target, drpcDialOptions...)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateOnDial(
+				ctx, rpcCtx, conn, target, nodeID, class, drpcDialOptions,
+			); err != nil {
+				_ = conn.Close()
+				return nil, errors.Wrap(err, "dial-time validation")
+			}
+			return conn, nil
 		})
 
 		// The passed in drpc connection can be either a concrete connection or
@@ -91,6 +107,51 @@ func DialDRPC(
 			pool: pool,
 		}, nil
 	}
+}
+
+// validateOnDial issues a Ping over the freshly-dialed bare drpc conn to
+// verify the remote endpoint's cluster identity (cluster ID, node ID,
+// cluster name, and version). It mirrors the checks runSingleHeartbeat
+// performs at peer setup. The Ping flows through the same interceptors and
+// per-RPC metadata as production traffic so server-side authorization
+// behaves identically.
+//
+// On error the caller must close conn — the pool must not cache an
+// unvalidated conn.
+//
+// drpc cannot use the gRPC strategy of "one TCP conn per peer lifetime"
+// (enforced for gRPC by onlyOnceDialer in pkg/rpc/context.go): drpcpool
+// transparently re-dials when a cached conn dies, and drpc currently
+// runs one stream per conn so blocking re-dials would either thrash or
+// serialize all traffic. Identity is therefore enforced per-dial here,
+// not once per peer.
+func validateOnDial(
+	ctx context.Context,
+	rpcCtx *Context,
+	conn drpc.Conn,
+	target string,
+	nodeID roachpb.NodeID,
+	class rpcbase.ConnectionClass,
+	drpcDialOptions []drpcclient.DialOption,
+) error {
+	// Wrap the bare conn so interceptors and per-RPC metadata apply to the
+	// Ping. The wrapper is single-shot and intentionally not Closed on
+	// success: ClientConn embeds drpc.Conn, so wrapper.Close would close
+	// the underlying conn we are about to hand back to the pool.
+	validationCC, err := drpcclient.NewClientConnWithOptions(ctx, conn, drpcDialOptions...)
+	if err != nil {
+		return errors.Wrap(err, "wrapping conn")
+	}
+	return runSingleHeartbeat(
+		ctx,
+		NewDRPCHeartbeatClientAdapter(validationCC),
+		peerKey{TargetAddr: target, NodeID: nodeID, Class: class},
+		ewma.NewMovingAverage(), // throwaway; latency is tracked by the peer heartbeat loop
+		nil,                     // skip clock-offset tracking at dial time
+		&rpcCtx.ContextOptions,
+		rpcCtx.RPCHeartbeatTimeout,
+		PingRequest_NONE, // dialback negotiation is owned by the peer layer
+	)
 }
 
 // drpcDialOptionsInternal is similar to grpcDialOptionsInternal but for
@@ -191,7 +252,11 @@ func (rpcCtx *Context) drpcDialOptsNetwork(
 ) ([]drpcclient.DialOption, error) {
 	// TODO(server): add compression support to drpc.
 	// TODO(server): add support for dial timeout.
-	// TODO(server): check if onlyOnceDialer is needed for drpc.
+	//
+	// We deliberately do not install an onlyOnceDialer-equivalent here;
+	// drpc enforces the cluster-identity invariant per-dial via
+	// validateOnDial instead. See validateOnDial for why drpc cannot use
+	// the gRPC strategy.
 
 	drpcDialOpts, err := rpcCtx.drpcDialOptsNetworkCredentials()
 	if err != nil {
