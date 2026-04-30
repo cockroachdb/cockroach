@@ -87,6 +87,32 @@ const (
 // requests are successful with nominal latencies. See also:
 // https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
+	// Register a fast-failover variant that tunes all intervals down to target
+	// ≤2s failover. Only runs with leader leases and crash failure mode. The
+	// cluster is geo-distributed across us-east1, us-central1, and us-west1 to
+	// get realistic cross-region RTTs (~20-80ms). See
+	// docs/tech-notes/leader-lease-interval.md for the tuning rationale.
+	r.Add(registry.TestSpec{
+		Name:      "failover/non-system/crash/fast-failover",
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
+		Timeout:   45 * time.Minute,
+		Cluster: r.MakeClusterSpec(7,
+			spec.CPU(2),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(2),
+			spec.Geo(),
+			spec.GCEZones("us-east1-b,us-central1-b,us-west1-b,us-east1-b,us-central1-b,us-west1-b,us-east1-b"),
+		),
+		CompatibleClouds:       registry.OnlyGCE,
+		Suites:                 registry.Suites(registry.Nightly),
+		Leases:                 registry.LeaderLeases,
+		PostProcessPerfMetrics: failoverAggregateFunction,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runFailoverNonSystemFastFailover(ctx, t, c)
+		},
+	})
+
 	for _, leases := range registry.LeaseTypes {
 		var leasesStr string
 		switch leases {
@@ -809,6 +835,112 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
+		return nil
+	})
+	m.Wait()
+}
+
+// runFailoverNonSystemFastFailover is a variant of runFailoverNonSystem that
+// tunes all lease, store liveness, and Raft intervals down to target ≤2s
+// failover. It only uses the crash failure mode (SIGKILL).
+//
+// The cluster is geo-distributed across us-east1, us-central1, and us-west1
+// (one CRDB node per region per group, plus a workload runner):
+//
+// n1 (us-east1), n2 (us-central1), n3 (us-west1): System ranges + SQL gateways
+// n4 (us-east1), n5 (us-central1), n6 (us-west1): Workload ranges
+// n7 (us-east1): Workload runner
+//
+// See docs/tech-notes/leader-lease-interval.md for the full tuning rationale.
+func runFailoverNonSystemFastFailover(ctx context.Context, t test.Test, c cluster.Cluster) {
+	require.Equal(t, 7, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms")
+
+	// Tuned intervals targeting ≤2s failover for a US-only cluster (~80ms RTT).
+	// Store liveness.
+	settings.Env = append(settings.Env, "COCKROACH_STORE_LIVENESS_HEARTBEAT_INTERVAL=200ms")
+	settings.Env = append(settings.Env, "COCKROACH_STORE_LIVENESS_SUPPORT_DURATION=1s")
+	settings.Env = append(settings.Env, "COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL=50ms")
+	settings.Env = append(settings.Env, "COCKROACH_RAFT_FORTIFICATION_GRACE_PERIOD=1s")
+	// Raft.
+	settings.Env = append(settings.Env, "COCKROACH_RAFT_TICK_INTERVAL=200ms")
+	settings.Env = append(settings.Env, "COCKROACH_RAFT_ELECTION_TIMEOUT_JITTER_TICKS=2")
+	// Network.
+	settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=500ms")
+	settings.Env = append(settings.Env, "COCKROACH_RPC_DIAL_TIMEOUT=1s")
+	settings.Env = append(settings.Env, "COCKROACH_RPC_HEARTBEAT_TIMEOUT=1500ms")
+
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+
+	failer := makeFailer(t, c, m, failureModeCrash, settings, rng)
+	failer.Setup(ctx)
+	defer failer.Cleanup(ctx)
+
+	startOpts := failoverStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--max-offset=100ms")
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
+
+	// Constrain all existing zone configs to n1-n3.
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
+
+	// Wait for upreplication.
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
+
+	// Create the kv database, constrained to n4-n6.
+	t.L().Printf("creating workload database")
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
+	c.Run(ctx, option.WithNodes(c.Node(7)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+
+	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
+
+	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
+	t.L().Printf("running workload")
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	})
+
+	// Start a worker to fail and recover n4-n6 in order.
+	m.Go(func(ctx context.Context) error {
+		defer cancelWorkload()
+
+		for i := 0; i < 3; i++ {
+			for _, node := range []int{4, 5, 6} {
+				sleepFor(ctx, t, time.Minute)
+
+				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
+				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{node}, []int{1, 2, 3})
+
+				// Randomly sleep up to the store liveness support duration (1s),
+				// to vary the time between the last heartbeat and the failure.
+				sleepFor(ctx, t, randutil.RandDuration(rng, time.Second))
+
+				failer.Ready(ctx, node)
+
+				t.L().Printf("failing n%d (%s)", node, failer)
+				failer.Fail(ctx, node)
+
+				sleepFor(ctx, t, time.Minute)
+
+				t.L().Printf("recovering n%d (%s)", node, failer)
+				failer.Recover(ctx, node)
+			}
+		}
 		return nil
 	})
 	m.Wait()
