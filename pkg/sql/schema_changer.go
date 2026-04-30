@@ -135,7 +135,106 @@ const (
 	StatusValidation jobs.StatusMessage = "validating schema"
 )
 
-// SchemaChanger is used to change the schema on a table.
+/*
+SchemaChanger is used to change the schema on a table and implements the
+legacy schema changer job.
+
+# The Legacy Schema Changer
+
+The legacy schema changer was designed to perform online schema changes by
+upholding the 2-version invariant, as described in the original 2015 design
+(see docs/RFCS/20151014_online_schema_change.md). It ensures that at any point
+in time, nodes in a cluster see at most two consecutive versions of a descriptor,
+allowing concurrent DML operations to proceed during the schema change.
+
+## Job State Machine
+
+The legacy schema changer execution is driven by a high-level state machine
+orchestrated by the jobs framework (specifically `schemaChangeResumer`). When
+a job is resumed, it typically follows this sequence of stages:
+
+1. Initialization:
+The job verifies it is "first in line" for the descriptor and initializes its
+running status.
+
+2. RunStateMachineBeforeBackfill:
+The first major transition stage. It moves mutations from their initial state
+towards the backfill stage. For additions, this typically means moving from
+`DELETE_ONLY` to `WRITE_ONLY`. For drops, it moves towards `DELETE_ONLY`.
+Each transition requires a descriptor update and waiting for lease convergence
+across the cluster.
+
+3. runBackfill:
+The bulk of the schema change work occurs here.
+  - Column Backfill: Uses `columnBackfiller` to populate new columns with default
+    values or computed expressions.
+  - Index Backfill: Uses `indexBackfiller` to populate new indexes from existing
+    table data.
+  - CTAS and Materialized Views: For `CREATE TABLE AS` and `CREATE MATERIALIZED
+    VIEW`, the legacy schema changer uses `backfillQueryIntoTable` to populate
+    the new table or view with the results of the defining query.
+
+For indexes, this stage might involve multiple sub-steps, including
+transitioning through `BACKFILLING` and `MERGING` states to handle
+MVCC-compatible backfills and unique constraint validation.
+
+4. done:
+The final stage where mutations are either made `PUBLIC` (for additions) or
+the descriptor elements are fully removed (for drops). This stage also
+schedules cleanup tasks, such as GC jobs for dropped indexes or tables.
+
+Each of these stages involves one or more transactions and often requires
+waiting for the entire cluster to see the latest version of the descriptor
+before proceeding.
+
+## Core Mechanisms
+
+1. Descriptor Mutations:
+The legacy schema changer operates by appending "mutations" to a table
+descriptor. Each mutation represents a step in a schema change (e.g., adding
+a column, creating an index). These mutations are stored in the
+`TableDescriptor.Mutations` slice. Each mutation has a `State` (e.g.,
+`DELETE_ONLY`, `WRITE_ONLY`) and a `Direction` (`ADD` or `DROP`).
+
+2. Jobs Integration:
+The execution is managed by jobs of type `SCHEMA_CHANGE` or
+`TYPEDESC_SCHEMA_CHANGE`. The `schemaChangeResumer` implements the `jobs.Resumer`
+interface to drive the process.
+
+## Limitations
+
+The legacy schema changer has several design limitations that eventually led to
+the development of the declarative schema changer (found in pkg/sql/schemachanger/):
+
+  - Linear Execution: It is largely restricted to performing a single mutation
+    at a time per descriptor.
+  - Limited Atomicity: While individual mutations are atomic, complex multi-step
+    schema changes involving multiple descriptors are difficult to coordinate
+    and roll back reliably.
+  - Rollback Weakness: Rollbacks in the legacy schema changer are not always
+    fully undoing all side effects. The `columnBackfiller` is particularly
+    problematic for rollbacks because it needs to perform another full table
+    scan and update to "remove" a column addition. Specifically, it
+    backfills the column with `NULL` values for all rows to ensure the data
+    is cleared before the column is fully dropped. This makes rollbacks as
+    expensive as the original addition. Furthermore, certain complex
+    interactions between concurrent DDLs can lead to states from which the
+    legacy schema changer cannot safely recover, potentially leaving the
+    descriptor in a "stuck" state.
+  - Complexity: The logic for handling various DDL operations was spread across
+    many files, making it hard to reason about correctness and add new features.
+
+## Relationship with the Declarative Schema Changer
+
+As of CockroachDB v22.2, the declarative schema changer (pkg/sql/schemachanger/)
+is the default for most DDL operations. The legacy schema changer remains in the
+codebase to handle transactions and schema changes that have not been ported over
+yet. The remaining legacy schema changes are mainly non-backfilling, outside of
+CREATE TABLE AS and materialized views.
+
+For information on the newer declarative schema changer, see the documentation in
+pkg/sql/schemachanger/doc.go.
+*/
 type SchemaChanger struct {
 	descID            descpb.ID
 	mutationID        descpb.MutationID

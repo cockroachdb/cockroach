@@ -173,6 +173,46 @@ func (p *planner) writeDescToBatch(
 	)
 }
 
+/*
+typeSchemaChanger manages online schema changes for user-defined types,
+primarily focusing on ENUM types (both standard and multi-region enums).
+
+# The Type Schema Changer
+
+Similar to the legacy schema changer, the type schema changer must uphold
+the 2-version invariant to ensure cluster-wide consistency when types are altered
+(e.g., adding or dropping ENUM values).
+
+## Enum Member State Machine
+
+Unlike table mutations which have complex multi-step state machines (DELETE_ONLY,
+WRITE_ONLY, BACKFILLING), enum members use a much simpler two-step state machine
+governed by their `Capability` and `Direction`:
+
+1. Addition (`ALTER TYPE ... ADD VALUE`):
+   - Initial State: The new enum value is appended to the type descriptor with
+     `Capability = READ_ONLY` and `Direction = ADD`. In this state, existing data
+     can be read (if it somehow exists), but new data cannot be written using
+     this logical value.
+   - Job Execution: The `typeSchemaChanger` job waits for cluster-wide lease
+     convergence on the `READ_ONLY` state. Once converged, it transitions the
+     member to `Capability = ALL` and `Direction = NONE`.
+
+2. Dropping (`ALTER TYPE ... DROP VALUE` - primarily for multi-region enums):
+   - Initial State: The enum value is marked with `Direction = DROP`.
+   - Job Execution: The job validates that the value is no longer in use. For
+     multi-region enums, this includes complex coordination to re-partition any
+     REGIONAL BY ROW tables that depend on the dropped region value before
+     finally removing the member from the descriptor entirely.
+
+## Jobs Integration
+
+The `typeSchemaChanger` is invoked via the jobs framework (usually as part of a
+`TYPEDESC_SCHEMA_CHANGE` job or embedded within standard schema change jobs).
+The job ensures that the necessary lease expirations occur between state
+transitions so that no node caches an invalid or premature version of the
+type descriptor.
+*/
 // typeSchemaChanger is the struct that actually runs the type schema change.
 type typeSchemaChanger struct {
 	typeID descpb.ID
