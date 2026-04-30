@@ -30,6 +30,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newDiskWriteByteTokensUsedCounters() [admissionpb.NumStoreWorkTypes]*metric.Counter {
+	var c [admissionpb.NumStoreWorkTypes]*metric.Counter
+	c[admissionpb.RegularStoreWorkType] = metric.NewCounter(kvDiskWriteByteTokensUsedRegular)
+	c[admissionpb.SnapshotIngestStoreWorkType] = metric.NewCounter(kvDiskWriteByteTokensUsedSnapshot)
+	c[admissionpb.ElasticStoreWorkType] = metric.NewCounter(kvDiskWriteByteTokensUsedElastic)
+	return c
+}
+
 // TestIOLoadListener is a datadriven test with the following command that
 // sets the state for token calculation and then ticks adjustmentInterval
 // times to cause tokens to be set in the testGranterWithIOTokens:
@@ -55,12 +63,14 @@ func TestIOLoadListener(t *testing.T) {
 				walFailoverUnlimitedTokens.Override(ctx, &st.SV, false)
 				ElasticBandwidthMaxUtil.Override(ctx, &st.SV, 1)
 				ioll = &ioLoadListener{
-					settings:              st,
-					kvRequester:           req,
-					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-					diskBandwidthLimiter:  newDiskBandwidthLimiter(),
-					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
-					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
+					settings:                st,
+					kvRequester:             req,
+					perWorkTokenEstimator:   makeStorePerWorkTokenEstimator(),
+					diskBandwidthLimiter:    newDiskBandwidthLimiter(),
+					l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
+					l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+					diskWriteByteTokensUtil: metric.NewGaugeFloat64(kvDiskWriteByteTokensUtil),
+					diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -278,11 +288,13 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:             st,
-		kvRequester:          req,
-		diskBandwidthLimiter: newDiskBandwidthLimiter(),
-		l0CompactedBytes:     metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced:     metric.NewCounter(l0TokensProduced),
+		settings:                st,
+		kvRequester:             req,
+		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
+		l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+		diskWriteByteTokensUtil: metric.NewGaugeFloat64(kvDiskWriteByteTokensUtil),
+		diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -347,9 +359,11 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
 		ioll := &ioLoadListener{
-			settings:         cluster.MakeTestingClusterSettings(),
-			l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
-			l0TokensProduced: metric.NewCounter(l0TokensProduced),
+			settings:                cluster.MakeTestingClusterSettings(),
+			l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
+			l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+			diskWriteByteTokensUtil: metric.NewGaugeFloat64(kvDiskWriteByteTokensUtil),
+			diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 		}
 		res := ioll.adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1}, 0,
@@ -392,12 +406,14 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:              st,
-		kvRequester:           req,
-		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
-		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
+		settings:                st,
+		kvRequester:             req,
+		perWorkTokenEstimator:   makeStorePerWorkTokenEstimator(),
+		diskBandwidthLimiter:    newDiskBandwidthLimiter(),
+		l0CompactedBytes:        metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:        metric.NewCounter(l0TokensProduced),
+		diskWriteByteTokensUtil: metric.NewGaugeFloat64(kvDiskWriteByteTokensUtil),
+		diskWriteByteTokensUsed: newDiskWriteByteTokensUsedCounters(),
 	}
 	ioll.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
