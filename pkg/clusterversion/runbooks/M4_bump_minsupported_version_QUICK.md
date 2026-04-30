@@ -24,12 +24,12 @@ Two PRs to bump MinSupported (e.g., from V25_2 → V25_3 → V25_4), each follow
 
 ### Critical Files (⚠️ BUILD BREAKS IF MISSED)
 
-| File | Action | Line |
-|------|--------|------|
-| `pkg/clusterversion/cockroach_versions.go` | `const MinSupported Key = V25_3` | ~362 |
-| `pkg/storage/pebble.go` | Update `MinimumSupportedFormatVersion` | ~2518 |
+| File | Action |
+|------|--------|
+| `pkg/clusterversion/cockroach_versions.go` | `const MinSupported Key = V25_3` |
+| `pkg/storage/pebble.go` | Update `MinimumSupportedFormatVersion` |
 
-**For pebble.go:** Check `pebbleFormatVersionMap` at line ~2510, use the pebble format for new MinSupported version.
+**For pebble.go:** Check `pebbleFormatVersionMap`, use the pebble format for the new MinSupported version.
 
 ### Find Files to Update
 
@@ -86,7 +86,7 @@ rm -rf pkg/sql/schemachanger/scplan/internal/rules/release_25_2/
 
 Edit `pkg/sql/schemachanger/scplan/plan.go`:
 - Remove import for `release_25_2`
-- Remove from `rulesForReleases` array (line ~158)
+- Remove from `rulesForReleases` array
 
 Edit `pkg/sql/schemachanger/scplan/BUILD.bazel`:
 - Remove dependency
@@ -119,8 +119,8 @@ rm pkg/sql/catalog/bootstrap/data/25_2_tenant.sha256
 ```
 
 Edit `pkg/sql/catalog/bootstrap/initial_values.go`:
-- Remove V25_2 entry from `initialValuesFactoryByKey` map (line ~66)
-- Remove `go:embed` variables (lines ~147-157)
+- Remove V25_2 entry from `initialValuesFactoryByKey` map
+- Remove `go:embed` variables for the removed version
 
 Edit `pkg/sql/catalog/bootstrap/BUILD.bazel`:
 - Remove embedsrcs entries
@@ -202,7 +202,7 @@ Release note: None"
 
 ### Step 1: Update logictestbase.go
 
-Remove config definition (lines ~501-515):
+Remove config definition:
 ```go
 // REMOVE:
 {
@@ -216,7 +216,7 @@ Remove config definition (lines ~501-515):
 },
 ```
 
-Remove from sets (lines ~660, ~684):
+Remove from sets:
 ```go
 "default-configs": makeConfigSet(
     "local-mixed-25.2",  // REMOVE THIS LINE
@@ -229,7 +229,7 @@ Remove from sets (lines ~660, ~684):
 
 ### Step 2: Update Nightly Build Script (⚠️ CRITICAL)
 
-Edit `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` (line ~84):
+Edit `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh`:
 
 ```diff
 -for config in local-mixed-25.2 local-mixed-25.3; do
