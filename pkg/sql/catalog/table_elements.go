@@ -445,6 +445,14 @@ type Column interface {
 	// and the error.
 	// Note it doesn't return the sequence owner info.
 	GetGeneratedAsIdentitySequenceOption(defaultIntSize int32) (*descpb.TableDescriptor_SequenceOpts, error)
+
+	// HasMaskingExpr returns true iff the column has a dynamic data masking
+	// expression set.
+	HasMaskingExpr() bool
+
+	// GetMaskingExpr returns the column masking expression if it exists,
+	// empty string otherwise.
+	GetMaskingExpr() string
 }
 
 // Constraint is an interface around a constraint.

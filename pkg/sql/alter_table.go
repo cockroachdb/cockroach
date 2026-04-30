@@ -1352,6 +1352,22 @@ func applyColumnMutation(
 		// Remove column identity descriptors
 		col.ColumnDesc().GeneratedAsIdentitySequenceOption = nil
 
+	case *tree.AlterTableSetMaskingFunction:
+		if col.IsComputed() && col.IsVirtual() {
+			return pgerror.Newf(
+				pgcode.InvalidColumnDefinition,
+				"column %q is a virtual computed column and cannot have a masking function",
+				col.GetName())
+		}
+		if t.Function != nil {
+			// SET MASKING FUNCTION: serialize the expression string.
+			exprStr := tree.Serialize(t.Function)
+			col.ColumnDesc().MaskingExpr = &exprStr
+		} else {
+			// DROP MASKING FUNCTION: clear the masking expression.
+			col.ColumnDesc().MaskingExpr = nil
+		}
+
 	}
 	return nil
 }

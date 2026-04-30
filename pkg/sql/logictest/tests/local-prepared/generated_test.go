@@ -484,6 +484,13 @@ func TestLogic_database(
 	runLogicTest(t, "database")
 }
 
+func TestLogic_ddm(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ddm")
+}
+
 func TestLogic_decimal(
 	t *testing.T,
 ) {

@@ -841,6 +841,10 @@ func (b *Builder) buildScan(
 	// reference them.
 	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
 
+	// Apply dynamic data masking projections. Unprivileged users see masked
+	// column values instead of raw data for columns with masking policies.
+	b.addDataMaskingProjections(tabMeta, outScope)
+
 	if b.trackSchemaDeps {
 		dep := opt.SchemaDep{DataSource: tab}
 		dep.ColumnIDToOrd = make(map[opt.ColumnID]int)

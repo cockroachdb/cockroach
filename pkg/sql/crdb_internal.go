@@ -239,6 +239,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
 		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
 		catconstants.CrdbInternalClusterActiveSessionHistoryTableID: crdbInternalClusterActiveSessionHistoryTable,
+		catconstants.CrdbInternalColumnMaskingPoliciesTableID:       crdbInternalColumnMaskingPoliciesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -10019,4 +10020,44 @@ CREATE VIEW crdb_internal.cluster_inspect_errors AS
 		{Name: "crdb_internal_expiration", Typ: types.TimestampTZ},
 	},
 	comment: `wrapper over system.inspect_errors`,
+}
+
+var crdbInternalColumnMaskingPoliciesTable = virtualSchemaTable{
+	comment: `dynamic data masking policies on table columns`,
+	schema: `
+CREATE TABLE crdb_internal.column_masking_policies (
+  database_name    STRING NOT NULL,
+  schema_name      STRING NOT NULL,
+  table_name       STRING NOT NULL,
+  column_name      STRING NOT NULL,
+  masking_function STRING NOT NULL
+)`,
+	populate: func(
+		ctx context.Context,
+		p *planner,
+		dbContext catalog.DatabaseDescriptor,
+		addRow func(...tree.Datum) error,
+	) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				table := descCtx.table
+				for _, col := range table.PublicColumns() {
+					if !col.HasMaskingExpr() {
+						continue
+					}
+					if err := addRow(
+						tree.NewDString(descCtx.database.GetName()),
+						tree.NewDString(descCtx.schema.GetName()),
+						tree.NewDString(table.GetName()),
+						tree.NewDString(col.GetName()),
+						tree.NewDString(col.GetMaskingExpr()),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
+	},
 }

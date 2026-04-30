@@ -287,6 +287,14 @@ func (c *prevCol) GetGeneratedAsIdentitySequenceOption(
 	return nil, errors.AssertionFailedf("unexpected call to GetGeneratedAsIdentitySequenceOption on cdc_prev")
 }
 
+func (c *prevCol) HasMaskingExpr() bool {
+	return false
+}
+
+func (c *prevCol) GetMaskingExpr() string {
+	return ""
+}
+
 func (c *prevCol) initColumnDescriptor() {
 	c.d = &descpb.ColumnDescriptor{
 		Name:         c.GetName(),
