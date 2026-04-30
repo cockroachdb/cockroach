@@ -55,8 +55,10 @@ func TestChangefeedUnwatchedFamilyMemoryMonitoring(t *testing.T) {
 
 		// Start changefeed watching only f1 with diff enabled.
 		// Events from f2 should return DecodeSkipUnwatchedFamily status.
+		// Override min_checkpoint_frequency so the sink flushes more often,
+		// making testing with cloudstorage sink more reliable.
 		feed := feed(t, f,
-			`CREATE CHANGEFEED FOR foo FAMILY f1 WITH diff, initial_scan='no', resolved`, args...)
+			`CREATE CHANGEFEED FOR foo FAMILY f1 WITH diff, initial_scan='no', resolved='100ms', min_checkpoint_frequency='100ms'`, args...)
 		defer closeFeed(t, feed)
 
 		// Update a watched column to generate an event.
