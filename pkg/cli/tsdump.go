@@ -118,13 +118,16 @@ will then convert it to the --format requested in the current invocation.
 		}
 
 		var output io.Writer = os.Stdout
+		var outputFile *os.File
+
 		if debugTimeSeriesDumpOpts.output != "" {
-			f, err := os.Create(debugTimeSeriesDumpOpts.output)
+			var err error
+			outputFile, err = os.Create(debugTimeSeriesDumpOpts.output)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create file %q", debugTimeSeriesDumpOpts.output)
 			}
-			defer f.Close()
-			output = f
+			defer outputFile.Close() // Simple safety net
+			output = outputFile
 		}
 
 		// Validate encoding flag is only used with raw format
@@ -400,18 +403,30 @@ will then convert it to the --format requested in the current invocation.
 			}
 		}
 
+		var err error
 		for {
-			data, err := recv()
+			var data *tspb.TimeSeriesData
+			data, err = recv()
 			if err == io.EOF {
-				return w.Flush()
+				err = w.Flush()
+				break
 			}
 			if err != nil {
-				return errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
+				err = errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
+				break
 			}
-			if err := w.Emit(data); err != nil {
-				return err
+			if err = w.Emit(data); err != nil {
+				break
 			}
 		}
+
+		if outputFile != nil {
+			if closeErr := outputFile.Close(); closeErr != nil && err == nil {
+				return errors.Wrap(closeErr, "failed to close time series dump file")
+			}
+		}
+
+		return err
 	}),
 }
 
