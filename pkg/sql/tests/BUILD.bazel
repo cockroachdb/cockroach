@@ -60,6 +60,7 @@ go_test(
         "sysbench_test.go",
         "system_table_test.go",
         "table_split_test.go",
+        "tenant_branch_test.go",
         "tracing_sql_test.go",
         "truncate_test.go",
         "virtual_cluster_name_test.go",

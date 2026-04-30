@@ -1324,6 +1324,37 @@ func makeTenantSQLServerArgs(
 
 	txnMetrics := kvcoord.MakeTxnMetrics(baseCfg.HistogramWindowInterval())
 	registry.AddMetricStruct(txnMetrics)
+
+	// If this tenant is a branch, wrap the DistSender so reads of keys the
+	// branch has not written fall through to the parent tenant at the
+	// branch's fork timestamp. The fallback uses a separate kv.DB rooted on
+	// the raw DistSender so multi-range Gets/Scans get auto-wrapped in a
+	// transaction. See pkg/kv/kvclient/kvtenant/branch_sender.go.
+	var rootSender kv.Sender = ds
+	if bi := sqlCfg.BranchInfo; bi != nil {
+		parentCodec := keys.MakeSQLCodec(bi.ParentID)
+		branchCodec := keys.MakeSQLCodec(sqlCfg.TenantID)
+		log.Dev.Infof(startupCtx, "[BRANCH] wiring BranchSender: branch=%s parent=%s branch_ts=%s",
+			sqlCfg.TenantID, bi.ParentID, bi.Timestamp)
+		fallbackTCS := kvcoord.NewTxnCoordSenderFactory(
+			kvcoord.TxnCoordSenderFactoryConfig{
+				AmbientCtx:        baseCfg.AmbientCtx,
+				Settings:          st,
+				Clock:             clock,
+				Stopper:           stopper,
+				HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
+				Linearizable:      sqlCfg.Linearizable,
+				Metrics:           txnMetrics,
+				TestingKnobs:      clientKnobs,
+			},
+			ds,
+		)
+		fallbackDBCtx := kv.DefaultDBContext(st, stopper)
+		fallbackDBCtx.NodeID = deps.instanceIDContainer
+		fallbackDB := kv.NewDBWithContext(baseCfg.AmbientCtx, fallbackTCS, clock, fallbackDBCtx)
+		rootSender = kvtenant.NewBranchSender(ds, fallbackDB, parentCodec, branchCodec, bi.Timestamp)
+	}
+
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx:        baseCfg.AmbientCtx,
@@ -1335,7 +1366,7 @@ func makeTenantSQLServerArgs(
 			Metrics:           txnMetrics,
 			TestingKnobs:      clientKnobs,
 		},
-		ds,
+		rootSender,
 	)
 
 	dbCtx := kv.DefaultDBContext(st, stopper)

@@ -1014,6 +1014,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
 %token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIDIRECTIONAL BIGINT BIGSERIAL BINARY BIT
+%token <str> BRANCH
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BY BYPASSRLS
 
@@ -5130,6 +5131,23 @@ create_virtual_cluster_stmt:
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
       ReplicationSourceConnUri: $12.expr(),
       Options: *$13.tenantReplicationOptions(),
+    }
+  }
+| CREATE virtual_cluster virtual_cluster_spec BRANCH FROM d_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateTenantAsBranch{
+      TenantSpec: $3.tenantSpec(),
+      ParentTenantName: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
+    }
+  }
+| CREATE virtual_cluster IF NOT EXISTS virtual_cluster_spec BRANCH FROM d_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateTenantAsBranch{
+      IfNotExists: true,
+      TenantSpec: $6.tenantSpec(),
+      ParentTenantName: &tree.TenantSpec{IsName: true, Expr: $9.expr()},
     }
   }
 | CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
@@ -19060,6 +19078,7 @@ unreserved_keyword:
 | BEGIN
 | BIDIRECTIONAL
 | BINARY
+| BRANCH
 | BUCKET_COUNT
 | BY
 | BYPASSRLS

@@ -70,6 +70,7 @@ func Get(
 		AllowEmpty:            cArgs.Header.AllowEmpty,
 		ReadCategory:          fs.BatchEvalReadCategory,
 		ReturnRawMVCCValues:   args.ReturnRawMVCCValues,
+		Tombstones:            args.IncludeTombstones,
 		WorkloadID:            h.WorkloadID,
 	})
 	if err != nil {

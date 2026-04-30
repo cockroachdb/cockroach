@@ -1,0 +1,75 @@
+# Schema changes against a parent-inherited table must succeed on the
+# branch. The schema changer rewrites the table's descriptor with a CPut
+# whose expected bytes were read via the parent fallthrough. Without the
+# branch sender's CPut fixup (AllowIfDoesNotExist on first write), the
+# CPut would fail because the branch's keyspace has nil for the
+# descriptor key while the expected bytes match the parent's value.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE customers (id INT PRIMARY KEY, name STRING);
+INSERT INTO customers VALUES (1, 'alice'), (2, 'bob');
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# Add a nullable column to the inherited table. The schema change must
+# materialize on the branch only; the parent's descriptor is untouched.
+exec-sql tenant=dev
+ALTER TABLE customers ADD COLUMN email STRING;
+----
+
+# The branch sees the new column; existing rows inherited from the
+# parent get NULL for the new column.
+query-sql tenant=dev
+SELECT id, name, email FROM customers ORDER BY id
+----
+1 alice <nil>
+2 bob <nil>
+
+# Branch can write to the new column.
+exec-sql tenant=dev
+UPDATE customers SET email = 'alice@example.com' WHERE id = 1;
+INSERT INTO customers VALUES (3, 'carol', 'carol@example.com');
+----
+
+query-sql tenant=dev
+SELECT id, name, email FROM customers ORDER BY id
+----
+1 alice alice@example.com
+2 bob <nil>
+3 carol carol@example.com
+
+# Parent's schema and data are unchanged. The new column does not exist
+# on the parent, and the new row is invisible.
+query-sql tenant=prod
+SELECT id, name FROM customers ORDER BY id
+----
+1 alice
+2 bob
+
+query-sql tenant=prod
+SELECT column_name FROM [SHOW COLUMNS FROM customers] ORDER BY column_name
+----
+id
+name
+
+# A second schema change on the branch (rename a column) also works,
+# proving CPut fixup is not a one-shot.
+exec-sql tenant=dev
+ALTER TABLE customers RENAME COLUMN email TO contact_email;
+----
+
+query-sql tenant=dev
+SELECT id, name, contact_email FROM customers ORDER BY id
+----
+1 alice alice@example.com
+2 bob <nil>
+3 carol carol@example.com

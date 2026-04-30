@@ -1,0 +1,48 @@
+# Dropping a branch tenant must release the protected-timestamp record
+# the branch wrote against its parent at fork time. Otherwise the parent's
+# MVCC garbage at and after branch_ts is pinned forever.
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER prod;
+ALTER VIRTUAL CLUSTER prod START SERVICE SHARED;
+----
+
+exec-sql tenant=prod
+CREATE TABLE t (id INT PRIMARY KEY);
+INSERT INTO t VALUES (1);
+----
+
+exec-sql tenant=system
+CREATE VIRTUAL CLUSTER dev BRANCH FROM prod;
+ALTER VIRTUAL CLUSTER dev START SERVICE SHARED;
+----
+
+# Branch creation wrote exactly one PTS record tagged with meta_type='branch'.
+query-sql tenant=system
+SELECT count(*) FROM system.protected_ts_records WHERE meta_type = 'branch'
+----
+1
+
+# Sanity check: branch sees the parent data.
+query-sql tenant=dev
+SELECT id FROM t ORDER BY id
+----
+1
+
+# Tear the branch down. STOP SERVICE is required before DROP.
+exec-sql tenant=system
+ALTER VIRTUAL CLUSTER dev STOP SERVICE;
+DROP VIRTUAL CLUSTER dev IMMEDIATE;
+----
+
+# The branch's PTS record is gone; the parent is no longer pinned.
+query-sql tenant=system
+SELECT count(*) FROM system.protected_ts_records WHERE meta_type = 'branch'
+----
+0
+
+# Parent is unaffected by the branch's lifecycle.
+query-sql tenant=prod
+SELECT id FROM t ORDER BY id
+----
+1

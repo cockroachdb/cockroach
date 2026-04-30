@@ -199,6 +199,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateExternalConnection(ctx, n)
 	case *tree.CreateTenant:
 		return p.CreateTenantNode(ctx, n)
+	case *tree.CreateTenantAsBranch:
+		return p.CreateTenantAsBranchNode(ctx, n)
 	case *tree.CheckExternalConnection:
 		return p.CheckExternalConnection(ctx, n)
 	case *tree.DropExternalConnection:
@@ -396,6 +398,7 @@ func init() {
 		&tree.CreateExternalConnection{},
 		&tree.AlterExternalConnection{},
 		&tree.CreateTenant{},
+		&tree.CreateTenantAsBranch{},
 		&tree.CreateIndex{},
 		&tree.CreatePolicy{},
 		&tree.CreateSchema{},

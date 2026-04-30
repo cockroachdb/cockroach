@@ -2309,6 +2309,31 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.TenantSpec)
 }
 
+// CreateTenantAsBranch represents a CREATE VIRTUAL CLUSTER ... BRANCH FROM
+// statement: it creates a new tenant as a copy-on-write branch of an existing
+// tenant. The branch shares the parent's data at its creation time and
+// diverges via writes to its own keyspace.
+type CreateTenantAsBranch struct {
+	IfNotExists bool
+	TenantSpec  *TenantSpec
+
+	// ParentTenantName names the tenant being branched from. As with
+	// ReplicationSourceTenantName, parsing guarantees this is a name, but we
+	// reuse TenantSpec for consistent identifier auto-promotion.
+	ParentTenantName *TenantSpec
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateTenantAsBranch) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE VIRTUAL CLUSTER ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
+	ctx.FormatNode(node.TenantSpec)
+	ctx.WriteString(" BRANCH FROM ")
+	ctx.FormatNode(node.ParentTenantName)
+}
+
 // CreateTenantFromReplication represents a CREATE VIRTUAL CLUSTER...FROM REPLICATION
 // statement.
 type CreateTenantFromReplication struct {

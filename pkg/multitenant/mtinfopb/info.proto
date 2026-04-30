@@ -83,7 +83,22 @@ message ProtoInfo {
   // maintaining its catalog accordingly).
   optional roachpb.TenantID read_from_tenant = 9 ;
 
-  // Next ID: 10.
+  // BranchParentID, if set, identifies the parent tenant that this tenant was
+  // branched from. A branch tenant has its own keyspace, but reads of keys
+  // unmodified since the fork point fall through to the parent at
+  // BranchTimestamp via a SQL-pod-level Sender wrapper. See
+  // pkg/kv/kvclient/kvtenant/branch_sender.go.
+  optional roachpb.TenantID branch_parent_id = 10 [(gogoproto.customname) = "BranchParentID"];
+
+  // BranchTimestamp is the fork point of a branch tenant. Reads on the branch
+  // that miss in the branch's keyspace fall through to the parent at this
+  // timestamp; the parent's data at this timestamp is held by a protected
+  // timestamp record for the lifetime of the branch.
+  //
+  // Only meaningful when BranchParentID is set.
+  optional util.hlc.Timestamp branch_timestamp = 11 [(gogoproto.nullable) = false];
+
+  // Next ID: 12.
 }
 
 message PreviousSourceTenant {
