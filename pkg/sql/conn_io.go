@@ -933,6 +933,12 @@ type RestrictedCommandResult interface {
 	RevokePortalPausability() error
 }
 
+// resultBufferingDisabler is the subset of RestrictedCommandResult used to
+// flush a statement's result writer mid-execution (see DisableBuffering).
+type resultBufferingDisabler interface {
+	DisableBuffering()
+}
+
 // DescribeResult represents the result of a Describe command (for either
 // describing a prepared statement or a portal).
 type DescribeResult interface {

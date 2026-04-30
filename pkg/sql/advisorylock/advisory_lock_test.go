@@ -75,6 +75,22 @@ func assertLockCycleBrokenError(t *testing.T, err error) {
 		"expected lock-cycle resolution to surface as a transaction retry error, got: %v", err)
 }
 
+// finishAdvisoryDeadlockTxn captures the error surfaced when the deadlock
+// cycle is broken. The losing side's failure can show up either on the
+// second pg_advisory_xact_lock call or at COMMIT — KV deadlock detection
+// force-aborts the victim, but the abort may only become visible to the
+// client at commit time if the lock acquisition slips past the abort (e.g.
+// because the lock holder released the lock before the abort propagated).
+// This helper tries COMMIT when the lock acquire returned nil so either
+// failure mode is captured on errCh.
+func finishAdvisoryDeadlockTxn(ctx context.Context, conn *gosql.Conn, lockErr error) error {
+	if lockErr != nil {
+		return lockErr
+	}
+	_, err := conn.ExecContext(ctx, `COMMIT`)
+	return err
+}
+
 // TestAdvisoryLockSQLAcquireRelease verifies locks are released on commit so a
 // later transaction can acquire the same key.
 func TestAdvisoryLockSQLAcquireRelease(t *testing.T) {
@@ -263,7 +279,7 @@ func TestAdvisoryLockSQLDeadlock(t *testing.T) {
 		select {
 		case start2 <- struct{}{}:
 		case <-ctx.Done():
-			return err
+			return ctx.Err()
 		}
 		select {
 		case <-proceed1:
@@ -273,7 +289,7 @@ func TestAdvisoryLockSQLDeadlock(t *testing.T) {
 		_, err := conn1.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, k2)
 		// Note: The final error cannot be returned here, since it will cancel the context
 		// if something failed.
-		errCh <- err
+		errCh <- finishAdvisoryDeadlockTxn(ctx, conn1, err)
 		return nil
 	})
 
@@ -297,7 +313,7 @@ func TestAdvisoryLockSQLDeadlock(t *testing.T) {
 			return ctx.Err()
 		}
 		_, err := conn2.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, k1)
-		errCh <- err
+		errCh <- finishAdvisoryDeadlockTxn(ctx, conn2, err)
 		return nil
 	})
 
@@ -313,7 +329,7 @@ func TestAdvisoryLockSQLDeadlock(t *testing.T) {
 		assertLockCycleBrokenError(t, err)
 	}
 	require.True(t, sawBreakingErr,
-		"expected at least one failing statement when breaking a lock cycle, got %#v", errs)
+		"expected at least one failing statement or commit when breaking a lock cycle, got %#v", errs)
 }
 
 // TestAdvisoryLockSQLDeadlockForUpdateCrossAdvisory builds a wait cycle between a
@@ -380,12 +396,6 @@ func TestAdvisoryLockSQLDeadlockForUpdateCrossAdvisory(t *testing.T) {
 			return err
 		}
 		defer func() { _, _ = conn1.ExecContext(context.Background(), `ROLLBACK`) }()
-		// Return at least one row so results are flushed to the client before the
-		// statements that participate in the deadlock. Otherwise explicit-txn
-		// auto-retry can rewind transparently and both Exec calls may return nil.
-		if _, err := conn1.ExecContext(ctx, `SELECT 1`); err != nil {
-			return err
-		}
 		if _, err := conn1.ExecContext(ctx,
 			`SELECT * FROM dead_adv_row WHERE id = 1 FOR UPDATE`); err != nil {
 			return err
@@ -399,7 +409,7 @@ func TestAdvisoryLockSQLDeadlockForUpdateCrossAdvisory(t *testing.T) {
 		_, err := conn1.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, advKey)
 		// Note: The final error cannot be returned here, since it will cancel the context
 		// if something failed.
-		errCh <- err
+		errCh <- finishAdvisoryDeadlockTxn(ctx, conn1, err)
 		return nil
 	})
 
@@ -413,15 +423,12 @@ func TestAdvisoryLockSQLDeadlockForUpdateCrossAdvisory(t *testing.T) {
 			return err
 		}
 		defer func() { _, _ = conn2.ExecContext(context.Background(), `ROLLBACK`) }()
-		if _, err := conn2.ExecContext(ctx, `SELECT 1`); err != nil {
-			return err
-		}
 		if _, err := conn2.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, advKey); err != nil {
 			return err
 		}
 		close(g2HasAdv)
 		_, err := conn2.ExecContext(ctx, `SELECT * FROM dead_adv_row WHERE id = 1 FOR UPDATE`)
-		errCh <- err
+		errCh <- finishAdvisoryDeadlockTxn(ctx, conn2, err)
 		return nil
 	})
 
@@ -437,7 +444,7 @@ func TestAdvisoryLockSQLDeadlockForUpdateCrossAdvisory(t *testing.T) {
 		assertLockCycleBrokenError(t, err)
 	}
 	require.True(t, sawBreakingErr,
-		"expected at least one failing statement when breaking FOR UPDATE vs advisory cycle, got %#v", errs)
+		"expected at least one failing statement or commit when breaking FOR UPDATE vs advisory cycle, got %#v", errs)
 }
 
 // TestAdvisoryLockSQLBlockingUnblocks verifies that a transaction blocked
