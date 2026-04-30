@@ -1784,6 +1784,9 @@ message TypeDescriptor {
       // ConstraintID uniquely identifies individual constraints within the domain.
       optional uint32 constraint_id = 3 [(gogoproto.customname) = "ConstraintID",
         (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+      // Validity indicates whether the constraint has been validated for all
+      // existing data.
+      optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
     }
     // CheckConstraints is the list of CHECK constraints on this domain.
     repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];

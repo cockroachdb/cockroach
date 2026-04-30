@@ -267,7 +267,12 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			*scpb.ForeignKeyConstraint,
 			*scpb.ForeignKeyConstraintUnvalidated,
 			*scpb.SequenceOwner,
-			*scpb.DatabaseRegionConfig:
+			*scpb.DatabaseRegionConfig,
+			*scpb.DomainCheckConstraint,
+			*scpb.DomainCheckConstraintUnvalidated,
+			*scpb.DomainDefault,
+			*scpb.DomainNotNull,
+			*scpb.DomainConstraintName:
 			b.Drop(e)
 		default:
 			panic(errors.AssertionFailedf("un-dropped backref %T (%v) should either be "+
