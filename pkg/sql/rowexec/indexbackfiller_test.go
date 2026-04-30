@@ -140,6 +140,7 @@ func TestSSTFileNamingConvention(t *testing.T) {
 		flowCtx.Cfg.ExternalStorageFromURI,
 		flowCtx.Cfg.DB.KV().Clock(),
 		prefix,
+		nodeID,
 		writeTS,
 		processorID,
 		false, /* checkDuplicates */
@@ -171,7 +172,7 @@ func TestSSTFileNamingConvention(t *testing.T) {
 		t.Logf("SST file URI: %s", uri)
 
 		// Verify the URI follows the naming convention:
-		// nodelocal://<nodeID>/job/<jobID>/map/proc-<procID>/<hlc-walltime>-<hlc-logical>.sst
+		// nodelocal://<nodeID>/job/<jobID>/map/proc-<procID>/n<instanceID>-<hlc-walltime>-<hlc-logical>.sst
 		expectedPrefix := fmt.Sprintf("nodelocal://%d/job/%d/map/proc-%d/", nodeID, jobID, processorID)
 		require.True(t, strings.HasPrefix(uri, expectedPrefix),
 			"URI %q does not have expected prefix %q", uri, expectedPrefix)
@@ -183,17 +184,19 @@ func TestSSTFileNamingConvention(t *testing.T) {
 		require.True(t, strings.HasSuffix(filename, ".sst"),
 			"filename %q does not end with .sst", filename)
 
-		// Verify the format is <walltime>-<logical>.sst.
+		// Verify the format is n<instanceID>-<walltime>-<logical>.sst.
 		filenameWithoutExt := strings.TrimSuffix(filename, ".sst")
 		parts := strings.Split(filenameWithoutExt, "-")
-		require.Equal(t, 2, len(parts),
-			"filename %q should have format <walltime>-<logical>.sst", filename)
+		require.Equal(t, 3, len(parts),
+			"filename %q should have format n<instanceID>-<walltime>-<logical>.sst", filename)
+		require.Equal(t, fmt.Sprintf("n%d", nodeID), parts[0],
+			"filename %q should start with the instance ID prefix", filename)
 
-		// Verify both parts are numeric (HLC timestamp components).
-		for i, part := range parts {
+		// Verify the timestamp parts are numeric (HLC timestamp components).
+		for i, part := range parts[1:] {
 			for _, ch := range part {
 				require.True(t, ch >= '0' && ch <= '9',
-					"part %d of filename %q contains non-numeric character: %c", i, filename, ch)
+					"part %d of filename %q contains non-numeric character: %c", i+1, filename, ch)
 			}
 		}
 	}

@@ -32,6 +32,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulksst",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/cloud",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

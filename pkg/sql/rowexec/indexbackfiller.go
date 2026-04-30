@@ -296,6 +296,7 @@ func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (bulksst.B
 			ib.flowCtx.Cfg.ExternalStorageFromURI,
 			ib.flowCtx.Cfg.DB.KV().Clock(),
 			prefix,
+			nodeID,
 			ib.spec.WriteAsOf,
 			ib.processorID,
 			checkDuplicates,

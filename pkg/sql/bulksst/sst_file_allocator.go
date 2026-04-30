@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -86,28 +87,34 @@ func (f *fileAllocatorBase) recordRowSample(rowSample roachpb.Key) {
 
 // ExternalFileAllocator allocates external files for SSTs.
 type ExternalFileAllocator struct {
-	es      cloud.ExternalStorage
-	baseURI string
-	clock   *hlc.Clock
+	es         cloud.ExternalStorage
+	baseURI    string
+	clock      *hlc.Clock
+	instanceID base.SQLInstanceID
 	fileAllocatorBase
 }
 
+// NewExternalFileAllocator constructs an ExternalFileAllocator. The instanceID
+// is embedded in generated filenames so that writers on different SQL
+// instances do not collide on the same path when their baseURIs happen to
+// resolve to the same physical directory. See #168559.
 func NewExternalFileAllocator(
-	es cloud.ExternalStorage, baseURI string, clock *hlc.Clock,
+	es cloud.ExternalStorage, baseURI string, clock *hlc.Clock, instanceID base.SQLInstanceID,
 ) FileAllocator {
 	return &ExternalFileAllocator{
 		es:                es,
 		baseURI:           baseURI,
 		clock:             clock,
+		instanceID:        instanceID,
 		fileAllocatorBase: fileAllocatorBase{},
 	}
 }
 
-// AddFile creates a new file with an HLC timestamp-based unique name.
+// AddFile creates a new file with a unique name composed of the writer's SQL
+// instance ID and the current HLC timestamp.
 func (e *ExternalFileAllocator) AddFile(ctx context.Context) (objstorage.Writable, string, error) {
-	// Use HLC timestamp for unique filename generation.
 	ts := e.clock.Now()
-	fileName := fmt.Sprintf("%d-%d.sst", ts.WallTime, ts.Logical)
+	fileName := fmt.Sprintf("n%d-%d-%d.sst", e.instanceID, ts.WallTime, ts.Logical)
 	writer, err := e.es.Writer(ctx, fileName)
 	if err != nil {
 		return nil, "", err

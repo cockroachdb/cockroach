@@ -154,13 +154,17 @@
 // easy cleanup:
 //
 //	nodelocal://{nodeID}/job/{jobID}/
-//	├── map/                           # Map phase output
-//	│   ├── {walltime}-{logical}.sst   # One SST per flush
+//	├── map/                                       # Map phase output
+//	│   ├── n{instanceID}-{walltime}-{logical}.sst # One SST per flush; the
+//	│   │                                          # n{instanceID} prefix
+//	│   │                                          # disambiguates writers
+//	│   │                                          # when nodelocal:// URIs
+//	│   │                                          # share a physical dir.
 //	│   └── ...
-//	├── merge/iter-1/                  # Local merge output
-//	│   ├── {taskID}-{fileIdx}.sst
+//	├── merge/iter-1/                              # Local merge output
+//	│   ├── n{instanceID}-{walltime}-{logical}.sst
 //	│   └── ...
-//	└── merge/iter-2/                  # (not used: final writes to KV)
+//	└── merge/iter-2/                              # (not used: final writes to KV)
 //
 // The /job/{jobID}/ prefix enables prefix-based cleanup on job
 // completion, cancellation, or failure. Intermediate SSTs from the map
