@@ -20,11 +20,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+// skipNonessentialBootstrap, when true, causes bootstrapSystem and
+// bootstrapCluster to skip the substeps marked skippableInTest, mirroring
+// the SkipSomeUpgradeSteps testing knob. This env var exists to make the
+// same fast path reachable from containerized test setups (e.g.
+// testcontainers, docker-compose) that cannot set Go-level testing knobs.
+// Intended for dev/test clusters only; do not enable in production.
+var skipNonessentialBootstrap = envutil.EnvOrDefaultBool(
+	"COCKROACH_SKIP_NONESSENTIAL_BOOTSTRAP", false)
 
 // bootstrapSystem runs a series of steps required to bootstrap a new cluster's
 // system tenant. These are run before the rest of the initialization steps in
@@ -34,10 +44,8 @@ import (
 func bootstrapSystem(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps,
 ) error {
-	var skipSomeSteps bool
-	if deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps {
-		skipSomeSteps = true
-	}
+	skipSomeSteps := (deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps) ||
+		skipNonessentialBootstrap
 	for _, u := range []struct {
 		name            string
 		fn              upgrade.SystemUpgradeFunc
@@ -67,10 +75,8 @@ func bootstrapSystem(
 func bootstrapCluster(
 	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
-	var skipSomeSteps bool
-	if deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps {
-		skipSomeSteps = true
-	}
+	skipSomeSteps := (deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps) ||
+		skipNonessentialBootstrap
 	for _, u := range []struct {
 		name            string
 		fn              upgrade.TenantUpgradeFunc
