@@ -411,71 +411,80 @@ func TestPutS3Endpoint(t *testing.T) {
 	})
 
 	t.Run("use-path-style", func(t *testing.T) {
-		// EngFlow machines have no internet access, and queries even to localhost will time out.
-		// So this test is skipped above.
 		ctx := context.Background()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 		defer srv.Close()
 
-		q := make(url.Values)
-		// Convert IP address to `localhost` to exercise the DNS-defining path in the S3 client.
-		localhostURL := strings.Replace(srv.URL, "127.0.0.1", "localhost", -1)
-		q.Add(AWSEndpointParam, localhostURL)
-		q.Add(AWSAccessKeyParam, "key")
-		q.Add(AWSSecretParam, "secret")
-		q.Add(S3RegionParam, "region")
-
-		// To validate the test, firstassert that the call fails without the Path Style param.
-		u := url.URL{
-			Scheme:   "s3",
-			Host:     "bucket",
-			Path:     "subdir1/subdir2",
-			RawQuery: q.Encode(),
-		}
-
 		user := username.RootUserName()
 		ioConf := base.ExternalIODirConfig{}
-
-		conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Setup a sink for the given args.
 		testSettings := cluster.MakeTestingClusterSettings()
 		clientFactory := blobs.TestBlobServiceClient("")
+		maxRetries.Override(ctx, &testSettings.SV, 1)
 
-		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
-			nil, nil, cloud.NilMetrics)
-		if err != nil {
-			t.Fatal(err)
+		{
+			q := make(url.Values)
+			localhostURL := strings.Replace(srv.URL, "127.0.0.1", "localhost", -1)
+			q.Add(AWSEndpointParam, localhostURL)
+			q.Add(AWSAccessKeyParam, "key")
+			q.Add(AWSSecretParam, "secret")
+			q.Add(S3RegionParam, "region")
+
+			u := url.URL{
+				Scheme:   "s3",
+				Host:     "bucket",
+				Path:     "subdir1/subdir2",
+				RawQuery: q.Encode(),
+			}
+
+			conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
+				nil, nil, cloud.NilMetrics)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer storage.Close()
+
+			_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "lookup bucket.localhost")
+			require.Contains(t, err.Error(), "no such host")
 		}
-		defer storage.Close()
 
-		_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "lookup bucket.localhost")
-		require.Contains(t, err.Error(), "no such host")
+		{
+			q := make(url.Values)
+			q.Add(AWSEndpointParam, srv.URL)
+			q.Add(AWSAccessKeyParam, "key")
+			q.Add(AWSSecretParam, "secret")
+			q.Add(S3RegionParam, "region")
+			q.Add(AWSUsePathStyle, "true")
 
-		// Now add the Path Style param and try again.
-		q.Add(AWSUsePathStyle, "true")
-		u.RawQuery = q.Encode()
-		pathStyleConf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
-		if err != nil {
-			t.Fatal(err)
-		}
+			u := url.URL{
+				Scheme:   "s3",
+				Host:     "bucket",
+				Path:     "subdir1/subdir2",
+				RawQuery: q.Encode(),
+			}
 
-		pathStyleStorage, err := cloud.MakeExternalStorage(ctx, pathStyleConf, ioConf, testSettings, clientFactory,
-			nil, nil, cloud.NilMetrics)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer pathStyleStorage.Close()
+			pathStyleConf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		// Should successfuly return a (empty) response.
-		_, _, err = pathStyleStorage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
-		if err != nil {
-			t.Fatal(err)
+			pathStyleStorage, err := cloud.MakeExternalStorage(ctx, pathStyleConf, ioConf, testSettings, clientFactory,
+				nil, nil, cloud.NilMetrics)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pathStyleStorage.Close()
+
+			_, _, err = pathStyleStorage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	})
 
@@ -483,64 +492,74 @@ func TestPutS3Endpoint(t *testing.T) {
 		ctx := context.Background()
 		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 		defer srv.Close()
-		q := make(url.Values)
-		// Convert IP address to `localhost` to exercise the DNS-defining path in the S3 client.
-		localhostURL := strings.Replace(srv.URL, "127.0.0.1", "localhost", -1)
-		q.Add(AWSEndpointParam, localhostURL)
-		q.Add(AWSAccessKeyParam, "key")
-		q.Add(AWSSecretParam, "secret")
-		q.Add(S3RegionParam, "region")
-		q.Add(AWSUsePathStyle, "true")
-
-		// Verify that it fails without the flag.
-		u := url.URL{
-			Scheme:   "s3",
-			Host:     "bucket",
-			Path:     "subdir1/subdir2",
-			RawQuery: q.Encode(),
-		}
 
 		user := username.RootUserName()
 		ioConf := base.ExternalIODirConfig{}
-
-		conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Setup a sink for the given args.
 		testSettings := cluster.MakeTestingClusterSettings()
 		clientFactory := blobs.TestBlobServiceClient("")
-		// Force to fail quickly.
-
 		maxRetries.Override(ctx, &testSettings.SV, 1)
-		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
-			nil, nil, cloud.NilMetrics)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer storage.Close()
-		_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
-		require.Error(t, err)
 
-		// Set AWSSkipTLSVerify to use with HTTPS Server with self signed certificates.
-		q.Add(AWSSkipTLSVerify, "true")
-		u.RawQuery = q.Encode()
+		{
+			q := make(url.Values)
+			q.Add(AWSEndpointParam, srv.URL)
+			q.Add(AWSAccessKeyParam, "key")
+			q.Add(AWSSecretParam, "secret")
+			q.Add(S3RegionParam, "region")
+			q.Add(AWSUsePathStyle, "true")
 
-		confWithSkipVerify, err := cloud.ExternalStorageConfFromURI(u.String(), user)
-		if err != nil {
-			t.Fatal(err)
+			u := url.URL{
+				Scheme:   "s3",
+				Host:     "bucket",
+				Path:     "subdir1/subdir2",
+				RawQuery: q.Encode(),
+			}
+
+			conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
+				nil, nil, cloud.NilMetrics)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer storage.Close()
+			_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+			require.Error(t, err)
 		}
-		storageWithSkipVerify, err := cloud.MakeExternalStorage(ctx, confWithSkipVerify, ioConf, testSettings, clientFactory,
-			nil, nil, cloud.NilMetrics)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer storageWithSkipVerify.Close()
-		require.True(t, storageWithSkipVerify.Conf().S3Config.SkipTLSVerify)
-		_, _, err = storageWithSkipVerify.ReadFile(ctx, "another test file", cloud.ReadOptions{NoFileSize: true})
-		if err != nil {
-			t.Fatal(err)
+
+		{
+			q := make(url.Values)
+			q.Add(AWSEndpointParam, srv.URL)
+			q.Add(AWSAccessKeyParam, "key")
+			q.Add(AWSSecretParam, "secret")
+			q.Add(S3RegionParam, "region")
+			q.Add(AWSUsePathStyle, "true")
+			q.Add(AWSSkipTLSVerify, "true")
+
+			u := url.URL{
+				Scheme:   "s3",
+				Host:     "bucket",
+				Path:     "subdir1/subdir2",
+				RawQuery: q.Encode(),
+			}
+
+			confWithSkipVerify, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+			if err != nil {
+				t.Fatal(err)
+			}
+			storageWithSkipVerify, err := cloud.MakeExternalStorage(ctx, confWithSkipVerify, ioConf, testSettings, clientFactory,
+				nil, nil, cloud.NilMetrics)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer storageWithSkipVerify.Close()
+			require.True(t, storageWithSkipVerify.Conf().S3Config.SkipTLSVerify)
+			_, _, err = storageWithSkipVerify.ReadFile(ctx, "another test file", cloud.ReadOptions{NoFileSize: true})
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	})
 }
