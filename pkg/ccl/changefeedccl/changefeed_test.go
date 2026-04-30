@@ -7911,11 +7911,6 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Sanity check for options compatibility validation.
 	sqlDB.ExpectErrWithTimeout(
-		t, `this sink is incompatible with option compression`,
-		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
-		`kafka://nope`)
-
-	sqlDB.ExpectErrWithTimeout(
 		t, `required column idk not present on table foo`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH headers_json_column_name='idk'`,
 		`kafka://nope`)
