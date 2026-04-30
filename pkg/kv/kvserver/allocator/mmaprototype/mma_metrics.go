@@ -446,6 +446,11 @@ const (
 type storePassState struct {
 	overloadKind overloadKind
 	shedCounts   [numShedKinds][numShedResults]int
+	// blocked is true when MMA recognized the store as overloaded but skipped
+	// shedding from it this pass because of pending decrease/increase. When
+	// set, shedCounts is empty and the store is attributed to the
+	// `<bucket>.blocked` gauge instead of success/failure.
+	blocked bool
 }
 
 func (s *storePassState) summarize() storePassSummary {
@@ -592,29 +597,99 @@ var (
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelType, "long_dur", metric.LabelResult, "failure"),
 	}
+
+	// The "blocked" gauges below cover the third per-bucket outcome: the store
+	// is overloaded but MMA chose not to shed from it this pass because it
+	// already has too much pending work (pending-decrease saturated above the
+	// fraction threshold, or pending-increase >= epsilon). For each duration
+	// bucket, success + failure + blocked equals the count of overloaded
+	// stores observed during the local MMA rebalancing pass.
+	metaOverloadedStoreLeaseGraceBlocked = metric.Metadata{
+		Name: "mma.overloaded_store.lease_grace.blocked",
+		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
+			"overload) where MMA skipped shedding because the store already has too much " +
+			"pending work (pending-decrease saturated above the configured fraction " +
+			"threshold, or pending-increase >= epsilon, indicating the load arithmetic is " +
+			"unreliable). For each duration bucket, success + failure + blocked equals the " +
+			"total overloaded stores observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "lease_grace", metric.LabelResult, "blocked"),
+	}
+	metaOverloadedStoreShortDurBlocked = metric.Metadata{
+		Name: "mma.overloaded_store.short_dur.blocked",
+		Help: "Number of stores overloaded for a short duration (2-5 min) where MMA skipped " +
+			"shedding because the store already has too much pending work (pending-decrease " +
+			"saturated above the configured fraction threshold, or pending-increase >= " +
+			"epsilon). For each duration bucket, success + failure + blocked equals the " +
+			"total overloaded stores observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "short_dur", metric.LabelResult, "blocked"),
+	}
+	metaOverloadedStoreMediumDurBlocked = metric.Metadata{
+		Name: "mma.overloaded_store.medium_dur.blocked",
+		Help: "Number of stores overloaded for a medium duration (5-8 min) where MMA skipped " +
+			"shedding because the store already has too much pending work (pending-decrease " +
+			"saturated above the configured fraction threshold, or pending-increase >= " +
+			"epsilon). For each duration bucket, success + failure + blocked equals the " +
+			"total overloaded stores observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "medium_dur", metric.LabelResult, "blocked"),
+	}
+	metaOverloadedStoreLongDurBlocked = metric.Metadata{
+		Name: "mma.overloaded_store.long_dur.blocked",
+		Help: "Number of stores overloaded for a long duration (8+ min) where MMA skipped " +
+			"shedding because the store already has too much pending work (pending-decrease " +
+			"saturated above the configured fraction threshold, or pending-increase >= " +
+			"epsilon). A persistently non-zero value here indicates an overloaded store " +
+			"that is repeatedly being deferred and may not be receiving relief. For each " +
+			"duration bucket, success + failure + blocked equals the total overloaded " +
+			"stores observed in that bucket this pass.",
+		Measurement: "Stores",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.overloaded_store",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "long_dur", metric.LabelResult, "blocked"),
+	}
 )
 
 type gaugeMetrics struct {
 	OverloadedStoreLeaseGraceSuccess *metric.Gauge
 	OverloadedStoreLeaseGraceFailure *metric.Gauge
+	OverloadedStoreLeaseGraceBlocked *metric.Gauge
 	OverloadedStoreShortDurSuccess   *metric.Gauge
 	OverloadedStoreShortDurFailure   *metric.Gauge
+	OverloadedStoreShortDurBlocked   *metric.Gauge
 	OverloadedStoreMediumDurSuccess  *metric.Gauge
 	OverloadedStoreMediumDurFailure  *metric.Gauge
+	OverloadedStoreMediumDurBlocked  *metric.Gauge
 	OverloadedStoreLongDurSuccess    *metric.Gauge
 	OverloadedStoreLongDurFailure    *metric.Gauge
+	OverloadedStoreLongDurBlocked    *metric.Gauge
 }
 
 func (m *gaugeMetrics) init() {
 	*m = gaugeMetrics{
 		OverloadedStoreLeaseGraceSuccess: metric.NewGauge(metaOverloadedStoreLeaseGraceSuccess),
 		OverloadedStoreLeaseGraceFailure: metric.NewGauge(metaOverloadedStoreLeaseGraceFailure),
+		OverloadedStoreLeaseGraceBlocked: metric.NewGauge(metaOverloadedStoreLeaseGraceBlocked),
 		OverloadedStoreShortDurSuccess:   metric.NewGauge(metaOverloadedStoreShortDurSuccess),
 		OverloadedStoreShortDurFailure:   metric.NewGauge(metaOverloadedStoreShortDurFailure),
+		OverloadedStoreShortDurBlocked:   metric.NewGauge(metaOverloadedStoreShortDurBlocked),
 		OverloadedStoreMediumDurSuccess:  metric.NewGauge(metaOverloadedStoreMediumDurSuccess),
 		OverloadedStoreMediumDurFailure:  metric.NewGauge(metaOverloadedStoreMediumDurFailure),
+		OverloadedStoreMediumDurBlocked:  metric.NewGauge(metaOverloadedStoreMediumDurBlocked),
 		OverloadedStoreLongDurSuccess:    metric.NewGauge(metaOverloadedStoreLongDurSuccess),
 		OverloadedStoreLongDurFailure:    metric.NewGauge(metaOverloadedStoreLongDurFailure),
+		OverloadedStoreLongDurBlocked:    metric.NewGauge(metaOverloadedStoreLongDurBlocked),
 	}
 }
 
@@ -720,6 +795,16 @@ func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
 	g.curState.shedCounts[shedLease][result]++
 }
 
+// blockedByPending is sandwiched between storeOverloaded and finishStore. It
+// records that MMA recognized the store as overloaded but skipped shedding
+// because the store already has too much pending work.
+func (g *rebalancingPassMetricsAndLogger) blockedByPending() {
+	if g == nil {
+		return
+	}
+	g.curState.blocked = true
+}
+
 // replicaShed is sandwiched between storeOverloaded and finishStore, and
 // provides the result of the shedding attempt.
 func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
@@ -747,9 +832,10 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 
 // computePassSummary performs the aggregation of the rebalancing pass summary,
 // updates gauges and generates a log message with stores per category of
-// successful rebalances, failed rebalances, skipped stores, and stores for
-// which no ranges were evaluates. The list of stores is truncated upto a fixed
-// number of stores (see `logStores`).
+// successful rebalances, failed rebalances, blocked stores (overloaded but
+// deferred due to pending work), skipped stores, and stores for which no
+// ranges were evaluated. The list of stores is truncated upto a fixed number
+// of stores (see `logStores`).
 // Example output:
 /*
 rebalancing pass summary [local=s1]:
@@ -759,6 +845,7 @@ rebalancing pass summary [local=s1]:
 		long: [s6]
 	success: [s1]
 	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
+	blocked: [s10]
 	skipped: [s5]
 	no-ranges-evaluated: [s10]
 */
@@ -767,16 +854,19 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 	g.successSummaries = g.successSummaries[:0]
 
 	// For each overloadKind, collect the stores that belong to it and count
-	// the stores that had shedding success or failure.
-	// NB: Each store is counted at most once based on whether it had any
-	// shedding success, even if it had shedding failures.
+	// the stores that had shedding success, failure, or were deferred due to
+	// pending work.
+	// NB: Each store is counted at most once based on whether it was blocked
+	// or had any shedding success, even if it had shedding failures.
 	var overloadSummaries [numOverloadKinds]struct {
-		success, failure int64
-		stores           []roachpb.StoreID
+		success, failure, blocked int64
+		stores                    []roachpb.StoreID
 	}
 
 	// Collect the stores for which no ranges were evaluated.
 	var noRangesEvaluated []roachpb.StoreID
+	// Collect blocked stores for the per-pass log.
+	var blockedStores []roachpb.StoreID
 
 	for storeID, passState := range g.states {
 		storeSummary := passState.summarize()
@@ -785,13 +875,17 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		overloadSummary := &overloadSummaries[passState.overloadKind]
 		overloadSummary.stores = append(overloadSummary.stores, storeID)
 
-		if storeSummary.numShedSuccesses > 0 {
+		switch {
+		case passState.blocked:
+			overloadSummary.blocked++
+			blockedStores = append(blockedStores, storeID)
+		case storeSummary.numShedSuccesses > 0:
 			overloadSummary.success++
 			g.successSummaries = append(g.successSummaries, storeSummary)
-		} else if storeSummary.numShedFailures > 0 {
+		case storeSummary.numShedFailures > 0:
 			overloadSummary.failure++
 			g.failedSummaries = append(g.failedSummaries, storeSummary)
-		} else {
+		default:
 			noRangesEvaluated = append(noRangesEvaluated, storeSummary.storeID)
 		}
 	}
@@ -803,15 +897,19 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		case overloadedWaitingForLeaseShedding:
 			g.m.OverloadedStoreLeaseGraceSuccess.Update(counts.success)
 			g.m.OverloadedStoreLeaseGraceFailure.Update(counts.failure)
+			g.m.OverloadedStoreLeaseGraceBlocked.Update(counts.blocked)
 		case overloadedShortDuration:
 			g.m.OverloadedStoreShortDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreShortDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreShortDurBlocked.Update(counts.blocked)
 		case overloadedMediumDuration:
 			g.m.OverloadedStoreMediumDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreMediumDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreMediumDurBlocked.Update(counts.blocked)
 		case overloadedLongDuration:
 			g.m.OverloadedStoreLongDurSuccess.Update(counts.success)
 			g.m.OverloadedStoreLongDurFailure.Update(counts.failure)
+			g.m.OverloadedStoreLongDurBlocked.Update(counts.blocked)
 		}
 	}
 
@@ -865,6 +963,18 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 			}
 			inner.SafeRune('}')
 			return inner.RedactableString()
+		})
+	}
+
+	// Log stores that were overloaded but blocked from shedding because of
+	// pending decrease/increase, sorted by store ID. The bucket affiliation
+	// for these stores is visible in the `overloaded:` section above.
+	if len(blockedStores) > 0 {
+		empty = false
+		slices.Sort(blockedStores)
+		buf.SafeString("\n\tblocked: ")
+		logStores(buf, blockedStores, func(store roachpb.StoreID) redact.RedactableString {
+			return redact.Sprintf("s%v", store)
 		})
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 // shedAction drives a single shed result recording on the
@@ -29,10 +30,8 @@ type shedAction struct {
 //
 // blockedByPending models the production case where the store is overloaded
 // but rebalanceStores skips shedding because the store already has too much
-// pending decrease (or pending increase >= epsilon). Today, the skip path
-// does not call into rebalancingPassMetricsAndLogger at all, so the store
-// is invisible to the per-bucket gauges; this is the bug that subsequent
-// commits address.
+// pending decrease (or pending increase >= epsilon). The store is attributed
+// to the corresponding `<bucket>.blocked` gauge.
 type storeActions struct {
 	storeID                  roachpb.StoreID
 	ignoreLevel              ignoreLevel
@@ -49,13 +48,12 @@ func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
 		g.skippedStore(s.storeID)
 		return
 	}
+	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
 	if s.blockedByPending {
-		// Current production behavior: the rebalanceStores skip path drops the
-		// store on the floor without informing the metrics harness. Reflect
-		// that here so the testdata pins the existing gap.
+		g.blockedByPending()
+		g.finishStore()
 		return
 	}
-	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
 	for _, action := range s.actions {
 		switch action.kind {
 		case shedLease:
@@ -133,9 +131,9 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 		},
 		{
 			// One store sheds successfully; another store is overloaded but
-			// rebalanceStores skipped it because of pending decrease/increase.
-			// Today, the skipped store contributes to no per-bucket gauge,
-			// so the count of stores in the bucket undershoots reality.
+			// rebalanceStores deferred shedding because of pending
+			// decrease/increase. Both stores must appear in the per-bucket
+			// summary; the deferred one in the new "blocked" outcome.
 			name: "blocked_by_pending",
 			setup: []storeActions{
 				{
@@ -205,4 +203,78 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 				datapathutils.TestDataPath(inner, t.Name(), testData.name))
 		})
 	}
+}
+
+// TestRebalancingPassMetricsBlockedGauges verifies that stores deferred via
+// the pending-work skip path land in the per-bucket "blocked" gauge, that
+// per-bucket success/failure/blocked sum to the count of overloaded stores
+// observed in the bucket, and that gauges reset across passes.
+func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	g := makeRebalancingPassMetricsAndLogger(1)
+
+	// Pass 1: s2 sheds successfully (short bucket), s3 fails (medium),
+	// s4 is blocked (medium), s5 is blocked (long).
+	g.resetForRebalancingPass()
+	(&storeActions{
+		storeID:     2,
+		ignoreLevel: ignoreLoadNoChangeAndHigher,
+		actions:     []shedAction{{kind: shedLease, result: shedSuccess}},
+	}).performActions(g)
+	(&storeActions{
+		storeID:     3,
+		ignoreLevel: ignoreLoadThresholdAndHigher,
+		actions:     []shedAction{{kind: shedReplica, result: noCandidate}},
+	}).performActions(g)
+	(&storeActions{
+		storeID:          4,
+		ignoreLevel:      ignoreLoadThresholdAndHigher,
+		blockedByPending: true,
+	}).performActions(g)
+	(&storeActions{
+		storeID:          5,
+		ignoreLevel:      ignoreHigherThanLoadThreshold,
+		blockedByPending: true,
+	}).performActions(g)
+
+	g.computePassSummary(&redact.StringBuilder{})
+
+	// Per-bucket totals must add up to the number of overloaded stores
+	// observed in that bucket.
+	require.Equal(t, int64(1), g.m.OverloadedStoreShortDurSuccess.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurFailure.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurBlocked.Value())
+
+	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurSuccess.Value())
+	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurFailure.Value())
+	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurBlocked.Value())
+
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSuccess.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurFailure.Value())
+	require.Equal(t, int64(1), g.m.OverloadedStoreLongDurBlocked.Value())
+
+	// Pass 2: s4 is no longer blocked and now sheds successfully (medium).
+	// All other stores drop out. Gauges must reflect only this pass.
+	g.resetForRebalancingPass()
+	(&storeActions{
+		storeID:     4,
+		ignoreLevel: ignoreLoadThresholdAndHigher,
+		actions:     []shedAction{{kind: shedReplica, result: shedSuccess}},
+	}).performActions(g)
+	g.computePassSummary(&redact.StringBuilder{})
+
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurSuccess.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurFailure.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurBlocked.Value())
+
+	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurSuccess.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurFailure.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurBlocked.Value())
+
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSuccess.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurFailure.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurBlocked.Value())
 }

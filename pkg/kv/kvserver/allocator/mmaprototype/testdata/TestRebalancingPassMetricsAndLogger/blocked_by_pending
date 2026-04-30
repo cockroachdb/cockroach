@@ -2,5 +2,6 @@ echo
 ----
 rebalancing pass summary [local=s1]:
 	overloaded:
-		short: [s3]
+		short: [s3, s7]
 	success: [s3]
+	blocked: [s7]

@@ -474,12 +474,16 @@ owners:
   mma_external_registration_failure: cockroachdb/kv
   mma_external_registration_success: cockroachdb/kv
   mma_overloaded_store: cockroachdb/kv
+  mma_overloaded_store_lease_grace_blocked: cockroachdb/kv
   mma_overloaded_store_lease_grace_failure: cockroachdb/kv
   mma_overloaded_store_lease_grace_success: cockroachdb/kv
+  mma_overloaded_store_long_dur_blocked: cockroachdb/kv
   mma_overloaded_store_long_dur_failure: cockroachdb/kv
   mma_overloaded_store_long_dur_success: cockroachdb/kv
+  mma_overloaded_store_medium_dur_blocked: cockroachdb/kv
   mma_overloaded_store_medium_dur_failure: cockroachdb/kv
   mma_overloaded_store_medium_dur_success: cockroachdb/kv
+  mma_overloaded_store_short_dur_blocked: cockroachdb/kv
   mma_overloaded_store_short_dur_failure: cockroachdb/kv
   mma_overloaded_store_short_dur_success: cockroachdb/kv
   mma_span_config_normalization: cockroachdb/kv
