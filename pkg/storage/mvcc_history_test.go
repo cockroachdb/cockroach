@@ -939,6 +939,11 @@ func (rw clearKeyPrintingReadWriter) ClearEngineKey(
 	return rw.ReadWriter.ClearEngineKey(key, opts)
 }
 
+func (rw clearKeyPrintingReadWriter) SingleClearUnversioned(key roachpb.Key) error {
+	rw.buf.Printf("called SingleClearUnversioned(%v)\n", key)
+	return rw.ReadWriter.SingleClearUnversioned(key)
+}
+
 func (rw clearKeyPrintingReadWriter) SingleClearEngineKey(key storage.EngineKey) error {
 	rw.buf.Printf("called SingleClearEngineKey(%v)\n", key)
 	return rw.ReadWriter.SingleClearEngineKey(key)

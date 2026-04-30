@@ -569,6 +569,12 @@ func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearO
 	return s.w.ClearEngineKey(key, opts)
 }
 
+func (s spanSetWriter) SingleClearUnversioned(key roachpb.Key) error {
+	// Pass-through, since single clear of unversioned keys is only used for
+	// raft log entries which are unreplicated range-ID local keys.
+	return s.w.SingleClearUnversioned(key)
+}
+
 func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
 	// Pass-through, since single clear is only used for the lock table, which
 	// is not in the spans.
