@@ -607,9 +607,13 @@ WITH contention_fingerprints AS (
     WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
 ),
 fingerprint_queries AS (
-    -- Only fetch statement data for fingerprints that appear in contention events
-    SELECT DISTINCT fingerprint_id, metadata->>'query' as query
+    -- Only fetch statement data for fingerprints that appear in contention events.
+    -- Source the query text from system.statements; fall back to
+    -- metadata->>'query' for rows that predate the system.statements backfill.
+    SELECT DISTINCT ss.fingerprint_id,
+                    COALESCE(s.fingerprint, ss.metadata->>'query') as query
     FROM system.statement_statistics ss
+    LEFT JOIN system.statements s ON s.fingerprint_id = ss.fingerprint_id
     WHERE EXISTS (
         SELECT 1 FROM contention_fingerprints cf
         WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id

@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -535,6 +536,13 @@ func (s *Container) DrainStats(
 	var distSQLUsed, vectorized, fullScan bool
 	var querySummary string
 
+	// Once V26_3 is active, query, query summary, and database are sourced
+	// from system.statements; omit them from the persisted metadata JSONB to
+	// avoid duplication. Mixed-version clusters keep populating them so
+	// older binaries reading metadata->>'query' continue to work.
+	omitDeprecatedKeyFields := s.st != nil &&
+		s.st.Version.IsActive(ctx, clusterversion.V26_3)
+
 	for key, stmt := range stmts {
 		func() {
 			stmt.mu.Lock()
@@ -546,18 +554,25 @@ func (s *Container) DrainStats(
 			querySummary = stmt.mu.querySummary
 		}()
 
+		stmtKey := appstatspb.StatementStatisticsKey{
+			Query:                    stmt.meta.stmtNoConstants,
+			QuerySummary:             querySummary,
+			DistSQL:                  distSQLUsed,
+			Vec:                      vectorized,
+			FullScan:                 fullScan,
+			App:                      s.appName,
+			Database:                 stmt.meta.database,
+			PlanHash:                 key.planHash,
+			TransactionFingerprintID: key.transactionFingerprintID,
+		}
+		if omitDeprecatedKeyFields {
+			stmtKey.Query = ""
+			stmtKey.QuerySummary = ""
+			stmtKey.Database = ""
+		}
+
 		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
-			Key: appstatspb.StatementStatisticsKey{
-				Query:                    stmt.meta.stmtNoConstants,
-				QuerySummary:             querySummary,
-				DistSQL:                  distSQLUsed,
-				Vec:                      vectorized,
-				FullScan:                 fullScan,
-				App:                      s.appName,
-				Database:                 stmt.meta.database,
-				PlanHash:                 key.planHash,
-				TransactionFingerprintID: key.transactionFingerprintID,
-			},
+			Key:                 stmtKey,
 			ID:                  stmt.ID,
 			Stats:               data,
 			AggregatedTs:        key.aggregatedTs,

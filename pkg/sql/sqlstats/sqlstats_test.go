@@ -14,12 +14,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,15 +136,23 @@ func TestStmtStatsQueryColumns(t *testing.T) {
 	s.SQLServer().(*sql.Server).GetSQLStatsProvider().MaybeFlush(ctx, s.AppStopper())
 
 	// Verify statement_statistics_persisted populates query/query_summary/database
-	// via the JOIN with system.statements.
+	// via the JOIN with system.statements. The statementstore writer is
+	// asynchronous, so wait for the row to appear.
 	var pQuery, pQuerySummary, pDatabase string
-	obsDB.QueryRow(t,
-		`SELECT query, query_summary, database
-		 FROM crdb_internal.statement_statistics_persisted
-		 WHERE app_name = $1 AND query LIKE '%SELECT _'`, appName,
-	).Scan(&pQuery, &pQuerySummary, &pDatabase)
+	testutils.SucceedsSoon(t, func() error {
+		row := obsDB.DB.QueryRowContext(ctx,
+			`SELECT query, query_summary, database
+			 FROM crdb_internal.statement_statistics_persisted
+			 WHERE app_name = $1 AND query LIKE '%SELECT _'`, appName)
+		if err := row.Scan(&pQuery, &pQuerySummary, &pDatabase); err != nil {
+			return err
+		}
+		if pQuery == "" {
+			return errors.New("query column not yet populated by statementstore")
+		}
+		return nil
+	})
 
-	require.NotEmpty(t, pQuery, "persisted: query column should be populated")
 	require.Contains(t, pQuery, "SELECT")
 	require.NotEmpty(t, pQuerySummary, "persisted: query_summary column should be populated")
 	require.Equal(t, "testdb", pDatabase, "persisted: database column should match")

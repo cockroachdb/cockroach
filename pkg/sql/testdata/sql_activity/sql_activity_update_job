@@ -38,11 +38,11 @@ update-app ignore=true
 
 # Check the values got properly added to the system tables.
 run-sql useApp=true
-SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
-system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+SELECT aggregated_ts, encode(fingerprint_id, 'hex'), statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,"SELECT _",1
-2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+2024-01-01 01:00:00 +0000 UTC,58d6127c4c85189b,1
+2024-01-01 01:00:00 +0000 UTC,6afa260318561b7f,1
 
 run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
@@ -53,11 +53,11 @@ system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, finger
 
 # Check the values got properly added to the top activity tables.
 run-sql useApp=true
-SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
-system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+SELECT aggregated_ts, encode(fingerprint_id, 'hex'), statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,"SELECT _",1
-2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
+2024-01-01 01:00:00 +0000 UTC,58d6127c4c85189b,1
+2024-01-01 01:00:00 +0000 UTC,6afa260318561b7f,1
 
 run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
@@ -110,14 +110,14 @@ update-app ignore=true
 
 # Check the values got properly added to the system tables
 run-sql useApp=true
-SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
-system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+SELECT aggregated_ts, encode(fingerprint_id, 'hex'), statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
-2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
-2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
-2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
-2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
+2024-01-01 01:00:00 +0000 UTC,58d6127c4c85189b,1
+2024-01-01 01:00:00 +0000 UTC,6afa260318561b7f,3
+2024-01-01 01:00:00 +0000 UTC,a8370357cd0f6f08,1
+2024-01-01 02:00:00 +0000 UTC,6afa260318561b7f,1
+2024-01-01 02:00:00 +0000 UTC,e76e463042ee3d91,1
 
 run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
@@ -131,14 +131,14 @@ system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, finger
 
 # Check the values got properly added to the top activity tables
 run-sql useApp=true
-SELECT aggregated_ts, metadata -> 'query' as query, statistics -> 'statistics' -> 'cnt' as count FROM
-system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, metadata -> 'query'
+SELECT aggregated_ts, encode(fingerprint_id, 'hex'), statistics -> 'statistics' -> 'cnt' as count FROM
+system.statement_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,"SELECT _",3
-2024-01-01 01:00:00 +0000 UTC,"SELECT _ WHERE _ = _",1
-2024-01-01 01:00:00 +0000 UTC,"SET application_name = _",1
-2024-01-01 02:00:00 +0000 UTC,"SELECT _",1
-2024-01-01 02:00:00 +0000 UTC,"SELECT _ WHERE (_ = _) AND (_ = _)",1
+2024-01-01 01:00:00 +0000 UTC,58d6127c4c85189b,1
+2024-01-01 01:00:00 +0000 UTC,6afa260318561b7f,3
+2024-01-01 01:00:00 +0000 UTC,a8370357cd0f6f08,1
+2024-01-01 02:00:00 +0000 UTC,6afa260318561b7f,1
+2024-01-01 02:00:00 +0000 UTC,e76e463042ee3d91,1
 
 run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
