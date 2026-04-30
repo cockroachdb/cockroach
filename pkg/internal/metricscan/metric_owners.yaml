@@ -890,6 +890,24 @@ owners:
   security_certificate_expiration_node_client: cockroachdb/security-engineering
   security_certificate_expiration_ui: cockroachdb/security-engineering
   security_certificate_expiration_ui_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days: cockroachdb/security-engineering
+  security_certificate_expiry_days_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days_ca_client_tenant: cockroachdb/security-engineering
+  security_certificate_expiry_days_client_ca: cockroachdb/security-engineering
+  security_certificate_expiry_days_client_tenant: cockroachdb/security-engineering
+  security_certificate_expiry_days_node: cockroachdb/security-engineering
+  security_certificate_expiry_days_node_client: cockroachdb/security-engineering
+  security_certificate_expiry_days_ui: cockroachdb/security-engineering
+  security_certificate_expiry_days_ui_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation: cockroachdb/security-engineering
+  security_certificate_last_rotation_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation_ca_client_tenant: cockroachdb/security-engineering
+  security_certificate_last_rotation_client_ca: cockroachdb/security-engineering
+  security_certificate_last_rotation_client_tenant: cockroachdb/security-engineering
+  security_certificate_last_rotation_node: cockroachdb/security-engineering
+  security_certificate_last_rotation_node_client: cockroachdb/security-engineering
+  security_certificate_last_rotation_ui: cockroachdb/security-engineering
+  security_certificate_last_rotation_ui_ca: cockroachdb/security-engineering
   security_certificate_ttl: cockroachdb/security-engineering
   security_certificate_ttl_ca: cockroachdb/security-engineering
   security_certificate_ttl_ca_client_tenant: cockroachdb/security-engineering
