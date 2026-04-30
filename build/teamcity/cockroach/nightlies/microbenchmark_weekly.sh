@@ -59,6 +59,16 @@ get_latest_patch_tag() {
   echo "$latest_tag"
 }
 
+# Best-effort disk-usage snapshotter
+log_disk_usage() {
+  echo "=== disk usage: $1 ($(date -u +%H:%M:%SZ)) ===" \
+    | tee -a "$output_dir/disk_usage.log"
+  ./bin/roachprod run "$ROACHPROD_CLUSTER":1-2 -- df -h /mnt/data1 / 2>&1 \
+    | tee -a "$output_dir/disk_usage.log" \
+    || echo "warn: log_disk_usage failed (exit $?)" \
+       | tee -a "$output_dir/disk_usage.log"
+}
+
 # Create arrays for the revisions and their corresponding SHAs.
 revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
 declare -a sha_arr
@@ -139,12 +149,16 @@ log_into_gcloud
   --gce-pd-volume-size=384 \
   --os-volume-size=50
 
+log_disk_usage "before-stage"
+
 # Stage binaries on the cluster
 for sha in "${build_sha_arr[@]}"; do
   archive_name=${BENCH_PACKAGE//\//-}
   archive_name="$sha-${archive_name/.../all}.tar.gz"
   ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
+
+log_disk_usage "after-stage"
 
 # Post issues to github for triggered builds (triggered builds are always on master)
 if [ -n "${TRIGGERED_BUILD:-}" ]; then
@@ -168,6 +182,8 @@ fi
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?
+
+log_disk_usage "after-run"
 
 # Write metadata to a file for each set of benchmarks
 declare -A metadata
