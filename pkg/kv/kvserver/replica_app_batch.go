@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -494,13 +495,18 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	return nil
 }
 
-// stageTruncation stages the raft log truncation command. It prepares the
-// truncation to happen immediately if tightly coupled truncations are used, or
-// queues the truncation into the loosely coupled machinery otherwise.
-func (b *replicaAppBatch) stageTruncation(
-	ctx context.Context, res *kvserverpb.ReplicatedEvalResult,
-) error {
-	truncatedState := res.GetRaftTruncatedState() // NB: not nil
+// shouldUseLooselyCoupledTruncation decides whether the truncation should be
+// enacted via the loosely-coupled path (raftLogTruncator) or applied
+// synchronously using tightly-coupled truncation.
+func shouldUseLooselyCoupledTruncation(
+	sv *settings.Values, raftExpectedFirstIndex kvpb.RaftIndex, enginesSeparated bool,
+) bool {
+	if enginesSeparated {
+		// With separated engines, loosely-coupled truncation is mandatory: the
+		// synchronous path cannot atomically truncate across two engines.
+		return true
+	}
+
 	// Use loosely-coupled truncations if configured by the setting. Otherwise,
 	// perform a tightly-coupled truncation, i.e. apply it immediately.
 	//
@@ -508,8 +514,19 @@ func (b *replicaAppBatch) stageTruncation(
 	// comment in that proto). It is possible that a replica still has a
 	// truncation sitting in the raft log that never populated this field.
 	// TODO(pav-kv): remove the zero check after any below-raft migration.
-	useLooselyCoupled := res.RaftExpectedFirstIndex != 0 &&
-		looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
+	return raftExpectedFirstIndex != 0 && looselyCoupledTruncationEnabled.Get(sv)
+}
+
+// stageTruncation stages the raft log truncation command. It prepares the
+// truncation to happen immediately if tightly coupled truncations are used, or
+// queues the truncation into the loosely coupled machinery otherwise.
+func (b *replicaAppBatch) stageTruncation(
+	ctx context.Context, res *kvserverpb.ReplicatedEvalResult,
+) error {
+	truncatedState := res.GetRaftTruncatedState() // NB: not nil
+	useLooselyCoupled := shouldUseLooselyCoupledTruncation(
+		&b.r.ClusterSettings().SV, res.RaftExpectedFirstIndex, b.r.store.EnginesSeparated(),
+	)
 
 	if useLooselyCoupled {
 		b.r.store.raftTruncator.addPendingTruncation(

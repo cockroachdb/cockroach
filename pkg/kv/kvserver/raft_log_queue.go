@@ -117,7 +117,8 @@ import (
 var looselyCoupledTruncationEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft_log.loosely_coupled_truncation.enabled",
-	"set to true to loosely couple the raft log truncation",
+	"set to true to loosely couple the raft log truncation. Loosely coupled truncations are "+
+		"automatically enabled if engines are separated",
 	metamorphic.ConstantWithTestBool("kv.raft_log.loosely_coupled_truncation.enabled", false),
 	settings.WithVisibility(settings.Reserved),
 )
