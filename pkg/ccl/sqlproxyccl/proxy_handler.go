@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgproto3/v2"
 	proxyproto "github.com/pires/go-proxyproto"
 	"google.golang.org/grpc"
@@ -372,7 +373,7 @@ func (handler *proxyHandler) handle(
 			// fake cancel requests.
 			log.Dev.Warningf(
 				ctx, "could not handle cancel request from client %s: %v",
-				incomingConn.RemoteAddr().String(), err,
+				redact.HashString(incomingConn.RemoteAddr().String()), err,
 			)
 		}
 		return nil
