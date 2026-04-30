@@ -48,4 +48,8 @@ const (
 	// InflightTraceDir is the directory name where the job trace dumper stores traces
 	// when a job opts in to dumping its execution traces.
 	InflightTraceDir = "inflight_trace_dump"
+
+	// HeartbeatTraceDumpDir is the directory name where the liveness heartbeat
+	// trace dumper stores verbose traces for slow heartbeats.
+	HeartbeatTraceDumpDir = "heartbeat_trace_dump"
 )
