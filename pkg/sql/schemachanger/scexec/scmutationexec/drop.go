@@ -133,6 +133,13 @@ func (i *immediateVisitor) RemoveUserPrivileges(
 	return nil
 }
 
+func (i *immediateVisitor) RemoveOwner(ctx context.Context, op scop.RemoveOwner) error {
+	// RemoveOwner is a noop: the owner goes away when the descriptor is
+	// dropped; when setting the owner (ALTER ... OWNER TO) a replace operation
+	// covers the update.
+	return nil
+}
+
 func (d *deferredVisitor) DeleteSchedule(_ context.Context, op scop.DeleteSchedule) error {
 	if op.ScheduleID != 0 {
 		d.DeferredMutationStateUpdater.DeleteSchedule(op.ScheduleID)

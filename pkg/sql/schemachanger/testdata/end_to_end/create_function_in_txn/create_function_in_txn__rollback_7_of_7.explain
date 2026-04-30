@@ -42,7 +42,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.FunctionPar..."}
       │         ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":105}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}

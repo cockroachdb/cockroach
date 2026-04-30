@@ -30,12 +30,12 @@ Schema change plan for DROP TYPE ‹defaultdb›.‹public›.‹blue_fish›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"blue_fish","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_blue_fish","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
@@ -84,12 +84,12 @@ Schema change plan for DROP TYPE ‹defaultdb›.‹public›.‹blue_fish›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"blue_fish","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_blue_fish","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":105}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
