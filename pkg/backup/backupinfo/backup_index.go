@@ -46,6 +46,7 @@ var (
 		"backup.index.read.enabled",
 		"if true, the backup index will be read when reading from a backup collection",
 		metamorphic.ConstantWithTestBool("backup.index.read.enabled", true),
+		settings.WithPublic,
 	)
 )
 
