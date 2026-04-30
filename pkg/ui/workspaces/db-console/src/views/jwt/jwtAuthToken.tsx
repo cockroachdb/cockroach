@@ -7,7 +7,7 @@ import { Spinner } from "@cockroachlabs/ui-components";
 import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { useParams } from "react-router-dom";
-import Select, { Option } from "react-select";
+import Select, { SingleValue } from "react-select";
 
 import ErrorCircle from "assets/error-circle.svg";
 import {
@@ -82,10 +82,12 @@ export const JwtAuthToken = (props: {
           </label>
           <Select
             name="username"
-            clearable={false}
-            value={username}
+            isClearable={false}
+            value={usernameOptions.find(o => o.value === username)}
             options={usernameOptions}
-            onChange={(option: Option<string>) => setUsername(option.value)}
+            onChange={(option: SingleValue<OptionValue>) =>
+              setUsername(option?.value ?? null)
+            }
           />
         </div>
         <TextInput
