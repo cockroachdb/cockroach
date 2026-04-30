@@ -9,18 +9,23 @@
 package main
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/defererr"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferloop"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferunlockcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errdelegate"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/iteratorerr"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/leaktestcall"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/logerr"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/redactcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/txnerr"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
@@ -65,6 +70,12 @@ func main() {
 		errwrap.Analyzer,
 		deferunlockcheck.Analyzer,
 		deferloop.Analyzer,
+		// Swallowed error detection analyzers:
+		defererr.Analyzer,
+		iteratorerr.Analyzer,
+		errdelegate.Analyzer,
+		logerr.Analyzer,
+		txnerr.Analyzer,
 	)
 
 	// Standard go vet analyzers:
