@@ -1039,6 +1039,15 @@ func (*CreateExtension) StatementType() StatementType { return TypeDDL }
 func (*CreateExtension) StatementTag() string { return "CREATE EXTENSION" }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateLanguage) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateLanguage) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateLanguage) StatementTag() string { return "CREATE LANGUAGE" }
+
+// StatementReturnType implements the Statement interface.
 func (*CreateExternalConnection) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -2704,6 +2713,7 @@ func (n *CopyTo) String() string                              { return AsString(
 func (n *CreateChangefeed) String() string                    { return AsString(n) }
 func (n *CreateDatabase) String() string                      { return AsString(n) }
 func (n *CreateExtension) String() string                     { return AsString(n) }
+func (n *CreateLanguage) String() string                      { return AsString(n) }
 func (n *CreateRoutine) String() string                       { return AsString(n) }
 func (n *CreateTrigger) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }

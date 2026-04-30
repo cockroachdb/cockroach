@@ -371,18 +371,18 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
-		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
+		{`COMMENT ON FUNCTION f() is 'f'`, 44135, ``, ``},
 
-		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
-		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
-		{`COPY t FROM STDIN FORCE QUOTE *`, 41608, `quote`, ``},
-		{`COPY t FROM STDIN FORCE NULL *`, 41608, `force_null`, ``},
-		{`COPY t FROM STDIN FORCE NOT NULL *`, 41608, `force_not_null`, ``},
-		{`COPY t FROM STDIN WITH (OIDS)`, 41608, `oids`, ``},
-		{`COPY t FROM STDIN (FREEZE)`, 41608, `freeze`, ``},
-		{`COPY t FROM STDIN WITH (FORCE_QUOTE) *`, 41608, `quote`, ``},
-		{`COPY t FROM STDIN (FORCE_NULL) *`, 41608, `force_null`, ``},
-		{`COPY t FROM STDIN (HEADER, FORCE_NOT_NULL) *`, 41608, `force_not_null`, ``},
+		{`COPY t FROM STDIN OIDS`, 0, `copy from unsupported format`, ``},
+		{`COPY t FROM STDIN FREEZE`, 85573, `freeze`, ``},
+		{`COPY t FROM STDIN FORCE QUOTE *`, 85575, `quote`, ``},
+		{`COPY t FROM STDIN FORCE NULL *`, 85575, `force_null`, ``},
+		{`COPY t FROM STDIN FORCE NOT NULL *`, 85575, `force_not_null`, ``},
+		{`COPY t FROM STDIN WITH (OIDS)`, 0, `copy from unsupported format`, ``},
+		{`COPY t FROM STDIN (FREEZE)`, 85573, `freeze`, ``},
+		{`COPY t FROM STDIN WITH (FORCE_QUOTE) *`, 85575, `quote`, ``},
+		{`COPY t FROM STDIN (FORCE_NULL) *`, 85575, `force_null`, ``},
+		{`COPY t FROM STDIN (HEADER, FORCE_NOT_NULL) *`, 85575, `force_not_null`, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
@@ -396,7 +396,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE EXTENSION IF NOT EXISTS a WITH schema = 'public'`, 74777, `create extension if not exists with`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
-		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
+		{`CREATE LANGUAGE a`, 169118, `create language a`, ``},
 		{`CREATE OPERATOR a`, 65017, ``, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
 		{`CREATE RULE a`, 0, `create rule`, ``},
@@ -414,7 +414,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP EXTENSION IF EXISTS a`, 74777, `drop extension if exists`, ``},
 		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
 		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``},
-		{`DROP LANGUAGE a`, 17511, `drop language a`, ``},
+		{`DROP LANGUAGE a`, 169118, `drop language a`, ``},
 		{`DROP OPERATOR a`, 0, `drop operator`, ``},
 		{`DROP PUBLICATION a`, 0, `drop publication`, ``},
 		{`DROP RULE a`, 0, `drop rule`, ``},
@@ -492,7 +492,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
 
-		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
@@ -525,9 +525,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(a INT, UNIQUE (a) NOT VALID)`, 0, `table constraint`,
 			`UNIQUE constraints cannot be marked NOT VALID`},
 
-		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
-		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
-		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 102984, ``, ``},
+		{`UPDATE foo SET a.b = 1`, 102984, ``, ``},
+		{`UPDATE Foo SET x.y = z`, 102984, ``, ``},
 
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
@@ -536,7 +536,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
-		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
 
