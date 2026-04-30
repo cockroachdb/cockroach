@@ -26,8 +26,8 @@ import (
 
 func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// NB: The default value for both the store liveness and node liveness
-	// suspect duration settings is 30s.
-	const suspectDuration = 30 * time.Second
+	// suspect duration settings is 1m.
+	const suspectDuration = time.Minute
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
 		// We test only upgrades from 23.2 in this test because it uses

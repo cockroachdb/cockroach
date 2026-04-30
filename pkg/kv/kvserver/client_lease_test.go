@@ -1308,6 +1308,11 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// Use a fixed suspect duration that the manual clock can easily exceed,
+	// rather than relying on the default (which may be too long for the
+	// SucceedsSoon timeout when combined with HybridManualClock wall time).
+	liveness.TimeAfterNodeSuspect.Override(ctx, &st.SV, 20*time.Second)
+	liveness.TimeAfterStoreSuspectInStoreLiveness.Override(ctx, &st.SV, 20*time.Second)
 
 	// Speed up lease transfers.
 	stickyRegistry := fs.NewStickyRegistry()
