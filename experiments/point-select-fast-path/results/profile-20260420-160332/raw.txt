@@ -1,0 +1,105 @@
+Configuring cache...
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build options --//build/toolchains:crdb_bench_flag, --//build/toolchains:crdb_test_flag, --//build/toolchains:crdb_test_off_flag, and 1 more have changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target @@com_github_buchgr_bazel_remote//:bazel-remote (1 packages loaded, 0 targets configured)
+Analyzing: target @@com_github_buchgr_bazel_remote//:bazel-remote (1 packages loaded, 0 targets configured)
+
+INFO: Analyzed target @@com_github_buchgr_bazel_remote//:bazel-remote (56 packages loaded, 10989 targets configured).
+INFO: Found 1 target...
+Target @@com_github_buchgr_bazel_remote//:bazel-remote up-to-date:
+  _bazel/bin/external/com_github_buchgr_bazel_remote/bazel-remote_/bazel-remote
+INFO: Elapsed time: 0.541s, Critical Path: 0.02s
+INFO: 1 process: 1 internal.
+INFO: Build completed successfully, 1 total action
+Using cache configuration file at /Users/matt/Library/Caches/dev-bazel-remote/config.yml
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelect/conc=1$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.benchtime=30s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/Users/matt/.roachdev/worktrees/cockroach-blue-pea --sandbox_writable_path=/Users/matt/.roachdev/worktrees/cockroach-blue-pea --test_arg -test.cpu --test_arg 8 --test_arg -test.cpuprofile=cpu.prof --test_arg -test.memprofile=mem.prof --test_output streamed
+INFO: Invocation ID: 357f2782-a18c-4d4e-a92f-1439b58633d6
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build options --//build/toolchains:crdb_bench_flag, --//build/toolchains:crdb_test_flag, --//build/toolchains:crdb_test_off_flag, and 2 more have changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+
+Analyzing: target //pkg/sql/tests:tests_test (1742 packages loaded, 17277 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (2233 packages loaded, 25259 targets configured).
+[299 / 6,095] Compiling src/google/protobuf/descriptor.cc [for tool]; 0s remote-cache ... (8 actions, 0 running)
+INFO: From Compiling src/google/protobuf/stubs/strutil.cc [for tool]:
+external/com_google_protobuf/src/google/protobuf/stubs/strutil.cc:526:11: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  526 |           sprintf(dest + used, (use_hex ? "\\x%02x" : "\\%03o"),
+      |           ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+1 warning generated.
+INFO: From Compiling src/google/protobuf/io/strtod.cc [for tool]:
+external/com_google_protobuf/src/google/protobuf/io/strtod.cc:66:14: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+   66 |   int size = sprintf(temp, "%.1f", 1.5);
+      |              ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+1 warning generated.
+INFO: From Linking external/com_google_protobuf/libprotobuf_lite.a [for tool]:
+libtool: warning: 'io_win32.o' has no symbols
+INFO: From Linking external/com_google_protobuf/libprotobuf.a [for tool]:
+libtool: warning: 'error_listener.o' has no symbols
+I260420 23:03:37.423210 1 (gostd) rand.go:288  [-] 1  random seed: -8101379602308163147
+[6,095 / 6,096] Testing //pkg/sql/tests:tests_test; 1s processwrapper-sandbox
+goos: darwin
+goarch: arm64
+cpu: Apple M3 Pro
+BenchmarkPointSelect/conc=1-8         	  349420	    102430 ns/op	       101.4 p50_us	       132.1 p99_us
+I260420 23:04:16.270173 67 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260420 23:04:16.270229 2505 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 3  quiescing stats garbage collector
+I260420 23:04:16.270260 4799 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 4  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+W260420 23:04:16.270506 1382 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 5  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270521 4861 jobs/adopt.go:563  [T1,Vsystem,n1] 6  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260420 23:04:16.270306 1243 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 7  exiting heartbeat loop
+I260420 23:04:16.270307 4822 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 9  KEY VISUALIZER job 100: stepping through state succeeded
+W260420 23:04:16.270547 1243 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 10  exiting heartbeat loop with error: node unavailable; try another peer
+I260420 23:04:16.270335 2504 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 11  quiescing auto stats misestimates refresher
+E260420 23:04:16.270556 1243 server/server_sql.go:535  [T1,Vsystem,n1] 12  failed to run update of instance with new session ID: node unavailable; try another peer
+I260420 23:04:16.270338 2503 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 13  quiescing auto stats refresher
+I260420 23:04:16.270360 281 server/start_listen.go:114  [T1,Vsystem,n1] 14  server shutting down: instructing cmux to stop accepting
+W260420 23:04:16.270568 4640 jobs/adopt.go:563  [T1,Vsystem,n1] 15  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260420 23:04:16.270536 2195 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168689785096306689,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 8  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270373 5001 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 16  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270387 2240 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 17  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270393 2324 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 18  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270632 4884 jobs/adopt.go:563  [T1,Vsystem,n1] 19  could not clear job claim: clear-job-claim: node unavailable; try another peer
+W260420 23:04:16.270405 2704 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270369 2253 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 21  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270410 2417 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 22  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270419 2706 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270423 2226 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168689785096306689,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 24  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270431 2725 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270434 2277 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 26  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270454 1252 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 27  error closing mux rangefeed client: context canceled
+W260420 23:04:16.270461 2210 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1168689785096306689,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 28  error closing mux rangefeed client: context canceled
+I260420 23:04:16.270716 1916 jobs/registry.go:1622  [T1,Vsystem,n1,job=1168689785096306689] 29  AUTO SPAN CONFIG RECONCILIATION job 1168689785096306689: stepping through state succeeded
+W260420 23:04:16.280910 67 server/server_sql.go:1847  [T1,Vsystem,n1] 30  server shutdown without a prior graceful drain
+I260420 23:04:16.280974 67 server/server_controller.go:380  [T1,Vsystem,n1] 31  server controller shutting down
+I260420 23:04:16.280983 67 server/server_controller.go:389  [T1,Vsystem,n1] 32  waiting for tenant servers to report stopped
+PASS
+[6,095 / 6,096] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 39s processwrapper-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 42.352s, Critical Path: 39.76s
+INFO: 113 processes: 111 remote cache hit, 1 internal, 1 processwrapper-sandbox.
+INFO: Build completed successfully, 113 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 39.5s
+
+Executed 1 out of 1 test: 1 test passes.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.

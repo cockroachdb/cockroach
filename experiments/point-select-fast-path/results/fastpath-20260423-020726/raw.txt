@@ -1,0 +1,86 @@
+$ bazel test //pkg/sql/tests:tests_test --nocache_test_results --test_arg -test.run=- --test_arg '-test.bench=^BenchmarkPointSelectSecondaryIndex$' --test_sharding_strategy=disabled --test_arg -test.cpu --test_arg 1 --test_arg -test.count=5 --test_arg -test.benchtime=10s --crdb_test_off --crdb_bench --test_arg -test.outputdir=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --sandbox_writable_path=/home/matt_white_cockroachlabs_com/cockroach-fastpath-experiment --test_arg -test.cpu --test_arg 24 --test_env COCKROACH_TEST_FIXTURES_DIR=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --sandbox_writable_path=/home/matt_white_cockroachlabs_com/.cache/crdb-test-fixtures --test_output streamed --test_env=POINT_SELECT_FAST_PATH=1
+INFO: Invocation ID: 938e6ee8-35ae-44e5-8ce0-c9797aea79d6
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+WARNING: Build option --test_env has changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+Analyzing: target //pkg/sql/tests:tests_test (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //pkg/sql/tests:tests_test (0 packages loaded, 25341 targets configured).
+[1 / 1] no actions running
+I260423 02:07:28.770384 1 (gostd) rand.go:288  [-] 1  random seed: -4929159496204039844
+[6,094 / 6,095] Testing //pkg/sql/tests:tests_test; 1s linux-sandbox
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   34766	    335185 ns/op	       324.1 p50_us	       469.5 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   34838	    333483 ns/op	       323.1 p50_us	       462.8 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   34447	    334221 ns/op	       323.6 p50_us	       461.8 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   35376	    333371 ns/op	       323.6 p50_us	       461.3 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=1-24         	   35341	    328547 ns/op	       319.0 p50_us	       455.7 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  272484	     42720 ns/op	       321.5 p50_us	       519.7 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  268929	     42787 ns/op	       322.0 p50_us	       525.8 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  271789	     42351 ns/op	       320.0 p50_us	       514.6 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  268692	     42251 ns/op	       319.5 p50_us	       512.0 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=8-24         	  264664	     42405 ns/op	       320.5 p50_us	       507.4 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  480194	     25427 ns/op	       401.9 p50_us	       617.0 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  476269	     25347 ns/op	       400.9 p50_us	       614.9 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  478990	     25335 ns/op	       400.4 p50_us	       616.4 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  464031	     25342 ns/op	       400.4 p50_us	       625.2 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=16-24        	  459262	     25150 ns/op	       396.3 p50_us	       622.1 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  675468	     16324 ns/op	       447.0 p50_us	      1260 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  668217	     16378 ns/op	       448.5 p50_us	      1274 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  661638	     16398 ns/op	       448.0 p50_us	      1300 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  656726	     16438 ns/op	       449.0 p50_us	      1298 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=32-24        	  646910	     16431 ns/op	       449.5 p50_us	      1308 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  752008	     16525 ns/op	       895.0 p50_us	      3228 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  755913	     16554 ns/op	       895.0 p50_us	      3277 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  749306	     16576 ns/op	       894.5 p50_us	      3256 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  744556	     16719 ns/op	       902.7 p50_us	      3320 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=64-24        	  714172	     16717 ns/op	       901.6 p50_us	      3355 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  726723	     16790 ns/op	      1768 p50_us	      7737 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  712095	     16848 ns/op	      1779 p50_us	      7791 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  703386	     16913 ns/op	      1786 p50_us	      7852 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  728655	     16993 ns/op	      1787 p50_us	      7983 p99_us
+BenchmarkPointSelectSecondaryIndex/conc=128-24       	  718698	     17141 ns/op	      1798 p50_us	      8184 p99_us
+I260423 02:15:47.201833 43 testutils/testcluster/testcluster.go:189  [-] 2  TestCluster quiescing nodes
+I260423 02:15:47.201974 7094 jobs/registry.go:1622  [T1,Vsystem,n1,job=100] 3  KEY VISUALIZER job 100: stepping through state succeeded
+I260423 02:15:47.202002 2772 sql/stats/automatic_stats.go:857  [T1,Vsystem,n1] 5  quiescing stats garbage collector
+W260423 02:15:47.202079 1509 sql/sqlliveness/slinstance/slinstance.go:337  [T1,Vsystem,n1] 6  exiting heartbeat loop
+W260423 02:15:47.202134 1509 sql/sqlliveness/slinstance/slinstance.go:324  [T1,Vsystem,n1] 7  exiting heartbeat loop with error: node unavailable; try another peer
+I260423 02:15:47.202160 601 server/start_listen.go:114  [T1,Vsystem,n1] 8  server shutting down: instructing cmux to stop accepting
+W260423 02:15:47.202146 7263 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=POLL JOBS STATS id=101,rangefeed=cluster-metrics-watcher,mux_n=1,gen=2] 9  error closing mux rangefeed client: context canceled
+E260423 02:15:47.202180 1509 server/server_sql.go:535  [T1,Vsystem,n1] 10  failed to run update of instance with new session ID: node unavailable; try another peer
+I260423 02:15:47.201978 7034 jobs/registry.go:1622  [T1,Vsystem,n1,job=103] 4  AUTO UPDATE SQL ACTIVITY job 103: stepping through state succeeded
+W260423 02:15:47.202186 2351 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=system-config-cache,mux_n=1,gen=2] 11  error closing mux rangefeed client: context canceled
+I260423 02:15:47.202305 2770 sql/stats/automatic_stats.go:766  [T1,Vsystem,n1] 13  quiescing auto stats refresher
+I260423 02:15:47.202297 2771 sql/stats/automatic_stats.go:804  [T1,Vsystem,n1] 12  quiescing auto stats misestimates refresher
+W260423 02:15:47.202687 1787 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-boundaries-watcher,mux_n=1,gen=2] 14  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202718 2844 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-entry-watcher,mux_n=1,gen=2] 15  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202768 2458 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169292161370783745,rangefeed=sql-watcher-descriptor-rangefeed,mux_n=1,gen=2] 16  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202834 2746 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=table-stats-cache,mux_n=1,gen=2] 17  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202879 1175 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=sql_instances,mux_n=1,gen=2] 18  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202874 2499 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169292161370783745,rangefeed=sql-watcher-protected-ts-records-rangefeed,mux_n=1,gen=2] 19  error closing mux rangefeed client: context canceled
+W260423 02:15:47.202973 2493 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,job=AUTO SPAN CONFIG RECONCILIATION id=1169292161370783745,rangefeed=sql-watcher-zones-rangefeed,mux_n=1,gen=2] 20  error closing mux rangefeed client: context canceled
+W260423 02:15:47.203011 2412 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=settings-watcher,mux_n=1,gen=2] 21  error closing mux rangefeed client: context canceled
+I260423 02:15:47.203036 1956 jobs/registry.go:1622  [T1,Vsystem,n1,job=1169292161370783745] 22  AUTO SPAN CONFIG RECONCILIATION job 1169292161370783745: stepping through state succeeded
+W260423 02:15:47.203036 2868 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=tenant-settings-watcher,mux_n=1,gen=2] 23  error closing mux rangefeed client: context canceled
+W260423 02:15:47.203037 2419 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=spanconfig-subscriber,mux_n=1,gen=2] 24  error closing mux rangefeed client: context canceled
+W260423 02:15:47.203049 2849 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=statement-hints-watcher,mux_n=1,gen=2] 25  error closing mux rangefeed client: context canceled
+W260423 02:15:47.203099 1557 15@kv/kvclient/kvcoord/dist_sender_mux_rangefeed.go:417  [T1,Vsystem,n1,rangefeed=lease,mux_n=1,gen=2] 26  error closing mux rangefeed client: context canceled
+W260423 02:15:47.207969 43 server/server_sql.go:1847  [T1,Vsystem,n1] 27  server shutdown without a prior graceful drain
+I260423 02:15:47.208068 43 server/server_controller.go:380  [T1,Vsystem,n1] 28  server controller shutting down
+I260423 02:15:47.208089 43 server/server_controller.go:389  [T1,Vsystem,n1] 29  waiting for tenant servers to report stopped
+PASS
+[6,094 / 6,095] 1 / 1 tests; Testing //pkg/sql/tests:tests_test; 498s linux-sandbox
+INFO: Found 1 test target...
+Target //pkg/sql/tests:tests_test up-to-date:
+  _bazel/bin/pkg/sql/tests/tests_test_/tests_test
+INFO: Elapsed time: 500.689s, Critical Path: 499.06s
+INFO: 2 processes: 1 internal, 1 linux-sandbox.
+INFO: Build completed successfully, 2 total actions
+//pkg/sql/tests:tests_test                                               PASSED in 498.9s
+
+Executed 1 out of 1 test: 1 test passes.

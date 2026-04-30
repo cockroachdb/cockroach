@@ -1163,22 +1163,44 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	if ex.executorType != executorTypeInternal &&
-		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
-		!ex.implicitTxn() {
-		// If an internal executor query that is run as part of a larger statement
-		// throws a retryable error, that error should be returned up and retried by
-		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
-		// TODO(rafi): The above should be happening already, but find a way to
-		// test it.
-		if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
-			stmtThresholdSpan.Finish()
-			return nil, nil, err
+	// Experimental point-select fast path. When the cluster setting is on
+	// AND the prepared statement matches the recognized shape, bypass the
+	// normal optimizer/distSQL/row.Fetcher dispatch entirely. The fast
+	// path preserves all earlier setup (txn stepping, active-query
+	// registration, planner reset, etc.); it only replaces the execute-
+	// side of the pipeline. See experiments/point-select-fast-path/.
+	fastPathHandled := false
+	if isExtendedProtocol && PointSelectFastPathEnabled.Get(&ex.server.cfg.Settings.SV) {
+		if plan := ex.tryGetPointSelectFastPath(ctx, p, prepared); plan != nil {
+			handled, fpErr := ex.execPointSelectFastPath(stmtCtx, plan, pinfo, res)
+			if handled {
+				if fpErr != nil {
+					stmtThresholdSpan.Finish()
+					return nil, nil, fpErr
+				}
+				fastPathHandled = true
+			}
 		}
-	} else {
-		if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
-			stmtThresholdSpan.Finish()
-			return nil, nil, err
+	}
+
+	if !fastPathHandled {
+		if ex.executorType != executorTypeInternal &&
+			ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
+			!ex.implicitTxn() {
+			// If an internal executor query that is run as part of a larger statement
+			// throws a retryable error, that error should be returned up and retried by
+			// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
+			// TODO(rafi): The above should be happening already, but find a way to
+			// test it.
+			if err := ex.dispatchReadCommittedStmtToExecutionEngine(stmtCtx, p, res); err != nil {
+				stmtThresholdSpan.Finish()
+				return nil, nil, err
+			}
+		} else {
+			if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
+				stmtThresholdSpan.Finish()
+				return nil, nil, err
+			}
 		}
 	}
 
