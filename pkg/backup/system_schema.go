@@ -950,7 +950,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.StatementsTable.GetName(): {
-		shouldIncludeInClusterBackup: optInToClusterBackup,
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 }
 
