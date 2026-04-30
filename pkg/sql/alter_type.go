@@ -407,6 +407,10 @@ func (p *planner) alterTypeOwner(
 	typeDesc := n.desc
 	oldOwner := typeDesc.GetPrivileges().Owner()
 
+	if newOwner == oldOwner {
+		return nil
+	}
+
 	arrayDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
@@ -429,11 +433,6 @@ func (p *planner) alterTypeOwner(
 	if err := p.setNewTypeOwner(ctx, typeDesc, arrayDesc, typeNameWithPrefix,
 		arrayTypeNameWithPrefix, newOwner); err != nil {
 		return err
-	}
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
-		return nil
 	}
 
 	if err := p.writeTypeSchemaChange(
