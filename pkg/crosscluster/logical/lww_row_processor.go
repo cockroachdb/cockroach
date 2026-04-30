@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -503,7 +504,7 @@ func makeSQLProcessor(
 			deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigByDestID)),
 			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
-		tombstoneUpdaters:          make(map[descpb.ID]*tombstoneUpdater, len(tableConfigByDestID)),
+		tombstoneUpdaters:          make(map[descpb.ID]*sqlwriter.TombstoneUpdater, len(tableConfigByDestID)),
 		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
 		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
 		ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID),
@@ -585,7 +586,7 @@ type lwwQuerier struct {
 	codec             keys.SQLCodec
 	db                descs.DB
 	queryBuffer       queryBuffer
-	tombstoneUpdaters map[descpb.ID]*tombstoneUpdater
+	tombstoneUpdaters map[descpb.ID]*sqlwriter.TombstoneUpdater
 
 	ieOverrideOptimisticInsert sessiondata.InternalExecutorOverride
 	ieOverrideInsert           sessiondata.InternalExecutorOverride
@@ -605,7 +606,7 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 		return err
 	}
 
-	lww.tombstoneUpdaters[td.GetID()] = newTombstoneUpdater(
+	lww.tombstoneUpdaters[td.GetID()] = sqlwriter.NewTombstoneUpdater(
 		lww.codec,
 		lww.db.KV(),
 		lww.leaseMgr,
@@ -733,8 +734,15 @@ func (lww *lwwQuerier) DeleteRow(
 	if rowCount != 1 {
 		// NOTE: at this point we don't know if we are updating a tombstone or if
 		// we are losing LWW. As long as it is a LWW loss or a tombstone update,
-		// updateTombstone will return okay.
-		return lww.tombstoneUpdaters[row.TableID].updateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
+		// UpdateTombstoneAny will return okay.
+		lwwLoss, err := lww.tombstoneUpdaters[row.TableID].UpdateTombstoneAny(ctx, txn, row.MvccTimestamp, datums)
+		if err != nil {
+			return batchStats{}, err
+		}
+		if lwwLoss {
+			return batchStats{kvWriteTooOld: 1}, nil
+		}
+		return batchStats{}, nil
 	}
 	return batchStats{}, nil
 }
