@@ -36,10 +36,16 @@ filegroup(
         "//conditions:default": [],
     }),
     visibility = [
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.1:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.3:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.4:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-26.1:__pkg__",
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-26.2:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.1:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-26.1:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-26.2:__pkg__",
     ],
 )
 
