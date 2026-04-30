@@ -176,18 +176,6 @@ type Registry struct {
 	creationKnobs syncutil.Map[jobspb.Type, func(Resumer) Resumer]
 }
 
-// DeprecatedUpdateJobWithTxn calls the Update method on an existing job with
-// jobID, using a transaction passed in the txn argument. Passing a
-// nil transaction means that a txn will be automatically created.
-//
-// Deprecated: See comment on DeprecatedUpdater for more information.
-func (r *Registry) DeprecatedUpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc DeprecatedUpdateFn,
-) error {
-	job := Job{registry: r, id: jobID}
-	return job.DeprecatedWithTxn(txn).Update(ctx, updateFunc)
-}
-
 // jobExecCtxMaker is a wrapper around sql.NewInternalPlanner. It returns an
 // *sql.planner as an interface{} due to package dependency cycles. It should
 // be cast to that type in the sql package when it is used. Returns a cleanup
