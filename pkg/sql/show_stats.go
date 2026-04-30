@@ -48,9 +48,25 @@ const showTableStatsOptForecast = "forecast"
 
 const showTableStatsOptMerge = "merge"
 
+const showTableStatsOptForecastStatus = "forecast_status"
+
 var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
-	showTableStatsOptForecast: exprutil.KVStringOptRequireNoValue,
-	showTableStatsOptMerge:    exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptForecast:       exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptMerge:          exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptForecastStatus: exprutil.KVStringOptRequireNoValue,
+}
+
+var showTableStatsForecastStatusColumns = colinfo.ResultColumns{
+	{Name: "column_names", Typ: types.StringArray},
+	{Name: "latest_created", Typ: types.TimestampTZ},
+	{Name: "forecast_at", Typ: types.TimestampTZ},
+	{Name: "row_count_r2", Typ: types.Float},
+	{Name: "null_count_r2", Typ: types.Float},
+	{Name: "distinct_count_r2", Typ: types.Float},
+	{Name: "avg_size_r2", Typ: types.Float},
+	{Name: "histogram_r2", Typ: types.Float},
+	{Name: "forecast_error", Typ: types.String},
+	{Name: "histogram_error", Typ: types.String},
 }
 
 func containsDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) bool {
@@ -82,9 +98,25 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
+	_, withForecastStatus := opts[showTableStatsOptForecastStatus]
+	if withForecastStatus {
+		if n.UsingJSON {
+			return nil, errors.New("cannot use forecast_status with USING JSON")
+		}
+		if _, ok := opts[showTableStatsOptForecast]; ok {
+			return nil, errors.New("cannot use forecast_status with forecast")
+		}
+		if _, ok := opts[showTableStatsOptMerge]; ok {
+			return nil, errors.New("cannot use forecast_status with merge")
+		}
+	}
+
 	columns := showTableStatsColumns
 	if n.UsingJSON {
 		columns = showTableStatsJSONColumns
+	}
+	if withForecastStatus {
+		columns = showTableStatsForecastStatusColumns
 	}
 
 	return &delayedNode{
@@ -137,6 +169,102 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 			// Guard against crashes in the code below (e.g. #56356).
 			defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
+			if withForecastStatus {
+				statsList := make([]*stats.TableStatistic, 0, len(rows))
+				for _, row := range rows {
+					colIDs := row[columnIDsIdx].(*tree.DArray).Array
+					if containsDroppedColumn(colIDs, desc) {
+						continue
+					}
+					stat, err := stats.NewTableStatisticProto(row)
+					if err != nil {
+						return nil, err
+					}
+					obs := &stats.TableStatistic{TableStatisticProto: *stat}
+					if obs.HistogramData != nil && !obs.HistogramData.ColumnType.UserDefined() {
+						if err := stats.DecodeHistogramBuckets(ctx, obs); err != nil {
+							return nil, err
+						}
+					}
+					statsList = append(statsList, obs)
+				}
+
+				// Reverse to sort by CreatedAt descending.
+				for i := 0; i < len(statsList)/2; i++ {
+					j := len(statsList) - i - 1
+					statsList[i], statsList[j] = statsList[j], statsList[i]
+				}
+
+				statuses := stats.ForecastTableStatisticsStatus(
+					ctx, p.ExtendedEvalContext().Settings, statsList,
+				)
+				v := p.newContainerValuesNode(columns, len(statuses))
+				for _, s := range statuses {
+					colNames := make(tree.Datums, len(s.ColumnIDs))
+					for i, colID := range s.ColumnIDs {
+						colDesc := catalog.FindColumnByID(desc, colID)
+						if colDesc == nil {
+							colNames[i] = tree.NewDString("<unknown>")
+						} else {
+							colNames[i] = tree.NewDString(colDesc.GetName())
+						}
+					}
+
+					var latestCreated tree.Datum = tree.DNull
+					if !s.LatestCreated.IsZero() {
+						d, err := tree.MakeDTimestampTZ(s.LatestCreated, time.Microsecond)
+						if err != nil {
+							v.Close(ctx)
+							return nil, err
+						}
+						latestCreated = d
+					}
+					var forecastAtDatum tree.Datum = tree.DNull
+					if !s.ForecastAt.IsZero() {
+						d, err := tree.MakeDTimestampTZ(s.ForecastAt, time.Microsecond)
+						if err != nil {
+							v.Close(ctx)
+							return nil, err
+						}
+						forecastAtDatum = d
+					}
+
+					f64OrNull := func(p *float64) tree.Datum {
+						if p == nil {
+							return tree.DNull
+						}
+						return tree.NewDFloat(tree.DFloat(*p))
+					}
+
+					forecastErr := tree.DNull
+					if s.ForecastError != nil {
+						forecastErr = tree.NewDString(s.ForecastError.Error())
+					}
+					histErr := tree.DNull
+					if s.HistogramError != nil {
+						histErr = tree.NewDString(s.HistogramError.Error())
+					}
+
+					res := tree.Datums{
+						tree.NewDArrayFromDatums(types.String, colNames),
+						latestCreated,
+						forecastAtDatum,
+						f64OrNull(s.RowCountR2),
+						f64OrNull(s.NullCountR2),
+						f64OrNull(s.DistinctCountR2),
+						f64OrNull(s.AvgSizeR2),
+						f64OrNull(s.HistogramR2),
+						forecastErr,
+						histErr,
+					}
+					if _, err := v.rows.AddRow(ctx, res); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+				return v, nil
+			}
 
 			_, withMerge := opts[showTableStatsOptMerge]
 			_, withForecast := opts[showTableStatsOptForecast]
