@@ -52,6 +52,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List schedules
+         * @description Returns schedule information, optionally filtered by status.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by status (ACTIVE or PAUSED) */
+                    status?: string;
+                    /** @description Maximum number of schedules to return */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Schedule list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.SchedulesListResponse"];
+                    };
+                };
+                /** @description Invalid limit */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+                /** @description Internal error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedules/{schedule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get schedule
+         * @description Returns information for a single schedule by ID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule ID */
+                    schedule_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Schedule info */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ScheduleInfo"];
+                    };
+                };
+                /** @description Invalid schedule ID */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+                /** @description Internal error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -102,6 +233,36 @@ export interface components {
         "dbconsole.NodesResponse": {
             /** @description Nodes contains status information for all nodes in the cluster. */
             nodes?: components["schemas"]["dbconsole.NodeInfo"][];
+        };
+        "dbconsole.ScheduleInfo": {
+            /** @description Command is the JSON representation of the schedule's execution arguments. */
+            command?: string;
+            /** @description Created is the schedule creation time in ISO 8601 format. */
+            created?: string;
+            /**
+             * @description ID is the unique identifier for the schedule. Serialized as a string to
+             *     avoid JavaScript integer precision loss for values exceeding 2^53.
+             * @example 0
+             */
+            id?: string;
+            /** @description JobsRunning is the number of currently running jobs for this schedule. */
+            jobs_running?: number;
+            /** @description Label is the name of the schedule. */
+            label?: string;
+            /** @description NextRun is the next scheduled run time in ISO 8601 format, empty if paused. */
+            next_run?: string;
+            /** @description Owner is the user who owns this schedule. */
+            owner?: string;
+            /** @description Recurrence is the cron expression or NEVER. */
+            recurrence?: string;
+            /** @description State is the schedule state from the schedule_state protobuf. */
+            state?: string;
+            /** @description Status is the schedule status (ACTIVE or PAUSED). */
+            status?: string;
+        };
+        "dbconsole.SchedulesListResponse": {
+            /** @description Schedules contains information for all matching schedules. */
+            schedules?: components["schemas"]["dbconsole.ScheduleInfo"][];
         };
     };
     responses: never;
