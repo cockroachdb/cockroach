@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,8 +65,10 @@ func (s *RowWriter) DeleteRow(
 	return nil
 }
 
-// InsertRow inserts a row into the table. It will return an error if the row
-// already exists.
+// InsertRow inserts a row into the table. It returns a ConditionFailedError
+// with OriginTimestampOlderThan set if the row lost a LWW comparison, or
+// ErrStalePreviousValue if the insert's origin timestamp is newer but the row
+// already exists (requiring a read refresh to convert the insert to an update).
 func (s *RowWriter) InsertRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
@@ -93,6 +96,15 @@ func (s *RowWriter) InsertRow(
 		}
 		return nil
 	})
+	// When the insert has a newer origin timestamp but conflicts with an
+	// existing row, the CPUT returns a ConditionFailedError with
+	// HadNewerOriginTimestamp. Return ErrStalePreviousValue so the caller
+	// triggers a read refresh and retries the write as an update.
+	if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+		if condErr.HadNewerOriginTimestamp {
+			return ErrStalePreviousValue
+		}
+	}
 	return err
 }
 
