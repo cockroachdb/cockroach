@@ -71,6 +71,10 @@ type ManagerTestingKnobs struct {
 	// is allow to allocate extra memory.
 	DisallowBytesMonitorCaching bool
 
+	// MemoryLimit, if positive, sets a local memory limit on the lease
+	// manager's bytesMonitor. Used in tests to trigger LRU eviction.
+	MemoryLimit int64
+
 	// TestingLeaseUpsertEventForID, if set, is called on every lease upsert
 	// attempt for the specified descriptor. The msg argument describes what
 	// happened (e.g. "attempting", "skipping", "already leased"). This knob
@@ -113,6 +117,12 @@ func (m *Manager) TestingOutstandingLeasesGauge() *metric.Gauge {
 // expired gauge that is used by this lease manager.
 func (m *Manager) TestingSessionBasedLeasesExpiredGauge() *metric.Gauge {
 	return m.storage.sessionBasedLeasesExpired
+}
+
+// TestingBoundAccountUsed returns the current memory usage of the lease
+// manager's bound account.
+func (m *Manager) TestingBoundAccountUsed() int64 {
+	return m.boundAccount.Used()
 }
 
 // TestingSessionBasedLeasesWaitingToExpireGauge returns the session based leases
