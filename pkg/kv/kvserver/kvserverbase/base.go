@@ -127,7 +127,7 @@ var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of load across stores",
-	"leases and replicas",
+	"auto",
 	map[LBRebalancingMode]string{
 		LBRebalancingOff:                 LBRebalancingOff.String(),
 		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
