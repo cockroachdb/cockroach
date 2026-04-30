@@ -29,7 +29,7 @@ go_library(
 
 go_test(
     name = "rand_test",
-    size = "small",
+    size = "large",
     srcs = [
         "diff_test.go",
         "rand_test.go",
@@ -37,6 +37,7 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":rand"],
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/crosscluster/ldrrandgen",
