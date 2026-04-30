@@ -251,14 +251,20 @@ message NumericStat {
 }
 
 message StatementStatisticsKey {
-  optional string query = 1 [(gogoproto.nullable) = false];
+  // query, database, and query_summary are deprecated. Consumers should
+  // source these values from system.statements (exposed via the query,
+  // query_summary, and database columns on
+  // crdb_internal.statement_statistics{,_persisted} and
+  // crdb_internal.statement_activity).
+  // TODO(CRDB-62872): remove in 27.1.
+  optional string query = 1 [(gogoproto.nullable) = false, deprecated=true];
   optional string app = 2 [(gogoproto.nullable) = false];
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
-  optional string database = 9 [(gogoproto.nullable) = false];
+  optional string database = 9 [(gogoproto.nullable) = false, deprecated=true];
   optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
-  optional string query_summary = 12 [(gogoproto.nullable) = false];
+  optional string query_summary = 12 [(gogoproto.nullable) = false, deprecated=true];
 
   reserved 4, 5, 6;
   optional uint64 transaction_fingerprint_id = 11
