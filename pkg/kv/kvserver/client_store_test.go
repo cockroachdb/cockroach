@@ -171,15 +171,26 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 			// and the lease acquisition will trigger an election. Expire that lease
 			// and send a request that'll force a re-acquisition. This time, we should
 			// get a leader lease.
+			//
+			// However, the clock increment also expires store liveness support,
+			// which can cause the Raft leader to step down. If this happens, we may
+			// end up acquiring yet another expiration based lease -- but that's fine,
+			// as eventually, we'll upgrade to a leader lease; the test needs to wait this
+			// out.
 			manualClock.Increment(tc.Server(0).RaftConfig().RangeLeaseDuration.Nanoseconds())
 			incArgs := incrementArgs(key, int64(5))
 
 			testutils.SucceedsSoon(t, func() error {
-				_, err := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), incArgs)
-				return err.GoError()
+				_, pErr := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), incArgs)
+				if pErr != nil {
+					return pErr.GoError()
+				}
+				lease, _ = repl.GetLease()
+				if lease.Type() != roachpb.LeaseLeader {
+					return errors.Errorf("expected leader lease, got %s", lease.Type())
+				}
+				return nil
 			})
-			lease, _ = repl.GetLease()
-			require.Equal(t, roachpb.LeaseLeader, lease.Type())
 		}
 
 		switch leaseType {
