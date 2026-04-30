@@ -14,6 +14,8 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/netip"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -1882,6 +1884,29 @@ func init() {
 	encoding.RegisterCodec(growStackCodec{Codec: codec{}})
 }
 
+// resolveAddrPort parses addr as a netip.AddrPort. If the host portion is not
+// a literal IP address, it is resolved via the system DNS resolver. This keeps
+// the fast path (literal IP) allocation-free while still supporting hostnames
+// that appear in some test and Docker environments.
+func resolveAddrPort(ctx context.Context, addr string) (netip.AddrPort, error) {
+	if ap, err := netip.ParseAddrPort(addr); err == nil {
+		return ap, nil
+	}
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	return netip.AddrPortFrom(ips[0], uint16(port)), nil
+}
+
 // onlyOnceDialer implements the grpc.WithDialer interface but only
 // allows a single connection attempt. It does this by marking all
 // errors as not temporary. In addition to this, if the first
@@ -1943,11 +1968,15 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 
 	// First dial.
 
-	dialer := net.Dialer{
-		LocalAddr: sourceAddr,
+	raddr, err := resolveAddrPort(ctx, addr)
+	if err != nil {
+		err = &notTemporaryError{error: err}
+		ood.mu.err = err
+		return nil, err
 	}
 
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	dialer := net.Dialer{}
+	conn, err := dialer.DialTCP(ctx, "tcp", sourceAddr, raddr)
 	if err != nil {
 		// Return an error and make sure it's not marked as temporary, so that
 		// ideally we don't even use the dialer again. (If the caller still does

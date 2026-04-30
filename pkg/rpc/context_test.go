@@ -1866,6 +1866,16 @@ func TestOnlyOnceDialer(t *testing.T) {
 	}
 }
 
+func TestOnlyOnceDialerResolvesHostnames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ood := &onlyOnceDialer{}
+	_, err := ood.dial(ctx, "localhost:12345")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "connection refused")
+	require.False(t, ood.mu.redialed)
+}
+
 type trackingListener struct {
 	net.Listener
 	mu          syncutil.Mutex
