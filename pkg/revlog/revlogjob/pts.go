@@ -100,6 +100,50 @@ func newPTSManager(
 	}
 }
 
+// PTSManagerForTesting wraps newPTSManager for use in package
+// external tests. Production callers go through flow.Run, which
+// builds it inline.
+type PTSManagerForTesting struct{ inner *ptsManager }
+
+// NewPTSManagerForTesting constructs the production ptsManager and
+// exposes its install / advance methods to package external tests.
+func NewPTSManagerForTesting(
+	job *jobs.Job,
+	ptsProvider protectedts.Manager,
+	internalDB isql.DB,
+	target *ptpb.Target,
+	startHLC hlc.Timestamp,
+) *PTSManagerForTesting {
+	return &PTSManagerForTesting{
+		inner: newPTSManager(job, ptsProvider, internalDB, target, startHLC),
+	}
+}
+
+// Install calls install.
+func (p *PTSManagerForTesting) Install(ctx context.Context) error {
+	return p.inner.install(ctx)
+}
+
+// Advance calls advance.
+func (p *PTSManagerForTesting) Advance(ctx context.Context, frontier hlc.Timestamp) {
+	p.inner.advance(ctx, frontier)
+}
+
+// RecordTSForTesting returns the in-memory record timestamp for
+// assertions; protected by the manager's mutex.
+func (p *PTSManagerForTesting) RecordTSForTesting() hlc.Timestamp {
+	p.inner.mu.Lock()
+	defer p.inner.mu.Unlock()
+	return p.inner.mu.recordTS
+}
+
+// RecordIDForTesting returns the in-memory record UUID.
+func (p *PTSManagerForTesting) RecordIDForTesting() uuid.UUID {
+	p.inner.mu.Lock()
+	defer p.inner.mu.Unlock()
+	return p.inner.mu.recordID
+}
+
 // install allocates a fresh PTS record at startHLC and writes its
 // UUID into the sibling job's BackupDetails.ProtectedTimestampRecord
 // in the same transaction that creates the record. Idempotent

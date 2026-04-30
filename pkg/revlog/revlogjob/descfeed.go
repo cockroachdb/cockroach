@@ -24,6 +24,77 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// descRangefeedSource subscribes to the descriptor stream and pumps
+// rangefeed events into events and errors into errs. The returned
+// stop function tears down the subscription. The interface is the
+// seam between runDescFeed and the rangefeed library: production
+// uses factoryDescRangefeedSource (one rangefeed.Factory call against
+// system.descriptor); tests use a fake that scripts events directly.
+type descRangefeedSource interface {
+	Subscribe(
+		ctx context.Context,
+		startTS hlc.Timestamp,
+		events chan<- rangefeedEvent,
+		errs chan<- error,
+	) (stop func(), err error)
+}
+
+// factoryDescRangefeedSource subscribes one rangefeed against
+// system.descriptor via a rangefeed.Factory. Fixed system.descriptor
+// span resolved from the codec at construction.
+type factoryDescRangefeedSource struct {
+	factory  *rangefeed.Factory
+	descSpan roachpb.Span
+}
+
+// newFactoryDescRangefeedSource builds a production
+// descRangefeedSource backed by the given factory + codec.
+func newFactoryDescRangefeedSource(
+	factory *rangefeed.Factory, codec keys.SQLCodec,
+) *factoryDescRangefeedSource {
+	return &factoryDescRangefeedSource{
+		factory: factory,
+		descSpan: roachpb.Span{
+			Key:    codec.DescMetadataPrefix(),
+			EndKey: codec.DescMetadataPrefix().PrefixEnd(),
+		},
+	}
+}
+
+// Subscribe implements descRangefeedSource by opening one rangefeed
+// against system.descriptor.
+func (s *factoryDescRangefeedSource) Subscribe(
+	ctx context.Context, startTS hlc.Timestamp, events chan<- rangefeedEvent, errs chan<- error,
+) (func(), error) {
+	rf, err := s.factory.RangeFeed(ctx, "revlog-descfeed",
+		[]roachpb.Span{s.descSpan}, startTS,
+		func(ctx context.Context, v *kvpb.RangeFeedValue) {
+			select {
+			case events <- rangefeedEvent{value: v}:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithDiff(false),
+		rangefeed.WithOnCheckpoint(
+			func(ctx context.Context, cp *kvpb.RangeFeedCheckpoint) {
+				select {
+				case events <- rangefeedEvent{checkpoint: cp}:
+				case <-ctx.Done():
+				}
+			}),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case errs <- err:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "starting descriptor rangefeed")
+	}
+	return rf.Close, nil
+}
+
 // ErrScopeTerminated signals that scope.Terminated returned true
 // and the writer should exit successfully. Callers translate it
 // into clean job completion, not an error.
@@ -87,7 +158,7 @@ func newDescFeedSignals() *descFeedSignals {
 // (ErrScopeTerminated), or the rangefeed errors terminally.
 func runDescFeed(
 	ctx context.Context,
-	factory *rangefeed.Factory,
+	source descRangefeedSource,
 	codec keys.SQLCodec,
 	scope Scope,
 	manager *TickManager,
@@ -96,11 +167,6 @@ func runDescFeed(
 	initialSpans []roachpb.Span,
 	sigs *descFeedSignals,
 ) error {
-	descSpan := roachpb.Span{
-		Key:    codec.DescMetadataPrefix(),
-		EndKey: codec.DescMetadataPrefix().PrefixEnd(),
-	}
-
 	state := &descFeedState{
 		scope:        scope,
 		manager:      manager,
@@ -114,33 +180,11 @@ func runDescFeed(
 	eventsCh := make(chan rangefeedEvent, 256)
 	errCh := make(chan error, 1)
 
-	rf, err := factory.RangeFeed(ctx, "revlog-descfeed",
-		[]roachpb.Span{descSpan}, startHLC,
-		func(ctx context.Context, v *kvpb.RangeFeedValue) {
-			select {
-			case eventsCh <- rangefeedEvent{value: v}:
-			case <-ctx.Done():
-			}
-		},
-		rangefeed.WithDiff(false),
-		rangefeed.WithOnCheckpoint(
-			func(ctx context.Context, cp *kvpb.RangeFeedCheckpoint) {
-				select {
-				case eventsCh <- rangefeedEvent{checkpoint: cp}:
-				case <-ctx.Done():
-				}
-			}),
-		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
-			select {
-			case errCh <- err:
-			case <-ctx.Done():
-			}
-		}),
-	)
+	stop, err := source.Subscribe(ctx, startHLC, eventsCh, errCh)
 	if err != nil {
-		return errors.Wrap(err, "starting descriptor rangefeed")
+		return errors.Wrap(err, "subscribing descriptor rangefeed")
 	}
-	defer rf.Close()
+	defer stop()
 
 	for {
 		select {

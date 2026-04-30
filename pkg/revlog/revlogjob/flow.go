@@ -162,8 +162,11 @@ func Run(
 	descDone := make(chan struct{})
 	go func() {
 		defer close(descDone)
+		descSource := newFactoryDescRangefeedSource(
+			execCtx.ExecCfg().RangeFeedFactory, execCtx.ExecCfg().Codec,
+		)
 		err := runDescFeed(
-			descCtx, execCtx.ExecCfg().RangeFeedFactory, execCtx.ExecCfg().Codec,
+			descCtx, descSource, execCtx.ExecCfg().Codec,
 			scope, manager, es, startHLC, spans, sigs,
 		)
 		switch {

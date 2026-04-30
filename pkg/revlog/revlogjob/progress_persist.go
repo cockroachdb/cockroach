@@ -59,6 +59,13 @@ func newJobPersister(jobID jobspb.JobID, db isql.DB) *jobPersister {
 	return &jobPersister{jobID: jobID, db: db}
 }
 
+// NewJobPersisterForTesting constructs the production jobPersister
+// for use in tests outside the package. Production callers go
+// through flow.Run, which builds it inline.
+func NewJobPersisterForTesting(jobID jobspb.JobID, db isql.DB) Persister {
+	return newJobPersister(jobID, db)
+}
+
 // Load reads the persisted checkpoint state for the job. Returns
 // (zero, false, nil) when the job has no prior checkpoint (first
 // run or never-checkpointed).
