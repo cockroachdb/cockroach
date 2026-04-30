@@ -26,12 +26,20 @@ type shedAction struct {
 
 // storeActions describes the overloaded store state and the shedding actions to
 // replay for one store during a pass.
+//
+// blockedByPending models the production case where the store is overloaded
+// but rebalanceStores skips shedding because the store already has too much
+// pending decrease (or pending increase >= epsilon). Today, the skip path
+// does not call into rebalancingPassMetricsAndLogger at all, so the store
+// is invisible to the per-bucket gauges; this is the bug that subsequent
+// commits address.
 type storeActions struct {
 	storeID                  roachpb.StoreID
 	ignoreLevel              ignoreLevel
 	actions                  []shedAction
 	skipped                  bool
 	withinLeaseSheddingGrace bool
+	blockedByPending         bool
 }
 
 // performAction executes the test actions defined in storeActions on a given
@@ -39,6 +47,12 @@ type storeActions struct {
 func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
 	if s.skipped {
 		g.skippedStore(s.storeID)
+		return
+	}
+	if s.blockedByPending {
+		// Current production behavior: the rebalanceStores skip path drops the
+		// store on the floor without informing the metrics harness. Reflect
+		// that here so the testdata pins the existing gap.
 		return
 	}
 	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
@@ -115,6 +129,27 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 				{storeID: 19, skipped: true},
 				{storeID: 20, skipped: true},
 				{storeID: 21, skipped: true},
+			},
+		},
+		{
+			// One store sheds successfully; another store is overloaded but
+			// rebalanceStores skipped it because of pending decrease/increase.
+			// Today, the skipped store contributes to no per-bucket gauge,
+			// so the count of stores in the bucket undershoots reality.
+			name: "blocked_by_pending",
+			setup: []storeActions{
+				{
+					storeID:     3,
+					ignoreLevel: ignoreLoadNoChangeAndHigher,
+					actions: []shedAction{
+						{kind: shedLease, result: shedSuccess},
+					},
+				},
+				{
+					storeID:          7,
+					ignoreLevel:      ignoreLoadNoChangeAndHigher,
+					blockedByPending: true,
+				},
 			},
 		},
 		{
