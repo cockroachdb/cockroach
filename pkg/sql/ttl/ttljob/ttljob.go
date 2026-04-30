@@ -216,6 +216,22 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		if err != nil {
 			return nil, nil, err
 		}
+		// PartitionSpans shards work by range, assigning each span to the
+		// leaseholder of that range. This is important for admission control:
+		// because each delete batch operates within a single range, the
+		// transaction gets the 1PC optimization and does not acquire intents
+		// across multiple ranges. This avoids lock priority inversion where
+		// intents held on underloaded ranges could block foreground traffic
+		// while the transaction waits on an overloaded range. For more context,
+		// see AdjustedPriorityWhenHoldingLocks in
+		// pkg/util/admission/admissionpb/admissionpb.go and the long comment in
+		// pkg/kv/kvserver/intentresolver/admission.go.
+		//
+		// If range boundaries become stale (e.g. due to rebalancing or node
+		// changes), delete batches could temporarily span multiple ranges,
+		// risking priority inversion until the plan is revised. The replanning
+		// mechanism (replanChecker below) detects such changes and triggers a
+		// job restart to refresh the plan.
 		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, remainingSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, nil, err
