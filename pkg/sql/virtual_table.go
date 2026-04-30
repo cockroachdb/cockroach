@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -111,6 +112,11 @@ func setupGenerator(
 		},
 		func(ctx context.Context) {
 			defer wg.Done()
+			// Register this goroutine for CPU accounting.
+			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
 			// We wait until a call to next before starting the worker. This prevents
 			// concurrent transaction usage during the startup phase. We also have to
 			// wait on done here if cleanup is called before any calls to next() to

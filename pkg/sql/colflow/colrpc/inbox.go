@@ -404,7 +404,9 @@ func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 		// for now.
 		i.allocator.AdjustMemoryUsageAfterAllocation(numSerializedBytes)
 		// Do admission control after memory accounting for the serialized bytes
-		// and before deserialization.
+		// and before deserialization. Note: this goroutine (the operator chain
+		// goroutine) is registered for SQL CPU accounting via RegisterGoroutine
+		// in FlowBase.StartInternal or accumulateAsyncComponent.
 		if i.admissionQ != nil {
 			if _, err := i.admissionQ.Admit(i.Ctx, i.admissionInfo); err != nil {
 				// err includes the case of context cancellation while waiting for
