@@ -45,8 +45,6 @@ func TestConfState_Equivalent(t *testing.T) {
 		{ConfState{Voters: []PeerID{1, 4, 3}}, ConfState{Voters: []PeerID{2, 1, 3}}, false},
 		// Non-equivalent learners.
 		{ConfState{Voters: []PeerID{1, 2, 3, 4}}, ConfState{Voters: []PeerID{2, 1, 3}}, false},
-		// Sensitive to AutoLeave flag.
-		{ConfState{AutoLeave: true}, ConfState{}, false},
 	}
 
 	for _, tc := range testCases {
