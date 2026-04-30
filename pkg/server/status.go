@@ -444,12 +444,15 @@ func (b *baseStatusServer) localExecutionInsights(
 		insightsCopy := *insight
 		insightsCopy.Statements = make([]*insightspb.Statement, len(insight.Statements))
 		copy(insightsCopy.Statements, insight.Statements)
-		if insight.Transaction != nil && slices.Contains(insight.Transaction.Causes, insightspb.Cause_HighContention) {
-			// Collect high contention insights seperately, they need additional validation / filtering.
-			// If it is valid we will add it to the response later.
+		if insight.Transaction != nil &&
+			slices.Contains(insight.Transaction.Causes, insightspb.Cause_HighContention) &&
+			!slices.Contains(insight.Transaction.Problems, insightspb.Problem_FailedExecution) {
+			// Collect high-contention-only insights separately for
+			// validation against resolved contention events. Insights
+			// that also have FailedExecution are independently valid
+			// and should not be gated on contention resolution.
 			highContentionInsights[insightsCopy.Transaction.ID] = insightsCopy
 		} else {
-			// All other insights are included in the response.
 			response.Insights = append(response.Insights, insightsCopy)
 		}
 	})
