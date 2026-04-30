@@ -648,15 +648,35 @@ func dumpImpl(
 		}
 	}
 
-	// Dump child metrics only for allowed metrics at 1M resolution
+	// Dump child metrics only for allowed metrics at 1M resolution.
+	//
+	// req.Names contains both unsuffixed series (counters, gauges) and
+	// histogram-expanded series (e.g. "cr.node.foo-count", "cr.node.foo-p99").
+	// Labeled child metrics are stored with the labels appended to the base
+	// metric name -- counters/gauges as "cr.node.foo{labels}", histogram
+	// children as "cr.node.foo{labels}-anysuffix". A scan span keyed on the
+	// suffixed name "cr.node.foo-count" therefore misses every labeled
+	// histogram child: '{' (0x7B) > '-' (0x2D), so "cr.node.foo{...}-count"
+	// sorts after the span's end key "cr.node.foo-count|".
+	//
+	// Strip any histogram suffix to recover the base name and scan once per
+	// unique allowed base. The span [base, base|) covers labeled
+	// counters/gauges ("base{labels}") and labeled histogram children
+	// ("base{labels}-anysuffix") in a single pass, since '{' < '|'.
+	seenBases := make(map[string]struct{})
 	for _, seriesName := range req.Names {
-		if !tsutil.IsAllowedChildMetric(seriesName) {
+		base := stripHistogramSuffix(seriesName)
+		if !tsutil.IsAllowedChildMetric(base) {
 			continue
 		}
+		if _, ok := seenBases[base]; ok {
+			continue
+		}
+		seenBases[base] = struct{}{}
 		if err := dumpTimeseriesAllSources(
 			ctx,
 			db,
-			seriesName,
+			base,
 			Resolution1m,
 			req.StartNanos,
 			req.EndNanos,
@@ -667,6 +687,18 @@ func dumpImpl(
 		}
 	}
 	return nil
+}
+
+// stripHistogramSuffix returns name with any HistogramMetricComputers suffix
+// removed. Used to recover the base metric name from a histogram-expanded name
+// like "cr.node.foo-p99". Returns name unchanged if no suffix matches.
+func stripHistogramSuffix(name string) string {
+	for _, c := range metric.HistogramMetricComputers {
+		if strings.HasSuffix(name, c.Suffix) {
+			return strings.TrimSuffix(name, c.Suffix)
+		}
+	}
+	return name
 }
 
 // DefaultDumper translates *roachpb.KeyValue into TimeSeriesData.
