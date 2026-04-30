@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -2026,21 +2027,20 @@ func (ief *InternalDB) txn(
 		return nil
 	}
 
-	run := db.Txn
-	if priority, hasPriority := cfg.GetAdmissionPriority(); hasPriority {
-		steppingMode := kv.SteppingDisabled
-		if cfg.GetSteppingEnabled() {
-			steppingMode = kv.SteppingEnabled
-		}
-		run = func(ctx context.Context, f kvTxnFunc) error {
-			return db.TxnWithAdmissionControl(
-				ctx, kvpb.AdmissionHeader_FROM_SQL, priority, steppingMode, f,
-			)
-		}
-	} else if cfg.GetSteppingEnabled() {
-		run = func(ctx context.Context, f kvTxnFunc) error {
-			return db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, f)
-		}
+	steppingMode := kv.SteppingDisabled
+	if cfg.GetSteppingEnabled() {
+		steppingMode = kv.SteppingEnabled
+	}
+	priority := admissionpb.NormalPri
+	if p, hasPriority := cfg.GetAdmissionPriority(); hasPriority {
+		priority = p
+	}
+
+	// Always set the source in AdmissionHeader to FROM_SQL. Using the db.Txn API
+	// would cause the source to default to OTHER, which bypasses admission
+	// control.
+	run := func(ctx context.Context, f kvTxnFunc) error {
+		return db.TxnWithAdmissionControl(ctx, kvpb.AdmissionHeader_FROM_SQL, priority, steppingMode, f)
 	}
 
 	cf := ief.server.cfg.CollectionFactory
