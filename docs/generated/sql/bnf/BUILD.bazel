@@ -145,6 +145,7 @@ FILES = [
     "drop_func_stmt",
     "drop_policy_stmt",
     "drop_proc",
+    "drop_provisioned_roles_stmt",
     "drop_index",
     "drop_owned_by_stmt",
     "drop_role_stmt",
