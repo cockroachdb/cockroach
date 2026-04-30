@@ -184,12 +184,19 @@ func (s *Store) tryGetOrCreateReplica(
 	// be accessed by someone holding a reference to, or currently creating a
 	// Replica for this rangeID, and that's us.
 
-	_ = kvstorage.CreateUninitReplicaTODO
-	// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
-	// statemachine).
+	// Use a read-write batch (not a write-only batch) because
+	// CreateUninitializedReplica needs to read back the RaftReplicaID it writes
+	// as part of its LoadReplicaState verification step.
+	b := s.batchFactory.NewBatch()
+	defer b.Close()
 	if err := kvstorage.CreateUninitializedReplica(
-		ctx, kvstorage.TODOState(s.StateEngine()), s.LogEngine(), s.StoreID(), id,
+		ctx, kvstorage.WrapState(b.State()),
+		kvstorage.RaftRO(s.LogEngine()),
+		b.WagWriter(), s.StoreID(), id,
 	); err != nil {
+		return nil, false, err
+	}
+	if err := b.Commit(true /* sync */); err != nil {
 		return nil, false, err
 	}
 
