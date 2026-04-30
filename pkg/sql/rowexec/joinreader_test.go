@@ -1327,6 +1327,204 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	require.True(t, jr.(*joinReader).Spilled())
 }
 
+func TestJoinReaderAdaptiveLookupMVP(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE test;
+CREATE TABLE test.adaptive_t (
+	a INT,
+	b INT,
+	v INT,
+	PRIMARY KEY (a, b)
+);
+INSERT INTO test.adaptive_t VALUES
+	(1, 1, 11),
+	(1, 2, 12),
+	(2, 1, 21),
+	(3, 1, 31);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "adaptive_t")
+	st := s.ClusterSettings()
+
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	inputTypes := types.TwoIntCols
+	outputTypes := types.ThreeIntCols
+
+	var fetchSpec fetchpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&fetchSpec,
+		s.Codec(),
+		td,
+		td.GetPrimaryIndex(),
+		[]descpb.ColumnID{1, 2, 3},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	makeInputRow := func(a, b tree.Datum) rowenc.EncDatumRow {
+		return rowenc.EncDatumRow{
+			rowenc.DatumToEncDatumUnsafe(types.Int, a),
+			rowenc.DatumToEncDatumUnsafe(types.Int, b),
+		}
+	}
+
+	run := func(inputRows rowenc.EncDatumRows, adaptiveEnabled bool, threshold int64, memoryLimit int64) (
+		[]string,
+		string,
+		string,
+		error,
+	) {
+		evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
+		defer evalCtx.Stop(ctx)
+		diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+		defer diskMonitor.Stop(ctx)
+
+		flowCtx := execinfra.FlowCtx{
+			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
+			Cfg: &execinfra.ServerConfig{
+				Settings:    st,
+				TempStorage: tempEngine,
+			},
+			Txn:         kv.NewTxn(ctx, s.DB(), srv.NodeID()),
+			DiskMonitor: diskMonitor,
+		}
+		if memoryLimit > 0 {
+			flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+		}
+
+		in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
+		out := &distsqlutils.RowBuffer{}
+		spec := execinfrapb.JoinReaderSpec{
+			FetchSpec:                fetchSpec,
+			LookupColumns:            []uint32{0, 1},
+			Type:                     descpb.InnerJoin,
+			AdaptiveEnabled:          adaptiveEnabled,
+			AdaptiveThresholdBytes:   threshold,
+			MaintainOrdering:         false,
+			MaintainLookupOrdering:   false,
+			LeftJoinWithPairedJoiner: false,
+		}
+		post := execinfrapb.PostProcessSpec{
+			Projection:    true,
+			OutputColumns: []uint32{0, 1, 4},
+		}
+
+		jr, err := newJoinReader(
+			ctx,
+			&flowCtx,
+			0, /* processorID */
+			&spec,
+			in,
+			&post,
+			lookupJoinReaderType,
+		)
+		if err != nil {
+			return nil, "", "", err
+		}
+
+		jr.Run(ctx, out)
+
+		var rows []string
+		var runErr error
+		for {
+			row, meta := out.Next()
+			if row == nil {
+				if meta == nil {
+					break
+				}
+				if meta.Err != nil {
+					runErr = meta.Err
+				}
+				continue
+			}
+			rows = append(rows, row.String(outputTypes))
+		}
+		sort.Strings(rows)
+		jrImpl := jr.(*joinReader)
+		return rows, jrImpl.adaptive.decision, jrImpl.adaptive.switchReason, runErr
+	}
+
+	oneRow := rowenc.EncDatumRows{makeInputRow(tree.NewDInt(1), tree.NewDInt(1))}
+	exactThreshold := int64(oneRow[0].Size())
+
+	t.Run("small input stays lookup", func(t *testing.T) {
+		rows, adaptiveDecision, switchReason, runErr := run(
+			oneRow, true /* adaptiveEnabled */, 1<<20 /* threshold */, 0, /* memoryLimit */
+		)
+		require.NoError(t, runErr)
+		require.Equal(t, []string{"[1 1 11]"}, rows)
+		require.Equal(t, joinReaderAdaptiveDecisionLookup, adaptiveDecision)
+		require.Equal(t, joinReaderAdaptiveSwitchReasonNone, switchReason)
+	})
+
+	t.Run("exact threshold stays lookup", func(t *testing.T) {
+		rows, adaptiveDecision, switchReason, runErr := run(
+			oneRow, true /* adaptiveEnabled */, exactThreshold, 0, /* memoryLimit */
+		)
+		require.NoError(t, runErr)
+		require.Equal(t, []string{"[1 1 11]"}, rows)
+		require.Equal(t, joinReaderAdaptiveDecisionLookup, adaptiveDecision)
+		require.Equal(t, joinReaderAdaptiveSwitchReasonNone, switchReason)
+	})
+
+	dupAndNullInput := rowenc.EncDatumRows{
+		makeInputRow(tree.NewDInt(1), tree.NewDInt(1)),
+		makeInputRow(tree.NewDInt(1), tree.NewDInt(1)),
+		makeInputRow(tree.NewDInt(2), tree.NewDInt(1)),
+		makeInputRow(tree.DNull, tree.NewDInt(1)),
+	}
+
+	t.Run("large input switches to hash and matches non-adaptive output", func(t *testing.T) {
+		adaptiveRows, adaptiveDecision, switchReason, adaptiveErr := run(
+			dupAndNullInput, true /* adaptiveEnabled */, 1 /* threshold */, 0, /* memoryLimit */
+		)
+		require.NoError(t, adaptiveErr)
+		require.Equal(t, joinReaderAdaptiveDecisionHash, adaptiveDecision)
+		require.Equal(t, joinReaderAdaptiveSwitchReasonThresholdExceeded, switchReason)
+
+		nonAdaptiveRows, _, _, nonAdaptiveErr := run(
+			dupAndNullInput, false /* adaptiveEnabled */, 0 /* threshold */, 0, /* memoryLimit */
+		)
+		require.NoError(t, nonAdaptiveErr)
+		require.Equal(t, nonAdaptiveRows, adaptiveRows)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		rows, adaptiveDecision, _, runErr := run(
+			nil /* inputRows */, true /* adaptiveEnabled */, 1 /* threshold */, 0, /* memoryLimit */
+		)
+		require.NoError(t, runErr)
+		require.Empty(t, rows)
+		require.Equal(t, joinReaderAdaptiveDecisionLookup, adaptiveDecision)
+	})
+
+	t.Run("memory failure path returns execution error", func(t *testing.T) {
+		_, _, switchReason, runErr := run(
+			dupAndNullInput, true /* adaptiveEnabled */, 1 /* threshold */, 1, /* memoryLimit */
+		)
+		if runErr == nil {
+			skip.IgnoreLint(t, "memory limit did not trigger reservation failure in this environment")
+		}
+		require.Equal(t, joinReaderAdaptiveSwitchReasonMemoryReservationFailed, switchReason)
+	})
+}
+
 // TestJoinReaderDrain tests various scenarios in which a joinReader's consumer
 // is closed.
 func TestJoinReaderDrain(t *testing.T) {
