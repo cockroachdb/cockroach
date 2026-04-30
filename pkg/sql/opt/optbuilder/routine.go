@@ -477,7 +477,14 @@ func (b *Builder) buildRoutine(
 			b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), f.ResolvedType(), inScope)
 		}
 
-		if f.ResolvedType().Identical(types.AnyTuple) || b.DisableDeferredRoutineBuild {
+		// Force eager build when the UDF could be inlined. Inlining requires
+		// len(Body) == 1 and non-volatile, which means the body RelExpr must
+		// be available at plan time. UDFs used in expression indexes and
+		// partial index predicates depend on inlining for correctness.
+		couldBeInlined := len(stmts) == 1 && !isSetReturning &&
+			o.Volatility != volatility.Volatile
+
+		if f.ResolvedType().Identical(types.AnyTuple) || b.DisableDeferredRoutineBuild || couldBeInlined {
 			// Eager path: build body RelExprs now.
 			body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
 				stmts, bodyScope, f, inScope, isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
