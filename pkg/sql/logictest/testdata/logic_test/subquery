@@ -1074,3 +1074,62 @@ WHERE NOT (
   )
 )
 ----
+
+# Regression test for #166646 / #116022. Exploration rules can duplicate scalar
+# expressions containing subqueries, causing the same memo group to be visited
+# twice with different physical properties in setLowestCostTree, which
+# previously caused a panic in SetBestProps ("cannot overwrite").
+statement ok
+CREATE TABLE t166646_apps (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    name STRING NOT NULL,
+    CONSTRAINT t166646_apps_pkey PRIMARY KEY (id ASC)
+);
+
+statement ok
+CREATE TABLE t166646_app_versions (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    app_id UUID NOT NULL,
+    version INT8 NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT t166646_app_versions_pkey PRIMARY KEY (id ASC),
+    CONSTRAINT t166646_fk_app_id_v FOREIGN KEY (app_id) REFERENCES t166646_apps(id),
+    INDEX idx_t166646_app_versions_app (app_id ASC, version DESC)
+);
+
+statement ok
+CREATE TABLE t166646_app_events (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    app_id UUID NOT NULL,
+    event STRING NOT NULL,
+    metadata JSONB NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT t166646_app_events_pkey PRIMARY KEY (id ASC),
+    CONSTRAINT t166646_fk_app_id_e FOREIGN KEY (app_id) REFERENCES t166646_apps(id),
+    INDEX idx_t166646_app_events_app (app_id ASC, event ASC, created_at DESC)
+);
+
+statement ok
+INSERT INTO t166646_apps (name) SELECT 'app-' || i FROM generate_series(1, 326) AS i;
+
+statement ok
+INSERT INTO t166646_app_versions (app_id, version)
+  SELECT a.id, v.n FROM t166646_apps a, generate_series(1, 15) AS v(n);
+
+statement ok
+INSERT INTO t166646_app_events (app_id, event, metadata)
+  SELECT a.id,
+         CASE WHEN i % 5 = 0 THEN 'github.sync' ELSE 'view' END,
+         CASE WHEN i % 5 = 0 THEN jsonb_build_object('version', (i % 15) + 1) ELSE NULL END
+  FROM t166646_apps a, generate_series(1, 65) AS s(i);
+
+statement ok
+SELECT v.version, v.created_at,
+       e.metadata->>'commit' AS github_commit
+FROM t166646_app_versions v
+LEFT JOIN t166646_app_events e ON e.app_id = v.app_id
+    AND e.event = 'github.sync'
+    AND (e.metadata->>'version')::int = v.version
+WHERE v.app_id = (SELECT id FROM t166646_apps LIMIT 1)
+ORDER BY v.version DESC
+LIMIT 3

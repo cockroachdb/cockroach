@@ -783,10 +783,14 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // Note that a memo group can have multiple lowest cost expressions, each for a
 // different set of physical properties. During optimization, these are retained
 // in the groupState map. However, only one of those lowest cost expressions
-// will be used in the final tree; the others are simply discarded. This is
-// because there is never a case where a relational expression is referenced
-// multiple times in the final tree, but with different physical properties
-// required by each of those references.
+// will be used in the final tree; the others are simply discarded. Normally a
+// given memo group is only referenced once in the final tree. However,
+// exploration rules like PushFilterIntoJoinLeftAndRight can duplicate scalar
+// expressions containing subqueries, causing two paths in the tree to
+// reference the same relational memo group. When this happens, the group may
+// be visited twice with different required physical properties (e.g.,
+// different limit hints). We detect this case and return early to avoid
+// re-processing the group or panicking in SetBestProps.
 func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
 	var relParent memo.RelExpr
 	var relCost memo.Cost
@@ -795,6 +799,20 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		state := o.lookupOptState(t.FirstExpr(), parentProps)
 		relParent, relCost = state.best, state.cost
 		parent = relParent
+
+		// If this group was already processed with different physical
+		// properties, return the previously processed expression. This
+		// avoids re-processing children and panicking in SetBestProps.
+		if relParent.RequiredPhysical() != nil &&
+			relParent.RequiredPhysical() != parentProps {
+			prevState := o.lookupOptState(
+				t.FirstExpr(), relParent.RequiredPhysical(),
+			)
+			if prevState != nil && prevState.best != nil {
+				return prevState.best
+			}
+			return parent
+		}
 
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
