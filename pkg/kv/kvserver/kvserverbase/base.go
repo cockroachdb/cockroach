@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
@@ -140,8 +141,12 @@ var disableMMA = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_MMA", false)
 // GetLoadBasedRebalancingMode returns the current load-based rebalancing mode.
 // If COCKROACH_DISABLE_MMA is set and the mode is an MMA mode, it falls back
 // to LBRebalancingLeasesAndReplicas.
-func GetLoadBasedRebalancingMode(sv *settings.Values) LBRebalancingMode {
-	mode := loadBasedRebalancingMode.Get(sv)
+//
+// The ctx and *cluster.Settings are accepted (rather than a bare
+// *settings.Values) so a future change can resolve mode values that depend on
+// the cluster version.
+func GetLoadBasedRebalancingMode(ctx context.Context, st *cluster.Settings) LBRebalancingMode {
+	mode := loadBasedRebalancingMode.Get(&st.SV)
 	if disableMMA && mode.IsMMA() {
 		return LBRebalancingLeasesAndReplicas
 	}
@@ -158,8 +163,8 @@ func OverrideLoadBasedRebalancingMode(
 
 // LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
 // uses the multi-metric store rebalancer.
-var LoadBasedRebalancingModeIsMMA = func(sv *settings.Values) bool {
-	return GetLoadBasedRebalancingMode(sv).IsMMA()
+var LoadBasedRebalancingModeIsMMA = func(ctx context.Context, st *cluster.Settings) bool {
+	return GetLoadBasedRebalancingMode(ctx, st).IsMMA()
 }
 
 // LBRebalancingMode controls if and when we do store-level rebalancing

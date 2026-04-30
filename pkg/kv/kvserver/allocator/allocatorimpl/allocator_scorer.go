@@ -1952,7 +1952,10 @@ func rankedCandidateListForRebalancing(
 // Contract: responsible for making sure that the returned bestIdx has the
 // corresponding MMA advisor in advisors.
 func bestRebalanceTarget(
-	randGen allocatorRand, options []rebalanceOptions, as *mmaintegration.AllocatorSync,
+	ctx context.Context,
+	randGen allocatorRand,
+	options []rebalanceOptions,
+	as *mmaintegration.AllocatorSync,
 ) (target, existingCandidate *candidate, bestIdx int) {
 	bestIdx = -1
 	var bestTarget *candidate
@@ -1982,7 +1985,7 @@ func bestRebalanceTarget(
 		for _, cand := range options[bestIdx].candidates {
 			stores = append(stores, cand.store.StoreID)
 		}
-		options[bestIdx].advisor = as.BuildMMARebalanceAdvisor(options[bestIdx].existing.store.StoreID, stores)
+		options[bestIdx].advisor = as.BuildMMARebalanceAdvisor(ctx, options[bestIdx].existing.store.StoreID, stores)
 	}
 
 	// Copy the selected target out of the candidates slice before modifying
