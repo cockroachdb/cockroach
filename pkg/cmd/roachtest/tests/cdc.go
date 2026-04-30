@@ -529,7 +529,6 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	}
 
 	feedOptions := make(map[string]string)
-	feedOptions["min_checkpoint_frequency"] = "'10s'"
 	feedOptions["envelope"] = args.envelope
 	if args.sinkType == cloudStorageSink || args.sinkType == webhookSink {
 		feedOptions["resolved"] = "'10s'"
@@ -882,11 +881,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	options := map[string]string{
 		"updated":  "",
 		"resolved": "'1s'",
-		// we need to set a min_checkpoint_frequency here because if we
-		// use the default 30s duration, the test will likely not be able
-		// to finish within 30 minutes
-		"min_checkpoint_frequency": "'2s'",
-		"diff":                     "",
+		"diff":     "",
 	}
 	metamorphic := cdcutil.NewMetamorphicSettings(t.L())
 	_, err := newChangefeedCreator(db, db, t.L(), "bank.bank", kafka.sinkURL(ctx), metamorphic).
@@ -1167,7 +1162,7 @@ func runCDCInitialScanRollingRestart(ctx context.Context, t test.Test, c cluster
 			if err := db.QueryRow(
 				fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE large, small
 INTO 'webhook-%s/?insecure_tls_skip_verify=true'
-WITH initial_scan='only', min_checkpoint_frequency='1s'`, sinkURL),
+WITH initial_scan='only'`, sinkURL),
 			).Scan(&job); err != nil {
 				t.Fatal(err)
 			}
@@ -1329,7 +1324,7 @@ func runCDCRollingRestart(
 	var jobID int
 	if err := db.QueryRow(fmt.Sprintf(
 		`CREATE CHANGEFEED FOR TABLE kv.kv INTO '%s'`+
-			` WITH updated, resolved, initial_scan='no', min_checkpoint_frequency='2s',`+
+			` WITH updated, resolved, initial_scan='no',`+
 			` kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "10ms"}}'`,
 		kafka.sinkURL(ctx),
 	)).Scan(&jobID); err != nil {
@@ -2050,7 +2045,7 @@ func runCDCWebhookBackpressureMetrics(ctx context.Context, t test.Test, c cluste
 	ct.newChangefeed(feedArgs{
 		sinkType:        webhookSink,
 		targets:         allTpccTargets,
-		opts:            map[string]string{"updated": "", "min_checkpoint_frequency": "'1s'", "webhook_sink_config": `'{"Flush": {"Messages": 10, "Frequency": "100ms"}}'`},
+		opts:            map[string]string{"updated": "", "webhook_sink_config": `'{"Flush": {"Messages": 10, "Frequency": "100ms"}}'`},
 		sinkURIOverride: fmt.Sprintf("webhook-%s/?insecure_tls_skip_verify=true", sinkURL),
 	})
 
@@ -2091,8 +2086,7 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 		sinkType: kafkaSink,
 		targets:  []string{"foo"},
 		opts: map[string]string{
-			"min_checkpoint_frequency": "'2s'",
-			"kafka_sink_config":        `'{"Flush": {"Messages": 1, "Frequency": "1s"}}'`,
+			"kafka_sink_config": `'{"Flush": {"Messages": 1, "Frequency": "1s"}}'`,
 		},
 	})
 
@@ -2187,11 +2181,10 @@ func runCDCMultiTablePTSBenchmark(
 		sinkType: nullSink,
 		targets:  targetNames,
 		opts: map[string]string{
-			"format":                   "'json'",
-			"resolved":                 "'1s'",
-			"full_table_name":          "",
-			"min_checkpoint_frequency": "'1s'",
-			"initial_scan":             "'no'",
+			"format":          "'json'",
+			"resolved":        "'1s'",
+			"full_table_name": "",
+			"initial_scan":    "'no'",
 		},
 	})
 
@@ -2791,7 +2784,6 @@ CONFIGURE ZONE USING
 				opts: map[string]string{
 					"updated":                       "",
 					"initial_scan":                  "'no'",
-					"min_checkpoint_frequency":      "'3s'",
 					"protect_data_from_gc_on_pause": "",
 					"on_error":                      "pause",
 					"kafka_sink_config":             `'{"Flush": {"MaxMessages": 100, "Frequency": "1s","Messages": 100 }, "Version": "2.7.2", "RequiredAcks": "ALL","Compression": "GZIP"}'`,
@@ -3551,9 +3543,8 @@ CONFIGURE ZONE USING
 						sinkType: nullSink,
 						targets:  targets,
 						opts: map[string]string{
-							"initial_scan":             "'no'",
-							"resolved":                 "'3s'",
-							"min_checkpoint_frequency": "'30s'",
+							"initial_scan": "'no'",
+							"resolved":     "'3s'",
 						},
 					})
 

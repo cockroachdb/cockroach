@@ -3058,7 +3058,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t,
 		`CREATE CHANGEFEED FOR foo INTO 'null://'
-WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$1`, tsStr,
+WITH resolved='50ms', no_initial_scan, cursor=$1`, tsStr,
 	).Scan(&jobID)
 
 	// Helper to read job progress
@@ -3208,7 +3208,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
 		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
+WITH resolved='100ms', no_initial_scan`)
 		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
@@ -5670,7 +5670,7 @@ func TestChangefeedAvroNotice(t *testing.T) {
 	expectNotice(t, s.Server, sql, `avro is no longer experimental, use format=avro`)
 }
 
-func TestChangefeedResolvedNotice(t *testing.T) {
+func TestChangefeedMinCheckpointFrequencyDeprecation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5678,19 +5678,15 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	defer cleanup()
 	s := cluster.Server(1)
 
-	// Set the default min_checkpoint_frequency to 30 seconds for this test
-	restoreDefault := changefeedbase.TestingSetDefaultMinCheckpointFrequency(30 * time.Second)
-	defer restoreDefault()
-
 	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	var actual string
+	var notices []string
 	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
-		actual = n.Message
+		notices = append(notices, n.Message)
 	})
 
 	dbWithHandler := gosql.OpenDB(connector)
@@ -5701,40 +5697,38 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
 
-	t.Run("resolved<min_checkpoint_frequency", func(t *testing.T) {
-		actual = "(no notice)"
-		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s', min_checkpoint_frequency='10s'`)
-		defer closeFeed(t, testFeed)
-		require.Equal(t, `resolved (5s) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
-	})
-	t.Run("resolved<min_checkpoint_frequency default", func(t *testing.T) {
-		actual = "(no notice)"
-		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s'`)
-		defer closeFeed(t, testFeed)
-		require.Equal(t, `resolved (5s) messages will not be emitted more frequently than the default min_checkpoint_frequency (30s), but may be emitted less frequently`, actual)
-	})
-	t.Run("resolved=min_checkpoint_frequency", func(t *testing.T) {
-		actual = "(no notice)"
+	deprecationMsg := changefeedbase.RetiredOptions[changefeedbase.OptMinCheckpointFrequency]
+
+	t.Run("min_checkpoint_frequency emits deprecation notice", func(t *testing.T) {
+		notices = nil
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s', min_checkpoint_frequency='5s'`)
 		defer closeFeed(t, testFeed)
-		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+		require.Contains(t, notices, deprecationMsg)
 	})
-	t.Run("resolved>min_checkpoint_frequency", func(t *testing.T) {
-		actual = "(no notice)"
+	t.Run("no deprecation notice without min_checkpoint_frequency", func(t *testing.T) {
+		notices = nil
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='5s'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s'`)
 		defer closeFeed(t, testFeed)
-		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+		require.NotContains(t, notices, deprecationMsg)
 	})
-	t.Run("resolved default", func(t *testing.T) {
-		actual = "(no notice)"
+	t.Run("alter changefeed emits deprecation notice", func(t *testing.T) {
+		notices = nil
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved, min_checkpoint_frequency='10s'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s'`)
 		defer closeFeed(t, testFeed)
-		require.Equal(t, `resolved (0s by default) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
+
+		jobFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobFeed.JobID())
+		waitForJobState(sqlDB, t, jobFeed.JobID(), `paused`)
+
+		notices = nil
+		sqlDB.Exec(t, fmt.Sprintf(
+			`ALTER CHANGEFEED %d SET min_checkpoint_frequency='5s'`, jobFeed.JobID()))
+		require.Contains(t, notices, deprecationMsg)
 	})
 }
 
@@ -5775,16 +5769,6 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
-	t.Run("normal resolved and min_checkpoint_frequency", func(t *testing.T) {
-		actual = "(no notice)"
-		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`,
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "test requires split_column_families NOT to be set",
-			})
-		defer closeFeed(t, testFeed)
-		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
-	})
 	t.Run("low resolved timestamp", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
@@ -5794,16 +5778,6 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `the 'resolved' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
-	})
-	t.Run("low min_checkpoint_frequency timestamp", func(t *testing.T) {
-		actual = "(no notice)"
-		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`,
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "test requires split_column_families NOT to be set",
-			})
-		defer closeFeed(t, testFeed)
-		require.Equal(t, `the 'min_checkpoint_frequency' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
 }
 
@@ -8744,7 +8718,6 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	opts := makeOptions(t)
 	defer addCloudStorageOptions(t, &opts)()
 	opts.forceRootUserConnection = true
-	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
 	defer testingUseFastRetry()()
 	const numNodes = 3
 
@@ -8778,6 +8751,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 			ReusableListenerReg: listenerReg,
 		})
 	defer tc.Stopper().Stop(context.Background())
+	changefeedbase.FrontierPersistenceInterval.Override(
+		context.Background(), &tc.Server(0).ApplicationLayer().ClusterSettings().SV, testSinkFlushFrequency)
 
 	db := tc.ServerConn(1)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -8843,7 +8818,6 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 
 	opts := makeOptions(t)
 	defer addCloudStorageOptions(t, &opts)()
-	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
 	defer testingUseFastRetry()()
 	const numNodes = 3
 
@@ -9333,7 +9307,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
+WITH resolved='100ms'`)
 		// Some test feeds (kafka) are not buffered, so we have to consume messages.
 		var shouldDrain int32 = 1
 		g := ctxgroup.WithContext(context.Background())
@@ -11523,7 +11497,6 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(10 * time.Millisecond)()
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
@@ -12440,7 +12413,7 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		require.Equal(t, int64(0), managePTSErrorCount)
 
 		createStmt := `CREATE CHANGEFEED FOR foo
-WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
+WITH resolved='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
@@ -12587,7 +12560,7 @@ func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 		}
 
 		createStmt := `CREATE CHANGEFEED FOR foo
-WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
+WITH resolved='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
