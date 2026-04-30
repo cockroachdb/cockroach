@@ -474,6 +474,42 @@ func initFlagsStartOpsForCmd(cmd *cobra.Command) {
 		"whether to enable the fluent-servers attribute in the CockroachDB logging configuration")
 	cmd.Flags().BoolVar(&startOpts.AutoRestart,
 		"auto-restart", startOpts.AutoRestart, "automatically restart cockroach processes that die")
+	cmd.Flags().BoolVar(&startOpts.EnableCloudProfiler,
+		"cloud-profiler", envutil.EnvOrDefaultBool("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED", false),
+		"Enable Continuous Cloud Profiler (CPU & Memory); use --cloud-profiler-probability=1 to enable for _all_ nodes",
+	)
+	cmd.Flags().Float64Var(&startOpts.CloudProfilerProbability,
+		"cloud-profiler-probability", 0.1,
+		"Probability that a specific node should have the Cloud Profiler Enabled",
+	)
+	validate := func(cmd *cobra.Command, args []string) error {
+		probChanged := cmd.Flags().Changed("cloud-profiler-probability")
+		enabled := startOpts.EnableCloudProfiler
+
+		// If the user set a probability but profiling isn't enabled, that's a misuse.
+		if probChanged && !enabled {
+			return fmt.Errorf("--cloud-profiler-probability requires --cloud-profiler (or env COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED=true)")
+		}
+		// If profiling is enabled, sanity-check the probability.
+		if enabled {
+			if startOpts.CloudProfilerProbability < 0 || startOpts.CloudProfilerProbability > 1 {
+				return fmt.Errorf("--cloud-profiler-probability must be in [0,1]")
+			}
+		}
+		return nil
+	}
+
+	pre := cmd.PreRunE
+	if pre == nil {
+		cmd.PreRunE = validate
+		return
+	}
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := pre(cmd, args); err != nil {
+			return err
+		}
+		return validate(cmd, args)
+	}
 }
 
 func initFlagInsecureIgnoreHostKeyForCmd(cmd *cobra.Command) {

@@ -19,16 +19,20 @@ import (
 //
 // The profiler initialization should be done as early as possible in the
 // server startup process for best results.
-func InitGoogleProfiler(ctx context.Context) {
+func InitGoogleProfiler(ctx context.Context, serviceName string) {
+	if serviceName == "" {
+		log.Dev.Warningf(ctx, "Google Cloud Profiler disabled (serviceName cannot be empty)")
+		return
+	}
 	// Detect cloud provider as profiler is only supported on GCP.
 	provider, _ := cloudinfo.GetInstanceRegion(ctx)
 	if provider != "gcp" {
-		log.Dev.Infof(ctx, "Google Cloud Profiler disabled (detected cloud: %s)", provider)
+		log.Dev.Warningf(ctx, "Google Cloud Profiler disabled (detected cloud: %s)", provider)
 		return
 	}
 
 	cfg := gcprofiler.Config{
-		Service:        "cockroachdb",
+		Service:        serviceName,
 		ServiceVersion: build.BinaryVersion(),
 	}
 	if err := gcprofiler.Start(cfg); err != nil {
