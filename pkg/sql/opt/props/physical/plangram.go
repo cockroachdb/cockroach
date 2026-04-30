@@ -6,8 +6,12 @@
 package physical
 
 import (
+	"bufio"
 	"bytes"
+	"io"
 	"strconv"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -48,8 +52,8 @@ import (
 //	scan: (Scan Index="abc_b_idx") | (Scan Index="abc_c_idx");
 //
 // The grammar is stored as a linked graph of terms, starting with the "root"
-// term. The graph could contain cycles (for example to match a plan with a FK
-// cascade cycle).
+// nonterminal. The graph could contain cycles (for example to match a plan with
+// a FK cascade cycle or a recursive UDF).
 //
 // PlanGrams are equivalent to top-down non-deterministic finite tree
 // automatons. We could compile the PlanGram into a state-table-based NFTA, but
@@ -58,10 +62,10 @@ import (
 // For some background see https://en.wikipedia.org/wiki/Regular_tree_grammar
 // and https://en.wikipedia.org/wiki/Tree_automaton.
 type PlanGram struct {
-	// root is the starting term, and can also be considered a "pseudo
-	// nonterminal" in the grammar consisting of a single production rule. But
-	// because of its construction this "root" nonterminal cannot be referenced
-	// from any other production rule.
+	// root is the starting term. "root" can also be considered a "pseudo
+	// nonterminal" in the grammar with a single production rule, but because of
+	// its construction, this "root" nonterminal cannot be referenced from any
+	// other production rule.
 	root planGramTerm
 }
 
@@ -81,11 +85,11 @@ type planGramTerm interface {
 // nonterminal matches the current optimizer sub-tree if any of its production
 // rules match the current sub-tree.
 type planGramProduction struct {
-	// name is the symbol identifying the nonterminal in the grammar, which must
-	// be unique in the grammar, and must not be "root", "any", or "none". It must
-	// not contain any of the characters "'\:=()|; or whitespace. For clarity it
-	// is recommended that the name not match any optimizer operator name, but
-	// syntactically there's no problem with re-using an operator name.
+	// name is the nonterminal symbol in the grammar, which must be unique and
+	// must not be "root", "any", or "none". It must not contain any of the
+	// characters "'\:=()|; or whitespace. For clarity it is recommended that
+	// names not match any optimizer operator name, but syntactically there's no
+	// problem with re-using an operator name.
 	name string
 	// rules are the set of production rules for this nonterminal. There must be
 	// at least one rule (which could be anyPlanGramTerm or nonePlanGramTerm if
@@ -94,11 +98,10 @@ type planGramProduction struct {
 	rules []planGramTerm
 }
 
-// planGramExpr represents a right-hand-side expression in the grammar, matching
-// an optimizer expression. If the optimizer expression has children
-// (e.g. InnerJoin) then those children are each represented by a term, and the
-// planGramExpr is a nonterminal. If the optimizer expression is nullary / a
-// leaf (e.g. Scan) then the planGramExpr is a terminal.
+// planGramExpr represents a right-hand-side expression in the grammar matching
+// an optimizer expression. The optimizer expression could have children, in
+// which case those children are each represented by a term (e.g. InnerJoin), or
+// the optimizer expression could be nullary / a leaf (e.g. Scan).
 type planGramExpr struct {
 	op       opt.Operator
 	fields   []planGramExprField
@@ -226,6 +229,331 @@ func (p PlanGram) String() string {
 	var b bytes.Buffer
 	p.FormatPretty(&b, false /* newlines */)
 	return b.String()
+}
+
+// ParsePlanGram parses a PlanGram grammar from the given io.Reader, or returns
+// an error if it cannot.
+func ParsePlanGram(r io.Reader) (PlanGram, error) {
+	br := bufio.NewReader(r)
+	if buf, err := br.Peek(10); err == nil && string(buf) == "root: any;" {
+		return AnyPlanGram, nil
+	}
+	if buf, err := br.Peek(11); err == nil && string(buf) == "root: none;" {
+		return NonePlanGram, nil
+	}
+
+	scanner := bufio.NewScanner(br)
+	scanner.Split(tokenizePlanGram)
+
+	p := planGramParser{
+		scanner:     scanner,
+		productions: make(map[string]*planGramProduction),
+	}
+	return p.parse()
+}
+
+// planGramParser is a recursive-descent parser for plangram grammars with
+// 1-token lookahead.
+type planGramParser struct {
+	scanner     *bufio.Scanner
+	tok         string
+	hasTok      bool
+	productions map[string]*planGramProduction
+}
+
+// next consumes and returns the next token.
+func (p *planGramParser) next() (string, error) {
+	if p.hasTok {
+		p.hasTok = false
+		return p.tok, nil
+	}
+	if !p.scanner.Scan() {
+		if err := p.scanner.Err(); err != nil {
+			return "", err
+		}
+		return "", errors.New("unexpected end of input")
+	}
+	return p.scanner.Text(), nil
+}
+
+// peek returns the next token without consuming it.
+func (p *planGramParser) peek() (string, bool) {
+	if p.hasTok {
+		return p.tok, true
+	}
+	if !p.scanner.Scan() {
+		return "", false
+	}
+	p.tok = p.scanner.Text()
+	p.hasTok = true
+	return p.tok, true
+}
+
+// expect consumes the next token and asserts it equals want.
+func (p *planGramParser) expect(want string) error {
+	got, err := p.next()
+	if err != nil {
+		return errors.Wrapf(err, "expected %q", want)
+	}
+	if got != want {
+		return errors.Newf("expected %q, got %q", want, got)
+	}
+	return nil
+}
+
+// getOrCreateProduction returns the production for the given name, creating a
+// forward-reference stub if one does not yet exist.
+func (p *planGramParser) getOrCreateProduction(name string) *planGramProduction {
+	pp, ok := p.productions[name]
+	if !ok {
+		pp = &planGramProduction{name: name}
+		p.productions[name] = pp
+	}
+	return pp
+}
+
+// resolveNonterminal maps a nonterminal name to its term. "any" and "none" are
+// resolved to their special terms; "root" is an error (root cannot be
+// referenced from other productions).
+func (p *planGramParser) resolveNonterminal(name string) (planGramTerm, error) {
+	switch name {
+	case "any":
+		return anyPlanGramTerm, nil
+	case "none":
+		return nonePlanGramTerm, nil
+	case "root":
+		return nil, errors.New("\"root\" cannot be used as a nonterminal reference")
+	default:
+		return p.getOrCreateProduction(name), nil
+	}
+}
+
+// parse is the entry point: parses the root production and all subsequent
+// productions, then validates that all forward references were resolved.
+func (p *planGramParser) parse() (PlanGram, error) {
+	// Parse "root" ":" term ";".
+	if err := p.expect("root"); err != nil {
+		return PlanGram{}, err
+	}
+	if err := p.expect(":"); err != nil {
+		return PlanGram{}, err
+	}
+	root, err := p.parseTerm()
+	if err != nil {
+		return PlanGram{}, err
+	}
+	// Root must have exactly one term (no alternates).
+	if tok, ok := p.peek(); ok && tok == "|" {
+		return PlanGram{}, errors.New("root must have exactly one term, not alternates")
+	}
+	if err := p.expect(";"); err != nil {
+		return PlanGram{}, err
+	}
+
+	// Parse remaining productions.
+	for {
+		if _, ok := p.peek(); !ok {
+			break
+		}
+		if err := p.parseProduction(); err != nil {
+			return PlanGram{}, err
+		}
+	}
+
+	if err := p.scanner.Err(); err != nil {
+		return PlanGram{}, err
+	}
+
+	// Validate all forward references were resolved (i.e. every production has
+	// at least one rule).
+	for name, pp := range p.productions {
+		if len(pp.rules) == 0 {
+			return PlanGram{}, errors.Newf("undefined nonterminal %q", name)
+		}
+	}
+
+	return PlanGram{root: root}, nil
+}
+
+// parseProduction parses: NAME ":" term { "|" term } ";".
+func (p *planGramParser) parseProduction() error {
+	name, err := p.next()
+	if err != nil {
+		return err
+	}
+	if name == "root" || name == "any" || name == "none" {
+		return errors.Newf("%q cannot be used as a production name", name)
+	}
+	pp := p.getOrCreateProduction(name)
+	if len(pp.rules) > 0 {
+		return errors.Newf("duplicate production %q", name)
+	}
+	if err := p.expect(":"); err != nil {
+		return err
+	}
+	term, err := p.parseTerm()
+	if err != nil {
+		return err
+	}
+	pp.rules = append(pp.rules, term)
+
+	// Parse alternates.
+	for {
+		tok, ok := p.peek()
+		if !ok || tok != "|" {
+			break
+		}
+		if _, err = p.next(); err != nil { // consume "|"
+			return err
+		}
+		term, err = p.parseTerm()
+		if err != nil {
+			return err
+		}
+		pp.rules = append(pp.rules, term)
+	}
+
+	return p.expect(";")
+}
+
+// parseTerm parses a single term: either an expression (starting with "(") or
+// a nonterminal name.
+func (p *planGramParser) parseTerm() (planGramTerm, error) {
+	tok, ok := p.peek()
+	if !ok {
+		return nil, errors.New("unexpected end of input: expected term")
+	}
+	if tok == "(" {
+		return p.parseExpr()
+	}
+	// Must be a nonterminal name.
+	name, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	return p.resolveNonterminal(name)
+}
+
+// parseExpr parses: "(" OP_NAME { field | child } ")".
+func (p *planGramParser) parseExpr() (planGramTerm, error) {
+	if err := p.expect("("); err != nil {
+		return nil, err
+	}
+	opName, err := p.next()
+	if err != nil {
+		return nil, err
+	}
+	op, ok := opt.OperatorByCamelCase(opName)
+	if !ok {
+		return nil, errors.Newf("unknown operator %q", opName)
+	}
+	expr := &planGramExpr{op: op}
+
+	for {
+		tok, ok := p.peek()
+		if !ok {
+			return nil, errors.New("unexpected end of input: expected \")\"")
+		}
+		if tok == ")" {
+			if _, err := p.next(); err != nil { // consume ")"
+				return nil, err
+			}
+			break
+		}
+		if tok == "(" {
+			// Inline child expression.
+			child, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			expr.children = append(expr.children, child)
+			continue
+		}
+		// Consume the name. Then peek to decide if it's a field (followed by "=")
+		// or a nonterminal child.
+		name, err := p.next()
+		if err != nil {
+			return nil, err
+		}
+		if next, ok := p.peek(); ok && next == "=" {
+			if _, err = p.next(); err != nil { // consume "="
+				return nil, err
+			}
+			val, err := p.next()
+			if err != nil {
+				return nil, err
+			}
+			unquoted, err := strconv.Unquote(val)
+			if err != nil {
+				return nil, errors.Wrapf(err, "invalid field value %s", val)
+			}
+			expr.fields = append(expr.fields, planGramExprField{key: name, val: unquoted})
+		} else {
+			// Nonterminal child.
+			term, err := p.resolveNonterminal(name)
+			if err != nil {
+				return nil, err
+			}
+			expr.children = append(expr.children, term)
+		}
+	}
+	return expr, nil
+}
+
+// tokenizePlanGram is a bufio.SplitFunc that tokenizes a byte stream for
+// parsing as a PlanGram.
+func tokenizePlanGram(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// Skip leading whitespace.
+	i := 0
+	for i < len(data) {
+		r, size := utf8.DecodeRune(data[i:])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		i += size
+	}
+	if i == len(data) {
+		if atEOF {
+			return i, nil, nil
+		}
+		return 0, nil, nil
+	}
+
+	switch data[i] {
+	case '"':
+		// Quoted string: use strconv.QuotedPrefix to find the end.
+		quoted, err := strconv.QuotedPrefix(string(data[i:]))
+		if err != nil {
+			if atEOF {
+				return 0, nil, err
+			}
+			// Might need more data to complete the quoted string.
+			return 0, nil, nil
+		}
+		return i + len(quoted), data[i : i+len(quoted)], nil
+	case '(', ')', ':', ';', '=', '|':
+		// Single-character punctuation token.
+		return i + 1, data[i : i+1], nil
+	default:
+		// Word token: scan until whitespace or punctuation.
+		j := i
+		for j < len(data) {
+			r, size := utf8.DecodeRune(data[j:])
+			if unicode.IsSpace(r) {
+				break
+			}
+			if data[j] == '"' || data[j] == '(' || data[j] == ')' ||
+				data[j] == ':' || data[j] == ';' || data[j] == '=' || data[j] == '|' {
+				break
+			}
+			j += size
+		}
+		if j == i {
+			// Should not happen, but guard against infinite loops.
+			return i + 1, data[i : i+1], nil
+		}
+		return j, data[i:j], nil
+	}
 }
 
 // visitProductions implements the planGramTerm interface.
