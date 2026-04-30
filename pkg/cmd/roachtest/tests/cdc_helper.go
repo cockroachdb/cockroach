@@ -7,8 +7,10 @@ package tests
 
 import (
 	"context"
+	b64 "encoding/base64"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"strings"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,6 +29,39 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// gceCredentialsEnv is the env var the roachtest CI runner exposes with a
+// JSON service-account key that has read/write access to roachtest GCS
+// buckets. Other roachtests (e.g. query_comparison_util.go) rely on the
+// same convention.
+const gceCredentialsEnv = "GOOGLE_EPHEMERAL_CREDENTIALS"
+
+// rewriteGCSAuthForLocalRead swaps AUTH=implicit on a gs:// URI for
+// AUTH=specified using credentials from gceCredentialsEnv. The sink URI uses
+// AUTH=implicit so the cluster nodes — which have a service account with the
+// devstorage.read_write scope attached — can write to GCS. The roachtest
+// process itself runs on a TeamCity GCE worker without that scope, so when it
+// needs to read the sink output back (to fingerprint it) it must authenticate
+// explicitly. URIs with other schemes or auth modes are returned unchanged.
+// See #119295.
+func rewriteGCSAuthForLocalRead(sinkURI string) (string, error) {
+	u, err := url.Parse(sinkURI)
+	if err != nil {
+		return "", errors.Wrap(err, "parsing sink URI")
+	}
+	if u.Scheme != "gs" || u.Query().Get("AUTH") != "implicit" {
+		return sinkURI, nil
+	}
+	credKey, ok := os.LookupEnv(gceCredentialsEnv)
+	if !ok {
+		return "", errors.Newf("%s not set", gceCredentialsEnv)
+	}
+	q := u.Query()
+	q.Set("AUTH", "specified")
+	q.Set("CREDENTIALS", b64.StdEncoding.EncodeToString([]byte(credKey)))
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
 
 // createTargetTableStmt returns two statements - one to create a new table with
 // name newTableName and with same schema as the targetTableName table and
@@ -235,7 +271,11 @@ func (m *metamorphicTestHelper) loadOpsToTableAndShowFingerprint(
 	newTableName string,
 ) string {
 	// Grab a handler to the cloud storage for the given sinks.
-	cs, err := cloud.ExternalStorageFromURI(ctx, strings.TrimPrefix(sinkURI, `experimental-`),
+	readURI, err := rewriteGCSAuthForLocalRead(strings.TrimPrefix(sinkURI, `experimental-`))
+	if err != nil {
+		t.Fatal(rperrors.TransientFailure(err, "GCE credentials issue"))
+	}
+	cs, err := cloud.ExternalStorageFromURI(ctx, readURI,
 		base.ExternalIODirConfig{},
 		cluster.MakeTestingClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
