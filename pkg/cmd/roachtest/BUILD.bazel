@@ -64,6 +64,7 @@ go_library(
         "//pkg/util/allstacks",
         "//pkg/util/debugutil",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/stop",
