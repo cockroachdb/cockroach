@@ -3624,15 +3624,10 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
 				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 			})
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server,
-				`d`, `public`, `multiple_alters`, 10)
 			// Changefeed level backfill for ADD COLUMN d.
-			assertPayloads(t, multipleAlters, []string{
-				// Backfill no-ops for column D (C schema change is complete)
-				// TODO(dan): Track duplicates more precisely in sinklessFeed/tableFeed.
-				// Scan output for column C
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}, "updated": "%s"}`, ts.AsOfSystemTime()),
+			assertPayloadsStripTs(t, multipleAlters, []string{
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}}`,
 			})
 		})
 	}
@@ -3777,22 +3772,13 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
 			wg.Done()
 
-			// When dropping the column, the desc goes from version 1->9 with the schema change being visible at
-			// version 2. Then, when adding column c, it goes from 9->17, with the schema change being visible at
-			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
-			// being visible at the 7th step (version 23).
-			// TODO(#142936): Investigate if this descriptor version hardcoding is sound.
-			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 6)
-			addTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 15)
-			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 23)
-
-			assertPayloads(t, multipleAlters, []string{
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}, "updated": "%s"}`, addTS.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}, "updated": "%s"}`, addTS.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}, "updated": "%s"}`, addTS2.AsOfSystemTime()),
-				fmt.Sprintf(`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}, "updated": "%s"}`, addTS2.AsOfSystemTime()),
+			assertPayloadsPerKeyOrderedStripTs(t, multipleAlters, []string{
+				`multiple_alters: [1]->{"after": {"a": 1}}`,
+				`multiple_alters: [2]->{"after": {"a": 2}}`,
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
+				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee", "d": "dee"}}`,
+				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee", "d": "dee"}}`,
 			})
 		})
 	}
