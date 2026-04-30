@@ -37,6 +37,7 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":rand"],
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/crosscluster/ldrrandgen",
