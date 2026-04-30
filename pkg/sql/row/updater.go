@@ -420,7 +420,7 @@ func (ru *Updater) UpdateRow(
 		kvOp = PutOp
 	}
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(
-		ctx, b, &ru.Helper, primaryIndexKey, ru.FetchCols, ru.newValues, ru.FetchColIDtoRowIndex,
+		ctx, b, &ru.Helper, primaryIndexKey, ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex, &ru.key, &ru.value, ru.valueBuf, oth, oldValues,
 		kvOp, mustValidateOldPKValues, traceKV,
 	)
