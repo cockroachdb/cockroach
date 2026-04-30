@@ -2179,8 +2179,6 @@ func NewLeaseManager(
 						Unit:        metric.Unit_BYTES,
 					},
 					Duration:     base.DefaultHistogramWindowInterval(),
-					MaxVal:       log10int64times1000,
-					SigFigs:      3,
 					BucketConfig: metric.MemoryUsage64MBBuckets,
 				}),
 			},

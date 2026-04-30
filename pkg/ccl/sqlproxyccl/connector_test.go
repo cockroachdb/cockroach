@@ -382,7 +382,6 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MustMakeTenantID(42),
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePrometheus,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
 				BucketConfig: metric.IOLatencyBuckets,
@@ -467,7 +466,6 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		c := &connector{
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
 				BucketConfig: metric.IOLatencyBuckets,
@@ -501,7 +499,6 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		c := &connector{
 			TenantID: roachpb.MustMakeTenantID(42),
 			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
 				BucketConfig: metric.IOLatencyBuckets,

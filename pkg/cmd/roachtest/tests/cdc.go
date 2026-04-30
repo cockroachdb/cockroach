@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/errors"
 	prompb "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -580,7 +581,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 func (ct *cdcTester) verifyMetrics(
 	ctx context.Context, check func(metrics map[string]*prompb.MetricFamily) (ok bool),
 ) {
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 
 	testutils.SucceedsSoon(ct.t, func() error {
 		uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())

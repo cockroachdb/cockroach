@@ -432,7 +432,6 @@ func NewEvalWaitMetrics() *EvalWaitMetrics {
 				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
 				Duration:     base.DefaultHistogramWindowInterval(),
 				BucketConfig: metric.IOLatencyBuckets,
-				Mode:         metric.HistogramModePrometheus,
 			},
 		)
 	}

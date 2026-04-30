@@ -493,9 +493,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 }
 
 func testHistogram() *aggmetric.Histogram {
-	return aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{
-		SigFigs: 1,
-	}).AddChild()
+	return aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{}).AddChild()
 }
 
 // BenchmarkTTLExpiration will benchmark the performance of queries that mimic

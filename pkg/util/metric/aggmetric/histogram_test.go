@@ -33,7 +33,7 @@ func TestSQLHistogram(t *testing.T) {
 		scrape := func(ex *metric.PrometheusExporter) {
 			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
@@ -49,8 +49,6 @@ func TestSQLHistogram(t *testing.T) {
 			Name: "histo_gram",
 		},
 		Duration:     base.DefaultHistogramWindowInterval(),
-		MaxVal:       100,
-		SigFigs:      1,
 		BucketConfig: metric.Percent100Buckets,
 	})
 	r.AddMetric(h)
@@ -70,10 +68,6 @@ func TestSQLHistogram(t *testing.T) {
 	}
 
 	testFile := "SQLHistogram_pre_eviction.txt"
-	if metric.HdrEnabled() {
-		testFile = "SQLHistogram_pre_eviction_hdr.txt"
-	}
-
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 
 	for i := 0 + cacheSize; i < cacheSize+5; i++ {
@@ -81,8 +75,5 @@ func TestSQLHistogram(t *testing.T) {
 	}
 
 	testFile = "SQLHistogram_post_eviction.txt"
-	if metric.HdrEnabled() {
-		testFile = "SQLHistogram_post_eviction_hdr.txt"
-	}
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 }

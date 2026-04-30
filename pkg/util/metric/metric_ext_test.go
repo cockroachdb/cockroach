@@ -6,22 +6,31 @@
 package metric_test
 
 import (
-	"encoding/json"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
+// normalizeProtoText normalizes prototext output to use a single space
+// after colons, working around differences between prototext library
+// versions (some use one space, others two).
+var multiSpaceAfterColon = regexp.MustCompile(`(\w):  +`)
+
+func normalizeProtoText(s string) string {
+	return multiSpaceAfterColon.ReplaceAllString(s, "$1: ")
+}
+
 func TestHistogramPrometheus(t *testing.T) {
-	// Regression test against https://github.com/cockroachdb/cockroach/pull/88331.
-	// The output includes buckets for which the upper bound equals the previous
-	// bucket's upper bound.
+	// Verify that the prometheus histogram output produced by
+	// goodhistogram is well-formed: monotonically increasing
+	// cumulative counts, no duplicate upper bounds, and correct
+	// totals.
 	h := metric.NewHistogram(metric.HistogramOptions{
-		Mode:     metric.HistogramModePrometheus,
 		Metadata: metric.Metadata{},
 		Duration: time.Second,
 		Buckets:  []float64{1, 2, 3, 4, 5, 6, 10, 20, 30},
@@ -30,7 +39,8 @@ func TestHistogramPrometheus(t *testing.T) {
 	h.RecordValue(5)
 	h.RecordValue(5)
 	h.RecordValue(10)
-	act, err := json.MarshalIndent(*h.ToPrometheusMetric().Histogram, "", "  ")
-	require.NoError(t, err)
-	echotest.Require(t, string(act), datapathutils.TestDataPath(t, "histogram.txt"))
+	act := normalizeProtoText(
+		prototext.MarshalOptions{Multiline: true, Indent: "  "}.Format(
+			h.ToPrometheusMetric().Histogram))
+	echotest.Require(t, act, datapathutils.TestDataPath(t, "histogram.txt"))
 }

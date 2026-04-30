@@ -176,7 +176,6 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 
 		// Compare values against metric.Histogram (prometheus-based implementation)
 		promhist := metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePrometheus,
 			Metadata: metric.Metadata{},
 			Duration: time.Hour,
 			Buckets:  hist.Buckets,
@@ -191,12 +190,15 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 		}
 
 		histWindow := promhist.WindowedSnapshot()
-		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), 1) // pmax
-		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), 1)   // pmin
-		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), 1)  // p50
-		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), 1)  // p75
-		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), 1)  // p90
-		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), 1)  // p99
+		// goodhistogram uses trapezoidal interpolation and may have
+		// slightly different bucket boundaries than the input, so we
+		// allow a tolerance proportional to the bucket width (~10).
+		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), 10) // pmax
+		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), 10)   // pmin
+		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), 10)  // p50
+		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), 10)  // p75
+		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), 10)  // p90
+		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), 10)  // p99
 	}
 }
 

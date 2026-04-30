@@ -180,7 +180,6 @@
             "pkg/util/log/registry.go": "flagged by linter, should be evaluated",
             "pkg/util/log/trace.go": "flagged by linter, should be evaluated",
             "pkg/util/log/vmodule.go": "flagged by linter, should be evaluated",
-            "pkg/util/metric/hdrhistogram.go": "flagged by linter, should be evaluated",
             "pkg/util/metric/metric.go": "flagged by linter, should be evaluated",
             "pkg/util/mon/bytes_usage.go": "flagged by linter, should be evaluated",
             "pkg/util/randutil/rand.go": "flagged by linter, should be evaluated",

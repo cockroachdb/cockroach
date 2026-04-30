@@ -2012,10 +2012,6 @@ raft_process_logcommit_latency_count: raft.process.logcommit.latency.count
 raft_process_logcommit_latency_sum: raft.process.logcommit.latency.sum
 raft_process_tickingnanos: raft.process.tickingnanos
 raft_process_workingnanos: raft.process.workingnanos
-raft_quota_pool_percent_used: raft.quota_pool.percent_used
-raft_quota_pool_percent_used_bucket: raft.quota_pool.percent_used.bucket
-raft_quota_pool_percent_used_count: raft.quota_pool.percent_used.count
-raft_quota_pool_percent_used_sum: raft.quota_pool.percent_used.sum
 raft_rcvd_app: raft.rcvd.app
 raft_rcvd_appresp: raft.rcvd.appresp
 raft_rcvd_bytes: raft.rcvd.bytes

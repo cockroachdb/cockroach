@@ -180,8 +180,6 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaMemMaxBytes,
 			Duration:     histogramWindow,
-			MaxVal:       log10int64times1000,
-			SigFigs:      3,
 			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
 		CurBytesCount:     metric.NewGauge(metaMemCurBytes),
@@ -190,8 +188,6 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		MaxDiskBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaDiskMaxBytes,
 			Duration:     histogramWindow,
-			MaxVal:       log10int64times1000,
-			SigFigs:      3,
 			BucketConfig: metric.MemoryUsage64MBBuckets}),
 		QueriesSpilled:              metric.NewCounter(metaQueriesSpilled),
 		SpilledBytesWritten:         metric.NewCounter(metaSpilledBytesWritten),

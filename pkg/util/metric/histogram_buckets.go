@@ -5,7 +5,12 @@
 
 package metric
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"math"
+
+	"github.com/cockroachdb/goodhistogram"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // staticBucketConfig describes the buckets we want to generate for a specific
 // category of metrics.
@@ -158,6 +163,45 @@ var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
 	BatchProcessLatencyBuckets, LongRunning60mLatencyBuckets, DataCount16MBuckets,
 	DataSize16MBBuckets, MemoryUsage64MBBuckets, ReplicaCPUTimeBuckets,
 	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets, ResponseTime30sBuckets}
+
+// ToGoodHistogramParams converts the bucket configuration into
+// goodhistogram.Params. For exponential distributions, the ErrorBound
+// is derived from the number of buckets spanning the [min, max] range.
+// For uniform distributions, a default ErrorBound is used.
+func (config staticBucketConfig) ToGoodHistogramParams() goodhistogram.Params {
+	if config.count == 0 {
+		return goodhistogram.Params{}
+	}
+	lo := config.min
+	if lo <= 0 {
+		lo = 1 // goodhistogram requires Lo > 0
+	}
+	hi := config.max
+	if hi <= lo {
+		hi = lo + 1
+	}
+	// Derive ErrorBound from the bucket count. For exponential
+	// distributions the bucket width ratio is (Hi/Lo)^(1/count), so the
+	// relative error within a bucket is approximately that ratio minus 1.
+	var errorBound float64
+	if config.distribution == Exponential && config.count > 1 {
+		errorBound = math.Pow(hi/lo, 1.0/float64(config.count)) - 1.0
+	} else {
+		errorBound = 0.05
+	}
+	// Clamp to goodhistogram's supported range.
+	if errorBound < 0.001 {
+		errorBound = 0.001
+	}
+	if errorBound > 0.5 {
+		errorBound = 0.5
+	}
+	return goodhistogram.Params{
+		Lo:         lo,
+		Hi:         hi,
+		ErrorBound: errorBound,
+	}
+}
 
 func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64
