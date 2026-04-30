@@ -27,8 +27,9 @@ import (
 // inspectCheckRowCount extends an inspectCheck that counts rows in addition to
 // its primary validation.
 type inspectCheckRowCount interface {
-	// Rows returns the number of rows counted by the check.
-	RowCount() uint64
+	// RowCount returns nil when the check cannot provide a reliable row count
+	// for the span.
+	RowCount() *uint64
 }
 
 // rowCountCheck verifies a table's row count matches the expected count.
@@ -127,8 +128,10 @@ func (c *rowCountCheck) CheckSpan(
 	for _, check := range checks {
 		// TODO(#160989): Handle inconsistency btwn checks on the same span.
 		if check, ok := check.(inspectCheckRowCount); ok {
-			data.SpanRowCount = check.RowCount()
-			return nil
+			if rowCount := check.RowCount(); rowCount != nil {
+				data.SpanRowCount = *rowCount
+				return nil
+			}
 		}
 	}
 
