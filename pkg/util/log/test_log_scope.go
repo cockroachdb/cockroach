@@ -192,7 +192,15 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Config) {
 	testConfig = logconfig.DefaultConfig()
 
-	forcePanicsToStderr := func(c *logconfig.Config) {
+	forcePanicsToStderr := func(c *logconfig.Config, keepRedaction bool, hasFileDir bool) {
+		if keepRedaction && hasFileDir {
+			// When -show-logs is specified and we have a file directory, we keep
+			// redaction markers in stderr output so the user can see them for
+			// debugging. We leave CaptureFd2 enabled so that the validation
+			// constraint is satisfied (redactable stderr requires fd2 capture).
+			// Panics will still be logged to files.
+			return
+		}
 		// Disable the internal fd2 capture to file, to ensure that panic
 		// objects get reported to stderr.
 		c.CaptureFd2.Enable = false
@@ -209,7 +217,7 @@ func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Con
 			panic(errors.Wrap(err, "error in test log config spec"))
 		}
 
-		forcePanicsToStderr(&h.Config)
+		forcePanicsToStderr(&h.Config, mostlyInline, fileDir != nil)
 
 		// Validate the configuration. This also ensures that if the
 		// user's choice does not set a target directory, we use the
@@ -299,7 +307,7 @@ func getTestConfig(fileDir *string, mostlyInline bool) (testConfig logconfig.Con
 		testConfig.Sinks.Stderr.Filter = severity.NONE
 	}
 
-	forcePanicsToStderr(&testConfig)
+	forcePanicsToStderr(&testConfig, mostlyInline, fileDir != nil)
 
 	if err := testConfig.Validate(fileDir); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error in predefined test log config"))
