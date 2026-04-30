@@ -621,8 +621,8 @@ func (ep *DummyEvalPlanner) InsertStatementHint(
 	statementFingerprint string,
 	hint hintpb.StatementHintUnion,
 	optDatabase string,
-) (int64, error) {
-	return 0, nil
+) (int64, int64, error) {
+	return 0, 0, nil
 }
 
 // DeleteStatementHint is part of the eval.Planner interface.
