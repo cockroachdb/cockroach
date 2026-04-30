@@ -826,6 +826,7 @@ func (cfg *Config) CreateEngines(ctx context.Context, stopper *stop.Stopper) (En
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 			storage.MemTableStopWritesThreshold(stopWritesThreshold),
 		)
+		addLogOpt(storage.MemtableSize(256<<20))
 		addCfgOpt(storeKnobs.EngineKnobs...)
 
 		if spec.InMemory {
