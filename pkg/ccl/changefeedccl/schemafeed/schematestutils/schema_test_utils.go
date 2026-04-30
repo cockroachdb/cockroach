@@ -9,7 +9,9 @@ package schematestutils
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -136,6 +138,11 @@ func AddDropIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor 
 
 // FetchDescVersionModificationTime fetches the `ModificationTime` of the
 // specified `version` of `tableName`'s table descriptor.
+//
+// Prefer FetchModificationTimeOfFirstMatchingDesc when the caller can describe
+// the desired schema state with a predicate: hardcoded version numbers are
+// brittle because the schema changer's intermediate steps can shift between
+// releases or even between runs (e.g. under stress).
 func FetchDescVersionModificationTime(
 	t testing.TB,
 	s serverutils.ApplicationLayerInterface,
@@ -144,16 +151,96 @@ func FetchDescVersionModificationTime(
 	tableName string,
 	version int,
 ) hlc.Timestamp {
-	db := s.SQLConn(t, serverutils.DBName(dbName))
-
-	tblKey := s.Codec().IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
-	header := kvpb.RequestHeader{
-		Key:    tblKey,
-		EndKey: tblKey.PrefixEnd(),
+	ts := fetchFirstMatchingDescModTime(t, s, dbName, schemaName, tableName,
+		func(tbl catalog.TableDescriptor) bool {
+			return int(tbl.GetVersion()) == version
+		})
+	if ts.IsEmpty() {
+		t.Fatalf("couldn't find table desc for version %d", version)
 	}
-	dropColTblID := sqlutils.QueryTableID(t, db, dbName, schemaName, tableName)
+	return ts
+}
+
+// FetchModificationTimeOfFirstMatchingDesc returns the ModificationTime of the
+// numerically smallest table-descriptor version satisfying pred.
+//
+// This lets a test pin down the timestamp at which a table reached a particular
+// schema state (e.g. "column b has been dropped and no mutations are pending")
+// without hardcoding a descriptor version number. Hardcoded versions are
+// brittle: under race or with future schema-changer changes, a schema change
+// may produce a different number of intermediate descriptor versions, causing
+// the lookup to either fail or return the wrong version's timestamp.
+//
+// The predicate should describe a transient state that is reached exactly once
+// during the test (e.g. by referring to the public column set), so that the
+// "first matching version" corresponds to the moment the schema change of
+// interest committed.
+//
+// Fails the test if no version matches.
+func FetchModificationTimeOfFirstMatchingDesc(
+	t testing.TB,
+	s serverutils.ApplicationLayerInterface,
+	dbName string,
+	schemaName string,
+	tableName string,
+	pred func(catalog.TableDescriptor) bool,
+) hlc.Timestamp {
+	ts := fetchFirstMatchingDescModTime(t, s, dbName, schemaName, tableName, pred)
+	if ts.IsEmpty() {
+		// Re-scan to produce a useful diagnostic listing every version observed.
+		var observed []string
+		forEachTableDescVersion(t, s, dbName, schemaName, tableName,
+			func(tbl catalog.TableDescriptor) {
+				cols := make([]string, 0, len(tbl.PublicColumns()))
+				for _, c := range tbl.PublicColumns() {
+					cols = append(cols, c.GetName())
+				}
+				observed = append(observed,
+					fmt.Sprintf("v%d cols=%v mutations=%d",
+						tbl.GetVersion(), cols, len(tbl.AllMutations())))
+			})
+		t.Fatalf("no descriptor version matched predicate; observed versions:\n  %s",
+			strings.Join(observed, "\n  "))
+	}
+	return ts
+}
+
+// fetchFirstMatchingDescModTime returns the ModificationTime of the lowest
+// descriptor version satisfying pred, or an empty timestamp if none match.
+func fetchFirstMatchingDescModTime(
+	t testing.TB,
+	s serverutils.ApplicationLayerInterface,
+	dbName, schemaName, tableName string,
+	pred func(catalog.TableDescriptor) bool,
+) hlc.Timestamp {
+	var bestVersion descpb.DescriptorVersion
+	var bestTS hlc.Timestamp
+	forEachTableDescVersion(t, s, dbName, schemaName, tableName,
+		func(tbl catalog.TableDescriptor) {
+			if !pred(tbl) {
+				return
+			}
+			if bestTS.IsEmpty() || tbl.GetVersion() < bestVersion {
+				bestVersion = tbl.GetVersion()
+				bestTS = tbl.GetModificationTime()
+			}
+		})
+	return bestTS
+}
+
+// forEachTableDescVersion invokes visit for every historical version of the
+// named table descriptor found in the descriptor table.
+func forEachTableDescVersion(
+	t testing.TB,
+	s serverutils.ApplicationLayerInterface,
+	dbName, schemaName, tableName string,
+	visit func(catalog.TableDescriptor),
+) {
+	db := s.SQLConn(t, serverutils.DBName(dbName))
+	tblKey := s.Codec().IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
+	tableID := sqlutils.QueryTableID(t, db, dbName, schemaName, tableName)
 	req := &kvpb.ExportRequest{
-		RequestHeader: header,
+		RequestHeader: kvpb.RequestHeader{Key: tblKey, EndKey: tblKey.PrefixEnd()},
 		MVCCFilter:    kvpb.MVCCFilter_All,
 		StartTime:     hlc.Timestamp{},
 	}
@@ -164,7 +251,7 @@ func FetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*kvpb.ExportResponse).Files {
-		ts, found := func() (hlc.Timestamp, bool) {
+		func() {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				LowerBound: keys.MinKey,
@@ -178,7 +265,7 @@ func FetchDescVersionModificationTime(
 				if ok, err := it.Valid(); err != nil {
 					t.Fatal(err)
 				} else if !ok {
-					return hlc.Timestamp{}, false
+					return
 				}
 				k := it.UnsafeKey()
 				if _, hasRange := it.HasPointAndRange(); hasRange {
@@ -188,11 +275,11 @@ func FetchDescVersionModificationTime(
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, tableID, err := encoding.DecodeUvarintAscending(remaining)
+				_, descID, err := encoding.DecodeUvarintAscending(remaining)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if tableID != uint64(dropColTblID) {
+				if descID != uint64(tableID) {
 					continue
 				}
 				unsafeValue, err := it.UnsafeValue()
@@ -207,17 +294,9 @@ func FetchDescVersionModificationTime(
 				}
 				require.NotNil(t, b)
 				if b.DescriptorType() == catalog.Table {
-					tbl := b.BuildImmutable().(catalog.TableDescriptor)
-					if int(tbl.GetVersion()) == version {
-						return tbl.GetModificationTime(), true
-					}
+					visit(b.BuildImmutable().(catalog.TableDescriptor))
 				}
 			}
 		}()
-		if found {
-			return ts
-		}
 	}
-	t.Fatal(errors.New(`couldn't find table desc for given version`))
-	return hlc.Timestamp{}
 }

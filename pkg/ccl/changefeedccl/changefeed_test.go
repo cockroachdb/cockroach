@@ -3450,6 +3450,31 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 	}
 }
 
+// settledPublicColumns returns a predicate matching a table descriptor whose
+// public column set is exactly cols and which has no pending mutations. This
+// is intended for tests that want the modification time at the moment a schema
+// change committed, without referring to a brittle hardcoded version number.
+func settledPublicColumns(cols ...string) func(catalog.TableDescriptor) bool {
+	want := make(map[string]struct{}, len(cols))
+	for _, c := range cols {
+		want[c] = struct{}{}
+	}
+	return func(tbl catalog.TableDescriptor) bool {
+		if len(tbl.AllMutations()) != 0 {
+			return false
+		}
+		if len(tbl.PublicColumns()) != len(want) {
+			return false
+		}
+		for _, c := range tbl.PublicColumns() {
+			if _, ok := want[c.GetName()]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+}
+
 // Test schema changes that require a backfill when the backfill option is
 // allowed when using the legacy schema changer.
 //
@@ -3624,8 +3649,11 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 				`multiple_alters: [1]->{"after": {"a": 1, "c": "cee"}}`,
 				`multiple_alters: [2]->{"after": {"a": 2, "c": "cee"}}`,
 			})
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server,
-				`d`, `public`, `multiple_alters`, 10)
+			// See the equivalent block in TestChangefeedSchemaChangeAllowBackfill
+			// for why we look up the version by predicate rather than by number.
+			ts := schematestutils.FetchModificationTimeOfFirstMatchingDesc(
+				t, s.TestServer.Server, `d`, `public`, `multiple_alters`,
+				settledPublicColumns("a", "c", "d"))
 			// Changefeed level backfill for ADD COLUMN d.
 			assertPayloads(t, multipleAlters, []string{
 				// Backfill no-ops for column D (C schema change is complete)
@@ -3777,14 +3805,17 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
 			wg.Done()
 
-			// When dropping the column, the desc goes from version 1->9 with the schema change being visible at
-			// version 2. Then, when adding column c, it goes from 9->17, with the schema change being visible at
-			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
-			// being visible at the 7th step (version 23).
-			// TODO(#142936): Investigate if this descriptor version hardcoding is sound.
-			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 6)
-			addTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 15)
-			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 23)
+			// Look up the modification time at which each schema change committed,
+			// identifying the descriptor version by the resulting public column set
+			// rather than a hardcoded version number. The schema changer can produce
+			// a different number of intermediate versions across releases or under
+			// race, so version-number hardcoding is brittle (#142936).
+			dropTS := schematestutils.FetchModificationTimeOfFirstMatchingDesc(
+				t, s.Server, `d`, `public`, `multiple_alters`, settledPublicColumns("a"))
+			addTS := schematestutils.FetchModificationTimeOfFirstMatchingDesc(
+				t, s.Server, `d`, `public`, `multiple_alters`, settledPublicColumns("a", "c"))
+			addTS2 := schematestutils.FetchModificationTimeOfFirstMatchingDesc(
+				t, s.Server, `d`, `public`, `multiple_alters`, settledPublicColumns("a", "c", "d"))
 
 			assertPayloads(t, multipleAlters, []string{
 				fmt.Sprintf(`multiple_alters: [1]->{"after": {"a": 1}, "updated": "%s"}`, dropTS.AsOfSystemTime()),
