@@ -158,7 +158,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 ) SyncChangeID {
 	var isMMARegistered bool
 	var mmaChange mmaprototype.ExternalRangeChange
-	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, as.st) {
 		change := convertLeaseTransferToMMA(desc, usage, amp, transferFrom, transferTo)
 		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(ctx, localStoreID, change)
 	}
@@ -190,7 +190,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 ) SyncChangeID {
 	var isMMARegistered bool
 	var mmaChange mmaprototype.ExternalRangeChange
-	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, as.st) {
 		var err error
 		change, err := convertReplicaChangeToMMA(desc, usage, amp, changes, leaseholderStoreID)
 		if err != nil {

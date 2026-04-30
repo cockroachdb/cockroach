@@ -101,7 +101,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		return
 	}
 
-	if !kvserverbase.LoadBasedRebalancingModeIsMMA(&msr.settings.ST.SV) {
+	if !kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, msr.settings.ST) {
 		// When the store rebalancer isn't set to use the multi-metric mode, the
 		// legacy store rebalancer is used.
 		return

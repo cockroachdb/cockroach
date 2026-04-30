@@ -106,9 +106,9 @@ import (
 // after calling this function, so the caller is responsible for keeping track
 // of the returned advisor and associating it.
 func (as *AllocatorSync) BuildMMARebalanceAdvisor(
-	existing roachpb.StoreID, cands []roachpb.StoreID,
+	ctx context.Context, existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *mmaprototype.MMARebalanceAdvisor {
-	if kvserverbase.GetLoadBasedRebalancingMode(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
+	if kvserverbase.GetLoadBasedRebalancingMode(ctx, as.st) != kvserverbase.LBRebalancingMultiMetricAndCount {
 		return mmaprototype.NoopMMARebalanceAdvisor()
 	}
 	return as.mmaAllocator.BuildMMARebalanceAdvisor(existing, cands)
