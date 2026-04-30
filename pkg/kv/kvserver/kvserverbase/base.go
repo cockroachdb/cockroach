@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -117,6 +118,11 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 // loadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
+//
+// The "auto" value defers the choice between the legacy load-based
+// rebalancer and the multi-metric allocator (MMA) to the cluster version:
+// pre-finalization clusters get the legacy behavior, post-finalization
+// clusters get MMA. See GetLoadBasedRebalancingMode.
 var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing",
@@ -128,6 +134,7 @@ var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
 		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
 		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
+		LBRebalancingAuto:                LBRebalancingAuto.String(),
 	},
 	settings.WithPublic,
 )
@@ -138,15 +145,35 @@ var loadBasedRebalancingMode = settings.RegisterEnumSetting(
 // Use when MMA causes crashes too frequent to change the setting.
 var disableMMA = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_MMA", false)
 
-// GetLoadBasedRebalancingMode returns the current load-based rebalancing mode.
-// If COCKROACH_DISABLE_MMA is set and the mode is an MMA mode, it falls back
-// to LBRebalancingLeasesAndReplicas.
+// GetLoadBasedRebalancingMode returns the resolved load-based rebalancing
+// mode.
 //
-// The ctx and *cluster.Settings are accepted (rather than a bare
-// *settings.Values) so a future change can resolve mode values that depend on
-// the cluster version.
+// LBRebalancingAuto is resolved against the cluster version: once the v26.3
+// version gate is active (i.e. upgrade finalization has reached v26.3), auto
+// resolves to LBRebalancingMultiMetricAndCount; otherwise it resolves to
+// LBRebalancingLeasesAndReplicas. This deferral ensures MMA is not enabled in
+// mixed-version clusters where some nodes may not yet understand the MMA
+// path.
+//
+// If COCKROACH_DISABLE_MMA is set and the resolved mode is an MMA mode, the
+// mode is forced back to LBRebalancingLeasesAndReplicas. The kill-switch is
+// applied after auto resolution so it overrides both explicit MMA modes and
+// auto-derived MMA.
 func GetLoadBasedRebalancingMode(ctx context.Context, st *cluster.Settings) LBRebalancingMode {
 	mode := loadBasedRebalancingMode.Get(&st.SV)
+	if mode == LBRebalancingAuto {
+		// Use ActiveVersionOrEmpty rather than IsActive so callers with an
+		// uninitialized version handle (e.g. the asim simulator) get the
+		// conservative legacy behavior instead of fataling. The zero
+		// ClusterVersion is Less-than every real version, so the comparison
+		// below naturally falls to the legacy branch.
+		ver := st.Version.ActiveVersionOrEmpty(ctx)
+		if !ver.Less(clusterversion.V26_3.Version()) {
+			mode = LBRebalancingMultiMetricAndCount
+		} else {
+			mode = LBRebalancingLeasesAndReplicas
+		}
+	}
 	if disableMMA && mode.IsMMA() {
 		return LBRebalancingLeasesAndReplicas
 	}
@@ -192,6 +219,14 @@ const (
 	// across stores. Note that this might cause more thrashing since lease and
 	// replica counts goal may be in conflict with the store-level load goal.
 	LBRebalancingMultiMetricAndCount
+	// LBRebalancingAuto defers the choice to the cluster version: once the
+	// v26.3 version gate is active, this resolves to
+	// LBRebalancingMultiMetricAndCount; otherwise it resolves to
+	// LBRebalancingLeasesAndReplicas. Used as the default value to roll MMA
+	// out at upgrade finalization without overriding explicit operator
+	// preferences. Resolution happens in GetLoadBasedRebalancingMode; this
+	// value is never returned from there.
+	LBRebalancingAuto
 )
 
 // IsMMA returns true if the mode uses the multi-metric store rebalancer.
@@ -216,6 +251,8 @@ func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.Print("multi-metric only")
 	case LBRebalancingMultiMetricAndCount:
 		w.Print("multi-metric and count")
+	case LBRebalancingAuto:
+		w.Print("auto")
 	default:
 		w.Printf("unknown(%d)", int64(m))
 	}
