@@ -7,7 +7,6 @@ package colfetcher
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -18,11 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,10 +33,6 @@ type ColBatchDirectScan struct {
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
 	hasDatumVec bool
-
-	// cpuStopWatch tracks the CPU time spent by this ColBatchDirectScan while
-	// fulfilling KV requests *in the current goroutine*.
-	cpuStopWatch *timeutil.CPUStopWatch
 
 	deserializer            colexecutils.Deserializer
 	deserializerInitialized bool
@@ -82,9 +75,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch, metadata *execinfrapb.Pr
 	var res row.KVBatchFetcherResponse
 	var err error
 	for {
-		s.cpuStopWatch.Start()
 		res, err = s.fetcher.NextBatch(s.Ctx)
-		s.cpuStopWatch.Stop()
 		if err != nil {
 			colexecerror.InternalError(convertFetchError(s.spec, err))
 		}
@@ -169,12 +160,9 @@ func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 // TODO(yuzefovich): check whether GetScanStats and GetConsumedRU should be
 // reimplemented.
 
-// GetKVCPUTime is part of the colexecop.KVReader interface.
-//
-// Note that this KV CPU time, unlike for the ColBatchScan, includes the
-// decoding time done by the cFetcherWrapper.
-func (s *ColBatchDirectScan) GetKVCPUTime() time.Duration {
-	return s.cpuStopWatch.Elapsed()
+// GetLocalKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetLocalKVCPUTime() int64 {
+	return s.fetcher.GetLocalKVCPUTime()
 }
 
 // Release implements the execreleasable.Releasable interface.
@@ -248,10 +236,6 @@ func NewColBatchDirectScan(
 			break
 		}
 	}
-	var cpuStopWatch *timeutil.CPUStopWatch
-	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		cpuStopWatch = timeutil.NewCPUStopWatch()
-	}
 	return &ColBatchDirectScan{
 		colBatchScanBase: base,
 		fetcher:          fetcher,
@@ -259,6 +243,5 @@ func NewColBatchDirectScan(
 		spec:             &fetchSpec,
 		resultTypes:      tableArgs.typs,
 		hasDatumVec:      hasDatumVec,
-		cpuStopWatch:     cpuStopWatch,
 	}, tableArgs.typs, nil
 }

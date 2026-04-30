@@ -108,6 +108,7 @@ go_test(
         "external_row_data_test.go",
         "fetcher_mvcc_test.go",
         "fetcher_test.go",
+        "kv_batch_fetcher_test.go",
         "main_test.go",
     ],
     embed = [":row"],

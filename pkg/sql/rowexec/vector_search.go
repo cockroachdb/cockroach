@@ -7,7 +7,6 @@ package rowexec
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -194,7 +193,6 @@ func (v *vectorSearchProcessor) execStatsForTrace() *execinfrapb.ComponentStats 
 			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
 			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
 			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
-			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
 			ContentionTime:      optional.MakeTimeValue(v.contentionEventsListener.GetContentionTime()),
 			LockWaitTime:        optional.MakeTimeValue(v.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(v.contentionEventsListener.GetLatchWaitTime()),
@@ -476,7 +474,6 @@ func (v *vectorMutationSearchProcessor) execStatsForTrace() *execinfrapb.Compone
 			BytesRead:           optional.MakeUint(uint64(kvStats.KVBytesRead)),
 			KVPairsRead:         optional.MakeUint(uint64(kvStats.KVPairsRead)),
 			KVTime:              optional.MakeTimeValue(kvStats.KVTime),
-			KVCPUTime:           optional.MakeTimeValue(time.Duration(kvStats.KVCPUTime)),
 			ContentionTime:      optional.MakeTimeValue(v.contentionEventsListener.GetContentionTime()),
 			LockWaitTime:        optional.MakeTimeValue(v.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(v.contentionEventsListener.GetLatchWaitTime()),

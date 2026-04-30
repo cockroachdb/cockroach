@@ -61,6 +61,7 @@ func newTxnKVStreamer(
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
 	kvCPUTime *int64,
+	localKVCPUTime *int64,
 	rawMVCCValues bool,
 	reverse bool,
 ) KVBatchFetcher {
@@ -72,7 +73,7 @@ func newTxnKVStreamer(
 		acc:            acc,
 		rawMVCCValues:  rawMVCCValues,
 	}
-	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued, kvCPUTime)
+	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued, kvCPUTime, localKVCPUTime)
 	return f
 }
 
