@@ -222,14 +222,16 @@ func (lv SecondaryLoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
 
 type RangeLoad struct {
 	Load LoadVector
-	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,
-	// rather than trying to (over) generalize, since currently this is the only
-	// resource broken down into two components.
+	// Nanos per second. Handling this as a special case, rather than trying to
+	// (over) generalize, since currently this is the only resource broken down
+	// into two components.
 	//
 	// Load[cpu]-RaftCPU is work being done on this store for evaluating
 	// proposals and can vary across replicas. Pessimistically, one can assume
 	// that if this replica is the leaseholder and we move the lease to a
 	// different existing replica, it will see an addition of Load[cpu]-RaftCPU.
+	//
+	// INVARIANT: RaftCPU <= Load[CPU].
 	RaftCPU LoadValue
 }
 
