@@ -8,6 +8,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,6 +56,15 @@ type deleteRangeNode struct {
 	// kvCPUTimeAccum tracks the cumulative CPU time (in nanoseconds) that KV
 	// reported in BatchResponse headers during the execution of this delete range.
 	kvCPUTimeAccum int64
+
+	// localKVCPUTimeAccum tracks the cumulative SQL goroutine CPU time (in
+	// nanoseconds) spent inside KV calls during delete range execution, as
+	// measured by the grunning library. This is the portion of SQL goroutine
+	// CPU that overlapped with KV work, not the CPU consumed on KV servers (see
+	// kvCPUTimeAccum for that).
+	localKVCPUTimeAccum int64
+	// cpuStopWatch measures grunning time around KV calls.
+	cpuStopWatch timeutil.CPUStopWatch
 }
 
 var _ planNode = &deleteRangeNode{}
@@ -81,6 +92,10 @@ func (d *deleteRangeNode) returnsRowsAffected() bool {
 
 func (d *deleteRangeNode) kvCPUTime() int64 {
 	return d.kvCPUTimeAccum
+}
+
+func (d *deleteRangeNode) localKVCPUTime() int64 {
+	return d.localKVCPUTimeAccum
 }
 
 // startExec implements the planNode interface.
@@ -126,7 +141,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 			b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 			d.deleteSpans(params, b, spans)
 			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
-			if err := params.p.txn.Run(ctx, b); err != nil {
+			d.cpuStopWatch.Start()
+			runErr := params.p.txn.Run(ctx, b)
+			if delta := d.cpuStopWatch.Stop(); delta > 0 {
+				atomic.AddInt64(&d.localKVCPUTimeAccum, int64(delta))
+			}
+			if runErr != nil {
 				return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 			}
 
@@ -149,7 +169,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 		d.deleteSpans(params, b, spans)
 		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
-		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
+		d.cpuStopWatch.Start()
+		commitErr := params.p.txn.CommitInBatch(ctx, b)
+		if delta := d.cpuStopWatch.Stop(); delta > 0 {
+			atomic.AddInt64(&d.localKVCPUTimeAccum, int64(delta))
+		}
+		if commitErr != nil {
 			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
 

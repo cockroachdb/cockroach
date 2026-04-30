@@ -49,6 +49,11 @@ type KVStats struct {
 	// KVCPUTime is the CPU time reported by KV, in nanoseconds. This uses
 	// int64 (not time.Duration) to match the BatchResponse.CPUTime field.
 	KVCPUTime int64
+	// LocalKVCPUTime is the SQL goroutine CPU time (in nanoseconds) spent
+	// inside KV calls, measured via grunning around txn.Run calls. This is the
+	// portion of SQL goroutine CPU that overlapped with KV work, not the CPU
+	// consumed on KV servers (see KVCPUTime for that).
+	LocalKVCPUTime int64
 }
 
 // Txn provides a context to make transactional changes to a vector index.
@@ -72,6 +77,9 @@ type Txn struct {
 
 	// kvStats accumulates KV statistics during batch execution.
 	kvStats KVStats
+
+	// cpuStopWatch measures goroutine CPU time around KV calls via grunning.
+	cpuStopWatch timeutil.CPUStopWatch
 
 	// collectKVStats indicates whether KV statistics should be collected.
 	collectKVStats bool
@@ -613,6 +621,7 @@ func (tx *Txn) getFullVectorsFromPK(
 		tx.kvStats.KVBytesRead += fetcher.GetBytesRead()
 		tx.kvStats.KVPairsRead += fetcher.GetKVPairsRead()
 		tx.kvStats.KVCPUTime += fetcher.GetKVCPUTime()
+		tx.kvStats.LocalKVCPUTime += fetcher.GetLocalKVCPUTime()
 	}
 
 	return err
@@ -722,7 +731,12 @@ func (tx *Txn) runAndRecordStats(ctx context.Context, b *kv.Batch) error {
 	}
 
 	start := timeutil.Now()
-	if err := tx.kv.Run(ctx, b); err != nil {
+	tx.cpuStopWatch.Start()
+	err := tx.kv.Run(ctx, b)
+	if delta := tx.cpuStopWatch.Stop(); delta > 0 {
+		tx.kvStats.LocalKVCPUTime += int64(delta)
+	}
+	if err != nil {
 		return err
 	}
 
