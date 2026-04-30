@@ -112,7 +112,7 @@ func Example_sql() {
 	// sql -e copy t.f from stdin
 	// sql -e select 1/(i-2) from generate_series(1,3) g(i)
 	// ?column?
-	// -1.0000000000000000000
+	// -1.0000000000000000000000000000000000000
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
@@ -190,9 +190,9 @@ func Example_sql_watch() {
 	// INSERT 0 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
-	// 0.50000000000000000000
+	// 0.50000000000000000000000000000000000000
 	// dec
-	// 1.0000000000000000000
+	// 1.0000000000000000000000000000000000000
 	// ERROR: division by zero
 	// SQLSTATE: 22012
 }

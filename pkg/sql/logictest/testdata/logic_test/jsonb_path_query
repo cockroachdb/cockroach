@@ -728,7 +728,7 @@ SELECT jsonb_path_query('{}', '1 * 2');
 query T
 SELECT jsonb_path_query('{}', '1 / 2');
 ----
-0.50000000000000000000
+0.50000000000000000000000000000000000000
 
 query T
 SELECT jsonb_path_query('{}', '3 % 2');
@@ -1150,7 +1150,7 @@ SELECT jsonb_path_query('[1, -2, 3, -4]', '$[*] ? (@ < -1)');
 query T
 SELECT jsonb_path_query('{"x": 5, "y": -3}', '(-$.x * 2 + $.y) / -1')
 ----
-13.000000000000000000
+13.000000000000000000000000000000000000
 
 statement error pgcode 22012 pq: division by zero
 SELECT jsonb_path_query('{"x": 5, "y": -3}', '(-$.x * 2 + $.y) / -0')
