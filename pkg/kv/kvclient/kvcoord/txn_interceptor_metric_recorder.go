@@ -77,13 +77,13 @@ func (*txnMetricRecorder) importLeafFinalState(context.Context, *roachpb.LeafTxn
 func (*txnMetricRecorder) epochBumpedLocked() {}
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
+func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) error { return nil }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}
+func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) error { return nil }
 
 // setReadOnlyCommit records the transaction commit as a read-only commit. Such
 // commits do not send EndTxn requests because they have no writes to commit or
