@@ -121,7 +121,7 @@ const (
 	defaultConcurrencyVCPURequirement = 2
 	// We don't recommend running on fewer than 4 vCPUs, but we do have clusters
 	// with 2 vCPUs.
-	minViableProcs = 2
+	minViableProcs = 4
 )
 
 var automaticFullStatsConcurrencyLimit = settings.RegisterIntSetting(
@@ -230,10 +230,10 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
 				details.Table.ID,
 			); err != nil {
-				if errors.Is(err, stats.ConcurrentCreateStatsError) {
+				if stats.IsConcurrentCreateStatsError(err) {
 					n.handleConcurrentStatsErr(ctx, details.Table.ID)
 					if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
-						log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
+						log.Dev.Infof(ctx, "table ID %d: %s, skipping", details.Table.ID, err)
 						return nil
 					}
 				}
@@ -278,10 +278,10 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
-		if errors.Is(err, stats.ConcurrentCreateStatsError) {
+		if stats.IsConcurrentCreateStatsError(err) {
 			n.handleConcurrentStatsErr(ctx, details.Table.ID)
 			if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
-				log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
+				log.Dev.Infof(ctx, "table ID %d: %s, skipping", details.Table.ID, err)
 				return nil
 			}
 		}
@@ -291,7 +291,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		return err
 	}
 	if err = job.AwaitCompletion(ctx); err != nil {
-		if errors.Is(err, stats.ConcurrentCreateStatsError) {
+		if stats.IsConcurrentCreateStatsError(err) {
 			// Delete the job so users don't see it and get confused by the error.
 			if delErr := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); delErr != nil {
 				log.Dev.Warningf(ctx, "failed to delete job: %v", delErr)
@@ -406,7 +406,7 @@ func (n *createStatsNode) checkConcurrencyLimit(
 	if row[0] != tree.DNull {
 		globalJobIDs = tree.MustBeDArray(row[0]).Array
 		if len(globalJobIDs) >= globalLimit {
-			return stats.ConcurrentCreateStatsError
+			return stats.ConcurrentCreateStatsLimitError
 		}
 	}
 	// We can start this auto stats job, so claim the locks accordingly.
@@ -1253,7 +1253,7 @@ func checkRunningJobsInTxnImpl(
 	}
 
 	if exists {
-		return stats.ConcurrentCreateStatsError
+		return stats.ConcurrentCreateStatsLimitError
 	}
 
 	return nil
