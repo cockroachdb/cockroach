@@ -187,6 +187,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -414,17 +415,16 @@ func ingestWithRetries(
 		log.Dev.Infof(ctx, "hit retryable error %s", err)
 
 		// Reload the job's in-memory progress from the database so that we see accurate progress.
-		reloadErr := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
-			job, err := execCtx.ExecCfg().JobRegistry.LoadClaimedJobWithTxn(ctx, resumer.job.ID(), t)
-			if err != nil {
-				return err
-			}
-			resumer.job = job
-			return nil
+		besteffort.Warning(ctx, "ingest-reload-progress", func(ctx context.Context) error {
+			return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+				job, err := execCtx.ExecCfg().JobRegistry.LoadClaimedJobWithTxn(ctx, resumer.job.ID(), t)
+				if err != nil {
+					return err
+				}
+				resumer.job = job
+				return nil
+			})
 		})
-		if reloadErr != nil {
-			log.Dev.Warningf(ctx, "error loading job progress: %v", reloadErr)
-		}
 
 		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
 		if !currentPersistedSpans.Equal(previousPersistedSpans) {

@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -759,6 +760,14 @@ func TestSpecsPersistedOnlyAfterInitialPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test explicitly creates conditions where the progress reload will occur often,
+	// making it flaky under stress.
+	besteffortCleanup := func() {}
+	if skip.Stress() {
+		besteffortCleanup = besteffort.TestAllowFailure("ingest-reload-progress")
+	}
+	defer besteffortCleanup()
+
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	var persistedPhysicalSpecsCount int
@@ -801,6 +810,9 @@ func TestStreamingAutoReplan(t *testing.T) {
 
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
 	skip.UnderDeadlock(t, "scatter may take too long")
+
+	// This test explicitly validates the progress reloading in ingestWithRetries.
+	defer besteffort.TestForbidSkip("ingest-reload-progress")()
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
@@ -1657,6 +1669,14 @@ func TestAlterExternalConnection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
+
+	// This test explicitly creates conditions where the progress reload will occur often,
+	// making it flaky under stress.
+	besteffortCleanup := func() {}
+	if skip.Stress() {
+		besteffortCleanup = besteffort.TestAllowFailure("ingest-reload-progress")
+	}
+	defer besteffortCleanup()
 
 	ctx := context.Background()
 	pollingInterval := 100 * time.Millisecond
