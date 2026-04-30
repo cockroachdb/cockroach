@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -868,7 +869,9 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		}
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
-		kvStats.KVCPUTime.MaybeAdd(optional.MakeTimeValue(fis.kvCPUTime))
+		kvStats.KVCPUTime.MaybeAdd(optional.MakeTimeValue(
+			time.Duration(z.infos[i].fetcher.GetLocalKVCPUTime()),
+		))
 	}
 	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,

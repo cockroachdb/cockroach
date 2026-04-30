@@ -35,6 +35,7 @@ go_test(
     name = "timeutil_test",
     size = "medium",
     srcs = [
+        "cpustopwatch_test.go",
         "main_test.go",
         "manual_time_test.go",
         "now_test.go",
@@ -48,6 +49,8 @@ go_test(
     ],
     embed = [":timeutil"],
     deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/grunning",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

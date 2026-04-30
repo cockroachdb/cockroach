@@ -247,7 +247,7 @@ type vectorizedStatsCollectorImpl struct {
 
 // GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
-	numBatches, numTuples, time, cpuTime, ok := vsc.batchInfoCollector.finishAndGetStats()
+	numBatches, numTuples, wallTime, cpuTime, ok := vsc.batchInfoCollector.finishAndGetStats()
 	if !ok {
 		// The stats collection wasn't successful for some reason, so we will
 		// return an empty object (since nil is not allowed by the contract of
@@ -262,6 +262,15 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		return &execinfrapb.ComponentStats{}
 	}
 
+	// There are two mutually exclusive paths for populating component stats:
+	// - columnarizer != nil: a row-engine processor is wrapped by the vectorized
+	//   engine. KV stats (including KVCPUTime for the CPU subtraction) come from
+	//   the processor's execStatsForTrace via the columnarizer.
+	// - kvReader != nil: a native vectorized KV operator (ColBatchScan,
+	//   ColBatchDirectScan, ColIndexJoin). KV stats are populated directly from
+	//   the operator, and local KV CPU time is subtracted via GetLocalKVCPUTime.
+	// Note that it is possible for neither path to be taken if the wrapped
+	// expression is vectorized and does not perform KV operations.
 	var s *execinfrapb.ComponentStats
 	if vsc.columnarizer != nil {
 		s = vsc.columnarizer.GetStats()
@@ -292,7 +301,7 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		// themselves). Similarly, for those wrapped processors it is ok to show the
 		// time as "execution time" since "KV time" would only make sense for
 		// tableReaders, and they are less likely to be wrapped than others.
-		s.KV.KVTime.Set(time)
+		s.KV.KVTime.Set(wallTime)
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
 		s.KV.KVPairsRead.Set(uint64(vsc.kvReader.GetKVPairsRead()))
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
@@ -307,9 +316,9 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 
 		// In order to account for SQL CPU time, we have to subtract the CPU time
 		// spent while serving KV requests on a SQL goroutine.
-		cpuTime -= vsc.kvReader.GetKVCPUTime()
+		cpuTime -= time.Duration(vsc.kvReader.GetLocalKVCPUTime())
 	} else {
-		s.Exec.ExecTime.Set(time)
+		s.Exec.ExecTime.Set(wallTime)
 	}
 	if cpuTime > 0 && grunning.Supported {
 		// Note that in rare cases, the measured CPU time can be less than zero

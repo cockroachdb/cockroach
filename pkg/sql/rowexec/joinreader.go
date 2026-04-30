@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1321,7 +1322,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			LockWaitTime:        optional.MakeTimeValue(jr.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(jr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
-			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
+			KVCPUTime:           optional.MakeTimeValue(time.Duration(jr.fetcher.GetLocalKVCPUTime())),
 			UsedStreamer:        jr.usesStreamer,
 		},
 		Output: jr.OutputHelper.Stats(),

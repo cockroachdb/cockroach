@@ -95,10 +95,11 @@ type KVReader interface {
 	// GetConsumedRU returns the number of RUs that were consumed during the
 	// KV reads.
 	GetConsumedRU() uint64
-	// GetKVCPUTime returns the CPU time consumed *on the current goroutine* by
-	// KV requests. It must be safe for concurrent use. It is used to calculate
-	// the SQL CPU time.
-	GetKVCPUTime() time.Duration
+	// GetLocalKVCPUTime returns the CPU time (in nanoseconds) spent on the
+	// calling goroutine during KV operations. It is measured via grunning
+	// deltas around txn.Send() calls. It must be safe for concurrent use.
+	// It is used to calculate the SQL CPU time.
+	GetLocalKVCPUTime() int64
 	// GetKVResponseCPUTime returns the CPU time as reported by KV BatchResponses
 	// processed by the KVReader throughout its lifetime so far.
 	GetKVResponseCPUTime() int64

@@ -72,7 +72,10 @@ func newTxnKVStreamer(
 		acc:            acc,
 		rawMVCCValues:  rawMVCCValues,
 	}
-	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued, kvCPUTime)
+	// The streaming KV fetcher dispatches requests on async goroutines where
+	// per-goroutine grunning measurement is not meaningful, so localKVCPUTime
+	// is always nil.
+	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued, kvCPUTime, nil /* localKVCPUTime */)
 	return f
 }
 

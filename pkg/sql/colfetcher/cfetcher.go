@@ -276,22 +276,22 @@ type cFetcher struct {
 	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
 	// are not invalidated) across NextKV() calls.
 	stableKVs bool
-	// bytesRead, kvPairsRead, kvCPUTime, and batchRequestsIssued store the total number of
-	// bytes read, key-values pairs read, CPU time reported by KV BatchResponses, and of
-	// BatchRequests issued, respectively, by this cFetcher throughout its lifetime in
-	// case when the underlying row.KVFetcher has already been closed and nil-ed out.
+	// bytesRead, kvPairsRead, kvCPUTime, localKVCPUTime, and
+	// batchRequestsIssued store the total number of bytes read, key-value
+	// pairs read, CPU time reported by KV BatchResponses, local KV CPU time,
+	// and BatchRequests issued, respectively, by this cFetcher throughout its
+	// lifetime in case when the underlying row.KVFetcher has already been
+	// closed and nil-ed out.
 	//
 	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead(), getKVPairsRead(), getKVCpuTime(), and getBatchRequestsIssued() should be
-	// used instead.
+	// getBytesRead(), getKVPairsRead(), getKVCPUTime(), getLocalKVCPUTime(),
+	// and getBatchRequestsIssued() should be used instead.
 	bytesRead           int64
 	kvPairsRead         int64
 	kvCPUTime           int64
+	localKVCPUTime      int64
 	batchRequestsIssued int64
-	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
-	// requests *in the current goroutine*.
-	cpuStopWatch *timeutil.CPUStopWatch
-	pacer        *admission.Pacer
+	pacer               *admission.Pacer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -563,9 +563,6 @@ func (cf *cFetcher) Init(
 	}
 	cf.stableKVs = nextKVer.Init(cf.getFirstKeyOfRow)
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs, cf.alwaysReallocate)
-	if cf.cFetcherArgs.collectStats {
-		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
-	}
 	if cf.txn != nil {
 		if pri := admissionpb.WorkPriority(cf.txn.AdmissionHeader().Priority); pri <= admissionpb.BulkNormalPri {
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
@@ -778,12 +775,10 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			return nil, errors.AssertionFailedf("invalid fetcher state")
 		case stateInitFetch:
 			cf.machine.firstKeyOfRow = nil
-			cf.cpuStopWatch.Start()
 			// Here we ignore partialRow return parameter because it can only be
 			// true when moreKVs is false, in which case we have already
 			// finalized the last row and will emit the batch as is.
 			moreKVs, _, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
-			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
@@ -948,9 +943,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			cf.cpuStopWatch.Start()
 			moreKVs, partialRow, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
-			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
@@ -1507,6 +1500,15 @@ func (cf *cFetcher) getKVCPUTime() int64 {
 	return cf.kvCPUTime
 }
 
+// getLocalKVCPUTime returns the CPU time spent on the calling goroutine during
+// KV operations, as measured by grunning deltas around txn.Send() calls.
+func (cf *cFetcher) getLocalKVCPUTime() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetLocalKVCPUTime()
+	}
+	return cf.localKVCPUTime
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1546,6 +1548,7 @@ func (cf *cFetcher) Close(ctx context.Context) {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
 			cf.kvPairsRead = cf.fetcher.GetKVPairsRead()
 			cf.kvCPUTime = cf.fetcher.GetKVCPUTime()
+			cf.localKVCPUTime = cf.fetcher.GetLocalKVCPUTime()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil
