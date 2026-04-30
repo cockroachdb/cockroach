@@ -17686,6 +17686,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: liveness.uncached_scans
+      exported_name: liveness_uncached_scans
+      description: Number of non-cached scans of the node liveness range
+      y_axis_label: Scans
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: lockbytes
       exported_name: lockbytes
       description: Number of bytes taken up by replicated lock key-values (shared and exclusive strength, not intent strength)
