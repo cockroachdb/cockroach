@@ -1440,6 +1440,9 @@ func (p *ProviderOpts) minCPUPlatform() string {
 	case "best":
 		// By default, we choose the latest CPU platform available for the machine
 		// type. This ensures run-to-run consistency.
+		if !supportsMinCPUPlatform(p.MachineType) {
+			return ""
+		}
 		info, err := gcedb.GetMachineInfo(p.MachineType)
 		if err != nil || len(info.CPUPlatforms) < 2 {
 			return ""
@@ -1448,6 +1451,25 @@ func (p *ProviderOpts) minCPUPlatform() string {
 
 	default:
 		return p.MinCPUPlatform
+	}
+}
+
+// supportsMinCPUPlatform returns whether the given machine type supports the
+// --min-cpu-platform flag. C4 family VMs reject this flag with the error
+// "C4 VM does not support minCpuPlatform" when instances are created via
+// managed instance groups. This is not documented in the GCE docs but is
+// enforced by the API.
+func supportsMinCPUPlatform(machineType string) bool {
+	parts := strings.Split(machineType, "-")
+	if len(parts) < 2 {
+		return false
+	}
+	family := parts[0]
+	switch family {
+	case "c4", "c4a", "c4d":
+		return false
+	default:
+		return true
 	}
 }
 
