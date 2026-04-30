@@ -161,6 +161,12 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 		if err := k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
+				log.Changefeed.Infof(ctx,
+					"kafka v2 sink reducing batch from %d to halves of %d and %d due to error: %v",
+					redact.SafeInt(int64(len(msgs))),
+					redact.SafeInt(int64(len(a))),
+					redact.SafeInt(int64(len(b))),
+					err)
 				// Recurse. This is a little odd because the client's batch
 				// state doesn't consist only of this payload, but the inflight
 				// payloads of all ParallelIO workers. Therefore reducing the
