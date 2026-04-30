@@ -34,6 +34,7 @@ go_library(
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/datadog",
+        "//pkg/cmd/roachtest/dlq",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/operations",
         "//pkg/cmd/roachtest/option",
@@ -114,6 +115,7 @@ go_test(
     deps = [
         "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/dlq",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestflags",
