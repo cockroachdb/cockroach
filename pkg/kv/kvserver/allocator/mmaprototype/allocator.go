@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmasnappb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -201,6 +202,17 @@ type Allocator interface {
 	// implementation.
 	IsInConflictWithMMA(
 		ctx context.Context, cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool) bool
+
+	// ClusterStateSnapshot returns a structured proto representation of the
+	// allocator's view of the cluster, suitable for diagnostics and offline
+	// analysis. The returned proto is a deep copy of the relevant allocator
+	// state and is safe to retain and serialize after the call returns.
+	//
+	// Snapshot construction is purely read-only; any panic in the underlying
+	// converters is recovered and surfaced as an error rather than tearing
+	// down the caller. See clusterState.Snapshot for details on what is and
+	// isn't included.
+	ClusterStateSnapshot() (*mmasnappb.ClusterStateSnapshot, error)
 }
 
 // Avoid unused lint errors.

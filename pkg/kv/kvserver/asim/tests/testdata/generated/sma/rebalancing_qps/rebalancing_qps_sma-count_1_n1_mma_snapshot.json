@@ -1,0 +1,602 @@
+{
+  "diskUtilRefuseThreshold": 0.925,
+  "diskUtilShedThreshold": 0.95,
+  "nodes": {
+    "1": {
+      "storeIds": [
+        1
+      ],
+      "nodeLoad": {
+        "nodeId": 1,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "2": {
+      "storeIds": [
+        2
+      ],
+      "nodeLoad": {
+        "nodeId": 2,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "3": {
+      "storeIds": [
+        3
+      ],
+      "nodeLoad": {
+        "nodeId": 3,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "4": {
+      "storeIds": [
+        4
+      ],
+      "nodeLoad": {
+        "nodeId": 4,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "5": {
+      "storeIds": [
+        5
+      ],
+      "nodeLoad": {
+        "nodeId": 5,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "6": {
+      "storeIds": [
+        6
+      ],
+      "nodeLoad": {
+        "nodeId": 6,
+        "nodeCpuCapacity": "8000000000"
+      }
+    },
+    "7": {
+      "storeIds": [
+        7
+      ],
+      "nodeLoad": {
+        "nodeId": 7,
+        "nodeCpuCapacity": "8000000000"
+      }
+    }
+  },
+  "stores": {
+    "1": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "29067",
+          "9812942"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "3"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 1,
+        "nodeId": 1,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "1"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "29067",
+          "9812942"
+        ],
+        "secondaryLoad": [
+          "1",
+          "3"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "39",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "1"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "2": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "28926",
+          "9738652"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "3"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 2,
+        "nodeId": 2,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "2"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "28926",
+          "9738652"
+        ],
+        "secondaryLoad": [
+          "1",
+          "3"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "40",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "2"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "3": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "38339",
+          "12934373"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "4"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 3,
+        "nodeId": 3,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "3"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "38339",
+          "12934373"
+        ],
+        "secondaryLoad": [
+          "1",
+          "4"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "39",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "3"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "4": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "19364",
+          "6535052"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "2"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 4,
+        "nodeId": 4,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "4"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "19364",
+          "6535052"
+        ],
+        "secondaryLoad": [
+          "1",
+          "2"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "38",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "4"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "5": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "38285",
+          "12908813"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "4"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 5,
+        "nodeId": 5,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "5"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "38285",
+          "12908813"
+        ],
+        "secondaryLoad": [
+          "1",
+          "4"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "39",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "5"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "6": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "9517",
+          "3214468"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "1"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 6,
+        "nodeId": 6,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "6"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "9517",
+          "3214468"
+        ],
+        "secondaryLoad": [
+          "1",
+          "1"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "45",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "6"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    },
+    "7": {
+      "status": {
+        "disposition": {
+          "lease": 1,
+          "replica": 1
+        }
+      },
+      "storeLoad": {
+        "reportedLoad": [
+          "0",
+          "38557",
+          "13020965"
+        ],
+        "capacity": [
+          "8000000000",
+          "9223372036854775807",
+          "274877906944"
+        ],
+        "reportedSecondaryLoad": [
+          "1",
+          "4"
+        ]
+      },
+      "storeAttributes": {
+        "storeId": 7,
+        "nodeId": 7,
+        "nodeAttrs": {
+
+        },
+        "nodeLocality": {
+          "tiers": [
+            {
+              "key": "region",
+              "value": "AU_EAST"
+            },
+            {
+              "key": "zone",
+              "value": "AU_EAST_1"
+            },
+            {
+              "key": "node",
+              "value": "7"
+            }
+          ]
+        },
+        "storeAttrs": {
+
+        }
+      },
+      "adjusted": {
+        "load": [
+          "0",
+          "38557",
+          "13020965"
+        ],
+        "secondaryLoad": [
+          "1",
+          "4"
+        ],
+        "loadPendingChangeIds": [
+        ],
+        "replicas": {
+        },
+        "topKRanges": {
+        }
+      },
+      "loadSeqNum": "37",
+      "localityTiers": [
+        "AU_EAST",
+        "AU_EAST_1",
+        "7"
+      ],
+      "overloadStartTime": "2022-03-21T11:00:00Z",
+      "overloadEndTime": "2022-03-21T11:00:00Z"
+    }
+  },
+  "ranges": {
+  },
+  "pendingChanges": {
+  },
+  "spanConfigs": {
+  }
+}

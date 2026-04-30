@@ -35,19 +35,21 @@ import (
 var redactedAddress = fmt.Sprintf("%s=%s", rpc.RemoteAddressTag, redact.RedactedMarker())
 
 const (
-	regexpOfRemoteAddress   = "[[:alnum:].:-]+"
-	stacksFileName          = "stacks.txt"
-	stacksWithLabelFileName = "stacks_with_labels.txt"
-	stacksPprofFileName     = "stacks.pprof"
-	heapPprofFileName       = "heap.pprof"
-	lsmFileName             = "lsm.txt"
-	rangesInfoFileName      = "ranges.json"
-	detailsFileName         = "details.json"
-	gossipFileName          = "gossip.json"
-	statusFileName          = "status.json"
-	cpuProfileFileName      = "cpu.pprof"
-	detailsName             = "details"
-	gossipName              = "gossip"
+	regexpOfRemoteAddress     = "[[:alnum:].:-]+"
+	stacksFileName            = "stacks.txt"
+	stacksWithLabelFileName   = "stacks_with_labels.txt"
+	stacksPprofFileName       = "stacks.pprof"
+	heapPprofFileName         = "heap.pprof"
+	lsmFileName               = "lsm.txt"
+	rangesInfoFileName        = "ranges.json"
+	detailsFileName           = "details.json"
+	gossipFileName            = "gossip.json"
+	statusFileName            = "status.json"
+	cpuProfileFileName        = "cpu.pprof"
+	mmaAllocatorStateFileName = "mma_allocator_state.json"
+	detailsName               = "details"
+	gossipName                = "gossip"
+	mmaAllocatorStateName     = "mma_allocator_state"
 )
 
 func (zc *debugZipContext) collectPerNodeData(
@@ -159,6 +161,17 @@ func makePerNodeZipRequests(
 		})
 	} else {
 		zr.info("skipping %s due to file filters", gossipFileName)
+	}
+
+	if zipCtx.files.shouldIncludeFile(path.Join(prefix, mmaAllocatorStateFileName)) {
+		zipRequests = append(zipRequests, zipRequest{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.MMAAllocatorState(ctx, &serverpb.MMAAllocatorStateRequest{NodeId: id})
+			},
+			pathName: path.Join(prefix, mmaAllocatorStateName),
+		})
+	} else {
+		zr.info("skipping %s due to file filters", mmaAllocatorStateFileName)
 	}
 	return zipRequests
 }

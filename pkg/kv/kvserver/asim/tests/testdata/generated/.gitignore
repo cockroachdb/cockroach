@@ -8,5 +8,10 @@
 # which are not deterministic.
 !sma/rebalancing_qps/**
 **/traces
+# Only track n1's MMA snapshot as a representative per-cfg example; the
+# snapshots for other nodes are still written locally (the asimview tool can
+# consume them) but would just bloat the PR.
+sma/rebalancing_qps/*_mma_snapshot.json
+!sma/rebalancing_qps/*_n1_mma_snapshot.json
 # And the readme file.
 !README.md
