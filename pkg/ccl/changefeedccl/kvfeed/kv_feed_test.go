@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
@@ -21,14 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	kvserverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -148,13 +153,14 @@ func TestKVFeed(t *testing.T) {
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
 		f := newKVFeed(buf, tc.spans,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
-			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, changefeedbase.BulkDelivery.Get(&settings.SV), tc.withFrontierQuantize,
+			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, tc.withFrontierQuantize,
 			0, /* consumerID */
 			tc.initialHighWater, tc.initialSpanTimePairs, tc.endTime,
 			codec,
-			tf, sf, rangefeedFactory(ref.run), bufferFactory,
+			tf, sf, nil /* factory */, bufferFactory,
 			changefeedbase.Targets{},
 			st, TestingKnobs{})
+		f.physicalFeedOverride = ref.Run
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
@@ -509,35 +515,67 @@ func (r *rawTableFeed) peekOrPop(
 
 type rawEventFeed []kvpb.RangeFeedEvent
 
-func (f rawEventFeed) run(
-	ctx context.Context,
-	spans []kvcoord.SpanTimePair,
-	eventC chan<- kvcoord.RangeFeedMessage,
-	opts ...kvcoord.RangeFeedOption,
-) error {
+// Run is the test implementation of kvFeed.physicalFeedOverride: it replays a
+// pre-built event log into sink in place of a real rangefeed. The same event
+// log is used regardless of where the test resumes from, so Run does the
+// post-processing a real rangefeed would otherwise hide:
+//
+//  1. Skip events the server wouldn't have re-delivered. A real rangefeed
+//     resumes from per-span StartAfter timestamps; we approximate that by
+//     dropping events older than the earliest StartAfter across all spans.
+//  2. For each surviving event, mirror the production callback wiring in
+//     physical_kv_feed.go: values pass through, checkpoints get quantized
+//     and dropped if they fall below cfg.Frontier (a stale resolved
+//     timestamp would move the consumer's frontier backwards).
+func (f *rawEventFeed) Run(ctx context.Context, sink kvevent.Writer, cfg rangeFeedConfig) error {
+	// Phase 1: locate the first event the consumer hasn't already seen.
 	var startAfter hlc.Timestamp
-	for _, s := range spans {
+	for _, s := range cfg.Spans {
 		if startAfter.IsEmpty() || s.StartAfter.Less(startAfter) {
 			startAfter = s.StartAfter
 		}
 	}
-
-	// We can't use binary search because the errors don't have timestamps.
-	// Instead we just search for the first event which comes after the start time.
+	events := []kvpb.RangeFeedEvent(*f)
 	var i int
-	for i = range f {
-		ev := f[i]
+	for i = range events {
+		ev := events[i]
 		if ev.Val != nil && startAfter.LessEq(ev.Val.Value.Timestamp) ||
 			ev.Checkpoint != nil && startAfter.LessEq(ev.Checkpoint.ResolvedTS) {
 			break
 		}
 	}
-	f = f[i:]
-	for i := range f {
+	events = events[i:]
+
+	// Phase 2: deliver surviving events, applying the same quantization and
+	// floor filter the production onCheckpoint callback applies.
+	for i := range events {
+		ev := &events[i]
+		switch {
+		case ev.Val != nil:
+			if err := sink.Add(ctx, kvevent.MakeKVEvent(ev)); err != nil {
+				return err
+			}
+		case ev.Checkpoint != nil:
+			resolved := quantizeTS(ev.Checkpoint.ResolvedTS, cfg.WithFrontierQuantize)
+			if !resolved.IsEmpty() && resolved.Less(cfg.Frontier) {
+				continue
+			}
+			qEv := &kvpb.RangeFeedEvent{
+				Checkpoint: &kvpb.RangeFeedCheckpoint{
+					Span:       ev.Checkpoint.Span,
+					ResolvedTS: resolved,
+				},
+			}
+			if err := sink.Add(
+				ctx, kvevent.MakeResolvedEvent(qEv, jobspb.ResolvedSpan_NONE),
+			); err != nil {
+				return err
+			}
+		}
 		select {
-		case eventC <- kvcoord.RangeFeedMessage{RangeFeedEvent: &f[i]}:
 		case <-ctx.Done():
 			return ctx.Err()
+		default:
 		}
 	}
 	return nil
@@ -553,12 +591,20 @@ func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 	}
 }
 
-// testKVEventWriter is a mock kvevent.Writer that appends to a slice of events.
+// testKVEventWriter is a mock kvevent.Writer that appends successful events to
+// a slice. If failErr is non-nil, Add returns failErr once it has accepted
+// failAfter events (use failAfter == 0 to fail on the first call).
 type testKVEventWriter struct {
-	events []kvevent.Event
+	events    []kvevent.Event
+	failAfter int
+	failErr   error
 }
 
 func (w *testKVEventWriter) Add(ctx context.Context, event kvevent.Event) error {
+	if w.failErr != nil && w.failAfter <= 0 {
+		return w.failErr
+	}
+	w.failAfter--
 	w.events = append(w.events, event)
 	return nil
 }
@@ -630,6 +676,62 @@ func (t *testSchemaFeed) peekOrPop(
 }
 
 var _ schemafeed.SchemaFeed = (*testSchemaFeed)(nil)
+
+func TestRangefeedClientFactoryErrorPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t VALUES (1), (2), (3)`)
+
+	codec := s.Codec()
+	descr := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "defaultdb", "t")
+	sp := tableSpan(codec, uint32(descr.GetID()))
+	factory := s.RangeFeedFactory().(*rangefeed.Factory)
+	st := timers.New(time.Minute).GetOrCreateScopedTimers("")
+
+	newCfg := func() rangeFeedConfig {
+		now := s.Clock().Now()
+		return rangeFeedConfig{
+			Frontier: now,
+			Spans: []kvcoord.SpanTimePair{
+				{Span: sp, StartAfter: now},
+			},
+			Timers: st,
+		}
+	}
+
+	t.Run("sink error propagates", func(t *testing.T) {
+		// The rangefeed propagates the sink error only once an event arrives
+		// (a value or a checkpoint). To keep the test from hanging if no event
+		// is delivered for any reason, bound the call with a generous timeout
+		// so we get a clear failure instead of a hang.
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		sinkErr := errors.New("sink write failed")
+		sink := &testKVEventWriter{failErr: sinkErr}
+
+		f := &kvFeed{factory: factory}
+		err := f.runRangeFeed(ctx, sink, newCfg())
+		require.ErrorIs(t, err, sinkErr)
+	})
+
+	t.Run("context cancellation propagates", func(t *testing.T) {
+		sink := &testKVEventWriter{}
+		f := &kvFeed{factory: factory}
+		ctx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := f.runRangeFeed(ctx, sink, newCfg())
+		require.ErrorIs(t, err, context.Canceled)
+	})
+}
 
 // testTableDesc is a mock for catalog.TableDescriptor that only contains a
 // modification time. It is used in lieu of a real table descriptor in
