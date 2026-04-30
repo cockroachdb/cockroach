@@ -79,6 +79,10 @@ type decodedBatch struct {
 	checkpoint   hlc.Timestamp
 }
 
+// ErrEndTimeReached signals that the coordinator has processed all transactions
+// with timestamp strictly less than endTime.
+var ErrEndTimeReached = errors.New("LDR endTime reached")
+
 // TxnLdrCoordinator orchestrates transactional logical replication by running
 // a pipeline of stages: subscribe, decode, schedule, apply, and checkpoint. It
 // is created per replication attempt and owned by the job resumer. The caller
@@ -90,6 +94,12 @@ type TxnLdrCoordinator struct {
 	payload           jobspb.LogicalReplicationDetails
 	client            streamclient.Client
 	heartbeatInterval func() time.Duration
+
+	// endTime instructs the coordinator to process only events with
+	// timestamp strictly less than endTime and to return ErrEndTimeReached
+	// once the applier frontier reaches it. The resumer uses this to
+	// converge on the earliest unappliable transaction. 
+	endTime hlc.Timestamp
 }
 
 func NewTxnLdrCoordinator(
@@ -97,6 +107,7 @@ func NewTxnLdrCoordinator(
 	job *jobs.Job,
 	client streamclient.Client,
 	heartbeatInterval func() time.Duration,
+	endTime hlc.Timestamp,
 ) *TxnLdrCoordinator {
 	payload := job.Details().(jobspb.LogicalReplicationDetails)
 	return &TxnLdrCoordinator{
@@ -105,6 +116,7 @@ func NewTxnLdrCoordinator(
 		payload:           payload,
 		client:            client,
 		heartbeatInterval: heartbeatInterval,
+		endTime:           endTime,
 	}
 }
 
@@ -402,6 +414,9 @@ func (p *TxnLdrCoordinator) stageCheckpoint(ctx context.Context, applier *txnapp
 			if err := p.checkpoint(ctx, frontier); err != nil {
 				return errors.Wrap(err, "checkpointing progress")
 			}
+			if p.endTime.LessEq(frontier) {
+				return ErrEndTimeReached
+			}
 		}
 	}
 }
@@ -520,5 +535,5 @@ func (p *TxnLdrCoordinator) createTxnFeed(
 
 	sv := &p.execCtx.ExecCfg().Settings.SV
 	targetBatchKVs := int(txnBatchSize.Get(sv))
-	return txnfeed.NewMergeFeed(orderedSubs, coveringSpan, targetBatchKVs), nil
+	return txnfeed.NewMergeFeed(orderedSubs, coveringSpan, targetBatchKVs, p.endTime), nil
 }
