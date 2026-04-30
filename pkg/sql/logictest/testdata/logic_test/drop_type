@@ -559,3 +559,17 @@ RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER 
 
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+# Regression test for #64398: Test both schemachangers error on the built-in rather than the bad schema.
+subtest regression_64398
+
+statement error pgcode 42809 type "geometry" is a built-in type
+DROP TYPE noexist.geometry
+
+statement error pgcode 42809 type "geometry" is a built-in type
+DROP TYPE noexist.public.geometry
+
+statement ok
+DROP TYPE IF EXISTS noexist.geometry
+
+subtest end

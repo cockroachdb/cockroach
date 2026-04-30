@@ -1215,6 +1215,12 @@ func (b *builderState) ResolveUserDefinedTypeType(
 		if p.IsExistenceOptional {
 			return nil
 		}
+		// Check if the name refers to a built-in type that couldn't be resolved
+		// because the qualifying schema/database doesn't exist (see #64663).
+		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
+			panic(pgerror.Newf(pgcode.WrongObjectType,
+				"type %q is a built-in type", name.Object()))
+		}
 		panic(sqlerrors.NewUndefinedTypeError(name))
 	}
 	switch typ.GetKind() {
