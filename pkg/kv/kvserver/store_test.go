@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -380,6 +381,112 @@ func TestStoreConfigSetDefaultsNumStores(t *testing.T) {
 			require.Equal(t, tc.expectConc, cfg.RaftSchedulerConcurrency)
 		})
 	}
+}
+
+// TestDrainIterResultLogStuckRanges verifies that logStuckRanges emits a
+// line per entry when numRemaining is at or below the threshold, and
+// suppresses the list entirely above it. Combined with the cap on
+// len(stuck), this means an emitted diagnostic list is never silently
+// truncated: in the logging regime (numRemaining <= threshold),
+// len(stuck) <= threshold by construction.
+func TestDrainIterResultLogStuckRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.Scope(t)
+	defer sc.Close(t)
+
+	mkStuck := func(n int) []stuckRange {
+		out := make([]stuckRange, n)
+		for i := range out {
+			out[i] = stuckRange{
+				desc:    &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i + 1)},
+				reason:  redact.Sprintf("probe-reason-%d", i+1),
+				blocked: time.Millisecond,
+			}
+		}
+		return out
+	}
+
+	tests := []struct {
+		name              string
+		numRemaining      int
+		numStuck          int
+		expectedLogOutput int
+	}{
+		{
+			name:              "at threshold emits all",
+			numRemaining:      drainStuckRangesLogThreshold,
+			numStuck:          drainStuckRangesLogThreshold,
+			expectedLogOutput: drainStuckRangesLogThreshold,
+		},
+		{
+			name:              "below threshold emits all",
+			numRemaining:      1,
+			numStuck:          1,
+			expectedLogOutput: 1,
+		},
+		{
+			name:              "above threshold suppresses",
+			numRemaining:      drainStuckRangesLogThreshold + 1,
+			numStuck:          drainStuckRangesLogThreshold,
+			expectedLogOutput: 0,
+		},
+		// numRemaining=0 with stuck entries cannot occur in practice (failures
+		// are a subset of remaining work), but guards the suppression predicate
+		// against a future `>` -> `>=` flip.
+		{
+			name:              "zero remaining with stuck still emits",
+			numRemaining:      0,
+			numStuck:          3,
+			expectedLogOutput: 3,
+		},
+		{
+			name:              "empty stuck is a no-op",
+			numRemaining:      0,
+			numStuck:          0,
+			expectedLogOutput: 0,
+		},
+	}
+
+	re := regexp.MustCompile(`drain stuck on r\d+.*probe-reason-`)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			before := timeutil.Now().UnixNano()
+			res := &drainIterResult{}
+			res.numRemaining.Store(int32(tc.numRemaining))
+			res.mu.stuck = mkStuck(tc.numStuck)
+			res.logStuckRanges(context.Background())
+			log.FlushFiles()
+			entries, err := log.FetchEntriesFromFiles(before, math.MaxInt64, 100, re,
+				log.WithFlattenedSensitiveData)
+			require.NoError(t, err)
+			require.Len(t, entries, tc.expectedLogOutput)
+		})
+	}
+
+	// Concurrently call addStuck from many more goroutines than the cap
+	// allows. This exercises the mutex (under -race) and verifies the cap
+	// is enforced without over-append.
+	t.Run("concurrent addStuck respects cap", func(t *testing.T) {
+		const goroutines = 100
+		require.Greater(t, goroutines, drainStuckRangesLogThreshold,
+			"test must attempt more adds than the cap allows")
+
+		res := &drainIterResult{}
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		for i := 0; i < goroutines; i++ {
+			go func(i int) {
+				defer wg.Done()
+				res.addStuck(stuckRange{
+					desc:    &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(i + 1)},
+					reason:  redact.Sprintf("probe-reason-%d", i+1),
+					blocked: time.Millisecond,
+				})
+			}(i)
+		}
+		wg.Wait()
+		require.Len(t, res.mu.stuck, drainStuckRangesLogThreshold)
+	})
 }
 
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
