@@ -740,4 +740,6 @@ func TestFetcherUninitialized(t *testing.T) {
 	// before the fetcher was fully initialized.
 	var fetcher Fetcher
 	assert.Zero(t, fetcher.GetBytesRead())
+	assert.Zero(t, fetcher.GetKVCPUTime())
+	assert.Zero(t, fetcher.GetLocalKVCPUTime())
 }

@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -472,9 +471,11 @@ func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
 	return s.cf.getBatchRequestsIssued()
 }
 
-// GetKVCPUTime is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
-	return s.cf.cpuStopWatch.Elapsed()
+// GetLocalKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetLocalKVCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getLocalKVCPUTime()
 }
 
 // UsedStreamer is part of the colexecop.KVReader interface.
