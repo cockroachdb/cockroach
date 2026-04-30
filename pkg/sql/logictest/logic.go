@@ -3947,7 +3947,8 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				} else if pgErr := (*pq.Error)(nil); errors.As(execErr, &pgErr) &&
 					(pgcode.MakeCode(string(pgErr.Code)) == pgcode.Syntax ||
 						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidParameterValue ||
-						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidTextRepresentation) {
+						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidTextRepresentation ||
+						pgcode.MakeCode(string(pgErr.Code)) == pgcode.DatatypeMismatch) {
 					prep, execErr = t.db.Prepare(p.SQL)
 					args = []interface{}{}
 				}
