@@ -21,3 +21,31 @@ ALTER TYPE defaultdb.climes RENAME VALUE 'tropical' TO 'equatorial'
   {logicalRepresentation: tropical, physicalRepresentation: QA==, typeId: 104}
 - [[EnumTypeValue:{DescID: 104, Name: equatorial}, PUBLIC], ABSENT]
   {logicalRepresentation: equatorial, physicalRepresentation: QA==, typeId: 104}
+
+build
+ALTER TYPE defaultdb.climes SET SCHEMA public
+----
+
+setup
+CREATE SCHEMA s;
+----
+
+build
+ALTER TYPE defaultdb.climes SET SCHEMA s
+----
+- [[Namespace:{DescID: 104, Name: climes, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: climes, schemaId: 101}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 104, schemaId: 101}
+- [[Namespace:{DescID: 104, Name: climes, ReferencedDescID: 100, IntValue: 106}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: climes, schemaId: 106}
+- [[SchemaChild:{DescID: 104, ReferencedDescID: 106}, PUBLIC], ABSENT]
+  {childObjectId: 104, schemaId: 106}
+- [[Namespace:{DescID: 105, Name: _climes, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _climes, schemaId: 101}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {childObjectId: 105, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _climes, ReferencedDescID: 100, IntValue: 106}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _climes, schemaId: 106}
+- [[SchemaChild:{DescID: 105, ReferencedDescID: 106}, PUBLIC], ABSENT]
+  {childObjectId: 105, schemaId: 106}
