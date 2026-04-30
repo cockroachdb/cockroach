@@ -1,0 +1,157 @@
+# Explore some interesting interactions between two voters and a witness
+# (i.e. in 3x configuration).
+
+setup
+v1: [a1]
+v2: [a1]
+w
+----
+v1: [a1] term=a
+v2: [a1] term=a
+
+# v1 wins election. Witness vote is dropped to hit an interesting case in
+# which the witness finds out about the leader later. Letting it vote would
+# work too and is unit tested.
+campaign v1 drop=(w)
+----
+v1 campaigns at term b
+v1: yes (self)
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+w: (dropped)
+outcome: won
+
+# v2 goes down.
+set-avail down=(v2)
+----
+ok
+
+# v1 proposes an entry.
+propose v1
+----
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
+
+# Since v2 is down, there's no way to commit unless v2 returns or the witness
+# comes into play.
+append v1
+----
+v1 appends through b3
+v2: (dropped)
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
+
+# v1 engages the witness using its last index. The witness promises to "ack" the
+# log up to this point, and also any future entries in the term until
+# disengagement. Because (v1+witness) is a quorum, v1 commits its log.
+engage v1
+----
+w:
+  - term advance 0 -> b (leader v1)
+  - engaged at b3
+  ok (term 0->b, voted v1, hi 0->b3, engaged)
+w:  vote=(b, v1) acked=(b3, engaged)
+v1: [a1 b2 b3] term=b committed=b3 leader
+
+# v2 comes back, but v1 goes down. We are now unavailable: the witness has the
+# more up to date (fictitious) log, so it won't vote for v2, but it also can't
+# campaign. Also, if v1 were lost permanently (not just unavailable), we'd have
+# lost durability. Effectively, (v1+witness) has the durability of a single-voter
+# group.
+set-avail up=(v2) down=(v1)
+----
+ok
+
+# Confirm that witness won't vote for v2. The witness has to assume that v1 has
+# more up to date log entries from the engaged term, and v2's log is not
+# obviously up to date with whatever the engaged term's entries might be.
+prevote v2
+----
+v2 prevotes at term c
+v2: yes (self)
+v1: (dropped)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - rejected vote for v2: log not up to date (effectiveHi b∞ > lm a1)
+  no
+outcome: lost
+
+# v1 comes back up, v2 goes back down.
+set-avail up=(v1) down=(v2)
+----
+ok
+
+# v1 could continue using the witness (nothing in the pair's state has changed
+# since it last did) but for extra spice, let's say it power cycled and lost
+# leadership. This creates the interesting situation in which v1 re-campaigns,
+# and needs a vote from the witness but the witness is still engaged at the
+# prior term. It typically wouldn't be able to vote here, but it is able to
+# here because it remembers that the candidate is the leader for the engaged
+# term, which proves that its log is up to date with anything the witness may
+# have helped synthesize acks for.
+#
+# Note that the witness disengages in the new term, preserving a high water mark
+# of b∞ (anything in term b may have been committed with the witness's help).
+# The leader also doesn't consider the witness engaged. It's a new term.
+campaign v1
+----
+v1 campaigns at term c
+v1: yes (self)
+v2: (dropped)
+w:
+  - engaged: effectiveHi inflated to b∞
+  - engaged leader v1 re-campaigning: skipping log check
+  - granted vote for v1 at term c, hi carried as b∞
+  yes (term b->c, hi b3->b∞, released)
+outcome: won
+
+# Nobody to append to, i.e. this is a no-op.
+append v1
+----
+v1 appends through c4
+v2: (dropped)
+v1: [a1 b2 b3 c4] term=c committed=b3 leader
+v2: [a1] term=b
+
+# v2 comes back, v1 goes down again. The witness disengaged when it voted for
+# v1 at term c, but preserved a high water mark of b∞ — reflecting that it may
+# have helped commit any entry in term b. v2's log (term a) can't prove it
+# covers what the witness helped commit, so the prevote fails.
+set-avail up=(v2) down=(v1)
+----
+ok
+
+prevote v2
+----
+v2 prevotes at term c
+v2: yes (self)
+v1: (dropped)
+w:
+  - rejected vote for v2: candidate term c <= vote term c (votedFor=v1)
+  no
+outcome: lost
+
+set-avail up=(v1)
+----
+ok
+
+# v1 is back. We assume it's still the leader (didn't step down, maybe short
+# network partition).
+# v1 proposes and replicates to v2, committing via the traditional v1+v2
+# quorum — no witness engagement needed.
+propose v1
+----
+v1: [a1 b2 b3 c4 c5] term=c committed=b3 leader
+v2: [a1] term=b
+
+append v1
+----
+v1 appends through c5
+v2:
+  - term advance b -> c (leader v1)
+  - accepted append through c5 (ok)
+  ok (term b->c, log=[a1 | b2 b3 c4 c5])
+v1: [a1 b2 b3 c4 c5] term=c committed=c5 leader
+v2: [a1 b2 b3 c4 c5] term=c

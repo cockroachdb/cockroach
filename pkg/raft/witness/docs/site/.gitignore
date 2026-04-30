@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.svelte-kit/
+.vite/
+*.log
+.DS_Store

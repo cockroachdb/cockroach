@@ -1,0 +1,17 @@
+---
+title: Cost of raft replication
+subtitle: Experiments and model — CPU, network, and disk
+---
+
+<script>
+  import { marked } from 'marked';
+
+  // Body lives in pkg/raft/witness/docs/cost-details.md so it's
+  // discoverable as plain markdown alongside landing.md. Pulled in at
+  // build time and rendered via marked.
+  import costDetailsMd from '$docs/cost-details.md?raw';
+
+  const costDetailsHtml = marked.parse(costDetailsMd);
+</script>
+
+{@html costDetailsHtml}

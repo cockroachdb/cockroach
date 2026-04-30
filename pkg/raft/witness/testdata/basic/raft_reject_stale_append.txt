@@ -1,0 +1,62 @@
+# A stale leader's append is rejected by followers who have moved to a higher
+# term.
+#
+# Three voters, no witness. Quorum = 2.
+
+setup
+v1: [a1]
+v2: [a1]
+v3: [a1]
+----
+v1: [a1] term=a
+v2: [a1] term=a
+v3: [a1] term=a
+
+# v1 wins election.
+campaign v1
+----
+v1 campaigns at term b
+v1: yes (self)
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+v3:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+outcome: won
+
+propose v1
+----
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
+v3: [a1] term=b
+
+# v2 campaigns with v1 partitioned away. v2 wins with v2+v3.
+# v1 still thinks it's leader at term b.
+campaign v2 drop=(v1)
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: (dropped)
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (term b->c, voted v2)
+outcome: won
+
+# v1 (stale leader at term b) tries to append. v2 and v3 reject because
+# they're at term c > b.
+append v1
+----
+v1 appends through b3
+v2:
+  - rejected, stale leader term b < c
+  rejected, stale leader term b < c
+v3:
+  - rejected, stale leader term b < c
+  rejected, stale leader term b < c
+v1: [a1 b2 b3] term=b leader
+v2: [a1 c2] term=c leader
+v3: [a1] term=c

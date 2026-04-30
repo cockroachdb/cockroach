@@ -1,0 +1,168 @@
+# Stale leader falls behind, loses election, gets its log truncated when the
+# new leader replicates to it.
+#
+# Four voters, no witness. Quorum = 3.
+
+setup
+v1: [a1]
+v2: [a1]
+v3: [a1]
+v4: [a1]
+----
+v1: [a1] term=a
+v2: [a1] term=a
+v3: [a1] term=a
+v4: [a1] term=a
+
+# v1 wins election.
+campaign v1
+----
+v1 campaigns at term b
+v1: yes (self)
+v2:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+v3:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+v4:
+  - term advance a -> b
+  - granted vote for v1 at term b
+  yes (term a->b, voted v1)
+outcome: won
+
+# v1 proposes two entries but does NOT replicate them.
+propose v1
+----
+v1: [a1 b2 b3] term=b leader
+v2: [a1] term=b
+v3: [a1] term=b
+v4: [a1] term=b
+
+propose v1
+----
+v1: [a1 b2 b3 b4] term=b leader
+v2: [a1] term=b
+v3: [a1] term=b
+v4: [a1] term=b
+
+# v2 campaigns. v1 is dropped (partitioned). v2 wins with v3+v4.
+# v1 is not contacted so it stays at term b, still believing it's leader.
+campaign v2 drop=(v1)
+----
+v2 campaigns at term c
+v2: yes (self)
+v1: (dropped)
+v3:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (term b->c, voted v2)
+v4:
+  - term advance b -> c
+  - granted vote for v2 at term c
+  yes (term b->c, voted v2)
+outcome: won
+
+# v2 proposes an entry.
+propose v2
+----
+v1: [a1 b2 b3 b4] term=b leader
+v2: [a1 c2 c3] term=c leader
+v3: [a1] term=c
+v4: [a1] term=c
+
+# v2 appends to v3 only. Matches: [0, 3, 3, 0]. Quorum match = 0, not committed.
+append v2 drop=(v1, v4)
+----
+v2 appends through c3
+v1: (dropped)
+v3:
+  - accepted append through c3 (ok)
+  ok (log=[a1 | c2 c3])
+v4: (dropped)
+v1: [a1 b2 b3 b4] term=b leader
+v2: [a1 c2 c3] term=c leader
+v3: [a1 c2 c3] term=c
+v4: [a1] term=c
+
+# v2 appends to v3 and v4. Matches: [0, 3, 3, 3]. Quorum match = 3, committed.
+append v2 drop=(v1)
+----
+v2 appends through c3
+v1: (dropped)
+v3:
+  - accepted append through c3 (ok)
+  ok
+v4:
+  - accepted append through c3 (ok)
+  ok (log=[a1 | c2 c3])
+v1: [a1 b2 b3 b4] term=b leader
+v2: [a1 c2 c3] term=c leader
+v3: [a1 c2 c3] term=c
+v4: [a1 c2 c3] term=c
+
+# v1 prevotes to check if it could win. Because it's at a stale term,
+# its votes get rejected.
+prevote v1
+----
+v1 prevotes at term c
+v1: yes (self)
+v2:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
+v3:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
+v4:
+  - rejected vote for v1: already voted for v2
+  no, already voted for v2
+outcome: lost
+
+# Bump v1 to term c (i.e. pretend it had some contact with the leader but is
+# now trying for the subsequent term) so it can try a proper prevote.
+set-term v1 c
+----
+ok
+
+# Now the rejection is on log up-to-date: v2/v3/v4's logs (ending at c3) are
+# ahead of v1's (ending at b4) since term c > b.
+prevote v1
+----
+v1 prevotes at term d
+v1: yes (self)
+v2:
+  - term advance c -> d
+  - stepped down as leader
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
+v3:
+  - term advance c -> d
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
+v4:
+  - term advance c -> d
+  - rejected vote for v1: log not up to date (c3 > b4)
+  no, log not up to date (c3 > b4)
+outcome: lost
+
+# v2 appends to everyone including v1. v1's divergent log [b2 b3 b4] gets
+# truncated and replaced with v2's log. v1 recognizes v2 as leader and bumps
+# to term c.
+append v2
+----
+v2 appends through c3
+v1:
+  - accepted append through c3 (ok, replaced 3 entries)
+  ok, replaced 3 entries (log=[a1 | c2 c3])
+v3:
+  - accepted append through c3 (ok)
+  ok
+v4:
+  - accepted append through c3 (ok)
+  ok
+v1: [a1 c2 c3] term=c
+v2: [a1 c2 c3] term=c committed=c3 leader
+v3: [a1 c2 c3] term=c
+v4: [a1 c2 c3] term=c
