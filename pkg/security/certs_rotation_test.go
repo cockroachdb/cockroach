@@ -64,11 +64,7 @@ func TestRotateCerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
-
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110007),
-		// Disable DRPC for this test due to #159661: since it's flaky
-		// with "connection closed" errors when DRPC is enabled.
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	}
 	srv := serverutils.StartServerOnly(t, params)
 	defer srv.Stopper().Stop(context.Background())
