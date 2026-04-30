@@ -5327,15 +5327,60 @@ Support status: [reserved](#support-status)
 
 
 
+DrainStatsChunk is one slice of a DrainSqlStats stream. Chunks are
+emitted with bounded size (sql.stats.drain.chunk_size) so a single
+RPC stays under gRPC's per-message limit even for nodes with many
+fingerprints.
+
+node_id identifies the source instance whose drain produced the
+chunk's statements and transactions. fingerprint_count is set on the
+terminal chunk for that source and reports the source's
+unique-fingerprint total.
+
+summary is set only on the very last chunk of a cluster-fanout
+stream (an empty NodeID request) and reports the per-instance
+outcome of every drain in the fanout. summary-bearing chunks carry
+no statements or transactions.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statements | [cockroach.sql.CollectedStatementStatistics](#cockroach.server.serverpb.DrainStatsChunk-cockroach.sql.CollectedStatementStatistics) | repeated |  | [reserved](#support-status) |
+| transactions | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.DrainStatsChunk-cockroach.sql.CollectedTransactionStatistics) | repeated |  | [reserved](#support-status) |
+| fingerprint_count | [int64](#cockroach.server.serverpb.DrainStatsChunk-int64) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.DrainStatsChunk-int32) |  |  | [reserved](#support-status) |
+| summary | [DrainStatsSummary](#cockroach.server.serverpb.DrainStatsChunk-cockroach.server.serverpb.DrainStatsSummary) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.DrainStatsChunk-cockroach.server.serverpb.DrainStatsSummary"></a>
+#### DrainStatsSummary
+
+DrainStatsSummary reports per-instance outcomes from a cluster-fanout
+DrainSqlStats. It is delivered as the very last chunk of the stream so
+consumers can correlate received chunks with the instances that
+produced them and react to partial failures.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| nodes | [DrainStatsSummary.NodeOutcome](#cockroach.server.serverpb.DrainStatsChunk-cockroach.server.serverpb.DrainStatsSummary.NodeOutcome) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DrainStatsChunk-cockroach.server.serverpb.DrainStatsSummary.NodeOutcome"></a>
+#### DrainStatsSummary.NodeOutcome
 
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| statements | [cockroach.sql.CollectedStatementStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedStatementStatistics) | repeated |  | [reserved](#support-status) |
-| transactions | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedTransactionStatistics) | repeated |  | [reserved](#support-status) |
-| fingerprint_count | [int64](#cockroach.server.serverpb.DrainStatsResponse-int64) |  |  | [reserved](#support-status) |
-
+| node_id | [int32](#cockroach.server.serverpb.DrainStatsChunk-int32) |  |  | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.DrainStatsChunk-string) |  | error is empty when the instance's drain succeeded; otherwise it carries the failure message reported by the fanout. | [reserved](#support-status) |
 
 
 

@@ -1729,10 +1729,42 @@ message DrainSqlStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
-message DrainStatsResponse {
+// DrainStatsChunk is one slice of a DrainSqlStats stream. Chunks are
+// emitted with bounded size (sql.stats.drain.chunk_size) so a single
+// RPC stays under gRPC's per-message limit even for nodes with many
+// fingerprints.
+//
+// node_id identifies the source instance whose drain produced the
+// chunk's statements and transactions. fingerprint_count is set on the
+// terminal chunk for that source and reports the source's
+// unique-fingerprint total.
+//
+// summary is set only on the very last chunk of a cluster-fanout
+// stream (an empty NodeID request) and reports the per-instance
+// outcome of every drain in the fanout. summary-bearing chunks carry
+// no statements or transactions.
+message DrainStatsChunk {
   repeated cockroach.sql.CollectedStatementStatistics statements = 1;
   repeated cockroach.sql.CollectedTransactionStatistics transactions = 2;
   int64 fingerprint_count = 3;
+  int32 node_id = 4 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  DrainStatsSummary summary = 5;
+}
+
+// DrainStatsSummary reports per-instance outcomes from a cluster-fanout
+// DrainSqlStats. It is delivered as the very last chunk of the stream so
+// consumers can correlate received chunks with the instances that
+// produced them and react to partial failures.
+message DrainStatsSummary {
+  message NodeOutcome {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // error is empty when the instance's drain succeeded; otherwise it
+    // carries the failure message reported by the fanout.
+    string error = 2;
+  }
+  repeated NodeOutcome nodes = 1 [(gogoproto.nullable) = false];
 }
 
 message StatementsResponse {
@@ -2807,7 +2839,7 @@ service Status {
       body: "*"
     };
   }
-  rpc DrainSqlStats(DrainSqlStatsRequest) returns (DrainStatsResponse) {
+  rpc DrainSqlStats(DrainSqlStatsRequest) returns (stream DrainStatsChunk) {
   }
 
   rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {

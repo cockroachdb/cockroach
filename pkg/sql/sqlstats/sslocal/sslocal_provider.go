@@ -126,10 +126,14 @@ func (s *SQLStats) DrainStats(
 	[]*appstatspb.CollectedTransactionStatistics,
 	int64,
 ) {
-	stmtStats := make([]*appstatspb.CollectedStatementStatistics, 0)
-	txnStats := make([]*appstatspb.CollectedTransactionStatistics, 0)
 	apps := s.getAppNames(false)
 	totalFingerprintCount := s.GetTotalFingerprintCount()
+	// totalFingerprintCount is the cluster-wide unique count for THIS node;
+	// it's a tight upper bound for both slices combined and a generous one
+	// for either slice alone, which is the right tradeoff to avoid the
+	// slice-grow chain on the per-app append below.
+	stmtStats := make([]*appstatspb.CollectedStatementStatistics, 0, totalFingerprintCount)
+	txnStats := make([]*appstatspb.CollectedTransactionStatistics, 0, totalFingerprintCount)
 
 	for _, app := range apps {
 		container := s.GetApplicationStats(app)

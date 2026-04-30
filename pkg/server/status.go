@@ -789,9 +789,12 @@ func (s *statusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
 }
 
-// RegisterService registers the DRPC service.
+// RegisterService registers the DRPC service. The registration goes through
+// drpcStatusServer because DRPC's stream type for DrainSqlStats differs from
+// gRPC's, and a single Go method on statusServer can implement only one
+// signature.
 func (s *statusServer) RegisterDRPCService(d drpc.Mux) error {
-	return serverpb.DRPCRegisterStatus(d, s)
+	return serverpb.DRPCRegisterStatus(d, &drpcStatusServer{statusServer: s})
 }
 
 // RegisterGateway starts the gateway (i.e. reverse
@@ -808,9 +811,38 @@ func (s *systemStatusServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterStatusServer(g, s)
 }
 
-// RegisterService registers the DRPC service.
+// RegisterService registers the DRPC service. See statusServer.RegisterDRPCService
+// for why DRPC registration uses a wrapper.
 func (s *systemStatusServer) RegisterDRPCService(d drpc.Mux) error {
-	return serverpb.DRPCRegisterStatus(d, s)
+	return serverpb.DRPCRegisterStatus(d, &drpcSystemStatusServer{systemStatusServer: s})
+}
+
+// drpcStatusServer adapts statusServer to the DRPC Status server interface.
+// statusServer.DrainSqlStats takes the gRPC stream type (to satisfy
+// serverpb.StatusServer), so DRPC needs its own DrainSqlStats method
+// that delegates to the shared DrainSqlStatsStream entry point. The
+// pattern mirrors adminServer/drpcAdminServer for the Drain RPC.
+type drpcStatusServer struct {
+	*statusServer
+}
+
+func (s *drpcStatusServer) DrainSqlStats(
+	req *serverpb.DrainSqlStatsRequest, stream serverpb.DRPCStatus_DrainSqlStatsStream,
+) error {
+	return s.statusServer.DrainSqlStatsStream(req, stream)
+}
+
+// drpcSystemStatusServer plays the same role as drpcStatusServer for the
+// system-tenant status server. It embeds *systemStatusServer so all unary
+// system-tenant overrides (Nodes/EngineStats/...) come along for free.
+type drpcSystemStatusServer struct {
+	*systemStatusServer
+}
+
+func (s *drpcSystemStatusServer) DrainSqlStats(
+	req *serverpb.DrainSqlStatsRequest, stream serverpb.DRPCStatus_DrainSqlStatsStream,
+) error {
+	return s.systemStatusServer.statusServer.DrainSqlStatsStream(req, stream)
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {

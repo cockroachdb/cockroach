@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1577,7 +1579,7 @@ func TestDrainSqlStats(t *testing.T) {
 		conn.Exec(t, "SELECT 1")
 	}
 	statusServer := testCluster.Server(0).GetStatusClient(t)
-	resp, err := statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	resp, err := drainSqlStats(t, ctx, statusServer, &serverpb.DrainSqlStatsRequest{})
 	require.NoError(t, err)
 	checkFingerprintCount(t, resp)
 	stmts, txns := filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
@@ -1590,7 +1592,7 @@ func TestDrainSqlStats(t *testing.T) {
 	require.Equal(t, stmts[0].ID, txns[0].StatementFingerprintIDs[0])
 
 	// Check that the stats are cleared.
-	resp, err = statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	resp, err = drainSqlStats(t, ctx, statusServer, &serverpb.DrainSqlStatsRequest{})
 	require.NoError(t, err)
 	stmts, txns = filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
 	require.Empty(t, stmts)
@@ -1625,7 +1627,7 @@ func TestDrainSqlStats_partialOutage(t *testing.T) {
 	// Stop server 2 to simulate a partial outage
 	testCluster.StopServer(2)
 	statusServer := testCluster.Server(0).GetStatusClient(t)
-	resp, err := statusServer.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	resp, err := drainSqlStats(t, ctx, statusServer, &serverpb.DrainSqlStatsRequest{})
 	require.NoError(t, err)
 	checkFingerprintCount(t, resp)
 	stmts, txns := filterStatementStatsByAppName(resp.Statements, resp.Transactions, appName)
@@ -1648,7 +1650,7 @@ func TestDrainSqlStatsPermissionDenied(t *testing.T) {
 
 	statusClient := ts.GetStatusClient(t)
 	defer ts.Stopper().Stop(ctx)
-	_, err := statusClient.DrainSqlStats(ctx, &serverpb.DrainSqlStatsRequest{})
+	_, err := drainSqlStats(t, ctx, statusClient, &serverpb.DrainSqlStatsRequest{})
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "user does not have admin role")
@@ -2076,7 +2078,7 @@ func filterStatementStatsByAppName(
 	return filteredStatements, filteredTransactions
 }
 
-func checkFingerprintCount(t *testing.T, resp *serverpb.DrainStatsResponse) {
+func checkFingerprintCount(t *testing.T, resp *drainSqlStatsResponse) {
 	stmtFingerprints := make(map[appstatspb.StmtFingerprintID]struct{})
 	txnFingerprints := make(map[appstatspb.TransactionFingerprintID]struct{})
 	for _, stmt := range resp.Statements {
@@ -2092,4 +2094,90 @@ func checkFingerprintCount(t *testing.T, resp *serverpb.DrainStatsResponse) {
 	}
 	actualFpCount := len(stmtFingerprints) + len(txnFingerprints)
 	require.Equal(t, resp.FingerprintCount, int64(actualFpCount))
+}
+
+// drainSqlStatsResponse is a test-only flattened view of the streaming
+// DrainSqlStats response: every chunk's statements/transactions appended
+// together, with FingerprintCount summed across terminal chunks. Existing
+// tests written against the unary DrainStatsResponse shape consume this.
+type drainSqlStatsResponse struct {
+	Statements       []*appstatspb.CollectedStatementStatistics
+	Transactions     []*appstatspb.CollectedTransactionStatistics
+	FingerprintCount int64
+}
+
+// drainSqlStats invokes the streaming DrainSqlStats RPC and materializes
+// the response into the legacy DrainStatsResponse shape. The cluster-
+// fanout proxy is a pure passthrough — it forwards per-source chunks
+// without merging — so this helper performs the dedup the legacy unary
+// form used to do at the proxy: statement stats with matching
+// (Key, AggregatedTs) and transaction stats with matching
+// (TxnFingerprintID, AggregatedTs) are merged via Stats.Add. The
+// resulting FingerprintCount is the deduplicated cluster-wide count.
+//
+// This dedup logic is duplicated from what the persistedsqlstats
+// coordinator does for live drains; the test helper exists so legacy
+// integration tests that pre-date the streaming form keep working.
+func drainSqlStats(
+	t *testing.T,
+	ctx context.Context,
+	client serverpb.RPCStatusClient,
+	req *serverpb.DrainSqlStatsRequest,
+) (*drainSqlStatsResponse, error) {
+	t.Helper()
+	stream, err := client.DrainSqlStats(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	type stmtKey struct {
+		key          appstatspb.StatementStatisticsKey
+		aggregatedTs time.Time
+	}
+	type txnKey struct {
+		fingerprintID appstatspb.TransactionFingerprintID
+		aggregatedTs  time.Time
+	}
+	stmts := make(map[stmtKey]*appstatspb.CollectedStatementStatistics)
+	txns := make(map[txnKey]*appstatspb.CollectedTransactionStatistics)
+	stmtFingerprints := make(map[appstatspb.StmtFingerprintID]struct{})
+	txnFingerprints := make(map[appstatspb.TransactionFingerprintID]struct{})
+	for {
+		chunk, recvErr := stream.Recv()
+		if recvErr != nil {
+			if errors.Is(recvErr, io.EOF) {
+				break
+			}
+			return nil, recvErr
+		}
+		for _, s := range chunk.Statements {
+			k := stmtKey{key: s.Key, aggregatedTs: s.AggregatedTs}
+			if existing, ok := stmts[k]; ok {
+				existing.Stats.Add(&s.Stats)
+			} else {
+				stmts[k] = s
+			}
+			stmtFingerprints[s.ID] = struct{}{}
+		}
+		for _, txn := range chunk.Transactions {
+			k := txnKey{fingerprintID: txn.TransactionFingerprintID, aggregatedTs: txn.AggregatedTs}
+			if existing, ok := txns[k]; ok {
+				existing.Stats.Add(&txn.Stats)
+			} else {
+				txns[k] = txn
+			}
+			txnFingerprints[txn.TransactionFingerprintID] = struct{}{}
+		}
+	}
+	resp := &drainSqlStatsResponse{
+		Statements:       make([]*appstatspb.CollectedStatementStatistics, 0, len(stmts)),
+		Transactions:     make([]*appstatspb.CollectedTransactionStatistics, 0, len(txns)),
+		FingerprintCount: int64(len(stmtFingerprints) + len(txnFingerprints)),
+	}
+	for _, s := range stmts {
+		resp.Statements = append(resp.Statements, s)
+	}
+	for _, t := range txns {
+		resp.Transactions = append(resp.Transactions, t)
+	}
+	return resp, nil
 }

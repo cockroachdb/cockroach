@@ -518,10 +518,7 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 func (s *Container) DrainStats(
 	ctx context.Context,
 ) ([]*appstatspb.CollectedStatementStatistics, []*appstatspb.CollectedTransactionStatistics) {
-	statementStats := make([]*appstatspb.CollectedStatementStatistics, 0)
 	var stmts map[stmtKey]*stmtStats
-
-	transactionStats := make([]*appstatspb.CollectedTransactionStatistics, 0)
 	var txns map[txnKey]*txnStats
 
 	func() {
@@ -532,6 +529,13 @@ func (s *Container) DrainStats(
 		// Reset statementStats and transactions after they're assigned to local variables.
 		s.clearLocked(ctx)
 	}()
+
+	// Pre-size to the exact final length: the source maps have already been
+	// detached above so their sizes are stable, and every entry produces
+	// exactly one output element. This avoids the slice-grow chain on large
+	// fingerprint counts (~5–10 grows for a 5000-entry slice).
+	statementStats := make([]*appstatspb.CollectedStatementStatistics, 0, len(stmts))
+	transactionStats := make([]*appstatspb.CollectedTransactionStatistics, 0, len(txns))
 
 	var data appstatspb.StatementStatistics
 	var distSQLUsed, vectorized, fullScan bool

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1797,6 +1798,16 @@ func (ief *InternalDB) CloneWithMemoryMonitor(
 
 func (ief *InternalDB) KV() *kv.DB {
 	return ief.db
+}
+
+// SQLStatsProvider returns the cluster-wide persisted SQL stats provider, or
+// nil if the underlying SQL server isn't fully constructed (which is the
+// case for shim instances built before the SQL layer is initialized).
+func (ief *InternalDB) SQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
+	if ief.server == nil {
+		return nil
+	}
+	return ief.server.persistedSQLStats
 }
 
 // NewInternalDB returns a new InternalDB.

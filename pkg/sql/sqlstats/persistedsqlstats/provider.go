@@ -75,6 +75,18 @@ type PersistedSQLStats struct {
 		nextFlushAt atomic.Value
 	}
 
+	// coordinatedFlushHints carries the previous coordinated flush cycle's
+	// observed merge-map sizes forward to the next cycle. Each new cycle
+	// pre-sizes its stmt and txn merge maps from these values, avoiding
+	// the grow-and-rehash chain on cluster-scale workloads. Stored as
+	// atomics for lock-free read/update; concurrent cycles are not
+	// expected (the coordinator job is a singleton via sqlliveness
+	// lease), so last-write-wins is fine.
+	coordinatedFlushHints struct {
+		stmtMapSize atomic.Int64
+		txnMapSize  atomic.Int64
+	}
+
 	// drain is closed when a graceful drain is initiated.
 	drain       chan struct{}
 	setDraining sync.Once
