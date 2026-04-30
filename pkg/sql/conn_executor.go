@@ -4296,7 +4296,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// acquired.
 		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
 			// Apply statement timeout on any waiting logic.
-			err = ex.runWithStatementTimeout(func(ctx context.Context) error {
+			err = ex.runWithStatementTimeout(ex.Ctx(), func(ctx context.Context) error {
 				cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
 				if err != nil {
 					return err
@@ -4398,15 +4398,17 @@ func (ex *connExecutor) onTxnStart(txnID uuid.UUID) error {
 	return ex.maybeSetSQLLivenessSessionAndGeneration()
 }
 
-// runWithStatementTimeout runs the given function with a context that has
-// the statement timeout applied. If the statement timeout is exceeded,
-// the onTimeoutError function is called and the return value of the function
-// is returned.
+// runWithStatementTimeout runs the given function with a context derived from
+// ctx that has the statement timeout applied. The caller passes the ctx it
+// wants threaded into execFn (e.g. a per-statement ctx so tracing spans and
+// other scope-bound state propagate to downstream KV calls). If the statement
+// timeout is exceeded, the onTimeoutError function is called and
+// QueryTimeoutError is returned.
 func (ex *connExecutor) runWithStatementTimeout(
-	execFn func(ctx context.Context) error, onTimeoutError func() error,
+	ctx context.Context, execFn func(ctx context.Context) error, onTimeoutError func() error,
 ) error {
 	// Set up a context that can be cancelled when the statement timeout is exceeded.
-	waitCtx := ex.ctxHolder.ctx()
+	waitCtx := ctx
 	var queryTimedout atomic.Bool
 	if ex.sessionData().StmtTimeout > 0 {
 		timePassed := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
@@ -4456,7 +4458,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
 	)
 
-	return ex.runWithStatementTimeout(func(ctx context.Context) error {
+	return ex.runWithStatementTimeout(ex.Ctx(), func(ctx context.Context) error {
 		if !ex.sessionData().DisableWaitForJobsNotice {
 			jobIDs := strings.Builder{}
 			for i, jobID := range ex.extraTxnState.jobs.created {
