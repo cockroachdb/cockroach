@@ -49,13 +49,14 @@ type BackupFixture interface {
 }
 
 type TpccFixture struct {
-	Name                   string
-	ImportWarehouses       int
-	WorkloadWarehouses     int
-	IncrementalChainLength int
-	CompactionThreshold    int
-	CompactionWindow       int
-	RestoredSizeEstimate   string
+	Name                 string
+	ImportWarehouses     int
+	WorkloadWarehouses   int
+	ChainLength          int
+	CompactionThreshold  int
+	CompactionWindow     int
+	Schedule             BackupSchedule
+	RestoredSizeEstimate string
 }
 
 var _ BackupFixture = TpccFixture{}
@@ -68,40 +69,45 @@ func (f TpccFixture) DatabaseName() string {
 	return "tpcc"
 }
 
+func (f TpccFixture) WithSchedule(schedule BackupSchedule) TpccFixture {
+	f.Schedule = schedule
+	return f
+}
+
 // TinyFixture is a TPCC fixture that is intended for smoke tests, local
 // testing, and continous testing of the fixture generation logic.
 var TinyFixture = TpccFixture{
-	Name:                   "tpcc-10",
-	ImportWarehouses:       10,
-	WorkloadWarehouses:     10,
-	IncrementalChainLength: 4,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "700MiB",
+	Name:                 "tpcc-10",
+	ImportWarehouses:     10,
+	WorkloadWarehouses:   10,
+	ChainLength:          4,
+	CompactionThreshold:  4,
+	CompactionWindow:     3,
+	RestoredSizeEstimate: "700MiB",
 }
 
 // SmallFixture is a TPCC fixture that is intended to be quick to restore and
 // cheap to generate for continous testing of the fixture generation logic.
 var SmallFixture = TpccFixture{
-	Name:                   "tpcc-5k",
-	ImportWarehouses:       5000,
-	WorkloadWarehouses:     1000,
-	IncrementalChainLength: 48,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "350GiB",
+	Name:                 "tpcc-5k",
+	ImportWarehouses:     5000,
+	WorkloadWarehouses:   1000,
+	ChainLength:          48,
+	CompactionThreshold:  4,
+	CompactionWindow:     3,
+	RestoredSizeEstimate: "350GiB",
 }
 
 // MediumFixture is a TPCC fixture sized so that it is a tight fit in 3 nodes
 // with the smallest supported node size of 4 VCPU per node.
 var MediumFixture = TpccFixture{
-	Name:                   "tpcc-30k",
-	ImportWarehouses:       30000,
-	WorkloadWarehouses:     5000,
-	IncrementalChainLength: 400,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "2TiB",
+	Name:                 "tpcc-30k",
+	ImportWarehouses:     30000,
+	WorkloadWarehouses:   5000,
+	ChainLength:          400,
+	CompactionThreshold:  4,
+	CompactionWindow:     3,
+	RestoredSizeEstimate: "2TiB",
 }
 
 // LargeFixture is a TPCC fixture sized so that it is a tight fit in 3 nodes
@@ -109,13 +115,13 @@ var MediumFixture = TpccFixture{
 // node storage density increases, then the size of this fixture should be
 // increased.
 var LargeFixture = TpccFixture{
-	Name:                   "tpcc-300k",
-	ImportWarehouses:       300000,
-	WorkloadWarehouses:     7500,
-	IncrementalChainLength: 400,
-	CompactionThreshold:    4,
-	CompactionWindow:       3,
-	RestoredSizeEstimate:   "20TiB",
+	Name:                 "tpcc-300k",
+	ImportWarehouses:     300000,
+	WorkloadWarehouses:   7500,
+	ChainLength:          400,
+	CompactionThreshold:  4,
+	CompactionWindow:     3,
+	RestoredSizeEstimate: "20TiB",
 }
 
 type backupFixtureSpecs struct {
@@ -140,20 +146,33 @@ type backupFixtureSpecs struct {
 
 const scheduleLabel = "tpcc_backup"
 
-func CreateScheduleStatement(fixture BackupFixture, uri url.URL) string {
-	// This backup schedule will first run a full backup immediately and then the
-	// incremental backups every minute until the user cancels the backup
-	// schedules. To ensure that only one full backup chain gets created,
-	// schedule the full back up on backup will get created on Sunday at Midnight
-	// ;)
+type BackupSchedule struct {
+	NumChains            int
+	FullFrequency        string
+	IncrementalFrequency string
+}
+
+// CreateScheduleStatement returns a SQL statment which creates a scheduled backup of database dbName.
+// If the BackupSchedule is zero-valued, the statment will run incrementals every minute,
+// and fulls once per week, otherwise it will run at the frequencies specified by the BackupSchedule.
+func (schedule *BackupSchedule) CreateScheduleStatement(dbName string, uri url.URL) string {
+	fullFreq := schedule.FullFrequency
+	if fullFreq == "" {
+		fullFreq = "@weekly"
+	}
+	incFreq := schedule.IncrementalFrequency
+	if incFreq == "" {
+		incFreq = "* * * * *"
+	}
+
 	statement := fmt.Sprintf(
 		`CREATE SCHEDULE IF NOT EXISTS "%s"
-FOR BACKUP DATABASE %s
-INTO '%s'
-RECURRING '* * * * *'
-FULL BACKUP '@weekly'
-WITH SCHEDULE OPTIONS first_run = 'now';
-`, scheduleLabel, fixture.DatabaseName(), uri.String())
+     FOR BACKUP DATABASE %s
+     INTO '%s'
+     RECURRING '%s'
+     FULL BACKUP '%s'
+     WITH SCHEDULE OPTIONS first_run = 'now';`,
+		scheduleLabel, dbName, uri.String(), incFreq, fullFreq)
 	return statement
 }
 
@@ -267,28 +286,38 @@ func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 		))
 		require.NoError(bd.t, err)
 	}
-	createScheduleStatement := CreateScheduleStatement(bd.sp.fixture, bd.registry.URI(bd.fixture.DataPath))
+	createScheduleStatement := bd.sp.fixture.Schedule.CreateScheduleStatement(
+		bd.sp.fixture.DatabaseName(), bd.registry.URI(bd.fixture.DataPath),
+	)
 	_, err := conn.Exec(createScheduleStatement)
 	require.NoError(bd.t, err)
 }
 
-// monitorBackups pauses the schedule once the target number of backups in the
-// chain have been taken.
+// monitorBackups pauses the schedule once the target number of backups have
+// been taken across all chains and waits for in-flight jobs to drain.
 func (bd *backupDriver) monitorBackups(ctx context.Context) error {
-	conn := bd.c.Conn(ctx, bd.t.L(), 1)
-	defer conn.Close()
+	db := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer db.Close()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return errors.Wrap(err, "pinning single connection")
+	}
+	defer func() { _ = conn.Close() }()
 	sql := sqlutils.MakeSQLRunner(conn)
 	sql.Exec(bd.t, "SET use_backups_with_ids = true")
+
 	fixtureURI := bd.registry.URI(bd.fixture.DataPath)
-	const (
-		WaitingFirstFull = iota
-		RunningIncrementals
-		WaitingCompletion
-		Done
-	)
-	state := WaitingFirstFull
-	for state != Done {
+	schedule := bd.sp.fixture.Schedule
+
+	targetNumChains := 1
+	if schedule.NumChains > 0 {
+		targetNumChains = schedule.NumChains
+	}
+
+	schedulePaused := false
+	for {
 		time.Sleep(1 * time.Minute)
+
 		compSuccess, compRunning, compFailed, err := bd.compactionJobStates(sql)
 		if err != nil {
 			return err
@@ -297,66 +326,51 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		switch state {
-		case WaitingFirstFull:
-			var activeScheduleCount int
-			scheduleCountQuery := fmt.Sprintf(
-				`SELECT count(*) FROM [SHOW SCHEDULES] WHERE label='%s' AND schedule_status='ACTIVE'`, scheduleLabel,
+		if len(backupFailed) > 0 {
+			return errors.Newf("backup jobs failed: %v", backupFailed)
+		}
+		if bd.sp.fixture.CompactionThreshold > 0 {
+			bd.t.L().Printf(
+				"%d compaction jobs succeeded, %d running",
+				len(compSuccess), len(compRunning),
 			)
-			sql.QueryRow(bd.t, scheduleCountQuery).Scan(&activeScheduleCount)
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while waiting first full: %v", backupFailed)
-			} else if activeScheduleCount < 2 {
-				bd.t.L().Printf(`First full backup still running`)
-			} else {
-				state = RunningIncrementals
+			if len(compFailed) > 0 {
+				bd.t.L().Errorf("compaction jobs failed: %v", compFailed)
 			}
-		case RunningIncrementals:
-			var backupCount int
-			// We track completed backups via SHOW BACKUPS as opposed to SHOW JOBs in
-			// the case that a fixture runs for a long enough time that old backup
-			// jobs stop showing up in SHOW JOBS.
-			// Since some fixtures have more than 50 backups in their collections, we
-			// set both OLDER THAN and NEWER THAN to avoid pagination.
-			backupCountQuery := fmt.Sprintf(
-				`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN 'now' NEWER THAN '-1w']`,
-				fixtureURI.String(),
-			)
-			sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
-			bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
+		}
 
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while running incrementals: %v", backupFailed)
-			} else if bd.sp.fixture.CompactionThreshold > 0 {
-				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
-				if len(compFailed) > 0 {
-					bd.t.L().Errorf("compaction jobs failed while running incrementals: %v", compFailed)
-				}
-			}
-
-			if backupCount >= bd.sp.fixture.IncrementalChainLength {
-				pauseSchedulesQuery := fmt.Sprintf(
-					`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel,
-				)
-				sql.Exec(bd.t, pauseSchedulesQuery)
-				if len(compRunning) > 0 || len(backupRunning) > 0 {
-					state = WaitingCompletion
-				} else {
-					state = Done
-				}
-			}
-		case WaitingCompletion:
-			if len(backupFailed) > 0 {
-				return errors.Newf("backup jobs failed while waiting completion: %v", backupFailed)
-			} else if len(compFailed) > 0 {
-				bd.t.L().Errorf("compaction jobs failed while waiting completion: %v", compFailed)
-			} else if len(backupRunning) > 0 {
+		if schedulePaused {
+			if len(backupRunning) > 0 {
 				bd.t.L().Printf("waiting for %d backup jobs to finish", len(backupRunning))
 			} else if len(compRunning) > 0 {
 				bd.t.L().Printf("waiting for %d compaction jobs to finish", len(compRunning))
 			} else {
-				state = Done
+				break
 			}
+			continue
+		}
+
+		var numChains int
+		sql.QueryRow(bd.t,
+			"SELECT count(*) FROM [SHOW BACKUPS IN $1 WITH DEBUG] WHERE start_time IS NULL",
+			fixtureURI.String()).Scan(&numChains)
+		var totalBackups int
+		sql.QueryRow(bd.t,
+			"SELECT count(*) FROM [SHOW BACKUPS IN $1]",
+			fixtureURI.String()).Scan(&totalBackups)
+		bd.t.L().Printf(
+			"%d scheduled backups taken (%d fulls + %d incrementals)",
+			totalBackups, numChains, totalBackups-numChains,
+		)
+
+		if numChains >= targetNumChains &&
+			totalBackups >= bd.sp.fixture.ChainLength*targetNumChains {
+			pauseSchedulesQuery := fmt.Sprintf(
+				`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`,
+				scheduleLabel,
+			)
+			sql.Exec(bd.t, pauseSchedulesQuery)
+			schedulePaused = true
 		}
 	}
 
@@ -371,6 +385,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			len(compFailed), len(compSuccess), compFailed,
 		)
 	}
+
 	return nil
 }
 
@@ -670,7 +685,7 @@ func registerBackupFixtures(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf(
 				"backupFixture/tpcc/warehouses=%d/incrementals=%d",
-				bf.fixture.ImportWarehouses, bf.fixture.IncrementalChainLength,
+				bf.fixture.ImportWarehouses, bf.fixture.ChainLength,
 			),
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           clusterSpec,
@@ -693,6 +708,7 @@ func registerBackupFixtures(r registry.Registry) {
 					registry: registry,
 				}
 				bd.prepareCluster(ctx)
+
 				bd.initWorkload(ctx)
 
 				stopWorkload, err := bd.runWorkload(ctx)
@@ -704,6 +720,115 @@ func registerBackupFixtures(r registry.Registry) {
 				stopWorkload()
 
 				if !bf.skipFingerprint {
+					fingerprintTime := bd.getLatestAOST(ctx)
+					fingerprint := bd.fingerprintFixture(ctx, fingerprintTime)
+					require.NoError(t, handle.SetFingerprint(ctx, fingerprint, fingerprintTime))
+				}
+
+				require.NoError(t, bd.checkRestorability(ctx))
+
+				require.NoError(t, handle.SetReadyAt(ctx))
+			},
+		})
+	}
+}
+
+const (
+	// scheduleChainingDefaultGCTTLSeconds is the GC TTL set for the default range when running a
+	// schedule chaining test. This is set to 50 seconds in order to be less than the default 1 minute
+	// incremental backup frequency for these tests.
+	scheduleChainingDefaultGCTTLSeconds = 50
+
+	// scheduleChainingNotIncludedGCTTLSeconds is the GC TTL set for spans which should not be included
+	// in backups during these tests. It is set to an extremely low value in order to cause heavy stress
+	// in situations where we are attempting to protect or backup spans that we should not be touching.
+	scheduleChainingNotIncludedGCTTLSeconds = 10
+)
+
+var DefaultBackupSchedule = BackupSchedule{
+	FullFrequency:        "*/5 * * * *",
+	IncrementalFrequency: "* * * * *",
+	NumChains:            2,
+}
+
+func registerBackupScheduleChaining(r registry.Registry) {
+	specs := []backupFixtureSpecs{
+		{
+			fixture: TinyFixture.WithSchedule(DefaultBackupSchedule),
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				workloadNode: true,
+			}),
+			timeout: 30 * time.Minute,
+			suites:  registry.Suites(registry.Nightly),
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE, spec.Local},
+		},
+		{
+			fixture: MediumFixture.WithSchedule(DefaultBackupSchedule),
+			hardware: makeHardwareSpecs(hardwareSpecs{
+				workloadNode: true,
+				nodes:        9,
+				cpus:         16,
+			}),
+			timeout:         16 * time.Hour,
+			suites:          registry.Suites(registry.Weekly),
+			clouds:          []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
+			skipFingerprint: true,
+		},
+	}
+	for _, spec := range specs {
+		spec := spec
+		clusterSpec := spec.hardware.makeClusterSpecs(r)
+		r.Add(registry.TestSpec{
+			Name:              fmt.Sprintf("backupFixture/schedule-chaining/%s", spec.fixture.Name),
+			Owner:             registry.OwnerDisasterRecovery,
+			Cluster:           clusterSpec,
+			Timeout:           spec.timeout,
+			EncryptionSupport: registry.EncryptionMetamorphic,
+			CompatibleClouds:  registry.Clouds(spec.clouds...),
+			Suites:            spec.suites,
+			Skip:              spec.skip,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				registry := GetFixtureRegistry(ctx, t, c.Cloud())
+
+				handle, err := registry.Create(ctx, fmt.Sprintf(
+					"%s-schedule-chaining", spec.fixture.Name,
+				), t.L())
+				require.NoError(t, err)
+
+				bd := backupDriver{
+					t:        t,
+					c:        c,
+					sp:       spec,
+					fixture:  handle.Metadata(),
+					registry: registry,
+				}
+				bd.prepareCluster(ctx)
+
+				// Shorten the GC TTL to be less than the frequency of the backup schedule.
+				conn := bd.c.Conn(ctx, t.L(), 1 /* node */)
+				defer conn.Close()
+				_, err = conn.Exec(
+					"ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = $1",
+					scheduleChainingDefaultGCTTLSeconds,
+				)
+				require.NoError(t, err)
+				// Shorten the GC TTL of the system database, which should not be included in the backup.
+				_, err = conn.Exec(
+					"ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = $1",
+					scheduleChainingNotIncludedGCTTLSeconds,
+				)
+				require.NoError(t, err)
+
+				bd.initWorkload(ctx)
+				stopWorkload, err := bd.runWorkload(ctx)
+				require.NoError(t, err)
+
+				bd.scheduleBackups(ctx)
+				require.NoError(t, bd.monitorBackups(ctx))
+
+				stopWorkload()
+
+				if !spec.skipFingerprint {
 					fingerprintTime := bd.getLatestAOST(ctx)
 					fingerprint := bd.fingerprintFixture(ctx, fingerprintTime)
 					require.NoError(t, handle.SetFingerprint(ctx, fingerprint, fingerprintTime))
