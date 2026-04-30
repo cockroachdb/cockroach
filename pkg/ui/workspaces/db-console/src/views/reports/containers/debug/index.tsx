@@ -310,6 +310,11 @@ export default function Debug() {
           note="View all cluster settings."
         />
         <DebugPanelLink
+          name="Feature Flags"
+          url="#/debug/feature-flags"
+          note="View and toggle experimental DB Console features."
+        />
+        <DebugPanelLink
           name="Localities"
           url="#/reports/localities"
           note="Check node localities and locations for your cluster."

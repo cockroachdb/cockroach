@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 )
 
@@ -42,6 +43,7 @@ type ApiV2DBConsole struct {
 	Status     StatusAPI
 	Admin      AdminAPI
 	InternalDB isql.DB
+	Settings   *cluster.Settings
 }
 
 // NodeInfo contains summarized node information for the UI.
@@ -78,6 +80,19 @@ type NodesResponse struct {
 type ErrorResponse struct {
 	// Error is the error message.
 	Error string `json:"error"`
+}
+
+// Handler returns an http.Handler that routes requests to the appropriate
+// BFF endpoint. The caller should wrap this with http.StripPrefix to strip
+// the /api/v2/dbconsole prefix before dispatching.
+func (api *ApiV2DBConsole) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/nodes", api.GetNodes)
+	mux.HandleFunc("/features", api.ListFeatures)
+	mux.HandleFunc("/features/", api.handleFeatureToggle)
+	mux.HandleFunc("/jobs-manager/jobs", api.GetJobsManagerJobs)
+	mux.HandleFunc("/jobs-manager/jobs/", api.HandleJobsManagerControl)
+	return mux
 }
 
 // GetNodes returns node information for the cluster overview page.
