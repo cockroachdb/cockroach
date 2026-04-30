@@ -10,8 +10,12 @@ import (
 	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -161,7 +165,8 @@ func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
 
 // ReplayWAG iterates over the WAG in the log engine and applies any unapplied
 // nodes to the state machine. It is called during store startup, before the
-// store goes online.
+// store goes online. For each unapplied node, it first replays raft log entries
+// to catch up the affected ranges, then applies the node's mutation.
 func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
 	var it wag.Iterator
 	for wagIdx, node := range it.Iter(ctx, raftRO) {
@@ -170,17 +175,141 @@ func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
 		} else if !apply {
 			continue
 		}
-		// TODO(mira): For each target in wagNodeCatchUps(node), replay raft log
-		// entries for the target range/replica up to the target index before
-		// applying the WAG node. The current raft log replay in
-		// handleRaftReadyRaftMuLocked needs to be factored out and invoked here.
-		// The catch-up code should assert that the target index is >= the
-		// replica's current applied index.
+		for target := range wagNodeCatchUps(node) {
+			// Load the ReplicaState for CheckForcedErr to reproduce command
+			// accept/reject decisions during raft log replay.
+			//
+			// TODO(mira): We pass a minimal descriptor because loading it by
+			// range ID requires a scan (descriptors are keyed by start key). Does
+			// this make CheckForcedErr's lease request validation inaccurate?
+			sl := MakeStateLoader(target.rangeID)
+			desc := roachpb.RangeDescriptor{RangeID: target.rangeID}
+			state, err := sl.Load(ctx, stateRW, &desc)
+			if err != nil {
+				return errors.Wrapf(err, "WAG node %d: loading state for r%d", wagIdx, target.rangeID)
+			}
+			if err := replayRaftLog(ctx, raftRO, stateRW, &state, target); err != nil {
+				return errors.Wrapf(err, "WAG node %d: catch-up r%d", wagIdx, target.rangeID)
+			}
+			// Persist the updated applied state after catch-up.
+			as := state.ToRangeAppliedState()
+			if err := sl.SetRangeAppliedState(ctx, stateRW, &as); err != nil {
+				return errors.Wrapf(err, "WAG node %d: persisting state for r%d", wagIdx, target.rangeID)
+			}
+		}
 		if err := applyMutation(ctx, stateRW, node.Mutation); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
 		}
 	}
 	return it.Error()
+}
+
+// replayRaftLog applies raft log entries for a range from its current applied
+// index up to the given target index. It iterates entries from the raft log and
+// applies each one using CheckForcedErr to reproduce the same accept/reject
+// decisions as the original application. The caller provides the initial
+// ReplicaState, which is mutated in place as entries are applied.
+func replayRaftLog(
+	ctx context.Context,
+	raftRO RaftRO,
+	stateWO StateWO,
+	state *kvserverpb.ReplicaState,
+	target raftCatchUpTarget,
+) error {
+	if target.index < state.RaftAppliedIndex {
+		return errors.AssertionFailedf(
+			"catch-up target index %d < applied index %d for r%d",
+			target.index, state.RaftAppliedIndex, target.rangeID,
+		)
+	}
+	if target.index == state.RaftAppliedIndex {
+		return nil // already caught up
+	}
+
+	// Apply entries from appliedIndex+1 through target index.
+	lo := state.RaftAppliedIndex + 1
+	hi := target.index + 1 // Visit uses [lo, hi)
+	var cmd raftlog.ReplicatedCmd
+	if err := raftlog.Visit(ctx, raftRO, target.rangeID, lo, hi, func(ent raftpb.Entry) error {
+		if err := cmd.Decode(&ent); err != nil {
+			return err
+		}
+		return applyEntry(ctx, state, stateWO, &cmd)
+	}); err != nil {
+		return errors.Wrapf(err, "replaying raft log for r%d", target.rangeID)
+	}
+
+	// Verify we replayed all expected entries.
+	if state.RaftAppliedIndex != target.index {
+		return errors.AssertionFailedf(
+			"raft log replay for r%d reached index %d, expected %d",
+			target.rangeID, state.RaftAppliedIndex, target.index,
+		)
+	}
+
+	return nil
+}
+
+// applyEntry validates and applies a single decoded raft entry to the state
+// machine. It uses CheckForcedErr to reproduce the same accept/reject decisions
+// as the online application path, applies the write batch for accepted commands,
+// and updates the in-memory applied state.
+//
+// Each entry's write batch is applied directly to the engine, but the applied
+// state (RangeAppliedState) is only updated in memory — the caller is
+// responsible for persisting it. This means the writes and applied state are
+// not atomic: if we crash mid-replay, entries may be re-applied on restart.
+// This is safe as long as the write batches are idempotent (MVCC puts at the
+// same timestamp are).
+func applyEntry(
+	ctx context.Context, state *kvserverpb.ReplicaState, writer StateWO, cmd *raftlog.ReplicatedCmd,
+) error {
+	if cmd.Index() == 0 {
+		return errors.AssertionFailedf("applying an entry requires a non-zero index")
+	}
+	if idx, applied := cmd.Index(), state.RaftAppliedIndex; idx != applied+1 {
+		return errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
+	}
+
+	// Reproduce the CheckForcedErr logic to determine if this command should be
+	// applied or rejected. Rejected commands are applied as no-ops.
+	fr := kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, false /* isLocal */, state)
+	if fr.ForcedError != nil {
+		// Rejected: apply as an empty command.
+		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
+		cmd.Cmd.WriteBatch = nil
+		cmd.Cmd.ClosedTimestamp = nil
+	}
+
+	// TODO(mira): AddSST, LinkExternalSSTable, and Excise have side effects
+	// beyond the write batch. Can these commands appear in the catch-up range,
+	// or are they always covered by the WAG node's mutation?
+	res := cmd.ReplicatedResult()
+	if res.AddSSTable != nil || res.LinkExternalSSTable != nil || res.Excise != nil {
+		return errors.UnimplementedErrorf(
+			errors.IssueLink{},
+			"standalone log application does not yet handle AddSST/LinkExternalSSTable/Excise"+
+				" at index %d", cmd.Index(),
+		)
+	}
+
+	if wb := cmd.Cmd.WriteBatch; wb != nil {
+		if err := writer.ApplyBatchRepr(wb.Data, false /* sync */); err != nil {
+			return errors.Wrap(err, "applying write batch")
+		}
+	}
+
+	// Update the applied state to reflect this entry.
+	state.RaftAppliedIndex = cmd.Index()
+	state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
+	if leaseAppliedIndex := fr.LeaseIndex; leaseAppliedIndex != 0 {
+		state.LeaseAppliedIndex = leaseAppliedIndex
+	}
+	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
+		state.RaftClosedTimestamp = *cts
+	}
+	state.Stats.Add(res.Delta.ToStats())
+	return nil
 }
 
 // applyMutation applies a WAG node's mutation to the state machine. It handles

@@ -293,8 +293,10 @@ func TestReplayWAG(t *testing.T) {
 		var seq wag.Seq
 		bf := MakeBatchFactory(&eng, &seq)
 
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 10}, wagpb.EventApply, "key1", "val1")
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 11}, wagpb.EventApply, "key2", "val2")
+		// Use EventCreate so no raft log catch-up is needed — this test is about
+		// WAG mutation application, not raft log replay.
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 10}, wagpb.EventCreate, "key1", "val1")
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 11}, wagpb.EventCreate, "key2", "val2")
 
 		require.NoError(t, ReplayWAG(ctx, RaftRO(eng.LogEngine()), StateRW(eng.StateEngine())))
 		require.Equal(t, []byte("val1"), getKey(t, eng.StateEngine(), "key1"))
@@ -302,8 +304,8 @@ func TestReplayWAG(t *testing.T) {
 
 		// Write two more nodes, then replay again. The first two nodes should
 		// be skipped and only the new ones applied.
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 12}, wagpb.EventApply, "key3", "val3")
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 13}, wagpb.EventApply, "key4", "val4")
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 12}, wagpb.EventCreate, "key3", "val3")
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 13}, wagpb.EventCreate, "key4", "val4")
 
 		require.NoError(t, ReplayWAG(ctx, RaftRO(eng.LogEngine()), StateRW(eng.StateEngine())))
 		require.Equal(t, []byte("val1"), getKey(t, eng.StateEngine(), "key1"))
