@@ -67,6 +67,7 @@ go_test(
         "partition_test.go",
         "query_vector_test.go",
         "rot_test.go",
+        "searcher_fixups_test.go",
         "search_set_test.go",
     ],
     data = glob(["testdata/**"]),

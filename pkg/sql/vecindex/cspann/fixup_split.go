@@ -537,8 +537,9 @@ func (fw *fixupWorker) reassignFromSameLevel(
 			// has already been randomized, but is not yet normalized.
 			fw.tempIndexCtx.Init(txn)
 			fw.index.setupContext(&fw.tempIndexCtx, fw.treeKey, metadata.Level, SearchOptions{
-				BaseBeamSize: fw.index.options.BaseBeamSize * 2,
-				SkipRerank:   true,
+				BaseBeamSize:            fw.index.options.BaseBeamSize * 2,
+				SkipRerank:              true,
+				DisableSplitMergeFixups: !fw.index.options.IsDeterministic,
 			})
 			fw.tempIndexCtx.query.InitCentroid(fw.index.quantizer.GetDistanceMetric(), metadata.Centroid)
 

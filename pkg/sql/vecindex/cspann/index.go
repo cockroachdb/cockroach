@@ -127,6 +127,11 @@ type SearchOptions struct {
 	// UpdateStats specifies whether index statistics will be modified by this
 	// search. These stats are used for adaptive search.
 	UpdateStats bool
+	// DisableSplitMergeFixups disables enqueueing background split/merge fixups
+	// based on partition sizes observed during the search. This is useful for
+	// internal maintenance searches that are immediately followed by vector
+	// moves, which can render the size check stale.
+	DisableSplitMergeFixups bool
 }
 
 // Context contains per-thread state needed during index operations. Callers
