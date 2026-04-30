@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -49,7 +49,6 @@ import (
 func TestBuildDataDrivenWithSQLDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
 
 	ctx := context.Background()
 
@@ -85,7 +84,6 @@ func TestBuildDataDrivenWithSQLDependencies(t *testing.T) {
 func TestBuildDataDrivenWithTestDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
 
 	ctx := context.Background()
 

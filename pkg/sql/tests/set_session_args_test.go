@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,7 +26,6 @@ func TestSetSessionArguments(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Enable enterprise features so READ COMMITTED can be tested.
-	defer ccl.TestingEnableEnterprise()()
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()

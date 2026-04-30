@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1567,7 +1567,6 @@ func TestInjectRetryErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Enable enterprise features to test READ COMMITTED retries.
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}

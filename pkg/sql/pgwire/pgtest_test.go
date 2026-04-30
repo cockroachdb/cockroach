@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -31,7 +31,6 @@ func TestPGTest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Enable enterprise features so READ COMMITTED can be tested.
-	defer ccl.TestingEnableEnterprise()()
 
 	if *flagAddr == "" {
 		newServer := func() (addr, user string, cleanup func()) {

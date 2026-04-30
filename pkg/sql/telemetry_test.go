@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -28,7 +28,6 @@ func TestTelemetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Enable enterprise features to test READ COMMITTED telemetry.
-	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "takes >1min under race")
 	skip.UnderDeadlock(t, "takes >1min under deadlock")
