@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -84,6 +85,8 @@ func (rc recCollector) addIndexRec(md *opt.Metadata, expr opt.Expr) {
 	case *memo.ZigzagJoinExpr:
 		rc.addIndex(md, expr.LeftIndex, expr.Cols, expr.LeftTable)
 		rc.addIndex(md, expr.RightIndex, expr.Cols, expr.RightTable)
+	case *memo.VectorSearchExpr:
+		rc.addIndex(md, expr.Index, expr.Cols, expr.Table)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		rc.addIndexRec(md, expr.Child(i))
@@ -465,7 +468,14 @@ func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 			direction = tree.Descending
 		}
 
-		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction}
+		// The operator class is only set on the last column of a vector index,
+		// which is the vector column itself. Preceding columns are prefix columns.
+		var opClass tree.Name
+		if ir.index.Type() == idxtype.VECTOR && i == len(ir.index.cols)-1 {
+			opClass = tree.Name(vecOpClassName(ir.index.vectorConfig.DistanceMetric))
+		}
+
+		indexCols[i] = tree.IndexElem{Column: colName, Direction: direction, OpClass: opClass}
 	}
 
 	return indexCols
@@ -484,4 +494,19 @@ func (ir *indexRecommendation) storingColumns() []tree.Name {
 		storingCols = append(storingCols, colName)
 	})
 	return storingCols
+}
+
+// vecOpClassName returns the operator class name for a given vector distance
+// metric, used in the CREATE VECTOR INDEX recommendation output.
+func vecOpClassName(metric vecpb.DistanceMetric) string {
+	switch metric {
+	case vecpb.L2SquaredDistance:
+		return "vector_l2_ops"
+	case vecpb.CosineDistance:
+		return "vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		return "vector_ip_ops"
+	default:
+		return ""
+	}
 }

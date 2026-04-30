@@ -24,7 +24,7 @@ import (
 // cat.StableID to its constructed HypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
-	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn,
+	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn, attrs IndexCandidateAttrs,
 ) (optTables, hypTables map[cat.StableID]cat.Table) {
 	numTables := len(indexCandidates)
 	hypTables = make(map[cat.StableID]cat.Table, numTables)
@@ -41,7 +41,9 @@ func BuildOptAndHypTableMaps(
 			// TODO (Shivam): Index recommendations should not only allow JSON columns
 			// to be part of inverted indexes since they are also forward indexable.
 			indexType := idxtype.FORWARD
-			if !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
+			if lastKeyCol.DatumType().Family() == types.PGVectorFamily {
+				indexType = idxtype.VECTOR
+			} else if !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
 				lastKeyCol.DatumType().Family() == types.JsonFamily {
 				indexType = idxtype.INVERTED
 
@@ -56,13 +58,14 @@ func BuildOptAndHypTableMaps(
 				indexOrd,
 				indexType,
 				t.Zone(),
+				attrs,
 			)
 
-			// Do not add hypothetical inverted indexes for which there is an existing
-			// index with the same key. Inverted indexes do not have stored columns,
-			// so we should not make a recommendation if the same index already
-			// exists.
-			if indexType != idxtype.INVERTED || hypTable.existingRedundantIndex(&hypIndex) == nil {
+			// Do not add hypothetical inverted or vector indexes for which there is
+			// an existing index with the same key. These index types do not have
+			// stored columns, so we should not make a recommendation if the same
+			// index already exists.
+			if (indexType != idxtype.INVERTED && indexType != idxtype.VECTOR) || hypTable.existingRedundantIndex(&hypIndex) == nil {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
 		}
