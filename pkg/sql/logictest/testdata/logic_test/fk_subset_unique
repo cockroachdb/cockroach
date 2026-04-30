@@ -1,0 +1,649 @@
+# LogicTest: default-configs 3node-tenant !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+
+# Foreign keys backed by a unique constraint covering only a subset of the
+# referenced columns (CockroachDB extension; gated by
+# require_fk_unique_constraint_on_all_columns). This feature is gated on
+# cluster version V26_3, so the tests are excluded from the local-mixed-*
+# configs where the cluster has not yet finalized to V26_3.
+
+# Creation, notice, basic DML enforcement, and edge cases for what counts
+# as a valid subset backing.
+subtest subset_unique_backing
+
+statement ok
+CREATE TABLE subset_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO subset_parent VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+
+# Default behavior: a unique constraint on a subset of the referenced columns
+# is accepted with a NOTICE. Here parent has UNIQUE(a) (the primary key) and
+# the FK references (a, b, c).
+
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE subset_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES subset_parent (a, b, c)
+)
+----
+NOTICE: foreign key "subset_child_a_b_c_fkey" is currently backed by a unique constraint that covers a subset of the referenced columns of subset_parent; this is a CockroachDB extension and may not be portable to other databases. Foreign key enforcement on insert may incur additional latency; consider adding a unique index matching all referenced columns, or (if applicable) extending the existing unique index to STORE the other referenced columns
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE TABLE subset_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES subset_parent (a, b, c)
+)
+
+# Insert satisfying the FK should succeed.
+statement ok
+INSERT INTO subset_child VALUES (1, 10, 100), (2, 20, 200)
+
+# Insert with non-existent parent key (a) should fail.
+statement error pq: insert on table "subset_child" violates foreign key constraint
+INSERT INTO subset_child VALUES (99, 0, 0)
+
+# Insert where parent key matches but extra columns don't should also fail —
+# the extra columns are enforced as implicit equality conditions.
+statement error pq: insert on table "subset_child" violates foreign key constraint
+INSERT INTO subset_child VALUES (1, 999, 100)
+
+statement error pq: insert on table "subset_child" violates foreign key constraint
+INSERT INTO subset_child VALUES (1, 10, 999)
+
+# Update on the child that violates the FK should fail.
+statement error pq: update on table "subset_child" violates foreign key constraint
+UPDATE subset_child SET b = 999 WHERE a = 1
+
+# Delete from parent should be blocked by RESTRICT-by-default.
+statement error pq: delete on table "subset_parent" violates foreign key constraint
+DELETE FROM subset_parent WHERE a = 1
+
+statement ok
+DROP TABLE subset_child, subset_parent
+
+# Same as above, but via ALTER TABLE ADD CONSTRAINT (exercises the
+# declarative schema changer path).
+statement ok
+CREATE TABLE subset_parent (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE subset_child (a INT, b INT, c INT)
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE subset_child ADD CONSTRAINT subset_fk FOREIGN KEY (a, b, c) REFERENCES subset_parent (a, b, c)
+----
+NOTICE: foreign key "subset_fk" is currently backed by a unique constraint that covers a subset of the referenced columns of subset_parent; this is a CockroachDB extension and may not be portable to other databases. Foreign key enforcement on insert may incur additional latency; consider adding a unique index matching all referenced columns, or (if applicable) extending the existing unique index to STORE the other referenced columns
+
+onlyif config weak-iso-level-configs
+statement ok
+ALTER TABLE subset_child ADD CONSTRAINT subset_fk FOREIGN KEY (a, b, c) REFERENCES subset_parent (a, b, c)
+
+# pg_constraint should surface the chosen backing constraint's OID (here, the
+# parent's PK) in conindid, rather than 0. Confirms the introspection path
+# falls back to the subset finder for subset FKs.
+query B
+SELECT conindid != 0
+  FROM pg_catalog.pg_constraint
+ WHERE conname = 'subset_fk'
+----
+true
+
+statement ok
+DROP TABLE subset_child, subset_parent
+
+# Exact-match FKs should NOT emit a notice (regression check that we only
+# warn on the strict-subset case).
+statement ok
+CREATE TABLE exact_parent (a INT, b INT, PRIMARY KEY (a, b))
+
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE exact_child (
+  a INT, b INT,
+  FOREIGN KEY (a, b) REFERENCES exact_parent (a, b)
+)
+----
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE TABLE exact_child (
+  a INT, b INT,
+  FOREIGN KEY (a, b) REFERENCES exact_parent (a, b)
+)
+
+statement ok
+DROP TABLE exact_child, exact_parent
+
+# A unique constraint covering NONE of the referenced columns is still
+# rejected — the relaxation requires a non-empty subset.
+statement ok
+CREATE TABLE no_overlap_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement error there is no unique constraint matching given keys for referenced table no_overlap_parent
+CREATE TABLE no_overlap_child (
+  b INT, c INT,
+  FOREIGN KEY (b, c) REFERENCES no_overlap_parent (b, c)
+)
+
+statement ok
+DROP TABLE no_overlap_parent
+
+# Partial unique indexes are still NOT eligible to back a subset FK.
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE partial_subset_parent (
+  a INT, b INT,
+  UNIQUE INDEX (a) WHERE b > 0
+)
+
+statement error there is no unique constraint matching given keys for referenced table partial_subset_parent
+CREATE TABLE partial_subset_child (
+  a INT, b INT,
+  FOREIGN KEY (a, b) REFERENCES partial_subset_parent (a, b)
+)
+
+statement ok
+DROP TABLE partial_subset_parent
+
+statement ok
+RESET experimental_enable_unique_without_index_constraints
+
+subtest end
+
+# SHOW CREATE TABLE round-trip and catalog back-reference protections for
+# subset FKs.
+subtest subset_unique_catalog
+
+# SHOW CREATE TABLE round-trip: subset FKs should serialize as a plain
+# FOREIGN KEY clause with no special markers indicating subset-cover backing.
+statement ok
+CREATE TABLE show_p (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE TABLE show_c (
+  a INT NOT NULL, b INT NOT NULL, c INT NOT NULL,
+  CONSTRAINT show_fk FOREIGN KEY (a, b, c) REFERENCES show_p (a, b, c),
+  FAMILY f1 (a, b, c)
+)
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE show_c
+----
+show_c  CREATE TABLE public.show_c (
+          a INT8 NOT NULL,
+          b INT8 NOT NULL,
+          c INT8 NOT NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT show_c_pkey PRIMARY KEY (rowid ASC),
+          CONSTRAINT show_fk FOREIGN KEY (a, b, c) REFERENCES public.show_p(a, b, c),
+          FAMILY f1 (a, b, c, rowid)
+        );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE show_c
+----
+show_c  CREATE TABLE public.show_c (
+          a INT8 NOT NULL,
+          b INT8 NOT NULL,
+          c INT8 NOT NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT show_c_pkey PRIMARY KEY (rowid ASC),
+          CONSTRAINT show_fk FOREIGN KEY (a, b, c) REFERENCES public.show_p(a, b, c),
+          FAMILY f1 (a, b, c, rowid)
+        ) WITH (schema_locked = true);
+
+statement ok
+DROP TABLE show_c, show_p
+
+# Dropping the unique constraint that backs a subset FK should fail because
+# of the catalog back-reference. Same protection that applies to exact-match
+# FKs — the subset extension must not bypass it.
+statement ok
+CREATE TABLE drop_p (id INT PRIMARY KEY, b INT, c INT, CONSTRAINT u_c UNIQUE (c))
+
+statement ok
+CREATE TABLE drop_c (
+  b INT NOT NULL, c INT NOT NULL,
+  CONSTRAINT drop_fk FOREIGN KEY (b, c) REFERENCES drop_p (b, c)
+)
+
+skipif config local-legacy-schema-changer
+statement error pq: .* is referenced by foreign key
+ALTER TABLE drop_p DROP CONSTRAINT u_c
+
+statement ok
+DROP TABLE drop_c, drop_p
+
+# Conversely, when the parent has multiple constraints that can subset-back
+# the FK, dropping one of them should succeed without CASCADE — the other
+# remains as a viable replacement backing.
+statement ok
+CREATE TABLE replace_p (
+  a INT PRIMARY KEY,
+  b INT,
+  CONSTRAINT u_b UNIQUE (b)
+)
+
+statement ok
+CREATE TABLE replace_c (
+  a INT NOT NULL, b INT NOT NULL,
+  CONSTRAINT replace_fk FOREIGN KEY (a, b) REFERENCES replace_p (a, b)
+)
+
+# Both UNIQUE(b) and PRIMARY KEY(a) subset-cover the FK on (a, b). Dropping
+# u_b leaves the PK as a viable replacement; the drop should succeed.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE replace_p DROP CONSTRAINT u_b
+
+# FK is still enforced after the drop, now backed solely by the PK.
+statement ok
+INSERT INTO replace_p VALUES (1, 10)
+
+statement ok
+INSERT INTO replace_c VALUES (1, 10)
+
+statement error pq: .* violates foreign key constraint
+INSERT INTO replace_c VALUES (99, 0)
+
+statement ok
+DROP TABLE replace_c, replace_p
+
+subtest end
+
+# UPSERT / INSERT ... ON CONFLICT goes through a different mutation path than
+# plain INSERT/UPDATE. Verify the subset FK is enforced for both the insert
+# and the conflict-update branches.
+subtest subset_unique_upsert
+
+statement ok
+CREATE TABLE upsert_p (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO upsert_p VALUES (1, 10, 100), (2, 20, 200)
+
+statement ok
+CREATE TABLE upsert_c (
+  cid INT PRIMARY KEY,
+  a INT NOT NULL, b INT NOT NULL, c INT NOT NULL,
+  CONSTRAINT upsert_fk FOREIGN KEY (a, b, c) REFERENCES upsert_p (a, b, c)
+)
+
+# UPSERT inserting a valid row succeeds (insert branch).
+statement ok
+INSERT INTO upsert_c (cid, a, b, c) VALUES (1, 1, 10, 100)
+ON CONFLICT (cid) DO UPDATE SET a = excluded.a, b = excluded.b, c = excluded.c
+
+# UPSERT inserting a row that violates the FK should fail (insert branch).
+statement error pq: .* violates foreign key constraint
+INSERT INTO upsert_c (cid, a, b, c) VALUES (2, 99, 0, 0)
+ON CONFLICT (cid) DO UPDATE SET a = excluded.a, b = excluded.b, c = excluded.c
+
+# UPSERT updating to a value that violates the FK should fail
+# (conflict-update branch); cid=1 already exists, so this hits ON CONFLICT.
+statement error pq: .* violates foreign key constraint
+INSERT INTO upsert_c (cid, a, b, c) VALUES (1, 99, 0, 0)
+ON CONFLICT (cid) DO UPDATE SET a = excluded.a, b = excluded.b, c = excluded.c
+
+# UPSERT that mismatches only on the non-unique-backed column also fails —
+# proves the residual equality is enforced on the UPSERT path too.
+statement error pq: .* violates foreign key constraint
+INSERT INTO upsert_c (cid, a, b, c) VALUES (1, 1, 999, 100)
+ON CONFLICT (cid) DO UPDATE SET a = excluded.a, b = excluded.b, c = excluded.c
+
+statement ok
+DROP TABLE upsert_c, upsert_p
+
+subtest end
+
+# Session-var and cluster-setting gating for subset FK creation.
+subtest subset_unique_settings
+
+# require_fk_unique_constraint_on_all_columns = true reverts to the strict
+# (PostgreSQL-compatible) behavior.
+statement ok
+SET require_fk_unique_constraint_on_all_columns = true
+
+statement ok
+CREATE TABLE strict_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement error there is no unique constraint matching given keys for referenced table strict_parent
+CREATE TABLE strict_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES strict_parent (a, b, c)
+)
+
+statement ok
+CREATE TABLE strict_child (a INT, b INT, c INT)
+
+statement error there is no unique constraint matching given keys for referenced table strict_parent
+ALTER TABLE strict_child ADD FOREIGN KEY (a, b, c) REFERENCES strict_parent (a, b, c)
+
+statement ok
+RESET require_fk_unique_constraint_on_all_columns
+
+statement ok
+DROP TABLE strict_child, strict_parent
+
+subtest end
+
+# NOT VALID + VALIDATE flow on subset FKs, including verification that the
+# validation query enforces equality on all referenced columns (not just the
+# unique-backed subset).
+subtest subset_unique_validation
+
+statement ok
+CREATE TABLE notvalid_parent (a INT PRIMARY KEY, b INT);
+CREATE TABLE notvalid_child (a INT, b INT);
+INSERT INTO notvalid_parent VALUES (1, 10), (2, 20);
+INSERT INTO notvalid_child VALUES (1, 10), (2, 20)
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE notvalid_child ADD CONSTRAINT notvalid_fk FOREIGN KEY (a, b) REFERENCES notvalid_parent (a, b) NOT VALID
+----
+NOTICE: foreign key "notvalid_fk" is currently backed by a unique constraint that covers a subset of the referenced columns of notvalid_parent; this is a CockroachDB extension and may not be portable to other databases. Foreign key enforcement on insert may incur additional latency; consider adding a unique index matching all referenced columns, or (if applicable) extending the existing unique index to STORE the other referenced columns
+
+onlyif config weak-iso-level-configs
+statement ok
+ALTER TABLE notvalid_child ADD CONSTRAINT notvalid_fk FOREIGN KEY (a, b) REFERENCES notvalid_parent (a, b) NOT VALID
+
+statement ok
+ALTER TABLE notvalid_child VALIDATE CONSTRAINT notvalid_fk
+
+# Drop the FK, insert a row that mismatches on the non-unique column, then
+# re-add as NOT VALID and confirm VALIDATE catches the mismatch (proving the
+# validation query enforces equality on all referenced columns, not just the
+# unique-backed ones).
+statement ok
+ALTER TABLE notvalid_child DROP CONSTRAINT notvalid_fk
+
+statement ok
+INSERT INTO notvalid_child VALUES (1, 999)
+
+statement ok
+ALTER TABLE notvalid_child ADD CONSTRAINT notvalid_fk FOREIGN KEY (a, b) REFERENCES notvalid_parent (a, b) NOT VALID
+
+statement error pgcode 23503 foreign key violation: "notvalid_child" row a=1, b=999, rowid=[0-9]+ has no match in "notvalid_parent"
+ALTER TABLE notvalid_child VALIDATE CONSTRAINT notvalid_fk
+
+statement ok
+DROP TABLE notvalid_child, notvalid_parent
+
+subtest end
+
+# Cascade and inbound-FK-trigger behavior on subset FKs. Specifically verifies
+# that the trigger fires correctly when a parent UPDATE changes a referenced
+# column that is NOT covered by the unique constraint backing the FK — a case
+# that didn't exist pre-subset-matching (where all referenced cols had to be
+# unique-backed).
+subtest subset_unique_cascade
+
+# ON DELETE CASCADE works on subset FKs.
+statement ok
+CREATE TABLE cascade_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE TABLE cascade_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES cascade_parent (a, b, c) ON DELETE CASCADE
+)
+
+statement ok
+INSERT INTO cascade_parent VALUES (1, 10, 100), (2, 20, 200)
+
+statement ok
+INSERT INTO cascade_child VALUES (1, 10, 100), (2, 20, 200)
+
+statement count 1
+DELETE FROM cascade_parent WHERE a = 1
+
+query III rowsort
+SELECT a, b, c FROM cascade_child
+----
+2  20  200
+
+statement ok
+DROP TABLE cascade_child, cascade_parent
+
+# Parent UPDATE on a non-unique-backed referenced column must still fire the
+# inbound FK trigger. With subset matching, the parent's unique constraint
+# covers only some referenced cols (here, just (a)); the trigger logic must
+# key on the FK's full ReferencedColumnIDs, not the unique-backed subset, or
+# we'd silently let parent updates break referential integrity.
+
+statement ok
+CREATE TABLE restrict_parent (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE restrict_child (
+  a INT, b INT,
+  FOREIGN KEY (a, b) REFERENCES restrict_parent (a, b)
+)
+
+statement ok
+INSERT INTO restrict_parent VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO restrict_child VALUES (1, 10), (2, 20)
+
+# Updating the unique-backed col on parent must fail (no parent with new key).
+statement error pq: update on table "restrict_parent" violates foreign key constraint
+UPDATE restrict_parent SET a = 99 WHERE a = 1
+
+# Updating the NON-unique-backed col on parent must also fail; this is the
+# subset-specific check. Without correct trigger logic this would silently
+# leave child(1, 10) referencing a non-existent parent(1, 10).
+statement error pq: update on table "restrict_parent" violates foreign key constraint
+UPDATE restrict_parent SET b = 999 WHERE a = 1
+
+statement ok
+DROP TABLE restrict_child, restrict_parent
+
+# Same scenario with ON UPDATE CASCADE — confirms the cascade also fires on
+# non-unique-backed col updates and propagates correctly.
+
+statement ok
+CREATE TABLE cascade_upd_parent (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE cascade_upd_child (
+  a INT, b INT,
+  FOREIGN KEY (a, b) REFERENCES cascade_upd_parent (a, b) ON UPDATE CASCADE
+)
+
+statement ok
+INSERT INTO cascade_upd_parent VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO cascade_upd_child VALUES (1, 10), (2, 20)
+
+# Update the non-unique-backed col on parent; cascade should propagate to
+# child.
+statement count 1
+UPDATE cascade_upd_parent SET b = 999 WHERE a = 1
+
+query II rowsort
+SELECT a, b FROM cascade_upd_child
+----
+1  999
+2  20
+
+statement ok
+DROP TABLE cascade_upd_child, cascade_upd_parent
+
+# ON DELETE SET NULL on a subset FK: deleting the parent row sets the child's
+# FK columns (all of them, including non-unique-backed ones) to NULL.
+statement ok
+CREATE TABLE setnull_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE TABLE setnull_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES setnull_parent (a, b, c) ON DELETE SET NULL
+)
+
+statement ok
+INSERT INTO setnull_parent VALUES (1, 10, 100), (2, 20, 200)
+
+statement ok
+INSERT INTO setnull_child VALUES (1, 10, 100), (2, 20, 200)
+
+statement count 1
+DELETE FROM setnull_parent WHERE a = 1
+
+query III rowsort
+SELECT a, b, c FROM setnull_child
+----
+NULL  NULL  NULL
+2     20    200
+
+statement ok
+DROP TABLE setnull_child, setnull_parent
+
+# ON DELETE SET DEFAULT on a subset FK: deleting the parent row resets the
+# child's FK columns to their declared DEFAULT values. The defaults must
+# themselves identify a valid parent row (here we keep a "fallback" parent
+# at (0, 0, 0)).
+statement ok
+CREATE TABLE setdefault_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE TABLE setdefault_child (
+  a INT DEFAULT 0, b INT DEFAULT 0, c INT DEFAULT 0,
+  FOREIGN KEY (a, b, c) REFERENCES setdefault_parent (a, b, c) ON DELETE SET DEFAULT
+)
+
+statement ok
+INSERT INTO setdefault_parent VALUES (0, 0, 0), (1, 10, 100)
+
+statement ok
+INSERT INTO setdefault_child VALUES (1, 10, 100)
+
+statement count 1
+DELETE FROM setdefault_parent WHERE a = 1
+
+query III rowsort
+SELECT a, b, c FROM setdefault_child
+----
+0  0  0
+
+statement ok
+DROP TABLE setdefault_child, setdefault_parent
+
+# ON UPDATE SET NULL on a subset FK: updating any referenced column on the
+# parent (including the non-unique-backed ones) sets the child's FK columns
+# to NULL. Verifies the cascade fires for non-unique-backed col updates and
+# uses SET NULL semantics rather than CASCADE.
+statement ok
+CREATE TABLE setnull_upd_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+CREATE TABLE setnull_upd_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES setnull_upd_parent (a, b, c) ON UPDATE SET NULL
+)
+
+statement ok
+INSERT INTO setnull_upd_parent VALUES (1, 10, 100), (2, 20, 200)
+
+statement ok
+INSERT INTO setnull_upd_child VALUES (1, 10, 100), (2, 20, 200)
+
+# Update the non-unique-backed col on parent; cascade should set the child's
+# FK cols to NULL.
+statement count 1
+UPDATE setnull_upd_parent SET b = 999 WHERE a = 1
+
+query III rowsort
+SELECT a, b, c FROM setnull_upd_child
+----
+NULL  NULL  NULL
+2     20    200
+
+statement ok
+DROP TABLE setnull_upd_child, setnull_upd_parent
+
+subtest end
+
+# MATCH SIMPLE / MATCH FULL semantics on subset FKs: the NULL-handling rules
+# apply to the FULL FK column set, not just the unique-backed subset.
+subtest subset_unique_match
+
+statement ok
+CREATE TABLE match_parent (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+INSERT INTO match_parent VALUES (1, 10, 100)
+
+# MATCH SIMPLE (default): if any FK column is NULL, the FK check is skipped
+# entirely. The residual equality filter on non-unique-backed columns must
+# not fire when the row is being skipped wholesale.
+statement ok
+CREATE TABLE match_simple_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES match_parent (a, b, c) MATCH SIMPLE
+)
+
+# Unique-backed col NULL → check skipped.
+statement ok
+INSERT INTO match_simple_child VALUES (NULL, 10, 100)
+
+# Non-unique-backed col NULL → check also skipped (MATCH SIMPLE applies to
+# the whole FK column set, including columns enforced via the residual filter
+# under subset matching).
+statement ok
+INSERT INTO match_simple_child VALUES (1, NULL, 100)
+
+statement ok
+INSERT INTO match_simple_child VALUES (1, 10, NULL)
+
+# All non-NULL → check enforced. Mismatch on a unique-backed col fails.
+statement error pq: insert on table "match_simple_child" violates foreign key constraint
+INSERT INTO match_simple_child VALUES (99, 10, 100)
+
+# All non-NULL → check enforced. Mismatch on a non-unique-backed col fails
+# (proves the residual filter still fires when no FK col is NULL).
+statement error pq: insert on table "match_simple_child" violates foreign key constraint
+INSERT INTO match_simple_child VALUES (1, 999, 100)
+
+statement ok
+DROP TABLE match_simple_child
+
+# MATCH FULL: all FK columns must be all-NULL or all-non-NULL. Mixed-NULL
+# rows are rejected outright with a "MATCH FULL does not allow mixing of
+# null and nonnull values" error. With subset matching, this rule applies to
+# the full FK column set, not just the unique-backed subset.
+statement ok
+CREATE TABLE match_full_child (
+  a INT, b INT, c INT,
+  FOREIGN KEY (a, b, c) REFERENCES match_parent (a, b, c) MATCH FULL
+)
+
+# All NULL → allowed (skipped).
+statement ok
+INSERT INTO match_full_child VALUES (NULL, NULL, NULL)
+
+# All non-NULL with matching parent → succeeds.
+statement ok
+INSERT INTO match_full_child VALUES (1, 10, 100)
+
+# Mixed NULL where the unique-backed col is NULL → MATCH FULL violation.
+statement error MATCH FULL does not allow mixing of null and nonnull key values
+INSERT INTO match_full_child VALUES (NULL, 10, 100)
+
+# Mixed NULL where ONLY a non-unique-backed col is NULL → also a MATCH FULL
+# violation. Confirms the rule applies to the full referenced column set
+# under subset matching.
+statement error MATCH FULL does not allow mixing of null and nonnull key values
+INSERT INTO match_full_child VALUES (1, NULL, 100)
+
+statement ok
+DROP TABLE match_full_child, match_parent
+
+subtest end

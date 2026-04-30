@@ -1010,7 +1010,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				if r, ok := matchOptionMap[fk.Match()]; ok {
 					matchType = r
 				}
-				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk)
+				// Use the subset finder so that FKs created via the
+				// require_fk_unique_constraint_on_all_columns extension surface
+				// their backing constraint. The subset finder returns the
+				// strict (exact) match first when available.
+				refConstraint, _, err := catalog.FindFKReferencedSubsetUniqueConstraint(refTable, fk)
 				if err != nil {
 					return err
 				}

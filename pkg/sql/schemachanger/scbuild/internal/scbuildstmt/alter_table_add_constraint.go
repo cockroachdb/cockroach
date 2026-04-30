@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -424,8 +425,30 @@ func alterTableAddForeignKey(
 	// 11. Verify that the referencedTable guarantees uniqueness on the
 	// referencedColumns. In code, this means we need to find either a
 	// PRIMARY INDEX, a UNIQUE INDEX, or a UNIQUE_WITHOUT_INDEX CONSTRAINT,
-	// that covers exactly referencedColumns.
-	if areColsUnique := areColsUniqueInTable(b, referencedTableID, referencedColIDs); !areColsUnique {
+	// that covers referencedColumns. By default this is an exact match;
+	// when the require_fk_unique_constraint_on_all_columns session setting
+	// is false and the cluster has finalized V26_3, a non-partial unique
+	// constraint covering only a non-empty subset of referencedColumns is
+	// also accepted, with a NOTICE emitted to flag the CockroachDB
+	// extension.
+	allowSubset := b.ClusterSettings().Version.IsActive(b, clusterversion.V26_3) &&
+		!b.SessionData().RequireFKUniqueConstraintOnAllColumns
+	switch {
+	case areColsUniqueInTable(b, referencedTableID, referencedColIDs):
+		// Exact match: no notice, nothing to do.
+	case allowSubset && areColsUniqueInTableSubset(b, referencedTableID, referencedColIDs):
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			pgnotice.Newf("foreign key %q is currently backed by a unique constraint "+
+				"that covers a subset of the referenced columns of %s; this is a "+
+				"CockroachDB extension and may not be portable to other databases. "+
+				"Foreign key enforcement on insert may incur additional latency; "+
+				"consider adding a unique index matching all referenced columns, "+
+				"or (if applicable) extending the existing unique index to STORE "+
+				"the other referenced columns",
+				fkDef.Name, referencedTableNamespaceElem.Name),
+		)
+	default:
 		panic(pgerror.Newf(
 			pgcode.ForeignKeyViolation,
 			"there is no unique constraint matching given keys for referenced table %s",
@@ -638,6 +661,32 @@ func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.Co
 			ret = isIndexUniqueAndCanServeFK(b, &te.Index, columnIDs)
 		case *scpb.UniqueWithoutIndexConstraint:
 			if te.Predicate == nil && descpb.ColumnIDs(te.ColumnIDs).PermutationOf(columnIDs) {
+				ret = true
+			}
+		}
+	})
+	return ret
+}
+
+// areColsUniqueInTableSubset is like areColsUniqueInTable but additionally
+// accepts a non-partial unique constraint whose key columns are a non-empty
+// subset of columnIDs. Used at FK creation time when the
+// require_fk_unique_constraint_on_all_columns session setting is false.
+func areColsUniqueInTableSubset(
+	b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID,
+) (ret bool) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if ret {
+			return
+		}
+
+		switch te := e.(type) {
+		case *scpb.PrimaryIndex:
+			ret = isIndexUniqueAndCanServeFKSubset(b, &te.Index, columnIDs)
+		case *scpb.SecondaryIndex:
+			ret = isIndexUniqueAndCanServeFKSubset(b, &te.Index, columnIDs)
+		case *scpb.UniqueWithoutIndexConstraint:
+			if te.Predicate == nil && descpb.ColumnIDs(te.ColumnIDs).IsNonEmptySubsetOf(columnIDs) {
 				ret = true
 			}
 		}

@@ -98,6 +98,31 @@ func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs 
 			allColumnIDs.PermutationOf(referencedColIDs))
 }
 
+// IsValidReferencedSubsetUniqueConstraint returns whether the index can serve
+// as a referenced index for a foreign key constraint whose referenced columns
+// are a (not necessarily strict) superset of the index's key columns. The
+// index is non-partial and unique on a non-empty subset of referencedColIDs.
+//
+// This relaxes IsValidReferencedUniqueConstraint to permit foreign keys that
+// list more referenced columns than the backing unique constraint covers; the
+// extra columns become implicit equality conditions enforced via a residual
+// filter on the parent lookup. This is a CockroachDB extension to standard SQL
+// gated by the require_fk_unique_constraint_on_all_columns session setting.
+func (desc *IndexDescriptor) IsValidReferencedSubsetUniqueConstraint(
+	referencedColIDs ColumnIDs,
+) bool {
+	if !desc.Unique || desc.IsPartial() {
+		return false
+	}
+	explicitColumnIDs := desc.explicitColumnIDsWithoutShardColumn()
+	if explicitColumnIDs.IsNonEmptySubsetOf(referencedColIDs) {
+		return true
+	}
+	allColumnIDs := append(ColumnIDs{}, explicitColumnIDs...)
+	allColumnIDs = append(allColumnIDs, desc.implicitColumnIDs()...)
+	return allColumnIDs.IsNonEmptySubsetOf(referencedColIDs)
+}
+
 // GetName is part of the UniqueConstraint interface.
 func (desc *IndexDescriptor) GetName() string {
 	return desc.Name

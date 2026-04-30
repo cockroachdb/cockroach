@@ -2437,9 +2437,12 @@ func (p *planner) tryRemoveFKBackReferences(
 	behavior tree.DropBehavior,
 	withSearchForReplacement bool,
 ) error {
+	// Use the subset-aware check so a subset-cover unique constraint can stand
+	// in as a replacement when another constraint is being dropped. Returns true
+	// for both exact and strict-subset matches.
 	isSuitable := func(fk catalog.ForeignKeyConstraint, u catalog.UniqueConstraint) bool {
 		return u.GetConstraintID() != uniqueConstraint.GetConstraintID() && !u.Dropped() &&
-			u.IsValidReferencedUniqueConstraint(fk)
+			u.IsValidReferencedSubsetUniqueConstraint(fk)
 	}
 	uwis := tableDesc.UniqueConstraintsWithIndex()
 	uwois := tableDesc.UniqueConstraintsWithoutIndex()
@@ -2469,8 +2472,10 @@ func (p *planner) tryRemoveFKBackReferences(
 		sliceIdx++
 		// The constraint being deleted could potentially be required by a
 		// referencing foreign key. Find alternatives if that's the case,
-		// otherwise remove the foreign key.
-		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
+		// otherwise remove the foreign key. Use the subset-aware check so that
+		// FKs created via the require_fk_unique_constraint_on_all_columns
+		// extension are also recognized as depending on this constraint.
+		if uniqueConstraint.IsValidReferencedSubsetUniqueConstraint(fk) &&
 			!uniqueConstraintHasReplacementCandidate(fk) {
 			// If we haven't found a replacement, then we check that the drop
 			// behavior is cascade.

@@ -672,8 +672,12 @@ func (sc *SchemaChanger) addConstraints(
 					// Check that a unique constraint for the FK still exists on the
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
-					// presence of the backreference prevents it.
-					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk)
+					// presence of the backreference prevents it. Use the subset finder
+					// so that FKs created via the
+					// require_fk_unique_constraint_on_all_columns extension are also
+					// recognized; it returns the strict (exact) match first when
+					// available.
+					_, _, err = catalog.FindFKReferencedSubsetUniqueConstraint(backrefTable, fk)
 					if err != nil {
 						return err
 					}

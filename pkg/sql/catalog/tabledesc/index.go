@@ -193,6 +193,12 @@ func (w index) IsValidReferencedUniqueConstraint(fk catalog.ForeignKeyConstraint
 	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
 }
 
+// IsValidReferencedSubsetUniqueConstraint implements the catalog.UniqueConstraint
+// interface.
+func (w index) IsValidReferencedSubsetUniqueConstraint(fk catalog.ForeignKeyConstraint) bool {
+	return w.desc.IsValidReferencedSubsetUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
+}
+
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format, in which the IDs of the stored columns were kept in the "extra"
 // column IDs slice, which is now called KeySuffixColumnIDs. Thus their data

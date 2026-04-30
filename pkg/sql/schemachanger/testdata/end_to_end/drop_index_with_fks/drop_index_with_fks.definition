@@ -1,17 +1,14 @@
 setup
-CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
-CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
+CREATE TABLE t (i INT, j INT, m INT);
+CREATE TABLE k (i INT, j INT, m INT);
 CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
 CREATE UNIQUE INDEX idx2 ON k(j, i);
 INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
 INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
 CREATE TABLE t_ref(i INT PRIMARY KEY,
                    j INT,
-                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES
-                          t(j, i),
-                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES
-                                                    k(j, i)
-                   );
+                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES t(j, i),
+                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES k(j, i));
 ----
 
 # Intentionally, only add $stageKey+[1,2] into t, and

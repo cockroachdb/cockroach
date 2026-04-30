@@ -3438,6 +3438,7 @@ recursion_depth_limit                                            1000           
 register_latch_wait_contention_events                            off                 NULL      NULL        NULL        string
 reorder_joins_limit                                              8                   NULL      NULL        NULL        string
 require_explicit_primary_keys                                    off                 NULL      NULL        NULL        string
+require_fk_unique_constraint_on_all_columns                      off                 NULL      NULL        NULL        string
 results_buffer_size                                              524288              NULL      NULL        NULL        string
 role                                                             none                NULL      NULL        NULL        string
 row_security                                                     on                  NULL      NULL        NULL        string
@@ -3698,6 +3699,7 @@ recursion_depth_limit                                            1000           
 register_latch_wait_contention_events                            off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                              8                   NULL  user     NULL      8                   8
 require_explicit_primary_keys                                    off                 NULL  user     NULL      off                 off
+require_fk_unique_constraint_on_all_columns                      off                 NULL  user     NULL      off                 off
 results_buffer_size                                              524288              NULL  user     NULL      524288              524288
 role                                                             none                NULL  user     NULL      none                none
 row_security                                                     on                  NULL  user     NULL      on                  on
@@ -3949,6 +3951,7 @@ recursion_depth_limit                                            NULL    NULL   
 register_latch_wait_contention_events                            NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                                              NULL    NULL     NULL     NULL        NULL
 require_explicit_primary_keys                                    NULL    NULL     NULL     NULL        NULL
+require_fk_unique_constraint_on_all_columns                      NULL    NULL     NULL     NULL        NULL
 results_buffer_size                                              NULL    NULL     NULL     NULL        NULL
 role                                                             NULL    NULL     NULL     NULL        NULL
 row_security                                                     NULL    NULL     NULL     NULL        NULL

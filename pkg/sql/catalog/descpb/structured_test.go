@@ -75,6 +75,98 @@ func TestColumnIDsPermutationOf(t *testing.T) {
 	}
 }
 
+func TestColumnIDsIsNonEmptySubsetOf(t *testing.T) {
+	type testCase struct {
+		name           string
+		subject, input ColumnIDs
+		expectedResult bool
+	}
+
+	testCases := []testCase{
+		{
+			name:           "empty subject is rejected even against any input",
+			subject:        ColumnIDs{},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: false,
+		},
+		{
+			name:           "empty subject and empty input is rejected",
+			subject:        ColumnIDs{},
+			input:          ColumnIDs{},
+			expectedResult: false,
+		},
+		{
+			name:           "non-empty subject, empty input",
+			subject:        ColumnIDs{ColumnID(1)},
+			input:          ColumnIDs{},
+			expectedResult: false,
+		},
+		{
+			name:           "strict subset",
+			subject:        ColumnIDs{ColumnID(1)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: true,
+		},
+		{
+			name:           "exact match counts as subset",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: true,
+		},
+		{
+			name:           "permutation counts as subset",
+			subject:        ColumnIDs{ColumnID(2), ColumnID(1)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: true,
+		},
+		{
+			name:           "subject not contained at all",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2)},
+			input:          ColumnIDs{ColumnID(3), ColumnID(4)},
+			expectedResult: false,
+		},
+		{
+			name:           "subject partially contained",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(3)},
+			expectedResult: false,
+		},
+		{
+			name:           "subject is superset",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2)},
+			expectedResult: false,
+		},
+		{
+			name:           "duplicates in subject all present in input",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(1)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: true,
+		},
+		{
+			name:           "duplicates in subject, one not in input",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(1), ColumnID(4)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(2), ColumnID(3)},
+			expectedResult: false,
+		},
+		{
+			name:           "duplicates in input do not affect result",
+			subject:        ColumnIDs{ColumnID(1), ColumnID(2)},
+			input:          ColumnIDs{ColumnID(1), ColumnID(1), ColumnID(2), ColumnID(2)},
+			expectedResult: true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.subject.IsNonEmptySubsetOf(tt.input)
+			if result != tt.expectedResult {
+				t.Errorf("IsNonEmptySubsetOf() %s: got %v, want %v", tt.name, result, tt.expectedResult)
+			}
+		})
+	}
+}
+
 func TestEffectiveCacheSize(t *testing.T) {
 	type testCase struct {
 		name           string
