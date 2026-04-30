@@ -292,6 +292,14 @@ $value
 =>
 $udf
 
+# EliminateNestedSubquery replaces a nested set of subqueries with a single
+# subquery. This applies when the nested subquery is the only value in a
+# single-row, single-column Values expression in the parent subquery.
+[EliminateNestedSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $subquery:(Subquery) ]) ]))
+=>
+$subquery
+
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
 # are skipped. If all WHEN conditions have been removed, the ELSE
