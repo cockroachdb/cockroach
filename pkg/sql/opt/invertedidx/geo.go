@@ -106,6 +106,17 @@ func getSpanExprForGeographyIndex(
 				"parameter %s is not float", additionalParams[0].ResolvedType())
 		}
 		distanceMeters := float64(*d)
+		// ST_DWithin(a, b, 0) is equivalent to ST_Intersects(a, b).
+		// Delegate to the Intersects path which produces proper index
+		// spans, whereas DWithin with distance=0 can produce empty
+		// spans that prevent index acceleration.
+		if distanceMeters == 0 {
+			unionKeySpans, err := geogIdx.Intersects(ctx, geog)
+			if err != nil {
+				return nil, err
+			}
+			return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans), nil
+		}
 		useSpheroid := geogfn.UseSpheroid
 		if len(additionalParams) == 2 {
 			b, ok := additionalParams[1].(*tree.DBool)
@@ -191,6 +202,17 @@ func getSpanExprForGeometryIndex(
 
 	case geoindex.DWithin:
 		distance := getDistanceParam(additionalParams)
+		// ST_DWithin(a, b, 0) is equivalent to ST_Intersects(a, b).
+		// Delegate to the Intersects path which produces proper index
+		// spans, whereas DWithin with distance=0 can produce empty
+		// spans that prevent index acceleration.
+		if distance == 0 {
+			unionKeySpans, err := geomIdx.Intersects(ctx, geom)
+			if err != nil {
+				return nil, err
+			}
+			return invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans), nil
+		}
 		unionKeySpans, err := geomIdx.DWithin(ctx, geom, distance)
 		if err != nil {
 			return nil, err

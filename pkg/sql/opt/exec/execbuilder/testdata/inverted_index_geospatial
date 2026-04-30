@@ -210,3 +210,57 @@ regions: <hidden>
                   spans: 31 spans
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVmFv4kYT_v7-itF8SaLXEbu2Q7mtKtEQrqVtjgjQVaeC0MY7IRa217e7bogiflb_QH9ZtXaIAj1o6Z1Uqf6wMM_OPp6ZZ0brJ7QfMxQ47v_U701gCW9Hw2tYkJ47eZsR_Px9f9QH6-Zp4chYSpw9PRmPBlffhO03vPP1zXDwbnIaM8ZYBPUPi85OhPiuP7zuT0YfAs-Vn8FwdNUfweUHWGKAhVb0TuZkUfyCHGcBlkYnZK02HnqqHQZqhYIFmBZl5Tw8CzDRhlA8oUtdRihw4mMckVRkWgwDVORkmtW0Lyl0fQDztFC0wgB7OqvywgpYNpFhgONSeqA1xcvpdHWnptMVi_zC_mLB82PP8CmCLBREDLS7J2MxwB_fg0_XCih4YxpapNqH5Mi6BnJpTgLY7789nzD6wYKiRCtSAsIGvH10ZMGQVAJ4Gy4bdDG66UEis8y-OJYyNRvHGAO8ft_rgXVUQqKrwsEprVwrLdyZAFbXtXEgWu5zyOUKcsq1eQSZZTqRzsfF6hhupUvuyYKuXFk5Ad6_jn8DhDhbB9hYz0JbJxeEgr_qjMEVCrYO_n5zDIpfyThSb9PMkSHT4tsdstnvr0oDuoAuF2B9L4B10jhRaxt9dTGdMq8t8xIeXBCoUMce8y3xp54Y-rJ0fbx1grXcjXqNbZ3Msu2moBUllUt1sQ0fEsbv2Y8ZOMpLUKldQmXlgr6AbuGObvwY3X7QafE80-GBmW7-zcslPX56rv8Tg1VZUmCdIZmT-df0jHb0DI_R82X-om01G1zsXi6MM-6vkZCF7fYb9vrptb_lnZg3Rod1eCeO-zE_Ea_vm2549kUn6DPKFu-ULTqmbGNtHJlWvF20Lv__Pxv2z0jjYieN-Jg0RmRLXVjaSmPfm9jOm875ehYgqQU13wVWVyahG6OT2rcxhzVRDSiyrtnljTEoNlvNDL1cIq-Z-EGmcD8T32UKDzJF-5nCXaboIFO8nynaZYoPMl0cqtMswLtMP8xThQI3Q3j-iWXzoD8gF9Y3wPheP9S0k8fSy3cnM0sBXsslXZEjk6dFal2aoHCmovX6f38EAAD__-7rWJw=
+
+# Regression test for #127265: st_dwithin with distance=0 should use the
+# inverted index (equivalent to st_intersects). The functional check (that the
+# right rows are returned) lives in pkg/sql/logictest/testdata/logic_test/geospatial_zm.
+statement ok
+CREATE TABLE geo_dwithin_zero (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  geog GEOGRAPHY,
+  INVERTED INDEX (geom),
+  INVERTED INDEX (geog)
+)
+
+# Geometry: st_dwithin with distance=0 should produce an inverted index scan.
+query T
+EXPLAIN SELECT id FROM geo_dwithin_zero WHERE st_dwithin(geom, 'POINT(1 1)'::geometry, 0)
+----
+distribution: local
+·
+• filter
+│ filter: st_dwithin(geom, '0101000000000000000000F03F000000000000F03F', 0.0)
+│
+└── • index join
+    │ table: geo_dwithin_zero@geo_dwithin_zero_pkey
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_dwithin_zero@geo_dwithin_zero_geom_idx
+              spans: 31 spans
+
+# Geography: st_dwithin with distance=0 should produce an inverted index scan.
+query T
+EXPLAIN SELECT id FROM geo_dwithin_zero WHERE st_dwithin(geog, 'POINT(1 1)'::geography, 0)
+----
+distribution: local
+·
+• filter
+│ filter: st_dwithin(geog, '0101000020E6100000000000000000F03F000000000000F03F', 0.0)
+│
+└── • index join
+    │ table: geo_dwithin_zero@geo_dwithin_zero_pkey
+    │
+    └── • inverted filter
+        │ inverted column: geog_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_dwithin_zero@geo_dwithin_zero_geog_idx
+              spans: 31 spans
