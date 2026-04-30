@@ -138,6 +138,13 @@ func (ex *connExecutor) makePreparedPortal(
 			// We will check whether the statement itself is pausable (i.e., that it
 			// doesn't contain DDL or mutations) when we build the plan.
 			portal.pauseInfo = &portalPauseInfo{}
+			portal.pauseInfo.execMon = mon.NewMonitor(mon.Options{
+				Name:     mon.MakeName("exec-pausable-portal"),
+				CurCount: ex.server.cfg.DistSQLSrv.Metrics.CurBytesCount,
+				MaxHist:  ex.server.cfg.DistSQLSrv.Metrics.MaxBytesHist,
+				Settings: ex.server.cfg.Settings,
+			})
+			portal.pauseInfo.execMon.StartNoReserved(ctx, ex.state.txnMon)
 			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
 			portal.portalPausablity = PausablePortal
 		}
@@ -176,6 +183,7 @@ func (p *PreparedPortal) close(
 	p.Stmt.DecRef(ctx)
 	if p.pauseInfo != nil {
 		p.pauseInfo.cleanupAll(ctx)
+		p.pauseInfo.execMon.Stop(ctx)
 		p.pauseInfo = nil
 	}
 }
@@ -227,6 +235,11 @@ type portalPauseInfo struct {
 	// curRes is the result channel of the current (or last, if the portal is
 	// closing) portal execution. It is assumed to be a pgwire.limitedCommandResult.
 	curRes RestrictedCommandResult
+	// execMon is the execution monitor for this portal. It needs to be separate
+	// from connExecutor.execMon because the pausable nature of the portal
+	// doesn't match "single query planning and execution" step used by that
+	// monitor.
+	execMon *mon.BytesMonitor
 	// The following 4 structs store information to persist for a portal's
 	// execution, as well as cleanup functions to be called when the portal is
 	// closed. These structs correspond to a function call chain for a query's
