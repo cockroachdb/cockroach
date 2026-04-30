@@ -782,7 +782,6 @@
             "pkg/roachprod/vm/aws/embedded\\.go$": "generated code",
             "pkg/security/securitytest/embedded\\.go$": "generated code",
             "pkg/util/bulk/tracing_aggregator.go$":"temporary exclusion until #100438 is resolved",
-            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"
         }
     },
