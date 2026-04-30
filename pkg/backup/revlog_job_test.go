@@ -99,15 +99,20 @@ func TestRevlogSiblingJobE2E(t *testing.T) {
 	jobutils.WaitForJobToCancel(t, sqlDB, siblingID)
 }
 
-// readSiblingJobID reads the `log/job.latest-1` marker file written by
-// maybeCreateRevlogSiblingJob and returns the embedded job ID.
+// readSiblingJobID lists log/job/ under the collection directory and
+// returns the jobID parsed from the (single) marker filename written
+// by maybeCreateRevlogSiblingJob.
 func readSiblingJobID(t *testing.T, collectionDir string) jobspb.JobID {
 	t.Helper()
-	markerPath := filepath.Join(collectionDir, "log", "job.latest-1")
-	body, err := os.ReadFile(markerPath)
-	require.NoError(t, err, "reading sibling job marker %s", markerPath)
-	id, err := strconv.ParseInt(strings.TrimSpace(string(body)), 10, 64)
-	require.NoError(t, err, "parsing sibling job marker contents %q", body)
+	jobDir := filepath.Join(collectionDir, "log", "job")
+	entries, err := os.ReadDir(jobDir)
+	require.NoError(t, err, "reading job marker dir %s", jobDir)
+	require.Len(t, entries, 1, "expected exactly one marker in %s", jobDir)
+	name := strings.TrimSuffix(entries[0].Name(), ".pb")
+	idx := strings.IndexByte(name, '_')
+	require.GreaterOrEqual(t, idx, 0, "malformed marker name %q", entries[0].Name())
+	id, err := strconv.ParseInt(name[idx+1:], 10, 64)
+	require.NoError(t, err, "parsing jobID from %q", entries[0].Name())
 	return jobspb.JobID(id)
 }
 

@@ -8,7 +8,10 @@ package backup
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -22,29 +25,93 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// revlogJobMarkerPrefix is the prefix under which a destination's
-// "log job already exists" marker file lives. The full file name is
-// `revlogJobMarkerPrefix + revlogJobMarkerSuffix` (currently a fixed
-// "-1" suffix; see TODO below). LIST(prefix=revlogJobMarkerPrefix,
-// limit=1) returning any file means a log job has already been
-// established for this destination, and a fresh BACKUP with
-// `WITH REVISION STREAM` should no-op the create-or-noop dance.
+// revlogJobDir is the directory under the BACKUP collection root
+// that holds claim markers for revlog (continuous backup) sibling
+// jobs. Marker files are named "<019d-wall-nanos>_<jobID>.pb" with
+// empty content; the wall-time prefix gives lex-ascending = creation
+// order, and the embedded jobID lets a reader identify the claimant
+// without opening the file. The oldest marker whose job is
+// non-terminal is the current owner of the destination's log.
+const revlogJobDir = "log/job/"
+
+// formatJobMarkerName builds a marker basename (no directory). The
+// 19-digit zero-padded wall nanosecond gives lex order = chronological
+// order; jobID is the tiebreaker for the (extremely unlikely) case of
+// two writes within the same nanosecond.
+func formatJobMarkerName(t time.Time, id jobspb.JobID) string {
+	return fmt.Sprintf("%019d_%d.pb", t.UnixNano(), id)
+}
+
+// parseJobMarkerJobID extracts the jobID from a marker basename
+// produced by formatJobMarkerName. Returns ok=false for names that
+// don't match the expected shape.
+func parseJobMarkerJobID(basename string) (jobspb.JobID, bool) {
+	name := strings.TrimSuffix(basename, ".pb")
+	idx := strings.IndexByte(name, '_')
+	if idx < 0 || idx == len(name)-1 {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(name[idx+1:], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return jobspb.JobID(id), true
+}
+
+// findOldestNonTerminalMarker walks log/job/ in lex order and returns
+// the basename and parsed jobID of the oldest marker whose job is
+// non-terminal. Markers pointing at jobs that don't exist (orphans
+// from a parent BACKUP that crashed mid-claim, or our own marker in
+// phase 3 before we've created the job) are treated as terminal
+// unless their jobID equals selfID — that case represents the caller
+// racing for the claim and is reported as live. Returns ("", 0, nil)
+// if no non-terminal claim exists. Pass selfID=0 to skip the
+// self-aliveness shortcut (phase 1 of the create dance).
 //
-// TODO(dt): replace the constant "-1" suffix with a descending
-// `now()` encoding so multiple generations of log jobs over the
-// destination's lifetime are findable in chronological-newest-first
-// order; on existence-check, read the latest file, parse the
-// embedded job ID, and check its status (running / paused /
-// canceled / failed) — like a pidfile. See the "Job creation"
-// subsection of docs/RFCS/20260420_continuous_backup.md.
-const (
-	revlogJobMarkerPrefix = "log/job.latest-"
-	revlogJobMarkerSuffix = "1"
-	revlogJobMarkerName   = revlogJobMarkerPrefix + revlogJobMarkerSuffix
-)
+// TODO(dt): on terminate, the writer should best-effort delete its
+// own marker and, on delete failure (WORM), drop a sibling
+// "<basename>.terminated" so this walk can short-circuit a registry
+// lookup in the WORM case. Skipped for now to keep the LIST size to
+// one entry per generation.
+func findOldestNonTerminalMarker(
+	ctx context.Context, store cloud.ExternalStorage, registry *jobs.Registry, selfID jobspb.JobID,
+) (string, jobspb.JobID, error) {
+	var names []string
+	if err := store.List(ctx, revlogJobDir, cloud.ListOptions{}, func(name string) error {
+		names = append(names, name)
+		return nil
+	}); err != nil {
+		return "", 0, errors.Wrap(err, "listing revlog job markers")
+	}
+	// ExternalStorage.List documents undefined ordering; sort
+	// defensively so phase 1 and phase 3 see the same view.
+	sort.Strings(names)
+	for _, name := range names {
+		id, ok := parseJobMarkerJobID(name)
+		if !ok {
+			continue
+		}
+		if id == selfID {
+			return name, id, nil
+		}
+		j, err := registry.LoadJob(ctx, id)
+		if err != nil {
+			if jobs.HasJobNotFoundError(err) {
+				continue
+			}
+			return "", 0, errors.Wrapf(err, "loading revlog claimant job %d", id)
+		}
+		if j.State().Terminal() {
+			continue
+		}
+		return name, id, nil
+	}
+	return "", 0, nil
+}
 
 // maybeCreateRevlogSiblingJob performs the create-or-noop dance for
 // the sibling revlog (continuous backup) job described in the
@@ -54,30 +121,26 @@ const (
 //
 // Algorithm:
 //
-//  1. LIST the destination for any object whose name starts with
-//     `log/job.latest-`. If one exists, a log job has already been
-//     established for this destination, so the dance no-ops. This
-//     gives idempotency across scheduled BACKUPs.
-//  2. Otherwise, create a sibling BACKUP job whose details are a copy
-//     of the parent BACKUP's details with `CreateRevlogJob=false` and
-//     `RevLogJob=true`. The flag at the top of the BACKUP resumer
-//     (see Resume) keys off `RevLogJob` to dispatch to the revlog
-//     execution path.
-//  3. Persist the new sibling job's ID into `log/job.latest-1` on
-//     the destination so subsequent BACKUPs find it via the LIST in
-//     step 1.
+//  1. LIST log/job/ and walk in ascending order. If the oldest marker
+//     whose job is non-terminal exists, the destination already has
+//     an active log job — silently no-op.
+//  2. Mint a fresh jobID and write an empty marker file at
+//     log/job/<wall-nanos>_<jobID>.pb. The file is empty: the jobID
+//     is encoded into the name so a reader doesn't need to open it.
+//  3. LIST again. If our marker is the oldest non-terminal entry, we
+//     won the race — create the adoptable sibling job with the
+//     pre-minted ID. Otherwise an earlier writer beat us; best-effort
+//     delete our marker (delete may fail on WORM and is tolerated)
+//     and silently no-op without creating a job.
+//
+// Creating the job after the win in step 3 means a lost race leaves
+// no orphaned job — only (possibly) an empty marker file.
 //
 // The store argument must be rooted at the BACKUP's *collection*
 // URI (details.CollectionURI), not at the per-backup details.URI:
-// the marker lives at the collection root alongside log/ so future
-// BACKUPs into the same collection find it via the existence-check
-// LIST in step 1, regardless of which timestamped backup directory
-// they end up writing to.
-//
-// In v1 a small race exists if two BACKUPs concurrently see no
-// marker and both create log jobs: both PUTs to `log/job.latest-1`
-// succeed (object stores allow PUT-overwrite by default). This is
-// accepted for v1 — see the RFC's "Job creation" subsection.
+// markers live at the collection root alongside log/ so future
+// BACKUPs into the same collection find them via step 1, regardless
+// of which timestamped backup directory they end up writing to.
 func maybeCreateRevlogSiblingJob(
 	ctx context.Context,
 	store cloud.ExternalStorage,
@@ -87,20 +150,44 @@ func maybeCreateRevlogSiblingJob(
 	jobRegistry *jobs.Registry,
 	db isql.DB,
 ) error {
-	// Step 1: existence check. We use ErrListingDone to short-circuit
-	// after the first match; ExternalStorage.List has no native limit.
-	exists, err := revlogJobMarkerExists(ctx, store)
-	if err != nil {
-		return errors.Wrap(err, "checking for existing revlog job marker")
-	}
-	if exists {
-		log.Dev.Infof(ctx, "revlog job marker already present for destination; skipping sibling job creation")
+	// Phase 1: speculative check. If a non-terminal claim exists, do
+	// nothing — no marker written, no job created.
+	if _, ownerID, err := findOldestNonTerminalMarker(ctx, store, jobRegistry, 0); err != nil {
+		return err
+	} else if ownerID != 0 {
+		log.Dev.Infof(ctx, "revlog job %d already owns destination; skipping sibling creation", ownerID)
 		return nil
 	}
 
-	// Step 2: build the sibling BACKUP job's record. We copy the
-	// parent's details so the sibling shares destination, encryption,
-	// etc., then flip the flags so the resumer takes the revlog fork.
+	// Phase 2: optimistic write. Mint our jobID and drop our marker.
+	// The job itself is not created yet — we don't want to leave an
+	// orphan if we lose phase 3.
+	siblingJobID := jobRegistry.MakeJobID()
+	markerName := revlogJobDir + formatJobMarkerName(timeutil.Now(), siblingJobID)
+	if err := cloud.WriteFile(ctx, store, markerName, bytes.NewReader(nil)); err != nil {
+		return errors.Wrapf(err, "writing revlog job marker %q", markerName)
+	}
+
+	// Phase 3: prove. The oldest non-terminal marker is the winner. If
+	// it's not us, an earlier writer beat us; clean up and bail.
+	winnerName, winnerID, err := findOldestNonTerminalMarker(ctx, store, jobRegistry, siblingJobID)
+	if err != nil {
+		return err
+	}
+	if winnerID != siblingJobID {
+		// Best-effort delete. On WORM buckets delete may fail; the
+		// stale empty marker is harmless (future readers will look up
+		// our jobID, find no job, and treat it as terminal).
+		if delErr := store.Delete(ctx, markerName); delErr != nil {
+			log.Dev.Warningf(ctx, "failed to delete losing revlog marker %q: %v", markerName, delErr)
+		}
+		log.Dev.Infof(ctx,
+			"lost revlog claim race to job %d (marker %q); skipping sibling creation",
+			winnerID, winnerName)
+		return nil
+	}
+
+	// We won. Build and create the sibling BACKUP job.
 	siblingDetails := parentDetails
 	siblingDetails.CreateRevlogJob = false
 	siblingDetails.RevLogJob = true
@@ -108,12 +195,9 @@ func maybeCreateRevlogSiblingJob(
 	// details. Otherwise the sibling's OnFailOrCancel would Release
 	// the parent BACKUP's PTS by ID — orphaning the parent and
 	// possibly letting GC remove data the parent still needs. The
-	// sibling will install its own PTS during its own resumer
-	// execution (per the v1 self-managed PTS design in the RFC's
-	// "PTS — v1 self-managed; future cluster-coordinated" concern).
+	// sibling installs its own PTS during its own resumer execution.
 	siblingDetails.ProtectedTimestampRecord = nil
 
-	siblingJobID := jobRegistry.MakeJobID()
 	siblingRecord := jobs.Record{
 		Description: "REVLOG: " + parentDescription,
 		Details:     siblingDetails,
@@ -126,13 +210,6 @@ func maybeCreateRevlogSiblingJob(
 		return err
 	}); err != nil {
 		return errors.Wrap(err, "creating revlog sibling job")
-	}
-
-	// Step 3: persist the new job's ID into the marker file so future
-	// BACKUPs find it on the existence check above.
-	idStr := strconv.FormatInt(int64(siblingJobID), 10)
-	if err := cloud.WriteFile(ctx, store, revlogJobMarkerName, bytes.NewReader([]byte(idStr))); err != nil {
-		return errors.Wrapf(err, "writing revlog job marker %q", revlogJobMarkerName)
 	}
 
 	log.Dev.Infof(ctx, "created revlog sibling job %d for destination", siblingJobID)
@@ -209,20 +286,4 @@ func ptsTargetForRevlogJob(codec keys.SQLCodec) *ptpb.Target {
 // serves; see revlogScope.
 func makeRevlogScope(execCfg *sql.ExecutorConfig, details jobspb.BackupDetails) revlogjob.Scope {
 	return newRevlogScope(execCfg, details)
-}
-
-// revlogJobMarkerExists returns true if the destination already has
-// at least one `log/job.latest-*` marker file. It LISTs at most one
-// entry under the marker prefix and short-circuits via
-// cloud.ErrListingDone.
-func revlogJobMarkerExists(ctx context.Context, store cloud.ExternalStorage) (bool, error) {
-	var found bool
-	err := store.List(ctx, revlogJobMarkerPrefix, cloud.ListOptions{}, func(string) error {
-		found = true
-		return cloud.ErrListingDone
-	})
-	if err != nil && !errors.Is(err, cloud.ErrListingDone) {
-		return false, err
-	}
-	return found, nil
 }
