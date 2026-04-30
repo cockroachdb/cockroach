@@ -3711,13 +3711,27 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	if udf.Def.Body != nil {
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
+		}
+	} else {
+		// Body is nil for SQL routines with deferred build. Infer mutation
+		// flags from body statement tags.
+		for _, tag := range udf.Def.BodyTags {
+			b.setMutationFlagsFromTag(tag)
 		}
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	// For SQL routines with deferred body building (nil Body), pass the
+	// definition so the planGen closure can build from ASTs at execution time.
+	var deferredDef *memo.UDFDefinition
+	if udf.Def.Body == nil {
+		deferredDef = udf.Def
+	}
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
 		udf.Def.Body,
@@ -3728,6 +3742,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
+		deferredDef,
 	)
 
 	r := tree.NewTypedRoutineExpr(

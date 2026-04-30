@@ -209,6 +209,38 @@ func (st *statementTree) CanMutateTable(
 	return true
 }
 
+// GetInitFnForDeferredRoutine returns a function that can be used to initialize
+// the statement tree for a deferred-build SQL routine body. Unlike
+// GetInitFnForPostQuery, this captures ALL statements on the stack (including
+// the current one), because CTE mutations are registered at the current level
+// via buildCTE → buildStmt (without Push/Pop).
+//
+// The returned function creates a synthesized ancestor node containing the
+// union of direct mutations from all captured nodes. Children mutations are
+// intentionally omitted because including them would cause false positives for
+// intra-routine sibling body statements (which are allowed to mutate the same
+// table independently).
+func (st *statementTree) GetInitFnForDeferredRoutine() func() statementTree {
+	if len(st.stmts) == 0 {
+		return nil
+	}
+	// Save references to all ancestor statementTreeNodes, including the current
+	// one. Modifications to them after this point will be reflected via the
+	// pointers, ensuring that mutations registered later (e.g., by sibling
+	// CTEs) are visible by the time the deferred body is built at execution
+	// time.
+	ancestors := make([]*statementTreeNode, len(st.stmts))
+	copy(ancestors, st.stmts)
+	return func() statementTree {
+		var node statementTreeNode
+		for i := range ancestors {
+			node.simpleInsertTables.UnionWith(ancestors[i].simpleInsertTables)
+			node.generalMutationTables.UnionWith(ancestors[i].generalMutationTables)
+		}
+		return statementTree{stmts: []*statementTreeNode{&node}}
+	}
+}
+
 // GetInitFnForPostQuery returns a function that can be used to initialize the
 // statement tree for a post-query that is a child of the current statement.
 // This is necessary because the post-query is not built until after the main

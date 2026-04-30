@@ -11,7 +11,6 @@ CREATE TABLE parent (p INT PRIMARY KEY);
 statement ok
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p));
 
-
 subtest insert
 
 statement ok
@@ -125,7 +124,6 @@ SELECT currval('s');
 subtest end
 
 subtest delete
-
 
 statement ok
 ALTER TABLE parent SET (schema_locked=false)
@@ -636,7 +634,6 @@ SELECT * FROM selfref;
 
 subtest end
 
-
 subtest corruption_check
 
 statement ok
@@ -704,7 +701,6 @@ SELECT i, j FROM child@child_j_idx;
 statement ok
 DROP TABLE IF EXISTS child CASCADE;
 
-
 statement ok
 ALTER TABLE parent SET (schema_locked=false)
 
@@ -759,5 +755,158 @@ SELECT i, j FROM child@child_j_idx;
 ----
 0  2
 
+subtest end
+
+subtest deferred_build_mutation_conflicts
+
+# Tests for cross-query mutation conflict detection with deferred-build UDFs.
+# These UDFs have their bodies built at execution time, so the statement tree
+# must be initialized with outer-query mutations captured at plan time.
+
+statement ok
+DROP TABLE IF EXISTS child CASCADE;
+
+statement ok
+DROP TABLE IF EXISTS parent CASCADE;
+
+statement ok
+CREATE TABLE parent (j INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child (i INT PRIMARY KEY, j INT REFERENCES parent (j) ON UPDATE CASCADE ON DELETE CASCADE, INDEX (j));
+
+statement ok
+INSERT INTO parent VALUES (0), (1), (2), (3), (4);
+
+statement ok
+INSERT INTO child VALUES (0, 0), (1, 1), (2, 2);
+
+# UDF that updates parent, which cascades to child.
+statement ok
+CREATE OR REPLACE FUNCTION f_update_parent(k INT) RETURNS INT AS $$
+  UPDATE parent SET j = j + 10 WHERE j = k RETURNING j
+$$ LANGUAGE SQL;
+
+# UDF that directly updates child.
+statement ok
+CREATE OR REPLACE FUNCTION f_update_child(k INT, v INT) RETURNS INT AS $$
+  UPDATE child SET j = v WHERE i = k RETURNING j
+$$ LANGUAGE SQL;
+
+# UDF that does a simple INSERT into child.
+statement ok
+CREATE OR REPLACE FUNCTION f_insert_child(k INT, v INT) RETURNS INT AS $$
+  INSERT INTO child VALUES (k, v) RETURNING j
+$$ LANGUAGE SQL;
+
+# UDF that uses a CTE with a mutation inside.
+statement ok
+CREATE OR REPLACE FUNCTION f_cte_update_child(k INT, v INT) RETURNS INT AS $$
+  WITH x AS (UPDATE child SET j = v WHERE i = k RETURNING j) SELECT j FROM x
+$$ LANGUAGE SQL;
+
+# --- Conflict cases (should error) ---
+
+# A deferred UDF that cascades to child + a sibling CTE that directly mutates child.
+statement error pgcode 0A000 pq: multiple mutations of the same table "child"
+WITH x AS (SELECT f_update_parent(0) AS j), y AS (UPDATE child SET j = 4 WHERE i = 1 RETURNING j) SELECT * FROM x;
+
+# Verify no corruption occurred.
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  0
+1  1
+2  2
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  0
+1  1
+2  2
+
+# A deferred UDF that directly mutates child + a sibling CTE that also mutates child.
+statement error pgcode 0A000 pq: multiple mutations of the same table "child"
+WITH x AS (SELECT f_update_child(0, 4) AS j), y AS (UPDATE child SET j = 3 WHERE i = 1 RETURNING j) SELECT * FROM x;
+
+# Verify no corruption.
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  0
+1  1
+2  2
+
+# A deferred UDF with an internal CTE mutation of child + a sibling CTE that mutates child.
+statement error pgcode 0A000 pq: multiple mutations of the same table "child"
+WITH x AS (SELECT f_cte_update_child(0, 4) AS j), y AS (UPDATE child SET j = 3 WHERE i = 1 RETURNING j) SELECT * FROM x;
+
+# Verify no corruption.
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  0
+1  1
+2  2
+
+# --- Allowed cases (should succeed) ---
+
+# Two sibling deferred UDFs mutating child independently. This is allowed because
+# neither UDF's mutations are in the other's captured state (they are siblings).
+query II
+SELECT f_update_child(0, 3), f_update_child(1, 4);
+----
+3  4
+
+# Verify correctness.
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  3
+1  4
+2  2
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  3
+1  4
+2  2
+
+# Reset.
+statement ok
+UPDATE child SET j = i WHERE true;
+
+# Two sibling deferred UDFs doing simple INSERTs to the same table. Allowed.
+query II
+SELECT f_insert_child(10, 3), f_insert_child(11, 4);
+----
+3  4
+
+statement ok
+DELETE FROM child WHERE i >= 10;
+
+# A deferred UDF that mutates parent + a sibling CTE that mutates a DIFFERENT table (child).
+# Allowed because they target different tables.
+query I
+WITH x AS (UPDATE child SET j = 3 WHERE i = 0 RETURNING j) SELECT f_update_parent(4) FROM x;
+----
+14
+
+# Verify correctness across both tables.
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  3
+1  1
+2  2
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  3
+1  1
+2  2
 
 subtest end

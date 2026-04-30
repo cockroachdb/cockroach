@@ -1473,3 +1473,23 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 		b.flags.Set(exec.PlanFlagContainsUpsert)
 	}
 }
+
+// setMutationFlagsFromTag sets mutation plan flags based on a statement tag
+// string. This is used for SQL routines with deferred body building, where the
+// body RelExprs are not yet available but the statement tags are known.
+func (b *Builder) setMutationFlagsFromTag(tag string) {
+	switch tag {
+	case "INSERT":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsInsert)
+	case "DELETE":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsDelete)
+	case "UPDATE":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsUpdate)
+	case "UPSERT":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsUpsert)
+	}
+}

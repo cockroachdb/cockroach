@@ -733,6 +733,37 @@ type UDFDefinition struct {
 	// of the function invocation.
 	Params opt.ColList
 
+	// ParamTypes stores the declared parameter types (after polymorphic
+	// resolution). Needed for deferred body building at execution time where
+	// the original Overload is not available.
+	ParamTypes []*types.T
+
+	// ParamNames stores the declared parameter names. Needed so that the
+	// deferred body build can resolve named parameter references.
+	ParamNames []string
+
+	// BodyText is the raw SQL body text from the routine definition. Used for
+	// deferred body building at execution time.
+	BodyText string
+
+	// InsideDataSource is true if the routine is used as a data source
+	// (e.g., SELECT * FROM my_udf()). Needed for return-type finalization
+	// during deferred build.
+	InsideDataSource bool
+
+	// DefinerUser is set for SECURITY DEFINER routines to the routine owner's
+	// username. When the deferred body build runs at execution time, it sets
+	// privilege overrides on the optbuilder so that table and function access
+	// within the body uses the definer's privileges. Empty for SECURITY
+	// INVOKER (the default).
+	DefinerUser string
+
+	// StmtTreeInitFn, when non-nil, returns an optbuilder statementTree
+	// initialized with mutations from the outer query. Used for deferred-build
+	// routines to detect cross-query mutation conflicts at execution time.
+	// Typed as any to avoid an import cycle (actual type: func() statementTree).
+	StmtTreeInitFn any
+
 	// Body contains a relational expression for each statement in the function
 	// body. It is unset during construction of a recursive UDF.
 	Body []RelExpr

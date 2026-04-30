@@ -1080,29 +1080,45 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
 			n := tp.Child("body")
-			for i := range def.Body {
-				stmtNode := n
-				if i == 0 {
-					if def.FirstStmtOutput.CursorDeclaration != nil {
-						// The first statement is opening a cursor.
-						stmtNode = n.Child("open-cursor")
-					} else if def.FirstStmtOutput.TargetBufferID != 0 {
-						// The first statement is writing to a target buffer.
-						stmtNode = n.Child("add-to-srf-result")
+			if def.Body != nil {
+				for i := range def.Body {
+					stmtNode := n
+					if i == 0 {
+						if def.FirstStmtOutput.CursorDeclaration != nil {
+							// The first statement is opening a cursor.
+							stmtNode = n.Child("open-cursor")
+						} else if def.FirstStmtOutput.TargetBufferID != 0 {
+							// The first statement is writing to a target buffer.
+							stmtNode = n.Child("add-to-srf-result")
+						}
+					}
+					prevTailCalls := f.tailCalls
+
+					// Routine calls in the last body statement may be tail calls if
+					// ResultBufferID is unset. If it is set, the result of the last body
+					// statement is not directly used as the result of the UDF call, so it
+					// cannot contain tail calls.
+					if i == len(def.Body)-1 && def.ResultBufferID == 0 {
+						f.tailCalls = make(map[opt.ScalarExpr]struct{})
+						ExtractTailCalls(def.Body[i], f.tailCalls)
+					}
+					f.formatExpr(def.Body[i], stmtNode)
+					f.tailCalls = prevTailCalls
+				}
+			} else {
+				// Body is nil for SQL routines with deferred body building.
+				// Show the body AST text instead.
+				for i, ast := range def.BodyASTs {
+					if ast != nil {
+						var s string
+						if f.RedactableValues {
+							s = tree.AsStringWithFlags(ast, tree.FmtMarkRedactionNode|tree.FmtOmitNameRedaction)
+						} else {
+							s = ast.String()
+						}
+						n.Childf("stmt%d: %s", i+1, s)
 					}
 				}
-				prevTailCalls := f.tailCalls
-
-				// Routine calls in the last body statement may be tail calls if
-				// ResultBufferID is unset. If it is set, the result of the last body
-				// statement is not directly used as the result of the UDF call, so it
-				// cannot contain tail calls.
-				if i == len(def.Body)-1 && def.ResultBufferID == 0 {
-					f.tailCalls = make(map[opt.ScalarExpr]struct{})
-					ExtractTailCalls(def.Body[i], f.tailCalls)
-				}
-				f.formatExpr(def.Body[i], stmtNode)
-				f.tailCalls = prevTailCalls
 			}
 			delete(f.withinUDFs, def)
 		} else if _, recursive := f.withinUDFs[def]; recursive {
