@@ -89,7 +89,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper)
 
-	clusterType := roachprodCluster
+	clusterType := roachprodClusterType
 	bindTo := ""
 	parallelism := roachtestflags.Parallelism
 	if roachtestflags.Cloud == spec.Local {

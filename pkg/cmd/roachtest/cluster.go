@@ -411,52 +411,52 @@ func initBinariesAndLibraries() {
 type clusterRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		clusters map[string]*clusterImpl
+		clusters map[string]testCluster
 		tagCount map[string]int
 		// savedClusters keeps track of clusters that have been saved for further
 		// debugging. Each cluster comes with a message about the test failure
 		// causing it to be saved for debugging.
-		savedClusters map[*clusterImpl]string
+		savedClusters map[testCluster]string
 	}
 }
 
 func newClusterRegistry() *clusterRegistry {
 	cr := &clusterRegistry{}
-	cr.mu.clusters = make(map[string]*clusterImpl)
-	cr.mu.savedClusters = make(map[*clusterImpl]string)
+	cr.mu.clusters = make(map[string]testCluster)
+	cr.mu.savedClusters = make(map[testCluster]string)
 	return cr
 }
 
-func (r *clusterRegistry) registerCluster(c *clusterImpl) error {
+func (r *clusterRegistry) registerCluster(c testCluster) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.clusters[c.name] != nil {
-		return fmt.Errorf("cluster named %q already exists in registry", c.name)
+	if r.mu.clusters[c.Name()] != nil {
+		return fmt.Errorf("cluster named %q already exists in registry", c.Name())
 	}
-	r.mu.clusters[c.name] = c
-	if err := c.addLabels(map[string]string{VmLabelTestRunID: runID}); err != nil && c.l != nil {
-		c.l.Printf("failed to add label to cluster [%s] - %s", c.name, err)
+	r.mu.clusters[c.Name()] = c
+	if err := c.addLabels(map[string]string{VmLabelTestRunID: runID}); err != nil && c.Logger() != nil {
+		c.Logger().Printf("failed to add label to cluster [%s] - %s", c.Name(), err)
 	}
 	return nil
 }
 
-func (r *clusterRegistry) unregisterCluster(c *clusterImpl) bool {
+func (r *clusterRegistry) unregisterCluster(c testCluster) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.mu.clusters[c.name]; !ok {
+	if _, ok := r.mu.clusters[c.Name()]; !ok {
 		// If the cluster is not registered, no-op. This allows the
 		// method to be called defensively.
 		return false
 	}
-	if err := c.removeLabels([]string{VmLabelTestRunID}); err != nil && c.l != nil {
-		c.l.Printf("failed to remove label from cluster [%s] - %s", c.name, err)
+	if err := c.removeLabels([]string{VmLabelTestRunID}); err != nil && c.Logger() != nil {
+		c.Logger().Printf("failed to remove label from cluster [%s] - %s", c.Name(), err)
 	}
-	delete(r.mu.clusters, c.name)
-	if c.tag != "" {
-		if _, ok := r.mu.tagCount[c.tag]; !ok {
+	delete(r.mu.clusters, c.Name())
+	if c.clusterTag() != "" {
+		if _, ok := r.mu.tagCount[c.clusterTag()]; !ok {
 			panic(fmt.Sprintf("tagged cluster not accounted for: %s", c))
 		}
-		r.mu.tagCount[c.tag]--
+		r.mu.tagCount[c.clusterTag()]--
 	}
 	return true
 }
@@ -471,14 +471,14 @@ func (r *clusterRegistry) countForTag(tag string) int {
 // destroyAllClusters.
 // msg is a message recording the reason why the cluster is being saved (i.e.
 // generally a test failure error).
-func (r *clusterRegistry) markClusterAsSaved(c *clusterImpl, msg string) {
+func (r *clusterRegistry) markClusterAsSaved(c testCluster, msg string) {
 	r.mu.Lock()
 	r.mu.savedClusters[c] = msg
 	r.mu.Unlock()
 }
 
 type clusterWithMsg struct {
-	*clusterImpl
+	testCluster
 	savedMsg string
 }
 
@@ -491,13 +491,13 @@ func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 	i := 0
 	for c, msg := range r.mu.savedClusters {
 		res[i] = clusterWithMsg{
-			clusterImpl: c,
+			testCluster: c,
 			savedMsg:    msg,
 		}
 		i++
 	}
 	sort.Slice(res, func(i, j int) bool {
-		return strings.Compare(res[i].name, res[j].name) < 0
+		return strings.Compare(res[i].Name(), res[j].Name()) < 0
 	})
 	return res
 }
@@ -512,8 +512,8 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 	go func() {
 		defer close(done)
 
-		var clusters []*clusterImpl
-		savedClusters := make(map[*clusterImpl]struct{})
+		var clusters []testCluster
+		savedClusters := make(map[testCluster]struct{})
 		r.mu.Lock()
 		for _, c := range r.mu.clusters {
 			clusters = append(clusters, c)
@@ -526,7 +526,7 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 		var wg sync.WaitGroup
 		wg.Add(len(clusters))
 		for _, c := range clusters {
-			go func(c *clusterImpl) {
+			go func(c testCluster) {
 				defer wg.Done()
 				if _, ok := savedClusters[c]; !ok {
 					// We don't close the logger here since the cluster may be still in use
@@ -653,8 +653,55 @@ type nodeSelector interface {
 	Merge(option.NodeListOption) option.NodeListOption
 }
 
-// clusterImpl implements cluster.Cluster.
+// testCluster is the roachtest runner's internal view of a cluster. Test
+// bodies continue to receive the public cluster.Cluster interface.
+type testCluster interface {
+	cluster.Cluster
+	fmt.Stringer
 
+	setTest(test.Test)
+	status(...interface{})
+
+	Destroy(context.Context, closeLoggerOpt, *logger.Logger)
+	Save(context.Context, string, *logger.Logger)
+	WipeForReuse(context.Context, *logger.Logger, spec.ClusterSpec) error
+	MaybeExtendCluster(context.Context, *logger.Logger, *registry.TestSpec) error
+
+	PutCockroach(context.Context, *logger.Logger, *testImpl) error
+	PutDeprecatedWorkload(context.Context, *logger.Logger, *testImpl) error
+
+	FetchLogs(context.Context, *logger.Logger) error
+	FetchDmesg(context.Context, *logger.Logger) error
+	FetchJournalctl(context.Context, *logger.Logger) error
+	FetchCores(context.Context, *logger.Logger) error
+	FetchPebbleCheckpoints(context.Context, *logger.Logger) error
+	FetchVMSpecs(context.Context, *logger.Logger) error
+	CopyRoachprodState(context.Context) error
+
+	HealthStatus(context.Context, *logger.Logger, option.NodeListOption) ([]*HealthStatusResult, error)
+	GetHostErrorVMs(context.Context, *logger.Logger) ([]string, error)
+	GetLiveMigrationVMs(*logger.Logger) ([]string, error)
+	Extend(context.Context, time.Duration, *logger.Logger) error
+
+	addLabels(map[string]string) error
+	removeLabels([]string) error
+	clusterTag() string
+
+	SetArchitecture(vm.CPUArch)
+	OS() string
+	SetEncryptedAtRest(bool)
+	EncryptedAtRest() bool
+	SetUseDRPC(bool)
+	SetGoCoverDir(string)
+	Logger() *logger.Logger
+	SetLogger(*logger.Logger)
+	ResetClusterSettings()
+	SetClusterSetting(string, string)
+	SetGrafanaTags([]string)
+	Saved() (bool, string)
+}
+
+// clusterImpl implements cluster.Cluster.
 // It is safe for concurrent use by multiple goroutines.
 type clusterImpl struct {
 	name  string
@@ -712,6 +759,13 @@ type clusterImpl struct {
 	preStartVirtualClusterHooks []install.PreStartHook
 }
 
+type roachprodCluster = clusterImpl
+
+var (
+	_ cluster.Cluster = (*roachprodCluster)(nil)
+	_ testCluster     = (*roachprodCluster)(nil)
+)
+
 // Name returns the cluster name, i.e. something like `teamcity-....`
 func (c *clusterImpl) Name() string {
 	return c.name
@@ -720,6 +774,64 @@ func (c *clusterImpl) Name() string {
 // Spec returns the spec underlying the cluster.
 func (c *clusterImpl) Spec() spec.ClusterSpec {
 	return c.spec
+}
+
+func (c *clusterImpl) clusterTag() string {
+	return c.tag
+}
+
+func (c *clusterImpl) SetArchitecture(arch vm.CPUArch) {
+	c.arch = arch
+}
+
+func (c *clusterImpl) OS() string {
+	return c.os
+}
+
+func (c *clusterImpl) SetEncryptedAtRest(enabled bool) {
+	c.encAtRest = enabled
+}
+
+func (c *clusterImpl) EncryptedAtRest() bool {
+	return c.encAtRest
+}
+
+func (c *clusterImpl) SetUseDRPC(enabled bool) {
+	c.useDRPC = enabled
+}
+
+func (c *clusterImpl) SetGoCoverDir(dir string) {
+	c.goCoverDir = dir
+}
+
+func (c *clusterImpl) Logger() *logger.Logger {
+	return c.l
+}
+
+func (c *clusterImpl) SetLogger(l *logger.Logger) {
+	c.l = l
+}
+
+func (c *clusterImpl) ResetClusterSettings() {
+	c.clusterSettings = map[string]string{}
+	c.virtualClusterSettings = map[string]string{}
+}
+
+func (c *clusterImpl) SetClusterSetting(name, value string) {
+	if c.clusterSettings == nil {
+		c.clusterSettings = map[string]string{}
+	}
+	c.clusterSettings[name] = value
+}
+
+func (c *clusterImpl) SetGrafanaTags(tags []string) {
+	c.grafanaTags = tags
+}
+
+func (c *clusterImpl) Saved() (bool, string) {
+	c.destroyState.mu.Lock()
+	defer c.destroyState.mu.Unlock()
+	return c.destroyState.mu.saved, c.destroyState.mu.savedMsg
 }
 
 // status is used to communicate the test's status. It's a no-op until the
@@ -885,7 +997,7 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 // i.e. unit tests that don't want to actually access a provider.
 var create = roachprod.Create
 
-// newCluster creates a new roachprod cluster.
+// newCluster creates a new cluster for the roachtest runner.
 //
 // setStatus is called with status messages indicating the stage of cluster
 // creation.
@@ -893,7 +1005,14 @@ var create = roachprod.Create
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
 	ctx context.Context, cfg clusterConfig, setStatus func(string),
-) (*clusterImpl, *vm.CreateOpts, error) {
+) (testCluster, *vm.CreateOpts, error) {
+	return f.newRoachprodCluster(ctx, cfg, setStatus)
+}
+
+// newRoachprodCluster creates a new roachprod-backed cluster.
+func (f *clusterFactory) newRoachprodCluster(
+	ctx context.Context, cfg clusterConfig, setStatus func(string),
+) (testCluster, *vm.CreateOpts, error) {
 	if ctx.Err() != nil {
 		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
 	}
@@ -1117,12 +1236,6 @@ func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	c.destroyState.mu.saved = true
 	c.destroyState.mu.savedMsg = msg
 	c.destroyState.mu.Unlock()
-}
-
-func (c *clusterImpl) saved() bool {
-	c.destroyState.mu.Lock()
-	defer c.destroyState.mu.Unlock()
-	return c.destroyState.mu.saved
 }
 
 var errClusterNotFound = errors.New("cluster not found")
@@ -1578,21 +1691,6 @@ func (c *clusterImpl) HealthStatus(
 	})
 
 	return results, nil
-}
-
-// assertConsistentReplicas fails the test if
-// crdb_internal.check_consistency(false, ”, ”) indicates that any ranges'
-// replicas are inconsistent with each other.
-func (c *clusterImpl) assertConsistentReplicas(
-	ctx context.Context, db *gosql.DB, t *testImpl,
-) error {
-	t.L().Printf("checking for replica divergence")
-	return timeutil.RunWithTimeout(
-		ctx, "consistency check", 20*time.Minute,
-		func(ctx context.Context) error {
-			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
-		},
-	)
 }
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run

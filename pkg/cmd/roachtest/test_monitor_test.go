@@ -40,7 +40,7 @@ func (s *stubTestMonitorError) WaitForNodeDeath() error {
 }
 
 func TestGlobalMonitorError(t *testing.T) {
-	newTestMonitor = func(_ context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
+	newTestMonitor = func(_ context.Context, t test.Test, c testCluster) *testMonitorImpl {
 		return &testMonitorImpl{
 			monitor: &stubTestMonitorError{},
 			t:       t,

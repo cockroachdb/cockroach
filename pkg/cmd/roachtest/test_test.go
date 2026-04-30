@@ -67,7 +67,7 @@ func nilLogger() *logger.Logger {
 
 func defaultClusterOpt() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
@@ -79,7 +79,7 @@ func defaultClusterOpt() clustersOpt {
 // cluster provisioning error.
 func clusterOptWithProvisioningError() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
@@ -288,7 +288,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 		Owner:             OwnerUnitTest,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			encAtRest := c.(*clusterImpl).encAtRest
+			encAtRest := c.(interface{ EncryptedAtRest() bool }).EncryptedAtRest()
 			t.L().Printf("encryption-at-rest=%t", encAtRest)
 			if encAtRest {
 				atomic.StoreInt32(&sawEncrypted, 1)
