@@ -50,6 +50,7 @@ go_test(
     name = "kvstorage_test",
     srcs = [
         "cluster_version_test.go",
+        "create_test.go",
         "datadriven_test.go",
         "destroy_test.go",
         "init_test.go",
