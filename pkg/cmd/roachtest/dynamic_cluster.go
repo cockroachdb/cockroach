@@ -14,11 +14,11 @@ import (
 )
 
 type dynamicClusterImpl struct {
-	*clusterImpl
+	*roachprodCluster
 }
 
 // Grow adds nodes to the cluster.
-func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
+func (c *roachprodCluster) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
 	err := roachprod.Grow(ctx, l, c.name, install.SimpleSecureOption(c.IsSecure()), nodeCount)
 	if err != nil {
 		return err
@@ -28,7 +28,7 @@ func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int)
 }
 
 // Shrink removes nodes from the cluster.
-func (c *clusterImpl) Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error {
+func (c *roachprodCluster) Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error {
 	err := roachprod.Shrink(ctx, l, c.name, nodeCount)
 	if err != nil {
 		return err
