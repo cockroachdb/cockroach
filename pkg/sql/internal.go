@@ -9,6 +9,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/advisorylock"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -406,6 +408,15 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
+			// We inherit the parent's advisory lock manager here. This is safe
+			// because internal executors on this path do not issue SQL
+			// SAVEPOINT/RELEASE statements; savepoint hooks still fire from the
+			// parent's conn_executor_savepoints. If that changes, using this
+			// inherited manager could desynchronize advisory-lock savepoint markers
+			// from the parent's savepoint stack.
+			if ie.extraTxnState.advisoryLockManager != nil {
+				ex.extraTxnState.advisoryLockManager = ie.extraTxnState.advisoryLockManager
+			}
 		}
 	}
 
@@ -1743,10 +1754,11 @@ func (icc *internalClientComm) RTrim(_ context.Context, pos CmdPos) {
 // executor in that it may lead to surprising bugs whereby we forget to add
 // fields here and keep them in sync.
 type extraTxnState struct {
-	txn                *kv.Txn
-	descCollection     *descs.Collection
-	jobs               *txnJobsCollection
-	schemaChangerState *SchemaChangerState
+	txn                 *kv.Txn
+	descCollection      *descs.Collection
+	jobs                *txnJobsCollection
+	schemaChangerState  *SchemaChangerState
+	advisoryLockManager *atomic.Pointer[advisorylock.Manager]
 
 	// regionsProvider is populated lazily.
 	regionsProvider *regions.Provider
