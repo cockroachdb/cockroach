@@ -229,7 +229,10 @@ type TickReader struct {
 // are read in manifest order (their disjoint-spans invariant means
 // any order satisfies the per-key ordering rule). Within a single
 // file, the SSTable iterator emits keys in (user_key, mvcc_ts)
-// ascending order.
+// ascending order. After all real files, Manifest.InlineTail (if
+// non-empty) is iterated as a virtual data file at flushorder =
+// max(file flushorders) + 1; entries are already sorted on the
+// write side.
 //
 // If reading or decoding any file fails, iteration stops and the
 // error is yielded once.
@@ -248,6 +251,39 @@ func (tr *TickReader) Events(ctx context.Context) iter.Seq2[Event, error] {
 				yield(Event{}, err)
 				return
 			}
+		}
+		if len(tr.tick.Manifest.InlineTail) > 0 {
+			tr.emitInlineTail(yield)
+		}
+	}
+}
+
+// emitInlineTail yields events from Manifest.InlineTail, treated as
+// a virtual data file at the highest flushorder. Entries are
+// pre-sorted by the writer (see TickManager.drainCoalesce); we
+// honor span-subset filtering the same way emitFile does, advancing
+// a span cursor as keys progress.
+func (tr *TickReader) emitInlineTail(yield func(Event, error) bool) {
+	hasSpans := len(tr.spans) > 0
+	spanCursor := 0
+	for i := range tr.tick.Manifest.InlineTail {
+		e := &tr.tick.Manifest.InlineTail[i]
+		if hasSpans {
+			for spanCursor < len(tr.spans) && bytes.Compare(tr.spans[spanCursor].EndKey, e.UserKey) <= 0 {
+				spanCursor++
+			}
+			if spanCursor >= len(tr.spans) {
+				return
+			}
+			if bytes.Compare(e.UserKey, tr.spans[spanCursor].Key) < 0 {
+				continue
+			}
+		}
+		ev := Event{Key: e.UserKey, Timestamp: e.MvccTs}
+		ev.Value.RawBytes = e.Value
+		ev.PrevValue.RawBytes = e.PrevValue
+		if !yield(ev, nil) {
+			return
 		}
 	}
 }

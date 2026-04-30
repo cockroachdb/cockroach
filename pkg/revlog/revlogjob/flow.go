@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,7 +78,14 @@ func Run(
 	}
 	defer es.Close()
 
-	manager, err := NewTickManager(es, spans, startHLC, tickWidth)
+	// The TickManager allocates file IDs on the gateway only when it
+	// needs to write a combined coalesce file at tick close (the
+	// "coalesced batch was too big to inline" path); IDs come from the
+	// same unique-int generator producers use, scoped to the gateway's
+	// SQL instance so they don't collide with producer-side IDs.
+	gatewayInstanceID := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
+	manager, err := NewTickManager(es, spans, startHLC, tickWidth,
+		nodeFileIDs{instanceID: unique.ProcessUniqueID(gatewayInstanceID)})
 	if err != nil {
 		return err
 	}

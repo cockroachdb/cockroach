@@ -125,6 +125,7 @@ func newCheckpointTestManager(t *testing.T, es cloud.ExternalStorage) *TickManag
 		[]roachpb.Span{{Key: roachpb.Key("\x00"), EndKey: roachpb.KeyMax}},
 		hlc.Timestamp{WallTime: 100 * int64(time.Second)},
 		10*time.Second,
+		&internalSeqFileIDs{},
 	)
 	require.NoError(t, err)
 	return m

@@ -6,7 +6,9 @@
 package revlogjob
 
 import (
+	"bytes"
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -19,18 +21,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// inlineTailMaxBytes is the largest marshaled-size budget for
+// Manifest.inline_tail. A combined coalesce buffer at or below this
+// size is inlined in the manifest; a larger one is PUT as a
+// separate data file. The threshold is intentionally well below any
+// practical S3 minimum-object-size threshold so that the manifest
+// stays a single small object even with the inlined tail attached.
+const inlineTailMaxBytes = 128 << 10
+
 // TickManager is the gateway-side authority for closing ticks. Each
 // call to Flush applies one producer's report:
 //
 //   - File entries get added to per-tick pending lists.
+//   - Coalesce contributions (small per-tick batches a producer
+//     forwarded instead of PUTing) get appended to the same tick's
+//     pending inline-entry list, to be drained on tick close.
 //   - Checkpoints get forwarded into the manager's own multi-span
 //     frontier (initialized at startHLC over the cluster's full span
 //     set).
 //
-// After applying both, any tick whose end has been crossed by the
-// aggregate frontier is closed: the manifest is written using whatever
-// files have been collected (an empty list yields an empty-Files
-// manifest, so coverage has no holes).
+// After applying all three, any tick whose end has been crossed by
+// the aggregate frontier is closed: the manager first drains the
+// pending coalesces (writing them as one extra data file at the
+// next-highest flushorder, or stuffing them into Manifest.inline_tail
+// when small enough — see closeTick) and then PUTs the manifest. An
+// empty file list and empty inline_tail yields an empty manifest, so
+// coverage has no holes.
 //
 // The manager's frontier is initialized over the union of all producer
 // span sets; producers each cover an assigned subset, and the aggregate
@@ -45,6 +61,13 @@ type TickManager struct {
 	es        cloud.ExternalStorage
 	tickWidth time.Duration
 	startHLC  hlc.Timestamp
+
+	// fileIDs allocates IDs for coordinator-side data files (the
+	// combined coalesce file written at tick close when the merged
+	// inline buffer is too big to fit in inline_tail). Producers'
+	// file IDs come from their own FileIDSource on the producer
+	// side.
+	fileIDs FileIDSource
 
 	// afterFrontierAdvance is set once at construction time (see
 	// SetAfterFrontierAdvance) and read without the lock from Flush.
@@ -88,19 +111,28 @@ type TickManager struct {
 }
 
 // NewTickManager constructs a TickManager. spans must be the union
-// of all producer span sets; tickWidth must be positive. The
-// manager's frontier is initialized at startHLC for every span.
+// of all producer span sets; tickWidth must be positive; fileIDs
+// must be non-nil (used for coordinator-side combined coalesce
+// files; see TickManager.fileIDs). The manager's frontier is
+// initialized at startHLC for every span.
 //
 // To rehydrate from a previous incarnation's checkpoint, follow up
 // with Rehydrate before any Flush.
 func NewTickManager(
-	es cloud.ExternalStorage, spans []roachpb.Span, startHLC hlc.Timestamp, tickWidth time.Duration,
+	es cloud.ExternalStorage,
+	spans []roachpb.Span,
+	startHLC hlc.Timestamp,
+	tickWidth time.Duration,
+	fileIDs FileIDSource,
 ) (*TickManager, error) {
 	if len(spans) == 0 {
 		return nil, errors.AssertionFailedf("revlogjob: NewTickManager requires at least one span")
 	}
 	if tickWidth <= 0 {
 		return nil, errors.AssertionFailedf("revlogjob: tickWidth must be positive (got %s)", tickWidth)
+	}
+	if fileIDs == nil {
+		return nil, errors.AssertionFailedf("revlogjob: NewTickManager requires a FileIDSource")
 	}
 	f, err := span.MakeFrontierAt(startHLC, spans...)
 	if err != nil {
@@ -110,6 +142,7 @@ func NewTickManager(
 		es:        es,
 		tickWidth: tickWidth,
 		startHLC:  startHLC,
+		fileIDs:   fileIDs,
 	}
 	m.mu.frontier = f
 	m.mu.prevFrontier = startHLC
@@ -323,13 +356,13 @@ func (m *TickManager) applyFlush(
 	defer m.mu.Unlock()
 
 	for _, ff := range msg.Files {
-		pt, ok := m.mu.pending[ff.TickEnd]
-		if !ok {
-			pt = &pendingTick{}
-			m.mu.pending[ff.TickEnd] = pt
-		}
+		pt := m.pendingForLocked(ff.TickEnd)
 		pt.files = append(pt.files, ff.File)
 		pt.add(ff.Stats)
+	}
+	for _, c := range msg.Coalesces {
+		pt := m.pendingForLocked(c.TickEnd)
+		pt.inlineEntries = append(pt.inlineEntries, c.Entries...)
 	}
 	for _, cp := range msg.Checkpoints {
 		if _, err := m.mu.frontier.Forward(cp.Span, cp.ResolvedTS); err != nil {
@@ -364,10 +397,18 @@ func (m *TickManager) runCloseLoopLocked(ctx context.Context) error {
 	}
 }
 
-// closeTickLocked writes the manifest for tickEnd using whatever
-// files were collected by Flush. An empty file list is a deliberate
-// "this tick is closed and contributed no events" signal so readers
-// see no coverage gap between adjacent ticks. mu must be held.
+// closeTickLocked seals tickEnd. It first drains any forwarded
+// coalesce contributions (writing them either as one combined data
+// file at the next-highest flushorder, or inline in
+// Manifest.inline_tail when the merged size fits below
+// inlineTailMaxBytes) and then writes the manifest. The order is
+// load-bearing: the close marker authoritatively lists every file
+// readers should consult, so the combined coalesce file (if any)
+// must be durable before the manifest goes out.
+//
+// An empty file list and empty inline_tail is a deliberate "this
+// tick is closed and contributed no events" signal so readers see
+// no coverage gap between adjacent ticks. mu must be held.
 //
 // TODO(dt): schema poller hook on tick-close decisions (DDL
 // reflected in coverage).
@@ -381,6 +422,11 @@ func (m *TickManager) closeTickLocked(ctx context.Context, tickEnd hlc.Timestamp
 	if pt != nil {
 		manifest.Files = pt.files
 		manifest.Stats = pt.stats
+		if len(pt.inlineEntries) > 0 {
+			if err := m.drainCoalesce(ctx, tickEnd, pt, &manifest); err != nil {
+				return err
+			}
+		}
 	}
 	if err := revlog.WriteTickManifest(ctx, m.es, manifest); err != nil {
 		return errors.Wrapf(err, "writing manifest for tick %s", tickEnd)
@@ -388,18 +434,121 @@ func (m *TickManager) closeTickLocked(ctx context.Context, tickEnd hlc.Timestamp
 	return nil
 }
 
-// pendingTick holds the in-flight files and rolled-up stats for a
-// tick that has not yet had its manifest written.
+// drainCoalesce processes the merged inline buffer for one closing
+// tick. The entries are sorted by (user_key, mvcc_ts) and adjacent
+// duplicates are dropped (rangefeed replays plus the
+// disjoint-spans-by-construction invariant make duplicates only
+// possible across a producer's own retries — same shape as the
+// producer-side dedupe, repeated defensively here). The merged
+// payload is then either marshaled into Manifest.inline_tail (when
+// it fits in inlineTailMaxBytes) or written as one extra data file
+// at flushorder = max(existing) + 1 and appended to Manifest.files.
+func (m *TickManager) drainCoalesce(
+	ctx context.Context, tickEnd hlc.Timestamp, pt *pendingTick, manifest *revlogpb.Manifest,
+) error {
+	entries := pt.inlineEntries
+	sort.Slice(entries, func(i, j int) bool {
+		if c := bytes.Compare(entries[i].UserKey, entries[j].UserKey); c != 0 {
+			return c < 0
+		}
+		return entries[i].MvccTs.Less(entries[j].MvccTs)
+	})
+	deduped := entries[:0]
+	for _, e := range entries {
+		if n := len(deduped); n > 0 {
+			last := deduped[n-1]
+			if last.MvccTs.Equal(e.MvccTs) && bytes.Equal(last.UserKey, e.UserKey) {
+				continue
+			}
+		}
+		deduped = append(deduped, e)
+	}
+	entries = deduped
+
+	// Estimate the on-wire size by summing each FlushEntry's
+	// marshaled size. Cheaper than marshaling once just to measure;
+	// the proto generator emits Size() inline. We compare against
+	// the inline cap exclusive of manifest overhead, which is fine
+	// — the cap is intentionally below the practical S3 floor with
+	// generous slack.
+	var inlineBytes int
+	for i := range entries {
+		inlineBytes += entries[i].Size()
+	}
+
+	if inlineBytes <= inlineTailMaxBytes {
+		manifest.InlineTail = entries
+		// Logical bytes only — sst_bytes stays unknown for the
+		// inline path because there's no SST written.
+		var keyCount, logicalBytes int64
+		for _, e := range entries {
+			keyCount++
+			logicalBytes += int64(len(e.UserKey) + len(e.Value) + len(e.PrevValue))
+		}
+		pt.stats.KeyCount += keyCount
+		pt.stats.LogicalBytes += logicalBytes
+		pt.sstBytesUnknown = true
+		pt.stats.SstBytes = 0
+		manifest.Stats = pt.stats
+		return nil
+	}
+
+	flushOrder := int32(0)
+	for _, f := range manifest.Files {
+		if f.FlushOrder >= flushOrder {
+			flushOrder = f.FlushOrder + 1
+		}
+	}
+	tw, err := revlog.NewTickWriter(ctx, m.es, tickEnd, m.fileIDs.Next(), flushOrder)
+	if err != nil {
+		return errors.Wrapf(err, "opening combined coalesce writer for tick %s", tickEnd)
+	}
+	for _, e := range entries {
+		if err := tw.Add(e.UserKey, e.MvccTs, e.Value, e.PrevValue); err != nil {
+			_, _, _ = tw.Close()
+			return errors.Wrapf(err, "adding coalesce entry to tick %s", tickEnd)
+		}
+	}
+	f, stats, err := tw.Close()
+	if err != nil {
+		return errors.Wrapf(err, "closing combined coalesce writer for tick %s", tickEnd)
+	}
+	manifest.Files = append(manifest.Files, f)
+	pt.add(stats)
+	manifest.Stats = pt.stats
+	return nil
+}
+
+// pendingForLocked returns the pendingTick for tickEnd, allocating
+// one the first time it's referenced. mu must be held.
+func (m *TickManager) pendingForLocked(tickEnd hlc.Timestamp) *pendingTick {
+	pt, ok := m.mu.pending[tickEnd]
+	if !ok {
+		pt = &pendingTick{}
+		m.mu.pending[tickEnd] = pt
+	}
+	return pt
+}
+
+// pendingTick holds the in-flight files, forwarded coalesce entries,
+// and rolled-up stats for a tick that has not yet had its manifest
+// written.
 type pendingTick struct {
 	files []revlogpb.File
 	stats revlogpb.Stats
 
+	// inlineEntries accumulates events forwarded by producers as
+	// Coalesce contributions for this tick. Drained on close: see
+	// TickManager.drainCoalesce.
+	inlineEntries []revlogpb.FlushEntry
+
 	// sstBytesUnknown is set if any contributor's Stats.SstBytes was
-	// 0 (i.e. the producer couldn't measure the resulting SST), or
-	// if the tick was rehydrated from a persisted snapshot (where
-	// per-file stats are not retained). When set, the final
-	// Stats.SstBytes is reported as 0 to avoid misleading readers
-	// with a partial sum.
+	// 0 (i.e. the producer couldn't measure the resulting SST), if
+	// the tick had any inline-tail contribution (no SST written at
+	// all in that case), or if the tick was rehydrated from a
+	// persisted snapshot (where per-file stats are not retained).
+	// When set, the final Stats.SstBytes is reported as 0 to avoid
+	// misleading readers with a partial sum.
 	sstBytesUnknown bool
 }
 
