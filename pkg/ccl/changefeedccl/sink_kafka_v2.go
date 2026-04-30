@@ -397,7 +397,7 @@ func makeKafkaSinkV2(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics())
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, sinkOpts.Compression, mb(true).netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -429,6 +429,7 @@ func buildKgoConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	topLevelCompression string,
 	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
@@ -537,8 +538,29 @@ func buildKgoConfig(
 
 	// TODO(#126991): Remove this sarama dependency.
 	// NOTE: kgo lets you give multiple compression options in preference order, which is cool but the config json doesnt support that. Should we?
+	//
+	// Apply top-level compression if set, erroring on conflict with kafka_sink_config.
+	effectiveCompression := sarama.CompressionCodec(sinkCfg.Compression)
+	if topLevelCompression != "" {
+		topCodec, ok := saramaCompressionCodecOptions[strings.ToUpper(topLevelCompression)]
+		if !ok {
+			return nil, errors.Errorf(
+				`unsupported compression codec %q for Kafka sink; valid options are %s`,
+				topLevelCompression, getValidCompressionCodecs())
+		}
+		if effectiveCompression != sarama.CompressionNone && effectiveCompression != topCodec {
+			return nil, errors.Newf(
+				`compression option %q conflicts with kafka_sink_config Compression %q; `+
+					`remove one or make them match`,
+				topLevelCompression, strings.ToUpper(effectiveCompression.String()))
+		}
+		if effectiveCompression == sarama.CompressionNone {
+			effectiveCompression = topCodec
+		}
+	}
+
 	var comp kgo.CompressionCodec
-	switch sarama.CompressionCodec(sinkCfg.Compression) {
+	switch effectiveCompression {
 	case sarama.CompressionNone:
 	case sarama.CompressionGZIP:
 		comp = kgo.GzipCompression()
@@ -549,7 +571,7 @@ func buildKgoConfig(
 	case sarama.CompressionZSTD:
 		comp = kgo.ZstdCompression()
 	default:
-		return nil, errors.Errorf(`unknown compression codec: %v`, sinkCfg.Compression)
+		return nil, errors.Errorf(`unknown compression codec: %v`, effectiveCompression)
 	}
 
 	if level := sinkCfg.CompressionLevel; level != sarama.CompressionLevelDefault {
