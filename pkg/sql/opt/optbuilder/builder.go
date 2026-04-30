@@ -228,6 +228,12 @@ type Builder struct {
 	// skipUnsafeInternalsCheck is used to skip the check that the
 	// planner is not used for unsafe internal statements.
 	skipUnsafeInternalsCheck bool
+
+	// DisableDeferredRoutineBuild, when true, forces eager body building
+	// for SQL routines. Set inside EXPLAIN/EXPLAIN ANALYZE so that all
+	// table references are tracked in the metadata (needed for explain
+	// bundles and plan formatting with redaction).
+	DisableDeferredRoutineBuild bool
 }
 
 // New creates a new Builder structure initialized with the given

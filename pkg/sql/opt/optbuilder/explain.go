@@ -26,6 +26,14 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		}
 	}
 
+	// Disable deferred body building so that EXPLAIN output includes all
+	// table references in the metadata, needed for explain bundles and
+	// plan formatting with redaction.
+	defer func(old bool) {
+		b.DisableDeferredRoutineBuild = old
+	}(b.DisableDeferredRoutineBuild)
+	b.DisableDeferredRoutineBuild = true
+
 	var stmtScope *scope
 	if explain.Mode == tree.ExplainFingerprint {
 		// We don't actually need to build the statement for EXPLAIN (FINGERPRINT),

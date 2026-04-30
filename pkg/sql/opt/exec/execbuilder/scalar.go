@@ -1034,7 +1034,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
-		nil, /* bodyBuilder */
+		udf.Def.BodyBuilder,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF

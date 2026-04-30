@@ -443,6 +443,7 @@ func (b *Builder) buildRoutine(
 	var bodyStmts []string
 	var bodyTags []string
 	var bodyASTs []tree.Statement
+	var bodyBuilder memo.RoutineBodyBuilder
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -468,9 +469,66 @@ func (b *Builder) buildRoutine(
 			})
 			appendedNullForVoidReturn = true
 		}
-		body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
-			stmts, bodyScope, f, inScope, isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
-		)
+
+		// Validate column definition list before the eager/deferred branch.
+		// Skip for AnyTuple since that always takes the eager path where
+		// validation runs inside finalizeRoutineReturnType.
+		if oldInsideDataSource && !f.ResolvedType().Identical(types.AnyTuple) {
+			b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), f.ResolvedType(), inScope)
+		}
+
+		if f.ResolvedType().Identical(types.AnyTuple) || b.DisableDeferredRoutineBuild {
+			// Eager path: build body RelExprs now.
+			body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
+				stmts, bodyScope, f, inScope, isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
+			)
+		} else {
+			// Deferred path: store ASTs and tags only; body and bodyProps stay nil.
+			bodyTags = make([]string, len(stmts))
+			bodyASTs = make([]tree.Statement, len(stmts))
+			for i := range stmts {
+				bodyASTs[i] = stmts[i].AST
+				if appendedNullForVoidReturn && i == len(stmts)-1 {
+					bodyTags[i] = ""
+				} else {
+					bodyTags[i] = stmts[i].AST.StatementTag()
+				}
+			}
+
+			// Capture resolved parameter types and names for the deferred builder.
+			var resolvedParamTypes []*types.T
+			var resolvedParamNames []string
+			if paramTypes, ok := o.Types.(tree.ParamTypes); ok {
+				resolvedParamTypes = make([]*types.T, len(paramTypes))
+				resolvedParamNames = make([]string, len(paramTypes))
+				for i := range paramTypes {
+					resolvedParamTypes[i] = maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
+					if resolvedParamTypes[i].Identical(types.AnyTuple) {
+						// RECORD-typed parameter: use the actual argument type.
+						resolvedParamTypes[i] = argTypes[i]
+					}
+					resolvedParamNames[i] = paramTypes[i].Name
+				}
+			}
+
+			// Capture the effective privilege user for SECURITY DEFINER.
+			var privUser string
+			if !b.dataSourcePrivilegeUserOverride.Undefined() {
+				privUser = b.dataSourcePrivilegeUserOverride.Normalized()
+			}
+
+			bodyBuilder = &sqlRoutineBodyBuilder{
+				stmtASTs:         bodyASTs,
+				paramTypes:       resolvedParamTypes,
+				paramNames:       resolvedParamNames,
+				rTyp:             f.ResolvedType(),
+				isSetReturning:   isSetReturning,
+				insideDataSource: oldInsideDataSource,
+				privilegeUser:    privUser,
+				routineType:      o.Type,
+				stmtTreeInitFn:   b.stmtTree.GetInitFnForDeferredRoutine(),
+			}
+		}
 
 		if b.verboseTracing {
 			bodyStmts = make([]string, len(stmts))
@@ -545,6 +603,7 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				BodyBuilder:        bodyBuilder,
 			},
 		},
 	)
