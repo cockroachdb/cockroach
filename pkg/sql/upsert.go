@@ -237,6 +237,10 @@ func (n *upsertNode) kvCPUTime() int64 {
 	return n.run.tw.kvCPUTime
 }
 
+func (n *upsertNode) localKVCPUTime() int64 {
+	return n.run.tw.localKVCPUTime
+}
+
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }

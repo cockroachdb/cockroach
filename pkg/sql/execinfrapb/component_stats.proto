@@ -160,10 +160,12 @@ message KVStats {
   optional util.optional.Uint range_key_contained_points = 19 [(gogoproto.nullable) = false];
   optional util.optional.Uint range_key_skipped_points = 20 [(gogoproto.nullable) = false];
 
-  // LocalKVCPUTime is the SQL goroutine CPU time spent in KV operations,
-  // measured via grunning deltas around txn.Send calls. This is subtracted
-  // from the total measured CPU time to isolate SQL-only CPU in per-operator
-  // stats.
+  // LocalKVCPUTime is the SQL goroutine CPU time spent inside KV calls,
+  // measured via grunning deltas around txn.Send. This is the portion of SQL
+  // goroutine CPU that overlapped with KV work, not the CPU consumed on KV
+  // servers (see KVCPUTime in data.proto Metrics for the KV-server side). It
+  // is subtracted from total measured CPU time to isolate SQL-only CPU in
+  // per-operator stats.
   optional util.optional.Duration local_kv_cpu_time = 11 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "LocalKVCPUTime"];
 
