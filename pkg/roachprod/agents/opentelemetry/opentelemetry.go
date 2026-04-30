@@ -63,61 +63,102 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 			return res, res.Err
 		}
 
-		tags := []string{
-			// Reserved Datadog tags.
-			"env:development",
-			fmt.Sprintf("host:%s", vm.Name(c.Name, int(node))),
-
-			// Custom tags.
-			fmt.Sprintf("cluster:%s", c.Name),
-		}
-		tags = append(tags, config.DatadogTags...)
-
-		data := templateData{
-			DatadogSite:        config.DatadogSite,
-			DatadogAPIKey:      config.DatadogAPIKey,
-			DatadogTags:        makeDatadogTags(tags),
-			CockroachDBMetrics: cockroachdbMetrics,
-		}
-
-		opentelemetryConfig, err := executeTemplate(opentelemetryConfigTemplate, data)
-		if err != nil {
-			res.Err = errors.Wrapf(err, "failed rendering opentelemetry configuration for node %d", node)
-			return res, res.Err
-		}
-
-		if err := c.PutString(ctx, l, install.Nodes{node}, opentelemetryConfig, "/tmp/opentelemetry-config.yaml", 0644); err != nil {
-			res.Err = errors.Wrapf(err, "failed writing opentelemetry configuration to node %d", node)
-			return res, res.Err
-		}
-
-		opentelemetryEnvConfig, err := executeTemplate(opentelemetryEnvTemplate, data)
-		if err != nil {
-			res.Err = errors.Wrapf(err, "failed rendering opentelemetry environment file for node %d", node)
-			return res, res.Err
-		}
-
-		if err := c.PutString(ctx, l, install.Nodes{node}, opentelemetryEnvConfig, "/tmp/opentelemetry-env.conf", 0644); err != nil {
-			res.Err = errors.Wrapf(err, "failed writing opentelemetry environment file to node %d", node)
-			return res, res.Err
-		}
-
-		// The `/etc/otelcol-contrib/config-override.yaml` file is created with no
-		// content so that the otelcol-contrib service can successfully start.
-		// Operators can add additional configuration in there to suit their needs.
-		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(install.Nodes{node}), "opentelemetry", `
-		sudo cp /tmp/opentelemetry-config.yaml /etc/otelcol-contrib/config.yaml && rm /tmp/opentelemetry-config.yaml
-		sudo touch /etc/otelcol-contrib/config-override.yaml
-		sudo cp /tmp/opentelemetry-env.conf /etc/otelcol-contrib/otelcol-contrib.conf && rm /tmp/opentelemetry-env.conf
-		sudo systemctl enable otelcol-contrib && sudo systemctl restart otelcol-contrib
-		`); err != nil {
-			res.Err = errors.Wrap(err, "failed enabling and starting opentelemetry service")
+		if err := deployConfigAndRestart(ctx, l, c, node, config); err != nil {
+			res.Err = err
 			return res, res.Err
 		}
 
 		return res, nil
 	}); err != nil {
 		return errors.Wrap(err, "failed starting opentelemetry")
+	}
+
+	return nil
+}
+
+// Restart regenerates the configuration and restarts the OpenTelemetry
+// Collector on the given CockroachDB cluster c. The collector must already be
+// installed; use Install for first-time setup.
+func Restart(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, config Config) error {
+	if err := c.Parallel(ctx, l, install.WithNodes(c.Nodes), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+		res := &install.RunResultDetails{Node: node}
+
+		if err := c.Run(
+			ctx, l, l.Stdout, l.Stderr,
+			install.WithNodes(install.Nodes{node}),
+			"opentelemetry-check",
+			`systemctl list-unit-files otelcol-contrib.service | grep -q otelcol-contrib`,
+		); err != nil {
+			res.Err = errors.Newf(
+				"opentelemetry collector is not installed on node %d; use opentelemetry-start to install it first",
+				node,
+			)
+			return res, res.Err
+		}
+
+		if err := deployConfigAndRestart(ctx, l, c, node, config); err != nil {
+			res.Err = err
+			return res, res.Err
+		}
+
+		return res, nil
+	}); err != nil {
+		return errors.Wrap(err, "failed restarting opentelemetry")
+	}
+
+	return nil
+}
+
+// deployConfigAndRestart renders the configuration templates, deploys them to
+// the node, and restarts the otelcol-contrib systemd service.
+func deployConfigAndRestart(
+	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, node install.Node, config Config,
+) error {
+	tags := []string{
+		// Reserved Datadog tags.
+		"env:development",
+		fmt.Sprintf("host:%s", vm.Name(c.Name, int(node))),
+
+		// Custom tags.
+		fmt.Sprintf("cluster:%s", c.Name),
+	}
+	tags = append(tags, config.DatadogTags...)
+
+	data := templateData{
+		DatadogSite:        config.DatadogSite,
+		DatadogAPIKey:      config.DatadogAPIKey,
+		DatadogTags:        makeDatadogTags(tags),
+		CockroachDBMetrics: cockroachdbMetrics,
+	}
+
+	opentelemetryConfig, err := executeTemplate(opentelemetryConfigTemplate, data)
+	if err != nil {
+		return errors.Wrapf(err, "failed rendering opentelemetry configuration for node %d", node)
+	}
+
+	if err := c.PutString(ctx, l, install.Nodes{node}, opentelemetryConfig, "/tmp/opentelemetry-config.yaml", 0644); err != nil {
+		return errors.Wrapf(err, "failed writing opentelemetry configuration to node %d", node)
+	}
+
+	opentelemetryEnvConfig, err := executeTemplate(opentelemetryEnvTemplate, data)
+	if err != nil {
+		return errors.Wrapf(err, "failed rendering opentelemetry environment file for node %d", node)
+	}
+
+	if err := c.PutString(ctx, l, install.Nodes{node}, opentelemetryEnvConfig, "/tmp/opentelemetry-env.conf", 0644); err != nil {
+		return errors.Wrapf(err, "failed writing opentelemetry environment file to node %d", node)
+	}
+
+	// The `/etc/otelcol-contrib/config-override.yaml` file is created with no
+	// content so that the otelcol-contrib service can successfully start.
+	// Operators can add additional configuration in there to suit their needs.
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(install.Nodes{node}), "opentelemetry", `
+	sudo cp /tmp/opentelemetry-config.yaml /etc/otelcol-contrib/config.yaml && rm /tmp/opentelemetry-config.yaml
+	sudo touch /etc/otelcol-contrib/config-override.yaml
+	sudo cp /tmp/opentelemetry-env.conf /etc/otelcol-contrib/otelcol-contrib.conf && rm /tmp/opentelemetry-env.conf
+	sudo systemctl enable otelcol-contrib && sudo systemctl restart otelcol-contrib
+	`); err != nil {
+		return errors.Wrap(err, "failed enabling and starting opentelemetry service")
 	}
 
 	return nil
