@@ -476,6 +476,20 @@ var compactionConcurrencyUpper = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// CompactionConcurrencyRange returns the lower and upper compaction concurrency
+// derived from cluster settings and environment variables. It is used both for
+// configuring CompactionConcurrencyRange in Pebble and for setting the global
+// limit in MultiEngineCompactionScheduler.
+func CompactionConcurrencyRange(sv *settings.Values) (int, int) {
+	lower := int(compactionConcurrencyLower.Get(sv))
+	upper := determineMaxConcurrentCompactions(
+		DefaultMaxConcurrentCompactions,
+		envMaxConcurrentCompactions,
+		int(compactionConcurrencyUpper.Get(sv)),
+	)
+	return lower, max(lower, upper)
+}
+
 // TODO(ssd): This could be SystemOnly but we currently init pebble
 // engines for temporary storage. Temporary engines shouldn't really
 // care about download compactions, but they do currently simply
@@ -878,6 +892,10 @@ type engineConfig struct {
 	//
 	// A value of 0 disables the limit.
 	blockConcurrencyLimitDivisor int
+
+	// compactionScheduler, if set, coordinates compactions across multiple
+	// engines. Passed to Pebble via Options.Experimental.CompactionScheduler.
+	compactionScheduler pebble.CompactionScheduler
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1082,13 +1100,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// Engine.SetCompactionConcurrency.
 	if cfg.opts.CompactionConcurrencyRange == nil {
 		cfg.opts.CompactionConcurrencyRange = func() (lower, upper int) {
-			lower = int(compactionConcurrencyLower.Get(&cfg.settings.SV))
-			upper = determineMaxConcurrentCompactions(
-				defaultMaxConcurrentCompactions,
-				envMaxConcurrentCompactions,
-				int(compactionConcurrencyUpper.Get(sv)),
-			)
-			return lower, max(lower, upper)
+			return CompactionConcurrencyRange(sv)
 		}
 	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
@@ -1109,6 +1121,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	if cfg.opts.Experimental.SpanPolicyFunc == nil {
 		cfg.opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
+	}
+
+	if cs := cfg.compactionScheduler; cs != nil {
+		cfg.opts.Experimental.CompactionScheduler = func() pebble.CompactionScheduler {
+			return cs
+		}
 	}
 
 	cfg.opts.EnsureDefaults()

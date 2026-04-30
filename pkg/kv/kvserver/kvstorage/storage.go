@@ -147,9 +147,6 @@ func MakeEngines(eng storage.Engine) Engines {
 // machine and log engines are logically (or physically) separated. To be used
 // only in tests, until separated engines are correctly supported.
 func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
-	if !buildutil.CrdbTestBuild {
-		panic("separated engines are not supported")
-	}
 	if spanset.EnableAssertions {
 		// Wrap the engines with span set engines to catch incorrect engine
 		// accesses.

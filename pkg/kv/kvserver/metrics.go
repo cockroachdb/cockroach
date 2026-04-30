@@ -3556,6 +3556,9 @@ type StoreMetrics struct {
 	WALFailoverSecondaryDiskCapacity   *metric.Gauge
 	WALFailoverSecondaryDiskAvailable  *metric.Gauge
 
+	// Log engine metrics. Only populated when separated engines are in use.
+	LogEngine logEngineMetrics
+
 	RdbCheckpoints *metric.Gauge
 
 	// Disk health metrics.
@@ -4679,8 +4682,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	sm.categoryIterMetrics.init(storeRegistry)
 	sm.categoryDiskWriteMetrics.init(storeRegistry)
 
+	sm.LogEngine = newLogEngineMetrics()
+
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
+	storeRegistry.AddMetricStruct(&sm.LogEngine)
 	for i := range sm.categoryIterMetrics.metrics {
 		storeRegistry.AddMetricStruct(&sm.categoryIterMetrics.metrics[i])
 	}
