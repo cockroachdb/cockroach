@@ -21,6 +21,26 @@ func (i *immediateVisitor) AddEnumTypeValue(ctx context.Context, op scop.AddEnum
 		return err
 	}
 
+	// Check if it's already there.
+	for j := range typ.EnumMembers {
+		member := &typ.EnumMembers[j]
+		if member.LogicalRepresentation == op.LogicalRepresentation &&
+			bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
+			if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
+				return nil
+			}
+			// It might already be promoted, which is also fine for idempotency.
+			if member.Capability == descpb.TypeDescriptor_EnumMember_ALL &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_NONE {
+				return nil
+			}
+			member.Capability = descpb.TypeDescriptor_EnumMember_READ_ONLY
+			member.Direction = descpb.TypeDescriptor_EnumMember_ADD
+			return nil
+		}
+	}
+
 	insertIdx, _ := slices.BinarySearchFunc(typ.EnumMembers, op.PhysicalRepresentation,
 		func(member descpb.TypeDescriptor_EnumMember, target []byte) int {
 			return bytes.Compare(member.PhysicalRepresentation, target)
@@ -52,6 +72,10 @@ func (i *immediateVisitor) PromoteEnumTypeValue(
 		member := &typ.EnumMembers[j]
 		if member.LogicalRepresentation == op.LogicalRepresentation &&
 			bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
+			if member.Capability == descpb.TypeDescriptor_EnumMember_ALL &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_NONE {
+				return nil
+			}
 			member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 			member.Direction = descpb.TypeDescriptor_EnumMember_NONE
 			return nil
@@ -76,6 +100,10 @@ func (i *immediateVisitor) DemoteEnumTypeValue(
 		member := &typ.EnumMembers[j]
 		if member.LogicalRepresentation == op.LogicalRepresentation &&
 			bytes.Equal(member.PhysicalRepresentation, op.PhysicalRepresentation) {
+			if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE {
+				return nil
+			}
 			member.Capability = descpb.TypeDescriptor_EnumMember_READ_ONLY
 			member.Direction = descpb.TypeDescriptor_EnumMember_REMOVE
 			return nil
@@ -104,8 +132,5 @@ func (i *immediateVisitor) RemoveEnumTypeValue(
 			return nil
 		}
 	}
-	return errors.AssertionFailedf(
-		"enum value %q not found in type descriptor %d",
-		op.LogicalRepresentation, op.TypeID,
-	)
+	return nil
 }
