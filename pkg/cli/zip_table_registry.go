@@ -1792,6 +1792,9 @@ limit 5000;`,
 			`"distinctCount"`,
 			`"nullCount"`,
 			`"avgSize"`,
+			// TODO(#168081): partialPredicate is actually likely to contain
+			// PII, so we need to redact its values in when redaction is
+			// requested.
 			`"partialPredicate"`,
 			`"fullStatisticID"`,
 			`"delayDelete"`,

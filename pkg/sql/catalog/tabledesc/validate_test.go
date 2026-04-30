@@ -318,6 +318,7 @@ var validationMap = []struct {
 			"MinStaleRows":             {status: iSolemnlySwearThisFieldIsValidated},
 			"FractionStaleRows":        {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialEnabled":           {status: iSolemnlySwearThisFieldIsValidated},
+			"PartialFixupEnabled":      {status: iSolemnlySwearThisFieldIsValidated},
 			"FullEnabled":              {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialMinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialFractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},

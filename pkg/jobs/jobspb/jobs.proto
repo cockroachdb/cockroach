@@ -1389,6 +1389,7 @@ message CreateStatsDetails {
   string where_clause = 10;
 
   // Spans over which to collect partial statistics with a WHERE clause.
+  // Currently only a single span is supported.
   repeated roachpb.Span where_spans = 11 [(gogoproto.nullable) = false];
 
   // The ID of the index used to collect partial statistics with a WHERE clause.

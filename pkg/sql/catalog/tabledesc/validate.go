@@ -2327,6 +2327,7 @@ func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumu
 	}
 	desc.validateAutoStatsEnabled(vea, catpb.AutoStatsEnabledTableSettingName, desc.AutoStatsSettings.Enabled)
 	desc.validateAutoStatsEnabled(vea, catpb.AutoPartialStatsEnabledTableSettingName, desc.AutoStatsSettings.PartialEnabled)
+	desc.validateAutoStatsEnabled(vea, catpb.AutoPartialFixupStatsEnabledTableSettingName, desc.AutoStatsSettings.PartialFixupEnabled)
 	desc.validateAutoStatsEnabled(vea, catpb.AutoFullStatsEnabledTableSettingName, desc.AutoStatsSettings.FullEnabled)
 
 	desc.validateMinStaleRows(vea, catpb.AutoStatsMinStaleTableSettingName, desc.AutoStatsSettings.MinStaleRows)
