@@ -7873,6 +7873,7 @@ privilege:
   name
 | CREATE
 | GRANT
+| REFERENCES
 | SELECT
 
 reset_stmt:

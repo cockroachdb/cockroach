@@ -5960,7 +5960,7 @@ GRANT SELECT ON t1 TO testuser WITH GRANT OPTION
 query T
 SELECT relacl FROM pg_class WHERE relname = 't1'
 ----
-{admin=C*r*a*d*w*D*t*m*/root,root=C*r*a*d*w*D*t*m*/root,testuser=r*/root}
+{admin=C*r*a*d*w*D*t*m*x*/root,root=C*r*a*d*w*D*t*m*x*/root,testuser=r*/root}
 
 # relacl: returns to NULL after revoking back to defaults.
 statement ok
@@ -6125,7 +6125,7 @@ GRANT SELECT ON testowner_table TO testuser
 query T
 SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
 ----
-{admin=C*r*a*d*w*D*t*m*/testowner,root=C*r*a*d*w*D*t*m*/testowner,testuser=r/testowner,testowner=CradwDtm/testowner}
+{admin=C*r*a*d*w*D*t*m*x*/testowner,root=C*r*a*d*w*D*t*m*x*/testowner,testuser=r/testowner,testowner=CradwDtmx/testowner}
 
 # relacl: returns to NULL after revoking back to defaults.
 statement ok

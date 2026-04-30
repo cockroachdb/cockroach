@@ -127,6 +127,7 @@ func MakeTestingSimpleTableDescriptor(
 		tree.PersistencePermanent,
 		// Sequences are unsupported here.
 		nil, /* colToSequenceRefs */
+		nil, /* authAccessor */
 		// We need to bypass the LOCALITY on non multi-region check here because
 		// we cannot access the database region config at import level.
 		// There is code that only allows REGIONAL BY TABLE tables to be imported,

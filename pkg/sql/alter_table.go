@@ -465,6 +465,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						tableState,
 						t.ValidationBehavior,
 						params.p.EvalContext(),
+						params.p,
 					)
 				})
 				if err != nil {

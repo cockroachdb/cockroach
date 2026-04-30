@@ -1717,6 +1717,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1730,6 +1731,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1746,6 +1748,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1758,6 +1761,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1778,6 +1782,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1791,6 +1796,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1806,6 +1812,7 @@ a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
 a  public  t  readwrite  MAINTAIN           false
+a  public  t  readwrite  REFERENCES         false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1818,6 +1825,7 @@ a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
 a  public  t  test-user  MAINTAIN           false
+a  public  t  test-user  REFERENCES         false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1886,6 +1894,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1899,6 +1908,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1915,6 +1925,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1927,6 +1938,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1947,6 +1959,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1960,6 +1973,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -1975,6 +1989,7 @@ a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
 a  public  v  readwrite  MAINTAIN           false
+a  public  v  readwrite  REFERENCES         false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1987,6 +2002,7 @@ a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
 a  public  v  test-user  MAINTAIN           false
+a  public  v  test-user  REFERENCES         false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -2005,6 +2021,7 @@ a  public  v     table     readwrite  CHANGEFEED         false
 a  public  v     table     readwrite  CREATE             false
 a  public  v     table     readwrite  DROP               false
 a  public  v     table     readwrite  MAINTAIN           false
+a  public  v     table     readwrite  REFERENCES         false
 a  public  v     table     readwrite  REPLICATIONDEST    false
 a  public  v     table     readwrite  REPLICATIONSOURCE  false
 a  public  v     table     readwrite  SELECT             false
@@ -2017,6 +2034,7 @@ a  public  v     table     test-user  CHANGEFEED         false
 a  public  v     table     test-user  CREATE             false
 a  public  v     table     test-user  DROP               false
 a  public  v     table     test-user  MAINTAIN           false
+a  public  v     table     test-user  REFERENCES         false
 a  public  v     table     test-user  REPLICATIONDEST    false
 a  public  v     table     test-user  REPLICATIONSOURCE  false
 a  public  v     table     test-user  TRIGGER            false

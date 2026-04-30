@@ -1,0 +1,359 @@
+subtest grant_revoke_references
+
+statement ok
+CREATE TABLE ref_test (id INT PRIMARY KEY)
+
+statement ok
+CREATE USER ref_user
+
+statement ok
+GRANT REFERENCES ON ref_test TO ref_user
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON ref_test
+----
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       ref_test    admin     ALL             true
+test           public       ref_test    ref_user  REFERENCES      false
+test           public       ref_test    root      ALL             true
+
+statement ok
+REVOKE REFERENCES ON ref_test FROM ref_user
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON ref_test
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       ref_test    admin    ALL             true
+test           public       ref_test    root     ALL             true
+
+statement ok
+DROP TABLE ref_test
+
+statement ok
+DROP USER ref_user
+
+subtest end
+
+subtest fk_requires_references_on_parent_table
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)
+
+statement ok
+CREATE USER fk_user;
+CREATE USER no_create
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT fk_user TO testuser;
+GRANT no_create TO testuser
+
+statement ok
+GRANT CREATE ON child TO fk_user
+
+user testuser
+
+# User has neither CREATE nor REFERENCES on either table.
+statement ok
+SET ROLE no_create
+
+statement error must be owner of table child or have CREATE privilege on table child
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+statement error must be owner of table child or have CREATE privilege on table child
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+# User has CREATE on child but neither REFERENCES nor CREATE on parent.
+statement ok
+SET ROLE fk_user
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error does not have REFERENCES privilege on relation parent
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error must be owner of table parent or have CREATE privilege on table parent
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error does not have REFERENCES privilege on relation parent
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error must be owner of table parent or have CREATE privilege on table parent
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+user root
+
+statement ok
+GRANT REFERENCES ON parent TO fk_user
+
+user testuser
+
+# User has CREATE on child and REFERENCES on parent.
+# Create FK should succeed after upgrade and fail in mixed version.
+statement ok
+SET ROLE fk_user
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error must be owner of table parent or have CREATE privilege on table parent
+ALTER TABLE child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error must be owner of table parent or have CREATE privilege on table parent
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+user root
+
+statement ok
+REVOKE REFERENCES ON parent FROM fk_user;
+GRANT CREATE ON parent TO fk_user
+
+user testuser
+
+# User has CREATE on child and parent, but no REFERENCES.
+# Create FK should succeed in mixed version and fail after upgrade.
+statement ok
+SET ROLE fk_user
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error does not have REFERENCES privilege on relation parent
+ALTER TABLE child ADD CONSTRAINT fk2 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE child ADD CONSTRAINT fk22 FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error does not have REFERENCES privilege on relation parent
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+user root 
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP USER fk_user;
+DROP USER no_create
+
+subtest end
+
+subtest self_referential_fk_requires_references
+
+statement ok
+CREATE TABLE self_ref (id INT PRIMARY KEY, parent_id INT)
+
+statement ok
+CREATE USER self_ref_user
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT self_ref_user TO testuser
+
+statement ok
+GRANT CREATE ON self_ref TO self_ref_user
+
+user testuser
+
+statement ok
+SET ROLE self_ref_user
+
+# User has CREATE on the table but not REFERENCES; self-referential FK should fail.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error does not have REFERENCES privilege on relation self_ref
+ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
+
+user root
+
+statement ok
+GRANT REFERENCES ON self_ref TO self_ref_user
+
+user testuser
+
+statement ok
+SET ROLE self_ref_user
+
+# User now has both CREATE and REFERENCES on the same table; self-referential FK should succeed.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES self_ref(id)
+
+user root
+
+statement ok
+DROP TABLE self_ref
+
+statement ok
+DROP USER self_ref_user
+
+subtest end
+
+subtest owner_can_create_fk_without_explicit_references
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)
+
+statement ok
+CREATE USER owner_user
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT owner_user TO testuser
+
+# Transfer ownership of both tables to owner_user.
+statement ok
+ALTER TABLE parent OWNER TO owner_user;
+ALTER TABLE child OWNER TO owner_user
+
+user testuser
+
+statement ok
+SET ROLE owner_user
+
+# Owner of both tables should be able to create FK without explicit REFERENCES grant.
+statement ok
+ALTER TABLE child ADD CONSTRAINT fk_owner FOREIGN KEY (parent_id) REFERENCES parent(id)
+
+user root
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+DROP USER owner_user
+
+subtest end
+
+subtest owner_of_parent_non_owner_of_child
+
+statement ok
+CREATE TABLE owned_parent (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE other_child (id INT PRIMARY KEY, parent_id INT)
+
+statement ok
+CREATE USER parent_owner
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT parent_owner TO testuser
+
+# Make parent_owner the owner of the parent table but only grant CREATE on the child.
+statement ok
+ALTER TABLE owned_parent OWNER TO parent_owner;
+GRANT CREATE ON other_child TO parent_owner
+
+user testuser
+
+statement ok
+SET ROLE parent_owner
+
+# Owner of parent has implicit REFERENCES; CREATE on child is sufficient.
+statement ok
+ALTER TABLE other_child ADD CONSTRAINT fk1 FOREIGN KEY (parent_id) REFERENCES owned_parent(id)
+
+user root
+
+statement ok
+DROP TABLE other_child
+
+statement ok
+DROP TABLE owned_parent
+
+statement ok
+DROP USER parent_owner
+
+subtest end
+
+subtest create_table_with_fk_requires_references
+
+statement ok
+CREATE TABLE parent (id INT PRIMARY KEY)
+
+statement ok
+CREATE USER fk_user
+
+# Grant the role to testuser so SET ROLE works.
+statement ok
+GRANT fk_user TO testuser
+
+# Grant CREATE on the schema so the user can create tables.
+statement ok
+GRANT CREATE ON SCHEMA public TO fk_user
+
+user testuser
+
+statement ok
+SET ROLE fk_user
+
+# Creating a table with an FK reference should fail without REFERENCES on parent.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error must have REFERENCES privilege on table parent
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
+
+user root
+
+# Grant REFERENCES on parent.
+statement ok
+GRANT REFERENCES ON parent TO fk_user
+
+user testuser
+
+statement ok
+SET ROLE fk_user
+
+# Now CREATE TABLE with FK should succeed.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
+
+user root
+
+statement ok
+DROP TABLE child
+
+statement ok
+DROP TABLE parent
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM fk_user
+
+statement ok
+DROP USER fk_user
+
+subtest end

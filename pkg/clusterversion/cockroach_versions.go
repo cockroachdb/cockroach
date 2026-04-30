@@ -281,6 +281,12 @@ const (
 	// storing advisory lock state.
 	V26_3_AddAdvisoryLocksTable
 
+	// V26_3_GrantReferencesToUsersWithCreate grants the REFERENCES privilege
+	// to all users/roles that currently hold CREATE on any table. This ensures
+	// backwards compatibility after FK creation switches from requiring CREATE
+	// to requiring REFERENCES on both the origin and referenced tables.
+	V26_3_GrantReferencesToUsersWithCreate
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -367,6 +373,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
 
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
+
+	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 8},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

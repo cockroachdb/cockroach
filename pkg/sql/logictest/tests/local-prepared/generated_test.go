@@ -1436,6 +1436,13 @@ func TestLogic_redact_descriptor_ccl(
 	runLogicTest(t, "redact_descriptor_ccl")
 }
 
+func TestLogic_references_privilege(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "references_privilege")
+}
+
 func TestLogic_rename_atomic(
 	t *testing.T,
 ) {
