@@ -13,12 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
-// State is the snapshot of TickManager state that survives a job
-// restart. It is what the coordinator persists periodically and
-// what it loads on resume to pick up where the prior incarnation
-// left off.
-//
-// Three pieces, none of which can be derived from the other two:
+// State is the persisted checkpoint of TickManager state, returned
+// by Persister.Load and consumed by TickManager.Rehydrate. Three
+// pieces, none of which can be derived from the other two:
 //
 //   - HighWater is the end time of the most-recently-closed tick.
 //     User-visible (system.job_progress.resolved) and used by the
@@ -40,10 +37,17 @@ type State struct {
 }
 
 // Persister loads and stores TickManager checkpoint state. The
-// orchestration code (TickManager, the checkpoint loop in flow.go)
-// uses this interface; concrete implementations live elsewhere
-// (progress_persist.go for the production jobs-backed impl;
-// in-memory variants for tests).
+// orchestration code (TickManager, the checkpoint loop in
+// progress.go) uses this interface; concrete implementations live
+// elsewhere (progress_persist.go for the production jobs-backed
+// impl; in-memory variants for tests).
+//
+// Store takes the three pieces as separate arguments rather than a
+// State value so that the live TickManager frontier flows directly
+// into the persister (and from there into jobfrontier.Store) under
+// the manager's lock — no intermediate copy keyed on
+// stringified-span. The OpenTicks map is owned by the caller; the
+// persister must not retain or mutate it after Store returns.
 //
 // All persistence is expected to be atomic — a partial Store that
 // e.g. writes the frontier but not the open-tick file lists would
@@ -57,5 +61,10 @@ type State struct {
 // run), or (zero, false, err) on a hard error.
 type Persister interface {
 	Load(ctx context.Context) (State, bool, error)
-	Store(ctx context.Context, state State) error
+	Store(
+		ctx context.Context,
+		highWater hlc.Timestamp,
+		frontier span.ReadOnlyFrontier,
+		openTicks map[hlc.Timestamp][]revlogpb.File,
+	) error
 }
