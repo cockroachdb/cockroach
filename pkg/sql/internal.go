@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -967,12 +968,23 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.PreventPartitioningSoftLimitedScans != nil {
 		sd.DistSQLPreventPartitioningSoftLimitedScans = *o.PreventPartitioningSoftLimitedScans
 	}
+	if o.DistSQLMode != nil {
+		sd.DistSQLMode = *o.DistSQLMode
+	}
+	if o.NewSchemaChangerMode != nil {
+		sd.NewSchemaChangerMode = *o.NewSchemaChangerMode
+	}
 	// For 25.2, we're being conservative and explicitly disabling buffered
 	// writes for the internal executor.
 	// TODO(yuzefovich): remove this for 25.3.
 	sd.BufferedWritesEnabled = false
 
 	if o.MultiOverride != "" {
+		if buildutil.CrdbTestBuild {
+			if err := sessiondata.ValidateMultiOverride(o.MultiOverride); err != nil {
+				panic(errors.Wrap(err, "invalid MultiOverride"))
+			}
+		}
 		overrides := strings.Split(o.MultiOverride, ",")
 		for _, override := range overrides {
 			parts := strings.Split(override, "=")
@@ -991,17 +1003,7 @@ var ieMultiOverride = settings.RegisterStringSetting(
 		"session variables used by the InternalExecutor (performed on a best-effort basis)",
 	"",
 	settings.WithValidateString(func(_ *settings.Values, val string) error {
-		if val == "" {
-			return nil
-		}
-		overrides := strings.Split(val, ",")
-		for _, override := range overrides {
-			parts := strings.Split(override, "=")
-			if len(parts) != 2 {
-				return errors.Newf("invalid override format: expected 'variable=value', found %q", override)
-			}
-		}
-		return nil
+		return sessiondata.ValidateMultiOverride(val)
 	}),
 )
 
