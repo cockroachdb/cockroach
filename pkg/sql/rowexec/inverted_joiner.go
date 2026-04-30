@@ -801,7 +801,6 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			LockWaitTime:        optional.MakeTimeValue(ij.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(ij.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(ij.fetcher.GetBatchRequestsIssued())),
-			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes() + ij.unlimitedMemMonitor.MaximumBytes())),

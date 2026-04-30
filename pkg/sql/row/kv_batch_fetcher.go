@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -280,16 +281,24 @@ func makeSendFunc(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	batchRequestsIssued *int64,
 	kvCPUTime *int64,
+	localKVCPUTime *int64,
 ) sendFunc {
 	if ext != nil {
-		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued, kvCPUTime)
+		return makeExternalSpanSendFunc(
+			ext, txn.DB(), batchRequestsIssued, kvCPUTime, localKVCPUTime,
+		)
 	}
+	var w timeutil.CPUStopWatch
 	return func(
 		ctx context.Context,
 		ba *kvpb.BatchRequest,
 	) (*kvpb.BatchResponse, error) {
 		log.VEventf(ctx, 2, "kv fetcher: sending a batch with %d requests", len(ba.Requests))
+		w.Start()
 		res, err := txn.Send(ctx, ba)
+		if delta := w.Stop(); delta > 0 && localKVCPUTime != nil {
+			atomic.AddInt64(localKVCPUTime, int64(delta))
+		}
 		if err != nil {
 			return nil, err.GoError()
 		}
@@ -309,8 +318,11 @@ func makeExternalSpanSendFunc(
 	db *kv.DB,
 	batchRequestsIssued *int64,
 	kvCPUTime *int64,
+	localKVCPUTime *int64,
 ) sendFunc {
 	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		var w timeutil.CPUStopWatch
+
 		for _, req := range ba.Requests {
 			// We only allow external row data for a few known types of request.
 			switch r := req.GetInner().(type) {
@@ -337,10 +349,14 @@ func makeExternalSpanSendFunc(
 				if err := txn.SetFixedTimestamp(ctx, ext.AsOf); err != nil {
 					return err
 				}
-				var err *kvpb.Error
-				res, err = txn.Send(ctx, ba)
-				if err != nil {
-					return err.GoError()
+				var pErr *kvpb.Error
+				w.Start()
+				res, pErr = txn.Send(ctx, ba)
+				if delta := w.Stop(); delta > 0 && localKVCPUTime != nil {
+					atomic.AddInt64(localKVCPUTime, int64(delta))
+				}
+				if pErr != nil {
+					return pErr.GoError()
 				}
 				return nil
 			})
@@ -372,6 +388,7 @@ type newTxnKVFetcherArgs struct {
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
 	kvCPUTime                  *int64
+	localKVCPUTime             *int64
 	rawMVCCValues              bool
 	workloadID                 uint64
 	workloadType               workloadid.WorkloadType
@@ -414,7 +431,9 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		args.admission.pacerFactory,
 		args.admission.settingsValues,
 	)
-	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued, args.kvCPUTime)
+	f.kvBatchMetrics.init(
+		args.kvPairsRead, args.batchRequestsIssued, args.kvCPUTime, args.localKVCPUTime,
+	)
 	return f
 }
 
@@ -1100,13 +1119,15 @@ type kvBatchMetrics struct {
 		kvPairsRead         *int64
 		batchRequestsIssued *int64
 		kvCPUTime           *int64
+		localKVCPUTime      *int64
 	}
 }
 
-func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued, kvCPUTime *int64) {
+func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued, kvCPUTime, localKVCPUTime *int64) {
 	h.atomics.kvPairsRead = kvPairsRead
 	h.atomics.batchRequestsIssued = batchRequestsIssued
 	h.atomics.kvCPUTime = kvCPUTime
+	h.atomics.localKVCPUTime = localKVCPUTime
 }
 
 // Record records metrics for the given batch response. It should be called
@@ -1156,4 +1177,12 @@ func (h *kvBatchMetrics) GetKVCPUTime() int64 {
 		return 0
 	}
 	return atomic.LoadInt64(h.atomics.kvCPUTime)
+}
+
+// GetLocalKVCPUTime implements the KVBatchFetcher interface.
+func (h *kvBatchMetrics) GetLocalKVCPUTime() int64 {
+	if h == nil || h.atomics.localKVCPUTime == nil {
+		return 0
+	}
+	return atomic.LoadInt64(h.atomics.localKVCPUTime)
 }

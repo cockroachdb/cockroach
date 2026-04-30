@@ -320,7 +320,6 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			LockWaitTime:        optional.MakeTimeValue(tr.contentionEventsListener.GetLockWaitTime()),
 			LatchWaitTime:       optional.MakeTimeValue(tr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
-			KVCPUTime:           optional.MakeTimeValue(is.kvCPUTime),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}

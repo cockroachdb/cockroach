@@ -8,7 +8,6 @@ package timeutil
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/crlib/crtime"
 )
@@ -29,9 +28,12 @@ type StopWatch struct {
 		// timeSource is the source of time used by the stop watch. It is always
 		// crtime.NowMono except for tests.
 		timeSource func() crtime.Mono
-		// cpuStopWatch is used to track CPU usage. It may be nil, in which case any
-		// operations on it are no-ops.
-		cpuStopWatch *cpuStopWatch
+		// cpuStopWatch tracks goroutine CPU time when trackCPU is true.
+		cpuStopWatch CPUStopWatch
+		// cpuElapsed is the accumulated CPU time across all Start/Stop cycles.
+		cpuElapsed time.Duration
+		// trackCPU is true if this StopWatch was created with NewStopWatchWithCPU.
+		trackCPU bool
 	}
 }
 
@@ -44,9 +46,7 @@ func NewStopWatch() *StopWatch {
 // addition to wall-clock time.
 func NewStopWatchWithCPU() *StopWatch {
 	w := NewStopWatch()
-	if grunning.Supported {
-		w.mu.cpuStopWatch = &cpuStopWatch{}
-	}
+	w.mu.trackCPU = true
 	return w
 }
 
@@ -69,7 +69,9 @@ func (w *StopWatch) Start() {
 	if !w.mu.started {
 		w.mu.started = true
 		w.mu.startedAt = w.mu.timeSource()
-		w.mu.cpuStopWatch.start()
+		if w.mu.trackCPU {
+			w.mu.cpuStopWatch.Start()
+		}
 	}
 }
 
@@ -84,7 +86,9 @@ func (w *StopWatch) Stop() {
 		// We don't use w.mu.startedAt.Elapsed() here so that testing time sources
 		// work correctly.
 		w.mu.elapsed += w.mu.timeSource().Sub(w.mu.startedAt)
-		w.mu.cpuStopWatch.stop()
+		if w.mu.trackCPU {
+			w.mu.cpuElapsed += w.mu.cpuStopWatch.Stop()
+		}
 	}
 }
 
@@ -96,12 +100,12 @@ func (w *StopWatch) Elapsed() time.Duration {
 }
 
 // ElapsedCPU returns the total CPU time measured by the stop watch so far. It
-// returns zero if cpuStopWatch is nil (which is the case if NewStopWatchWithCPU
-// was not called or the platform does not support grunning).
+// returns zero if the StopWatch was not created with NewStopWatchWithCPU or
+// the platform does not support grunning.
 func (w *StopWatch) ElapsedCPU() time.Duration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.mu.cpuStopWatch.elapsed()
+	return w.mu.cpuElapsed
 }
 
 // CurrentElapsed returns the duration the stopwatch has been started and a bool
