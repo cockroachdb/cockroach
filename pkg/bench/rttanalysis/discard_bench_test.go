@@ -12,37 +12,40 @@ func init() {
 	reg.Register("Discard", []RoundTripBenchTestCase{
 		{
 			Name: "DISCARD ALL, no tables",
-			Setup: `DROP DATABASE IF EXISTS db CASCADE; 
+			Setup: `DROP DATABASE IF EXISTS db CASCADE;
 CREATE DATABASE db;`,
-			Stmt: "DISCARD ALL",
+			Stmt:  "DISCARD ALL",
+			Reset: "DROP DATABASE IF EXISTS db CASCADE",
 		},
 		{
 			Name: "DISCARD ALL, 1 tables in 1 db",
 			Setup: `
 SET experimental_enable_temp_tables = true;
-DROP DATABASE IF EXISTS db CASCADE; 
-CREATE DATABASE db; 
-USE db; 
+DROP DATABASE IF EXISTS db CASCADE;
+CREATE DATABASE db;
+USE db;
 CREATE TEMPORARY TABLE foo(i int);
 `,
-			Stmt: "DISCARD ALL",
+			Stmt:  "DISCARD ALL",
+			Reset: "DROP DATABASE IF EXISTS db CASCADE",
 		},
 		{
 			Name: "DISCARD ALL, 2 tables in 2 dbs",
 			Setup: `
 SET experimental_enable_temp_tables = true;
-DROP DATABASE IF EXISTS db CASCADE; 
-CREATE DATABASE db; 
-USE db; 
+DROP DATABASE IF EXISTS db CASCADE;
+CREATE DATABASE db;
+USE db;
 CREATE TEMPORARY TABLE foo(i int);
 CREATE TEMPORARY TABLE bar(i int);
-DROP DATABASE IF EXISTS db2 CASCADE; 
-CREATE DATABASE db2; 
-USE db2; 
+DROP DATABASE IF EXISTS db2 CASCADE;
+CREATE DATABASE db2;
+USE db2;
 CREATE TEMPORARY TABLE foo(i int);
 CREATE TEMPORARY TABLE bar(i int);
 `,
-			Stmt: "DISCARD ALL",
+			Stmt:  "DISCARD ALL",
+			Reset: "DROP DATABASE IF EXISTS db CASCADE; DROP DATABASE IF EXISTS db2 CASCADE",
 		},
 	})
 }

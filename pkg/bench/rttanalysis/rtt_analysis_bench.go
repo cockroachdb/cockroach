@@ -6,11 +6,9 @@
 package rttanalysis
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
@@ -55,20 +52,20 @@ type RoundTripBenchTestCase struct {
 // It avoids creating a tracing span so that there's less overhead, which means
 // roundtrips are not measured.
 func runCPUMemBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
+	cluster := cc(b, false)
+	defer cluster.close()
 	for _, tc := range tests {
 		b.Run(tc.Name, func(b testingB) {
 			if tc.SkipIssue != 0 {
 				skip.WithIssue(b, tc.SkipIssue)
 			}
-			executeRoundTripTest(b, tc, cc, false /* measureRoundtrips */)
+			executeRoundTripTest(b, tc, cluster)
 		})
 	}
 }
 
-// RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
-// and counts how many round trips the Stmt specified by the test case performs.
-// It runs each leaf subtest numRuns times. It uses the limiter to limit
-// concurrency.
+// runRoundTripBenchmarkTest creates a single cluster and runs all test cases
+// serially within it. Each test case is run numRuns times.
 func runRoundTripBenchmarkTest(
 	t *testing.T,
 	scope *log.TestLogScope,
@@ -76,60 +73,30 @@ func runRoundTripBenchmarkTest(
 	tests []RoundTripBenchTestCase,
 	cc ClusterConstructor,
 	numRuns int,
-	limit *quotapool.IntPool,
 ) {
 	skip.UnderMetamorphic(t, "changes the RTTs")
-	var wg sync.WaitGroup
+	cluster := cc(t, true)
+	defer cluster.close()
 	for _, tc := range tests {
-		wg.Add(1)
-		go func(tc RoundTripBenchTestCase) {
-			defer wg.Done()
-			t.Run(tc.Name, func(t *testing.T) {
-				runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns, limit)
-			})
-		}(tc)
+		t.Run(tc.Name, func(t *testing.T) {
+			if tc.SkipIssue != 0 {
+				skip.WithIssue(t, tc.SkipIssue)
+			}
+			for i := 0; i < numRuns; i++ {
+				executeRoundTripTest(
+					tShim{T: t, results: results, scope: scope}, tc, cluster,
+				)
+			}
+		})
 	}
-	wg.Wait()
 }
 
-func runRoundTripBenchmarkTestCase(
-	t *testing.T,
-	scope *log.TestLogScope,
-	results *resultSet,
-	tc RoundTripBenchTestCase,
-	cc ClusterConstructor,
-	numRuns int,
-	limit *quotapool.IntPool,
-) {
-	if tc.SkipIssue != 0 {
-		skip.WithIssue(t, tc.SkipIssue)
-	}
-	var wg sync.WaitGroup
-	for i := 0; i < numRuns; i++ {
-		alloc, err := limit.Acquire(context.Background(), 1)
-		require.NoError(t, err)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer alloc.Release()
-			executeRoundTripTest(tShim{
-				T: t, results: results, scope: scope,
-			}, tc, cc, true /* measureRoundTrips */)
-		}()
-	}
-	wg.Wait()
-}
-
-// executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
-func executeRoundTripTest(
-	b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor, measureRoundtrips bool,
-) {
+// executeRoundTripTest executes a RoundTripBenchCase on the provided cluster.
+func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cluster *Cluster) {
 	getDir, cleanup := b.logScope()
 	defer cleanup()
 
-	cluster := cc(b, measureRoundtrips)
-	defer cluster.close()
-
+	measureRoundtrips := cluster.measuresRoundtrips
 	adminSQL := sqlutils.MakeSQLRunner(cluster.adminConn())
 	sql := adminSQL
 	if tc.NonAdminUser {
