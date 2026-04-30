@@ -3391,9 +3391,7 @@ CONFIGURE ZONE USING
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
-
-			feed := ct.newChangefeed(feedArgs{
+			args := feedArgs{
 				sinkType: kafkaSink,
 				envelope: "enriched",
 				targets:  allTpccTargets,
@@ -3405,7 +3403,13 @@ CONFIGURE ZONE USING
 					"updated":             "",
 					"enriched_properties": "source",
 				},
-			})
+			}
+			sinkURI := ct.setupSink(args)
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "10m"})
+
+			args.sinkURIOverride = sinkURI
+			feed := ct.newChangefeed(args)
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      10 * time.Minute,
