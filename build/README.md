@@ -194,7 +194,7 @@ To achieve this, proceed as follows:
    5 onwards.
 4. Commit the result with a descriptive title, e.g. "deps: upgrade XXX
    to version YYY".
-5. Push this change in a PR (also with a descriptive title), then
+5. Push this change in a PR (also with a descriptive title), then 
    solicit a review.
 
 ### Removing a dependency
