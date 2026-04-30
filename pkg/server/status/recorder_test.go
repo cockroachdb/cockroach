@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
@@ -1347,6 +1348,64 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		require.Equal(t, len(expectedSuffixes), len(foundSuffixes), "Expected to find histogram metric suffixes")
+	})
+
+	// Regression test: two metrics that share an identical label set must each
+	// be recorded under their own (distinct) names. The childMetricNameCache
+	// is keyed by labels alone — only the encoded label suffix is shared
+	// across metrics; the metric-name prefix must come from the caller on
+	// every lookup. In production, most allowlisted changefeed agg-metrics
+	// are built via aggmetric.MakeBuilder("scope") and share the same
+	// single-label shape, so this code path is exercised on any non-trivial
+	// cluster.
+	t.Run("cache shares label suffix without confusing metric names", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		counter := aggmetric.NewCounter(metric.Metadata{
+			Name:     "changefeed.error_retries",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "scope")
+		counter.AddChild("default").Inc(7)
+		reg.AddMetric(counter)
+
+		gauge := aggmetric.NewGauge(metric.Metadata{
+			Name:     "changefeed.lagging_ranges",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "scope")
+		gauge.AddChild("default").Update(99)
+		reg.AddMetric(gauge)
+
+		// Wire up a real cache, matching how MetricsRecorder shares one
+		// cache across all of its registryRecorder instances.
+		var cache syncutil.Map[uint64, cacheEntry]
+		recorder := registryRecorder{
+			registry:             reg,
+			format:               nodeTimeSeriesPrefix,
+			source:               "test-source",
+			timestampNanos:       manual.Now().UnixNano(),
+			childMetricNameCache: &cache,
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		seen := make(map[string]float64, len(dest))
+		for _, ts := range dest {
+			require.Len(t, ts.Datapoints, 1)
+			seen[ts.Name] = ts.Datapoints[0].Value
+		}
+
+		wantErrorRetries := fmt.Sprintf(nodeTimeSeriesPrefix,
+			`changefeed.error_retries{scope="default"}`)
+		wantLaggingRanges := fmt.Sprintf(nodeTimeSeriesPrefix,
+			`changefeed.lagging_ranges{scope="default"}`)
+
+		require.Contains(t, seen, wantErrorRetries,
+			"counter should be recorded under its own name; got %v", seen)
+		require.Contains(t, seen, wantLaggingRanges,
+			"gauge should be recorded under its own name; got %v", seen)
+		require.Equal(t, float64(7), seen[wantErrorRetries])
+		require.Equal(t, float64(99), seen[wantLaggingRanges])
 	})
 }
 
