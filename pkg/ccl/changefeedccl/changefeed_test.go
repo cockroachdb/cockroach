@@ -10809,6 +10809,23 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	sql1.Exec(t, "CREATE TABLE bar (b INT PRIMARY KEY)")
 	sql1.Exec(t, "INSERT INTO bar VALUES (1), (2)")
 
+	// Force foo and bar into separate ranges. Without this, the two tiny
+	// tables may share a single range, in which case PartitionSpans returns
+	// one partition and the two-aggregator assertion below flakes.
+	sql1.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (0)")
+	sql1.Exec(t, "ALTER TABLE bar SPLIT AT VALUES (0)")
+	testutils.SucceedsSoon(t, func() error {
+		var fooRangeID, barRangeID int
+		sql1.QueryRow(t,
+			"SELECT range_id FROM [SHOW RANGES FROM TABLE foo] LIMIT 1").Scan(&fooRangeID)
+		sql1.QueryRow(t,
+			"SELECT range_id FROM [SHOW RANGES FROM TABLE bar] LIMIT 1").Scan(&barRangeID)
+		if fooRangeID == barRangeID {
+			return errors.Newf("foo and bar still share range %d", fooRangeID)
+		}
+		return nil
+	})
+
 	foo := feed(t, feedFactory, "CREATE CHANGEFEED FOR foo, bar")
 	defer closeFeed(t, foo)
 
