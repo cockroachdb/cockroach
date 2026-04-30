@@ -140,6 +140,7 @@ PROTO_FILES = [
     "//pkg/storage/enginepb:key_registry.proto",
     "//pkg/storage/enginepb:mvcc.proto",
     "//pkg/storage/enginepb:mvcc3.proto",
+    "//pkg/storage/enginepb:remote.proto",
     "//pkg/storage/enginepb:rocksdb.proto",
     "//pkg/storage/enginepb:stats.proto",
     "//pkg/ts/catalog:chart_catalog.proto",
