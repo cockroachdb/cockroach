@@ -698,3 +698,19 @@ var (
 )
 
 var ErrNoZoneConfigApplies = errors.New("no zone config applies")
+
+// NewSkipUniqueChecksError returns a user-facing error when duplicate rows are
+// found in an index that has the skip_unique_checks storage parameter set. This
+// is used by both the row-based and vectorized execution engines in place of an
+// internal assertion failure.
+func NewSkipUniqueChecksError(tableName, indexName string) error {
+	return errors.WithHint(
+		pgerror.Newf(pgcode.UniqueViolation,
+			"index %q of table %q contains duplicate keys",
+			indexName, tableName,
+		),
+		"This index has the skip_unique_checks storage parameter set, which "+
+			"allows duplicate values. Resolve the duplicate rows and consider "+
+			"removing skip_unique_checks using ALTER INDEX ... RESET (skip_unique_checks).",
+	)
+}

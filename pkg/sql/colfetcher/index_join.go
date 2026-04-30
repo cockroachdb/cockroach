@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -141,6 +142,13 @@ type ColIndexJoin struct {
 	// maintainOrdering is true when the index join is required to maintain its
 	// input ordering, in which case the ordering of the spans cannot be changed.
 	maintainOrdering bool
+
+	// hasSkipUniqueChecks, tableName, and indexName are stored from the fetch
+	// spec to produce a user-facing error instead of an internal assertion
+	// failure when duplicate rows are encountered due to skip_unique_checks.
+	hasSkipUniqueChecks bool
+	tableName           string
+	indexName           string
 
 	// usesStreamer indicates whether the ColIndexJoin is using the Streamer
 	// API.
@@ -349,6 +357,10 @@ func (s *ColIndexJoin) getRowSize(idx int) int64 {
 func (s *ColIndexJoin) assertScanRowCounts() {
 	if s.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 		if s.scanRowCounts.actual > s.scanRowCounts.expected {
+			if s.hasSkipUniqueChecks {
+				colexecerror.ExpectedError(sqlerrors.NewSkipUniqueChecksError(s.tableName, s.indexName))
+				return
+			}
 			colexecerror.InternalError(errors.AssertionFailedf(
 				"expected to fetch no more than %d rows, found %d",
 				s.scanRowCounts.expected, s.scanRowCounts.actual,
@@ -356,6 +368,10 @@ func (s *ColIndexJoin) assertScanRowCounts() {
 		}
 	} else {
 		if s.scanRowCounts.actual != s.scanRowCounts.expected {
+			if s.hasSkipUniqueChecks && s.scanRowCounts.actual > s.scanRowCounts.expected {
+				colexecerror.ExpectedError(sqlerrors.NewSkipUniqueChecksError(s.tableName, s.indexName))
+				return
+			}
 			colexecerror.InternalError(errors.AssertionFailedf(
 				"expected to fetch %d rows, found %d",
 				s.scanRowCounts.expected, s.scanRowCounts.actual,
@@ -687,17 +703,20 @@ func NewColIndexJoin(
 	)
 
 	op := &ColIndexJoin{
-		OneInputNode:      colexecop.NewOneInputNode(input),
-		flowCtx:           flowCtx,
-		processorID:       processorID,
-		cf:                fetcher,
-		spanAssembler:     spanAssembler,
-		ResultTypes:       tableArgs.typs,
-		maintainOrdering:  spec.MaintainOrdering,
-		txn:               txn,
-		usesStreamer:      useStreamer,
-		limitHintHelper:   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
-		lockingWaitPolicy: spec.LockingWaitPolicy,
+		OneInputNode:        colexecop.NewOneInputNode(input),
+		flowCtx:             flowCtx,
+		processorID:         processorID,
+		cf:                  fetcher,
+		spanAssembler:       spanAssembler,
+		ResultTypes:         tableArgs.typs,
+		maintainOrdering:    spec.MaintainOrdering,
+		txn:                 txn,
+		usesStreamer:        useStreamer,
+		limitHintHelper:     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		lockingWaitPolicy:   spec.LockingWaitPolicy,
+		hasSkipUniqueChecks: spec.FetchSpec.HasSkipUniqueChecks,
+		tableName:           spec.FetchSpec.TableName,
+		indexName:           spec.FetchSpec.IndexName,
 	}
 	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
 		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues, flowCtx.EvalCtx.SessionData(),
