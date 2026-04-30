@@ -1751,6 +1751,14 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
 	return p.clear(MVCCKey{Key: key}, opts)
 }
 
+// SingleClearUnversioned implements the Engine interface.
+func (p *Pebble) SingleClearUnversioned(key roachpb.Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	return p.db.SingleDelete(EncodeMVCCKey(MVCCKey{Key: key}), pebble.Sync)
+}
+
 // ClearEngineKey implements the Engine interface.
 func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
@@ -3042,6 +3050,10 @@ func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 }
 
 func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
+	return errors.AssertionFailedf("not implemented")
+}
+
+func (p *pebbleReadOnly) SingleClearUnversioned(key roachpb.Key) error {
 	return errors.AssertionFailedf("not implemented")
 }
 
