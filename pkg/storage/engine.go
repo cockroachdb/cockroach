@@ -646,6 +646,18 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearUnversioned(key roachpb.Key, opts ClearOptions) error
+	// SingleClearUnversioned removes an unversioned item from the db using a
+	// Pebble SingleDelete. It has the same purpose as ClearUnversioned but uses
+	// SingleDelete which is more efficient when the caller can guarantee that
+	// the key has been Set exactly once since the last SingleDelete/Delete.
+	//
+	// WARNING: using this on a key that has been Set multiple times without an
+	// intervening delete will not fully remove the key — it only cancels the
+	// most recent Set, leaving older Sets visible. See the Pebble SingleDelete
+	// documentation for the full contract.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	SingleClearUnversioned(key roachpb.Key) error
 	// ClearEngineKey removes the given point key from the engine. It does not
 	// affect range keys.  Note that clear actually removes entries from the
 	// storage engine. This is a general-purpose and low-level method that should

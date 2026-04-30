@@ -474,6 +474,11 @@ func (fw *SSTWriter) clear(key MVCCKey, opts ClearOptions) error {
 	return fw.fw.Delete(fw.scratch)
 }
 
+// SingleClearUnversioned implements the Writer interface.
+func (fw *SSTWriter) SingleClearUnversioned(key roachpb.Key) error {
+	return errors.AssertionFailedf("not implemented")
+}
+
 // SingleClearEngineKey implements the Writer interface.
 func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 	return errors.AssertionFailedf("not implemented")
