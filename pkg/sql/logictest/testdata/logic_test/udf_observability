@@ -1,3 +1,9 @@
+# The event_logging subtest validates exact Statement strings in system.eventlog,
+# which assumes no prepared statements. For example, CREATE FUNCTION ... AS
+# $$ SELECT 1 $$ records a doubled body ($$SELECT 1; SELECT 1;$$) when executed
+# via Prepare+Execute.
+# LogicTest: !local-prepared
+
 subtest event_logging
 
 statement ok

@@ -92,13 +92,6 @@ func TestLogic_alias_types(
 	runLogicTest(t, "alias_types")
 }
 
-func TestLogic_alter_column_type(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "alter_column_type")
-}
-
 func TestLogic_alter_database_convert_to_schema(
 	t *testing.T,
 ) {
@@ -223,13 +216,6 @@ func TestLogic_alter_sequence_owner(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_sequence_owner")
-}
-
-func TestLogic_alter_table(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "alter_table")
 }
 
 func TestLogic_alter_table_owner(
@@ -505,25 +491,11 @@ func TestLogic_column_families(
 	runLogicTest(t, "column_families")
 }
 
-func TestLogic_comment_on(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "comment_on")
-}
-
 func TestLogic_composite_types(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "composite_types")
-}
-
-func TestLogic_computed(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "computed")
 }
 
 func TestLogic_conditional(
@@ -545,13 +517,6 @@ func TestLogic_constrained_stats(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "constrained_stats")
-}
-
-func TestLogic_crdb_internal(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "crdb_internal")
 }
 
 func TestLogic_crdb_internal_catalog(
@@ -594,13 +559,6 @@ func TestLogic_create_as_non_metamorphic(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_as_non_metamorphic")
-}
-
-func TestLogic_create_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "create_index")
 }
 
 func TestLogic_create_statements(
@@ -993,13 +951,6 @@ func TestLogic_fips_ready(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "fips_ready")
-}
-
-func TestLogic_fk(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "fk")
 }
 
 func TestLogic_fk_read_committed(
@@ -1947,13 +1898,6 @@ func TestLogic_privilege_builtins(
 	runLogicTest(t, "privilege_builtins")
 }
 
-func TestLogic_privileges_comments(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "privileges_comments")
-}
-
 func TestLogic_privileges_table(
 	t *testing.T,
 ) {
@@ -2276,13 +2220,6 @@ func TestLogic_schema_change_feature_flags(
 	runLogicTest(t, "schema_change_feature_flags")
 }
 
-func TestLogic_schema_change_in_txn(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "schema_change_in_txn")
-}
-
 func TestLogic_schema_change_in_txn_ccl(
 	t *testing.T,
 ) {
@@ -2309,13 +2246,6 @@ func TestLogic_schema_locked(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "schema_locked")
-}
-
-func TestLogic_schema_repair(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "schema_repair")
 }
 
 func TestLogic_scrub(
@@ -2486,53 +2416,11 @@ func TestLogic_show_completions(
 	runLogicTest(t, "show_completions")
 }
 
-func TestLogic_show_create(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create")
-}
-
-func TestLogic_show_create_all_routines(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_routines")
-}
-
-func TestLogic_show_create_all_schemas(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_schemas")
-}
-
-func TestLogic_show_create_all_tables(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_tables")
-}
-
-func TestLogic_show_create_all_tables_builtin(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_tables_builtin")
-}
-
 func TestLogic_show_create_all_triggers(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_triggers")
-}
-
-func TestLogic_show_create_all_types(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_types")
 }
 
 func TestLogic_show_create_ccl(
@@ -3471,18 +3359,4 @@ func TestLogic_zigzag_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zigzag_join")
-}
-
-func TestLogic_zone_config(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "zone_config")
-}
-
-func TestLogic_zone_config_system_tenant(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "zone_config_system_tenant")
 }

@@ -3586,7 +3586,7 @@ func (t *logicTest) processSubtest(
 				}
 				githubIssueID, args := extractGithubIssue(fields[2:])
 				for _, configName := range args {
-					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) || t.cfg.IsEquivalentTo(configName) {
 						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
 					}
 					if !logictestbase.ConfigExists(configName) {
@@ -3640,7 +3640,7 @@ func (t *logicTest) processSubtest(
 				githubIssueID, args := extractGithubIssue(fields[2:])
 				shouldSkip := true
 				for _, configName := range args {
-					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) || t.cfg.IsEquivalentTo(configName) {
 						// Our config matches one item in the list.
 						shouldSkip = false
 					}
@@ -4054,6 +4054,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				}
 			}
 
+			noticeLenBeforePrepare := len(t.noticeBuffer)
 			prep, execErr = t.db.Prepare(tree.AsStringWithFlags(ast, tree.FmtShowFullURIs))
 
 			if execErr != nil {
@@ -4083,6 +4084,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			}
 
 			if execErr == nil {
+				// Discard notices from the prepare phase so that noticetrace
+				// tests only see notices produced during execution.
+				t.noticeBuffer = t.noticeBuffer[:noticeLenBeforePrepare]
 				rows, execErr = prep.Query(args...)
 				rowses = append(rowses, rows)
 			}
@@ -4824,6 +4828,7 @@ func (t *logicTest) runFile(path string, config logictestbase.TestClusterConfig)
 var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
+var logicTestsNightly = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_NIGHTLY", false)
 
 // TestServerArgs contains the parameters that callers of RunLogicTest might
 // want to specify for the test clusters to be created with.
@@ -4879,10 +4884,28 @@ func RunLogicTest(
 		lastProgress: timeutil.Now(),
 	}
 
-	// Check whether the test can only be run in non-metamorphic mode.
-	_, nonMetamorphicBatchSizes :=
+	// Check whether the test can only be run in non-metamorphic mode, and
+	// collect the blocklist from the test file header for metamorphic resolution.
+	_, nonMetamorphicBatchSizes, blockedConfigs, usesDefaults :=
 		logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
 	config := logictestbase.LogicTestConfigs[configIdx]
+
+	// Resolve metamorphic configs before any other checks.
+	rng, _ := randutil.NewTestRand()
+	if config.IsMetamorphic {
+		if *rewriteResultsInTestfiles {
+			config = config.ResolveMetamorphicBaseline()
+		} else {
+			var skipMeta bool
+			config, skipMeta = config.ResolveMetamorphic(rng, blockedConfigs)
+			if skipMeta {
+				skip.IgnoreLint(t, "all metamorphic options blocked")
+			}
+		}
+		t.Logf("metamorphic config %q resolved: %s",
+			logictestbase.LogicTestConfigs[configIdx].Name,
+			config.MetamorphicSummary())
+	}
 
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make
@@ -4892,9 +4915,6 @@ func RunLogicTest(
 
 	verbose := testing.Verbose() || log.V(1)
 
-	// Only used in rewrite mode, where we don't need to run the same file through
-	// multiple configs.
-
 	if testing.Short() && config.SkipShort {
 		skip.IgnoreLint(t, "config skipped by -test.short")
 	}
@@ -4903,6 +4923,9 @@ func RunLogicTest(
 	}
 	if logicTestsConfigFilter != "" && config.Name != logicTestsConfigFilter {
 		skip.IgnoreLint(t, "config does not match env var")
+	}
+	if !logicTestsNightly && usesDefaults && logictestbase.IsNightlyOnlyConfig(configIdx) {
+		skip.IgnoreLint(t, "nightly-only config; set COCKROACH_LOGIC_TESTS_NIGHTLY=true to run")
 	}
 
 	var cc *corpus.Collector
@@ -4927,7 +4950,6 @@ func RunLogicTest(
 		serverArgs.DisableWorkmemRandomization = true
 	}
 
-	rng, _ := randutil.NewTestRand()
 	lt := logicTest{
 		rootT:                      t,
 		verbose:                    verbose,

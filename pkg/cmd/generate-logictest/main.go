@@ -83,7 +83,9 @@ func (t *testdir) addLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.logicTestsConfigPaths = append(t.logicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.logicTestsConfigPaths = append(t.logicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -92,7 +94,9 @@ func (t *testdir) addExecBuildLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.execBuildLogicTestsConfigPaths = append(t.execBuildLogicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.execBuildLogicTestsConfigPaths = append(t.execBuildLogicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -105,7 +109,9 @@ func (t *testdir) addSqliteLogicTests(testPrefix string) error {
 	if err != nil {
 		return err
 	}
-	t.sqliteLogicTestsConfigPaths = append(t.sqliteLogicTestsConfigPaths, testPrefixConfigPaths{testPrefix: testPrefix, configPaths: paths})
+	t.sqliteLogicTestsConfigPaths = append(t.sqliteLogicTestsConfigPaths, testPrefixConfigPaths{
+		testPrefix: testPrefix, configPaths: paths,
+	})
 	return nil
 }
 
@@ -172,7 +178,8 @@ func (t *testdir) dumpConfig(configIdx int) error {
 	if strings.Contains(cfg.Name, "cockroach-go-testserver") {
 		tplCfg.NumCPU = 3
 	}
-	if cfg.Name == "3node-tenant" || strings.HasPrefix(cfg.Name, "multiregion-") {
+	if cfg.Name == "3node-tenant" || cfg.Name == "3node-meta" ||
+		strings.HasPrefix(cfg.Name, "multiregion-") {
 		tplCfg.SkipUnderRace = true
 	}
 	tplCfg.UseHeavyPool = useHeavyPoolNever
@@ -182,7 +189,7 @@ func (t *testdir) dumpConfig(configIdx int) error {
 		cfg.Name == "local" {
 		tplCfg.UseHeavyPool = useHeavyPoolForExpensiveConfig
 	} else if strings.Contains(cfg.Name, "cockroach-go-testserver") ||
-		strings.Contains(cfg.Name, "3node-tenant") {
+		strings.Contains(cfg.Name, "3node-tenant") || cfg.Name == "3node-meta" {
 		tplCfg.UseHeavyPool = useHeavyPoolAlways
 	}
 	subdir := filepath.Join(t.dir, cfg.Name)
@@ -221,7 +228,6 @@ func (t *testdir) dumpConfig(configIdx int) error {
 			dumpTestForFile(f, configPaths.testPrefix, relativeFile, "runSqliteLogicTest")
 		}
 	}
-
 	return buildFileTpl.Execute(buildF, tplCfg)
 }
 
