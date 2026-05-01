@@ -134,6 +134,13 @@ type sheddingStore struct {
 	// replacement stores for some particular replica), see the comment where
 	// sheddingStores are constructed.
 	storeLoadSummary
+	// withinLeaseSheddingGracePeriod and iLevel are the result of
+	// classifyOverload, computed once when the store is identified as
+	// overloaded and reused by both the shedding path (rebalanceStore) and
+	// the pending-blocked skip path so both paths attribute the store to
+	// the same overload bucket.
+	withinLeaseSheddingGracePeriod bool
+	iLevel                         ignoreLevel
 }
 
 // classifyOverload returns the overload classification for the given store,
@@ -241,12 +248,21 @@ func (re *rebalanceEnv) rebalanceStores(
 				}
 				ss.overloadEndTime = time.Time{}
 			}
+			// Classify once per overloaded store; both the shedding path
+			// (rebalanceStore, via sheddingStore) and the pending-blocked
+			// skip path below feed the same bucket.
+			withinGrace, iLevel, _ := classifyOverload(ss, sls, re.now)
 			// The pending decrease must be small enough to continue shedding
 			if ss.maxFractionPendingDecrease < re.fractionPendingIncreaseOrDecreaseThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
 				passML.logf(ctx, 2, "store s%v was added to shedding store list", storeID)
-				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
+				sheddingStores = append(sheddingStores, sheddingStore{
+					StoreID:                        storeID,
+					storeLoadSummary:               sls,
+					withinLeaseSheddingGracePeriod: withinGrace,
+					iLevel:                         iLevel,
+				})
 			} else {
 				var reason redact.RedactableString
 				if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
@@ -263,8 +279,7 @@ func (re *rebalanceEnv) rebalanceStores(
 				// to the `<bucket>.blocked` gauge. Without this, an overloaded
 				// store stuck in this skip path is invisible to the per-bucket
 				// metrics, even though MMA still considers it overloaded.
-				withinLeaseSheddingGracePeriod, iLevel, _ := classifyOverload(ss, sls, re.now)
-				re.passObs.storeOverloaded(storeID, withinLeaseSheddingGracePeriod, iLevel)
+				re.passObs.storeOverloaded(storeID, withinGrace, iLevel)
 				re.passObs.blockedByPending()
 				re.passObs.finishStore()
 			}
@@ -451,13 +466,14 @@ func (re *rebalanceEnv) rebalanceStore(
 	// of load from s1 => s2 unless s1 is not seeing any load shedding for
 	// some interval of time. We need a way to capture this information in a
 	// simple but effective manner. For now, we capture this using these
-	// grace duration thresholds (see classifyOverload).
-	withinLeaseSheddingGracePeriod, iLevel, _ := classifyOverload(ss, store.storeLoadSummary, re.now)
-	re.passObs.storeOverloaded(ss.StoreID, withinLeaseSheddingGracePeriod, iLevel)
+	// grace duration thresholds (see classifyOverload). The classification
+	// was computed when the store was added to sheddingStores; we just
+	// read it back here.
+	re.passObs.storeOverloaded(ss.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
 	defer func() {
 		re.passObs.finishStore()
 	}()
-	if withinLeaseSheddingGracePeriod && store.StoreID != localStoreID {
+	if store.withinLeaseSheddingGracePeriod && store.StoreID != localStoreID {
 		ml.logf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
 	}
@@ -499,7 +515,7 @@ func (re *rebalanceEnv) rebalanceStore(
 	}
 
 	ml.logf(ctx, 2, "attempting to shed replicas next")
-	re.rebalanceReplicas(ctx, store, ss, localStoreID, iLevel, ml)
+	re.rebalanceReplicas(ctx, store, ss, localStoreID, store.iLevel, ml)
 }
 
 func (re *rebalanceEnv) rebalanceReplicas(
