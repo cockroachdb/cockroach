@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -58,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -195,8 +195,7 @@ func changefeedPlanHook(
 	}
 	if changefeedStmt.Level != tree.ChangefeedLevelTable {
 		return nil, nil, false,
-			errors.UnimplementedError(
-				errors.IssueLink{IssueURL: build.MakeIssueURL(154053)},
+			unimplemented.NewWithIssue(154053,
 				"database-level changefeed is not implemented yet",
 			)
 	}
@@ -709,9 +708,9 @@ func createChangefeedJobRecord(
 	for _, t := range tableNameToDescriptor {
 		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 			if tbl.ExternalRowData().TenantID.IsSet() {
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+				return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.replication_target", "changefeeds on a replication target are not supported")
 			}
-			return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+			return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.external_table", "changefeeds on external tables are not supported")
 		}
 	}
 	// This grabs table descriptors once to get their ids.
@@ -730,9 +729,9 @@ func createChangefeedJobRecord(
 		for _, t := range tableNameToDescriptor {
 			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 				if tbl.ExternalRowData().TenantID.IsSet() {
-					return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+					return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.replication_target", "changefeeds on a replication target are not supported")
 				}
-				return nil, changefeedbase.Targets{}, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+				return nil, changefeedbase.Targets{}, unimplemented.New("changefeed.external_table", "changefeeds on external tables are not supported")
 			}
 		}
 

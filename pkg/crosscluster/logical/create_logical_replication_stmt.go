@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -95,7 +96,7 @@ func createLogicalReplicationStreamPlanHook(
 		defer span.Finish()
 
 		if stmt.From.Database != "" {
-			return errors.UnimplementedErrorf(errors.IssueLink{}, "logical replication streams on databases are unsupported")
+			return unimplemented.New("logical_replication.database", "logical replication streams on databases are unsupported")
 		}
 		if len(stmt.From.Tables) != len(stmt.Into.Tables) {
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")

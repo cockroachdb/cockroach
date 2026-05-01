@@ -92,6 +92,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/bulk",
         "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
