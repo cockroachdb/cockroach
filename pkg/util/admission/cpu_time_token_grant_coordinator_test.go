@@ -145,3 +145,53 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 }
+
+// TestSetResourceGroupConfigViaCoord exercises the public coord
+// entry point end-to-end: it must update the shared holder AND
+// signal the RM-mode WorkQueue to push the new config onto its
+// cached per-group state. A bug that wires the refresh to the wrong
+// queue, drops the holder write, or skips the refresh would not be
+// caught by tests that go directly through holder/refresh.
+func TestSetResourceGroupConfigViaCoord(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ambientCtx log.AmbientContext
+	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	var opts Options
+	knobs := &TestingKnobs{DisableCPUTimeTokenFillerGoroutine: true}
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
+	defer coords.Close()
+	cpuCoords := coords.RegularCPU
+	rmQueue := cpuCoords.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
+
+	// Force RM mode so the apply path runs synchronously when refresh
+	// is invoked. Without this, refresh is a no-op and the test would
+	// only assert the holder write.
+	rmQueue.setUseResourceGroup(true)
+
+	// Public API call. This is the only thing under test.
+	cpuCoords.SetResourceGroupConfig(map[uint64]ResourceGroupConfig{
+		highResourceGroupID: {Weight: 70, MaxCPU: true},
+		lowResourceGroupID:  {Weight: 30, MaxCPU: false},
+	})
+
+	// Holder reflects the new config.
+	snap := cpuCoords.cpuTimeCoord.configHolder.Snapshot()
+	require.Equal(t, uint32(70), snap[highResourceGroupID].Weight)
+	require.True(t, snap[highResourceGroupID].MaxCPU)
+	require.Equal(t, uint32(30), snap[lowResourceGroupID].Weight)
+	require.False(t, snap[lowResourceGroupID].MaxCPU)
+
+	// RM-mode WorkQueue's cached per-group state reflects the new
+	// config (refresh propagated through to applyConfigLocked).
+	high := getGroupLocked(rmQueue, rgGroupKey(highResourceGroupID))
+	require.NotNil(t, high, "rg high container should be pre-created by apply")
+	require.Equal(t, uint32(70), high.weight)
+	require.True(t, high.cpuTimeBurstBucket.maxCPU)
+	low := getGroupLocked(rmQueue, rgGroupKey(lowResourceGroupID))
+	require.NotNil(t, low, "rg low container should be pre-created by apply")
+	require.Equal(t, uint32(30), low.weight)
+	require.False(t, low.cpuTimeBurstBucket.maxCPU)
+}

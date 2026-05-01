@@ -601,14 +601,13 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 	h.Close()
 }
 
-// TestSetMaxCPUGroupsRGOnly verifies that SetMaxCPUGroups inputs
-// are interpreted as resource group IDs (rgKind) only. A
-// numerically equal tenant-keyed container must not inherit the
-// flag — that's the cross-namespace collision the kind discriminator
-// in q.mu.groups is meant to prevent. The lookup-time guard in
-// getMaxCPULocked enforces this even though q.mu.maxCPUGroups
-// itself is uint64-keyed.
-func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
+// TestSetResourceGroupConfigRGOnly verifies that SetResourceGroupConfig
+// inputs only affect rg-keyed containers. A numerically equal
+// tenant-keyed container must not inherit the maxCPU flag — that's the
+// cross-namespace collision the kind discriminator in q.mu.groups is
+// meant to prevent. applyConfigLocked enforces this by always keying
+// its writes via rgGroupKey.
+func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -644,8 +643,12 @@ func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
 	require.NotSame(t, tenantContainer, rgContainer,
 		"tenant 1 and rg 1 must be distinct *groupInfo entries")
 
-	// Set maxCPU on group 1. It should affect the rg container only.
-	q.SetMaxCPUGroups(map[uint64]bool{1: true})
+	// Set maxCPU on group 1 via the holder + apply path. It should
+	// affect the rg container only.
+	q.configHolder.Set(map[uint64]ResourceGroupConfig{
+		1: {Weight: 1, MaxCPU: true},
+	})
+	q.refreshResourceGroupConfig()
 
 	q.mu.Lock()
 	tenantMaxCPU := tenantContainer.cpuTimeBurstBucket.maxCPU
@@ -654,7 +657,7 @@ func TestSetMaxCPUGroupsRGOnly(t *testing.T) {
 
 	require.False(t, tenantMaxCPU,
 		"tenant container must not inherit the rg-keyed maxCPU flag "+
-			"(getMaxCPULocked's isRg guard is the enforcement)")
+			"(applyConfigLocked writes only rg-keyed entries)")
 	require.True(t, rgMaxCPU,
 		"rg container should pick up the maxCPU flag")
 
@@ -687,14 +690,6 @@ func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
 	return g.used
 }
 
-// hasGroup reports whether q.mu.groups has an entry for key.
-func hasGroup(q *WorkQueue, key groupKey) bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	_, ok := q.mu.groups[key]
-	return ok
-}
-
 // TestSQLCPUHandleCloseAfterModeFlip verifies that a mode flip
 // between Admit and Close still routes the drained reservation to
 // the original (Admit-time) container. The reservationSourceGroup
@@ -720,7 +715,11 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
 	// route to rgGroupKey(highResourceGroupID), but Close should still
 	// target the tenant-keyed container that holds the prior tokens.
+	// Note: setUseResourceGroup(true) pre-creates the rg-keyed
+	// containers via applyConfigLocked, so the rg container exists
+	// before Close runs.
 	q.setUseResourceGroup(true)
+	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
 
 	_ = tg.buf.stringAndReset()
 	h.Close()
@@ -729,8 +728,8 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	require.Less(t, requireGroupUsed(t, q, tenantKey), usedBefore,
 		"tenant container's used must decrement; if not, Close "+
 			"re-derived the container key from the post-flip mode")
-	require.False(t, hasGroup(q, rgGroupKey(highResourceGroupID)),
-		"rg container must not have been created by Close (it would "+
-			"mean Close re-derived from current mode rather than using "+
-			"reservationSourceGroup)")
+	require.Equal(t, rgUsedBefore, requireGroupUsed(t, q, rgGroupKey(highResourceGroupID)),
+		"rg container's used must not change; if it did, Close "+
+			"re-derived the container key from the post-flip mode "+
+			"rather than using reservationSourceGroup")
 }

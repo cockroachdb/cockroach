@@ -330,13 +330,6 @@ type WorkQueue struct {
 			// The maps are lazily allocated.
 			active, inactive map[groupKey]uint32
 		}
-		// maxCPUGroups maps resource group ID to whether that group always
-		// qualifies for burst (MAX_CPU). IDs are interpreted as resource group
-		// IDs (rgKind); the lookup in getMaxCPULocked short-circuits for
-		// tenant-keyed containers so a numerically equal tenant ID can never
-		// inherit the flag. Only used if mode == usesCPUTimeTokens and
-		// admission.cpu_time_tokens.mode == "resource_manager".
-		maxCPUGroups map[uint64]bool
 
 		// useResourceGroup, when true, derives the resource group ID from
 		// WorkInfo.Priority instead of WorkInfo.TenantID. Used in Resource
@@ -359,21 +352,36 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
-		// burstBucketCapacity is the capacity for newly created group burst
-		// buckets. Note that buckets init full, so burstBucketCapacity is also
-		// the starting token count. Updated by refillBurstBuckets. Only used
-		// if mode == usesCPUTimeTokens.
+		// burstBucketCapacity seeds new groupInfos when Admit lazy-creates
+		// them or applyConfigLocked pre-creates them. New buckets take this
+		// value for both tokens and capacity, so groups start full and can
+		// burst right away.
 		//
-		// TODO(wenyihu6): For RM, a group that appears between refills will use
-		// burstBucketCapacity (which may be stale or zero) until the next refill
-		// delivers its correct per-group capacity within 1ms. We should plumb the
-		// per-group capacity to newGroupInfo at creation time so new groups don't
-		// wait for the next refill cycle.
+		// Only serverless mode uses this. serverlessStrategy refreshes it
+		// every 1ms via refillBurstBuckets to match the current uniform
+		// per-tenant capacity. RM mode leaves it at zero, since each RM
+		// group's capacity scales by its weight and no single value would
+		// work as a queue-wide seed. A new RM group starts at capacity 0
+		// and picks up its real value on the next refillRMGroupBurstBuckets
+		// tick (within 1ms).
 		burstBucketCapacity int64
 		// overrideAllToBypassAdmission, when true, causes all work to bypass
 		// admission control. Used by CPU time token AC.
 		overrideAllToBypassAdmission bool
 	}
+
+	// configHolder owns the per-resource-group config for RM mode.
+	// Only set when mode == usesCPUTimeTokens; nil otherwise. Reads
+	// happen only on RM-mode paths (gated by useResourceGroup, which
+	// itself is only set true in the CTT path), so non-CTT WorkQueues
+	// never reach a read site. See resource_group_config_holder.go
+	// for the type's lifecycle contract.
+	//
+	// Lock ordering: q.mu is acquired first, holder.mu second. Never
+	// the reverse. All current readers (Snapshot, GetOrDefault) are
+	// called from sites that already hold q.mu.
+	configHolder *ResourceGroupConfigHolder
+
 	logThreshold log.EveryN
 	metrics      *WorkQueueMetrics
 	stopCh       chan struct{}
@@ -405,6 +413,11 @@ type workQueueOptions struct {
 	// metrics. Only set when mode == usesCPUTimeTokens. See
 	// cpuTimeTokenMetrics for details.
 	perGroupAggMetrics *groupAggMetrics
+	// configHolder is the per-resource-group config for RM mode.
+	// Only set by the CTT grant coordinator; left nil by other
+	// call sites since non-CTT WorkQueues never reach an RM-mode
+	// read site. See WorkQueue.configHolder for the full contract.
+	configHolder *ResourceGroupConfigHolder
 
 	// timeSource can be set to non-nil for tests. If nil,
 	// the timeutil.DefaultTimeSource will be used.
@@ -485,6 +498,7 @@ func initWorkQueue(
 	q.logThreshold = log.Every(5 * time.Minute)
 	q.metrics = metrics
 	q.stopCh = stopCh
+	q.configHolder = opts.configHolder
 	q.perGroupAggMetrics = opts.perGroupAggMetrics
 	q.timeSource = timeSource
 	q.knobs = knobs
@@ -740,10 +754,16 @@ func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 // setUseResourceGroup enables or disables priority-based resource
 // group derivation. When enabled, the resource group ID is derived
 // from WorkInfo.Priority instead of WorkInfo.TenantID.
+//
+// When enabled is true, the current holder snapshot is also applied
+// to q.mu.groups via applyConfigLocked.
 func (q *WorkQueue) setUseResourceGroup(enabled bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.useResourceGroup = enabled
+	if enabled {
+		q.applyConfigLocked(q.configHolder.Snapshot())
+	}
 }
 
 // groupKeyForWorkLocked returns the composite groupKey for the given
@@ -820,8 +840,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that group yet. When we create the groupInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all groups.
-		maxCPU := q.getMaxCPULocked(gKey)
-		group = newGroupInfo(gKey, q.getGroupWeightLocked(gKey),
+		weights, maxCPU := q.getGroupWeightLocked(gKey)
+		group = newGroupInfo(gKey, weights,
 			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
 			maxCPU, q.perGroupAggMetrics)
 		q.mu.groups[gKey] = group
@@ -967,8 +987,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// groupInfo struct is declared.
 		group, ok = q.mu.groups[gKey]
 		if !ok {
-			maxCPU := q.getMaxCPULocked(gKey)
-			group = newGroupInfo(gKey, q.getGroupWeightLocked(gKey),
+			weights, maxCPU := q.getGroupWeightLocked(gKey)
+			group = newGroupInfo(gKey, weights,
 				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
 				maxCPU, q.perGroupAggMetrics)
 			q.mu.groups[gKey] = group
@@ -1445,7 +1465,9 @@ func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capaci
 	if !ok {
 		return
 	}
-	q.mu.burstBucketCapacity = capacity
+	// Do NOT write q.mu.burstBucketCapacity here: that field is the
+	// serverless lazy-create seed and must not be polluted by RM-mode
+	// per-group scaled capacities.
 	q.refillBurstBucketLocked(group, toAdd, capacity)
 }
 
@@ -1557,55 +1579,43 @@ const defaultGroupWeight = 1
 // admission.kv_slot_adjuster.overload_threshold. We don't want to starve
 // small groups, so the cap is currently set to 20. A more sophisticated fair
 // sharing scheme would not need such a cap.
+//
+// TODO(wenyihu6): the cap is currently only applied to tenant weights via
+// SetTenantWeights. Resource Manager mode weights flow through
+// SetResourceGroupConfig without any cap enforcement. Consider whether the
+// same cap (or an analogous one) should be enforced for resource groups,
+// likely at the SQL DDL level (CREATE/ALTER RESOURCE GROUP) rather than
+// silently in the admission layer, so operators get an explicit error
+// instead of a weight that's quietly ignored.
 const groupWeightCap = 20
 
-func (q *WorkQueue) getGroupWeightLocked(gKey groupKey) uint32 {
-	weight, ok := q.mu.groupWeights.active[gKey]
-	if !ok {
-		weight = defaultGroupWeight
-	}
-	return weight
-}
-
-// getMaxCPULocked returns the maxCPU flag for the given group.
-// Returns false if the ID is not in maxCPUGroups, or if gKey is
-// tenant-keyed: maxCPUGroups is populated with RG IDs, so the
-// kind guard prevents a numerically equal tenant ID from inheriting
-// the flag. See cpuTimeBurstBucket for how this flag affects burst
-// qualification.
+// getGroupWeightLocked returns the heap weight and maxCPU flag for
+// gKey. The two cases come from different sources:
 //
-// REQUIRES: q.mu is held.
-func (q *WorkQueue) getMaxCPULocked(gKey groupKey) bool {
-	q.mu.AssertHeld()
-	if !gKey.isRg() {
-		return false
-	}
-	return q.mu.maxCPUGroups[gKey.id]
-}
-
-// SetMaxCPUGroups replaces all per-resource-group maxCPU flags with
-// the provided map. Input IDs are interpreted as resource group IDs
-// (rgKind); only rg-keyed containers consult this map (see
-// getMaxCPULocked), so a numerically equal tenant ID can never
-// inherit the flag. Groups absent from the map revert to the default
-// (maxCPU=false). Existing groups have their burst buckets updated;
-// new groups will pick up their flag when created. The map is
-// captured by reference; the caller must not modify it after calling.
-func (q *WorkQueue) SetMaxCPUGroups(groups map[uint64]bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.mu.maxCPUGroups = groups
-	for gKey, group := range q.mu.groups {
-		maxCPU := q.getMaxCPULocked(gKey)
-		if group.cpuTimeBurstBucket.maxCPU != maxCPU {
-			prevQual := group.cpuTimeBurstBucket.burstQualification()
-			group.cpuTimeBurstBucket.maxCPU = maxCPU
-			curQual := group.cpuTimeBurstBucket.burstQualification()
-			if prevQual != curQual && isInGroupHeap(group) {
-				q.mu.groupHeap.fix(group)
-			}
+//   - rgKind reads both fields from configHolder (RM-mode config).
+//   - tenantKind reads weight from groupWeights.active and always
+//     returns maxCPU=false (tenants don't carry burst flags).
+//
+// q.mu must be held. configHolder.GetOrDefault returns the safety
+// fallback for unconfigured rgKind IDs, so this call always returns
+// a usable weight.
+func (q *WorkQueue) getGroupWeightLocked(gKey groupKey) (weight uint32, maxCPU bool) {
+	switch gKey.kind {
+	case rgKind:
+		cfg := q.configHolder.GetOrDefault(gKey.id)
+		weight = cfg.Weight
+		maxCPU = cfg.MaxCPU
+	case tenantKind:
+		w, ok := q.mu.groupWeights.active[gKey]
+		if !ok {
+			weight = defaultGroupWeight
+		} else {
+			weight = w
 		}
+	default:
+		panic(errors.AssertionFailedf("unknown group kind %s", gKey.kind))
 	}
+	return
 }
 
 // SetOverrideAllToBypassAdmission sets whether all work should bypass
@@ -1614,6 +1624,105 @@ func (q *WorkQueue) SetOverrideAllToBypassAdmission(override bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.overrideAllToBypassAdmission = override
+}
+
+// refreshResourceGroupConfig pushes the current holder snapshot onto
+// q.mu.groups via applyConfigLocked. Call this after configHolder.Set
+// to make a config change visible to in-flight admits.
+//
+// No-op in serverless mode: a Set that arrives there updates only the
+// holder; setUseResourceGroup(true) replays it when the queue next
+// enters RM mode.
+//
+// NB: caller must only invoke this on a WorkQueue with a non-nil
+// configHolder (i.e., a CTT queue). The useResourceGroup gate
+// also prevents a nil-deref as a defesnive check.
+func (q *WorkQueue) refreshResourceGroupConfig() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.mu.useResourceGroup {
+		q.applyConfigLocked(q.configHolder.Snapshot())
+	}
+}
+
+// applyConfigLocked walks a holder snapshot and upserts each rgKind
+// group's groupInfo (weight + maxCPU, heap fix on weight or burst
+// qualification change, pre-create if missing). It has upsert
+// semantics: rgKind entries absent from the snapshot are left in
+// q.mu.groups and drain via the GC path.
+//
+// q.mu must be held. Two callers:
+//
+//   - setUseResourceGroup, right after RM mode is enabled.
+//   - refreshResourceGroupConfig, during RM steady-state when the
+//     holder config changes.
+//
+// Idempotent. Reapplying the same snapshot is a no-op on the second
+// pass; reapplying different snapshots converges on the last one.
+//
+// New-vs-existing asymmetry: when the !ok branch creates a fresh
+// groupInfo, it pulls cpuTimeTokenEstimator and
+// cpuTimeBurstBucket.capacity from package state
+// (defaultCPUTimeTokenEstimator and q.mu.burstBucketCapacity), not
+// from the snapshot. Later applies for the same ID only rewrite
+// weight and maxCPU, so the estimator seed and bucket capacity stick
+// at their first-creation values. The bucket capacity catches up
+// independently on the next refillRMGroupBurstBuckets tick (within
+// 1ms), so a Set that changes MaxCPU lands instantly while the
+// implied bucket capacity trails briefly.
+//
+// All writes happen under one q.mu critical section, so concurrent
+// readers see either fully-old or fully-new state, never a stitched
+// generation. At expected N (a handful of groups), the lock hold is
+// microseconds and not a hot-path concern. If N ever grows to
+// hundreds or thousands, mirror SetTenantWeights's pattern:
+// pre-compute under a sub-mutex (configHolder already does this),
+// then take q.mu in short batches.
+func (q *WorkQueue) applyConfigLocked(config map[uint64]ResourceGroupConfig) {
+	// rgKind weights are not stored in groupWeights.active. The map is
+	// tenant-only; rgKind groups carry their weight on groupInfo.weight
+	// (written below for existing groups, and at lazy-create time from
+	// the holder), so a parallel lookup map would be redundant.
+	for id, d := range config {
+		k := rgGroupKey(id)
+		group, ok := q.mu.groups[k]
+		if !ok {
+			// Pre-create the rgKind groupInfo from the holder snapshot so
+			// the very first Admit for this ID hits the fast path with the
+			// configured weight/maxCPU already in place. This is the same
+			// initialization the lazy-create branch in Admit performs (see
+			// getGroupWeightLocked, which reads from configHolder for
+			// rgKind), just done eagerly under the apply path so existing
+			// callers don't need to wait for a first Admit before observing
+			// the new config in q.mu.groups.
+			group = newGroupInfo(k, d.Weight, q.mode,
+				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
+				q.mu.burstBucketCapacity, d.MaxCPU, q.perGroupAggMetrics)
+			q.mu.groups[k] = group
+			continue
+		}
+		// Track whether anything that affects groupHeap.Less changed,
+		// so we can fix the heap once per group at the end. Less
+		// orders by burstQualification then by used/weight, so both a
+		// weight change and a maxCPU-driven qualification flip can
+		// invalidate the heap invariant.
+		needsHeapFix := false
+		if group.weight != d.Weight {
+			group.weight = d.Weight
+			needsHeapFix = true
+		}
+		if group.cpuTimeBurstBucket.maxCPU != d.MaxCPU {
+			prevQual := group.cpuTimeBurstBucket.burstQualification()
+			group.cpuTimeBurstBucket.maxCPU = d.MaxCPU
+			curQual := group.cpuTimeBurstBucket.burstQualification()
+			if prevQual != curQual {
+				needsHeapFix = true
+			}
+		}
+		if needsHeapFix && isInGroupHeap(group) {
+			q.mu.groupHeap.fix(group)
+		}
+	}
 }
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
@@ -1701,7 +1810,7 @@ func (q *WorkQueue) SetTenantWeights(groupWeights map[uint64]uint32) {
 			}
 			key := keys[index]
 			gi := q.mu.groups[key]
-			weight := q.getGroupWeightLocked(key)
+			weight, _ := q.getGroupWeightLocked(key)
 			if gi != nil && gi.weight != weight {
 				gi.weight = weight
 				if isInGroupHeap(gi) {

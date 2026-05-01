@@ -715,8 +715,6 @@ type workQueueIForAllocator interface {
 	// by default.
 	refillRMGroupBurstBuckets(rate100, cap100 float64)
 	// setUseResourceGroup toggles RM-style group derivation.
-	// TODO(wenyihu6): on false -> true, snapshot the configHolder and
-	// apply derived state to groupInfo (see WorkQueue.setUseResourceGroup).
 	setUseResourceGroup(enabled bool)
 }
 

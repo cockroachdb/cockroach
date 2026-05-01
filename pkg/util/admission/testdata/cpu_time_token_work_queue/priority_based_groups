@@ -25,20 +25,21 @@ set-priority-based-groups v=true
 # group 1 regardless of tenant ID.
 admit id=1 tenant=10 priority=0 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 1: admit succeeded
 
 admit id=2 tenant=20 priority=0 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 2: admit succeeded
 
 # Both high-pri admits (different tenants) should land in group 1.
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 2, w: 1, fifo: -128
-burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
+ group-id: 1 used: 2, w: 80, fifo: -128
+ group-id: 2 used: 0, w: 20, fifo: -128
+burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=0 capacity=0 qual=no_burst
 
 # Admit low-priority work (priority=-30, BulkNormalPri). Should route
 # to group 2 regardless of tenant ID.
@@ -56,9 +57,9 @@ id 4: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 2, w: 1, fifo: -128
- group-id: 2 used: 2, w: 1, fifo: -128
-burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 qual=no_burst rg2=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
+ group-id: 1 used: 2, w: 80, fifo: -128
+ group-id: 2 used: 2, w: 20, fifo: -128
+burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-2 capacity=0 qual=no_burst
 
 ###
 # Verify AdmittedWorkDone uses the correct group. Complete work from
@@ -78,9 +79,9 @@ tookWithoutPermission 199
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 101, w: 1, fifo: -128
- group-id: 2 used: 201, w: 1, fifo: -128
-burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 qual=no_burst rg2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
+ group-id: 1 used: 101, w: 80, fifo: -128
+ group-id: 2 used: 201, w: 20, fifo: -128
+burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
 
 ###
 # Verify burst qualification works correctly with priority-based groups.
@@ -110,8 +111,8 @@ admit id=6 tenant=10 priority=-30 requested-count=1
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 1
- group-id: 1 used: 101, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
- group-id: 2 used: 201, w: 1, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 1 used: 101, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 2 used: 201, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
 burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
 
 gc-groups-and-reset-used
@@ -151,6 +152,6 @@ print
 ----
 closed epoch: 0 groupHeap len: 0
  group-id: 50 used: 1, w: 1, fifo: -128
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: t50=fullness=0.0% tokens=-1 capacity=0 qual=no_burst rg1=fullness=0.0% tokens=-102 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-202 capacity=0 qual=no_burst

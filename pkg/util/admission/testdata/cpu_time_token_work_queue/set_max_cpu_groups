@@ -25,7 +25,7 @@ set-try-get-return-value v=true
 # BulkNormalPri -> rg 2.
 admit id=1 tenant=10 priority=0 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 1: admit succeeded
 
 admit id=2 tenant=10 priority=-30 requested-count=1
@@ -40,9 +40,9 @@ refill-burst-buckets to-add=51 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
-burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 qual=no_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
+burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
 
 # Set rg 1 to maxCPU=true via SetMaxCPUGroups. rg 1 should now be
 # can_burst despite being at only 50% fullness.
@@ -52,8 +52,8 @@ set-max-cpu-groups group=1 v=true
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=50.0% tokens=50 capacity=100 maxCPU=true qual=can_burst rg2=fullness=50.0% tokens=50 capacity=100 qual=no_burst
 
 # Queue work for both groups.
@@ -98,8 +98,8 @@ set-max-cpu-groups group=1 v=false
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=49.0% tokens=49 capacity=100 qual=no_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
 
 # Both groups are now no_burst. New work should report no_burst.
@@ -136,8 +136,8 @@ set-max-cpu-groups group=1 v=true
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 1
- group-id: 1 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
- group-id: 2 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 1 used: 0, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: 2 used: 0, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
 burst-buckets: rg1=fullness=48.0% tokens=48 capacity=100 maxCPU=true qual=can_burst rg2=fullness=49.0% tokens=49 capacity=100 qual=no_burst
 
 # rg 1 (can_burst via maxCPU) should be granted before rg 2.
@@ -189,5 +189,6 @@ id 8: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
-burst-buckets: rg1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 0, w: 20, fifo: -128
+burst-buckets: rg1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst rg2=fullness=100.0% tokens=100 capacity=100 qual=can_burst

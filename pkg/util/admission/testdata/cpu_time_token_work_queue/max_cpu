@@ -30,7 +30,7 @@ set-try-get-return-value v=true
 # then flip rg 1 to maxCPU=true.
 admit id=1 tenant=10 priority=0 requested-count=1
 ----
-tryGet: input no_burst, returning true
+tryGet: input can_burst, returning true
 id 1: admit succeeded
 
 admit id=2 tenant=10 priority=-30 requested-count=1
@@ -46,8 +46,8 @@ set-max-cpu-groups group=1 v=true
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
 
 # Refill 25 tokens with capacity=100. Both buckets: -1+25=24 tokens,
@@ -59,8 +59,8 @@ refill-burst-buckets to-add=25 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 1, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst rg2=fullness=24.0% tokens=24 capacity=100 qual=no_burst
 
 # Queue work for both groups. rg 1's work should be granted first
@@ -121,6 +121,6 @@ refill-burst-buckets to-add=25 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100001, w: 1, fifo: -128
- group-id: 2 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 100001, w: 80, fifo: -128
+ group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst rg2=fullness=48.0% tokens=48 capacity=100 qual=no_burst

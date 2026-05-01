@@ -130,6 +130,12 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 //
 // Note that cpuTimeTokenGranter does not handle replenishing the buckets.
 //
+// All numResourceTiers tiers are always initialized and iterated. In
+// Resource Manager mode, tier-1 mirrors tier-0's refill rates and receives
+// the same token deductions, but no work is routed to it, so its admission
+// checks are no-ops. This avoids special-casing the refill and deduction
+// loops. See rmStrategy.computeTargets for details.
+//
 // For more, see the initial design sketch:
 // https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
 type cpuTimeTokenGranter struct {

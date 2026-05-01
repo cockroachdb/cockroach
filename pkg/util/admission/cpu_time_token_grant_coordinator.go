@@ -197,6 +197,27 @@ func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 	coord.cpuTimeCoord.setGroupWeights(weights)
 }
 
+// SetResourceGroupConfig installs a new per-resource-group
+// configuration (weight + maxCPU) for Resource Manager mode in two
+// steps: write the source-of-truth holder, then signal the RM-mode
+// WorkQueue to refresh its cached per-group state from the holder.
+//
+// If RM mode is currently off, the second step is a no-op: the
+// change is staged in the holder and applied automatically when the
+// queue next enters RM mode (via setUseResourceGroup(true)).
+//
+// See ResourceGroupConfigHolder's type comment in
+// resource_group_config_holder.go for the design discussion of why a
+// dedicated holder owns the config storage.
+func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config map[uint64]ResourceGroupConfig) {
+	coord.cpuTimeCoord.configHolder.Set(config)
+	q, ok := coord.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
+	if !ok {
+		panic(errors.AssertionFailedf("queues[%d] is not a *WorkQueue", rmQueueTier))
+	}
+	q.refreshResourceGroupConfig()
+}
+
 // GetRunnableCountCallback returns a callback of type
 // goschedstats.RunnableCountCallback.
 func (coord *CPUGrantCoordinators) GetRunnableCountCallback() goschedstats.RunnableCountCallback {
@@ -209,9 +230,15 @@ func (cg *CPUGrantCoordinators) Close() {
 	cg.cpuTimeCoord.close()
 }
 
+// rmQueueTier is the index in cpuTimeTokenGrantCoordinator.queues
+// that owns RM-mode work. Tier 1 is unused in RM mode; see the
+// comment on cpuTimeTokenGranter for why.
+const rmQueueTier resourceTier = 0
+
 type cpuTimeTokenGrantCoordinator struct {
-	filler *cpuTimeTokenFiller
-	queues [numResourceTiers]requesterClose
+	filler       *cpuTimeTokenFiller
+	queues       [numResourceTiers]requesterClose
+	configHolder *ResourceGroupConfigHolder
 }
 
 func makeCPUTimeTokenGrantCoordinator(
@@ -263,6 +290,11 @@ func makeCPUTimeTokenGrantCoordinator(
 
 	var requesters [numResourceTiers]requester
 	wqMetrics := makeWorkQueueMetrics("cpu", registry)
+	// One holder shared across both per-tier WorkQueues. RM mode only
+	// uses tier 0; tier 1 sees every Set (the holder is shared) but
+	// never applies, since SetResourceGroupConfig forwards refresh
+	// signals only to tier 0 (rmQueueTier) below.
+	configHolder := newResourceGroupConfigHolder()
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		opts := makeWorkQueueOptions(KVWork)
 		opts.mode = usesCPUTimeTokens
@@ -272,6 +304,7 @@ func makeCPUTimeTokenGrantCoordinator(
 			tokensUsed:     metrics.TokensUsedPerTenant[tier],
 			tokensReturned: metrics.TokensReturnedPerTenant[tier],
 		}
+		opts.configHolder = configHolder
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]
@@ -288,7 +321,8 @@ func makeCPUTimeTokenGrantCoordinator(
 	allocator.configureQueue()
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
-		filler: filler,
+		filler:       filler,
+		configHolder: configHolder,
 	}
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		coordinator.queues[tier] = requesters[tier]
@@ -335,12 +369,20 @@ func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *Work
 				"queue[%d] accessed in resource manager mode", tier))
 		}
 	}
-	return coord.queues[tier].(*WorkQueue)
+	q, ok := coord.queues[tier].(*WorkQueue)
+	if !ok {
+		panic(errors.AssertionFailedf("queues[%d] is not a *WorkQueue", tier))
+	}
+	return q
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) setGroupWeights(weights map[uint64]uint32) {
 	for tier := range coord.queues {
-		coord.queues[tier].(*WorkQueue).SetTenantWeights(weights)
+		q, ok := coord.queues[tier].(*WorkQueue)
+		if !ok {
+			panic(errors.AssertionFailedf("queues[%d] is not a *WorkQueue", tier))
+		}
+		q.SetTenantWeights(weights)
 	}
 }
 
