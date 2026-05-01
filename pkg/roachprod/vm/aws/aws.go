@@ -1577,17 +1577,16 @@ func (p *Provider) deleteManagedCluster(l *logger.Logger, vms vm.List) error {
 
 	for region := range byRegion {
 		g.GoCtx(func(ctx context.Context) error {
-			// Delete the ASG first (this terminates instances)
+			var combinedErr error
 			if err := p.deleteAutoScalingGroup(ctx, l, clusterName, region); err != nil {
-				l.Printf("Warning: failed to delete ASG: %v", err)
+				combinedErr = errors.CombineErrors(combinedErr,
+					errors.Wrapf(err, "failed to delete ASG in region %s", region))
 			}
-
-			// Delete the launch template
 			if err := p.deleteLaunchTemplate(ctx, l, clusterName, region); err != nil {
-				l.Printf("Warning: failed to delete launch template: %v", err)
+				combinedErr = errors.CombineErrors(combinedErr,
+					errors.Wrapf(err, "failed to delete launch template in region %s", region))
 			}
-
-			return nil
+			return combinedErr
 		})
 	}
 
