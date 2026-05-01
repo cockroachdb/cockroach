@@ -183,23 +183,43 @@ func nDatasets(rng *rand.Rand, n int) []string {
 	return allDatasets[:n]
 }
 
-func anyThreeDatasets(rng *rand.Rand) []string {
-	return nDatasets(rng, 3)
-}
-
 func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
 
-func anySmallDataset(rng *rand.Rand) []string {
-	all := allDatasets(rng)
-	small := slices.DeleteFunc(all, func(name string) bool {
-		return name == "tpch/lineitem"
+// nSmallDatasets returns n randomly chosen datasets, excluding lineitem in
+// any format. Use for subtests whose extra work would push a lineitem import
+// past importTestTimeout. Like nDatasets, the returned names have distinct
+// table names so concurrent imports do not collide.
+func nSmallDatasets(rng *rand.Rand, n int) []string {
+	small := slices.DeleteFunc(allDatasets(rng), func(name string) bool {
+		return datasets[name].getTableName() == "lineitem"
 	})
 	rng.Shuffle(len(small), func(i, j int) {
 		small[i], small[j] = small[j], small[i]
 	})
-	return small[:1]
+	seen := make(map[string]bool)
+	var result []string
+	for _, name := range small {
+		tbl := datasets[name].getTableName()
+		if seen[tbl] {
+			continue
+		}
+		seen[tbl] = true
+		result = append(result, name)
+		if len(result) == n {
+			break
+		}
+	}
+	return result
+}
+
+func anySmallDataset(rng *rand.Rand) []string {
+	return nSmallDatasets(rng, 1)
+}
+
+func anyThreeSmallDatasets(rng *rand.Rand) []string {
+	return nSmallDatasets(rng, 3)
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -272,7 +292,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeSmallDatasets),
 	},
 	// Test with a decommissioned node. Exclude lineitem (the largest dataset)
 	// to avoid timeouts when running with only 3 active nodes.
@@ -331,14 +351,14 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "cancellation",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeSmallDatasets),
 		importRunner: importCancellationRunner,
 	},
 	// Test column families.
 	{
 		subtestName:  "colfam",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		preTestHook:  makeColumnFamilies,
 	},
 	// Test pause and resume of import jobs.
@@ -352,7 +372,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "split",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: splitImportRunner,
 	},
 }
