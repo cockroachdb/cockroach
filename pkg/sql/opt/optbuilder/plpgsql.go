@@ -2410,14 +2410,16 @@ func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt
 	// Save any outer CTEs before building the expression, which may have
 	// subqueries with inner CTEs. Also set the maxParamOrd to the number of
 	// routine parameters.
-	defer func(prevCTEs cteSources, prevCheckMaxParamOrd bool, prevMaxParamOrd int) {
+	defer func(prevCTEs cteSources, prevCheckMaxParamOrd bool, prevMaxParamOrd int, prevHook func(*tree.ColumnItem) (tree.Expr, bool)) {
 		b.ob.ctes = prevCTEs
 		s.checkMaxParamOrd = prevCheckMaxParamOrd
 		s.maxParamOrd = prevMaxParamOrd
-	}(b.ob.ctes, s.checkMaxParamOrd, s.maxParamOrd)
+		s.plpgsqlVarRef = prevHook
+	}(b.ob.ctes, s.checkMaxParamOrd, s.maxParamOrd, s.plpgsqlVarRef)
 	b.ob.ctes = nil
 	s.checkMaxParamOrd = true
 	s.maxParamOrd = len(b.rootBlock().vars)
+	s.plpgsqlVarRef = b.rewriteCompositeFieldAccess
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
@@ -2452,12 +2454,14 @@ func (b *plpgsqlBuilder) buildSQLStatement(stmt tree.Statement, inScope *scope) 
 		return outScope
 	}
 	// Set the maxParamOrd to the number of routine parameters.
-	defer func(prevCheckMaxParamOrd bool, prevMaxParamOrd int) {
+	defer func(prevCheckMaxParamOrd bool, prevMaxParamOrd int, prevHook func(*tree.ColumnItem) (tree.Expr, bool)) {
 		inScope.checkMaxParamOrd = prevCheckMaxParamOrd
 		inScope.maxParamOrd = prevMaxParamOrd
-	}(inScope.checkMaxParamOrd, inScope.maxParamOrd)
+		inScope.plpgsqlVarRef = prevHook
+	}(inScope.checkMaxParamOrd, inScope.maxParamOrd, inScope.plpgsqlVarRef)
 	inScope.checkMaxParamOrd = true
 	inScope.maxParamOrd = len(b.rootBlock().vars)
+	inScope.plpgsqlVarRef = b.rewriteCompositeFieldAccess
 	return b.ob.buildStmtAtRootWithScope(stmt, nil /* desiredTypes */, inScope)
 }
 
@@ -2485,6 +2489,61 @@ func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.Sca
 		scalar = b.ob.factory.ConstructCast(scalar, typ)
 	}
 	return scalar
+}
+
+// lookupPLpgSQLVar searches the active block stack for a PL/pgSQL variable
+// with the given name and returns its declared type. The second return value
+// is false if no such variable exists. Unlike resolveVariableForAssign, this
+// does not panic and does not enforce constness.
+func (b *plpgsqlBuilder) lookupPLpgSQLVar(name ast.Variable) (typ *types.T, found bool) {
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		if t, ok := b.blocks[i].varTypes[name]; ok {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
+// rewriteCompositeFieldAccess implements the scope.plpgsqlVarRef hook. It
+// rewrites a SQL ColumnItem of the form `var.field` into the equivalent
+// parenthesized field-access expression `(var).field` when `var` names a
+// composite-typed PL/pgSQL variable that has a field with the given name.
+// The second return value indicates whether the prefix names any PL/pgSQL
+// variable in scope (composite or not), so that callers can suppress hints
+// that wouldn't apply. This mirrors the plpgsql_post_column_ref hook in
+// postgres' pl_comp.c.
+func (b *plpgsqlBuilder) rewriteCompositeFieldAccess(
+	t *tree.ColumnItem,
+) (rewritten tree.Expr, knownVar bool) {
+	if t.TableName == nil {
+		return nil, false
+	}
+	prefix := t.TableName.Object()
+	if prefix == "" {
+		return nil, false
+	}
+	varTyp, found := b.lookupPLpgSQLVar(ast.Variable(prefix))
+	if !found {
+		return nil, false
+	}
+	if varTyp.Family() != types.TupleFamily {
+		return nil, true
+	}
+	// The field name must match one of the tuple's labels.
+	var matched bool
+	for _, label := range varTyp.TupleLabels() {
+		if label == string(t.ColumnName) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return nil, true
+	}
+	return &tree.ColumnAccessExpr{
+		Expr:    &tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{prefix}},
+		ColName: t.ColumnName,
+	}, true
 }
 
 // resolveVariableForAssign attempts to retrieve the type of the variable with

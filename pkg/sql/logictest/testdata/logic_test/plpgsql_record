@@ -448,4 +448,179 @@ SELECT * FROM f113186() AS foo(x INT);
 statement error pgcode 42P13 pq: return type mismatch in function declared to return record
 SELECT * FROM f113186() AS foo(x TIMESTAMP);
 
+# Unparenthesized field access on a composite-typed PL/pgSQL variable.
+# Regression test for #114687.
+subtest unparenthesized_composite_access
+
+statement ok
+CREATE TYPE composite_xy AS (x INT, y INT);
+
+# Composite-typed declared variable.
+statement ok
+CREATE PROCEDURE p_unparen_decl() LANGUAGE plpgsql AS $$
+  DECLARE v composite_xy := ROW(1, 2);
+  BEGIN RAISE NOTICE 'x=% y=%', v.x, v.y; END
+$$;
+
+statement ok
+CALL p_unparen_decl();
+
+# Composite-typed function parameter.
+statement ok
+CREATE FUNCTION f_unparen_param(val composite_xy) RETURNS INT LANGUAGE plpgsql AS $$
+  BEGIN RETURN val.x + val.y; END
+$$;
+
+query I
+SELECT f_unparen_param(ROW(10, 20)::composite_xy);
+----
+30
+
+# Assignment LHS with field indirection plus unparenthesized RHS access.
+statement ok
+CREATE FUNCTION f_unparen_assign(val composite_xy) RETURNS composite_xy LANGUAGE plpgsql AS $$
+  BEGIN
+    val.x := val.x + 100;
+    RETURN val;
+  END
+$$;
+
+query T
+SELECT f_unparen_assign(ROW(1, 2)::composite_xy);
+----
+(101,2)
+
+# Parenthesized form continues to work (regression).
+statement ok
+CREATE FUNCTION f_paren_param(val composite_xy) RETURNS INT LANGUAGE plpgsql AS $$
+  BEGIN RETURN (val).x + (val).y; END
+$$;
+
+query I
+SELECT f_paren_param(ROW(3, 4)::composite_xy);
+----
+7
+
+# Standalone SQL statement (no INTO target) referencing a composite variable's
+# field -- exercises the buildSQLStatement path.
+statement ok
+CREATE TABLE t_unparen_stmt (a INT, b INT);
+
+statement ok
+CREATE PROCEDURE p_unparen_stmt() LANGUAGE plpgsql AS $$
+  DECLARE v composite_xy := ROW(11, 22);
+  BEGIN INSERT INTO t_unparen_stmt VALUES (v.x, v.y); END
+$$;
+
+statement ok
+CALL p_unparen_stmt();
+
+query II
+SELECT a, b FROM t_unparen_stmt;
+----
+11  22
+
+# SELECT ... INTO referencing a composite variable's field.
+statement ok
+CREATE FUNCTION f_unparen_into(val composite_xy) RETURNS INT LANGUAGE plpgsql AS $$
+  DECLARE r INT;
+  BEGIN SELECT val.x + val.y INTO r; RETURN r; END
+$$;
+
+query I
+SELECT f_unparen_into(ROW(7, 8)::composite_xy);
+----
+15
+
+# Bound cursor whose query references a composite variable's field. The bound
+# query is built when OPEN is processed, so this exercises buildSQLStatement
+# via the cursor path.
+statement ok
+CREATE PROCEDURE p_unparen_cursor() LANGUAGE plpgsql AS $$
+  DECLARE
+    v composite_xy := ROW(31, 32);
+    c CURSOR FOR SELECT v.x, v.y;
+    rx INT; ry INT;
+  BEGIN
+    OPEN c;
+    FETCH c INTO rx, ry;
+    CLOSE c;
+    RAISE NOTICE 'cursor x=% y=%', rx, ry;
+  END
+$$;
+
+statement ok
+CALL p_unparen_cursor();
+
+# A non-composite PL/pgSQL variable accessed with .field produces a bare
+# error matching Postgres -- the "surround in parentheses" hint would be
+# misleading because parens won't help when the variable is scalar.
+statement error pgcode 42P01 pq: no data source matches prefix: n in this context$
+CREATE PROCEDURE p_non_composite() LANGUAGE plpgsql AS $$
+  DECLARE n INT := 5;
+  BEGIN RAISE NOTICE '%', n.bogus; END
+$$;
+
+# A composite variable that shadows an in-scope table column produces an
+# ambiguous-reference error, matching Postgres' plpgsql_post_column_ref
+# behavior.
+statement ok
+CREATE TABLE shadow_v (x INT, y INT);
+
+statement ok
+INSERT INTO shadow_v VALUES (10, 20);
+
+statement error pgcode 42702 column reference "shadow_v\.x" is ambiguous\nDETAIL: It could refer to either a PL/pgSQL variable or a table column\.
+CREATE FUNCTION f_ambiguous() RETURNS INT LANGUAGE plpgsql AS $$
+  DECLARE shadow_v composite_xy := ROW(1, 2); r INT;
+  BEGIN SELECT shadow_v.x INTO r FROM shadow_v; RETURN r; END
+$$;
+
+# A PL/pgSQL variable whose name matches an existing table still resolves
+# unambiguously when the SQL statement does not reference that table.
+statement ok
+CREATE FUNCTION f_var_shadow_no_table_ref() RETURNS INT LANGUAGE plpgsql AS $$
+  DECLARE shadow_v composite_xy := ROW(1, 2);
+  BEGIN RETURN shadow_v.x; END
+$$;
+
+query I
+SELECT f_var_shadow_no_table_ref();
+----
+1
+
+# A nested CALL must not inherit the caller's PL/pgSQL variable namespace:
+# the callee's reference to the shadow_v table must resolve to the table
+# even though the caller has a shadow_v variable of its own.
+statement ok
+CREATE PROCEDURE p_uses_shadow_table(bar composite_xy, OUT r INT) LANGUAGE plpgsql AS $$
+  BEGIN SELECT shadow_v.x INTO r FROM shadow_v; END
+$$;
+
+statement ok
+CREATE FUNCTION f_call_shadow_table() RETURNS INT LANGUAGE plpgsql AS $$
+  DECLARE shadow_v composite_xy := ROW(1, 2); r INT;
+  BEGIN CALL p_uses_shadow_table(shadow_v, r); RETURN r; END
+$$;
+
+query I
+SELECT f_call_shadow_table();
+----
+10
+
+statement ok
+DROP FUNCTION f_call_shadow_table;
+DROP PROCEDURE p_uses_shadow_table;
+DROP FUNCTION f_var_shadow_no_table_ref;
+DROP TABLE shadow_v;
+DROP PROCEDURE p_unparen_cursor;
+DROP FUNCTION f_unparen_into;
+DROP PROCEDURE p_unparen_stmt;
+DROP TABLE t_unparen_stmt;
+DROP FUNCTION f_paren_param;
+DROP FUNCTION f_unparen_assign;
+DROP FUNCTION f_unparen_param;
+DROP PROCEDURE p_unparen_decl;
+DROP TYPE composite_xy;
+
 subtest end
