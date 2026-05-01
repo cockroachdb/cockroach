@@ -171,19 +171,28 @@ func destroyReplicaImpl(
 		); err != nil {
 			return err
 		}
+		if err := logstore.ClearRange(
+			ctx, rw.Raft.RO, rw.Raft.WO, buf,
+			info.RaftAppliedIndex+1 /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+			false, /* sizeKnown */
+		); err != nil {
+			return err
+		}
+	} else {
 		if err := storage.ClearRangeWithHeuristic(
 			ctx, rw.Raft.RO, rw.Raft.WO,
-			buf.RaftLogKey(info.RaftAppliedIndex+1), sl.RaftReplicaIDKey(),
+			buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
 			ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
-	} else if err := storage.ClearRangeWithHeuristic(
-		ctx, rw.Raft.RO, rw.Raft.WO,
-		buf.RangeTombstoneKey().Next(), sl.RaftReplicaIDKey(),
-		ClearRangeThresholdPointKeys(),
-	); err != nil {
-		return err
+		if err := logstore.ClearRange(
+			ctx, rw.Raft.RO, rw.Raft.WO, buf,
+			0 /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+			false, /* sizeKnown */
+		); err != nil {
+			return err
+		}
 	}
 	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
 		return err
@@ -265,10 +274,14 @@ func RewriteRaftState(
 	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
 	}
-	// Clear the raft log. Note that there are no Pebble range keys in this span.
-	raftLog := sl.RaftLogPrefix() // NB: use only until next StateLoader call
-	if err := raftWO.ClearRawRange(
-		raftLog, raftLog.PrefixEnd(), true /* pointKeys */, false, /* rangeKeys */
+	// Clear the raft log via the logstore. Note that there are no Pebble range
+	// keys in this span. We use the count-based path (sizeKnown=true) with
+	// pointKeyThreshold=1 to force a single range tombstone over the whole log
+	// span, without scanning.
+	if err := logstore.ClearRange(
+		ctx, nil /* reader */, raftWO, sl.RangeIDPrefixBuf,
+		0 /* lo */, math.MaxUint64 /* hi */, 1, /* pointKeyThreshold */
+		true, /* sizeKnown */
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
 	}

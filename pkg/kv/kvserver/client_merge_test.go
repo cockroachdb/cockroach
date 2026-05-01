@@ -4018,9 +4018,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 				))
 				// Ditto for the unreplicated RangeID keys. Note that it is also split
-				// into two range clears, to work around the RaftReplicaID key.
+				// into three range clears, to work around the RaftReplicaID key and
+				// to force all raft log clearing to go through logstore.
 				require.NoError(t, sst.ClearRawRange(
-					keys.RaftHardStateKey(rangeID), sl.RaftReplicaIDKey(), true, false,
+					keys.RaftHardStateKey(rangeID), sl.RaftLogPrefix(), true, false,
+				))
+				require.NoError(t, storage.ClearRangeWithHeuristic(
+					ctx, receivingEng, &sst,
+					sl.RaftLogPrefix(), sl.RaftLogPrefix().PrefixEnd(),
+					kvstorage.ClearRangeThresholdPointKeys(),
 				))
 				require.NoError(t, sl.ClearRaftReplicaID(&sst))
 				require.NoError(t, sst.ClearRawRange(

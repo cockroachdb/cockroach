@@ -482,28 +482,14 @@ func Compact(
 	// the new truncation index. This is performed atomically with updating the
 	// RaftTruncatedState so that the state of the log is consistent.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := next.Index - prev.Index
-	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
-		if err := writer.ClearRawRange(start, end, true, false); err != nil {
-			return errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v after index %d",
-				next, prev.Index)
-		}
-	} else {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
-		// allocating when constructing Raft log keys (16 bytes).
-		prefix := prefixBuf.RaftLogPrefix()
-		for idx := prev.Index + 1; idx <= next.Index; idx++ {
-			if err := writer.ClearUnversioned(
-				keys.RaftLogKeyFromPrefix(prefix, idx),
-				storage.ClearOptions{},
-			); err != nil {
-				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					next, idx)
-			}
-		}
+	if err := ClearRange(
+		ctx, nil /* reader */, writer, *prefixBuf,
+		prev.Index+1, next.Index+1, int(raftLogTruncationClearRangeThreshold),
+		true, /* sizeKnown */
+	); err != nil {
+		return errors.Wrapf(err,
+			"unable to clear truncated Raft entries for %+v after index %d",
+			next, prev.Index)
 	}
 
 	key := prefixBuf.RaftTruncatedStateKey()
@@ -517,6 +503,66 @@ func Compact(
 		ctx, writer, key, hlc.Timestamp{}, value, storage.MVCCWriteOptions{},
 	); err != nil {
 		return errors.Wrap(err, "unable to write RaftTruncatedState")
+	}
+	return nil
+}
+
+// ClearRange clears raft log entries in the half-open index range [lo, hi),
+// choosing between per-entry point deletes and a single Pebble range tombstone
+// based on pointKeyThreshold. Returns nil if lo >= hi.
+//
+// If sizeKnown == false: storage.ClearRangeWithHeuristic is used. It scans up
+//
+//	to pointKeyThreshold keys to decide. r must be non-nil. The bounds may
+//	use the sentinels lo == 0 (start at the raft log prefix) and
+//	hi == math.MaxUint64 (clear to the end of the raft log keyspace).
+//
+// If sizeKnown == true: The caller knows exactly how many entries to be
+// truncated. It arithmetically checks whether to use point or range deletions
+// based on pointKeyThreshold instead of iterating the indices.
+func ClearRange(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+	sizeKnown bool,
+) error {
+	if !sizeKnown && r == nil {
+		return errors.AssertionFailedf("ClearRange: scan mode requires a non-nil reader")
+	}
+	if lo >= hi {
+		return nil
+	}
+	// NB: RangeIDPrefixBuf shares a backing buffer across calls — successive
+	// RaftLogKey/RaftLogPrefix invocations may overwrite earlier results, so
+	// clone start and end.
+	var start, end roachpb.Key
+	if lo == 0 {
+		start = prefixBuf.RaftLogPrefix().Clone()
+	} else {
+		start = prefixBuf.RaftLogKey(lo).Clone()
+	}
+	if hi == math.MaxUint64 {
+		end = prefixBuf.RaftLogPrefix().PrefixEnd()
+	} else {
+		end = prefixBuf.RaftLogKey(hi).Clone()
+	}
+	if !sizeKnown {
+		return storage.ClearRangeWithHeuristic(ctx, r, w, start, end, pointKeyThreshold)
+	}
+	// Count-based path: no scan, decide arithmetically.
+	if hi-lo >= kvpb.RaftIndex(pointKeyThreshold) {
+		return w.ClearRawRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+	}
+	prefix := prefixBuf.RaftLogPrefix()
+	for idx := lo; idx < hi; idx++ {
+		if err := w.ClearUnversioned(
+			keys.RaftLogKeyFromPrefix(prefix, idx), storage.ClearOptions{},
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
