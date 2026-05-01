@@ -352,18 +352,21 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
-		// burstBucketCapacity seeds new groupInfos when Admit lazy-creates
-		// them or applyConfigLocked pre-creates them. New buckets take this
-		// value for both tokens and capacity, so groups start full and can
-		// burst right away.
+		// burstBucketCapacity is the (tokens, capacity) seed used when a
+		// new groupInfo is created via Admit lazy-create or
+		// applyConfigLocked pre-create. Both fields take this value, so
+		// new groups start full and can burst immediately.
 		//
-		// Only serverless mode uses this. serverlessStrategy refreshes it
-		// every 1ms via refillBurstBuckets to match the current uniform
-		// per-tenant capacity. RM mode leaves it at zero, since each RM
-		// group's capacity scales by its weight and no single value would
-		// work as a queue-wide seed. A new RM group starts at capacity 0
-		// and picks up its real value on the next refillRMGroupBurstBuckets
-		// tick (within 1ms).
+		// Serverless mode: refreshed every 1ms by refillBurstBuckets to
+		// match the uniform per-tenant capacity.
+		//
+		// RM mode: left at zero. RM capacities scale by per-group weight,
+		// so no queue-wide value is correct. Seeding with the unscaled
+		// 100% value would briefly grant unearned burst budget to
+		// non-MAX_CPU groups; seeding with zero only throttles a brand-
+		// new group for at most one refill tick (1ms), which is the safer
+		// failure mode. refillRMGroupBurstBuckets installs the correct
+		// per-group capacity on the next tick.
 		burstBucketCapacity int64
 		// overrideAllToBypassAdmission, when true, causes all work to bypass
 		// admission control. Used by CPU time token AC.
@@ -1443,21 +1446,15 @@ func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
 	}
 }
 
-// refillBurstBucketForGroup adds tokens to a specific resource group's
-// burst bucket and updates its capacity. This is called by
-// rmStrategy.refillBurst with pre-scaled per-group amounts. For example,
-// a group with WEIGHT_CPU=10% gets toAdd and capacity equal to 10% of the
-// 100% CPU rate, so its burst bucket stays at steady state when the
-// group uses ~10% of node CPU.
-// TODO(wenyihu6): actually finish the plumbing from ^
+// refillBurstBucketForGroup refills a single rgKind group's burst
+// bucket. Test-only: production refills go through
+// refillRMGroupBurstBuckets, which iterates all rgKind groups under one
+// q.mu critical section. This entry point exists for datadriven tests
+// that need to drive one group's bucket to a specific (toAdd, capacity)
+// without running the full filler.
 //
-// If the group's burst qualification changes, its position in the
-// groupHeap is updated.
-//
-// TODO(wenyihu6): investigate whether refill rates need a pre-warming
-// period after RM config changes. A sudden config swap (e.g. changing
-// which groups have maxCPU) could interact poorly with the filler's
-// model if it hasn't had time to stabilize at the new rates.
+// If the refill flips the group's burst qualification, its groupHeap
+// position is fixed.
 func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capacity int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -1465,24 +1462,34 @@ func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capaci
 	if !ok {
 		return
 	}
-	// Do NOT write q.mu.burstBucketCapacity here: that field is the
-	// serverless lazy-create seed and must not be polluted by RM-mode
-	// per-group scaled capacities.
 	q.refillBurstBucketLocked(group, toAdd, capacity)
 }
 
-// refillRMGroupBurstBuckets is the per-group RM-mode refill entry point
-// called by rmStrategy.refillBurst. rate100 may be negative when
-// resetInterval forwards a delta; cap100 is the current rate and should
-// be non-negative.
+// refillRMGroupBurstBuckets refills every rgKind group's burst bucket
+// in a single q.mu critical section. rate100 and cap100 are the 100%
+// CPU per-tick refill rate and bucket capacity; per-group amounts are
+// scaled by group.weight/100. Called by rmStrategy.refillBurst on every
+// tick.
 //
-// No-op stub today; RM mode is off by default, so the stub has no production
-// effect. Per-group refill cannot be implemented yet because per-resource-group
-// configuration (weight, MaxCPU, burstFrac) is not yet plumbed onto groupInfo.
+// Iterating q.mu.groups directly (rather than snapshotting the holder)
+// avoids a per-tick allocation. The kind filter skips any tenantKind
+// orphans left over from a prior serverless mode.
 //
-// TODO(wenyihu6): once that storage lands, wire this to iterate groupInfos
-// and refill each bucket scaled by burstFrac.
+// Holding q.mu once (instead of acquiring per group) costs one lock
+// acquire instead of N+1 and makes the refill atomic across groups: no
+// observer can see a partial-refill state.
 func (q *WorkQueue) refillRMGroupBurstBuckets(rate100, cap100 float64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for k, group := range q.mu.groups {
+		if k.kind != rgKind {
+			continue
+		}
+		burstFrac := float64(group.weight) / 100.0
+		toAdd := int64(rate100 * burstFrac)
+		capacity := int64(cap100 * burstFrac)
+		q.refillBurstBucketLocked(group, toAdd, capacity)
+	}
 }
 
 // refillBurstBucketLocked refills a group's burst bucket and fixes its

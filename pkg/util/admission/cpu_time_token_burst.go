@@ -37,9 +37,6 @@ import "github.com/cockroachdb/redact"
 // With cluster settings at their default values, this implies that
 // an application tenant can burst, if they are using roughly less
 // than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
-//
-// TODO(wenyihu6): refillBurstBuckets currently applies the same uniform
-// toAdd/capacity to all groups. Add per-group scaling of refill rates.
 type cpuTimeBurstBucket struct {
 	tokens   int64
 	capacity int64
@@ -47,16 +44,36 @@ type cpuTimeBurstBucket struct {
 	// burstQualification to always return noBurst. This effectively
 	// disables the burstQualification functionality.
 	disabled bool
-	// maxCPU is true for MAX_CPU resource groups in RM mode.
-	// See cpuTimeBurstBucket comment for burst qualification rules.
+	// maxCPU, when true, forces burstQualification to canBurst regardless
+	// of token level. Set for MAX_CPU resource groups in RM mode. Seeded
+	// at init and rewritten by applyConfigLocked when ResourceGroupConfig
+	// changes.
 	maxCPU bool
 }
 
+// init sets up a fresh burst bucket. tokens and capacity both take the
+// seed, so the seed determines cold-start behavior.
+//
+// Serverless mode seeds with the uniform per-tenant capacity, so a new
+// tenant starts full and can burst immediately.
+//
+// RM mode seeds with zero (see WorkQueue.burstBucketCapacity for why).
+// The cold-start sequence is:
+//
+//   - The first admission drives tokens negative; adjust has no floor,
+//     only refill enforces -capacity/4.
+//   - burstQualification returns noBurst.
+//   - The group is not blocked: it still draws from the granter's
+//     noBurst pool, just ranked below canBurst groups in the groupHeap.
+//   - The next refill (within 1ms) installs the per-group scaled
+//     capacity and toAdd, and floors tokens at -capacity/4. The bucket
+//     then recovers toward canBurst over subsequent refills if the
+//     group stays at or below its allocation.
+//
+// The brief negative excursion is an accounting artifact: the granter's
+// token pool meters actual CPU, this bucket only governs burst
+// qualification.
 func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, maxCPU bool) {
-	// The bucket of a new group is inited full. This implies that
-	// a group can burst when its work first appears on a KV node.
-	// After <= 1s, the bucket state should track the usage of the
-	// group accurately.
 	*m = cpuTimeBurstBucket{
 		tokens:   capacity,
 		capacity: capacity,
