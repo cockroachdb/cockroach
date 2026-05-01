@@ -266,6 +266,35 @@ var ConcurrentRangefeedItersLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var catchupScanPrioritizationEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.catchup_scan_prioritization.enabled",
+	"prioritize system-table rangefeed catchup scans over bulk consumers; "+
+		"when false, all catchup scans share a single FIFO semaphore",
+	true,
+)
+
+const (
+	catchupQueueHigh       = 0
+	catchupQueueLow        = 1
+	catchupQueueHighWeight = 8
+	catchupQueueLowWeight  = 1
+)
+
+// catchupQueueLowMaxActive caps concurrently-active low-priority catchup
+// scans, reserving max(1, n/4) of the n total slots as headroom for
+// high-priority requests.
+func catchupQueueLowMaxActive(n int) int {
+	reserved := n / 4
+	if reserved < 1 {
+		reserved = 1
+	}
+	if n-reserved < 1 {
+		return 1
+	}
+	return n - reserved
+}
+
 var PerConsumerCatchupLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.per_consumer_catchup_scan_limit",
@@ -905,20 +934,26 @@ type Store struct {
 	raftLogQueue         *raftLogQueue      // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
-	raftTruncator        *raftLogTruncator
-	wagTruncator         *kvstorage.WAGTruncator     // Initialized only on separate engines.
-	raftSnapshotQueue    *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue   *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner              *replicaScanner             // Replica scanner
-	consistencyQueue     *consistencyQueue           // Replica consistency check queue
-	consistencyLimiter   *quotapool.RateLimiter      // Rate limits consistency checks
-	metrics              *StoreMetrics
-	intentResolver       *intentresolver.IntentResolver
-	recoveryMgr          txnrecovery.Manager
-	storeLiveness        storeliveness.Fabric
-	syncWaiters          []*logstore.SyncWaiterLoop
-	raftEntryCache       *raftentry.Cache
-	limiters             batcheval.Limiters
+	raftTruncator      *raftLogTruncator
+	wagTruncator       *kvstorage.WAGTruncator     // Initialized only on separate engines.
+	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
+	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner            *replicaScanner             // Replica scanner
+	consistencyQueue   *consistencyQueue           // Replica consistency check queue
+	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
+	metrics            *StoreMetrics
+	intentResolver     *intentresolver.IntentResolver
+	recoveryMgr        txnrecovery.Manager
+	storeLiveness      storeliveness.Fabric
+	syncWaiters        []*logstore.SyncWaiterLoop
+	raftEntryCache     *raftentry.Cache
+	limiters           batcheval.Limiters
+	// catchupScanQueue limits and prioritizes rangefeed catch-up scans across
+	// the store. Requests are classified by AdmissionHeader.Priority into a
+	// high-pri queue (system-table rangefeeds at >= admissionpb.NormalPri) and
+	// a low-pri queue (BulkNormalPri changefeeds and similar). See the
+	// catchupQueue* constants for the dispatch weights and headroom policy.
+	catchupScanQueue     *multiqueue.WeightedMultiQueue
 	txnWaitMetrics       *txnwait.Metrics
 	raftMetrics          *raft.Metrics
 	sstSnapshotStorage   snaprecv.SSTSnapshotStorage
@@ -1693,13 +1728,23 @@ func NewStore(
 		s.limiters.ConcurrentAddSSTableAsWritesRequests.SetLimit(
 			int(addSSTableAsWritesRequestLimit.Get(&cfg.Settings.SV)))
 	})
-	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
-		"rangefeedIterLimiter", int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
-	)
-	ConcurrentRangefeedItersLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		s.limiters.ConcurrentRangefeedIters.SetLimit(
-			int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
-	})
+	{
+		n := int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV))
+		s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
+			"rangefeedIterLimiter", n,
+		)
+		s.catchupScanQueue = multiqueue.NewWeightedMultiQueue(n, []multiqueue.TypeConfig{
+			{QueueType: catchupQueueHigh, Weight: catchupQueueHighWeight},
+			{QueueType: catchupQueueLow, Weight: catchupQueueLowWeight,
+				MaxActive: catchupQueueLowMaxActive(n)},
+		})
+		ConcurrentRangefeedItersLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+			n := int(ConcurrentRangefeedItersLimit.Get(&cfg.Settings.SV))
+			s.limiters.ConcurrentRangefeedIters.SetLimit(n)
+			s.catchupScanQueue.UpdateConcurrencyLimit(n)
+			s.catchupScanQueue.UpdateTypeMaxActive(catchupQueueLow, catchupQueueLowMaxActive(n))
+		})
+	}
 
 	rateLimit := bulkIOReadLimit.Get(&cfg.Settings.SV)
 	s.limiters.BulkIOReadRate.Init(tokenbucket.TokensPerSecond(rateLimit), tokenbucket.Tokens(rateLimit))
