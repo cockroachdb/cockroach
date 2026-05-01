@@ -53,7 +53,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/security/username",
