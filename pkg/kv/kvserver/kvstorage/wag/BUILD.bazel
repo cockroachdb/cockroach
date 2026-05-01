@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/util/buildutil",
         "@com_github_stretchr_testify//require",
     ],
 )

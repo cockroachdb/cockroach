@@ -6,8 +6,11 @@
 package wag
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 // Writer prepares a WAG node encoding a single state machine mutation and the
@@ -50,7 +53,30 @@ func (w *Writer) AddEvent(addr wagpb.Addr, eventType wagpb.EventType) {
 	if w.disabled() {
 		return
 	}
+	if buildutil.CrdbTestBuild {
+		for _, e := range w.events {
+			if e.Addr.RangeID == addr.RangeID {
+				panic(fmt.Sprintf(
+					"WAG writer: duplicate RangeID r%d in staged events", addr.RangeID,
+				))
+			}
+		}
+	}
 	w.events = append(w.events, wagpb.Event{Addr: addr, Type: eventType})
+}
+
+// FlushNodeWithoutMutation writes a WAG node containing the given event with an
+// empty mutation. This is used for lifecycle events that have no associated
+// state machine mutation, such as EventCreate during bootstrap.
+func (w *Writer) FlushNodeWithoutMutation(
+	raftBatch storage.Writer, addr wagpb.Addr, eventType wagpb.EventType,
+) error {
+	if w.disabled() {
+		return nil
+	}
+	return Write(raftBatch, w.seq.Next(), wagpb.Node{
+		Events: []wagpb.Event{{Addr: addr, Type: eventType}},
+	})
 }
 
 // Flush writes the staged WAG node to the raft engine. The node's

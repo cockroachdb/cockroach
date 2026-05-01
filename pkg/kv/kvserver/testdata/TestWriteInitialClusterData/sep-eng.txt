@@ -1,2 +1,65 @@
 echo
 ----
+wag/1: (r4/1:0,EventCreate)
+wag/2: (r4/1:10,EventInit)
+> Put: 1.000000000,0 /Local/Range"z"/RangeDescriptor (0x016b127a00017264736300000000003b9aca0009): ["z", /Max)
+> 	Raw:r4:{z-/Max} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/Range"z"/QueueLastProcessed/"consistencyChecker" (0x016b127a0001716c7074636f6e73697374656e6379436865636b657200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=11 mergeTs=<nil> txnDidNotUpdateMeta=false
+> Put: 1.000000000,0 /Meta2/Max (0x03ffff00000000003b9aca0009): ["z", /Max)
+> 	Raw:r4:{z-/Max} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): <empty>
+> Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0,0
+> Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698c727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): 10.2
+> Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Put: 0,0 /Local/RangeID/4/u/RaftReplicaID (0x01698c757266747200): replica_id:1 
+> Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<last_update_nanos:1000000000 sys_bytes:249 sys_count:6 > raft_closed_timestamp:<> raft_applied_index_term:5 
+wag/3: (r3/1:0,EventCreate)
+wag/4: (r3/1:10,EventInit)
+> Put: 1.000000000,0 /Local/Range"m"/RangeDescriptor (0x016b126d00017264736300000000003b9aca0009): ["m", "z")
+> 	Raw:r3:{m-z} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=11 mergeTs=<nil> txnDidNotUpdateMeta=false
+> Put: 1.000000000,0 /Meta2/"z" (0x037a00000000003b9aca0009): ["m", "z")
+> 	Raw:r3:{m-z} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): <empty>
+> Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0,0
+> Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 10.2
+> Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Put: 0,0 /Local/RangeID/3/u/RaftReplicaID (0x01698b757266747200): replica_id:1 
+> Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<last_update_nanos:1000000000 sys_bytes:248 sys_count:6 > raft_closed_timestamp:<> raft_applied_index_term:5 
+wag/5: (r2/1:0,EventCreate)
+wag/6: (r2/1:10,EventInit)
+> Put: 1.000000000,0 /Local/Range/Meta2/""/RangeDescriptor (0x016b120300017264736300000000003b9aca0009): [/Meta2/"", "m")
+> 	Raw:r2:{/Meta2-m} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/Range/Meta2/""/QueueLastProcessed/"consistencyChecker" (0x016b12030001716c7074636f6e73697374656e6379436865636b657200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=11 mergeTs=<nil> txnDidNotUpdateMeta=false
+> Put: 1.000000000,0 /Meta2/"m" (0x036d00000000003b9aca0009): [/Meta2/"", "m")
+> 	Raw:r2:{/Meta2-m} [(n1,s1):1, next=2, gen=0]
+> Put: 1.000000000,0 /Meta1/Max (0x02ffff00000000003b9aca0009): [/Meta2/"", "m")
+> 	Raw:r2:{/Meta2-m} [(n1,s1):1, next=2, gen=0]
+> Put: 1.000000000,0 /System/"bootstrap-version" (0x04626f6f7473747261702d76657273696f6e00000000003b9aca0009): "7\x0eň\x03\b\n\x10\x02\x18\x11 \x00"
+> Put: 1.000000000,0 /System/"node-idgen" (0x046e6f64652d696467656e00000000003b9aca0009): "~\xf4\xb8\xcb\x01\x02"
+> Put: 1.000000000,0 /System/"store-idgen" (0x0473746f72652d696467656e00000000003b9aca0009): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+> Put: 1.000000000,0 /System/"range-idgen" (0x0472616e67652d696467656e00000000003b9aca0009): "\x1b~\xb9`\x01\b"
+> Put: 1.000000000,0 /System/NodeLiveness/1 (0x04006c6976656e6573732d8900000000003b9aca0009): "w\x8d<\xfc\x03\b\x01\x1a\x04\b\x00\x10\x00"
+> Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): <empty>
+> Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0,0
+> Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.2
+> Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+> Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<last_update_nanos:1000000000 live_bytes:308 live_count:8 key_bytes:176 key_count:8 val_bytes:132 val_count:8 sys_bytes:248 sys_count:6 > raft_closed_timestamp:<> raft_applied_index_term:5 
+wag/7: (r1/1:0,EventCreate)
+wag/8: (r1/1:10,EventInit)
+> Put: 1.000000000,0 /Local/Range/Min/RangeDescriptor (0x016b1200017264736300000000003b9aca0009): [/Min, /Meta2/"")
+> 	Raw:r1:/M{in-eta2} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/Range/Min/QueueLastProcessed/"consistencyChecker" (0x016b120001716c7074636f6e73697374656e6379436865636b657200): txn={<nil>} ts=0,0 del=false klen=0 vlen=0 rawlen=11 mergeTs=<nil> txnDidNotUpdateMeta=false
+> Put: 1.000000000,0 /Meta1/"" (0x0200000000003b9aca0009): [/Min, /Meta2/"")
+> 	Raw:r1:/M{in-eta2} [(n1,s1):1, next=2, gen=0]
+> Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
+> Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
+> Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.2
+> Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+> Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<last_update_nanos:1000000000 live_bytes:87 live_count:2 key_bytes:30 key_count:2 val_bytes:57 val_count:2 sys_bytes:245 sys_count:6 > raft_closed_timestamp:<> raft_applied_index_term:5 
