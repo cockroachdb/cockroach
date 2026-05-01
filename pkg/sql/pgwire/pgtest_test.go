@@ -30,8 +30,6 @@ func TestPGTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable enterprise features so READ COMMITTED can be tested.
-
 	if *flagAddr == "" {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()

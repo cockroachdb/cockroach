@@ -25,8 +25,6 @@ func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable enterprise features so READ COMMITTED can be tested.
-
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)

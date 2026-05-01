@@ -1566,8 +1566,6 @@ func TestInjectRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable enterprise features to test READ COMMITTED retries.
-
 	ctx := context.Background()
 	params := base.TestServerArgs{}
 
