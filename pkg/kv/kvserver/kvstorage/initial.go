@@ -9,6 +9,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -112,10 +114,18 @@ func WriteInitialRangeState(
 	ctx context.Context,
 	stateRW StateRW,
 	raftWO RaftWO,
+	w *wag.Writer,
 	desc roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
 ) error {
+	// Stage WAG lifecycle events for crash recovery when engines are separated.
+	// A bootstrapped replica enters the lifecycle as created and immediately
+	// initialized at RaftInitialLogIndex.
+	id := roachpb.FullReplicaID{RangeID: desc.RangeID, ReplicaID: replicaID}
+	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate)
+	w.AddEvent(wagpb.MakeAddr(id, RaftInitialLogIndex), wagpb.EventInit)
+
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
 	initialGCHint := roachpb.GCHint{}
@@ -133,8 +143,6 @@ func WriteInitialRangeState(
 		return err
 	}
 
-	// TODO(sep-raft-log): when the log storage is separated, write a WAG node
-	// here, for crash recovery.
 	return WriteInitialRaftState(ctx, raftWO, desc.RangeID)
 }
 

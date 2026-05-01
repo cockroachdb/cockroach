@@ -53,7 +53,7 @@ func TestWriteInitialRangeState(t *testing.T) {
 		defer b.Close()
 
 		require.NoError(t, WriteInitialRangeState(
-			context.Background(), b, b,
+			context.Background(), b, b, nil, /* wagWriter */
 			testRangeDesc, testReplicaID, testReplicaVersion,
 		))
 
@@ -75,7 +75,7 @@ func TestWriteInitialRangeState(t *testing.T) {
 		defer batch.Close()
 
 		require.NoError(t, WriteInitialRangeState(
-			context.Background(), batch.State(), batch.Raft(),
+			context.Background(), batch.State(), batch.Raft(), batch.WagWriter(),
 			testRangeDesc, testReplicaID, testReplicaVersion,
 		))
 		require.NoError(t, batch.TestingFlushWAG())

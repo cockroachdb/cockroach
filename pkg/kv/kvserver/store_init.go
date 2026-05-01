@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -157,9 +158,8 @@ func WriteInitialClusterData(
 		// up with a partially initialized store if there is a crash in the middle.
 		// Write through a single batch, or find another way to make this atomic.
 
-		// TODO(sep-raft-log): this code path initializes replicas when bootstrapping
-		// the cluster and will need to write through WAG.
-		factory := kvstorage.MakeBatchFactory(&eng, nil /* seq */)
+		var wagSeq wag.Seq
+		factory := kvstorage.MakeBatchFactory(&eng, &wagSeq)
 
 		err := func() error {
 			batch := factory.NewBatch()
@@ -252,15 +252,14 @@ func WriteInitialClusterData(
 			}
 
 			if err := kvstorage.WriteInitialRangeState(
-				ctx, batch.State(), batch.Raft(),
+				ctx, batch.State(), batch.Raft(), batch.WagWriter(),
 				*desc, firstReplicaID, initialReplicaVersion,
 			); err != nil {
 				return err
 			}
 
-			// TODO(sep-raft-log): the computed stats much be reflected in the WAG
-			// node written in WriteInitialRangeState, before the write is committed.
-			// Decompose WriteInitialRangeState to make it possible.
+			// NB: The WAG node's Mutation.Batch is populated at Commit time with
+			// the full state batch repr, so the stats computed below are included.
 			computedStats, err := rditer.ComputeStatsForRange(
 				ctx, desc, batch.State(), fs.UnknownReadCategory, now.WallTime)
 			if err != nil {
