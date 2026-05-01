@@ -56,15 +56,36 @@ on each side without rationalizing toward either answer.
    can evolve independently. This is more "future-proofing" than
    "performance," but real.
 
-5. **Tighter dispatch loop, no Go-stack recursion.** A flat
-   `for { switch op { ... } }` interpreter has monomorphic dispatch
-   (one branch site, predictable); Volcano's per-operator interface
-   dispatch is megamorphic. And bytecode doesn't recurse through Go's
-   call stack the way `Next()` chains do — operator-tree depth costs
-   goroutine stack per query. In absolute terms this is probably a
-   few percent, not the headline win.
+5. **Tighter dispatch loop.** A flat `for { switch op { ... } }`
+   interpreter has monomorphic dispatch (one branch site, predictable);
+   Volcano's per-operator interface dispatch is megamorphic. CPU win
+   in absolute terms is probably a few percent — not the headline.
 
-6. **Autoparameterization-friendly contract.** Bytecode's
+6. **Bounded goroutine stack; worker-pool execution becomes feasible.**
+   Bytecode interpretation is a flat dispatch loop — it doesn't recurse
+   through Go's call stack. Volcano operators do: every `Next()` call
+   into a child operator pushes a Go stack frame, so deep operator
+   trees cost goroutine stack per query. Go's stacks start small
+   (~2KB) but grow on demand and **don't shrink back** in normal
+   operation; once a goroutine has handled a deep query, its stack
+   stays large. At high concurrency this leads to real memory bloat —
+   a phenomenon that has shown up in production CRDB escalations
+   involving goroutines with very large stacks.
+
+   With bytecode, query programs can run on a fixed-size pool of
+   long-lived worker goroutines whose stacks stay bounded, since the
+   interpreter needs only modest constant-depth Go frames regardless
+   of program complexity. The cold-path cases that DO need deep stacks
+   (planning and compiling on cache miss) can be handled outside the
+   pool, and become rarer as the cache warms.
+
+   This connects to the per-core-executor question listed as open
+   elsewhere in the workspace: a worker-pool model is structurally
+   easier to build on a bounded-stack substrate than on a Volcano
+   substrate where each query needs its own goroutine to hold its
+   operator-chain frames.
+
+7. **Autoparameterization-friendly contract.** Bytecode's
    `(program, parameter_vector)` interface decouples program shape from
    parameter values cleanly. Operator trees can carry literals inside
    nodes; rebinding requires either tree-walking or careful operator
@@ -91,6 +112,7 @@ rough comparison:
 | Per-execute pipeline-rebuild cost | Eliminated | Eliminated |
 | Per-tuple dispatch | Tighter (monomorphic switch) | Better than today (function pointer, no megamorphic) but not as tight |
 | Allocation discipline | Native (compile-time register file) | Plumbed in (against the grain) |
+| Goroutine stack / memory | Bounded; worker-pool model feasible | Per-query goroutines; stacks grow with operator depth and don't shrink |
 | Future KV pushdown | Easier (sandboxable bytecode) | Harder (DAG-style retrofit needed) |
 | Future native code | Easier (`VM_NATIVE` opcode) | Harder (separate JIT path) |
 | Compiler complexity | New codebase | Reuse exec-builder |
@@ -102,9 +124,11 @@ rough comparison:
 
 **Bytecode wins on the architectural dimensions** — allocation
 discipline, KV-pushdown hospitability, native-code evolution path,
-compile/execute separation — **and Volcano-with-caching wins on the
-immediate-pragmatic dimensions** — familiarity, incremental adoption,
-no compiler to write, observability.
+compile/execute separation — **and on operational/concurrency
+characteristics** — bounded goroutine stacks, worker-pool feasibility,
+predictable memory behavior under load. **Volcano-with-caching wins
+on the immediate-adoption dimensions** — familiarity, incremental
+rollout, no new compiler to write, self-describing observability.
 
 If the goal were narrowly "capture the Phase 1 win in production,"
 Volcano-with-aggressive-caching is the lower-risk path. If the goal
