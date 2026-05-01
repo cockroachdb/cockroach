@@ -709,11 +709,16 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	}
 	// Fetch public keys from gcloud to set up ssh access for all users into the
 	// shared ubuntu user.
-	authorizedKeys, err := gce.Infrastructure.GetUserAuthorizedKeys()
-	if err != nil {
-		return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
+	if gce.Infrastructure != nil {
+		authorizedKeys, err := gce.Infrastructure.GetUserAuthorizedKeys()
+		if err != nil {
+			return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
+		}
+		installCluster.AuthorizedKeys = authorizedKeys.AsSSH()
+	} else {
+		l.Printf("WARNING: GCE infrastructure not initialized (gcloud CLI may not be installed); " +
+			"skipping authorized key retrieval")
 	}
-	installCluster.AuthorizedKeys = authorizedKeys.AsSSH()
 	return installCluster.SetupSSH(ctx, l)
 }
 
