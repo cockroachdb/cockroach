@@ -1,0 +1,4 @@
+echo
+----
+id=1 weight=80 maxCPU=true
+id=2 weight=20 maxCPU=false
