@@ -2096,11 +2096,15 @@ SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
 make_timestamptz
 2013-07-15 08:15:23.5 -0500 EST
 
+# Cast to text on the server so the result doesn't depend on the client's
+# tzdata: lib/pq cannot preserve a named timezone (e.g. EST) when scanning
+# BCE timestamptz values into Go's time.Time on systems where the local
+# tzdata reports an LMT offset for the BCE instant.
 query T colnames,rowsort
-SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)::text
 ----
 make_timestamptz
--2013-07-15 08:15:23.5 -0500 EST
+2014-07-15 08:15:23.5-05 BC
 
 query T colnames,rowsort
 SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
