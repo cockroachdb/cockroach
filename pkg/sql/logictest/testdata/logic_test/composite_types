@@ -438,4 +438,30 @@ DROP TYPE comp_owner;
 REVOKE CREATE ON SCHEMA public FROM comp_owner_user;
 DROP USER comp_owner_user
 
+# Accessing a field of a composite-typed column without parens is rejected by
+# the SQL grammar (the parser interprets `name1.name2` as `relation.column`).
+# Postgres has the same limitation. Verify we emit the helpful HINT pointing
+# at the parenthesized workaround.
+subtest unparenthesized_field_access_hint
+
+statement ok
+CREATE TYPE comp_field AS (x INT, y INT);
+
+statement ok
+CREATE TABLE comp_field_t (v comp_field);
+
+statement ok
+INSERT INTO comp_field_t VALUES (ROW(1, 2));
+
+query I
+SELECT (v).x FROM comp_field_t;
+----
+1
+
+query error pgcode 42P01 pq: no data source matches prefix: v in this context\nHINT: to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: \(varName\)\.fieldName
+SELECT v.x FROM comp_field_t;
+
+statement ok
+DROP TABLE comp_field_t; DROP TYPE comp_field;
+
 subtest end
