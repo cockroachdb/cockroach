@@ -73,15 +73,21 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
 	appBatchStats
+	// state is the batch's view of the replica's state. It is updated as
+	// commands are staged in the batch, tracking the applied index, lease
+	// index, MVCC stats, and other fields needed for command validation.
+	state kvserverpb.ReplicaState
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
-	// - batch
-	// - state
+	// - batch: moving it here would let addWriteBatch and applyEntry use
+	//   b.batch.State() directly, removing the writer parameter. Standalone
+	//   callers would construct a kvstorage.Batch wrapping just the state
+	//   engine (nil raft/WAG fields, as with non-separated engines).
 	// - changeRemovesReplica
 }
 
 func (b *appBatch) assertAndCheckCommand(
-	ctx context.Context, cmd *raftlog.ReplicatedCmd, state *kvserverpb.ReplicaState, isLocal bool,
+	ctx context.Context, cmd *raftlog.ReplicatedCmd, isLocal bool,
 ) (kvserverbase.ForcedErrResult, error) {
 	if log.V(4) {
 		log.KvExec.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
@@ -91,7 +97,7 @@ func (b *appBatch) assertAndCheckCommand(
 	if cmd.Index() == 0 {
 		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
 	}
-	if idx, applied := cmd.Index(), state.RaftAppliedIndex; idx != applied+1 {
+	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out-of-order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
 		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
@@ -101,7 +107,7 @@ func (b *appBatch) assertAndCheckCommand(
 	// well. This just needs a bit more untangling as they reference *Replica, but
 	// for no super-convincing reason.
 
-	return kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, state), nil
+	return kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, &b.state), nil
 }
 
 func (b *appBatch) toCheckedCmd(
@@ -213,4 +219,20 @@ func (b *appBatch) runPostAddTriggers(
 	}
 
 	return nil
+}
+
+// stageTrivialResult updates the applied state in b.state to reflect a
+// successfully checked command. This covers the "trivial" fields that are
+// updated for every command: applied index/term, lease applied index, closed
+// timestamp, and MVCC stats.
+func (b *appBatch) stageTrivialResult(cmd *raftlog.ReplicatedCmd, fr kvserverbase.ForcedErrResult) {
+	b.state.RaftAppliedIndex = cmd.Index()
+	b.state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
+	if leaseAppliedIndex := fr.LeaseIndex; leaseAppliedIndex != 0 {
+		b.state.LeaseAppliedIndex = leaseAppliedIndex
+	}
+	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
+		b.state.RaftClosedTimestamp = *cts
+	}
+	b.state.Stats.Add(cmd.ReplicatedResult().Delta.ToStats())
 }
