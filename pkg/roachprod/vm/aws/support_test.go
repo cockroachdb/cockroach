@@ -23,6 +23,53 @@ func TestWriteStartupScriptTemplate(t *testing.T) {
 	echotest.Require(t, string(data), datapathutils.TestDataPath(t, "startup_script"))
 }
 
+func TestIsManaged(t *testing.T) {
+	testCases := []struct {
+		name     string
+		vms      vm.List
+		expected bool
+	}{
+		{
+			name:     "empty list",
+			vms:      vm.List{},
+			expected: false,
+		},
+		{
+			name: "non-managed VM",
+			vms: vm.List{
+				{Labels: map[string]string{vm.TagRoachprod: "true"}},
+			},
+			expected: false,
+		},
+		{
+			name: "managed VM",
+			vms: vm.List{
+				{Labels: map[string]string{vm.TagManaged: "true", vm.TagRoachprod: "true"}},
+			},
+			expected: true,
+		},
+		{
+			name: "managed empty cluster placeholder",
+			vms: vm.List{
+				{
+					Name:         vm.Name("user-test", 0),
+					Provider:     ProviderName,
+					Zone:         "us-east-2a",
+					Labels:       map[string]string{vm.TagCluster: "user-test", vm.TagManaged: "true", vm.TagRoachprod: "true"},
+					EmptyCluster: true,
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, isManaged(tc.vms))
+		})
+	}
+}
+
 // TestIOPSCalculation tests that IOPS are calculated correctly for io1/io2 volumes,
 // respecting AWS's maximum IOPS-to-size ratio constraints.
 func TestIOPSCalculation(t *testing.T) {
