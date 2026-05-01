@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -31,28 +32,63 @@ func TestWriteInitialRangeState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-	b := eng.NewBatch() // TODO(pav-kv): make it write-only batch
-	defer b.Close()
+	desc := roachpb.RangeDescriptor{
+		RangeID:       5,
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("z"),
+		NextReplicaID: 4,
+	}
+	const replicaID = roachpb.ReplicaID(3)
+	// Use an arbitrary version instead of things like clusterversion.Latest, so
+	// that the test doesn't sporadically fail when version bumps occur.
+	replicaVersion := roachpb.Version{Major: 10, Minor: 2, Patch: 17}
 
-	require.NoError(t, WriteInitialRangeState(
-		context.Background(), b, b,
-		roachpb.RangeDescriptor{
-			RangeID:       5,
-			StartKey:      roachpb.RKey("a"),
-			EndKey:        roachpb.RKey("z"),
-			NextReplicaID: 4,
-		},
-		roachpb.ReplicaID(3),
-		// Use arbitrary version instead of things like clusterversion.Latest, so
-		// that the test doesn't sporadically fail when version bumps occur.
-		roachpb.Version{Major: 10, Minor: 2, Patch: 17},
-	))
+	t.Run("shared-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		b := eng.NewBatch()
+		defer b.Close()
 
-	str, err := print.DecodeWriteBatch(b.Repr())
-	require.NoError(t, err)
-	echotest.Require(t, str, filepath.Join("testdata", t.Name()+".txt"))
+		require.NoError(t, WriteInitialRangeState(
+			context.Background(), b, b,
+			desc, replicaID, replicaVersion,
+		))
+
+		str, err := print.DecodeWriteBatch(b.Repr())
+		require.NoError(t, err)
+		echotest.Require(t, str, filepath.Join(
+			"testdata", "TestWriteInitialRangeState", "shared-eng.txt",
+		))
+	})
+
+	t.Run("sep-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		engines := MakeSeparatedEnginesForTesting(eng, eng)
+
+		var seq wag.Seq
+		factory := MakeBatchFactory(&engines, &seq)
+		batch := factory.NewBatch()
+		defer batch.Close()
+
+		require.NoError(t, WriteInitialRangeState(
+			context.Background(), batch.State(), batch.Raft(),
+			desc, replicaID, replicaVersion,
+		))
+		require.NoError(t, batch.TestingFlushWAG())
+
+		stateStr, err := print.DecodeWriteBatch(batch.State().Repr())
+		require.NoError(t, err)
+		echotest.Require(t, stateStr, filepath.Join(
+			"testdata", "TestWriteInitialRangeState", "sep-eng-state.txt",
+		))
+
+		raftStr, err := print.DecodeWriteBatch(batch.Raft().Repr())
+		require.NoError(t, err)
+		echotest.Require(t, raftStr, filepath.Join(
+			"testdata", "TestWriteInitialRangeState", "sep-eng-raft.txt",
+		))
+	})
 }
 
 func TestSynthesizeHardState(t *testing.T) {
