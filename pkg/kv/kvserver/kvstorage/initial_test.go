@@ -9,6 +9,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -50,7 +51,7 @@ func TestWriteInitialRangeState(t *testing.T) {
 		defer b.Close()
 
 		require.NoError(t, WriteInitialRangeState(
-			context.Background(), b, b,
+			context.Background(), b, b, nil, /* wagWriter */
 			desc, replicaID, replicaVersion,
 		))
 
@@ -72,7 +73,7 @@ func TestWriteInitialRangeState(t *testing.T) {
 		defer batch.Close()
 
 		require.NoError(t, WriteInitialRangeState(
-			context.Background(), batch.State(), batch.Raft(),
+			context.Background(), batch.State(), batch.Raft(), batch.WagWriter(),
 			desc, replicaID, replicaVersion,
 		))
 		require.NoError(t, batch.TestingFlushWAG())
@@ -85,6 +86,10 @@ func TestWriteInitialRangeState(t *testing.T) {
 
 		raftStr, err := print.DecodeWriteBatch(batch.Raft().Repr())
 		require.NoError(t, err)
+		// DecodeWriteBatch produces a trailing blank line for WAG nodes because
+		// the embedded batch repr ends with \n and the Put wrapper adds another.
+		// Collapse it so the golden file stays clean.
+		raftStr = strings.ReplaceAll(raftStr, "\n\n", "\n")
 		echotest.Require(t, raftStr, filepath.Join(
 			"testdata", "TestWriteInitialRangeState", "sep-eng-raft.txt",
 		))

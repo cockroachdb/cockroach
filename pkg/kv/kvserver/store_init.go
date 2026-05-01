@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -115,6 +116,12 @@ func WriteInitialClusterData(
 		return split.Equal(keys.Meta2Prefix)
 	})
 
+	// NB: A zero-valued Seq is correct here — the engine is empty at
+	// bootstrap. The store's wagSeq.Init() picks up these indices from
+	// disk at startup, so post-bootstrap sequencing continues correctly.
+	var wagSeq wag.Seq
+	factory := kvstorage.MakeBatchFactory(&eng, &wagSeq)
+
 	// We iterate through the ranges backwards, since they all need to contribute
 	// to the stats of the second range (i.e. because they all write meta2 records
 	// in the second range), and so we want to create the second range at the end
@@ -156,10 +163,6 @@ func WriteInitialClusterData(
 		// TODO(#97616): the ranges are written one by one, so it is possible to end
 		// up with a partially initialized store if there is a crash in the middle.
 		// Write through a single batch, or find another way to make this atomic.
-
-		// TODO(sep-raft-log): this code path initializes replicas when bootstrapping
-		// the cluster and will need to write through WAG.
-		factory := kvstorage.MakeBatchFactory(&eng, nil /* seq */)
 
 		err := func() error {
 			batch := factory.NewBatch()
@@ -252,15 +255,14 @@ func WriteInitialClusterData(
 			}
 
 			if err := kvstorage.WriteInitialRangeState(
-				ctx, batch.State(), batch.Raft(),
+				ctx, batch.State(), batch.Raft(), batch.WagWriter(),
 				*desc, firstReplicaID, initialReplicaVersion,
 			); err != nil {
 				return err
 			}
 
-			// TODO(sep-raft-log): the computed stats much be reflected in the WAG
-			// node written in WriteInitialRangeState, before the write is committed.
-			// Decompose WriteInitialRangeState to make it possible.
+			// NB: The WAG node's Mutation.Batch is populated at Commit time with
+			// the full state batch repr, so the stats computed below are included.
 			computedStats, err := rditer.ComputeStatsForRange(
 				ctx, desc, batch.State(), fs.UnknownReadCategory, now.WallTime)
 			if err != nil {
