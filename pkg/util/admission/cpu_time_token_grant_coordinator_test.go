@@ -145,3 +145,94 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
 	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 }
+
+// TestGetCTTWorkQueueRoutesByMode pins the per-mode routing of
+// GetCTTWorkQueue: serverless splits by tenant; RM collapses both
+// tenants to queues[rmQueueTier]; offMode panics (caller must gate).
+// Without these invariants RM mode would silently send work through
+// tenant-keyed queues, defeating the single-queue invariant the
+// granter relies on.
+func TestGetCTTWorkQueueRoutesByMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ambientCtx log.AmbientContext
+	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	var opts Options
+	knobs := &TestingKnobs{DisableCPUTimeTokenFillerGoroutine: true}
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
+	defer coords.Close()
+	cpuCoords := coords.RegularCPU
+	setActiveMode := func(mode cpuTimeTokenMode) {
+		cpuCoords.cpuTimeCoord.filler.activeMode.Store(int64(mode))
+	}
+
+	sysQ := cpuCoords.cpuTimeCoord.queues[systemTenant].(*WorkQueue)
+	appQ := cpuCoords.cpuTimeCoord.queues[appTenant].(*WorkQueue)
+	rmQ := cpuCoords.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
+
+	for _, tc := range []struct {
+		name             string
+		mode             cpuTimeTokenMode
+		wantSys, wantApp *WorkQueue
+	}{
+		{name: "serverless", mode: serverlessMode, wantSys: sysQ, wantApp: appQ},
+		{name: "resource_manager", mode: resourceManagerMode, wantSys: rmQ, wantApp: rmQ},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setActiveMode(tc.mode)
+			require.Same(t, tc.wantSys, cpuCoords.GetCTTWorkQueue(true /* isSystemTenant */))
+			require.Same(t, tc.wantApp, cpuCoords.GetCTTWorkQueue(false /* isSystemTenant */))
+		})
+	}
+
+	t.Run("off_panics", func(t *testing.T) {
+		setActiveMode(offMode)
+		require.Panics(t, func() {
+			cpuCoords.GetCTTWorkQueue(true /* isSystemTenant */)
+		}, "GetCTTWorkQueue with activeMode=offMode must panic; caller is responsible for gating")
+	})
+
+	// Mode transitions: flipping serverless -> RM -> serverless on the
+	// same coords must reflect on the very next GetCTTWorkQueue call.
+	// Routes the exact bug this fix addresses (stale activeMode).
+	t.Run("transitions", func(t *testing.T) {
+		setActiveMode(serverlessMode)
+		require.Same(t, sysQ, cpuCoords.GetCTTWorkQueue(true /* isSystemTenant */))
+		setActiveMode(resourceManagerMode)
+		require.Same(t, rmQ, cpuCoords.GetCTTWorkQueue(true /* isSystemTenant */))
+		setActiveMode(serverlessMode)
+		require.Same(t, sysQ, cpuCoords.GetCTTWorkQueue(true /* isSystemTenant */))
+	})
+}
+
+// TestGetSQLResponseWorkQueue pins the contract: the function returns
+// a slots-based WorkQueue for SQLKVResponseWork and SQLSQLResponseWork,
+// and panics on any other WorkKind. The panic is the only protection
+// against a caller misusing this for SQL CPU admission (which belongs
+// on GetCTTWorkQueue).
+func TestGetSQLResponseWorkQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ambientCtx log.AmbientContext
+	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	var opts Options
+	knobs := &TestingKnobs{DisableCPUTimeTokenFillerGoroutine: true}
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
+	defer coords.Close()
+	cpuCoords := coords.RegularCPU
+
+	for _, kind := range []WorkKind{SQLKVResponseWork, SQLSQLResponseWork} {
+		q := cpuCoords.GetSQLResponseWorkQueue(kind)
+		require.NotNil(t, q)
+		require.Equal(t, usesTokens, q.mode,
+			"GetSQLResponseWorkQueue must return a slots/tokens-based queue")
+	}
+
+	require.Panics(t, func() {
+		cpuCoords.GetSQLResponseWorkQueue(KVWork)
+	}, "GetSQLResponseWorkQueue must panic for workKind=KVWork")
+}

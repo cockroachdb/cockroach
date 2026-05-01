@@ -132,58 +132,53 @@ type CPUGrantCoordinators struct {
 }
 
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If CPU time
-// token AC is enabled (via admission.cpu_time_tokens.mode or the legacy
-// enabled bool), it returns a WorkQueue that implements CPU time token
-// AC. Else it returns a WorkQueue that does slots-based AC.
+// token AC is enabled (via `admission.cpu_time_tokens.mode` or the
+// legacy enabled bool), it returns a CTT-mode WorkQueue. Else it
+// returns a slots-based WorkQueue.
 //
 // In serverless mode, there is one WorkQueue for system tenant work
 // and another for app tenant work. The system tenant WorkQueue is
 // backed by a granter that allows greater resource usage than the app
-// tenant WorkQueue. This is a prioritization scheme. In resource
-// manager mode, only queue[0] will be used (not yet implemented). For
-// details regarding the granters, see cpu_time_token_granter.go.
+// tenant WorkQueue. In resource manager mode, all work flows through
+// `queues[rmQueueTier]`. For details on the granters, see
+// `cpu_time_token_granter.go`.
 func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
 	mode := cpuTimeTokenMode(coord.cpuTimeCoord.filler.activeMode.Load())
-	switch mode {
-	case offMode:
-		// activeMode should never be offMode in normal operation: the
-		// constructor maps off to serverless, and resetInterval never
-		// returns offMode. This case is a defensive fallback.
+	if mode == offMode {
+		// `activeMode` should never be `offMode` in normal operation
+		// (the constructor maps off to serverless and `resetInterval`
+		// never returns offMode). Defensive fallback to slots.
 		return coord.slotsCoord.GetWorkQueue(KVWork)
-	case serverlessMode:
-		if isSystemTenant {
-			return coord.cpuTimeCoord.getWorkQueue(systemTenant)
-		}
-		return coord.cpuTimeCoord.getWorkQueue(appTenant)
-	case resourceManagerMode:
-		// RM mode uses a single WorkQueue for all work.
-		return coord.cpuTimeCoord.getWorkQueue(0)
-	default:
-		panic(fmt.Sprintf("unexpected mode %d", mode))
 	}
+	return coord.cpuTimeCoord.routeCTTByTenant(isSystemTenant, mode)
 }
 
 // GetCTTWorkQueue returns the CPU time token WorkQueue unconditionally,
-// without checking whether CPU time token AC is enabled. The caller is
-// responsible for gating on the setting. This avoids a race in GetKVWorkQueue
-// where the setting can flip between the caller's check and the internal
-// re-check, returning a slot-based queue to a caller that expects a CTT queue.
+// without checking whether CPU time token AC is enabled. Caller must
+// gate on the cluster setting; `activeMode` is read here so a mode flip
+// between the caller's gate and the routing is reflected.
+//
+// Panics if `activeMode == offMode`: the caller's gating contract
+// implies CTT is enabled, so reaching offMode here is a constructor or
+// `resetInterval` invariant violation, not a recoverable race.
 func (coord *CPUGrantCoordinators) GetCTTWorkQueue(isSystemTenant bool) *WorkQueue {
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+	mode := cpuTimeTokenMode(coord.cpuTimeCoord.filler.activeMode.Load())
+	if mode == offMode {
+		panic(errors.AssertionFailedf("GetCTTWorkQueue called with activeMode=offMode"))
 	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+	return coord.cpuTimeCoord.routeCTTByTenant(isSystemTenant, mode)
 }
 
-// GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
-// SQLSQLResponseWork. If any other queue is requested from this function,
-// it panics.
-func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue {
+// GetSQLResponseWorkQueue returns a slots-based WorkQueue for the
+// response-side SQL admission paths (SQLKVResponseWork, SQLSQLResponseWork).
+// These are distinct from GetCTTWorkQueue, which handles SQL CPU
+// admission via CPU time tokens. Panics if workKind is anything else.
+func (coord *CPUGrantCoordinators) GetSQLResponseWorkQueue(workKind WorkKind) *WorkQueue {
 	if workKind != SQLKVResponseWork && workKind != SQLSQLResponseWork {
-		panic(fmt.Sprintf("workKind %q not supported by GetSQLWorkQueue", workKind))
+		panic(fmt.Sprintf("workKind %q not supported by GetSQLResponseWorkQueue", workKind))
 	}
 	return coord.slotsCoord.queues[workKind].(*WorkQueue)
 }
@@ -322,6 +317,26 @@ func makeCPUTimeTokenGrantCoordinator(
 	}
 
 	return coordinator
+}
+
+// routeCTTByTenant returns the CTT WorkQueue for the given tenant
+// kind under the given mode. Serverless mode splits queues by tenant;
+// RM mode collapses to queues[rmQueueTier]. Caller must have
+// established mode != offMode.
+func (coord *cpuTimeTokenGrantCoordinator) routeCTTByTenant(
+	isSystemTenant bool, mode cpuTimeTokenMode,
+) *WorkQueue {
+	switch mode {
+	case serverlessMode:
+		if isSystemTenant {
+			return coord.getWorkQueue(systemTenant)
+		}
+		return coord.getWorkQueue(appTenant)
+	case resourceManagerMode:
+		return coord.getWorkQueue(rmQueueTier)
+	default:
+		panic(errors.AssertionFailedf("routeCTTByTenant: unexpected mode %d", mode))
+	}
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *WorkQueue {

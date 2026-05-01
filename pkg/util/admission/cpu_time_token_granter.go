@@ -48,6 +48,10 @@ const (
 	numResourceTiers
 )
 
+// rmQueueTier is the tier that owns all work in Resource Manager mode.
+// RM collapses tiers into a single queue, so this is an alias of tier 0.
+const rmQueueTier = 0
+
 func (rt resourceTier) String() string {
 	return redact.StringWithoutMarkers(rt)
 }
