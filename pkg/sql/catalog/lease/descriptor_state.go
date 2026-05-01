@@ -25,6 +25,11 @@ type descriptorState struct {
 	id      descpb.ID
 	stopper *stop.Stopper
 
+	// lruEntry holds the intrusive doubly-linked list pointers for
+	// LRU-based memory eviction. Protected by Manager.mu, not
+	// descriptorState.mu.
+	lruEntry
+
 	mu struct {
 		syncutil.Mutex
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -65,7 +66,12 @@ func runSchemaChangeWorkload(t *testing.T, createDBStmt string) {
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t,
 		3, /* numServers */
-		base.TestingKnobs{},
+		base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				MemoryLimit:                 80000, // 80 KB
+				DisallowBytesMonitorCaching: true,
+			},
+		},
 		multiregionccltestutils.WithBaseDirectory(dir),
 	)
 	defer cleanup()
@@ -83,6 +89,7 @@ func runSchemaChangeWorkload(t *testing.T, createDBStmt string) {
 	tdb.Exec(t, createDBStmt)
 	tdb.Exec(t, "GRANT admin TO testuser")
 	tdb.Exec(t, "SET CLUSTER SETTING sql.log.all_statements.enabled = true")
+	tdb.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_lease.eviction.enabled = true")
 
 	dumpRows := func(name string, rows *gosql.Rows) {
 		t.Helper()

@@ -6,6 +6,7 @@ go_library(
         "count.go",
         "descriptor_set.go",
         "descriptor_state.go",
+        "descriptor_state_lru.go",
         "descriptor_version_state.go",
         "doc.go",
         "kv_writer.go",
