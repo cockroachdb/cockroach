@@ -37,7 +37,9 @@ var (
 cockroachdb/test-eng:
  label: T-testeng
 cockroachdb/dev-inf:
- label: T-dev-inf`
+ label: T-dev-inf
+cockroachdb/sql-foundations:
+ label: T-sql-foundations`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -215,6 +217,11 @@ func TestCreatePostRequest(t *testing.T) {
 							refError = liveMigrationError("my_VM")
 						case "error-with-owner-sql-foundations":
 							refError = registry.ErrorWithOwner(registry.OwnerSQLFoundations, refError)
+						case "error-with-owner-sql-foundations-title-override":
+							refError = registry.ErrorWithOwner(
+								registry.OwnerSQLFoundations, refError,
+								registry.WithTitleOverride("schema_change_workload_failure"),
+							)
 						case "error-with-owner-test-eng":
 							refError = registry.ErrorWithOwner(registry.OwnerTestEng, refError)
 						case "require-no-error-failed":
