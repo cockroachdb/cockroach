@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -583,9 +584,9 @@ func backupPlanHook(
 		for _, t := range targetDescs {
 			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
 				if tbl.ExternalRowData().TenantID.IsSet() {
-					return errors.UnimplementedError(errors.IssueLink{}, "backing up from a replication target is not supported")
+					return unimplemented.New("backup.replication_target", "backing up from a replication target is not supported")
 				}
-				return errors.UnimplementedError(errors.IssueLink{}, "backing up from external tables is not supported")
+				return unimplemented.New("backup.external_table", "backing up from external tables is not supported")
 			}
 		}
 
