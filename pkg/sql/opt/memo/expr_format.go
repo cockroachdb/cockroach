@@ -1108,9 +1108,13 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			} else {
 				// Deferred-build routine: body is not yet built. Show ASTs.
 				n := tp.Child("body (deferred)")
+				fmtFlags := tree.FmtSimple
+				if f.RedactableValues {
+					fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+				}
 				for i, ast := range def.BodyASTs {
 					if ast != nil {
-						n.Childf("stmt%d: %s", i+1, tree.AsString(ast))
+						n.Childf("stmt%d: %s", i+1, tree.AsStringWithFlags(ast, fmtFlags))
 					}
 				}
 			}

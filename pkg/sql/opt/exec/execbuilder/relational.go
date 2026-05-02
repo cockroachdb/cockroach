@@ -3735,6 +3735,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
 		udf.Def.BodyBuilder,
+		udf.Def.Name,
 	)
 
 	r := tree.NewTypedRoutineExpr(
