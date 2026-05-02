@@ -26,15 +26,37 @@ type Config interface {
 	Snapshot() ConfigSnapshot
 }
 
-// ResourceGroup serves as the key for the config.
-//
-// The zero key is used for all groups that are not explicitly enumerated. In
-// serverless, there will be one group for the system tenant and one zero keyed
-// group for all other tenants.
-//
+const MatchAllTenantID = 0
+const MatchAllGroupID = 0
+
+// ElasticGroupID is for future use.
+const ElasticGroupID = 1
+
+// DefaultGroupID is used when no resource groups are configured.
+const DefaultGroupID = 2
+
 // We should consider reserving a prefix of GroupIDs, say [1, 5) for internal
-// purposes. GroupID 1, could be used for all elastic work, when we unify that
-// too.
+// purposes.
+
+// ResourceGroup serves two purposes:
+// - as the key for the config.
+// - as a parameter when seeking admission.
+//
+// In the latter case both fields must be non-zero.
+//
+// In the former case, the (0, 0) and (0, <non-zero>) pair are permitted. The
+// (<non-zero>, 0) pair is not permitted, since there is no difficulty in
+// enumerating group-ids (unlike tenant-ids).
+//
+// When seeking admission, policy matching tries to exact match both fields. If
+// that fails, it tries to match (0, 1), i.e., the admission request specifies
+// (tenant-id, 1), i.e., it is elastic work for some tenant. If that fails, it
+// matches (0, 0).
+//
+// In the serverless case, the config will specify three groups:
+// (1, <default-group-id>): for system tenant regular work
+// (0, 0): for all application tenant's regular work
+// (0, 1): (eventually) for all tenant's elastic work.
 type ResourceGroup struct {
 	TenantID roachpb.TenantID
 	GroupID  uint64
@@ -42,9 +64,9 @@ type ResourceGroup struct {
 
 // GroupConfig is the config for a group.
 //
-// For serverless, the system tenant has Weight=math.MaxUint32,
-// BurstQualification=1.0, and other tenants have Weight=1,
-// BurstQualification=0.2.
+// For serverless, the system tenant (1, <default-group-id>) has
+// Weight=math.MaxUint32, BurstQualification=1.0, and other tenants (0, 0) have
+// Weight=1, BurstQualification=0.2.
 //
 // In a real resource group world, the weight is the WEIGHT_CPU, and the
 // BurstQualification is the normalized fraction of the weight.
@@ -52,6 +74,7 @@ type GroupConfig struct {
 	Weight uint32
 	// Fraction is in the interval [0, 1].
 	BurstQualificationFraction float64
+	// TODO(future): add fields for the case this group represents elastic work.
 }
 
 // ConfigSnapshot is immutable and very cheap to query, since no locking, and
@@ -90,9 +113,18 @@ type workQueueForBurstBuckets interface {
 // burstBucketFiller is initialized every 1s by the cpuTimeTokenAllocator, using
 // its computed tokens and the current ConfigSnapshot, and then handed to the
 // WorkQueue by calling burstReset. The internals are opaque to the WorkQueue,
-// which must only call the methods.
+// which must only call the methods: getCapacity and getTokensToAdd.
 type burstBucketFiller struct {
+	// burstConfigs contain the fully specified groups.
 	burstConfigs map[ResourceGroup]bucketConfig
+	// matchAllConfig is for the (0, 0) group.
+	matchAllConfig bucketConfig
+
+	// TODO: measure if we need to optimize doing a series of map lookups every
+	// 1ms.
+	//
+	// TODO: the above doesn't handle the (0, 1) case since unification of elastic
+	// work is in the future.
 }
 
 type bucketConfig struct {
@@ -105,11 +137,19 @@ type bucketConfig struct {
 // also calls this when constructing a new groupInfo in response to a new Admit
 // request.
 func (bbf *burstBucketFiller) getCapacity(g ResourceGroup) int64 {
-	return bbf.burstConfigs[g].tokenCapacity
+	return bbf.getBucketConfigInternal(g).tokenCapacity
 }
 
 // On every burstAllocationTick, the WorkQueue iterates over its current groups
 // map and calls this method to get the tokens to add.
 func (bbf *burstBucketFiller) getTokensToAdd(g ResourceGroup) int64 {
-	return bbf.burstConfigs[g].tokensToAddPerTick
+	return bbf.getBucketConfigInternal(g).tokensToAddPerTick
+}
+
+func (bbf *burstBucketFiller) getBucketConfigInternal(g ResourceGroup) bucketConfig {
+	bc, ok := bbf.burstConfigs[g]
+	if ok {
+		return bc
+	}
+	return bbf.matchAllConfig
 }
