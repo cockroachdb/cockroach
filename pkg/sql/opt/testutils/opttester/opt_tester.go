@@ -650,7 +650,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "norm":
 		e, err := ot.OptNorm()
@@ -667,7 +667,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "opt":
 		e, err := ot.Optimize()
@@ -676,9 +676,9 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 		}
 		ot.postProcess(tb, d, e)
 		if ot.Flags.RoundFloatsInStringsSigFigs > 0 {
-			return floatcmp.RoundFloatsInString(ot.FormatExpr(e), ot.Flags.RoundFloatsInStringsSigFigs)
+			return floatcmp.RoundFloatsInString(ot.FormatAndCheck(tb, d, e), ot.Flags.RoundFloatsInStringsSigFigs)
 		}
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
 		explore := d.Cmd == "assign-placeholders-opt"
@@ -688,7 +688,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "placeholder-fast-path":
 		e, ok, err := ot.PlaceholderFastPath()
@@ -770,7 +770,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "exprnorm":
 		e, err := ot.ExprNorm()
@@ -778,7 +778,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			return fmt.Sprintf("error: %s\n", err)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "expropt":
 		e, err := ot.ExprOpt()
@@ -789,7 +789,7 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 			return fmt.Sprintf("error: %s\n", err)
 		}
 		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		return ot.FormatAndCheck(tb, d, e)
 
 	case "stats-quality":
 		result, err := ot.StatsQuality(tb, d)
@@ -854,12 +854,41 @@ func (ot *OptTester) GetMemo() *memo.Memo {
 	return ot.f.Memo()
 }
 
-// FormatExpr is a convenience wrapper for memo.FormatExpr.
+// FormatExpr is a convenience wrapper for memo.FormatExpr. It sets the
+// BuildDeferredBody callback so that deferred UDF bodies are shown inline.
 func (ot *OptTester) FormatExpr(e opt.Expr) string {
 	mem := ot.f.Memo()
-	return memo.FormatExpr(
-		ot.ctx, e, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
+	f := memo.MakeExprFmtCtx(
+		ot.ctx, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
 	)
+	f.BuildDeferredBody = ot.buildDeferredBodyForTest
+	f.FormatExpr(e)
+	return f.Buffer.String()
+}
+
+// buildDeferredBodyForTest builds a deferred UDF body using the outer memo's
+// factory so that column IDs are globally unique (no overlap with the outer
+// query). This follows the same pattern used for post-query (cascade/trigger)
+// test formatting in OptTester.PostQueries, which also passes the outer
+// factory to Build() for the same reason (see "We use the same memo to build
+// the cascade" in the buildPostQueries closure). Note that production code
+// uses a fresh memo for both post-queries (see post_queries.go) and deferred
+// routine bodies (see scalar.go) since the outer memo may be cached or shared.
+//
+// Rule tracking and optimization settings are inherited from the outer
+// factory (configured in makeOptimizer), so expect=/expect-not= directives
+// work correctly.
+func (ot *OptTester) buildDeferredBodyForTest(
+	def *memo.UDFDefinition,
+) ([]memo.RelExpr, opt.ColList, *memo.Memo, error) {
+	body, _, params, err := def.BodyBuilder.Build(
+		ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, ot.f,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Return the outer memo — body columns are allocated in the same namespace.
+	return body, params, ot.f.Memo(), nil
 }
 
 func formatRuleSet(r RuleSet) string {
@@ -897,7 +926,15 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 			memo.RequestColStat(ot.ctx, &ot.evalCtx, mem, rel, cols)
 		}
 	}
+}
+
+// FormatAndCheck formats the expression and then checks expected rules. Rules
+// are checked after formatting because FormatExpr may build deferred UDF
+// bodies, which can trigger additional normalization rules.
+func (ot *OptTester) FormatAndCheck(tb testing.TB, d *datadriven.TestData, e opt.Expr) string {
+	result := ot.FormatExpr(e)
 	ot.checkExpectedRules(tb, d)
+	return result
 }
 
 // Fills in lazily-derived properties (for display).
@@ -2017,7 +2054,7 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 
 	buf := bytes.Buffer{}
 	ot.postProcess(tb, d, expr)
-	buf.WriteString(ot.FormatExpr(expr))
+	buf.WriteString(ot.FormatAndCheck(tb, d, expr))
 
 	// Split the previous test output into blocks containing the stats for each
 	// expression. The first element will contain the expression tree itself, so
