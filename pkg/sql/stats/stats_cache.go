@@ -336,9 +336,16 @@ func (sc *TableStatisticsCache) Clear() {
 func (sc *TableStatisticsCache) Stop() {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	// Clear the cache first so that OnEvictedEntry calls shrinkEntryLocked
-	// for each entry, properly releasing the bytes tracked by the account.
-	sc.mu.cache.Clear()
+	// The stopper closer that calls Stop is registered in
+	// NewTableStatisticsCache *before* sc.mu.cache is initialised. If the
+	// stopper begins draining closers during cache construction (rare, but
+	// observed in TestServerController on shared-process tenants), Stop can
+	// fire on a partially-initialised cache. Guard against that here.
+	if sc.mu.cache != nil {
+		// Clear the cache first so that OnEvictedEntry calls shrinkEntryLocked
+		// for each entry, properly releasing the bytes tracked by the account.
+		sc.mu.cache.Clear()
+	}
 	sc.mu.acc.Clear(context.Background())
 	if sc.mon != nil {
 		sc.mon.Stop(context.Background())
