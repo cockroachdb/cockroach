@@ -1,0 +1,354 @@
+# Test basic flushes and snapshot.
+init start-file-num=100
+----
+
+open range=r1 manifest=0
+----
+opened r1: manifest=0
+
+state range=r1
+----
+current-manifest: 0
+manifest 0: refs=0 snaps=0 sstables=[]
+
+# Flush a file.
+flush range=r1 file=flush1.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+reopened r1: manifest=159
+
+state range=r1
+----
+current-manifest: 159
+manifest 159: refs=0 snaps=0 sstables=[000158.sst]
+
+files dir=/r1
+----
+000158.sst:
+  previous-manifest:0
+MANIFEST-000159:
+  manifest:159
+  000158.sst
+
+# Flush another file.
+flush range=r1 file=flush2.sst
+----
+GetFileNums(60) => [160, 220)
+InstallNewManifest(current=159, new=MANIFEST-000219/219, files=[{000218.sst 218}])
+reopened r1: manifest=219
+
+state range=r1
+----
+current-manifest: 219
+manifest 219: refs=0 snaps=0 sstables=[000158.sst 000218.sst]
+
+files dir=/r1
+----
+000158.sst:
+  previous-manifest:0
+000218.sst:
+  previous-manifest:159
+MANIFEST-000159:
+  manifest:159
+  000158.sst
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+  000218.sst
+
+# Take a snapshot.
+snapshot range=r1
+----
+snapshot r1-219
+
+state range=r1
+----
+current-manifest: 219
+manifest 219: refs=0 snaps=1 sstables=[000158.sst 000218.sst]
+
+# Close snapshot.
+close-snapshot name=r1-219
+----
+closed: r1-219
+
+state range=r1
+----
+current-manifest: 219
+manifest 219: refs=0 snaps=0 sstables=[000158.sst 000218.sst]
+
+close range=r1
+----
+closed: r1
+
+# Test split with manifestNum=0 (no flush, no data).
+# Verifies that Split produces valid manifests on a fresh engine.
+init start-file-num=100
+----
+
+open range=r1 manifest=0
+----
+opened r1: manifest=0
+
+snapshot range=r1
+----
+snapshot r1-0
+
+split snapshot=r1-0 key=m rhs-range=r2
+----
+GetFileNums(60) => [100, 160)
+lhs-manifest: MANIFEST-000159/159
+rhs-manifest: MANIFEST-000159/159
+rhs-files: []
+reopened r1: manifest=159
+opened r2: manifest=159
+
+state range=r1
+----
+current-manifest: 159
+manifest 159: refs=0 snaps=0 sstables=[]
+
+state range=r2
+----
+current-manifest: 159
+manifest 159: refs=0 snaps=0 sstables=[]
+
+files dir=/r1
+----
+MANIFEST-000159:
+  manifest:159
+
+files dir=/r2
+----
+MANIFEST-000159:
+  manifest:159
+
+close range=r1
+----
+closed: r1
+
+close range=r2
+----
+closed: r2
+
+# Test split operation after flushing, so non-empty manifest.
+init start-file-num=100
+----
+
+open range=r1 manifest=0
+----
+opened r1: manifest=0
+
+flush range=r1 file=data.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+reopened r1: manifest=159
+
+snapshot range=r1
+----
+snapshot r1-159
+
+split snapshot=r1-159 key=m rhs-range=r2
+----
+GetFileNums(60) => [160, 220)
+lhs-manifest: MANIFEST-000219/219
+rhs-manifest: MANIFEST-000219/219
+rhs-files: [{000158.sst 158}]
+reopened r1: manifest=219
+opened r2: manifest=219
+
+files dir=/r2
+----
+000158.sst:
+  previous-manifest:0
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+
+files dir=/r1
+----
+000158.sst:
+  previous-manifest:0
+MANIFEST-000159:
+  manifest:159
+  000158.sst
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+
+state range=r1
+----
+current-manifest: 219
+manifest 219: refs=0 snaps=0 sstables=[000158.sst]
+
+state range=r2
+----
+current-manifest: 219
+manifest 219: refs=0 snaps=0 sstables=[000158.sst]
+
+close range=r1
+----
+closed: r1
+
+close range=r2
+----
+closed: r2
+
+# Test merge operation.
+init start-file-num=100
+----
+
+open range=r1 manifest=0
+----
+opened r1: manifest=0
+
+# Flush to r1.
+flush range=r1 file=r1-data.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+reopened r1: manifest=159
+
+# Split off r2.
+snapshot range=r1
+----
+snapshot r1-159
+
+split snapshot=r1-159 key=m rhs-range=r2
+----
+GetFileNums(60) => [160, 220)
+lhs-manifest: MANIFEST-000219/219
+rhs-manifest: MANIFEST-000219/219
+rhs-files: [{000158.sst 158}]
+reopened r1: manifest=219
+opened r2: manifest=219
+
+# Flush to r2.
+flush range=r2 file=r2-data.sst
+----
+GetFileNums(60) => [220, 280)
+InstallNewManifest(current=219, new=MANIFEST-000279/279, files=[{000278.sst 278}])
+reopened r2: manifest=279
+
+state range=r2
+----
+current-manifest: 279
+manifest 279: refs=0 snaps=0 sstables=[000158.sst 000278.sst]
+
+files dir=/r1
+----
+000158.sst:
+  previous-manifest:0
+MANIFEST-000159:
+  manifest:159
+  000158.sst
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+
+files dir=/r2
+----
+000158.sst:
+  previous-manifest:0
+000278.sst:
+  previous-manifest:219
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+MANIFEST-000279:
+  manifest:279
+  000158.sst
+  000278.sst
+
+# Merge r2 back into r1.
+snapshot range=r1
+----
+snapshot r1-219
+
+snapshot range=r2
+----
+snapshot r2-279
+
+merge lhs-snapshot=r1-219 rhs-snapshot=r2-279
+----
+GetFileNums(60) => [280, 340)
+merged-manifest: MANIFEST-000339/339
+merged-files: [{000280.sst 280} {000281.sst 281}]
+reopened r1: manifest=339
+
+state range=r1
+----
+current-manifest: 339
+manifest 339: refs=0 snaps=0 sstables=[000158.sst 000280.sst 000281.sst]
+
+files dir=/r1
+----
+000158.sst:
+  previous-manifest:0
+000280.sst:
+  previous-manifest:0
+000281.sst:
+  previous-manifest:219
+MANIFEST-000159:
+  manifest:159
+  000158.sst
+MANIFEST-000219:
+  manifest:219
+  000158.sst
+MANIFEST-000339:
+  manifest:339
+  000158.sst
+  000280.sst
+  000281.sst
+
+snapshot range=r1
+----
+snapshot r1-339
+
+close-snapshot name=r1-339
+----
+closed: r1-339
+
+close range=r1
+----
+closed: r1
+
+# Test async-close: closeInner blocks until all snapshots are closed.
+init start-file-num=100
+----
+
+open range=r1 manifest=0
+----
+opened r1: manifest=0
+
+flush range=r1 file=data.sst
+----
+GetFileNums(60) => [100, 160)
+InstallNewManifest(current=0, new=MANIFEST-000159/159, files=[{000158.sst 158}])
+reopened r1: manifest=159
+
+# Create a snapshot.
+snapshot range=r1
+----
+snapshot r1-159
+
+state range=r1
+----
+current-manifest: 159
+manifest 159: refs=0 snaps=1 sstables=[000158.sst]
+
+# Start async close - it will block because of the open snapshot.
+async-close range=r1
+----
+async-close started: r1 (blocked waiting for snapshots)
+
+# Close the snapshot.
+close-snapshot name=r1-159
+----
+closed: r1-159
+
+# Now wait-close should complete.
+wait-close range=r1
+----
+async-close completed: r1
