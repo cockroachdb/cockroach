@@ -40,7 +40,11 @@ func TestRaftStorageWrites(t *testing.T) {
 	//   state.ByteSize == stats() + expectedDrift
 	// across both modes (drift stays 0 under Delete).
 	testutils.RunTrueAndFalse(t, "single_delete", func(t *testing.T, useSingleDelete bool) {
-		UseRaftLogSingleDelete = useSingleDelete
+		// Override the default value of `raftLogSingleDeleteEnv`.
+		raftLogSingleDeleteEnv = raftLogSingleDeleteDisabled
+		if useSingleDelete {
+			raftLogSingleDeleteEnv = raftLogSingleDeleteEnabled
+		}
 		ctx := context.Background()
 		const rangeID = roachpb.RangeID(123)
 		sl := NewStateLoader(rangeID)
@@ -128,7 +132,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries)
+				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -142,7 +146,7 @@ func TestRaftStorageWrites(t *testing.T) {
 		truncate := func(name string, ts kvserverpb.RaftTruncatedState) {
 			t.Helper()
 			batch := writeBatch(func(rw storage.ReadWriter) {
-				require.NoError(t, Compact(ctx, trunc, ts, sl, rw))
+				require.NoError(t, Compact(ctx, trunc, ts, sl, rw, false /* enginesSeparated */))
 			})
 			trunc = ts
 			if useSingleDelete {
