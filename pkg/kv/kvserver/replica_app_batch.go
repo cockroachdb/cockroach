@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -550,6 +551,7 @@ func (b *replicaAppBatch) stageTruncation(
 	if err := handleTruncatedStateBelowRaftPreApply(
 		ctx, b.truncState, *truncatedState,
 		b.r.raftMu.stateLoader.StateLoader, b.batch.Raft(),
+		logstore.UseRaftLogSingleDelete(b.r.logStorage.ls.Separated),
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}

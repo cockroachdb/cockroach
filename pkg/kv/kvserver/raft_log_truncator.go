@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -566,6 +567,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
 		stateLoader.StateLoader, batch,
+		logstore.UseRaftLogSingleDelete(eng.Separated()),
 	); err != nil {
 		log.KvExec.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()

@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,14 +50,46 @@ var DisableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
-// UseRaftLogSingleDelete controls whether to use Pebble's SingleDelete
-// instead of Delete when clearing individual raft log entries during
-// truncation and log suffix replacement. SingleDelete is more efficient
-// because it can be compacted away faster, but requires that each key has
-// been Set exactly once since the last delete. This is naturally the case
-// for raft log entries in the common path.
-var UseRaftLogSingleDelete = envutil.EnvOrDefaultBool(
-	"COCKROACH_RAFT_LOG_SINGLE_DELETE", false)
+// raftLogSingleDeleteMode selects how UseRaftLogSingleDelete decides whether to
+// use Pebble's SingleDelete for raft log entries deletions.
+type raftLogSingleDeleteMode int
+
+const (
+	// raftLogSingleDeleteDefault defers the choice to engine separation.
+	raftLogSingleDeleteDefault raftLogSingleDeleteMode = iota
+	// raftLogSingleDeleteEnabled forces SingleDelete on.
+	raftLogSingleDeleteEnabled
+	// raftLogSingleDeleteDisabled forces SingleDelete off.
+	raftLogSingleDeleteDisabled
+)
+
+// raftLogSingleDeleteEnv reflects the COCKROACH_RAFT_LOG_SINGLE_DELETE env var.
+var raftLogSingleDeleteEnv = func() raftLogSingleDeleteMode {
+	switch strings.ToLower(envutil.EnvOrDefaultString(
+		"COCKROACH_RAFT_LOG_SINGLE_DELETE", "default")) {
+	case "true":
+		return raftLogSingleDeleteEnabled
+	case "false":
+		return raftLogSingleDeleteDisabled
+	default:
+		return raftLogSingleDeleteDefault
+	}
+}()
+
+// UseRaftLogSingleDelete reports whether to use Pebble's SingleDelete instead
+// of regular Delete when clearing individual raft log entries deletions.
+// TODO(ibrahim): Remove this function once single deletions are the default for
+// raft log.
+func UseRaftLogSingleDelete(separated bool) bool {
+	switch raftLogSingleDeleteEnv {
+	case raftLogSingleDeleteEnabled:
+		return true
+	case raftLogSingleDeleteDisabled:
+		return false
+	default:
+		return separated
+	}
+}
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 	settings.SystemOnly,
@@ -136,8 +169,11 @@ type WriteStats struct {
 
 // LogStore is a stub of a separated Raft log storage.
 type LogStore struct {
-	RangeID     roachpb.RangeID
-	Engine      storage.Engine
+	RangeID roachpb.RangeID
+	Engine  storage.Engine
+	// Separated is true iff the raft log engine is separated from the state
+	// machine engine.
+	Separated   bool
 	Sideload    SideloadStorage
 	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
@@ -216,6 +252,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
 			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			UseRaftLogSingleDelete(s.Separated),
 		); err != nil {
 			const expl = "during append"
 			return RaftState{}, errors.Wrap(err, expl)
@@ -412,6 +449,7 @@ func logAppend(
 	rw storage.ReadWriter,
 	prev RaftState,
 	entries []raftpb.Entry,
+	useSingleDelete bool,
 ) (RaftState, error) {
 	if len(entries) == 0 {
 		return prev, nil
@@ -442,7 +480,7 @@ func logAppend(
 		var err error
 		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
 			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
-		} else if UseRaftLogSingleDelete {
+		} else if useSingleDelete {
 			// When using SingleDelete for truncation, we must ensure each raft
 			// log key has exactly one Set. Overwriting via MVCCPut would create a
 			// second Set. Instead, cancel the old Set with a SingleDelete, then
@@ -471,7 +509,7 @@ func logAppend(
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			key := keys.RaftLogKeyFromPrefix(raftLogPrefix, i)
-			if UseRaftLogSingleDelete {
+			if useSingleDelete {
 				// These tail entries have exactly one Set each — they were
 				// appended once and are now being cut from the log.
 				// TODO(pav-kv): the stats won't account for the removed entries'
@@ -506,6 +544,7 @@ func Compact(
 	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	writer storage.Writer,
+	useSingleDelete bool,
 ) error {
 	if next.Index <= prev.Index {
 		// TODO(pav-kv): return an assertion failure error.
@@ -531,7 +570,7 @@ func Compact(
 		for idx := prev.Index + 1; idx <= next.Index; idx++ {
 			key := keys.RaftLogKeyFromPrefix(prefix, idx)
 			var err error
-			if UseRaftLogSingleDelete {
+			if useSingleDelete {
 				err = writer.SingleClearUnversioned(key)
 			} else {
 				err = writer.ClearUnversioned(key, storage.ClearOptions{})

@@ -67,7 +67,7 @@ func TestRaftStorageWrites(t *testing.T) {
 		batch := writeBatch(func(rw storage.ReadWriter) {
 			require.NoError(t, storeHardState(ctx, rw, sl, hs))
 			var err error
-			newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries)
+			newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* useSingleDelete */)
 			require.NoError(t, err)
 		})
 		state = newState
@@ -77,7 +77,7 @@ func TestRaftStorageWrites(t *testing.T) {
 	truncate := func(name string, ts kvserverpb.RaftTruncatedState) {
 		t.Helper()
 		batch := writeBatch(func(rw storage.ReadWriter) {
-			require.NoError(t, Compact(ctx, trunc, ts, sl, rw))
+			require.NoError(t, Compact(ctx, trunc, ts, sl, rw, false /* useSingleDelete */))
 		})
 		trunc = ts
 		state.ByteSize = stats()
