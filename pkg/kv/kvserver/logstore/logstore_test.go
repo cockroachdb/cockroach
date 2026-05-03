@@ -8,11 +8,13 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,4 +112,217 @@ func TestRaftStorageWrites(t *testing.T) {
 	output = strings.ReplaceAll(output, "\n\n", "\n")
 	output = strings.ReplaceAll(output, "\n\n", "\n")
 	echotest.Require(t, output, filepath.Join("testdata", t.Name()+".txt"))
+}
+
+type logstoreTruncHelper struct {
+	t         *testing.T
+	ctx       context.Context
+	rangeID   roachpb.RangeID
+	prefixBuf keys.RangeIDPrefixBuf
+	eng       storage.Engine
+}
+
+func newLogstoreTruncHelper(t *testing.T, ctx context.Context) *logstoreTruncHelper {
+	const rangeID = roachpb.RangeID(123)
+	h := &logstoreTruncHelper{
+		t:         t,
+		ctx:       ctx,
+		rangeID:   rangeID,
+		prefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
+		eng:       storage.NewDefaultInMemForTesting(),
+	}
+	h.populate()
+	return h
+}
+
+// close releases the engine.
+func (h *logstoreTruncHelper) close() {
+	h.eng.Close()
+}
+
+// populate writes the raft log entries [15,16,17,18,19] using logAppend.
+func (h *logstoreTruncHelper) populate() {
+	h.t.Helper()
+	entries := []raftpb.Entry{
+		{Index: 15, Term: 10}, {Index: 16, Term: 10}, {Index: 17, Term: 10},
+		{Index: 18, Term: 10}, {Index: 19, Term: 10},
+	}
+	b := h.eng.NewBatch()
+	defer b.Close()
+	_, err := logAppend(
+		h.ctx, h.prefixBuf.RaftLogPrefix(), b, RaftState{}, entries, false, /* useSingleDelete */
+	)
+	require.NoError(h.t, err)
+	require.NoError(h.t, b.Commit(true /* sync */))
+}
+
+// countBatchOps tallies the deletion ops recorded in a Pebble batch's wire
+// representation, classifying them as point deletes, single deletes, or range
+// deletes.
+func (h *logstoreTruncHelper) countBatchOps(batchRepr []byte) (points, singleDels, ranges int) {
+	h.t.Helper()
+	r, err := storage.NewBatchReader(batchRepr)
+	require.NoError(h.t, err)
+	for r.Next() {
+		switch r.KeyKind() {
+		case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
+			points++
+		case pebble.InternalKeyKindSingleDelete:
+			singleDels++
+		case pebble.InternalKeyKindRangeDelete:
+			ranges++
+		}
+	}
+	return points, singleDels, ranges
+}
+
+// raftLogIndices returns the raft log indices present in the engine's raft log
+// span.
+func (h *logstoreTruncHelper) raftLogIndices() []kvpb.RaftIndex {
+	h.t.Helper()
+	prefix := h.prefixBuf.RaftLogPrefix()
+	iter, err := h.eng.NewMVCCIterator(h.ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound: prefix, UpperBound: prefix.PrefixEnd(),
+	})
+	require.NoError(h.t, err)
+	defer iter.Close()
+	var indices []kvpb.RaftIndex
+	iter.SeekGE(storage.MakeMVCCMetadataKey(prefix))
+	for {
+		ok, err := iter.Valid()
+		require.NoError(h.t, err)
+		if !ok {
+			break
+		}
+		key := iter.UnsafeKey().Key
+		idx, err := keys.DecodeRaftLogKeyFromSuffix(key[len(prefix):])
+		require.NoError(h.t, err)
+		indices = append(indices, idx)
+		iter.Next()
+	}
+	return indices
+}
+
+// TestClearRange verifies the scan-based heuristic in ClearRange: when the
+// number of raft log keys actually present in [lo, hi) is below the threshold,
+// the function emits per-entry point deletes; otherwise it emits a single
+// Pebble range tombstone.
+func TestClearRange(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		lo, hi                 kvpb.RaftIndex
+		threshold              int
+		wantPoints, wantRanges int
+		wantIndices            []kvpb.RaftIndex
+	}{
+		{lo: 0, hi: math.MaxUint64, threshold: 1, wantPoints: 0, wantRanges: 1},
+		{lo: 0, hi: math.MaxUint64, threshold: 6, wantPoints: 5, wantRanges: 0},
+		{lo: 11, hi: 16, threshold: 3, wantPoints: 1, wantRanges: 0, wantIndices: []kvpb.RaftIndex{16, 17, 18, 19}},
+		{lo: 11, hi: 16, threshold: 6, wantPoints: 1, wantRanges: 0, wantIndices: []kvpb.RaftIndex{16, 17, 18, 19}},
+		{lo: 11, hi: 20, threshold: 3, wantPoints: 0, wantRanges: 1},
+		{lo: 11, hi: 20, threshold: 6, wantPoints: 5, wantRanges: 0},
+		{lo: 15, hi: 19, threshold: 3, wantPoints: 0, wantRanges: 1, wantIndices: []kvpb.RaftIndex{19}},
+		{lo: 15, hi: 19, threshold: 6, wantPoints: 4, wantRanges: 0, wantIndices: []kvpb.RaftIndex{19}},
+		// Empty / inverted ranges are no-ops.
+		{lo: 15, hi: 15, threshold: 1, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+		{lo: 100, hi: 15, threshold: 1, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+	}
+
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			h := newLogstoreTruncHelper(t, ctx)
+			defer h.close()
+			batch := h.eng.NewBatch()
+			defer batch.Close()
+			require.NoError(t, ClearRange(ctx, h.eng, batch, h.prefixBuf, tc.lo, tc.hi, tc.threshold))
+			points, singleDels, ranges := h.countBatchOps(batch.Repr())
+			require.Equal(t, tc.wantPoints, points)
+			require.Equal(t, 0, singleDels)
+			require.Equal(t, tc.wantRanges, ranges)
+			require.NoError(t, batch.Commit(true /* sync */))
+			require.Equal(t, tc.wantIndices, h.raftLogIndices())
+		})
+	}
+}
+
+// TestClearRangeSizeKnown verifies that it correctly chooses between point
+// deletes, single deletes, and range deletes based on the provided args.
+func TestClearRangeSizeKnown(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		lo, hi                                 kvpb.RaftIndex
+		threshold                              int
+		maybeUseSingleDel                      bool
+		wantPoints, wantSingleDels, wantRanges int
+		wantIndices                            []kvpb.RaftIndex
+	}{
+		{lo: 0, hi: math.MaxUint64, threshold: 1, wantRanges: 1},
+		{lo: 0, hi: math.MaxUint64, threshold: 1, maybeUseSingleDel: true, wantRanges: 1},
+		{lo: 15, hi: 19, threshold: 3, wantRanges: 1, wantIndices: []kvpb.RaftIndex{19}},
+		{lo: 15, hi: 19, threshold: 3, maybeUseSingleDel: true, wantRanges: 1, wantIndices: []kvpb.RaftIndex{19}},
+		{lo: 15, hi: 19, threshold: 6, wantPoints: 4, wantIndices: []kvpb.RaftIndex{19}},
+		{lo: 15, hi: 19, threshold: 6, maybeUseSingleDel: true, wantSingleDels: 4, wantIndices: []kvpb.RaftIndex{19}},
+		// Empty / inverted ranges are no-ops.
+		{lo: 15, hi: 15, threshold: 1, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+		{lo: 100, hi: 15, threshold: 1, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+	}
+
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			h := newLogstoreTruncHelper(t, ctx)
+			defer h.close()
+			batch := h.eng.NewBatch()
+			defer batch.Close()
+			require.NoError(t, ClearRangeSizeKnown(
+				batch, h.prefixBuf, tc.lo, tc.hi, tc.threshold, tc.maybeUseSingleDel,
+			))
+			points, singleDels, ranges := h.countBatchOps(batch.Repr())
+			require.Equal(t, tc.wantPoints, points)
+			require.Equal(t, tc.wantSingleDels, singleDels)
+			require.Equal(t, tc.wantRanges, ranges)
+			require.NoError(t, batch.Commit(true /* sync */))
+			require.Equal(t, tc.wantIndices, h.raftLogIndices())
+		})
+	}
+}
+
+// TestClearRangeWithSingleDeletes verifies that ClearRangeWithSingleDeletes
+// emits one SingleDelete per raft log key actually present in [lo, hi), never
+// a regular Delete and never a range tombstone.
+func TestClearRangeWithSingleDeletes(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		lo, hi         kvpb.RaftIndex
+		wantSingleDels int
+		wantIndices    []kvpb.RaftIndex
+	}{
+		{lo: 0, hi: math.MaxUint64, wantSingleDels: 5},
+		{lo: 11, hi: 16, wantSingleDels: 1, wantIndices: []kvpb.RaftIndex{16, 17, 18, 19}},
+		{lo: 11, hi: 20, wantSingleDels: 5},
+		{lo: 15, hi: 19, wantSingleDels: 4, wantIndices: []kvpb.RaftIndex{19}},
+
+		// Empty / inverted ranges are no-ops.
+		{lo: 15, hi: 15, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+		{lo: 100, hi: 15, wantIndices: []kvpb.RaftIndex{15, 16, 17, 18, 19}},
+	}
+
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			h := newLogstoreTruncHelper(t, ctx)
+			defer h.close()
+			batch := h.eng.NewBatch()
+			defer batch.Close()
+			require.NoError(t, ClearRangeWithSingleDeletes(
+				ctx, h.eng, batch, h.prefixBuf, tc.lo, tc.hi,
+			))
+			points, singleDels, ranges := h.countBatchOps(batch.Repr())
+			require.Equal(t, tc.wantSingleDels, singleDels)
+			// ClearRangeWithSingleDeletes() never issues regular point/range deletes.
+			require.Equal(t, 0, points)
+			require.Equal(t, 0, ranges)
+			require.NoError(t, batch.Commit(true /* sync */))
+			require.Equal(t, tc.wantIndices, h.raftLogIndices())
+		})
+	}
 }

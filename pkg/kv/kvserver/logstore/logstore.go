@@ -553,36 +553,17 @@ func Compact(
 	// Truncate the Raft log from the entry after the previous truncation index to
 	// the new truncation index. This is performed atomically with updating the
 	// RaftTruncatedState so that the state of the log is consistent.
-	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := next.Index - prev.Index
-	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
-		if err := writer.ClearRawRange(start, end, true, false); err != nil {
-			return errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v after index %d",
-				next, prev.Index)
-		}
-	} else {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
-		// allocating when constructing Raft log keys (16 bytes).
-		prefix := prefixBuf.RaftLogPrefix()
-		for idx := prev.Index + 1; idx <= next.Index; idx++ {
-			key := keys.RaftLogKeyFromPrefix(prefix, idx)
-			var err error
-			if useSingleDelete {
-				err = writer.SingleClearUnversioned(key)
-			} else {
-				err = writer.ClearUnversioned(key, storage.ClearOptions{})
-			}
-			if err != nil {
-				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					next, idx)
-			}
-		}
+	if err := ClearRangeSizeKnown(
+		writer, loader.RangeIDPrefixBuf,
+		prev.Index+1, next.Index+1, int(raftLogTruncationClearRangeThreshold),
+		useSingleDelete,
+	); err != nil {
+		return errors.Wrapf(err,
+			"unable to clear truncated Raft entries for %+v after index %d",
+			next, prev.Index)
 	}
 
-	key := prefixBuf.RaftTruncatedStateKey()
+	key := loader.RangeIDPrefixBuf.RaftTruncatedStateKey()
 	var value roachpb.Value
 	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
 		return err
@@ -593,6 +574,121 @@ func Compact(
 		ctx, writer, key, hlc.Timestamp{}, value, storage.MVCCWriteOptions{},
 	); err != nil {
 		return errors.Wrap(err, "unable to write RaftTruncatedState")
+	}
+	return nil
+}
+
+// raftLogBounds converts a half-open raft log index range [lo, hi) to its
+// engine key span. The sentinels lo == 0 and hi == math.MaxUint64 expand to
+// RaftLogPrefix and RaftLogPrefix.PrefixEnd respectively.
+func raftLogBounds(
+	prefixBuf keys.RangeIDPrefixBuf, lo, hi kvpb.RaftIndex,
+) (start, end roachpb.Key) {
+	if lo == 0 {
+		start = prefixBuf.RaftLogPrefix().Clone()
+	} else {
+		start = prefixBuf.RaftLogKey(lo).Clone()
+	}
+	if hi == math.MaxUint64 {
+		end = prefixBuf.RaftLogPrefix().PrefixEnd()
+	} else {
+		end = prefixBuf.RaftLogKey(hi).Clone()
+	}
+	return start, end
+}
+
+// ClearRange clears raft log entries in the half-open index range [lo, hi)
+// when the entry count is unknown. It scans up to pointKeyThreshold keys via
+// storage.ClearRangeWithHeuristic to choose between per-entry point deletes
+// and a single Pebble range tombstone. Returns nil if lo >= hi.
+func ClearRange(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	start, end := raftLogBounds(prefixBuf, lo, hi)
+	return storage.ClearRangeWithHeuristic(ctx, r, w, start, end, pointKeyThreshold)
+}
+
+// ClearRangeWithSingleDeletes clears raft log entries in the half-open index
+// range [lo, hi) using SingleDelete for every point key found by scanning the
+// log.
+func ClearRangeWithSingleDeletes(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	start, end := raftLogBounds(prefixBuf, lo, hi)
+	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
+	for ; ok; ok, err = iter.NextEngineKey() {
+		key, kerr := iter.UnsafeEngineKey()
+		if kerr != nil {
+			return kerr
+		}
+		if err := w.SingleClearEngineKey(key); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// ClearRangeSizeKnown clears raft log entries in the half-open index range
+// [lo, hi) when the caller already knows how many entries the range contains.
+// The choice between point deletes and a Pebble range tombstone is made
+// arithmetically (hi - lo vs pointKeyThreshold) without scanning. Returns nil
+// if lo >= hi.
+//
+// If maybeUseSingleDel is true, it uses SingleDelete instead of regular Delete
+// if the size is <= pointKeyThreshold.
+func ClearRangeSizeKnown(
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+	maybeUseSingleDel bool,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	if hi-lo >= kvpb.RaftIndex(pointKeyThreshold) {
+		start, end := raftLogBounds(prefixBuf, lo, hi)
+		return w.ClearRawRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+	}
+	// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
+	// allocating when constructing Raft log keys (16 bytes).
+	prefix := prefixBuf.RaftLogPrefix()
+	for idx := lo; idx < hi; idx++ {
+		key := keys.RaftLogKeyFromPrefix(prefix, idx)
+		var err error
+		if maybeUseSingleDel {
+			err = w.SingleClearUnversioned(key)
+		} else {
+			err = w.ClearUnversioned(key, storage.ClearOptions{})
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
