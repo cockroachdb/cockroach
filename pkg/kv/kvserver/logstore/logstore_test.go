@@ -35,7 +35,8 @@ func TestRaftStorageWrites(t *testing.T) {
 	// SingleClearUnversioned does not touch MVCCStats; we assert that
 	// compensation is correct by comparing state.ByteSize to ComputeStats.
 	testutils.RunTrueAndFalse(t, "single_delete", func(t *testing.T, useSingleDelete bool) {
-		UseRaftLogSingleDelete = useSingleDelete
+		// Override the default value of `raftLogSingleDeleteEnv`.
+		defer TestingSetRaftLogSingleDelete(useSingleDelete)()
 		ctx := context.Background()
 		const rangeID = roachpb.RangeID(123)
 		sl := NewStateLoader(rangeID)
@@ -78,7 +79,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries)
+				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -88,7 +89,7 @@ func TestRaftStorageWrites(t *testing.T) {
 		truncate := func(name string, ts kvserverpb.RaftTruncatedState) {
 			t.Helper()
 			batch := writeBatch(func(rw storage.ReadWriter) {
-				require.NoError(t, Compact(ctx, trunc, ts, sl, rw))
+				require.NoError(t, Compact(ctx, trunc, ts, sl, rw, false /* enginesSeparated */))
 			})
 			trunc = ts
 			// Compact does not update state.ByteSize; recompute it from the

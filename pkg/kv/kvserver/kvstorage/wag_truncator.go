@@ -277,7 +277,7 @@ func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
 func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
 ) error {
-	if logstore.UseRaftLogSingleDelete {
+	if logstore.UseRaftLogSingleDelete(t.eng.Separated()) {
 		if err := clearRaftLogWithSingleDelete(
 			ctx, raft.RO, raft.WO, rangeID, lastIndex,
 		); err != nil {

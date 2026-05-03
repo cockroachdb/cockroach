@@ -550,6 +550,7 @@ func (b *replicaAppBatch) stageTruncation(
 	if err := handleTruncatedStateBelowRaftPreApply(
 		ctx, b.truncState, *truncatedState,
 		b.r.raftMu.stateLoader.StateLoader, b.batch.Raft(),
+		b.r.logStorage.ls.Separated,
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}

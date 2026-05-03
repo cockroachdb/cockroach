@@ -565,7 +565,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	defer batch.Close()
 	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
-		stateLoader.StateLoader, batch,
+		stateLoader.StateLoader, batch, eng.Separated(),
 	); err != nil {
 		log.KvExec.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()
