@@ -49,13 +49,59 @@ var DisableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
-// UseRaftLogSingleDelete controls whether to use Pebble's SingleDelete
-// instead of Delete when clearing individual raft log entries during
-// truncation and log suffix replacement. SingleDelete is more efficient
-// because it can be compacted away faster, but requires that each key has
-// been Set exactly once since the last delete. This is naturally the case
-// for raft log entries in the common path.
-var UseRaftLogSingleDelete = false
+// raftLogSingleDeleteMode selects how UseRaftLogSingleDelete decides whether
+// to use Pebble's SingleDelete for raft log entry deletes or regular point
+// deletes.
+type raftLogSingleDeleteMode int
+
+const (
+	// raftLogSingleDeleteDefault defers the choice to engine separation.
+	raftLogSingleDeleteDefault raftLogSingleDeleteMode = iota
+	// raftLogSingleDeleteEnabled forces SingleDelete on. This is only to be used
+	// in tests where we want to force the usage of SingleDelete.
+	raftLogSingleDeleteEnabled
+	// raftLogSingleDeleteDisabled forces SingleDelete off. his is only to be used
+	// in tests where we want to force the usage of point deletes.
+	raftLogSingleDeleteDisabled
+)
+
+// raftLogSingleDelete controls UseRaftLogSingleDelete. It is intentionally
+// unexported and not env-driven as it's dangerous to enable it without a proper
+// migration process.
+var raftLogSingleDelete = raftLogSingleDeleteDefault
+
+// UseRaftLogSingleDelete reports whether to use Pebble's SingleDelete instead
+// of regular point Delete when clearing individual raft log entries.
+// It is safe to use SingleDelete with separate engines because we are
+// guaranteed an empty raft log history. This is because running CRDB with
+// separate engines has two possible paths: completely new cluster, and
+// migrating a cluster that uses a single engine to separate engines. Both cases
+// have an empty raft log history, and therefore, SingleDelete is safe.
+// TODO(ibrahim): Remove this function once single deletions are the default for
+// raft log.
+func UseRaftLogSingleDelete(separated bool) bool {
+	switch raftLogSingleDelete {
+	case raftLogSingleDeleteEnabled:
+		return true
+	case raftLogSingleDeleteDisabled:
+		return false
+	default:
+		return separated
+	}
+}
+
+// TestingSetRaftLogSingleDelete forces UseRaftLogSingleDelete to return the
+// given value regardless of engine separation. It returns a cleanup function
+// that restores the previous setting; callers should defer it.
+func TestingSetRaftLogSingleDelete(enabled bool) func() {
+	prev := raftLogSingleDelete
+	if enabled {
+		raftLogSingleDelete = raftLogSingleDeleteEnabled
+	} else {
+		raftLogSingleDelete = raftLogSingleDeleteDisabled
+	}
+	return func() { raftLogSingleDelete = prev }
+}
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 	settings.SystemOnly,
@@ -135,8 +181,11 @@ type WriteStats struct {
 
 // LogStore is a stub of a separated Raft log storage.
 type LogStore struct {
-	RangeID     roachpb.RangeID
-	Engine      storage.Engine
+	RangeID roachpb.RangeID
+	Engine  storage.Engine
+	// Separated is true iff the raft log engine is separated from the state
+	// machine engine.
+	Separated   bool
 	Sideload    SideloadStorage
 	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
@@ -215,6 +264,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
 			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			UseRaftLogSingleDelete(s.Separated),
 		); err != nil {
 			const expl = "during append"
 			return RaftState{}, errors.Wrap(err, expl)
@@ -411,6 +461,7 @@ func logAppend(
 	rw storage.ReadWriter,
 	prev RaftState,
 	entries []raftpb.Entry,
+	enginesSeparated bool,
 ) (RaftState, error) {
 	if len(entries) == 0 {
 		return prev, nil
@@ -429,6 +480,7 @@ func logAppend(
 	value.RawBytes = value.RawBytes[:0]
 	diff.Reset()
 
+	useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
 	opts := storage.MVCCWriteOptions{Stats: diff, Category: fs.ReplicationReadCategory}
 	for i := range entries {
 		ent := &entries[i]
@@ -441,7 +493,7 @@ func logAppend(
 		var err error
 		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
 			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
-		} else if UseRaftLogSingleDelete {
+		} else if useSingleDelete {
 			// When using SingleDelete for truncation, we must ensure each raft
 			// log key has exactly one Set. Overwriting via MVCCPut would create a
 			// second Set. Instead, cancel the old Set with a SingleDelete, then
@@ -467,7 +519,7 @@ func logAppend(
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			key := keys.RaftLogKeyFromPrefix(raftLogPrefix, i)
-			if UseRaftLogSingleDelete {
+			if useSingleDelete {
 				// These tail entries have exactly one Set each — they were
 				// appended once and are now being cut from the log.
 				if err := singleClearInline(ctx, rw, key, diff); err != nil {
@@ -530,6 +582,7 @@ func Compact(
 	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	writer storage.Writer,
+	enginesSeparated bool,
 ) error {
 	if next.Index <= prev.Index {
 		// TODO(pav-kv): return an assertion failure error.
@@ -551,11 +604,12 @@ func Compact(
 	} else {
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
 		// allocating when constructing Raft log keys (16 bytes).
+		useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
 		prefix := prefixBuf.RaftLogPrefix()
 		for idx := prev.Index + 1; idx <= next.Index; idx++ {
 			key := keys.RaftLogKeyFromPrefix(prefix, idx)
 			var err error
-			if UseRaftLogSingleDelete {
+			if useSingleDelete {
 				err = writer.SingleClearUnversioned(key)
 			} else {
 				err = writer.ClearUnversioned(key, storage.ClearOptions{})
