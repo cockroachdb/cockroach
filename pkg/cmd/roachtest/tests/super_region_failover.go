@@ -33,10 +33,6 @@ func registerSuperRegionFailover(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "multi-region/super-region-failover",
 		Owner: registry.OwnerSQLQueries,
-		// The test kills nodes and expects them to be dead at the end of
-		// scenario 1 (before recovery). We recover them, but we also need
-		// SkipPostValidations in case the test fails mid-scenario.
-		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             45 * time.Minute,
 		Cluster: r.MakeClusterSpec(
 			12,

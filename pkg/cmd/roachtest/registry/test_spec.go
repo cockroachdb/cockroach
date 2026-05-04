@@ -245,16 +245,12 @@ const (
 	// PostValidationInvalidDescriptors checks if there exists any descriptors in
 	// the crdb_internal.invalid_objects virtual table.
 	PostValidationInvalidDescriptors
-	// PostValidationNoDeadNodes checks if there are any dead nodes in the cluster.
-	// TODO: Deprecate or replace this functionality.
-	// In its current state it is no longer functional.
-	// See: https://github.com/cockroachdb/cockroach/issues/137329 for details.
-	PostValidationNoDeadNodes
+	_
 	// PostValidationInspect runs INSPECT DATABASE on user databases to verify
 	// consistency.
 	PostValidationInspect
 	// PostValidationAll is a bitwise OR of all post-validations to skip.
-	PostValidationAll = PostValidationReplicaDivergence | PostValidationInvalidDescriptors | PostValidationNoDeadNodes | PostValidationInspect
+	PostValidationAll = PostValidationReplicaDivergence | PostValidationInvalidDescriptors | PostValidationInspect
 )
 
 // PromSub replaces all non prometheus friendly chars with "_". Note,
