@@ -153,6 +153,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 
 	r.mu.RLock()
 	b.ab.state = r.shMu.state
+	b.ab.initialForceFlushIndex = r.shMu.state.ForceFlushIndex
 	b.truncState = r.asLogStorage().shMu.trunc
 	b.ab.state.Stats = &sm.stats
 	*b.ab.state.Stats = *r.shMu.state.Stats

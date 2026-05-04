@@ -87,6 +87,11 @@ type appBatch struct {
 	// batch accumulates writes implied by the raft entries in this batch, across
 	// both the state and raft engines. It is engine separation aware.
 	batch kvstorage.Batch[storage.Batch]
+	// initialForceFlushIndex records the ForceFlushIndex at the start of the
+	// batch, used by addAppliedStateToBatch to detect whether it changed.
+	initialForceFlushIndex roachpb.ForceFlushIndex
+	// asAlloc is reused by addAppliedStateToBatch to avoid heap allocations.
+	asAlloc kvserverpb.RangeAppliedState
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - changeRemovesReplica
@@ -248,4 +253,21 @@ func (b *appBatch) stageTrivialResult(cmd *raftlog.ReplicatedCmd, fr kvserverbas
 		// final value being written.
 		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
 	}
+}
+
+// addAppliedStateToBatch writes the applied state to the batch. This records
+// the highest raft and lease index that have been applied, along with the MVCC
+// stats. If the ForceFlushIndex changed during this batch, it is written to
+// its own key first.
+func (b *appBatch) addAppliedStateToBatch(ctx context.Context, rangeID roachpb.RangeID) error {
+	sl := kvstorage.MakeStateLoader(rangeID)
+	if b.state.ForceFlushIndex != b.initialForceFlushIndex {
+		// NB: this branch goes first, so that MVCC stats are accurate below.
+		if err := sl.SetForceFlushIndex(
+			ctx, b.batch.State(), b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			return err
+		}
+	}
+	b.asAlloc = b.state.ToRangeAppliedState()
+	return sl.SetRangeAppliedState(ctx, b.batch.State(), &b.asAlloc)
 }
