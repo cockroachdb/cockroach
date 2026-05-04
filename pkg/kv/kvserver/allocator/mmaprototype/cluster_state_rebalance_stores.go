@@ -165,8 +165,8 @@ type sheddingStore struct {
 // thresholds.
 func classifyOverload(
 	ss *storeState, sls storeLoadSummary, now time.Time,
-) (withinLeaseSheddingGracePeriod bool, iLevel ignoreLevel, overloadDur time.Duration) {
-	overloadDur = now.Sub(ss.overloadStartTime)
+) (withinLeaseSheddingGracePeriod bool, iLevel ignoreLevel) {
+	overloadDur := now.Sub(ss.overloadStartTime)
 	iLevel = ignoreLoadNoChangeAndHigher
 	if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
 		iLevel = ignoreHigherThanLoadThreshold
@@ -175,7 +175,7 @@ func classifyOverload(
 	}
 	withinLeaseSheddingGracePeriod = sls.dimSummary[CPURate] >= overloadSlow &&
 		overloadDur < leaseSheddingGraceDuration
-	return withinLeaseSheddingGracePeriod, iLevel, overloadDur
+	return withinLeaseSheddingGracePeriod, iLevel
 }
 
 // Called periodically, say every 10s.
@@ -260,7 +260,7 @@ func (re *rebalanceEnv) rebalanceStores(
 			// entry with storeOverloaded + finishStore exactly once, even
 			// for entries that turn out to be unsheddable (pending
 			// decrease/increase, or per-pass range-move budget exhausted).
-			withinGrace, iLevel, _ := classifyOverload(ss, sls, re.now)
+			withinGrace, iLevel := classifyOverload(ss, sls, re.now)
 			// The pending decrease must be small enough to continue shedding,
 			// and there should be no pending increase (since pending-increase
 			// estimates can be overestimates).

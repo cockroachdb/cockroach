@@ -409,6 +409,35 @@ func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel
 // store completes, curState is saved to states. At the end of the pass,
 // states is aggregated to update m, and failedSummaries/successSummaries are
 // built for logging.
+//
+// Pairing protocol. The methods on this type must be invoked in the order
+// described, once per rebalanceStores invocation. In production the methods
+// are only invoked on the first rebalanceStores call per allocator tick.
+// The aggregation in computePassSummary depends on these invariants:
+//
+//  1. resetForRebalancingPass is called once at the start of the
+//     rebalanceStores call.
+//  2. For each store classified as overloaded (i.e. each entry that ends up
+//     in sheddingStores), storeOverloaded is called exactly once.
+//  3. For each storeOverloaded call, finishStore is called exactly once
+//     before any subsequent storeOverloaded call. The window between
+//     storeOverloaded and finishStore is the only time leaseShed and
+//     replicaShed may be called for that store.
+//  4. Between a storeOverloaded/finishStore pair, leaseShed and/or
+//     replicaShed are called once for each top-K range the rebalancer
+//     actually examined for that store (one call per range, recording the
+//     corresponding shedResult). The rebalancer stops iterating early — and
+//     so stops calling leaseShed/replicaShed — when it hits its per-store
+//     transfer limit (maxLeaseTransferCount for leases), when
+//     ss.maxFractionPendingDecrease saturates above
+//     fractionPendingIncreaseOrDecreaseThreshold mid-loop, or (for replicas)
+//     when rebalanceStores' shared range-move budget re.maxRangeMoveCount is
+//     exhausted. If no ranges were examined at all (cannotShed=true, or
+//     rebalanceStores already reached re.maxRangeMoveCount before this
+//     store's turn), neither is called and the store is classified as
+//     skipped by computePassSummary.
+//  5. finishRebalancingPass is called once at the end of the rebalanceStores
+//     call.
 type rebalancingPassMetricsAndLogger struct {
 	// The local store where the rebalancing pass is happening.
 	localStoreID roachpb.StoreID
@@ -420,11 +449,12 @@ type rebalancingPassMetricsAndLogger struct {
 	// Overloaded store ID -> shedding counts and overload category.
 	states map[roachpb.StoreID]storePassState
 	// numStoreOverloadedCallsThisPass counts storeOverloaded invocations
-	// during one rebalanceStores call for this local store. Reset by
-	// resetForRebalancingPass at the start of the pass; accumulates across
-	// all sheddingStores processed in that pass. Assertion-only: read only
-	// by the invariant checks in finishRebalancingPass and
-	// computePassSummary.
+	// during one rebalanceStores call. Reset by resetForRebalancingPass at
+	// the start of the call and incremented once per sheddingStores entry
+	// (i.e. on each storeOverloaded call). In production, the methods
+	// recording into this struct are only invoked on the first
+	// rebalanceStores call per allocator tick. Used by the assertions in
+	// finishRebalancingPass and computePassSummary.
 	numStoreOverloadedCallsThisPass int64
 	// Shedding results for the currently-processing store.
 	curState storePassState
@@ -600,20 +630,23 @@ var (
 
 	// The "skipped" gauges below cover the third per-bucket outcome: the
 	// store is overloaded but MMA chose not to shed from it this pass for a
-	// known reason — most commonly because it already has too much pending
-	// work (pending-decrease saturated above the fraction threshold, or
-	// pending-increase >= epsilon). For each duration bucket,
-	// success + failure + skipped equals the count of overloaded stores
-	// observed during the local MMA rebalancing pass.
+	// known reason. Common reasons include: pending work on the store
+	// (pending-decrease saturated above the fraction threshold, or
+	// pending-increase >= epsilon), no top-K ranges available to evaluate,
+	// or rebalanceStores' per-pass range-move budget already exhausted by a
+	// higher-priority store. For each duration bucket, success + failure +
+	// skipped equals the count of overloaded stores observed during the
+	// local MMA rebalancing pass.
 	metaOverloadedStoreLeaseGraceSkipped = metric.Metadata{
 		Name: "mma.overloaded_store.lease_grace.skipped",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) that MMA recognized as overloaded but did not shed from this pass. " +
-			"The most common reason is pending work on the store (pending-decrease saturated " +
+			"Common reasons include pending work on the store (pending-decrease saturated " +
 			"above the configured fraction threshold, or pending-increase >= epsilon, " +
-			"indicating the load arithmetic is unreliable). For each duration bucket, " +
-			"success + failure + skipped equals the total overloaded stores observed in " +
-			"that bucket this pass.",
+			"indicating the load arithmetic is unreliable), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -623,11 +656,12 @@ var (
 	metaOverloadedStoreShortDurSkipped = metric.Metadata{
 		Name: "mma.overloaded_store.short_dur.skipped",
 		Help: "Number of stores overloaded for a short duration (2-5 min) that MMA recognized " +
-			"as overloaded but did not shed from this pass. The most common reason is pending " +
+			"as overloaded but did not shed from this pass. Common reasons include pending " +
 			"work on the store (pending-decrease saturated above the configured fraction " +
-			"threshold, or pending-increase >= epsilon). For each duration bucket, " +
-			"success + failure + skipped equals the total overloaded stores observed in that " +
-			"bucket this pass.",
+			"threshold, or pending-increase >= epsilon), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -637,11 +671,12 @@ var (
 	metaOverloadedStoreMediumDurSkipped = metric.Metadata{
 		Name: "mma.overloaded_store.medium_dur.skipped",
 		Help: "Number of stores overloaded for a medium duration (5-8 min) that MMA recognized " +
-			"as overloaded but did not shed from this pass. The most common reason is pending " +
+			"as overloaded but did not shed from this pass. Common reasons include pending " +
 			"work on the store (pending-decrease saturated above the configured fraction " +
-			"threshold, or pending-increase >= epsilon). For each duration bucket, " +
-			"success + failure + skipped equals the total overloaded stores observed in that " +
-			"bucket this pass.",
+			"threshold, or pending-increase >= epsilon), no top-K ranges available to " +
+			"evaluate, or the per-pass range-move budget already exhausted. For each " +
+			"duration bucket, success + failure + skipped equals the total overloaded stores " +
+			"observed in that bucket this pass.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -651,9 +686,10 @@ var (
 	metaOverloadedStoreLongDurSkipped = metric.Metadata{
 		Name: "mma.overloaded_store.long_dur.skipped",
 		Help: "Number of stores overloaded for a long duration (8+ min) that MMA recognized as " +
-			"overloaded but did not shed from this pass. The most common reason is pending " +
-			"work on the store (pending-decrease saturated above the configured fraction " +
-			"threshold, or pending-increase >= epsilon). A persistently non-zero value here " +
+			"overloaded but did not shed from this pass. Common reasons include pending work " +
+			"on the store (pending-decrease saturated above the configured fraction threshold, " +
+			"or pending-increase >= epsilon), no top-K ranges available to evaluate, or the " +
+			"per-pass range-move budget already exhausted. A persistently non-zero value here " +
 			"indicates an overloaded store that is repeatedly being deferred and may not be " +
 			"receiving relief. For each duration bucket, success + failure + skipped equals " +
 			"the total overloaded stores observed in that bucket this pass.",
@@ -716,31 +752,7 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 	g.numStoreOverloadedCallsThisPass = 0
 }
 
-// Per-pass call protocol. The aggregation in computePassSummary relies on
-// callers obeying the following invariants for each rebalancing pass:
-//
-//  1. resetForRebalancingPass is called once at the start of the pass.
-//  2. For each store classified as overloaded (i.e. each entry that ends
-//     up in sheddingStores), storeOverloaded is called exactly once.
-//  3. For each storeOverloaded call, finishStore is called exactly once
-//     before any subsequent storeOverloaded call. The window between
-//     storeOverloaded and finishStore is the only time leaseShed and
-//     replicaShed may be called for that store.
-//  4. Between a storeOverloaded/finishStore pair, leaseShed and/or
-//     replicaShed are called once per range that was actually attempted
-//     (one call per attempt, with the corresponding shedResult). If no
-//     ranges were attempted (e.g. cannotShed=true, or the per-pass range-
-//     move budget was exhausted), neither is called and the store ends
-//     up classified as "skipped" by computePassSummary.
-//  5. finishRebalancingPass is called once at the end of the pass.
-//
-// Violations of (2) or (3) are caught by the assertion in
-// computePassSummary, which compares numStoreOverloadedCallsThisPass against
-// success+failure+skipped aggregated from g.states.
-
 // storeOverloaded marks the start of processing for an overloaded store.
-// It must be paired with a subsequent finishStore call before the next
-// storeOverloaded invocation. See the protocol comment above.
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
 	storeID roachpb.StoreID, withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel,
 ) {
@@ -755,8 +767,7 @@ func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
 }
 
 // finishStore commits the curState accumulated since the matching
-// storeOverloaded call into g.states. See the protocol comment above
-// storeOverloaded.
+// storeOverloaded call into g.states.
 func (g *rebalancingPassMetricsAndLogger) finishStore() {
 	if g == nil {
 		return
@@ -819,12 +830,10 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
-// leaseShed records the outcome of one lease-shed attempt. Must be
-// called between storeOverloaded and finishStore for the store the
-// attempt was made from. Called once per range attempted; not called
-// at all if no ranges were attempted (the store will then be
-// classified as "skipped"). See the protocol comment above
-// storeOverloaded.
+// leaseShed records the outcome of considering one top-K range for a
+// lease transfer from the currently-open overloaded store. Called once
+// per top-K range that the rebalancer examined; not called at all if no
+// ranges were examined (the store is then classified as skipped).
 func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
 	if g == nil {
 		return
@@ -832,8 +841,10 @@ func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
 	g.curState.shedCounts[shedLease][result]++
 }
 
-// replicaShed records the outcome of one replica-shed attempt. Same
-// pairing rules as leaseShed.
+// replicaShed records the outcome of considering one top-K range for a
+// replica move from the currently-open overloaded store. Called once per
+// top-K range that the rebalancer examined; not called at all if no
+// ranges were examined (the store is then classified as skipped).
 func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
 	if g == nil {
 		return
@@ -841,11 +852,10 @@ func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
 	g.curState.shedCounts[shedReplica][result]++
 }
 
-// finishRebalancingPass closes out the per-pass bookkeeping. numSheddingStores
-// is the size of the caller's sheddingStores slice; it must equal the number
-// of storeOverloaded calls made during the pass. A mismatch indicates a
-// pairing-protocol bug (e.g. the caller appended an entry to sheddingStores
-// but skipped the storeOverloaded call, or vice versa).
+// finishRebalancingPass closes out the bookkeeping for one rebalanceStores
+// invocation. numSheddingStores is the size of the caller's sheddingStores
+// slice; it must equal the number of storeOverloaded calls made during the
+// rebalanceStores call.
 func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 	ctx context.Context, numSheddingStores int,
 ) {
@@ -886,16 +896,8 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 // function places it into exactly one of the three outcomes.
 //
 // Example output:
-/*
-rebalancing pass summary [local=s1]:
-	overloaded:
-		short: [s1, s5, s10]
-		medium: [s8]
-		long: [s6]
-	success: [s1]
-	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
-	skipped: [s5, s10]
-*/
+// rebalancing pass summary [local=s1]: overloaded: short: [s1, s5, s10] medium: [s8] long: [s6] success: [s1] failure: [{s6, total: 2, no-cand-load:2}, {s8,
+// total: 1, no-cand:1}] skipped: [s5, s10] */
 func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
@@ -906,7 +908,7 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 	// that did not record a leaseShed/replicaShed call between
 	// storeOverloaded and finishStore lands here. This makes
 	// success + failure + skipped == len(overloaded stores in bucket) hold
-	// by construction; assertSumInvariant below double-checks.
+	// by construction; the inline assertion below double-checks.
 	// NB: Each store is counted at most once.
 	var overloadSummaries [numOverloadKinds]struct {
 		success, failure, skipped int64
