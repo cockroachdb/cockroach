@@ -62,9 +62,6 @@ type replicaAppBatch struct {
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
-
-	// Reused by addAppliedStateToBatch to avoid heap allocations.
-	asAlloc kvserverpb.RangeAppliedState
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -601,7 +598,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Add the replica applied state key to the write batch if this change
 	// doesn't remove us.
 	if !b.changeRemovesReplica {
-		if err := b.addAppliedStateToBatch(ctx); err != nil {
+		if err := b.ab.addAppliedStateToBatch(ctx); err != nil {
 			return err
 		}
 	}
@@ -712,26 +709,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// addAppliedStateToBatch adds the applied state to the application batch's
-// Pebble batch. This records the highest raft and lease index that have been
-// applied as of this batch. It also records the Range's MVCC stats.
-func (b *replicaAppBatch) addAppliedStateToBatch(ctx context.Context) error {
-	// Write the ForceFlushIndex if it was staged during this batch. This index is
-	// stored in a separate RangeForceFlushKey but follows the same deferred-write
-	// pattern as RangeAppliedState.
-	if b.ab.state.ForceFlushIndex != b.r.shMu.state.ForceFlushIndex {
-		// NB: this branch goes first, so that MVCC stats are accurate below.
-		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
-			ctx, b.ab.batch.State(), b.ab.state.Stats, &b.ab.state.ForceFlushIndex); err != nil {
-			return err
-		}
-	}
-	// Set the range applied state, which includes the last applied raft and lease
-	// index along with the MVCC stats, all in one key.
-	b.asAlloc = b.ab.state.ToRangeAppliedState()
-	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.ab.batch.State(), &b.asAlloc)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
