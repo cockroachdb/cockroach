@@ -318,17 +318,10 @@ func (re *rebalanceEnv) rebalanceStores(
 	if re.passObs != nil && len(sheddingStores) > 0 {
 		var buf redact.StringBuilder
 		buf.SafeString("sorted shedding stores:")
-		any := false
 		for _, store := range sheddingStores {
-			if store.cannotShed {
-				continue
-			}
-			buf.Printf(" (s%d: %s)", store.StoreID, store.sls)
-			any = true
+			buf.Printf(" (s%d: %s, cannotShed: %t)", store.StoreID, store.sls, store.cannotShed)
 		}
-		if any {
-			log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
-		}
+		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
 	}
 
 	// Single processing loop. Each entry — sheddable or not, in-budget or

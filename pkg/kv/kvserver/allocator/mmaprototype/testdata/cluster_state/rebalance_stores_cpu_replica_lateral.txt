@@ -71,7 +71,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): loadLow, reason: load is >10% below mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=7.50% capacity=2000]
 [mmaid=1] evaluating s4: node load loadLow, store load loadNormal, worst dim ByteSize
-[mmaid=1] sorted shedding stores: (s1: overloadSlow) (s2: overloadSlow) (s3: overloadSlow)
+[mmaid=1] sorted shedding stores: (s1: overloadSlow, cannotShed: false) (s2: overloadSlow, cannotShed: false) (s3: overloadSlow, cannotShed: false)
 [mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first
@@ -158,7 +158,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=2] evaluating s3: node load loadLow, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=2] adding overloaded store s3 to shedding list (worst dim: WriteBandwidth, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: r1+s3[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] evaluating s4: node load loadLow, store load loadNormal, worst dim ByteSize
-[mmaid=2] sorted shedding stores: (s1: overloadSlow) (s2: overloadSlow) (s3: overloadSlow)
+[mmaid=2] sorted shedding stores: (s1: overloadSlow, cannotShed: false) (s2: overloadSlow, cannotShed: false) (s3: overloadSlow, cannotShed: false)
 [mmaid=2] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=2] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]
 [mmaid=2] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first

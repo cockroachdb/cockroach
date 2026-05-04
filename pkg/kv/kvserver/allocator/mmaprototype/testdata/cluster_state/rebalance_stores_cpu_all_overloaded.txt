@@ -90,7 +90,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] evaluating s4: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s4 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
 [mmaid=1] adding overloaded store s4 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
-[mmaid=1] sorted shedding stores: (s1: overloadUrgent) (s2: overloadUrgent) (s3: overloadUrgent) (s4: overloadUrgent)
+[mmaid=1] sorted shedding stores: (s1: overloadUrgent, cannotShed: false) (s2: overloadUrgent, cannotShed: false) (s3: overloadUrgent, cannotShed: false) (s4: overloadUrgent, cannotShed: false)
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:5ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first

@@ -67,7 +67,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] load summary for dim=ByteSize (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] evaluating s2: node load loadLow, store load loadLow, worst dim CPURate
-[mmaid=1] sorted shedding stores: (s1: overloadSlow)
+[mmaid=1] sorted shedding stores: (s1: overloadSlow, cannotShed: false)
 [mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first
