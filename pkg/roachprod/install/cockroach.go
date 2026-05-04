@@ -1309,7 +1309,15 @@ func (c *SyncedCluster) generateStartArgs(
 			if err != nil {
 				return nil, err
 			}
-			addresses[i] = fmt.Sprintf("%s:%d", c.Host(joinNode), desc.Port)
+			var joinHost string
+			if c.IsLocal() {
+				joinHost = listenHost
+			} else if c.shouldAdvertisePublicIP() {
+				joinHost = c.Host(joinNode)
+			} else {
+				joinHost = c.VMs[joinNode-1].PrivateIP
+			}
+			addresses[i] = fmt.Sprintf("%s:%d", joinHost, desc.Port)
 		}
 		args = append(args, fmt.Sprintf("--join=%s", strings.Join(addresses, ",")))
 	}
