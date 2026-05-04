@@ -10,9 +10,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -172,6 +174,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 		writers = append(writers, writer)
 	}
 
+	m := p.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics)
 	p.applier, err = txnapply.NewApplier(
 		ctx, applierID, p.FlowCtx.Cfg.Settings, writers, p.depResolver, p.spec.AllApplierIds,
 		func() *admission.SQLCPUHandle {
@@ -181,6 +184,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 				CreateTime: timeutil.Now().UnixNano(),
 			}, false /* atGateway */)
 		},
+		m,
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")
