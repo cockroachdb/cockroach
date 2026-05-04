@@ -275,12 +275,12 @@ func (re *rebalanceEnv) rebalanceStores(
 				passML.logf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): %s; pending: %s",
 					storeID, sls.worstDim, reason, formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
-				// Record the store as overloaded-but-blocked so it contributes
-				// to the `<bucket>.blocked` gauge. Without this, an overloaded
+				// Record the store as overloaded-but-skipped so it contributes
+				// to the `<bucket>.skipped` gauge. Without this, an overloaded
 				// store stuck in this skip path is invisible to the per-bucket
 				// metrics, even though MMA still considers it overloaded.
 				re.passObs.storeOverloaded(storeID, withinGrace, iLevel)
-				re.passObs.blockedByPending()
+				re.passObs.skippedByPending()
 				re.passObs.finishStore()
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {

@@ -164,7 +164,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 	overloaded:
 		short: [s2, s4]
 	failure: [{s2, total: 1, range-transient:1}]
-	blocked: [s4]
+	skipped: [s4]
 pending(2)
 change-id=1 store-id=4 node-id=4 range-id=1 load-delta=[cpu:1ns/s, write-bandwidth:880 kB/s, byte-size:0 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)

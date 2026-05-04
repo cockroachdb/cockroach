@@ -28,17 +28,17 @@ type shedAction struct {
 // storeActions describes the overloaded store state and the shedding actions to
 // replay for one store during a pass.
 //
-// blockedByPending models the production case where the store is overloaded
-// but rebalanceStores skips shedding because the store already has too much
-// pending decrease (or pending increase >= epsilon). The store is attributed
-// to the corresponding `<bucket>.blocked` gauge.
+// skippedByPending models the production case where the store is overloaded
+// but rebalanceStores does not shed from it this pass because the store
+// already has too much pending decrease (or pending increase >= epsilon).
+// The store is attributed to the corresponding `<bucket>.skipped` gauge.
 type storeActions struct {
 	storeID                  roachpb.StoreID
 	ignoreLevel              ignoreLevel
 	actions                  []shedAction
 	skipped                  bool
 	withinLeaseSheddingGrace bool
-	blockedByPending         bool
+	skippedByPending         bool
 }
 
 // performAction executes the test actions defined in storeActions on a given
@@ -49,8 +49,8 @@ func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
 		return
 	}
 	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
-	if s.blockedByPending {
-		g.blockedByPending()
+	if s.skippedByPending {
+		g.skippedByPending()
 		g.finishStore()
 		return
 	}
@@ -133,8 +133,8 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 			// One store sheds successfully; another store is overloaded but
 			// rebalanceStores deferred shedding because of pending
 			// decrease/increase. Both stores must appear in the per-bucket
-			// summary; the deferred one in the new "blocked" outcome.
-			name: "blocked_by_pending",
+			// summary; the deferred one in the "skipped" outcome.
+			name: "skipped_by_pending",
 			setup: []storeActions{
 				{
 					storeID:     3,
@@ -146,7 +146,7 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 				{
 					storeID:          7,
 					ignoreLevel:      ignoreLoadNoChangeAndHigher,
-					blockedByPending: true,
+					skippedByPending: true,
 				},
 			},
 		},
@@ -205,11 +205,11 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 	}
 }
 
-// TestRebalancingPassMetricsBlockedGauges verifies that stores deferred via
-// the pending-work skip path land in the per-bucket "blocked" gauge, that
-// per-bucket success/failure/blocked sum to the count of overloaded stores
+// TestRebalancingPassMetricsSkippedGauges verifies that stores deferred via
+// the pending-work skip path land in the per-bucket "skipped" gauge, that
+// per-bucket success/failure/skipped sum to the count of overloaded stores
 // observed in the bucket, and that gauges reset across passes.
-func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
+func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
@@ -217,7 +217,7 @@ func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
 	g := makeRebalancingPassMetricsAndLogger(1)
 
 	// Pass 1: s2 sheds successfully (short bucket), s3 fails (medium),
-	// s4 is blocked (medium), s5 is blocked (long).
+	// s4 is skipped (medium), s5 is skipped (long).
 	g.resetForRebalancingPass()
 	(&storeActions{
 		storeID:     2,
@@ -232,12 +232,12 @@ func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
 	(&storeActions{
 		storeID:          4,
 		ignoreLevel:      ignoreLoadThresholdAndHigher,
-		blockedByPending: true,
+		skippedByPending: true,
 	}).performActions(g)
 	(&storeActions{
 		storeID:          5,
 		ignoreLevel:      ignoreHigherThanLoadThreshold,
-		blockedByPending: true,
+		skippedByPending: true,
 	}).performActions(g)
 
 	g.computePassSummary(&redact.StringBuilder{})
@@ -246,17 +246,17 @@ func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
 	// observed in that bucket.
 	require.Equal(t, int64(1), g.m.OverloadedStoreShortDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurFailure.Value())
-	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurBlocked.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurSkipped.Value())
 
 	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurSuccess.Value())
 	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurFailure.Value())
-	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurBlocked.Value())
+	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurSkipped.Value())
 
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurFailure.Value())
-	require.Equal(t, int64(1), g.m.OverloadedStoreLongDurBlocked.Value())
+	require.Equal(t, int64(1), g.m.OverloadedStoreLongDurSkipped.Value())
 
-	// Pass 2: s4 is no longer blocked and now sheds successfully (medium).
+	// Pass 2: s4 is no longer skipped and now sheds successfully (medium).
 	// All other stores drop out. Gauges must reflect only this pass.
 	g.resetForRebalancingPass()
 	(&storeActions{
@@ -268,13 +268,13 @@ func TestRebalancingPassMetricsBlockedGauges(t *testing.T) {
 
 	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurFailure.Value())
-	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurBlocked.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurSkipped.Value())
 
 	require.Equal(t, int64(1), g.m.OverloadedStoreMediumDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurFailure.Value())
-	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurBlocked.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreMediumDurSkipped.Value())
 
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurFailure.Value())
-	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurBlocked.Value())
+	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSkipped.Value())
 }

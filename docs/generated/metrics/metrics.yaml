@@ -17811,20 +17811,20 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.lease_grace.blocked
-      exported_name: mma_overloaded_store_lease_grace_blocked
-      labeled_name: 'mma.overloaded_store{type: lease_grace, result: blocked}'
-      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where MMA skipped shedding because the store already has too much pending work (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon, indicating the load arithmetic is unreliable). For each duration bucket, success + failure + blocked equals the total overloaded stores observed in that bucket this pass.
+    - name: mma.overloaded_store.lease_grace.failure
+      exported_name: mma_overloaded_store_lease_grace_failure
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where the local store failed to shed any leases or replicas during this store's MMA rebalancing pass. During this grace period, remote stores wait for the overloaded store to shed its own leases before intervening. A non-zero value indicates the overloaded store is struggling to self-shed.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.lease_grace.failure
-      exported_name: mma_overloaded_store_lease_grace_failure
-      labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
-      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where the local store failed to shed any leases or replicas during this store's MMA rebalancing pass. During this grace period, remote stores wait for the overloaded store to shed its own leases before intervening. A non-zero value indicates the overloaded store is struggling to self-shed.
+    - name: mma.overloaded_store.lease_grace.skipped
+      exported_name: mma_overloaded_store_lease_grace_skipped
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: skipped}'
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) that MMA recognized as overloaded but did not shed from this pass. The most common reason is pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon, indicating the load arithmetic is unreliable). For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -17841,20 +17841,20 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.long_dur.blocked
-      exported_name: mma_overloaded_store_long_dur_blocked
-      labeled_name: 'mma.overloaded_store{type: long_dur, result: blocked}'
-      description: Number of stores overloaded for a long duration (8+ min) where MMA skipped shedding because the store already has too much pending work (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). A persistently non-zero value here indicates an overloaded store that is repeatedly being deferred and may not be receiving relief. For each duration bucket, success + failure + blocked equals the total overloaded stores observed in that bucket this pass.
+    - name: mma.overloaded_store.long_dur.failure
+      exported_name: mma_overloaded_store_long_dur_failure
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
+      description: Number of stores overloaded for a long duration (8+ min) where all shedding attempts failed during this store's MMA rebalancing pass. Even with the most aggressive target selection, no suitable store was found. This may indicate cluster-wide capacity issues or overly restrictive constraints.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.long_dur.failure
-      exported_name: mma_overloaded_store_long_dur_failure
-      labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
-      description: Number of stores overloaded for a long duration (8+ min) where all shedding attempts failed during this store's MMA rebalancing pass. Even with the most aggressive target selection, no suitable store was found. This may indicate cluster-wide capacity issues or overly restrictive constraints.
+    - name: mma.overloaded_store.long_dur.skipped
+      exported_name: mma_overloaded_store_long_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: skipped}'
+      description: Number of stores overloaded for a long duration (8+ min) that MMA recognized as overloaded but did not shed from this pass. The most common reason is pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). A persistently non-zero value here indicates an overloaded store that is repeatedly being deferred and may not be receiving relief. For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -17871,20 +17871,20 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.medium_dur.blocked
-      exported_name: mma_overloaded_store_medium_dur_blocked
-      labeled_name: 'mma.overloaded_store{type: medium_dur, result: blocked}'
-      description: Number of stores overloaded for a medium duration (5-8 min) where MMA skipped shedding because the store already has too much pending work (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). For each duration bucket, success + failure + blocked equals the total overloaded stores observed in that bucket this pass.
+    - name: mma.overloaded_store.medium_dur.failure
+      exported_name: mma_overloaded_store_medium_dur_failure
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: failure}'
+      description: Number of stores overloaded for a medium duration (5-8 min) where all shedding attempts failed during this store's MMA rebalancing pass. Despite considering moderately-loaded targets, no suitable store was found (e.g., constraints cannot be satisfied, all candidates still too loaded).
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.medium_dur.failure
-      exported_name: mma_overloaded_store_medium_dur_failure
-      labeled_name: 'mma.overloaded_store{type: medium_dur, result: failure}'
-      description: Number of stores overloaded for a medium duration (5-8 min) where all shedding attempts failed during this store's MMA rebalancing pass. Despite considering moderately-loaded targets, no suitable store was found (e.g., constraints cannot be satisfied, all candidates still too loaded).
+    - name: mma.overloaded_store.medium_dur.skipped
+      exported_name: mma_overloaded_store_medium_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: skipped}'
+      description: Number of stores overloaded for a medium duration (5-8 min) that MMA recognized as overloaded but did not shed from this pass. The most common reason is pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -17901,20 +17901,20 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.short_dur.blocked
-      exported_name: mma_overloaded_store_short_dur_blocked
-      labeled_name: 'mma.overloaded_store{type: short_dur, result: blocked}'
-      description: Number of stores overloaded for a short duration (2-5 min) where MMA skipped shedding because the store already has too much pending work (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). For each duration bucket, success + failure + blocked equals the total overloaded stores observed in that bucket this pass.
+    - name: mma.overloaded_store.short_dur.failure
+      exported_name: mma_overloaded_store_short_dur_failure
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
+      description: Number of stores overloaded for a short duration (2-5 min) where all shedding attempts failed during this store's MMA rebalancing pass. Failures occur when no suitable target store is found (e.g., all targets are too loaded, constraints cannot be satisfied). At this stage, MMA only considers lightly-loaded targets.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/kv
-    - name: mma.overloaded_store.short_dur.failure
-      exported_name: mma_overloaded_store_short_dur_failure
-      labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
-      description: Number of stores overloaded for a short duration (2-5 min) where all shedding attempts failed during this store's MMA rebalancing pass. Failures occur when no suitable target store is found (e.g., all targets are too loaded, constraints cannot be satisfied). At this stage, MMA only considers lightly-loaded targets.
+    - name: mma.overloaded_store.short_dur.skipped
+      exported_name: mma_overloaded_store_short_dur_skipped
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: skipped}'
+      description: Number of stores overloaded for a short duration (2-5 min) that MMA recognized as overloaded but did not shed from this pass. The most common reason is pending work on the store (pending-decrease saturated above the configured fraction threshold, or pending-increase >= epsilon). For each duration bucket, success + failure + skipped equals the total overloaded stores observed in that bucket this pass.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
