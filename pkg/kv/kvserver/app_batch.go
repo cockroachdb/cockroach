@@ -97,9 +97,6 @@ type appBatch struct {
 	initialForceFlushIndex roachpb.ForceFlushIndex
 	// asAlloc is reused by addAppliedStateToBatch to avoid heap allocations.
 	asAlloc kvserverpb.RangeAppliedState
-	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
-	//
-	// - changeRemovesReplica
 }
 
 func (b *appBatch) assertAndCheckCommand(
@@ -232,6 +229,30 @@ func (b *appBatch) runPostAddTriggers(
 		}
 	}
 
+	return nil
+}
+
+// applyEntry validates and applies a single decoded raft entry to the state
+// machine using the standalone application pipeline. The online path
+// (replicaAppBatch.Stage) calls the same underlying methods with replica-only
+// steps interleaved.
+//
+// Commands that fail CheckForcedErr are applied as empty no-ops: their
+// WriteBatch and ReplicatedEvalResult are zeroed out, but the applied index
+// still advances. This matches the online path's behavior.
+//
+// The caller is responsible for calling addAppliedStateToBatch and committing
+// the batch after applying one or more entries.
+func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd) error {
+	fr, err := b.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, false /* isLocal */)
+	if err != nil {
+		return err
+	}
+	b.toCheckedCmd(ctx, &cmd.ReplicatedCmd, fr)
+	if err := b.addWriteBatch(ctx, cmd); err != nil {
+		return err
+	}
+	b.stageTrivialResult(&cmd.ReplicatedCmd, fr)
 	return nil
 }
 
