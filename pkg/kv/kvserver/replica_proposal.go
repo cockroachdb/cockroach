@@ -977,6 +977,7 @@ func makeProposalResultErr(err error) proposalResult {
 func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -996,7 +997,7 @@ func (r *Replica) evaluateProposal(
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	ba, batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, g, st, ui)
+	ba, batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ss, ba, g, st, ui)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -1083,12 +1084,13 @@ func (r *Replica) evaluateProposal(
 func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (*ProposalData, *kvpb.Error) {
-	ba, res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, g, st, ui)
+	ba, res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ss, ba, g, st, ui)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{

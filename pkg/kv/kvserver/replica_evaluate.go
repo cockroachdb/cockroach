@@ -30,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
@@ -203,6 +201,7 @@ func evaluateBatch(
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
 	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
@@ -289,21 +288,6 @@ func evaluateBatch(
 	// conflicts and chose the highest timestamp to return for more efficient
 	// retries.
 	var deferredWriteTooOldErr *kvpb.WriteTooOldError
-
-	// Only collect the scan stats if the tracing is enabled.
-	var ss *kvpb.ScanStats
-	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
-		ss = &kvpb.ScanStats{}
-		defer func() {
-			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
-				// Only record non-empty ScanStats.
-				ss.NodeID = rec.NodeID()
-				locality := rec.GetNodeLocality()
-				ss.Region, _ = locality.Find("region")
-				sp.RecordStructured(ss)
-			}
-		}()
-	}
 
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come

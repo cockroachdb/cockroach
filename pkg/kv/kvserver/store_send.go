@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -23,26 +25,63 @@ import (
 	"github.com/cockroachdb/tokenbucket"
 )
 
-// SenderWithWriteBytes is implemented by Store, Stores, and Replica. It
-// extends the kv.Sender.Send signature with an additional StoreWriteBytes
-// return value for admission control integration.
-type SenderWithWriteBytes interface {
-	SendWithWriteBytes(
-		ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
-	) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error)
+// StoreWorkStats embeds admission.StoreWorkDoneInfo, since the notion of
+// "work is done" is specific to admission control and doesn't need to leak
+// everywhere. It also contains an instance of kvpb.ScanStats to keep track
+// of low-level pebble statistics.
+type StoreWorkStats struct {
+	admission.StoreWorkDoneInfo
+	scanStats kvpb.ScanStats
 }
 
-// ToSenderForTesting wraps a SenderWithWriteBytes as a kv.Sender. It releases
-// the StoreWriteBytes after each call.
-func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
+var storeWorkStatsPool = sync.Pool{
+	New: func() any { return &StoreWorkStats{} },
+}
+
+// NewStoreWorkStats returns a new empty StoreWorkStats from the pool.
+func NewStoreWorkStats() *StoreWorkStats {
+	return storeWorkStatsPool.Get().(*StoreWorkStats)
+}
+
+// Release returns the *StoreWorkStats to the pool.
+func (ws *StoreWorkStats) Release() {
+	if ws == nil {
+		return
+	}
+	*ws = StoreWorkStats{}
+	storeWorkStatsPool.Put(ws)
+}
+
+// ScanStats returns a pointer to the underlying kvpb.ScanStats.
+func (ws *StoreWorkStats) ScanStats() *kvpb.ScanStats {
+	if ws == nil {
+		return nil
+	}
+	return &ws.scanStats
+}
+
+// SenderWithWorkStats is implemented by Store, Stores, and Replica. It extends
+// the kv.Sender.Send signature with an additional StoreWorkStats parameter that
+// tracks statistics during request evaluation that is used to perform admission
+// control and tracing.
+type SenderWithWorkStats interface {
+	SendWithWorkStats(
+		ctx context.Context,
+		ba *kvpb.BatchRequest,
+		stats *StoreWorkStats,
+		admissionInfo kvadmission.AdmissionInfo,
+	) (*kvpb.BatchResponse, *kvpb.Error)
+}
+
+// ToSenderForTesting wraps a SenderWithWorkStats as a kv.Sender.
+func ToSenderForTesting(sws SenderWithWorkStats) kv.Sender {
 	return kv.SenderFunc(func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		br, writeBytes, pErr := swb.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
-		writeBytes.Release()
+		br, pErr := sws.SendWithWorkStats(ctx, ba, nil /* stats */, kvadmission.AdmissionInfo{})
 		return br, pErr
 	})
 }
 
-// SendWithWriteBytes fetches a range based on the header's replica, assembles
+// SendWithWorkStats fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the command using
 // the fetched range.
 //
@@ -60,9 +99,12 @@ func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
 // instance due to the timestamp cache or finding a committed value in the path
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
-func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
-) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
+func (s *Store) SendWithWorkStats(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	stats *StoreWorkStats,
+	admissionInfo kvadmission.AdmissionInfo,
+) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
@@ -70,27 +112,27 @@ func (s *Store) SendWithWriteBytes(
 		arg := union.GetInner()
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, kvpb.IsRange(arg)); err != nil {
-			return nil, nil, kvpb.NewError(errors.Wrapf(err,
+			return nil, kvpb.NewError(errors.Wrapf(err,
 				"failed to verify keys for %s", arg.Method()))
 		}
 	}
 
-	if throttled, err := s.maybeThrottleBatch(ctx, ba); err != nil {
-		return nil, nil, kvpb.NewError(err)
+	if throttled, err := s.maybeThrottleBatch(ctx, ba, stats); err != nil {
+		return nil, kvpb.NewError(err)
 	} else {
-		defer func() { throttled.performAccounting(br) }()
+		defer throttled.performAccounting(stats)
 	}
 
 	if ba.BoundedStaleness != nil {
 		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
 		if pErr != nil {
-			return nil, nil, pErr
+			return nil, pErr
 		}
 		ba = newBa
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
-		return nil, nil, kvpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
@@ -103,7 +145,7 @@ func (s *Store) SendWithWriteBytes(
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
 			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Now); err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 		}
 	}
@@ -174,7 +216,7 @@ func (s *Store) SendWithWriteBytes(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			return nil, nil, kvpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			// If we have an uninitialized copy of the range, then we are probably a
@@ -184,7 +226,7 @@ func (s *Store) SendWithWriteBytes(
 			// the client that it should move on and try the next replica. Very
 			// likely, the next replica the client tries will be initialized and will
 			// have useful leaseholder information for the client.
-			return nil, nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
+			return nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
 				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
@@ -196,7 +238,7 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
-		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo)
+		br, pErr = repl.SendWithWorkStats(ctx, ba, stats, admissionInfo)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
@@ -206,7 +248,7 @@ func (s *Store) SendWithWriteBytes(
 				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
 			}
 
-			return br, writeBytes, nil
+			return br, nil
 		}
 
 		// Augment error if necessary and return.
@@ -224,7 +266,7 @@ func (s *Store) SendWithWriteBytes(
 			// Range from this Store.
 			rSpan, err := keys.Range(ba.Requests)
 			if err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 
 			// The kvclient thought that a particular range id covers rSpans. It was
@@ -235,7 +277,7 @@ func (s *Store) SendWithWriteBytes(
 			// that the client requested, and all the ranges in between.
 			ri, err := t.MismatchedRange()
 			if err != nil {
-				return nil, nil, kvpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
 			startKey := ri.Desc.StartKey
@@ -312,12 +354,12 @@ func (s *Store) SendWithWriteBytes(
 		// Unable to retry, exit the retry loop and return an error.
 		break
 	}
-	return nil, nil, pErr
+	return nil, pErr
 }
 
 // batchThrottleCallback is returned from the maybeThrottleBatch function and is
 // used to perform accounting and cleanup of any rate limiting related state
-// after a SendWithWriteBytes call completes.
+// after a SendWithWorkStats call completes.
 type batchThrottleCallback struct {
 	// reservation is the reservation from a ConcurrentRequestLimiter.
 	reservation limit.Reservation
@@ -325,20 +367,24 @@ type batchThrottleCallback struct {
 	// set whenever a request for low-priority bulk reads was throttled and
 	// needs to account for tokens corresponding to actually read data.
 	limiters *batcheval.Limiters
+	// baseline contains the number of bytes accumulated into ScanStats before
+	// request evaluation. This is tracked so we can correctly attribute the
+	// statistics for this instance of evaluation.
+	baseline uint64
 }
 
 // maybeThrottleBatch inspects the provided batch and determines whether
 // throttling should be applied to avoid overloading the Store. If so, the
 // method blocks and returns a struct containing the information needed to
 // perform accounting for rate limiters. The caller must call
-// (batchThrottleCallback).performAccounting with the BatchResponse after the
+// (batchThrottleCallback).performAccounting with the StoreWorkStats after the
 // evaluation completes.
 //
 // Of note is that request throttling is all performed above evaluation and
 // before a request acquires latches on a range. Otherwise, the request could
 // inadvertently block others while being throttled.
 func (s *Store) maybeThrottleBatch(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, stats *StoreWorkStats,
 ) (batchThrottleCallback, error) {
 	if !ba.IsSingleRequest() {
 		return batchThrottleCallback{}, nil
@@ -403,15 +449,21 @@ func (s *Store) maybeThrottleBatch(
 			log.KvExec.Infof(ctx, "bulk low-priority read operation was delayed by %v", waited)
 		}
 
-		return batchThrottleCallback{reservation: res, limiters: &s.limiters}, nil
+		// Calculate the baseline stats from the given parameters.
+		var baseline uint64
+		if ss := stats.ScanStats(); ss != nil {
+			baseline = ss.BlockBytes - ss.BlockBytesInCache
+		}
+
+		return batchThrottleCallback{reservation: res, limiters: &s.limiters, baseline: baseline}, nil
 	}
 
 	return batchThrottleCallback{}, nil
 }
 
 // performAccounting must be called after maybeThrottleBatch with the returned
-// batchThrottleCallback and the BatchResponse.
-func (b batchThrottleCallback) performAccounting(br *kvpb.BatchResponse) {
+// batchThrottleCallback and the StoreWorkStats.
+func (b batchThrottleCallback) performAccounting(stats *StoreWorkStats) {
 	if b.reservation != nil {
 		b.reservation.Release()
 	}
@@ -425,11 +477,9 @@ func (b batchThrottleCallback) performAccounting(br *kvpb.BatchResponse) {
 	// token bucket falling too much into -ve, because we have pagination in the
 	// TTL layer and also a ConcurrentRequestLimiter to ensure the bucket
 	// doesn't fall arbitrarily into debt.
-	var bytesRead int64
-	if br != nil {
-		for _, resp := range br.Responses {
-			bytesRead += resp.GetInner().Header().NumBytes
-		}
+	var bytesRead uint64
+	if ss := stats.ScanStats(); ss != nil {
+		bytesRead = (ss.BlockBytes - ss.BlockBytesInCache) - b.baseline
 	}
 
 	b.limiters.BulkIOReadRate.Lock()
@@ -514,8 +564,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 
 	// Pass empty AdmissionInfo since this is an internal request that bypasses
 	// admission control.
-	br, writeBytes, pErr := s.SendWithWriteBytes(ctx, queryResBa, kvadmission.AdmissionInfo{})
-	writeBytes.Release()
+	br, pErr := s.SendWithWorkStats(ctx, queryResBa, nil /* stats */, kvadmission.AdmissionInfo{})
 	if pErr != nil {
 		return ba, pErr
 	}

@@ -699,8 +699,7 @@ func (p *pendingLeaseRequest) requestLease(
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
 	// Pass empty AdmissionInfo since lease acquisition bypasses admission control.
-	_, writeBytes, pErr := p.repl.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
-	writeBytes.Release()
+	_, pErr := p.repl.SendWithWorkStats(ctx, ba, nil /* stats */, kvadmission.AdmissionInfo{})
 	return pErr.GoError()
 }
 

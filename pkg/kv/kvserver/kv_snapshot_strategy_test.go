@@ -60,7 +60,7 @@ func (m *mockKVAdmissionController) AdmitKVWork(
 }
 
 func (m *mockKVAdmissionController) AdmittedKVWorkDone(
-	kvadmission.Handle, *kvadmission.StoreWriteBytes,
+	kvadmission.Handle, admission.StoreWorkDoneInfo,
 ) {
 }
 

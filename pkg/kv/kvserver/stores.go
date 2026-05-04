@@ -47,7 +47,7 @@ type Stores struct {
 	sendQueueLogger *rac2.SendQueueLogger
 }
 
-var _ SenderWithWriteBytes = &Stores{}
+var _ SenderWithWorkStats = &Stores{}
 var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses
@@ -175,25 +175,28 @@ func (ls *Stores) GetReplicaForRangeID(
 	return replica, store, nil
 }
 
-// SendWithWriteBytes sends a batch request. The store is looked up from the
+// SendWithWorkStats sends a batch request. The store is looked up from the
 // store map using the ID specified in the request.
-func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
-) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
+func (ls *Stores) SendWithWorkStats(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	stats *StoreWorkStats,
+	admissionInfo kvadmission.AdmissionInfo,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
-		return nil, nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
+		return nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
-		return nil, nil, kvpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 
-	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba, admissionInfo)
+	br, pErr := store.SendWithWorkStats(ctx, ba, stats, admissionInfo)
 	if br != nil && br.Error != nil {
 		panic(kvpb.ErrorUnexpectedlySet(store, br))
 	}
-	return br, writeBytes, pErr
+	return br, pErr
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends
