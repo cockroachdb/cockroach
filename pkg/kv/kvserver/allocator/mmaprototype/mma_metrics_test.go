@@ -261,3 +261,88 @@ func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurFailure.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreLongDurSkipped.Value())
 }
+
+// TestRebalancingPassMetricsAndLoggerProtocolAssertions verifies that the
+// pairing-protocol assertions on rebalancingPassMetricsAndLogger panic when
+// a caller violates the storeOverloaded/finishStore/leaseShed/replicaShed
+// ordering. These assertions guard against future refactors of
+// rebalanceStores accidentally dropping a finishStore call or interleaving
+// per-store recordings.
+func TestRebalancingPassMetricsAndLoggerProtocolAssertions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name string
+		do   func(g *rebalancingPassMetricsAndLogger)
+		want string
+	}{
+		{
+			name: "double_storeOverloaded",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.storeOverloaded(ctx, 2, false, ignoreLoadNoChangeAndHigher)
+				g.storeOverloaded(ctx, 3, false, ignoreLoadNoChangeAndHigher)
+			},
+			want: "storeOverloaded called for s3 while s2 still open",
+		},
+		{
+			name: "finishStore_without_open",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.finishStore(ctx)
+			},
+			want: "finishStore called with no open storeOverloaded",
+		},
+		{
+			name: "leaseShed_without_open",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.leaseShed(ctx, shedSuccess)
+			},
+			want: "leaseShed called with no open storeOverloaded",
+		},
+		{
+			name: "replicaShed_without_open",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.replicaShed(ctx, shedSuccess)
+			},
+			want: "replicaShed called with no open storeOverloaded",
+		},
+		{
+			name: "finishRebalancingPass_with_open",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.storeOverloaded(ctx, 2, false, ignoreLoadNoChangeAndHigher)
+				g.finishRebalancingPass(ctx, 1)
+			},
+			want: "finishRebalancingPass called with s2 still open",
+		},
+		{
+			name: "sheddingStores_size_mismatch",
+			do: func(g *rebalancingPassMetricsAndLogger) {
+				g.resetForRebalancingPass()
+				g.storeOverloaded(ctx, 2, false, ignoreLoadNoChangeAndHigher)
+				g.finishStore(ctx)
+				g.finishRebalancingPass(ctx, 5 /* lie */)
+			},
+			want: "len(sheddingStores)=5 != storeOverloaded calls=1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := makeRebalancingPassMetricsAndLogger(1)
+			defer func() {
+				r := recover()
+				require.NotNil(t, r, "expected panic")
+				err, ok := r.(error)
+				require.True(t, ok, "expected panic value to be an error, got %T", r)
+				require.Contains(t, err.Error(), tc.want)
+			}()
+			tc.do(g)
+		})
+	}
+}

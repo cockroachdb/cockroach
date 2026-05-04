@@ -456,6 +456,9 @@ type rebalancingPassMetricsAndLogger struct {
 	// rebalanceStores call per allocator tick. Used by the assertions in
 	// finishRebalancingPass and computePassSummary.
 	numStoreOverloadedCallsThisPass int64
+	// storeOpen is true while a storeOverloaded/finishStore pair is open
+	// (i.e. between calls). Used only by the pairing assertions.
+	storeOpen bool
 	// Shedding results for the currently-processing store.
 	curState storePassState
 	// Store ID that curState belongs to.
@@ -750,6 +753,7 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 	}
 	clear(g.states)
 	g.numStoreOverloadedCallsThisPass = 0
+	g.storeOpen = false
 }
 
 // assertTruef enforces an invariant when cond is false: in CRDB test
@@ -769,7 +773,7 @@ func assertTruef(ctx context.Context, cond bool, format string, args ...any) {
 
 // storeOverloaded marks the start of processing for an overloaded store.
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
-	_ context.Context,
+	ctx context.Context,
 	storeID roachpb.StoreID,
 	withinLeaseSheddingGracePeriod bool,
 	ignoreLevel ignoreLevel,
@@ -777,20 +781,27 @@ func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, !g.storeOpen,
+		"storeOverloaded called for s%d while s%d still open",
+		storeID, g.curStoreID)
 	g.curStoreID = storeID
 	g.curState = storePassState{
 		overloadKind: toOverloadKind(withinLeaseSheddingGracePeriod, ignoreLevel),
 	}
 	g.numStoreOverloadedCallsThisPass++
+	g.storeOpen = true
 }
 
 // finishStore commits the curState accumulated since the matching
 // storeOverloaded call into g.states.
-func (g *rebalancingPassMetricsAndLogger) finishStore(_ context.Context) {
+func (g *rebalancingPassMetricsAndLogger) finishStore(ctx context.Context) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"finishStore called with no open storeOverloaded")
 	g.states[g.curStoreID] = g.curState
+	g.storeOpen = false
 }
 
 // shedResult is specified for ranges that were considered for shedding. It
@@ -852,10 +863,12 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 // lease transfer from the currently-open overloaded store. Called once
 // per top-K range that the rebalancer examined; not called at all if no
 // ranges were examined (the store is then classified as skipped).
-func (g *rebalancingPassMetricsAndLogger) leaseShed(_ context.Context, result shedResult) {
+func (g *rebalancingPassMetricsAndLogger) leaseShed(ctx context.Context, result shedResult) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"leaseShed called with no open storeOverloaded")
 	g.curState.shedCounts[shedLease][result]++
 }
 
@@ -863,10 +876,12 @@ func (g *rebalancingPassMetricsAndLogger) leaseShed(_ context.Context, result sh
 // replica move from the currently-open overloaded store. Called once per
 // top-K range that the rebalancer examined; not called at all if no
 // ranges were examined (the store is then classified as skipped).
-func (g *rebalancingPassMetricsAndLogger) replicaShed(_ context.Context, result shedResult) {
+func (g *rebalancingPassMetricsAndLogger) replicaShed(ctx context.Context, result shedResult) {
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, g.storeOpen,
+		"replicaShed called with no open storeOverloaded")
 	g.curState.shedCounts[shedReplica][result]++
 }
 
@@ -880,6 +895,8 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 	if g == nil {
 		return
 	}
+	assertTruef(ctx, !g.storeOpen,
+		"finishRebalancingPass called with s%d still open", g.curStoreID)
 	assertTruef(ctx, int64(numSheddingStores) == g.numStoreOverloadedCallsThisPass,
 		"mma rebalancing pass: len(sheddingStores)=%d != storeOverloaded calls=%d",
 		redact.SafeInt(numSheddingStores),
