@@ -108,6 +108,8 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] no top-K[WriteBandwidth] ranges found for s3 with lease on local s1
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		short: [s1]
+		lease-grace: [s2]
+		short: [s1, s3]
 	failure: [{s1, total: 1, not-overloaded:1}]
+	no-ranges-evaluated: [s2, s3]
 pending(0)

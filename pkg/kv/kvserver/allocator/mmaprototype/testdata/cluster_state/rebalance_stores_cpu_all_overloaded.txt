@@ -136,7 +136,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] no top-K[CPURate] ranges found for s4 with lease on local s1
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		lease-grace: [s1, s2, s3]
+		lease-grace: [s1, s2, s3, s4]
 	failure: [{s1, total: 2, no-cand-load:2}]
-	no-ranges-evaluated: [s2, s3]
+	no-ranges-evaluated: [s2, s3, s4]
 pending(0)

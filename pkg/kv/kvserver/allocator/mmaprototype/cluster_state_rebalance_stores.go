@@ -344,7 +344,12 @@ func (re *rebalanceEnv) rebalanceStores(
 				re.maxRangeMoveCount)
 			break
 		}
+		// Classify the store exactly once per pass here, so that early
+		// returns inside rebalanceStore (e.g. n==0 top-K, lease-grace remote)
+		// don't leave the store unattributed in the per-bucket gauges.
+		re.passObs.storeOverloaded(store.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
 		re.rebalanceStore(ctx, store, localStoreID, ml)
+		re.passObs.finishStore()
 		// Only update the timer for persistent overload, not when the
 		// bridge was set up via verbose logging. Otherwise, turning off
 		// verbose logging would suppress the next persistent-overload
@@ -475,12 +480,8 @@ func (re *rebalanceEnv) rebalanceStore(
 	// some interval of time. We need a way to capture this information in a
 	// simple but effective manner. For now, we capture this using these
 	// grace duration thresholds (see classifyOverload). The classification
-	// was computed when the store was added to sheddingStores; we just
-	// read it back here.
-	re.passObs.storeOverloaded(ss.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
-	defer func() {
-		re.passObs.finishStore()
-	}()
+	// was computed when the store was added to sheddingStores; we just read
+	// it back here. The outer loop calls storeOverloaded/finishStore for us.
 	if store.withinLeaseSheddingGracePeriod && store.StoreID != localStoreID {
 		ml.logf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
