@@ -137,10 +137,17 @@ type sheddingStore struct {
 	// withinLeaseSheddingGracePeriod and iLevel are the result of
 	// classifyOverload, computed once when the store is identified as
 	// overloaded and reused by both the shedding path (rebalanceStore) and
-	// the pending-blocked skip path so both paths attribute the store to
-	// the same overload bucket.
+	// the no-shed path so both paths attribute the store to the same
+	// overload bucket.
 	withinLeaseSheddingGracePeriod bool
 	iLevel                         ignoreLevel
+	// cannotShed is true when the store is overloaded but rebalanceStores
+	// decided up front not to attempt shedding from it this pass — e.g.
+	// because of pending decrease/increase. Such stores are still recorded
+	// (storeOverloaded + finishStore) so they contribute to the per-bucket
+	// `skipped` outcome; rebalanceStore is not invoked on them. The
+	// detection-site log line records why.
+	cannotShed bool
 }
 
 // classifyOverload returns the overload classification for the given store,
@@ -248,22 +255,19 @@ func (re *rebalanceEnv) rebalanceStores(
 				}
 				ss.overloadEndTime = time.Time{}
 			}
-			// Classify once per overloaded store; both the shedding path
-			// (rebalanceStore, via sheddingStore) and the pending-blocked
-			// skip path below feed the same bucket.
+			// The store is overloaded. Classify once and append it to
+			// sheddingStores. The single processing loop below pairs each
+			// entry with storeOverloaded + finishStore exactly once, even
+			// for entries that turn out to be unsheddable (pending
+			// decrease/increase, or per-pass range-move budget exhausted).
 			withinGrace, iLevel, _ := classifyOverload(ss, sls, re.now)
-			// The pending decrease must be small enough to continue shedding
-			if ss.maxFractionPendingDecrease < re.fractionPendingIncreaseOrDecreaseThreshold &&
-				// There should be no pending increase, since that can be an overestimate.
-				ss.maxFractionPendingIncrease < epsilon {
-				passML.logf(ctx, 2, "store s%v was added to shedding store list", storeID)
-				sheddingStores = append(sheddingStores, sheddingStore{
-					StoreID:                        storeID,
-					storeLoadSummary:               sls,
-					withinLeaseSheddingGracePeriod: withinGrace,
-					iLevel:                         iLevel,
-				})
-			} else {
+			cannotShed := false
+			// The pending decrease must be small enough to continue shedding,
+			// and there should be no pending increase (since pending-increase
+			// estimates can be overestimates).
+			if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold ||
+				ss.maxFractionPendingIncrease >= epsilon {
+				cannotShed = true
 				var reason redact.RedactableString
 				if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
 					reason = redact.Sprintf("pending decrease %.2f >= threshold %.2f",
@@ -275,15 +279,16 @@ func (re *rebalanceEnv) rebalanceStores(
 				passML.logf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): %s; pending: %s",
 					storeID, sls.worstDim, reason, formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
-				// Record the store as overloaded so it contributes to the
-				// `<bucket>.skipped` gauge — derived in computePassSummary
-				// from the absence of any leaseShed/replicaShed calls.
-				// Without this, an overloaded store stuck in this skip path
-				// is invisible to the per-bucket metrics, even though MMA
-				// still considers it overloaded.
-				re.passObs.storeOverloaded(storeID, withinGrace, iLevel)
-				re.passObs.finishStore()
+			} else {
+				passML.logf(ctx, 2, "store s%v was added to shedding store list", storeID)
 			}
+			sheddingStores = append(sheddingStores, sheddingStore{
+				StoreID:                        storeID,
+				storeLoadSummary:               sls,
+				withinLeaseSheddingGracePeriod: withinGrace,
+				iLevel:                         iLevel,
+				cannotShed:                     cannotShed,
+			})
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
 			// loadNoChange, since a store can hover at the border of the two.
@@ -298,8 +303,16 @@ func (re *rebalanceEnv) rebalanceStores(
 	// contributing 22.5% cpu utilization. Node n2 is at 60% utilization, and
 	// has 1 store contributing all 60%. When looking at rebalancing, we want to
 	// first shed load from the stores of n1, before we shed load from the store
-	// on n2.
+	// on n2. Sheddable stores sort before unsheddable (cannotShed) ones so
+	// the budget cutoff below applies to actionable candidates first.
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
+		// Sheddable stores first.
+		if a.cannotShed != b.cannotShed {
+			if a.cannotShed {
+				return 1
+			}
+			return -1
+		}
 		// Prefer to shed from the local store first.
 		if a.StoreID == localStoreID {
 			return -1
@@ -314,16 +327,25 @@ func (re *rebalanceEnv) rebalanceStores(
 	if re.passObs != nil && len(sheddingStores) > 0 {
 		var buf redact.StringBuilder
 		buf.SafeString("sorted shedding stores:")
+		any := false
 		for _, store := range sheddingStores {
+			if store.cannotShed {
+				continue
+			}
 			buf.Printf(" (s%d: %s)", store.StoreID, store.sls)
+			any = true
 		}
-		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
+		if any {
+			log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
+		}
 	}
 
-	i := 0
-	n := len(sheddingStores)
-	for ; i < n; i++ {
-		store := sheddingStores[i]
+	// Single processing loop. Each entry — sheddable or not, in-budget or
+	// not — is bookended by exactly one storeOverloaded/finishStore pair,
+	// so every overloaded store is classified once and the per-bucket
+	// invariant in computePassSummary holds by construction.
+	budgetExhaustedLogged := false
+	for _, store := range sheddingStores {
 		ss := re.stores[store.StoreID]
 		// Decide per-shedding-store whether to promote detailed logs to
 		// Infof: persistently overloaded and not recently logged. Gated
@@ -336,39 +358,34 @@ func (re *rebalanceEnv) rebalanceStores(
 			overloadDur >= persistentOverloadThreshold &&
 			re.now.Sub(ss.lastDetailedLogTimes[localStoreID]) >= detailedLogInterval
 		ml := makeMMALogger(persistentOverload)
+
+		re.passObs.storeOverloaded(store.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
 		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
 		// not in this outer loop.
-		if re.rangeMoveCount >= re.maxRangeMoveCount {
-			ml.logf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
-				re.maxRangeMoveCount)
-			break
-		}
-		// Classify the store exactly once per pass here, so that early
-		// returns inside rebalanceStore (e.g. n==0 top-K, lease-grace remote)
-		// don't leave the store unattributed in the per-bucket gauges.
-		re.passObs.storeOverloaded(store.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
-		re.rebalanceStore(ctx, store, localStoreID, ml)
-		re.passObs.finishStore()
-		// Only update the timer for persistent overload, not when the
-		// bridge was set up via verbose logging. Otherwise, turning off
-		// verbose logging would suppress the next persistent-overload
-		// burst for detailedLogInterval.
-		if persistentOverload {
-			if ss.lastDetailedLogTimes == nil {
-				ss.lastDetailedLogTimes = make(map[roachpb.StoreID]time.Time)
+		switch {
+		case store.cannotShed:
+			// Detection-site log line already explained the reason.
+		case re.rangeMoveCount >= re.maxRangeMoveCount:
+			if !budgetExhaustedLogged {
+				ml.logf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
+					re.maxRangeMoveCount)
+				budgetExhaustedLogged = true
 			}
-			ss.lastDetailedLogTimes[localStoreID] = re.now
+		default:
+			re.rebalanceStore(ctx, store, localStoreID, ml)
+			// Only update the timer for persistent overload, not when the
+			// bridge was set up via verbose logging. Otherwise, turning off
+			// verbose logging would suppress the next persistent-overload
+			// burst for detailedLogInterval.
+			if persistentOverload {
+				if ss.lastDetailedLogTimes == nil {
+					ss.lastDetailedLogTimes = make(map[roachpb.StoreID]time.Time)
+				}
+				ss.lastDetailedLogTimes[localStoreID] = re.now
+			}
 		}
-	}
-	for ; i < n; i++ {
-		// Per-pass range-move budget exhausted. Record the remaining
-		// sheddingStores under their stashed classification; computePassSummary
-		// derives the `<bucket>.skipped` outcome from the absence of any
-		// leaseShed/replicaShed calls between storeOverloaded and finishStore.
-		s := sheddingStores[i]
-		re.passObs.storeOverloaded(s.StoreID, s.withinLeaseSheddingGracePeriod, s.iLevel)
 		re.passObs.finishStore()
 	}
 	re.passObs.finishRebalancingPass(ctx)
