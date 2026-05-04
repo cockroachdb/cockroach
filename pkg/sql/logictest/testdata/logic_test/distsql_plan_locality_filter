@@ -1,0 +1,206 @@
+# LogicTest: local multiregion-9node-3region-3azs
+
+# Tests for the distsql_plan_locality_filter / distsql_plan_locality_filter_strict
+# session variables. These restrict which SQL instances DistSQL physical
+# planning will consider; strict mode causes planning to error out when no
+# instance matches.
+
+subtest defaults
+
+query T
+SHOW distsql_plan_locality_filter
+----
+·
+
+query T
+SHOW distsql_plan_locality_filter_strict
+----
+off
+
+subtest set_and_round_trip
+
+statement ok
+SET distsql_plan_locality_filter = 'region=us-east1,zone=us-east1-a'
+
+query T
+SHOW distsql_plan_locality_filter
+----
+region=us-east1,zone=us-east1-a
+
+statement ok
+SET distsql_plan_locality_filter_strict = on
+
+query T
+SHOW distsql_plan_locality_filter_strict
+----
+on
+
+# Reset strict mode; the query below should succeed because the gateway either
+# matches the filter or falls back to standard instance selection.
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+statement ok
+SELECT 1
+
+# Empty string clears the filter.
+statement ok
+SET distsql_plan_locality_filter = ''
+
+query T
+SHOW distsql_plan_locality_filter
+----
+·
+
+subtest invalid_input
+
+statement error invalid distsql_plan_locality_filter
+SET distsql_plan_locality_filter = 'not a valid locality'
+
+# A locality string with a missing value is also rejected.
+statement error invalid distsql_plan_locality_filter
+SET distsql_plan_locality_filter = 'region='
+
+# Reset to defaults.
+statement ok
+RESET distsql_plan_locality_filter
+
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+subtest strict_mode_unsatisfiable
+
+# No SQL instance has region=does-not-exist, so strict mode should surface that
+# as an error when the planner attempts to distribute work.
+statement ok
+CREATE TABLE locality_filter_t (k INT PRIMARY KEY)
+
+statement ok
+SET distsql = always
+
+statement ok
+SET distsql_plan_locality_filter = 'region=does-not-exist'
+
+statement ok
+SET distsql_plan_locality_filter_strict = on
+
+statement error no healthy sql instances available matching locality requirement
+SELECT count(*) FROM locality_filter_t
+
+statement ok
+RESET distsql_plan_locality_filter
+
+statement ok
+RESET distsql_plan_locality_filter_strict
+
+statement ok
+RESET distsql
+
+# Test that the locality filter actually controls DistSQL flow placement in a
+# multi-node cluster with locality assignments. The multiregion-9node-3region-3azs
+# config assigns:
+#   Nodes 1-3: region=ap-southeast-2
+#   Nodes 4-6: region=ca-central-1
+#   Nodes 7-9: region=us-east-1
+
+onlyif config multiregion-9node-3region-3azs
+subtest distributed_flow_placement
+
+onlyif config multiregion-9node-3region-3azs
+statement ok
+CREATE TABLE lf_distributed (k INT PRIMARY KEY, v INT)
+
+onlyif config multiregion-9node-3region-3azs
+statement ok
+INSERT INTO lf_distributed SELECT i, i FROM generate_series(1, 9) AS g(i)
+
+# Split into 3 ranges and place one in each region.
+onlyif config multiregion-9node-3region-3azs
+statement ok
+ALTER TABLE lf_distributed SPLIT AT VALUES (4), (7)
+
+onlyif config multiregion-9node-3region-3azs
+retry
+statement ok
+ALTER TABLE lf_distributed EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[4], 4), (ARRAY[7], 7)
+
+# Verify data placement: ranges on nodes in 3 different regions.
+onlyif config multiregion-9node-3region-3azs
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE lf_distributed WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/4         {1}       1
+…/1/4               …/1/7         {4}       4
+…/1/7               <after:/Max>  {7}       7
+
+onlyif config multiregion-9node-3region-3azs
+statement ok
+SET distsql = on
+
+# Without a locality filter, a full scan distributes flows to all three regions.
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VEC) SELECT * FROM lf_distributed
+----
+│
+├ Node 1
+│ └ *colexec.ParallelUnorderedSynchronizer
+│   ├ *colfetcher.ColBatchScan
+│   ├ *colrpc.Inbox
+│   └ *colrpc.Inbox
+├ Node 4
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+└ Node 7
+  └ *colrpc.Outbox
+    └ *colfetcher.ColBatchScan
+
+# With the filter set to us-east-1, scan flows should move off non-matching
+# nodes (1-6) onto us-east-1 nodes (7-9). The gateway (node 1) still
+# coordinates. The exact set of us-east-1 nodes chosen is non-deterministic,
+# so we verify by checking which nodes appear rather than exact EXPLAIN output.
+onlyif config multiregion-9node-3region-3azs
+statement ok
+SET distsql_plan_locality_filter = 'region=us-east-1'
+
+# No non-gateway, non-us-east-1 node should appear in the plan.
+onlyif config multiregion-9node-3region-3azs
+query B
+SELECT count(*) = 0 FROM [EXPLAIN (VEC) SELECT * FROM lf_distributed]
+WHERE info ~ 'Node [2-6]'
+----
+true
+
+# At least one us-east-1 node (7-9) must run a scan.
+onlyif config multiregion-9node-3region-3azs
+query B
+SELECT count(*) > 0 FROM [EXPLAIN (VEC) SELECT * FROM lf_distributed]
+WHERE info ~ 'Node [789]'
+----
+true
+
+# Narrowing further to a specific AZ restricts to a single node.
+onlyif config multiregion-9node-3region-3azs
+statement ok
+SET distsql_plan_locality_filter = 'region=us-east-1,availability-zone=us-az1'
+
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VEC) SELECT * FROM lf_distributed
+----
+│
+├ Node 1
+│ └ *colrpc.Inbox
+└ Node 7
+  └ *colrpc.Outbox
+    └ *colfetcher.ColBatchScan
+
+onlyif config multiregion-9node-3region-3azs
+statement ok
+RESET distsql_plan_locality_filter
+
+onlyif config multiregion-9node-3region-3azs
+statement ok
+RESET distsql

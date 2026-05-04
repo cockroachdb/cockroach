@@ -79,6 +79,13 @@ func TestLogic_alter_table_locality(
 	runLogicTest(t, "alter_table_locality")
 }
 
+func TestLogic_distsql_plan_locality_filter(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_plan_locality_filter")
+}
+
 func TestLogic_global_placement_restricted(
 	t *testing.T,
 ) {

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -2312,4 +2313,76 @@ func TestClosestInstances(t *testing.T) {
 			require.Equal(t, tc.expectedLocalityStrength, strength)
 		})
 	}
+}
+
+// TestNewPlanningCtxLocalityFilterFromSession verifies that
+// DistSQLPlanner.NewPlanningCtx propagates a non-empty
+// distsql_plan_locality_filter (and the strict flag) from the planner's
+// session data into the constructed PlanningCtx. The wiring point lives in
+// distsql_physical_planner.go, so we exercise it directly via a real
+// in-memory server rather than mocking out the planner construction.
+func TestNewPlanningCtxLocalityFilterFromSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}}},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.ApplicationLayer()
+	execCfg := ts.ExecutorConfig().(ExecutorConfig)
+
+	// makePlanner produces a planner whose session data optionally has the
+	// locality filter and strict flag set. We then call NewPlanningCtx and
+	// observe the resulting PlanningCtx. The cleanup is scoped to the
+	// subtest so that the planner's monitors are stopped before the outer
+	// stopper shuts down.
+	makePlanner := func(t *testing.T, filter string, strict bool) *planner {
+		// Use a fresh internal session and overlay the locality filter on top.
+		sd := NewInternalSessionData(ctx, execCfg.Settings, "test-locality-filter")
+		sd.DistSQLPlanLocalityFilter = filter
+		sd.DistSQLPlanLocalityFilterStrict = strict
+		p, cleanup := NewInternalPlanner(
+			"test-locality-filter",
+			ts.DB().NewTxn(ctx, "test-locality-filter"),
+			username.NodeUserName(),
+			&MemoryMetrics{},
+			&execCfg,
+			sd,
+		)
+		t.Cleanup(cleanup)
+		return p.(*planner)
+	}
+
+	t.Run("empty filter leaves PlanningCtx unfiltered", func(t *testing.T) {
+		p := makePlanner(t, "", false)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), p, p.Txn(), FullDistribution,
+		)
+		require.Empty(t, planCtx.localityFilters)
+		require.False(t, planCtx.strictFiltering)
+	})
+
+	t.Run("filter is parsed and propagated", func(t *testing.T) {
+		p := makePlanner(t, "region=us-east1,zone=us-east1-a", true)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), p, p.Txn(), FullDistribution,
+		)
+		require.Len(t, planCtx.localityFilters, 1)
+		require.Equal(t, "region=us-east1,zone=us-east1-a",
+			planCtx.localityFilters[0].String())
+		require.True(t, planCtx.strictFiltering)
+	})
+
+	t.Run("nil planner leaves PlanningCtx unfiltered", func(t *testing.T) {
+		p := makePlanner(t, "", false)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), nil, /* planner */
+			p.Txn(), FullDistribution,
+		)
+		require.Empty(t, planCtx.localityFilters)
+		require.False(t, planCtx.strictFiltering)
+	})
 }
