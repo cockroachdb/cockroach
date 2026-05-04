@@ -25,6 +25,7 @@ debug zip --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --validate-
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
+[node 1] requesting mutex profile... received response... writing binary output: debug/nodes/1/mutex.pprof... done
 [node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response...
 [node 1] requesting heap profile list: last request failed: rpc error: ...
@@ -52,6 +53,7 @@ debug zip --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --validate-
 [node 3] requesting stacks with labels... received response... writing binary output: debug/nodes/3/stacks_with_labels.txt... done
 [node 3] requesting goroutine profile... received response... writing binary output: debug/nodes/3/stacks.pprof... done
 [node 3] requesting heap profile... received response... writing binary output: debug/nodes/3/heap.pprof... done
+[node 3] requesting mutex profile... received response... writing binary output: debug/nodes/3/mutex.pprof... done
 [node 3] requesting engine stats... received response... writing binary output: debug/nodes/3/lsm.txt... done
 [node 3] requesting heap profile list... received response...
 [node 3] requesting heap profile list: last request failed: rpc error: ...

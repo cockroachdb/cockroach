@@ -25,6 +25,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
+[node 1] requesting mutex profile... received response... writing binary output: debug/nodes/1/mutex.pprof... done
 [node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response... done
 [node ?] ? heap profiles found

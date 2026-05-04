@@ -419,6 +419,21 @@ func makePlan(
 		if err != nil {
 			return nil, nil, err
 		}
+		{
+			totalSpans := 0
+			for _, sp := range spanPartitions {
+				totalSpans += len(sp.Spans)
+			}
+			log.Changefeed.Infof(ctx,
+				"DARRYL: PartitionSpans returned %d partition(s) for %d tracked span(s) (total spans across partitions: %d)",
+				len(spanPartitions), len(trackedSpans), totalSpans)
+			for i, sp := range spanPartitions {
+				nRanges, hasRangeInfo := sp.NumRanges()
+				log.Changefeed.Infof(ctx,
+					"DARRYL:   partition %d: SQLInstanceID=%d, spans=%d, numRanges=%d (hasRangeInfo=%t)",
+					i, sp.SQLInstanceID, len(sp.Spans), nRanges, hasRangeInfo)
+			}
+		}
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Changefeed.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
@@ -443,7 +458,7 @@ func makePlan(
 		switch {
 		case distMode == sql.LocalDistribution || rangeDistributionStrategy == changefeedbase.ChangefeedRangeDistributionStrategyDefault:
 		case rangeDistributionStrategy == changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple:
-			log.Changefeed.Infof(ctx, "rebalancing ranges using balanced simple distribution")
+			log.Changefeed.Infof(ctx, "DARRYL: rebalancing ranges using balanced simple distribution, %d partition(s) before rebalance", len(spanPartitions))
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
@@ -451,6 +466,13 @@ func makePlan(
 				ctx, &ri, rebalanceThreshold.Get(sv), spanPartitions)
 			if err != nil {
 				return nil, nil, err
+			}
+			log.Changefeed.Infof(ctx, "DARRYL: after rebalance: %d partition(s)", len(spanPartitions))
+			for i, sp := range spanPartitions {
+				nRanges, hasRangeInfo := sp.NumRanges()
+				log.Changefeed.Infof(ctx,
+					"DARRYL:   post-rebalance partition %d: SQLInstanceID=%d, spans=%d, numRanges=%d (hasRangeInfo=%t)",
+					i, sp.SQLInstanceID, len(sp.Spans), nRanges, hasRangeInfo)
 			}
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Changefeed.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
@@ -672,6 +694,7 @@ func rebalanceSpanPartitions(
 	ctx context.Context, ri rangeIterator, sensitivity float64, partitions []sql.SpanPartition,
 ) ([]sql.SpanPartition, error) {
 	if len(partitions) <= 1 {
+		log.Changefeed.Infof(ctx, "DARRYL: skipping rebalance, only %d partition(s)", len(partitions))
 		return partitions, nil
 	}
 
