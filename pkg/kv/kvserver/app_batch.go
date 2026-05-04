@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -221,4 +222,35 @@ func (b *appBatch) runPostAddTriggers(
 	}
 
 	return nil
+}
+
+// stageTrivialResult updates the applied state in b.state to reflect a
+// successfully checked command. This covers the "trivial" fields that are
+// updated for every command: applied index/term, lease applied index, closed
+// timestamp, and MVCC stats.
+func (b *appBatch) stageTrivialResult(cmd *raftlog.ReplicatedCmd, fr kvserverbase.ForcedErrResult) {
+	b.state.RaftAppliedIndex = cmd.Index()
+	b.state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
+	// NB: since the command is "trivial" we know the LeaseIndex field is set to
+	// something meaningful if it's nonzero (e.g. cmd is not a lease request).
+	// For a rejected command, LeaseIndex was zeroed out earlier.
+	if leaseAppliedIndex := fr.LeaseIndex; leaseAppliedIndex != 0 {
+		b.state.LeaseAppliedIndex = leaseAppliedIndex
+	}
+	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
+		b.state.RaftClosedTimestamp = *cts
+	}
+	// Special-cased MVCC stats handling to exploit commutativity of stats
+	// delta upgrades. Thanks to commutativity, the spanlatch manager does
+	// not have to serialize on the stats key.
+	res := cmd.ReplicatedResult()
+	b.state.Stats.Add(res.Delta.ToStats())
+	if res.DoTimelyApplicationToAllReplicas {
+		// Update the pending ForceFlushIndex of this batch. Writing is deferred
+		// to addAppliedStateToBatch, following the same pattern as AppliedState
+		// fields (RaftAppliedIndex, LeaseAppliedIndex). This allows multiple
+		// commands in the same batch to update ForceFlushIndex, with only the
+		// final value being written.
+		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
+	}
 }
