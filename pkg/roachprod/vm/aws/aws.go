@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -563,6 +564,13 @@ var DefaultConfig = func() (cfg *awsConfig) {
 // https://github.com/cockroachdb/cockroach/issues/105968.
 var defaultZones = []string{
 	"us-east-2a",
+	"us-east-2b",
+	"us-east-2c",
+}
+
+// defaultGeoExtraZones are the additional zones used for geo-distributed
+// clusters, appended to a randomly selected zone from defaultZones.
+var defaultGeoExtraZones = []string{
 	"us-west-2b",
 	"eu-west-2b",
 }
@@ -863,10 +871,11 @@ func (p *Provider) Create(
 }
 
 func DefaultZones(geoDistributed bool) []string {
+	zone := defaultZones[rand.Intn(len(defaultZones))]
 	if geoDistributed {
-		return defaultZones
+		return append([]string{zone}, defaultGeoExtraZones...)
 	}
-	return []string{defaultZones[0]}
+	return []string{zone}
 }
 
 // createInstances creates EC2 instances in parallel with rate limiting.
