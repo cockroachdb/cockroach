@@ -4,3 +4,4 @@
 // included in the /LICENSE file.
 
 export * from "./databases";
+export * from "./sqlActivity";

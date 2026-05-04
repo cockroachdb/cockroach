@@ -303,6 +303,17 @@ export default function Debug() {
           disabled={disable_kv_level_advanced_debug}
         />
         <StatementDiagnosticsConnected />
+        <PanelTitle>SQL Activity (V2)</PanelTitle>
+        <DebugPanelLink
+          name="Statements (V2)"
+          url="#/debug/statements"
+          note="View statement statistics using the new V2 API with server-side pagination and sorting."
+        />
+        <DebugPanelLink
+          name="Transactions (V2)"
+          url="#/debug/transactions"
+          note="View transaction statistics using the new V2 API with server-side pagination and sorting."
+        />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
