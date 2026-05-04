@@ -73,15 +73,23 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
 	appBatchStats
+	// state is the batch's view of the replica's state. It is copied from
+	// under Replica.mu when the batch is initialized and is updated in
+	// stageTrivialReplicatedEvalResult.
+	//
+	// This is a shallow copy so any mutations inside of pointer fields need
+	// to copy-on-write. The exception to this is `state.Stats`, for which
+	// backing memory has already been provided and which may thus be
+	// modified directly.
+	state kvserverpb.ReplicaState
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch
-	// - state
 	// - changeRemovesReplica
 }
 
 func (b *appBatch) assertAndCheckCommand(
-	ctx context.Context, cmd *raftlog.ReplicatedCmd, state *kvserverpb.ReplicaState, isLocal bool,
+	ctx context.Context, cmd *raftlog.ReplicatedCmd, isLocal bool,
 ) (kvserverbase.ForcedErrResult, error) {
 	if log.V(4) {
 		log.KvExec.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
@@ -91,7 +99,7 @@ func (b *appBatch) assertAndCheckCommand(
 	if cmd.Index() == 0 {
 		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
 	}
-	if idx, applied := cmd.Index(), state.RaftAppliedIndex; idx != applied+1 {
+	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out-of-order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
 		return kvserverbase.ForcedErrResult{}, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
@@ -101,7 +109,7 @@ func (b *appBatch) assertAndCheckCommand(
 	// well. This just needs a bit more untangling as they reference *Replica, but
 	// for no super-convincing reason.
 
-	return kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, state), nil
+	return kvserverbase.CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, &b.state), nil
 }
 
 func (b *appBatch) toCheckedCmd(
