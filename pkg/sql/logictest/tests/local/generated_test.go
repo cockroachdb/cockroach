@@ -2612,6 +2612,13 @@ func TestLogic_show_ranges(
 	runLogicTest(t, "show_ranges")
 }
 
+func TestLogic_show_schedules_privilege(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_schedules_privilege")
+}
+
 func TestLogic_show_source(
 	t *testing.T,
 ) {

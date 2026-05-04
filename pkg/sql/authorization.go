@@ -272,6 +272,20 @@ func (p *planner) CheckPrivilegeForUser(
 			if hasViewSystemTablePriv {
 				return nil
 			}
+			// VIEWSCHEDULE grants implicit SELECT on system.scheduled_jobs and
+			// system.jobs, the two tables underlying SHOW SCHEDULES.
+			tableID := d.GetID()
+			if tableID == keys.ScheduledJobsTableID || tableID == keys.JobsTableID {
+				hasViewSchedule, err := p.HasPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWSCHEDULE, user,
+				)
+				if err != nil {
+					return err
+				}
+				if hasViewSchedule {
+					return nil
+				}
+			}
 		}
 	}
 	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)

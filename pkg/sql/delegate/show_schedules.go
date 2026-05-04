@@ -10,14 +10,28 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // commandColumn converts executor execution arguments into jsonb representation.
 const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
+	// Check access: VIEWSCHEDULE system privilege (admin users satisfy this
+	// implicitly through ALL privileges). If the user lacks VIEWSCHEDULE,
+	// return an explicit error rather than letting the delegated query fail
+	// with a confusing "does not have SELECT privilege on relation
+	// scheduled_jobs" message.
+	if err := d.catalog.CheckPrivilege(
+		d.ctx, syntheticprivilege.GlobalPrivilegeObject,
+		d.catalog.GetCurrentUser(), privilege.VIEWSCHEDULE,
+	); err != nil {
+		return nil, err
+	}
+
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
 
 	columnExprs := []string{
