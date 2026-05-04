@@ -752,6 +752,21 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 	g.numStoreOverloadedCallsThisPass = 0
 }
 
+// assertTruef enforces an invariant when cond is false: in CRDB test
+// builds it panics with an errors.AssertionFailedf; in production it
+// logs the same wrapped error to log.KvDistribution at Error severity
+// and returns. Uses context.Background() for the production log; a
+// future commit threads call-site contexts through.
+func assertTruef(cond bool, format string, args ...any) {
+	if cond {
+		return
+	}
+	if buildutil.CrdbTestBuild {
+		panic(errors.AssertionFailedf(format, args...))
+	}
+	log.KvDistribution.Errorf(context.Background(), "%v", errors.AssertionFailedf(format, args...))
+}
+
 // storeOverloaded marks the start of processing for an overloaded store.
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
 	storeID roachpb.StoreID, withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel,
@@ -862,18 +877,10 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 	if g == nil {
 		return
 	}
-	if int64(numSheddingStores) != g.numStoreOverloadedCallsThisPass {
-		err := errors.AssertionFailedf(
-			"mma rebalancing pass: len(sheddingStores)=%d != "+
-				"storeOverloaded calls=%d",
-			redact.SafeInt(numSheddingStores),
-			redact.SafeInt(g.numStoreOverloadedCallsThisPass),
-		)
-		if buildutil.CrdbTestBuild {
-			panic(err)
-		}
-		log.KvDistribution.Errorf(ctx, "%v", err)
-	}
+	assertTruef(int64(numSheddingStores) == g.numStoreOverloadedCallsThisPass,
+		"mma rebalancing pass: len(sheddingStores)=%d != storeOverloaded calls=%d",
+		redact.SafeInt(numSheddingStores),
+		redact.SafeInt(g.numStoreOverloadedCallsThisPass))
 	buf := redact.StringBuilder{}
 	g.computePassSummary(&buf)
 	log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
@@ -950,22 +957,16 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		totalFailure += counts.failure
 		totalSkipped += counts.skipped
 	}
-	if total := totalSuccess + totalFailure + totalSkipped; total != g.numStoreOverloadedCallsThisPass {
-		err := errors.AssertionFailedf(
-			"mma rebalancing pass: storeOverloaded calls (%d) != "+
-				"success(%d)+failure(%d)+skipped(%d) = %d; states=%v",
-			redact.SafeInt(g.numStoreOverloadedCallsThisPass),
-			redact.SafeInt(totalSuccess),
-			redact.SafeInt(totalFailure),
-			redact.SafeInt(totalSkipped),
-			redact.SafeInt(total),
-			g.states,
-		)
-		if buildutil.CrdbTestBuild {
-			panic(err)
-		}
-		log.KvDistribution.Errorf(context.Background(), "%v", err)
-	}
+	total := totalSuccess + totalFailure + totalSkipped
+	assertTruef(total == g.numStoreOverloadedCallsThisPass,
+		"mma rebalancing pass: storeOverloaded calls (%d) != "+
+			"success(%d)+failure(%d)+skipped(%d) = %d; states=%v",
+		redact.SafeInt(g.numStoreOverloadedCallsThisPass),
+		redact.SafeInt(totalSuccess),
+		redact.SafeInt(totalFailure),
+		redact.SafeInt(totalSkipped),
+		redact.SafeInt(total),
+		g.states)
 
 	// Update gauge metrics using overloadSummaries aggregated from all
 	// overloaded stores.
