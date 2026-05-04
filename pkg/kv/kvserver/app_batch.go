@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -83,9 +84,11 @@ type appBatch struct {
 	// backing memory has already been provided and which may thus be
 	// modified directly.
 	state kvserverpb.ReplicaState
+	// batch accumulates writes implied by the raft entries in this batch, across
+	// both the state and raft engines. It is engine separation aware.
+	batch kvstorage.Batch[storage.Batch]
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
-	// - batch
 	// - changeRemovesReplica
 }
 
@@ -139,9 +142,7 @@ func (b *appBatch) runPreAddTriggers(ctx context.Context, cmd *raftlog.Replicate
 }
 
 // addWriteBatch adds the command's writes to the batch.
-func (b *appBatch) addWriteBatch(
-	ctx context.Context, batch storage.Batch, cmd *replicatedCmd,
-) error {
+func (b *appBatch) addWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
 	wb := cmd.Cmd.WriteBatch
 	if wb == nil {
 		return nil
@@ -151,7 +152,7 @@ func (b *appBatch) addWriteBatch(
 	} else {
 		b.numMutations += mutations
 	}
-	if err := batch.ApplyBatchRepr(wb.Data, false); err != nil {
+	if err := b.batch.State().ApplyBatchRepr(wb.Data, false); err != nil {
 		return errors.Wrapf(err, "unable to apply WriteBatch")
 	}
 	return nil
