@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -108,6 +109,7 @@ type Applier struct {
 	id          ldrdecoder.ApplierID
 	settings    *cluster.Settings
 	depResolver DependencyResolverClient
+	metrics     *metrics.Metrics
 
 	mu struct {
 		syncutil.Mutex
@@ -164,6 +166,7 @@ func NewApplier(
 	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
 	newCPUHandle func() *admission.SQLCPUHandle,
+	metrics *metrics.Metrics,
 ) (_ *Applier, retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -181,10 +184,14 @@ func NewApplier(
 	if newCPUHandle == nil {
 		return nil, errors.AssertionFailedf("newCPUHandle must not be nil")
 	}
+	if metrics == nil {
+		return nil, errors.New("metrics must not be nil")
+	}
 	a := &Applier{
 		id:                id,
 		settings:          settings,
 		depResolver:       depResolver,
+		metrics:           metrics,
 		txnWriters:        writers,
 		newCPUHandle:      newCPUHandle,
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
@@ -341,6 +348,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 
 	if transaction.remainingDeps == 0 {
 		if transaction.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
+			a.metrics.TxnApplierReadyTxns.Inc(1)
 			return true, nil
 		}
 		heap.Push(&a.mu.horizonWaiting, horizonWaiter{
@@ -349,6 +357,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		})
 		a.registerHorizonWaitLocked(transaction.EventHorizon)
 	}
+	a.metrics.TxnApplierBlockedTxns.Inc(1)
 	return false, nil
 }
 
@@ -500,7 +509,11 @@ func (a *Applier) recordCompletion(
 	delete(a.mu.localWaiting, completedID)
 
 	a.mu.committed.Resolve(completedID)
-	delete(a.mu.transactions, completedID)
+	// Don't count synthetic transactions.
+	if _, ok := a.mu.transactions[completedID]; ok {
+		delete(a.mu.transactions, completedID)
+		a.metrics.TxnApplierReadyTxns.Dec(1)
+	}
 
 	// Advance the resolved time by draining applied txns from the front
 	// of the ordered txnIDs buffer.
@@ -554,6 +567,8 @@ func (a *Applier) resolveDependencyLocked(
 		if waitingTxn.remainingDeps == 0 {
 			if waitingTxn.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 				readyBuffer.AddLast(waitingTxn.Transaction)
+				a.metrics.TxnApplierBlockedTxns.Dec(1)
+				a.metrics.TxnApplierReadyTxns.Inc(1)
 			} else {
 				heap.Push(&a.mu.horizonWaiting, horizonWaiter{
 					txnID:   waitingID,
@@ -610,6 +625,8 @@ func (a *Applier) drainSatisfiedHorizonWaitersLocked(
 		heap.Pop(&a.mu.horizonWaiting)
 		txn := a.mu.transactions[top.txnID]
 		readyBuffer.AddLast(txn.Transaction)
+		a.metrics.TxnApplierBlockedTxns.Dec(1)
+		a.metrics.TxnApplierReadyTxns.Inc(1)
 	}
 }
 

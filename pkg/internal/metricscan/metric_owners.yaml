@@ -474,6 +474,8 @@ owners:
   logical_replication_retry_queue_events: cockroachdb/cdc
   logical_replication_scanning_ranges: cockroachdb/cdc
   logical_replication_scanning_ranges_by_label: cockroachdb/cdc
+  logical_replication_txn_applier_blocked_txns: cockroachdb/cdc
+  logical_replication_txn_applier_ready_txns: cockroachdb/cdc
   mma_change: cockroachdb/kv
   mma_change_external_lease_failure: cockroachdb/kv
   mma_change_external_lease_success: cockroachdb/kv

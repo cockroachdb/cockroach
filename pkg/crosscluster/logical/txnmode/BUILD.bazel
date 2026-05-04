@@ -18,6 +18,7 @@ go_library(
         "//pkg/crosscluster",
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/ldrsettings",
+        "//pkg/crosscluster/logical/metrics",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/crosscluster/logical/txnapply",
         "//pkg/crosscluster/logical/txnfeed",
