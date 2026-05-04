@@ -230,6 +230,26 @@ func (b *appBatch) runPostAddTriggers(
 	return nil
 }
 
+// applyEntry validates and applies a single decoded raft entry to the state
+// machine using the standalone application pipeline. It calls
+// assertAndCheckCommand, toCheckedCmd, addWriteBatch, and stageTrivialResult
+// in sequence. The online path (replicaAppBatch.Stage) calls these same methods
+// individually with replica-only steps interleaved.
+//
+// See TestAppBatchApplyEntry for the intended usage pattern.
+func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd) error {
+	fr, err := b.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, false /* isLocal */)
+	if err != nil {
+		return err
+	}
+	b.toCheckedCmd(ctx, &cmd.ReplicatedCmd, fr)
+	if err := b.addWriteBatch(ctx, cmd); err != nil {
+		return err
+	}
+	b.stageTrivialResult(&cmd.ReplicatedCmd, fr)
+	return nil
+}
+
 // stageTrivialResult updates the applied state in b.state to reflect a
 // successfully checked command. This covers the "trivial" fields that are
 // updated for every command: applied index/term, lease applied index, closed
