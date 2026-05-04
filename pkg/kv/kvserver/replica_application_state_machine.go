@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -150,9 +151,11 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	// it is more efficient. If there are exceptions, sparingly use NewReader or
 	// NewBatch (if it needs to read its own writes, which is unlikely).
 	b.ab.batch = r.store.batchFactory.NewBatch()
+	b.ab.sl = kvstorage.StateLoader{StateLoader: r.raftMu.stateLoader.StateLoader}
 
 	r.mu.RLock()
 	b.ab.state = r.shMu.state
+	b.ab.initialForceFlushIndex = r.shMu.state.ForceFlushIndex
 	b.truncState = r.asLogStorage().shMu.trunc
 	b.ab.state.Stats = &sm.stats
 	*b.ab.state.Stats = *r.shMu.state.Stats
