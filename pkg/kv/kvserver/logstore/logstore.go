@@ -440,6 +440,29 @@ func storeHardState(
 // maintain exclusive access to the raft log for the duration of the method
 // call.
 //
+// assertNoLiveRaftLogEntry returns an assertion error if the raft log key for
+// the given index has a live value in the reader. Used to verify the
+// precondition for MVCCBlindPut, which must land on an empty key for the
+// SingleDelete invariant (exactly one Set per key over its lifetime) to hold.
+// Intended for test-build callers (gated on buildutil.CrdbTestBuild).
+func assertNoLiveRaftLogEntry(
+	ctx context.Context, reader storage.Reader, raftLogPrefix roachpb.Key, index kvpb.RaftIndex,
+) error {
+	key := keys.RaftLogKeyFromPrefix(raftLogPrefix, index)
+	// Raft log entries are inline values (hlc.Timestamp{}). MVCCGet's Value is
+	// absent when the key has no value or the most recent write is a
+	// (Single)Delete tombstone, so a present Value here means a live entry.
+	res, err := storage.MVCCGet(ctx, reader, key, hlc.Timestamp{}, storage.MVCCGetOptions{})
+	if err != nil {
+		return err
+	}
+	if res.Value.IsPresent() {
+		return errors.AssertionFailedf(
+			"raft log entry %d already has a live value before blind put", index)
+	}
+	return nil
+}
+
 // logAppend is intentionally oblivious to the existence of sideloaded
 // proposals. They are managed by the caller, including cleaning up obsolete
 // on-disk payloads in case the log tail is replaced.
@@ -471,14 +494,26 @@ func logAppend(
 	opts := storage.MVCCWriteOptions{Stats: diff, Category: fs.ReplicationReadCategory}
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
+		index := kvpb.RaftIndex(ent.Index)
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, index)
 
 		if err := value.SetProto(ent); err != nil {
 			return RaftState{}, err
 		}
 		value.InitChecksum(key)
 		var err error
-		if kvpb.RaftIndex(ent.Index) > prev.LastIndex {
+		if index > prev.LastIndex {
+			// Test-only: a fresh-index BlindPut must land on an empty key. If
+			// not, a subsequent SingleDelete of this entry would leave a stale
+			// Set behind, breaking the SingleDelete invariant. On the unindexed
+			// raft log batch the read passes through to the engine, which is
+			// what we want — prev.LastIndex reflects the engine's committed
+			// state, so any live value at index > prev.LastIndex is a real bug.
+			if buildutil.CrdbTestBuild {
+				if err := assertNoLiveRaftLogEntry(ctx, rw, raftLogPrefix, index); err != nil {
+					return RaftState{}, err
+				}
+			}
 			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		} else if useSingleDelete {
 			// When using SingleDelete for truncation, we must ensure each raft
@@ -493,6 +528,11 @@ func logAppend(
 			if err = rw.SingleClearUnversioned(key); err != nil {
 				return RaftState{}, err
 			}
+			// No post-SingleClear assertion: it would need to read in-batch
+			// state to verify the clear took effect, but the raft log batch is
+			// unindexed and reads pass through to the engine, which still sees
+			// the original Set. An indexed-batch path would also pin an
+			// iterator on the batch and risk leaking on shutdown.
 			_, err = storage.MVCCBlindPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
 		} else {
 			_, err = storage.MVCCPut(ctx, rw, key, hlc.Timestamp{}, *value, opts)
