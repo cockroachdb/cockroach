@@ -343,7 +343,7 @@ func (re *rebalanceEnv) rebalanceStores(
 			re.now.Sub(ss.lastDetailedLogTimes[localStoreID]) >= detailedLogInterval
 		ml := makeMMALogger(persistentOverload)
 
-		re.passObs.storeOverloaded(store.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
+		re.passObs.storeOverloaded(ctx, store.StoreID, store.withinLeaseSheddingGracePeriod, store.iLevel)
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
 		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
@@ -370,7 +370,7 @@ func (re *rebalanceEnv) rebalanceStores(
 				ss.lastDetailedLogTimes[localStoreID] = re.now
 			}
 		}
-		re.passObs.finishStore()
+		re.passObs.finishStore(ctx)
 	}
 	re.passObs.finishRebalancingPass(ctx, len(sheddingStores) /* for assertion only */)
 	return re.changes
@@ -575,12 +575,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			ml.logf(ctx, 3, "skipping r%d: has pending changes", rangeID)
-			re.passObs.replicaShed(rangeTransient)
+			re.passObs.replicaShed(ctx, rangeTransient)
 			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
-			re.passObs.replicaShed(rangeTransient)
+			re.passObs.replicaShed(ctx, rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -590,7 +590,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
-			re.passObs.replicaShed(rangeConstraintsError)
+			re.passObs.replicaShed(ctx, rangeConstraintsError)
 			continue
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
@@ -614,7 +614,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if err != nil {
 			// This range has some constraints that are violated. Let those be
 			// fixed first.
-			re.passObs.replicaShed(rangeConstraintsViolated)
+			re.passObs.replicaShed(ctx, rangeConstraintsViolated)
 			ml.logf(ctx, 3, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 			continue
 		}
@@ -704,7 +704,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			addedLoad[CPURate] = rstate.load.RaftCPU
 		}
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, cands.means, false, loadDim, ml) {
-			re.passObs.replicaShed(noCandidateToAcceptLoad)
+			re.passObs.replicaShed(ctx, noCandidateToAcceptLoad)
 			continue
 		}
 		addTarget := roachpb.ReplicationTarget{
@@ -731,7 +731,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, localStoreID, rangeChange))
 		re.rangeMoveCount++
-		re.passObs.replicaShed(shedSuccess)
+		re.passObs.replicaShed(ctx, shedSuccess)
 		log.KvDistribution.Infof(ctx,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
 			rangeID, removeTarget.StoreID, addTarget.StoreID, &re.changes[len(re.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
@@ -788,7 +788,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			ml.logf(ctx, 3, "skipping r%d: has pending changes", rangeID)
-			re.passObs.leaseShed(rangeTransient)
+			re.passObs.leaseShed(ctx, rangeTransient)
 			continue
 		}
 		foundLocalReplica := false
@@ -818,7 +818,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
-			re.passObs.leaseShed(rangeTransient)
+			re.passObs.leaseShed(ctx, rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -828,7 +828,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
-			re.passObs.leaseShed(rangeConstraintsError)
+			re.passObs.leaseShed(ctx, rangeConstraintsError)
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {
@@ -864,7 +864,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// No candidates to move the lease to. We bail early to avoid some
 			// logging below that is not helpful if we didn't have any real
 			// candidates to begin with.
-			re.passObs.leaseShed(noCandidate)
+			re.passObs.leaseShed(ctx, noCandidate)
 			continue
 		}
 		// NB: intentionally log before re-adding the current leaseholder so
@@ -886,7 +886,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 
 		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
-			re.passObs.leaseShed(noHealthyCandidate)
+			re.passObs.leaseShed(ctx, noHealthyCandidate)
 			ml.logf(ctx, 3,
 				"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
 				ss.NodeID, ss.StoreID, rangeID)
@@ -903,7 +903,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
 			ml.logf(ctx, 3, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
-			re.passObs.leaseShed(notOverloaded)
+			re.passObs.leaseShed(ctx, notOverloaded)
 			continue
 		}
 		candsSet := candidateSet{candidates: (*pCandInfos)[:0]}
@@ -951,7 +951,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			panic("raft cpu higher than total cpu")
 		}
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, &means, true, CPURate, ml) {
-			re.passObs.leaseShed(noCandidateToAcceptLoad)
+			re.passObs.leaseShed(ctx, noCandidateToAcceptLoad)
 			continue
 		}
 		addTarget := roachpb.ReplicationTarget{
@@ -971,7 +971,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		re.addPendingRangeChange(ctx, leaseChange)
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, store.StoreID, leaseChange))
-		re.passObs.leaseShed(shedSuccess)
+		re.passObs.leaseShed(ctx, shedSuccess)
 		log.KvDistribution.Infof(ctx,
 			"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
 				"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",

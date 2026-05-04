@@ -6,6 +6,7 @@
 package mmaprototype
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,17 +41,17 @@ type storeActions struct {
 
 // performAction executes the test actions defined in storeActions on a given
 // rebalancingPassMetricsAndLogger struct.
-func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
-	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
+func (s *storeActions) performActions(ctx context.Context, g *rebalancingPassMetricsAndLogger) {
+	g.storeOverloaded(ctx, s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
 	for _, action := range s.actions {
 		switch action.kind {
 		case shedLease:
-			g.leaseShed(action.result)
+			g.leaseShed(ctx, action.result)
 		case shedReplica:
-			g.replicaShed(action.result)
+			g.replicaShed(ctx, action.result)
 		}
 	}
-	g.finishStore()
+	g.finishStore(ctx)
 }
 
 func TestRebalancingPassMetricsAndLogger(t *testing.T) {
@@ -58,6 +59,7 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
+	ctx := context.Background()
 	g := makeRebalancingPassMetricsAndLogger(1)
 
 	// Define the test scenarios.
@@ -175,12 +177,12 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 			// Perform the actions for the setup.
 			g.resetForRebalancingPass()
 			for _, setup := range testData.setup {
-				setup.performActions(g)
+				setup.performActions(ctx, g)
 			}
 
 			// Compare the output of the logging pass.
 			buf := redact.StringBuilder{}
-			g.computePassSummary(&buf)
+			g.computePassSummary(ctx, &buf)
 			echotest.Require(inner, string(buf.RedactableString()),
 				datapathutils.TestDataPath(inner, t.Name(), testData.name))
 		})
@@ -196,6 +198,7 @@ func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
+	ctx := context.Background()
 	g := makeRebalancingPassMetricsAndLogger(1)
 
 	// Pass 1: s2 sheds successfully (short bucket), s3 fails (medium),
@@ -205,22 +208,22 @@ func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 		storeID:     2,
 		ignoreLevel: ignoreLoadNoChangeAndHigher,
 		actions:     []shedAction{{kind: shedLease, result: shedSuccess}},
-	}).performActions(g)
+	}).performActions(ctx, g)
 	(&storeActions{
 		storeID:     3,
 		ignoreLevel: ignoreLoadThresholdAndHigher,
 		actions:     []shedAction{{kind: shedReplica, result: noCandidate}},
-	}).performActions(g)
+	}).performActions(ctx, g)
 	(&storeActions{
 		storeID:     4,
 		ignoreLevel: ignoreLoadThresholdAndHigher,
-	}).performActions(g)
+	}).performActions(ctx, g)
 	(&storeActions{
 		storeID:     5,
 		ignoreLevel: ignoreHigherThanLoadThreshold,
-	}).performActions(g)
+	}).performActions(ctx, g)
 
-	g.computePassSummary(&redact.StringBuilder{})
+	g.computePassSummary(ctx, &redact.StringBuilder{})
 
 	// Per-bucket totals must add up to the number of overloaded stores
 	// observed in that bucket.
@@ -243,8 +246,8 @@ func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 		storeID:     4,
 		ignoreLevel: ignoreLoadThresholdAndHigher,
 		actions:     []shedAction{{kind: shedReplica, result: shedSuccess}},
-	}).performActions(g)
-	g.computePassSummary(&redact.StringBuilder{})
+	}).performActions(ctx, g)
+	g.computePassSummary(ctx, &redact.StringBuilder{})
 
 	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurSuccess.Value())
 	require.Equal(t, int64(0), g.m.OverloadedStoreShortDurFailure.Value())

@@ -523,7 +523,7 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
-	failLogger func(shedResult),
+	failLogger func(context.Context, shedResult),
 	ml mmaLogger,
 ) roachpb.StoreID {
 	if loadThreshold <= loadNoChange {
@@ -650,7 +650,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to load")
-		failLogger(noCandidateDueToLoad)
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -682,7 +682,7 @@ func sortTargetCandidateSetAndPick(
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
 		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
-		failLogger(noCandidateDueToLoad)
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -693,7 +693,7 @@ func sortTargetCandidateSetAndPick(
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
-		failLogger(noCandidateDueToLoad)
+		failLogger(ctx, noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -749,7 +749,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
-		failLogger(noCandidateDueToUnmatchedLeasePreference)
+		failLogger(ctx, noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -763,7 +763,7 @@ func sortTargetCandidateSetAndPick(
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
 			ml.logf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
-			failLogger(noCandidateDueToLoad)
+			failLogger(ctx, noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
@@ -967,7 +967,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		effectiveMeans = &means.meansLoad
 	} else if len(filteredStores) == 0 {
 		// No viable candidates at all.
-		passObs.replicaShed(noCandidate)
+		passObs.replicaShed(ctx, noCandidate)
 		return candidateSet{}, sheddingSLS
 	} else {
 		// Some stores were filtered; recompute means over filtered set.
@@ -985,7 +985,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		// In this set of stores, this store no longer looks overloaded. Note that
 		// we don't consider nls here: if nls is high but sls is low, it means other
 		// stores on the node are causing node-level overload, not this store.
-		passObs.replicaShed(notOverloaded)
+		passObs.replicaShed(ctx, notOverloaded)
 		return candidateSet{}, sheddingSLS
 	}
 
@@ -1004,7 +1004,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	}
 	cset.means = effectiveMeans
 	if len(cset.candidates) == 0 {
-		passObs.replicaShed(noCandidate)
+		passObs.replicaShed(ctx, noCandidate)
 	}
 	return cset, sheddingSLS
 }
