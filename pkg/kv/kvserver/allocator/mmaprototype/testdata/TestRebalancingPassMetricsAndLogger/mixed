@@ -3,10 +3,10 @@ echo
 rebalancing pass summary [local=s1]:
 	overloaded:
 		lease-grace: [s10]
-		short: [s1]
-		medium: [s8]
+		short: [s1, s12]
+		medium: [s5, s8]
 		long: [s6]
 	success: [s1, s8]
 	failure: [{s6, total: 4, no-healthy-cand:4}]
-	over-budget: [s5, s12]
+	skipped: [s5, s12]
 	no-ranges-evaluated: [s10]

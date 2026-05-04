@@ -30,24 +30,21 @@ type shedAction struct {
 //
 // skippedByPending models the production case where the store is overloaded
 // but rebalanceStores does not shed from it this pass because the store
-// already has too much pending decrease (or pending increase >= epsilon).
-// The store is attributed to the corresponding `<bucket>.skipped` gauge.
+// already has too much pending decrease (or pending increase >= epsilon),
+// or because the per-pass range-move budget was exhausted before processing
+// the store. The store is attributed to the corresponding `<bucket>.skipped`
+// gauge.
 type storeActions struct {
 	storeID                  roachpb.StoreID
 	ignoreLevel              ignoreLevel
 	actions                  []shedAction
-	skipped                  bool
-	withinLeaseSheddingGrace bool
 	skippedByPending         bool
+	withinLeaseSheddingGrace bool
 }
 
 // performAction executes the test actions defined in storeActions on a given
 // rebalancingPassMetricsAndLogger struct.
 func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
-	if s.skipped {
-		g.skippedStore(s.storeID)
-		return
-	}
 	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
 	if s.skippedByPending {
 		g.skippedByPending()
@@ -103,31 +100,21 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 			},
 		},
 		{
-			// More stores than the logging limit.
+			// More stores than the logging limit. All overloaded with no shed
+			// actions; the harness simulates the production "range-move
+			// budget exhausted" path via skippedByPending.
 			name: "limit",
-			setup: []storeActions{
-				{storeID: 1, skipped: true},
-				{storeID: 2, skipped: true},
-				{storeID: 3, skipped: true},
-				{storeID: 4, skipped: true},
-				{storeID: 5, skipped: true},
-				{storeID: 6, skipped: true},
-				{storeID: 7, skipped: true},
-				{storeID: 8, skipped: true},
-				{storeID: 9, skipped: true},
-				{storeID: 10, skipped: true},
-				{storeID: 11, skipped: true},
-				{storeID: 12, skipped: true},
-				{storeID: 13, skipped: true},
-				{storeID: 14, skipped: true},
-				{storeID: 15, skipped: true},
-				{storeID: 16, skipped: true},
-				{storeID: 17, skipped: true},
-				{storeID: 18, skipped: true},
-				{storeID: 19, skipped: true},
-				{storeID: 20, skipped: true},
-				{storeID: 21, skipped: true},
-			},
+			setup: func() []storeActions {
+				out := make([]storeActions, 0, 21)
+				for i := roachpb.StoreID(1); i <= 21; i++ {
+					out = append(out, storeActions{
+						storeID:          i,
+						ignoreLevel:      ignoreLoadNoChangeAndHigher,
+						skippedByPending: true,
+					})
+				}
+				return out
+			}(),
 		},
 		{
 			// One store sheds successfully; another store is overloaded but
@@ -184,8 +171,16 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 					storeID:                  10,
 					withinLeaseSheddingGrace: true,
 				},
-				{storeID: 12, skipped: true},
-				{storeID: 5, skipped: true},
+				{
+					storeID:          12,
+					ignoreLevel:      ignoreLoadNoChangeAndHigher,
+					skippedByPending: true,
+				},
+				{
+					storeID:          5,
+					ignoreLevel:      ignoreLoadThresholdAndHigher,
+					skippedByPending: true,
+				},
 			},
 		},
 	} {

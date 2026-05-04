@@ -403,11 +403,11 @@ func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel
 // stores'. Each store tracks "from my perspective, what overloaded stores did I
 // observe and what were the outcomes?" during its rebalancing pass.
 //
-// Each rebalancing pass: states and skippedStores are reset at start. For each
-// overloaded store, curState/curStoreID track shedding results; when processing
-// of that store completes, curState is saved to states (or the store is added
-// to skippedStores if skipped). At the end of the pass, states is aggregated to
-// update m, and failedSummaries/successSummaries are built for logging.
+// Each rebalancing pass: states is reset at start. For each overloaded
+// store, curState/curStoreID track shedding results; when processing of that
+// store completes, curState is saved to states. At the end of the pass,
+// states is aggregated to update m, and failedSummaries/successSummaries are
+// built for logging.
 type rebalancingPassMetricsAndLogger struct {
 	// The local store where the rebalancing pass is happening.
 	localStoreID roachpb.StoreID
@@ -418,9 +418,6 @@ type rebalancingPassMetricsAndLogger struct {
 
 	// Overloaded store ID -> shedding counts and overload category.
 	states map[roachpb.StoreID]storePassState
-	// Overloaded stores skipped during the pass (due to max range/lease move
-	// limit reached).
-	skippedStores []roachpb.StoreID
 	// Shedding results for the currently-processing store.
 	curState storePassState
 	// Store ID that curState belongs to.
@@ -714,7 +711,6 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 		return
 	}
 	clear(g.states)
-	g.skippedStores = g.skippedStores[:0]
 }
 
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
@@ -819,13 +815,6 @@ func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
 	g.curState.shedCounts[shedReplica][result]++
 }
 
-func (g *rebalancingPassMetricsAndLogger) skippedStore(storeID roachpb.StoreID) {
-	if g == nil {
-		return
-	}
-	g.skippedStores = append(g.skippedStores, storeID)
-}
-
 func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Context) {
 	if g == nil {
 		return
@@ -838,21 +827,20 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 // computePassSummary performs the aggregation of the rebalancing pass summary,
 // updates gauges and generates a log message with stores per category of
 // successful rebalances, failed rebalances, skipped stores (overloaded but
-// not shed from this pass — most commonly due to pending work), over-budget
-// stores (cut off because the per-pass range-move budget was exhausted), and
-// stores for which no ranges were evaluated. The list of stores is truncated
-// upto a fixed number of stores (see `logStores`).
+// not shed from this pass — most commonly due to pending work, also covers
+// stores that were cut off when the per-pass range-move budget was
+// exhausted), and stores for which no ranges were evaluated. The list of
+// stores is truncated upto a fixed number of stores (see `logStores`).
 // Example output:
 /*
 rebalancing pass summary [local=s1]:
 	overloaded:
-		short: [s1, s10]
+		short: [s1, s5, s10]
 		medium: [s8]
 		long: [s6]
 	success: [s1]
 	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
-	skipped: [s10]
-	over-budget: [s5]
+	skipped: [s5, s10]
 	no-ranges-evaluated: [s10]
 */
 func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
@@ -980,18 +968,6 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		slices.Sort(skippedStores)
 		buf.SafeString("\n\tskipped: ")
 		logStores(buf, skippedStores, func(store roachpb.StoreID) redact.RedactableString {
-			return redact.Sprintf("s%v", store)
-		})
-	}
-
-	// Log stores that were cut off because the per-pass range-move budget was
-	// exhausted, sorted by store ID. These stores are not yet routed through
-	// the per-bucket skipped accounting; a follow-up unifies them.
-	if len(g.skippedStores) > 0 {
-		empty = false
-		slices.Sort(g.skippedStores)
-		buf.SafeString("\n\tover-budget: ")
-		logStores(buf, g.skippedStores, func(store roachpb.StoreID) redact.RedactableString {
 			return redact.Sprintf("s%v", store)
 		})
 	}

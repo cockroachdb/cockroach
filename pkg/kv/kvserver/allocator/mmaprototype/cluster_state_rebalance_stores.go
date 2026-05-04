@@ -357,7 +357,15 @@ func (re *rebalanceEnv) rebalanceStores(
 		}
 	}
 	for ; i < n; i++ {
-		re.passObs.skippedStore(sheddingStores[i].StoreID)
+		// Per-pass range-move budget exhausted. Record the remaining
+		// sheddingStores under the per-bucket `skipped` outcome using their
+		// stashed classification, so they show up alongside other
+		// overloaded-but-deferred stores instead of in a flat bucket-less
+		// list.
+		s := sheddingStores[i]
+		re.passObs.storeOverloaded(s.StoreID, s.withinLeaseSheddingGracePeriod, s.iLevel)
+		re.passObs.skippedByPending()
+		re.passObs.finishStore()
 	}
 	re.passObs.finishRebalancingPass(ctx)
 	return re.changes
