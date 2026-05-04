@@ -7,7 +7,11 @@ import classNames from "classnames/bind";
 import includes from "lodash/includes";
 import isNil from "lodash/isNil";
 import React, { useRef, useState } from "react";
-import Select from "react-select";
+import Select, {
+  components,
+  DropdownIndicatorProps,
+  SingleValue,
+} from "react-select";
 
 import { CaretDown } from "src/components/icon/caretDown";
 import { trustIcon } from "src/util/trust";
@@ -45,10 +49,16 @@ interface DropdownOwnProps {
 
 const cx = classNames.bind(styles);
 
-export const arrowRenderer = ({ isOpen }: { isOpen: boolean }) => (
-  <span className={cx("caret-down", { active: isOpen })}>
-    <CaretDown />
-  </span>
+const CustomDropdownIndicator = (
+  props: DropdownIndicatorProps<DropdownOption, false>,
+) => (
+  <components.DropdownIndicator {...props}>
+    <span
+      className={cx("caret-down", { active: props.selectProps.menuIsOpen })}
+    >
+      <CaretDown />
+    </span>
+  </components.DropdownIndicator>
 );
 
 /**
@@ -68,10 +78,10 @@ export default function Dropdown({
   type = "secondary",
 }: DropdownOwnProps): React.ReactElement {
   const [isFocused, setIsFocused] = useState(false);
+  const [menuIsOpen, setMenuIsOpen] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
-  const selectRef = useRef<Select<DropdownOption>>(null);
 
   const triggerSelectClick = (e: any) => {
     onDropdownClick && onDropdownClick();
@@ -81,23 +91,13 @@ export default function Dropdown({
     }
     const dropdownNode = dropdownRef.current as Node;
     const titleNode = titleRef.current as Node;
-    const selectNode = selectRef.current;
 
     if (
       e.target.isSameNode(dropdownNode) ||
       e.target.isSameNode(titleNode) ||
       e.target.className.indexOf("dropdown__select") > -1
     ) {
-      // This is a far-less-than-ideal solution to the need to trigger
-      // the react-select dropdown from the entirety of the dropdown area
-      // instead of just the nodes rendered by the component itself
-      // the approach borrows from:
-      // https://github.com/JedWatson/react-select/issues/305#issuecomment-172607534
-      //
-      // a broader discussion on the status of a possible feature addition that
-      // would render this hack moot can be found here:
-      // https://github.com/JedWatson/react-select/issues/1989
-      (selectNode as any).handleMouseDownOnMenu(e);
+      setMenuIsOpen(prev => !prev);
     }
   };
 
@@ -145,26 +145,24 @@ export default function Dropdown({
       {content ? (
         content
       ) : (
-        // The below typescript fails to typecheck because the
-        // react-select library's types aren't flexible enough to
-        // accept the `options` and `onChange` props that use the
-        // custom `DropdownOption` type as the target. It's likely
-        // that an upgrade of react-select would fix this but we
-        // avoid it here because it will likely break implementation.
-
-        /* eslint @typescript-eslint/ban-ts-comment: "off" */
-        // @ts-ignore
-        <Select
+        <Select<DropdownOption, false>
           className={cx("dropdown__select")}
-          arrowRenderer={arrowRenderer}
-          clearable={false}
-          searchable={false}
+          components={{ DropdownIndicator: CustomDropdownIndicator }}
+          isClearable={false}
+          isSearchable={false}
           options={options}
-          value={selected}
-          onChange={onChange}
+          value={options.find(o => o.value === selected)}
+          onChange={(opt: SingleValue<DropdownOption>) => {
+            if (opt && onChange) {
+              onChange(opt);
+            }
+            setMenuIsOpen(false);
+          }}
+          menuIsOpen={menuIsOpen}
+          onMenuOpen={() => setMenuIsOpen(true)}
+          onMenuClose={() => setMenuIsOpen(false)}
           onFocus={() => setIsFocused(true)}
-          onClose={() => setIsFocused(false)}
-          ref={selectRef}
+          onBlur={() => setIsFocused(false)}
         />
       )}
       <span

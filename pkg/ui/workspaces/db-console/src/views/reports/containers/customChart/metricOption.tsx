@@ -5,32 +5,41 @@
 
 import classnames from "classnames";
 import React from "react";
-import { OptionComponentProps } from "react-select";
+import { OptionProps, components } from "react-select";
 
 import "./metricOption.scss";
 
+interface MetricOptionData {
+  label: string;
+  value: string;
+  description?: string;
+}
+
 export const MetricOption = React.memo(
-  (props: OptionComponentProps<string>) => {
-    const { option, className, onSelect, onFocus } = props;
-    const { label, description } = option;
-    const classes = classnames("metric-option", className);
+  (props: OptionProps<MetricOptionData, false>) => {
+    const { data } = props;
+    const { label, description } = data;
+    const classes = classnames("metric-option", {
+      "metric-option--is-focused": props.isFocused,
+      "metric-option--is-selected": props.isSelected,
+    });
 
     return (
-      <div
-        className={classes}
-        role="option"
-        aria-label={label}
-        title={option.title || description}
-        onMouseDown={event => onSelect(option, event)}
-        onMouseEnter={event => onFocus(option, event)}
-      >
-        <div className="metric-option__label">{label}</div>
-        {description && (
-          <div className="metric-option__description" title={description}>
-            {description}
-          </div>
-        )}
-      </div>
+      <components.Option {...props}>
+        <div
+          className={classes}
+          role="option"
+          aria-label={label}
+          title={description}
+        >
+          <div className="metric-option__label">{label}</div>
+          {description && (
+            <div className="metric-option__description" title={description}>
+              {description}
+            </div>
+          )}
+        </div>
+      </components.Option>
     );
   },
 );
