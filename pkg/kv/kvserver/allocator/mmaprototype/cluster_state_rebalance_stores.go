@@ -344,7 +344,7 @@ func (re *rebalanceEnv) rebalanceStores(
 	// not — is bookended by exactly one storeOverloaded/finishStore pair,
 	// so every overloaded store is classified once and the per-bucket
 	// invariant in computePassSummary holds by construction.
-	budgetExhaustedLogged := false
+	rangeMoveLimitReachedLogged := false
 	for _, store := range sheddingStores {
 		ss := re.stores[store.StoreID]
 		// Decide per-shedding-store whether to promote detailed logs to
@@ -368,10 +368,10 @@ func (re *rebalanceEnv) rebalanceStores(
 		case store.cannotShed:
 			// Detection-site log line already explained the reason.
 		case re.rangeMoveCount >= re.maxRangeMoveCount:
-			if !budgetExhaustedLogged {
+			if !rangeMoveLimitReachedLogged {
 				ml.logf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
 					re.maxRangeMoveCount)
-				budgetExhaustedLogged = true
+				rangeMoveLimitReachedLogged = true
 			}
 		default:
 			re.rebalanceStore(ctx, store, localStoreID, ml)
