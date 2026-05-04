@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -5181,12 +5183,28 @@ var pgCatalogStatioAllIndexesTable = virtualSchemaTable{
 }
 
 var pgCatalogTimezoneAbbrevsTable = virtualSchemaTable{
-	comment: "pg_timezone_abbrevs was created for compatibility and is currently unimplemented",
+	comment: "pg_timezone_abbrevs lists the timezone abbreviations recognized by date/time literal parsing",
 	schema:  vtable.PgCatalogTimezoneAbbrevs,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		abbrevs := pgdate.PGTimezoneAbbrevs()
+		names := make([]string, 0, len(abbrevs))
+		for name := range abbrevs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			entry := abbrevs[name]
+			utcOffsetInterval := duration.MakeDuration(int64(entry.UTCOffsetSecs)*int64(time.Second), 0, 0)
+			if err := addRow(
+				tree.NewDString(name),
+				tree.NewDInterval(utcOffsetInterval, types.DefaultIntervalTypeMetadata),
+				tree.MakeDBool(tree.DBool(entry.IsDST)),
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 var pgCatalogStatSysTablesTable = virtualSchemaTable{

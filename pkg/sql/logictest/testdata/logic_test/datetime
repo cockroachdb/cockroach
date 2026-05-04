@@ -829,14 +829,21 @@ SELECT '2015-08-25 05:45:45.53453'::timestamp
 statement ok
 SET TIME ZONE 'Europe/Rome'
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+# Timezone abbreviations (e.g. CET) parse to a fixed offset via
+# pg_catalog.pg_timezone_abbrevs. Display uses the session timezone, which is
+# Europe/Rome here, so the +01:00 input renders as +02:00 (CEST) on Aug 25.
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 CEST
 
 statement ok
 SET TIME ZONE +1
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0100 +0100
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -872,8 +879,10 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 statement ok
 SET TIMEZONE = +2
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 +0200
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -2138,6 +2147,37 @@ SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
 
 statement error pgcode 22023 pq: could not parse "No" as time zone
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
+
+subtest end
+
+subtest timezone_abbreviation_parsing
+
+# Timestamp literals with PostgreSQL-recognized timezone abbreviations resolve
+# to a fixed offset via pg_catalog.pg_timezone_abbrevs, regardless of the host
+# system's IANA tzdata. Previously these returned unimplemented (#31710).
+
+query T
+SELECT '2014-07-15 08:15:23 EST'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+query T
+SELECT '2014-07-15 08:15:23 PST'::timestamptz::text;
+----
+2014-07-15 11:15:23-05
+
+# Abbreviations that have no IANA zone counterpart still resolve. EAT (East
+# Africa Time) is +03:00.
+query T
+SELECT '2014-07-15 08:15:23 EAT'::timestamptz::text;
+----
+2014-07-15 00:15:23-05
+
+# Lowercase input is accepted.
+query T
+SELECT '2014-07-15 08:15:23 est'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
 
 subtest end
 

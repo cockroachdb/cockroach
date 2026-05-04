@@ -5746,6 +5746,24 @@ query TTTB
 SELECT * from pg_timezone_names WHERE name = 'DoesNotExist'
 ----
 
+# pg_timezone_abbrevs
+
+query TTB rowsort
+SELECT abbrev, utc_offset, is_dst
+FROM pg_catalog.pg_timezone_abbrevs
+WHERE abbrev IN ('EST', 'EDT', 'CST', 'CDT', 'PST', 'PDT', 'MST', 'MDT', 'UTC', 'EAT')
+----
+CDT  -05:00:00  true
+CST  -06:00:00  false
+EAT  03:00:00   false
+EDT  -04:00:00  true
+EST  -05:00:00  false
+MDT  -06:00:00  true
+MST  -07:00:00  false
+PDT  -07:00:00  true
+PST  -08:00:00  false
+UTC  00:00:00   false
+
 # Regression test for incorrectly handling left anti virtual lookup joins
 # (#88096).
 statement ok

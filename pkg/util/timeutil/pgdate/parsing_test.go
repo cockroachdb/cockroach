@@ -457,15 +457,12 @@ var timeTestData = []timeData{
 		hasTimezone: true,
 	},
 	{
-		// 04:05:06 PST time zone specified by abbreviation
-		// Unimplemented with message to user as such:
-		// https://github.com/cockroachdb/cockroach/issues/31710
-		s:   "04:05:06 PST",
-		err: true,
-		// This should be the value if/when we implement this.
-		exp:           time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0800", -8*60*60)),
-		hasTimezone:   true,
-		unimplemented: true,
+		// 04:05:06 PST time zone specified by abbreviation. Resolved via the
+		// table mirrored from PostgreSQL's src/timezone/tznames/Default; see
+		// pkg/util/timeutil/pgdate/pg_timezone_abbrevs.go.
+		s:           "04:05:06 PST",
+		exp:         time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("PST", -8*60*60)),
+		hasTimezone: true,
 	},
 	{
 		// This test, and the next show that resolution of geographic names
