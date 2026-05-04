@@ -14,7 +14,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=10.0 max-lease-t
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 10.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]

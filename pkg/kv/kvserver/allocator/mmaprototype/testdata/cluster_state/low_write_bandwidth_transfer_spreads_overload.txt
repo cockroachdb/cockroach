@@ -82,7 +82,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=CPURate (n2): loadNormal, reason: load is within 5% of mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=5.00% capacity=2000]
 [mmaid=1] evaluating s2: node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=1] overload-continued s2 ((store=overloadSlow worst=WriteBandwidth cpu=loadNormal writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s2 was added to shedding store list
+[mmaid=1] adding overloaded store s2 to shedding list (worst dim: WriteBandwidth, cannotShed: false, pending decrease 0.00 vs threshold 10.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s3): loadNormal, reason: load is within 5% of mean [load=100 meanLoad=100 fractionUsed=5.00% meanUtil=5.00% capacity=2000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadLow, reason: load is >10% below mean [load=8600000 meanLoad=10000000]
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000000]
@@ -146,7 +146,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000000]
 [mmaid=2] load summary for dim=CPURate (n2): loadNormal, reason: load is within 5% of mean [load=99 meanLoad=100 fractionUsed=4.95% meanUtil=5.00% capacity=2000]
 [mmaid=2] evaluating s2: node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
-[mmaid=2] store s2 was added to shedding store list
+[mmaid=2] adding overloaded store s2 to shedding list (worst dim: WriteBandwidth, cannotShed: false, pending decrease 0.07 vs threshold 10.00, pending increase 0.00 vs epsilon 0.00); pending: r1-s2[cpu:-1ns/s, write-bandwidth:-800 kB/s, byte-size:0 B]
 [mmaid=2] evaluating s3: node load loadNormal, store load loadNormal, worst dim CPURate
 [mmaid=2] load summary for dim=CPURate (s4): loadNormal, reason: load is within 5% of mean [load=101 meanLoad=100 fractionUsed=5.05% meanUtil=5.00% capacity=2000]
 [mmaid=2] load summary for dim=WriteBandwidth (s4): overloadSlow, reason: load is >10% above mean [load=11180000 meanLoad=10000000]
@@ -154,7 +154,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] load summary for dim=CPURate (n4): loadNormal, reason: load is within 5% of mean [load=101 meanLoad=100 fractionUsed=5.05% meanUtil=5.00% capacity=2000]
 [mmaid=2] evaluating s4: node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=2] overload-continued s4 ((store=overloadSlow worst=WriteBandwidth cpu=loadNormal writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.09,0.00(false))) - within grace period
-[mmaid=2] skipping overloaded store s4 (worst dim: WriteBandwidth): pending increase 0.09 >= epsilon; pending: r1+s4[cpu:1ns/s, write-bandwidth:880 kB/s, byte-size:0 B]
+[mmaid=2] adding overloaded store s4 to shedding list (worst dim: WriteBandwidth, cannotShed: true, pending decrease 0.00 vs threshold 10.00, pending increase 0.09 vs epsilon 0.00); pending: r1+s4[cpu:1ns/s, write-bandwidth:880 kB/s, byte-size:0 B]
 [mmaid=2] sorted shedding stores: (s2: overloadSlow)
 [mmaid=2] start processing shedding store s2: cpu node load loadNormal, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=2] top-K[WriteBandwidth] ranges for s2 with lease on local s1: r1:[cpu:1ns/s, write-bandwidth:800 kB/s, byte-size:0 B]

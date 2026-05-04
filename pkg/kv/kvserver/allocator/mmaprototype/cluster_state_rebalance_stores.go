@@ -261,27 +261,18 @@ func (re *rebalanceEnv) rebalanceStores(
 			// for entries that turn out to be unsheddable (pending
 			// decrease/increase, or per-pass range-move budget exhausted).
 			withinGrace, iLevel, _ := classifyOverload(ss, sls, re.now)
-			cannotShed := false
 			// The pending decrease must be small enough to continue shedding,
 			// and there should be no pending increase (since pending-increase
 			// estimates can be overestimates).
-			if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold ||
-				ss.maxFractionPendingIncrease >= epsilon {
-				cannotShed = true
-				var reason redact.RedactableString
-				if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
-					reason = redact.Sprintf("pending decrease %.2f >= threshold %.2f",
-						ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold)
-				} else {
-					reason = redact.Sprintf("pending increase %.2f >= epsilon",
-						ss.maxFractionPendingIncrease)
-				}
-				passML.logf(ctx, 2,
-					"skipping overloaded store s%d (worst dim: %s): %s; pending: %s",
-					storeID, sls.worstDim, reason, formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
-			} else {
-				passML.logf(ctx, 2, "store s%v was added to shedding store list", storeID)
-			}
+			cannotShed := ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold ||
+				ss.maxFractionPendingIncrease >= epsilon
+			passML.logf(ctx, 2,
+				"adding overloaded store s%d to shedding list (worst dim: %s, cannotShed: %t, "+
+					"pending decrease %.2f vs threshold %.2f, pending increase %.2f vs epsilon %.2f); pending: %s",
+				storeID, sls.worstDim, cannotShed,
+				ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold,
+				ss.maxFractionPendingIncrease, epsilon,
+				formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
 			sheddingStores = append(sheddingStores, sheddingStore{
 				StoreID:                        storeID,
 				storeLoadSummary:               sls,

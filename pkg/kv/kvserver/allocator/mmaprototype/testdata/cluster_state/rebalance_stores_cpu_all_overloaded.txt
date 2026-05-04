@@ -68,28 +68,28 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
-[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s2: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s2 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
-[mmaid=1] store s2 was added to shedding store list
+[mmaid=1] adding overloaded store s2 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s3 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
-[mmaid=1] store s3 was added to shedding store list
+[mmaid=1] adding overloaded store s3 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s4: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s4 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
-[mmaid=1] store s4 was added to shedding store list
+[mmaid=1] adding overloaded store s4 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] sorted shedding stores: (s1: overloadUrgent) (s2: overloadUrgent) (s3: overloadUrgent) (s4: overloadUrgent)
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:5ns/s, write-bandwidth:0 B/s, byte-size:0 B]

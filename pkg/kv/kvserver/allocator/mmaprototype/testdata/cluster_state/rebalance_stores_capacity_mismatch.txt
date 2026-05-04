@@ -143,21 +143,21 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 1.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s2): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n2): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] evaluating s2: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s2 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s2 was added to shedding store list
+[mmaid=1] adding overloaded store s2 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 1.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s3): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] evaluating s3: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s3 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
-[mmaid=1] store s3 was added to shedding store list
+[mmaid=1] adding overloaded store s3 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 1.00, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=300 meanLoad=541 fractionUsed=60.00% meanUtil=75.80% capacity=500]
 [mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=500]
 [mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=500]
