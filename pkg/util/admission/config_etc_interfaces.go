@@ -9,6 +9,7 @@ import (
 	"iter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
 // Code comments here are a mix of implementation notes and usage notes, to
@@ -97,6 +98,30 @@ type ConfigSnapshot interface {
 	// also need to decide what fraction of that token bucket needs to be full to
 	// allow for bursting. Currently we hard-code that to 0.9.
 	BurstableTokenBucketFullnessFraction() float64
+
+	ResourceGroupTransformer
+}
+
+// ResourceGroupTransformer allows the core admission package to be agnostic of
+// the context it is functioning in. Transform is called as the first step in
+// admission.WorkQueue (outside the mutex). Some scenarios:
+//
+//   - Running in serverless mode: values of the form (t, *, p) are transformed
+//     into (t, 2, p) since we want all the work for a tenant to share the same
+//     resource group.
+//
+//   - Running in resource group mode where the system tenant has defined resource
+//     groups for all tenants to share: values of the form (t, g, p) where g > 0
+//     are transformed into (1, g, p) since we want work for all tenants for group
+//     g to share the same burstable budget. Values of the form (t, 0, p)
+//     represent the caller does not know the resource group, and would be
+//     transformed to (t, 2, p) since 2 is the default resource group.
+//
+//   - Running in a mode where < normal pri is one resource group (g2) and the
+//     rest is another (g1). Value (t, g, p) is transformed into (1, g2, 0) if p <
+//     normal pri else (1, g1, 0).
+type ResourceGroupTransformer interface {
+	Transform(ResourceGroup, admissionpb.WorkPriority) (ResourceGroup, admissionpb.WorkPriority)
 }
 
 // workQueueForBurstBuckets is implemented by WorkQueue.
@@ -113,13 +138,14 @@ type workQueueForBurstBuckets interface {
 // burstBucketFiller is initialized every 1s by the cpuTimeTokenAllocator, using
 // its computed tokens and the current ConfigSnapshot, and then handed to the
 // WorkQueue by calling burstReset. The internals are opaque to the WorkQueue,
-// which must only call the methods: getCapacity and getTokensToAdd.
+// which must only call the methods: getCapacityAndWeight, getTokensToAdd, and
+// the ResourceGroupTransformer method.
 type burstBucketFiller struct {
 	// burstConfigs contain the fully specified groups.
 	burstConfigs map[ResourceGroup]bucketConfig
 	// matchAllConfig is for the (0, 0) group.
 	matchAllConfig bucketConfig
-
+	ResourceGroupTransformer
 	// TODO: measure if we need to optimize doing a series of map lookups every
 	// 1ms.
 	//
@@ -130,14 +156,16 @@ type burstBucketFiller struct {
 type bucketConfig struct {
 	tokensToAddPerTick int64
 	tokenCapacity      int64
+	weight             uint32
 }
 
 // On every burstReset, the WorkQueue iterates over its current groups map and
-// calls this method to get the new capacity, to adjust the capacity value. It
-// also calls this when constructing a new groupInfo in response to a new Admit
-// request.
-func (bbf *burstBucketFiller) getCapacity(g ResourceGroup) int64 {
-	return bbf.getBucketConfigInternal(g).tokenCapacity
+// calls this method to get the new capacity, to adjust the capacity value, and
+// the new weight. It also calls this when constructing a new groupInfo in
+// response to a new Admit request.
+func (bbf *burstBucketFiller) getCapacityAndWeight(g ResourceGroup) (cap int64, w uint32) {
+	bc := bbf.getBucketConfigInternal(g)
+	return bc.tokenCapacity, bc.weight
 }
 
 // On every burstAllocationTick, the WorkQueue iterates over its current groups
