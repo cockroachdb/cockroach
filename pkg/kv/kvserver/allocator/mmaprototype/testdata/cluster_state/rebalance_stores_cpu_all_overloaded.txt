@@ -138,5 +138,5 @@ rebalance-stores store-id=1 vmodule=3
 	overloaded:
 		lease-grace: [s1, s2, s3, s4]
 	failure: [{s1, total: 2, no-cand-load:2}]
-	no-ranges-evaluated: [s2, s3, s4]
+	skipped: [s2, s3, s4]
 pending(0)

@@ -118,7 +118,7 @@ rebalance-stores store-id=1 vmodule=3
 		short: [s3]
 	success: [s1]
 	failure: [{s3, total: 1, range-transient:1}]
-	no-ranges-evaluated: [s2]
+	skipped: [s2]
 pending(2)
 change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)

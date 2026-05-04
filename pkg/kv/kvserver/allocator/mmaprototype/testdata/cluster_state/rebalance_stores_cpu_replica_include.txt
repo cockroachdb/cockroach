@@ -95,7 +95,7 @@ rebalance-stores store-id=1 vmodule=3
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
 		lease-grace: [s3]
-	no-ranges-evaluated: [s3]
+	skipped: [s3]
 pending(0)
 
 # Advance time beyond the lease shedding grace period.

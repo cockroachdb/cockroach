@@ -25,20 +25,16 @@ type shedAction struct {
 	result shedResult
 }
 
-// storeActions describes the overloaded store state and the shedding actions to
-// replay for one store during a pass.
-//
-// skippedByPending models the production case where the store is overloaded
-// but rebalanceStores does not shed from it this pass because the store
-// already has too much pending decrease (or pending increase >= epsilon),
-// or because the per-pass range-move budget was exhausted before processing
-// the store. The store is attributed to the corresponding `<bucket>.skipped`
-// gauge.
+// storeActions describes the overloaded store state and the shedding actions
+// to replay for one store during a pass. With no actions, the store is
+// recorded as overloaded but produces no leaseShed/replicaShed calls; the
+// pass-summary derivation then attributes it to the `<bucket>.skipped`
+// outcome (matches the production paths for pending-blocked, lease-grace
+// remote, n==0 top-K, and range-move-budget exhausted).
 type storeActions struct {
 	storeID                  roachpb.StoreID
 	ignoreLevel              ignoreLevel
 	actions                  []shedAction
-	skippedByPending         bool
 	withinLeaseSheddingGrace bool
 }
 
@@ -46,11 +42,6 @@ type storeActions struct {
 // rebalancingPassMetricsAndLogger struct.
 func (s *storeActions) performActions(g *rebalancingPassMetricsAndLogger) {
 	g.storeOverloaded(s.storeID, s.withinLeaseSheddingGrace, s.ignoreLevel)
-	if s.skippedByPending {
-		g.skippedByPending()
-		g.finishStore()
-		return
-	}
 	for _, action := range s.actions {
 		switch action.kind {
 		case shedLease:
@@ -101,16 +92,15 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 		},
 		{
 			// More stores than the logging limit. All overloaded with no shed
-			// actions; the harness simulates the production "range-move
-			// budget exhausted" path via skippedByPending.
+			// actions, derived as skipped (mirrors the production "range-move
+			// budget exhausted" path).
 			name: "limit",
 			setup: func() []storeActions {
 				out := make([]storeActions, 0, 21)
 				for i := roachpb.StoreID(1); i <= 21; i++ {
 					out = append(out, storeActions{
-						storeID:          i,
-						ignoreLevel:      ignoreLoadNoChangeAndHigher,
-						skippedByPending: true,
+						storeID:     i,
+						ignoreLevel: ignoreLoadNoChangeAndHigher,
 					})
 				}
 				return out
@@ -118,9 +108,9 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 		},
 		{
 			// One store sheds successfully; another store is overloaded but
-			// rebalanceStores deferred shedding because of pending
-			// decrease/increase. Both stores must appear in the per-bucket
-			// summary; the deferred one in the "skipped" outcome.
+			// rebalanceStores deferred shedding (no shed actions). Both
+			// stores must appear in the per-bucket summary; the deferred one
+			// in the derived "skipped" outcome.
 			name: "skipped_by_pending",
 			setup: []storeActions{
 				{
@@ -131,9 +121,8 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 					},
 				},
 				{
-					storeID:          7,
-					ignoreLevel:      ignoreLoadNoChangeAndHigher,
-					skippedByPending: true,
+					storeID:     7,
+					ignoreLevel: ignoreLoadNoChangeAndHigher,
 				},
 			},
 		},
@@ -172,14 +161,12 @@ func TestRebalancingPassMetricsAndLogger(t *testing.T) {
 					withinLeaseSheddingGrace: true,
 				},
 				{
-					storeID:          12,
-					ignoreLevel:      ignoreLoadNoChangeAndHigher,
-					skippedByPending: true,
+					storeID:     12,
+					ignoreLevel: ignoreLoadNoChangeAndHigher,
 				},
 				{
-					storeID:          5,
-					ignoreLevel:      ignoreLoadThresholdAndHigher,
-					skippedByPending: true,
+					storeID:     5,
+					ignoreLevel: ignoreLoadThresholdAndHigher,
 				},
 			},
 		},
@@ -225,14 +212,12 @@ func TestRebalancingPassMetricsSkippedGauges(t *testing.T) {
 		actions:     []shedAction{{kind: shedReplica, result: noCandidate}},
 	}).performActions(g)
 	(&storeActions{
-		storeID:          4,
-		ignoreLevel:      ignoreLoadThresholdAndHigher,
-		skippedByPending: true,
+		storeID:     4,
+		ignoreLevel: ignoreLoadThresholdAndHigher,
 	}).performActions(g)
 	(&storeActions{
-		storeID:          5,
-		ignoreLevel:      ignoreHigherThanLoadThreshold,
-		skippedByPending: true,
+		storeID:     5,
+		ignoreLevel: ignoreHigherThanLoadThreshold,
 	}).performActions(g)
 
 	g.computePassSummary(&redact.StringBuilder{})

@@ -8,5 +8,4 @@ rebalancing pass summary [local=s1]:
 		long: [s6]
 	success: [s1, s8]
 	failure: [{s6, total: 4, no-healthy-cand:4}]
-	skipped: [s5, s12]
-	no-ranges-evaluated: [s10]
+	skipped: [s5, s10, s12]

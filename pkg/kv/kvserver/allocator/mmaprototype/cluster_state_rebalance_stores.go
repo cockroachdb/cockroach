@@ -275,12 +275,13 @@ func (re *rebalanceEnv) rebalanceStores(
 				passML.logf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): %s; pending: %s",
 					storeID, sls.worstDim, reason, formatLoadPendingChanges(ss.adjusted.loadPendingChanges))
-				// Record the store as overloaded-but-skipped so it contributes
-				// to the `<bucket>.skipped` gauge. Without this, an overloaded
-				// store stuck in this skip path is invisible to the per-bucket
-				// metrics, even though MMA still considers it overloaded.
+				// Record the store as overloaded so it contributes to the
+				// `<bucket>.skipped` gauge — derived in computePassSummary
+				// from the absence of any leaseShed/replicaShed calls.
+				// Without this, an overloaded store stuck in this skip path
+				// is invisible to the per-bucket metrics, even though MMA
+				// still considers it overloaded.
 				re.passObs.storeOverloaded(storeID, withinGrace, iLevel)
-				re.passObs.skippedByPending()
 				re.passObs.finishStore()
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
@@ -363,13 +364,11 @@ func (re *rebalanceEnv) rebalanceStores(
 	}
 	for ; i < n; i++ {
 		// Per-pass range-move budget exhausted. Record the remaining
-		// sheddingStores under the per-bucket `skipped` outcome using their
-		// stashed classification, so they show up alongside other
-		// overloaded-but-deferred stores instead of in a flat bucket-less
-		// list.
+		// sheddingStores under their stashed classification; computePassSummary
+		// derives the `<bucket>.skipped` outcome from the absence of any
+		// leaseShed/replicaShed calls between storeOverloaded and finishStore.
 		s := sheddingStores[i]
 		re.passObs.storeOverloaded(s.StoreID, s.withinLeaseSheddingGracePeriod, s.iLevel)
-		re.passObs.skippedByPending()
 		re.passObs.finishStore()
 	}
 	re.passObs.finishRebalancingPass(ctx)

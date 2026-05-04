@@ -111,5 +111,5 @@ rebalance-stores store-id=1 vmodule=3
 		lease-grace: [s2]
 		short: [s1, s3]
 	failure: [{s1, total: 1, not-overloaded:1}]
-	no-ranges-evaluated: [s2, s3]
+	skipped: [s2, s3]
 pending(0)

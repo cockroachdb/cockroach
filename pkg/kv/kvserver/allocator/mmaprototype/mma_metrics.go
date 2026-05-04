@@ -443,12 +443,6 @@ const (
 type storePassState struct {
 	overloadKind overloadKind
 	shedCounts   [numShedKinds][numShedResults]int
-	// skipped is true when MMA recognized the store as overloaded but did not
-	// shed from it this pass for a known reason — most commonly because of
-	// pending decrease/increase. When set, shedCounts is empty and the store
-	// is attributed to the `<bucket>.skipped` gauge instead of
-	// success/failure.
-	skipped bool
 }
 
 func (s *storePassState) summarize() storePassSummary {
@@ -796,16 +790,6 @@ func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
 	g.curState.shedCounts[shedLease][result]++
 }
 
-// skippedByPending is sandwiched between storeOverloaded and finishStore. It
-// records that MMA recognized the store as overloaded but did not shed from
-// it this pass because the store already has too much pending work.
-func (g *rebalancingPassMetricsAndLogger) skippedByPending() {
-	if g == nil {
-		return
-	}
-	g.curState.skipped = true
-}
-
 // replicaShed is sandwiched between storeOverloaded and finishStore, and
 // provides the result of the shedding attempt.
 func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
@@ -826,11 +810,20 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 
 // computePassSummary performs the aggregation of the rebalancing pass summary,
 // updates gauges and generates a log message with stores per category of
-// successful rebalances, failed rebalances, skipped stores (overloaded but
-// not shed from this pass — most commonly due to pending work, also covers
-// stores that were cut off when the per-pass range-move budget was
-// exhausted), and stores for which no ranges were evaluated. The list of
-// stores is truncated upto a fixed number of stores (see `logStores`).
+// successful rebalances, failed rebalances, and skipped stores (overloaded
+// but not shed from this pass for any reason: pending work, lease-grace
+// remote, no top-K ranges to evaluate, or per-pass range-move budget
+// exhausted). The list of stores is truncated upto a fixed number of stores
+// (see `logStores`).
+//
+// INVARIANT: per duration bucket,
+//
+//	success + failure + skipped == count of overloaded stores in bucket.
+//
+// Holds by construction: every overloaded store goes through
+// storeOverloaded + finishStore exactly once, and the switch in this
+// function places it into exactly one of the three outcomes.
+//
 // Example output:
 /*
 rebalancing pass summary [local=s1]:
@@ -841,23 +834,24 @@ rebalancing pass summary [local=s1]:
 	success: [s1]
 	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
 	skipped: [s5, s10]
-	no-ranges-evaluated: [s10]
 */
 func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
 
 	// For each overloadKind, collect the stores that belong to it and count
-	// the stores that had shedding success, failure, or were skipped this pass.
-	// NB: Each store is counted at most once based on whether it was skipped
-	// or had any shedding success, even if it had shedding failures.
+	// the stores that had shedding success, failure, or were skipped this
+	// pass. The skipped count and slice are derived: any overloaded store
+	// that did not record a leaseShed/replicaShed call between
+	// storeOverloaded and finishStore lands here. This makes
+	// success + failure + skipped == len(overloaded stores in bucket) hold
+	// by construction; assertSumInvariant below double-checks.
+	// NB: Each store is counted at most once.
 	var overloadSummaries [numOverloadKinds]struct {
 		success, failure, skipped int64
 		stores                    []roachpb.StoreID
 	}
 
-	// Collect the stores for which no ranges were evaluated.
-	var noRangesEvaluated []roachpb.StoreID
 	// Collect skipped stores for the per-pass log.
 	var skippedStores []roachpb.StoreID
 
@@ -869,9 +863,6 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		overloadSummary.stores = append(overloadSummary.stores, storeID)
 
 		switch {
-		case passState.skipped:
-			overloadSummary.skipped++
-			skippedStores = append(skippedStores, storeID)
 		case storeSummary.numShedSuccesses > 0:
 			overloadSummary.success++
 			g.successSummaries = append(g.successSummaries, storeSummary)
@@ -879,7 +870,27 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 			overloadSummary.failure++
 			g.failedSummaries = append(g.failedSummaries, storeSummary)
 		default:
-			noRangesEvaluated = append(noRangesEvaluated, storeSummary.storeID)
+			overloadSummary.skipped++
+			skippedStores = append(skippedStores, storeID)
+		}
+	}
+
+	// Assert the per-bucket sum invariant. By construction the switch above
+	// puts every overloaded store into exactly one of {success, failure,
+	// skipped}, so a mismatch indicates a bookkeeping bug we want to surface.
+	for kind, counts := range overloadSummaries {
+		if int64(len(counts.stores)) != counts.success+counts.failure+counts.skipped {
+			log.KvDistribution.Errorf(context.Background(),
+				"%v", errors.AssertionFailedf(
+					"mma overload bucket %v: success(%d)+failure(%d)+skipped(%d) "+
+						"!= overloaded(%d); states=%v",
+					redact.Safe(overloadKind(kind)),
+					redact.SafeInt(counts.success),
+					redact.SafeInt(counts.failure),
+					redact.SafeInt(counts.skipped),
+					redact.SafeInt(len(counts.stores)),
+					counts.stores,
+				))
 		}
 	}
 
@@ -968,16 +979,6 @@ func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringB
 		slices.Sort(skippedStores)
 		buf.SafeString("\n\tskipped: ")
 		logStores(buf, skippedStores, func(store roachpb.StoreID) redact.RedactableString {
-			return redact.Sprintf("s%v", store)
-		})
-	}
-
-	// Log stores for which no ranges were evaluated.
-	if len(noRangesEvaluated) > 0 {
-		empty = false
-		slices.Sort(noRangesEvaluated)
-		buf.SafeString("\n\tno-ranges-evaluated: ")
-		logStores(buf, noRangesEvaluated, func(store roachpb.StoreID) redact.RedactableString {
 			return redact.Sprintf("s%v", store)
 		})
 	}
