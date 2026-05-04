@@ -113,8 +113,8 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		checkedCmd, err := b.Stage(cmd.ctx, cmd)
 		require.NoError(t, err)
 		require.Equal(t, !add, b.changeRemovesReplica)
-		require.Equal(t, b.state.RaftAppliedIndex, cmd.Index())
-		require.Equal(t, b.state.LeaseAppliedIndex, cmd.Cmd.MaxLeaseIndex)
+		require.Equal(t, b.ab.state.RaftAppliedIndex, cmd.Index())
+		require.Equal(t, b.ab.state.LeaseAppliedIndex, cmd.Cmd.MaxLeaseIndex)
 
 		// Check the replica's destroy status.
 		reason, _ := r.IsDestroyed()
