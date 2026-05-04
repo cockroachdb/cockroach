@@ -224,6 +224,69 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Txn-mode applier metrics.
+	metaTxnApplierTxnWaitTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.txn_wait_txns",
+		Help:        "Number of in-flight transactions blocked on a peer transaction's completion",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "txn_wait",
+		),
+	}
+	metaTxnApplierHorizonWaitTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.horizon_wait_txns",
+		Help:        "Number of in-flight transactions waiting for the global frontier to advance past their event horizon",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "horizon_wait",
+		),
+	}
+	metaTxnApplierReadyTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.ready_txns",
+		Help:        "Number of in-flight transactions that are ready to be applied or currently being applied",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "ready",
+		),
+	}
+
+	metaLabeledTxnApplierTxnWaitTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.txn_wait_txns_by_label",
+		Help:        "Number of in-flight transactions blocked on a peer transaction's completion, by job scope",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns_by_label",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "txn_wait",
+		),
+	}
+	metaLabeledTxnApplierHorizonWaitTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.horizon_wait_txns_by_label",
+		Help:        "Number of in-flight transactions waiting for the global frontier to advance past their event horizon, by job scope",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns_by_label",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "horizon_wait",
+		),
+	}
+	metaLabeledTxnApplierReadyTxns = metric.Metadata{
+		Name:        "logical_replication.txn_applier.ready_txns_by_label",
+		Help:        "Number of in-flight transactions that are ready to be applied or currently being applied, by job scope",
+		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.txn_applier.in_flight_txns_by_label",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "ready",
+		),
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -268,6 +331,15 @@ type Metrics struct {
 	LabeledEventsDLQed    *metric.CounterVec
 	LabeledScanningRanges *metric.GaugeVec
 	LabeledCatchupRanges  *metric.GaugeVec
+
+	// Txn-mode applier metrics.
+	TxnApplierTxnWaitTxns     *metric.Gauge
+	TxnApplierHorizonWaitTxns *metric.Gauge
+	TxnApplierReadyTxns       *metric.Gauge
+
+	LabeledTxnApplierTxnWaitTxns     *metric.GaugeVec
+	LabeledTxnApplierHorizonWaitTxns *metric.GaugeVec
+	LabeledTxnApplierReadyTxns       *metric.GaugeVec
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -317,5 +389,16 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
 		LabeledScanningRanges: metric.NewExportedGaugeVec(metaLabeledScanningRanges, []string{"label"}),
 		LabeledCatchupRanges:  metric.NewExportedGaugeVec(metaLabeledCatchupRanges, []string{"label"}),
+
+		TxnApplierTxnWaitTxns:     metric.NewGauge(metaTxnApplierTxnWaitTxns),
+		TxnApplierHorizonWaitTxns: metric.NewGauge(metaTxnApplierHorizonWaitTxns),
+		TxnApplierReadyTxns:       metric.NewGauge(metaTxnApplierReadyTxns),
+
+		LabeledTxnApplierTxnWaitTxns: metric.NewExportedGaugeVec(
+			metaLabeledTxnApplierTxnWaitTxns, []string{"label"}),
+		LabeledTxnApplierHorizonWaitTxns: metric.NewExportedGaugeVec(
+			metaLabeledTxnApplierHorizonWaitTxns, []string{"label"}),
+		LabeledTxnApplierReadyTxns: metric.NewExportedGaugeVec(
+			metaLabeledTxnApplierReadyTxns, []string{"label"}),
 	}
 }

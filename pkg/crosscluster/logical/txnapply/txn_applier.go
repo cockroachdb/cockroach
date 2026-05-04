@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -131,9 +132,11 @@ type Checkpoint struct{ Timestamp hlc.Timestamp }
 // Also note that the applier assumes it is sent transactions in increasing
 // timestamp order.
 type Applier struct {
-	id          ldrdecoder.ApplierID
-	settings    *cluster.Settings
-	depResolver DependencyResolverClient
+	id           ldrdecoder.ApplierID
+	settings     *cluster.Settings
+	depResolver  DependencyResolverClient
+	metrics      *metrics.Metrics
+	metricsLabel string
 
 	mu struct {
 		syncutil.Mutex
@@ -190,6 +193,8 @@ func NewApplier(
 	depResolver DependencyResolverClient,
 	allApplierIDs []ldrdecoder.ApplierID,
 	newCPUHandle func() *admission.SQLCPUHandle,
+	metrics *metrics.Metrics,
+	metricsLabel string,
 ) (_ *Applier, retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -207,10 +212,15 @@ func NewApplier(
 	if newCPUHandle == nil {
 		return nil, errors.AssertionFailedf("newCPUHandle must not be nil")
 	}
+	if metrics == nil {
+		return nil, errors.New("metrics must not be nil")
+	}
 	a := &Applier{
 		id:                id,
 		settings:          settings,
 		depResolver:       depResolver,
+		metrics:           metrics,
+		metricsLabel:      metricsLabel,
 		txnWriters:        writers,
 		newCPUHandle:      newCPUHandle,
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
@@ -258,6 +268,11 @@ func (a *Applier) Run(ctx context.Context, input chan ApplierEvent) error {
 
 	group.GoCtx(func(ctx context.Context) error {
 		return a.aggregator(ctx, applied, ready)
+	})
+
+	group.GoCtx(func(ctx context.Context) error {
+		statsInterval := applierStatsPollInterval.Get(&a.settings.SV)
+		return a.startApplierStatsPoller(ctx, statsInterval)
 	})
 
 	return group.Wait()
