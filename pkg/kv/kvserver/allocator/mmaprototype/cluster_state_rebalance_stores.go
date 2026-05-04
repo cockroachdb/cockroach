@@ -372,7 +372,7 @@ func (re *rebalanceEnv) rebalanceStores(
 		}
 		re.passObs.finishStore()
 	}
-	re.passObs.finishRebalancingPass(ctx)
+	re.passObs.finishRebalancingPass(ctx, len(sheddingStores) /* for assertion only */)
 	return re.changes
 }
 
