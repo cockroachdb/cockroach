@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -136,7 +137,7 @@ type logicalReplicationWriterProcessor struct {
 	aggTimer timeutil.Timer
 
 	// metrics are monitoring all running ingestion jobs.
-	metrics *Metrics
+	metrics *metrics.Metrics
 
 	logBufferEvery log.EveryN
 
@@ -230,7 +231,7 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient:  InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
-		metrics:    flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
+		metrics:    flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics),
 		seenEvery:  log.Every(1 * time.Minute),
 		retryEvery: log.Every(1 * time.Minute),
 		pacer:      kvbulk.NewCPUPacer(ctx, flowCtx.Cfg.DB.KV(), useLowPriority),
@@ -294,7 +295,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName, listeners...)
 
-	lrw.metrics = lrw.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+	lrw.metrics = lrw.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics)
 
 	db := lrw.FlowCtx.Cfg.DB
 
