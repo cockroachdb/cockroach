@@ -222,6 +222,12 @@ func (v *WriteStopwatchVec) SetStartTime(labels map[string]string) {
 	v.GaugeVec.Update(labels, v.timeSource.Now().UnixNano())
 }
 
+// SetExplicitStartTime records the provided timestampNanos as the start time
+// for the given label set.
+func (v *WriteStopwatchVec) SetExplicitStartTime(labels map[string]string, timestampNanos int64) {
+	v.GaugeVec.Update(labels, timestampNanos)
+}
+
 // Each calls f for every child stopwatch.
 func (v *WriteStopwatchVec) Each(f func(WritableMetric)) {
 	v.GaugeVec.EachChild(func(s *metric.VecChildSnapshot) {

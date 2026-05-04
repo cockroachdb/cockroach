@@ -240,6 +240,16 @@ func (s *WriteStopwatch) SetStartTime() {
 	s.dirty.Store(true)
 }
 
+// SetExplicitStartTime records the provided timestampNanos as the start time and
+// marks dirty. If the stopwatch has been deleted, the call is a no-op.
+func (s *WriteStopwatch) SetExplicitStartTime(timestampNanos int64) {
+	if s.deleted.Load() {
+		return
+	}
+	s.Gauge.Update(timestampNanos)
+	s.dirty.Store(true)
+}
+
 // Value returns the stored unix timestamp (nanoseconds), or 0 if not started.
 func (s *WriteStopwatch) Value() int64 {
 	return s.Gauge.Value()

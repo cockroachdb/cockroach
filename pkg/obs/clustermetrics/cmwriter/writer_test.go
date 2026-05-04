@@ -258,6 +258,14 @@ func TestWriter_Flush(t *testing.T) {
 				require.NotZero(t, stored.StoredValue, "stopwatch should store a nonzero unix timestamp")
 			},
 		}, {
+			name: "stopwatch SetExplicitStartTime stores provided timestamp",
+			setup: func(env *testEnv) {
+				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
+				env.writer.AddMetric(sw)
+				sw.SetExplicitStartTime(1700000000000000000)
+			},
+			wantStored: map[string]int64{"sw": 1700000000000000000},
+		}, {
 			name: "stopwatch not started is not stored",
 			setup: func(env *testEnv) {
 				sw := cmmetrics.NewWriteStopwatch(metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{})
@@ -575,6 +583,26 @@ func TestWriter_VecMetrics(t *testing.T) {
 		stored, ok = env.store.getByLabels("sv", map[string]string{"job": "restore"})
 		require.True(t, ok, "expected labeled stopwatch to be stored")
 		require.NotZero(t, stored.StoredValue, "stopwatch should store a nonzero unix timestamp")
+	})
+
+	t.Run("stopwatch vec SetExplicitStartTime stores provided timestamp per child", func(t *testing.T) {
+		env := newTestEnv()
+		sv := cmmetrics.NewWriteStopwatchVec(metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job")
+		env.writer.AddMetric(sv)
+
+		const backupNanos int64 = 1700000000000000000
+		const restoreNanos int64 = 1800000000000000000
+		sv.SetExplicitStartTime(map[string]string{"job": "backup"}, backupNanos)
+		sv.SetExplicitStartTime(map[string]string{"job": "restore"}, restoreNanos)
+		env.writer.Flush(env.ctx)
+
+		stored, ok := env.store.getByLabels("sv", map[string]string{"job": "backup"})
+		require.True(t, ok, "expected labeled stopwatch to be stored")
+		require.Equal(t, backupNanos, stored.StoredValue)
+
+		stored, ok = env.store.getByLabels("sv", map[string]string{"job": "restore"})
+		require.True(t, ok, "expected labeled stopwatch to be stored")
+		require.Equal(t, restoreNanos, stored.StoredValue)
 	})
 
 	t.Run("stopwatch vec with no children is not flushed", func(t *testing.T) {
