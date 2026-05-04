@@ -281,6 +281,10 @@ const (
 	// storing advisory lock state.
 	V26_3_AddAdvisoryLocksTable
 
+	// V26_3_ForecastMinGoodnessOfFitTableSetting adds the per-table
+	// sql_stats_forecasts_min_goodness_of_fit storage parameter.
+	V26_3_ForecastMinGoodnessOfFitTableSetting
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -367,6 +371,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
 
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
+
+	V26_3_ForecastMinGoodnessOfFitTableSetting: {Major: 26, Minor: 2, Internal: 8},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

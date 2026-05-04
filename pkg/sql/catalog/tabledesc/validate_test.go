@@ -130,6 +130,7 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
 			"AutoStatsSettings":             {status: iSolemnlySwearThisFieldIsValidated},
 			"ForecastStats":                 {status: thisFieldReferencesNoObjects},
+			"ForecastStatsMinGoodnessOfFit": {status: thisFieldReferencesNoObjects},
 			"ImportStartWallTime":           {status: thisFieldReferencesNoObjects},
 			"HistogramBuckets":              {status: thisFieldReferencesNoObjects},
 			"HistogramSamples":              {status: thisFieldReferencesNoObjects},

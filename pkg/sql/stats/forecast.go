@@ -97,7 +97,7 @@ var maxDecrease = settings.RegisterFloatSetting(
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
 func ForecastTableStatistics(
-	ctx context.Context, st *cluster.Settings, observed []*TableStatistic,
+	ctx context.Context, st *cluster.Settings, observed []*TableStatistic, minRequiredFit float64,
 ) []*TableStatistic {
 	// Group observed statistics by column set, skipping over partial statistics
 	// and statistics with inverted histograms.
@@ -141,7 +141,7 @@ func ForecastTableStatistics(
 		at := latest.Add(avgRefresh)
 
 		forecast, err := forecastColumnStatistics(
-			ctx, st, observedByCols[colKey], at, minGoodnessOfFit.Get(&st.SV),
+			ctx, st, observedByCols[colKey], at, minRequiredFit,
 		)
 		if err != nil {
 			log.VEventf(

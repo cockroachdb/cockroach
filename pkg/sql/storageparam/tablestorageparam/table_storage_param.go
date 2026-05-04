@@ -650,6 +650,35 @@ var tableParams = map[string]tableParam{
 		onSet:   autoStatsFractionStaleRowsSetFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
+	`sql_stats_forecasts_min_goodness_of_fit`: {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_3_ForecastMinGoodnessOfFitTableSetting) {
+				return "", pgerror.Newf(pgcode.FeatureNotSupported,
+					"%s cannot be used until the cluster upgrade to v26.3 is finalized", key)
+			}
+			floatVal, err := floatFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			if floatVal < 0 || floatVal > 1 {
+				return "", pgerror.Newf(pgcode.InvalidParameterValue,
+					"value %g out of range for %s: must be between 0 and 1", floatVal, key)
+			}
+			return fmt.Sprintf("%g", floatVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			floatVal, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return err
+			}
+			po.TableDesc.TableDescriptor.ForecastStatsMinGoodnessOfFit = &floatVal
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
+			po.TableDesc.TableDescriptor.ForecastStatsMinGoodnessOfFit = nil
+			return nil
+		},
+	},
 	`sql_stats_forecasts_enabled`: {
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			enabled, err := boolFromDatum(ctx, evalCtx, key, datum)

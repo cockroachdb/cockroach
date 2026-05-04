@@ -3102,6 +3102,69 @@ statement error parameter "sql_stats_forecasts_enabled" requires a Boolean value
 ALTER TABLE t5 SET (sql_stats_forecasts_enabled = 'invalid')
 
 # -----------------------------------------------------------------------------
+# sql_stats_forecasts_min_goodness_of_fit - float storage parameter for forecast threshold
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = 0.80)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'forecastStatsMinGoodnessOfFit'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+0.8
+
+# Boundary values should succeed.
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = 0)
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = 1)
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_forecasts_min_goodness_of_fit)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'forecastStatsMinGoodnessOfFit'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+NULL
+
+statement error value -0.1 out of range for sql_stats_forecasts_min_goodness_of_fit: must be between 0 and 1
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = -0.1)
+
+statement error value 1.5 out of range for sql_stats_forecasts_min_goodness_of_fit: must be between 0 and 1
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = 1.5)
+
+# Verify SHOW CREATE TABLE includes the parameter.
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_min_goodness_of_fit = 0.85)
+
+query TT
+SHOW CREATE TABLE t5
+----
+t5  CREATE TABLE public.t5 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+    ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15, sql_stats_forecasts_min_goodness_of_fit = 0.85, schema_locked = true);
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_forecasts_min_goodness_of_fit)
+
+# -----------------------------------------------------------------------------
 # sql_stats_automatic_partial_collection_min_stale_rows - integer storage parameter
 # -----------------------------------------------------------------------------
 

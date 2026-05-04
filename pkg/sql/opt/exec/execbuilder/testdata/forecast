@@ -2474,5 +2474,95 @@ RESET CLUSTER SETTING sql.stats.forecasts.max_decrease
 statement ok
 RESET CLUSTER SETTING sql.stats.forecasts.min_goodness_of_fit
 
+# Verify the per-table sql_stats_forecasts_min_goodness_of_fit storage
+# parameter overrides the cluster setting. Use the same irregular data as above
+# (300, 220, 30) which doesn't produce a forecast at the default threshold
+# (0.95) but does at a lower threshold (0.9).
+
+statement ok
+CREATE TABLE gof_override (v INT)
+
+statement ok
+ALTER TABLE gof_override INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "v"
+          ],
+          "created_at": "2023-04-18 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 300,
+          "row_count": 300
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "v"
+          ],
+          "created_at": "2023-04-19 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 220,
+          "row_count": 220
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "v"
+          ],
+          "created_at": "2023-04-20 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 30,
+          "row_count": 30
+      }
+]'
+
+# With the default cluster setting (0.95), no forecast is produced.
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE gof_override WITH FORECAST]
+ORDER BY created
+----
+__auto__  {v}  2023-04-18 00:00:00 +0000 UTC  300  1  300  1
+__auto__  {v}  2023-04-19 00:00:00 +0000 UTC  220  1  220  1
+__auto__  {v}  2023-04-20 00:00:00 +0000 UTC  30   1  30   1
+
+# Lower the threshold on just this table to 0.9.
+statement ok
+ALTER TABLE gof_override SET (sql_stats_forecasts_min_goodness_of_fit = 0.9)
+
+# Now a forecast is produced for this table.
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE gof_override WITH FORECAST]
+ORDER BY created
+----
+__auto__      {v}  2023-04-18 00:00:00 +0000 UTC  300  1  300  1
+__auto__      {v}  2023-04-19 00:00:00 +0000 UTC  220  1  220  1
+__auto__      {v}  2023-04-20 00:00:00 +0000 UTC  30   1  30   1
+__forecast__  {v}  2023-04-21 00:00:00 +0000 UTC  10   1  10   0
+
+# Reset the per-table override.
+statement ok
+ALTER TABLE gof_override RESET (sql_stats_forecasts_min_goodness_of_fit)
+
+# With the override removed, no forecast again.
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE gof_override WITH FORECAST]
+ORDER BY created
+----
+__auto__  {v}  2023-04-18 00:00:00 +0000 UTC  300  1  300  1
+__auto__  {v}  2023-04-19 00:00:00 +0000 UTC  220  1  220  1
+__auto__  {v}  2023-04-20 00:00:00 +0000 UTC  30   1  30   1
+
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
