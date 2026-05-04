@@ -81,7 +81,7 @@ fi
 # build rules that own them, then find all go_test targets that transitively
 # depend on those rules. Exclude integration-tagged tests, which require
 # bespoke setup (e.g. lint_test needs GO_SDK) and have their own CI jobs.
-QUERY="kind('go_test', rdeps(//pkg/..., same_pkg_direct_rdeps(set(${CANDIDATES})))) except attr('tags', 'integration', //pkg/...)"
+QUERY="kind('(go|jest)_test', rdeps(//pkg/..., same_pkg_direct_rdeps(set(${CANDIDATES})))) except attr('tags', 'integration', //pkg/...)"
 
 # Temporarily disable errexit so we can inspect the query exit code.
 set +e
