@@ -543,7 +543,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"CREATE INDEX idx ON tbl (val) WHERE i > 1",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
-			skipIssue:    97813,
 		},
 		{
 			desc:         "create expression index",

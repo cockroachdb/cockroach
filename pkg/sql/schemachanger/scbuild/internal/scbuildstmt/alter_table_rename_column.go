@@ -95,7 +95,7 @@ func renameColumnChecks(b BuildCtx, col *scpb.Column, oldName, newName tree.Name
 				tree.ErrString(&oldName), fnName.Name),
 			)
 		}
-	}, true /* allowPartialIdxPredicateRef */)
+	}, allowAllPredicateRefs)
 
 	if col.IsInaccessible {
 		panic(pgerror.Newf(
