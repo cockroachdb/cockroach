@@ -2015,6 +2015,42 @@ func MVCCBlindPutInlineProto(
 	return MVCCBlindPutInline(writer, key, value, ms)
 }
 
+// MVCCDeleteInline deletes an inline (unversioned) value. Unlike a blind put,
+// this reads the existing value to determine its size for MVCC stats
+// accounting. This is a fast path for non-transactional inline deletes, such
+// as raft log truncation.
+func MVCCDeleteInline(
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, key roachpb.Key,
+) error {
+	metaKey := MakeMVCCMetadataKey(key)
+	iter, err := rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{Prefix: true})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	// Read the existing inline metadata to determine its size for stats.
+	var origMetaKeySize, origMetaValSize int64
+	iter.SeekGE(metaKey)
+	if ok, err := iter.Valid(); err != nil {
+		return err
+	} else if ok && iter.UnsafeKey().Key.Equal(metaKey.Key) {
+		origMetaKeySize = int64(iter.UnsafeKey().EncodedSize())
+		origMetaValSize = int64(iter.ValueLen())
+	}
+
+	if err := rw.ClearUnversioned(metaKey.Key, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(origMetaValSize),
+	}); err != nil {
+		return err
+	}
+	if ms != nil {
+		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, 0, 0)
+	}
+	return nil
+}
+
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
 //

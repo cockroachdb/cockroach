@@ -447,8 +447,7 @@ func logAppend(
 		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			_, _, err := storage.MVCCDelete(ctx, rw, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
-				hlc.Timestamp{}, opts)
+			err := storage.MVCCDeleteInline(ctx, rw, diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i))
 			if err != nil {
 				return RaftState{}, err
 			}
