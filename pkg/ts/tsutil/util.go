@@ -35,14 +35,13 @@ var AllowedChildMetrics = map[string]struct{}{
 
 // IsAllowedChildMetric checks if a metric name matches one of the allowed child metrics.
 func IsAllowedChildMetric(name string) bool {
-	metricName := name
 	for _, prefix := range []string{"cr.node.", "cr.store."} {
-		if strings.HasPrefix(metricName, prefix) {
-			metricName = strings.TrimPrefix(metricName, prefix)
+		if strings.HasPrefix(name, prefix) {
+			name = strings.TrimPrefix(name, prefix)
 			break
 		}
 	}
-	_, ok := AllowedChildMetrics[metricName]
+	_, ok := AllowedChildMetrics[name]
 	return ok
 }
 

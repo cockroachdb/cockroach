@@ -1162,21 +1162,16 @@ func (rr registryRecorder) recordChild(
 	})
 }
 
-// hashSep is the field separator written between hashed components in
-// hashLabels. Hoisted to package scope to avoid per-call allocation on the
-// recording hot path.
-var hashSep = []byte{0}
-
-// hashLabels computes a stable hash of a label set. The zero-byte separators
-// close a collision where adjacent fields could otherwise be reassociated
-// (e.g. {name="ab", value="c"} vs {name="a", value="bc"}).
+// hashLabels computes a stable hash of a label set. The zero-byte separator
+// after each field prevents collisions where boundaries could otherwise shift
+// (e.g. without it, {a="bc"} and {ab="c"} would both hash "abc").
 func hashLabels(labels []*prometheusgo.LabelPair) uint64 {
 	h := fnv.New64a()
 	for _, label := range labels {
 		h.Write([]byte(label.GetName()))
-		h.Write(hashSep)
+		h.Write([]byte{0})
 		h.Write([]byte(label.GetValue()))
-		h.Write(hashSep)
+		h.Write([]byte{0})
 	}
 	return h.Sum64()
 }
@@ -1296,15 +1291,13 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 					if count < 0 {
 						continue // Skip malformed snapshots
 					}
-					value := c.ComputedMetric(snapshot)
-					metricName := baseName + c.Suffix
 					*dest = append(*dest, tspb.TimeSeriesData{
-						Name:   fmt.Sprintf(rr.format, metricName),
+						Name:   fmt.Sprintf(rr.format, baseName+c.Suffix),
 						Source: rr.source,
 						Datapoints: []tspb.TimeSeriesDatapoint{
 							{
 								TimestampNanos: rr.timestampNanos,
-								Value:          value,
+								Value:          c.ComputedMetric(snapshot),
 							},
 						},
 					})
