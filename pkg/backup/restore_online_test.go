@@ -207,6 +207,58 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	})
 }
 
+func TestFastRestoreFractionCompleted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 100
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(
+		t, singleNode, numAccounts, InitManualReplication,
+	)
+	defer cleanupFn()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
+	)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	sqlDB.Exec(
+		t,
+		"SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'",
+	)
+	var jobID int
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, new_db_name=data2, detached",
+		externalStorage,
+	)).Scan(&jobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(jobID))
+
+	var fractionCompleted float64
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf(
+			"SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = %d",
+			jobID,
+		),
+	).Scan(&fractionCompleted)
+	require.InDelta(t, experimentalCopyLinkFraction, fractionCompleted, 1e-6)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(jobID))
+
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf(
+			"SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = %d",
+			jobID,
+		),
+	).Scan(&fractionCompleted)
+	require.Equal(t, 1.0, fractionCompleted)
+}
+
 // We run full cluster online restore recovery in a separate environment since
 // it requires dropping all databases and will impact other tests.
 func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
