@@ -151,6 +151,12 @@ func registerRebalanceLoad(r registry.Registry) {
 				concurrency, appNode, "./cockroach workload", numStores, numNodes,
 			))
 		}
+		// FORCED-FAIL: trigger artifact collection on the mmc variant to
+		// verify that the new mma_state.json entries (PR #169233) are
+		// captured in the debug zip. Remove before merging.
+		if rebalanceMode == "multi-metric and count" {
+			t.Fatal("forced failure to test debug zip MMA state collection (PR #169233)")
+		}
 	}
 
 	// Add the tests to the registry based on the rebalance
