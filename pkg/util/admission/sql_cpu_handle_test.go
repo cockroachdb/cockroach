@@ -645,8 +645,8 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 
 	// Set maxCPU on group 1 via the holder + apply path. It should
 	// affect the rg container only.
-	q.configHolder.Set(map[uint64]ResourceGroupConfig{
-		1: {Weight: 1, MaxCPU: true},
+	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(1): {Weight: 1, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 

@@ -1609,7 +1609,7 @@ const groupWeightCap = 20
 func (q *WorkQueue) getGroupWeightLocked(gKey groupKey) (weight uint32, maxCPU bool) {
 	switch gKey.kind {
 	case rgKind:
-		cfg := q.configHolder.GetOrDefault(gKey.id)
+		cfg := q.configHolder.GetOrDefault(gKey)
 		weight = cfg.Weight
 		maxCPU = cfg.MaxCPU
 	case tenantKind:
@@ -1685,13 +1685,12 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 // hundreds or thousands, mirror SetTenantWeights's pattern:
 // pre-compute under a sub-mutex (configHolder already does this),
 // then take q.mu in short batches.
-func (q *WorkQueue) applyConfigLocked(config map[uint64]ResourceGroupConfig) {
+func (q *WorkQueue) applyConfigLocked(config map[groupKey]ResourceGroupConfig) {
 	// rgKind weights are not stored in groupWeights.active. The map is
 	// tenant-only; rgKind groups carry their weight on groupInfo.weight
 	// (written below for existing groups, and at lazy-create time from
 	// the holder), so a parallel lookup map would be redundant.
-	for id, d := range config {
-		k := rgGroupKey(id)
+	for k, d := range config {
 		group, ok := q.mu.groups[k]
 		if !ok {
 			// Pre-create the rgKind groupInfo from the holder snapshot so

@@ -576,12 +576,13 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				// (tenant-keyed groups) but still expect maxCPU flips to
 				// land on existing groups.
 				cfg := q.configHolder.Snapshot()
-				cur := cfg[uint64(group)]
+				k := rgGroupKey(uint64(group))
+				cur := cfg[k]
 				cur.MaxCPU = v
 				if cur.Weight == 0 {
 					cur.Weight = 1
 				}
-				cfg[uint64(group)] = cur
+				cfg[k] = cur
 				q.configHolder.Set(cfg)
 				q.mu.Lock()
 				q.applyConfigLocked(q.configHolder.Snapshot())
@@ -1318,9 +1319,9 @@ func TestSetUseResourceGroupAppliesHolderSnapshot(t *testing.T) {
 	defer cleanup()
 
 	// Custom config replaces the default seed.
-	q.configHolder.Set(map[uint64]ResourceGroupConfig{
-		highResourceGroupID: {Weight: 60, MaxCPU: true},
-		lowResourceGroupID:  {Weight: 40, MaxCPU: false},
+	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
+		rgGroupKey(lowResourceGroupID):  {Weight: 40, MaxCPU: false},
 	})
 
 	// Pre-condition: no rg containers exist yet (we're in serverless mode).
@@ -1354,8 +1355,8 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	defer cleanup()
 	// Stay in serverless mode (default).
 
-	q.configHolder.Set(map[uint64]ResourceGroupConfig{
-		highResourceGroupID: {Weight: 60, MaxCPU: true},
+	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 
@@ -1364,7 +1365,7 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.GetOrDefault(highResourceGroupID)
+	cfg := q.configHolder.GetOrDefault(rgGroupKey(highResourceGroupID))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
 }
@@ -1382,9 +1383,9 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	q.configHolder.Set(map[uint64]ResourceGroupConfig{
-		highResourceGroupID: {Weight: 70, MaxCPU: true},
-		lowResourceGroupID:  {Weight: 30, MaxCPU: false},
+	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
+		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
 	})
 	q.setUseResourceGroup(true)
 

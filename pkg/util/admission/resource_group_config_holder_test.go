@@ -19,17 +19,17 @@ import (
 )
 
 // formatSnapshot renders a snapshot map deterministically: one line per
-// id, sorted ascending. Used only by the echotest goldens.
-func formatSnapshot(snap map[uint64]ResourceGroupConfig) string {
-	ids := make([]uint64, 0, len(snap))
-	for id := range snap {
-		ids = append(ids, id)
+// key, sorted ascending by id. Used only by the echotest goldens.
+func formatSnapshot(snap map[groupKey]ResourceGroupConfig) string {
+	keys := make([]groupKey, 0, len(snap))
+	for k := range snap {
+		keys = append(keys, k)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	sort.Slice(keys, func(i, j int) bool { return keys[i].id < keys[j].id })
 	var b strings.Builder
-	for _, id := range ids {
-		cfg := snap[id]
-		fmt.Fprintf(&b, "id=%d weight=%d maxCPU=%t\n", id, cfg.Weight, cfg.MaxCPU)
+	for _, k := range keys {
+		cfg := snap[k]
+		fmt.Fprintf(&b, "%s weight=%d maxCPU=%t\n", k, cfg.Weight, cfg.MaxCPU)
 	}
 	return b.String()
 }
@@ -48,7 +48,7 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 
 	t.Run("get_or_default_unknown", w.Run(t, "get_or_default_unknown", func(t *testing.T) string {
 		h := newResourceGroupConfigHolder()
-		cfg := h.GetOrDefault(9999)
+		cfg := h.GetOrDefault(rgGroupKey(9999))
 		return fmt.Sprintf("weight=%d maxCPU=%t\n", cfg.Weight, cfg.MaxCPU)
 	}))
 }
@@ -58,29 +58,29 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 func TestResourceGroupConfigHolderSet(t *testing.T) {
 	t.Run("replaces_wholesale_dropping_seed", func(t *testing.T) {
 		h := newResourceGroupConfigHolder()
-		h.Set(map[uint64]ResourceGroupConfig{
-			42: {Weight: 100, MaxCPU: false},
+		h.Set(map[groupKey]ResourceGroupConfig{
+			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		})
 		// Set is wholesale: the seed (high/low) must be gone, and only the
-		// freshly-Set ID must remain.
-		require.Equal(t, map[uint64]ResourceGroupConfig{
-			42: {Weight: 100, MaxCPU: false},
+		// freshly-Set key must remain.
+		require.Equal(t, map[groupKey]ResourceGroupConfig{
+			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		}, h.Snapshot())
 	})
 
 	t.Run("input_aliasing_safe", func(t *testing.T) {
 		h := newResourceGroupConfigHolder()
-		input := map[uint64]ResourceGroupConfig{
-			7: {Weight: 100, MaxCPU: false},
+		input := map[groupKey]ResourceGroupConfig{
+			rgGroupKey(7): {Weight: 100, MaxCPU: false},
 		}
 		h.Set(input)
 
 		// Mutate the input post-Set; the holder must not observe it.
-		input[7] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
-		input[8] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
+		input[rgGroupKey(7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
+		input[rgGroupKey(8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
 
-		require.Equal(t, map[uint64]ResourceGroupConfig{
-			7: {Weight: 100, MaxCPU: false},
+		require.Equal(t, map[groupKey]ResourceGroupConfig{
+			rgGroupKey(7): {Weight: 100, MaxCPU: false},
 		}, h.Snapshot())
 
 		// And the holder's internal map is not aliased to the input.
@@ -93,15 +93,15 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 	})
 }
 
-// TestResourceGroupConfigHolderGet covers GetOrDefault for a configured ID.
+// TestResourceGroupConfigHolderGet covers GetOrDefault for a configured key.
 func TestResourceGroupConfigHolderGet(t *testing.T) {
 	h := newResourceGroupConfigHolder()
-	h.Set(map[uint64]ResourceGroupConfig{
-		highResourceGroupID: {Weight: 75, MaxCPU: true},
+	h.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(highResourceGroupID): {Weight: 75, MaxCPU: true},
 	})
 	require.Equal(t,
 		ResourceGroupConfig{Weight: 75, MaxCPU: true},
-		h.GetOrDefault(highResourceGroupID))
+		h.GetOrDefault(rgGroupKey(highResourceGroupID)))
 }
 
 // TestResourceGroupConfigHolderSnapshot verifies Snapshot returns an
@@ -112,8 +112,8 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	snap1 := h.Snapshot()
 
 	// Mutate snap1 and confirm the holder's state is unchanged.
-	snap1[999] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
-	delete(snap1, highResourceGroupID)
+	snap1[rgGroupKey(999)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
+	delete(snap1, rgGroupKey(highResourceGroupID))
 	require.Equal(t, defaultRMResourceGroupConfig, h.Snapshot())
 
 	// Snapshot must return a fresh map each call, not an alias of the
@@ -144,22 +144,22 @@ func TestResourceGroupConfigHolderConcurrent(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				h.Set(map[uint64]ResourceGroupConfig{
-					uint64(i): {Weight: uint32(j % 100), MaxCPU: j%2 == 0},
+				h.Set(map[groupKey]ResourceGroupConfig{
+					rgGroupKey(uint64(i)): {Weight: uint32(j % 100), MaxCPU: j%2 == 0},
 				})
 			}
 		}(i)
 		go func(i int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				_ = h.GetOrDefault(uint64(i))
+				_ = h.GetOrDefault(rgGroupKey(uint64(i)))
 			}
 		}(i)
 		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				snap := h.Snapshot()
-				snap[9999] = ResourceGroupConfig{Weight: 99, MaxCPU: true}
+				snap[rgGroupKey(9999)] = ResourceGroupConfig{Weight: 99, MaxCPU: true}
 				_ = snap
 			}
 		}()

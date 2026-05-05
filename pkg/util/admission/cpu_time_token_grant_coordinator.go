@@ -209,7 +209,7 @@ func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 // See ResourceGroupConfigHolder's type comment in
 // resource_group_config_holder.go for the design discussion of why a
 // dedicated holder owns the config storage.
-func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config map[uint64]ResourceGroupConfig) {
+func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config map[groupKey]ResourceGroupConfig) {
 	coord.cpuTimeCoord.configHolder.Set(config)
 	q, ok := coord.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
 	if !ok {
