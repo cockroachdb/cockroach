@@ -1245,6 +1245,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.registry.AddMetricStruct(clusterMetricsWriter.Metrics())
 	execCfg.ClusterMetricsWriter = clusterMetricsWriter
 
+	// Register job cluster metrics with writer.
+	clusterMetricsWriter.AddMetricStruct(jobRegistry.ClusterMetrics())
+
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)

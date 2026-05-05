@@ -59,6 +59,7 @@ type GaugeVec struct {
 // names. The metadata is automatically registered so that the cmreader
 // can materialize this metric from the rangefeed.
 func NewGaugeVec(metadata metric.Metadata, labelNames ...string) *GaugeVec {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &GaugeVec{
 		GaugeVec: metric.NewExportedGaugeVec(metadata, labelNames),
@@ -131,6 +132,7 @@ type CounterVec struct {
 // label names. The metadata is automatically registered so that the
 // cmreader can materialize this metric from the rangefeed.
 func NewCounterVec(metadata metric.Metadata, labelNames ...string) *CounterVec {
+	metadata.MetricType = prometheusgo.MetricType_COUNTER
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &CounterVec{
 		CounterVec: metric.NewExportedCounterVec(metadata, labelNames),
@@ -209,6 +211,7 @@ type WriteStopwatchVec struct {
 func NewWriteStopwatchVec(
 	metadata metric.Metadata, timeSource timeutil.TimeSource, labelNames ...string,
 ) *WriteStopwatchVec {
+	metadata.MetricType = prometheusgo.MetricType_GAUGE
 	ensureLabeledClusterMetricRegistered(metadata.Name, metadata, labelNames)
 	return &WriteStopwatchVec{
 		GaugeVec:   metric.NewExportedGaugeVec(metadata, labelNames),
