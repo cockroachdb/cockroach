@@ -59,17 +59,45 @@ func (p *Provider) buildInstanceProperties(
 	// Add additional disks (SSDs or persistent disks).
 	if !providerOpts.BootDiskOnly {
 		if opts.SSDOpts.UseLocalSSD {
-			// Local SSDs are physically attached to the host machine.
-			for i := 0; i < providerOpts.SSDCount; i++ {
-				disks = append(disks, &computepb.AttachedDisk{
-					AutoDelete: proto.Bool(true),
-					Type:       proto.String(computepb.AttachedDisk_SCRATCH.String()),
-					Mode:       proto.String(computepb.AttachedDisk_READ_WRITE.String()),
-					InitializeParams: &computepb.AttachedDiskInitializeParams{
-						DiskType: proto.String("local-ssd"),
-					},
-					Interface: proto.String(computepb.AttachedDisk_NVME.String()),
-				})
+			counts, err := AllowedLocalSSDCount(providerOpts.MachineType)
+			if err != nil {
+				return nil, err
+			}
+
+			// If only one count is allowed, the machine type has a fixed local
+			// SSD configuration, typically through the -lssd suffix.
+			if len(counts) == 1 {
+				if providerOpts.SSDCount != counts[0] {
+					l.Printf(
+						"WARNING: %[1]q only supports %[2]d local SSDs. Setting --gce-local-ssd-count to %[2]d",
+						providerOpts.MachineType,
+						counts[0],
+					)
+					providerOpts.SSDCount = counts[0]
+				}
+			} else {
+				minCount := counts[0]
+				if providerOpts.SSDCount < minCount {
+					l.Printf(
+						"WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d",
+						minCount,
+						providerOpts.MachineType,
+						minCount,
+					)
+					providerOpts.SSDCount = minCount
+				}
+				// Local SSDs are physically attached to the host machine.
+				for i := 0; i < providerOpts.SSDCount; i++ {
+					disks = append(disks, &computepb.AttachedDisk{
+						AutoDelete: proto.Bool(true),
+						Type:       proto.String(computepb.AttachedDisk_SCRATCH.String()),
+						Mode:       proto.String(computepb.AttachedDisk_READ_WRITE.String()),
+						InitializeParams: &computepb.AttachedDiskInitializeParams{
+							DiskType: proto.String("local-ssd"),
+						},
+						Interface: proto.String(computepb.AttachedDisk_NVME.String()),
+					})
+				}
 			}
 		} else {
 			// Persistent disks are network-attached storage.

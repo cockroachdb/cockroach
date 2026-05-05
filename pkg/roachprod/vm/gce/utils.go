@@ -395,10 +395,28 @@ var SupportedT2AZones = []string{
 	"us-central1-a", "us-central1-b", "us-central1-f",
 }
 
+// UnsupportedC4AZones is the set of known GCE zones where C4A machine types
+// are unavailable in regions used by roachprod defaults or explicit roachtest
+// zone selections.
+var UnsupportedC4AZones = []string{
+	"asia-northeast1-a",
+	"europe-central2-b", "europe-central2-c",
+	"us-west1-b",
+}
+
 // Used mainly in support of https://github.com/cockroachdb/cockroach/issues/122035.
 func IsSupportedT2AZone(zones []string) bool {
 	for _, zone := range zones {
 		if slices.Index(SupportedT2AZones, zone) == -1 {
+			return false
+		}
+	}
+	return true
+}
+
+func IsSupportedC4AZone(zones []string) bool {
+	for _, zone := range zones {
+		if slices.Index(UnsupportedC4AZones, zone) != -1 {
 			return false
 		}
 	}

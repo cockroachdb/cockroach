@@ -27,7 +27,7 @@ func buildClusterCreateOpts(
 	}
 
 	machineTypeSpecs, err := gce.ParseMachineTypeSpecs(
-		gceProviderOpts.MachineTypeSpecs, numNodes,
+		gceMachineTypeSpecsForCreate(createVMOpts, gceProviderOpts), numNodes,
 	)
 	if err != nil {
 		return nil, err
@@ -53,6 +53,22 @@ func buildClusterCreateOpts(
 	}
 
 	return opts, nil
+}
+
+func gceMachineTypeSpecsForCreate(
+	createVMOpts vm.CreateOpts, gceProviderOpts *gce.ProviderOpts,
+) []string {
+	// The GCE flag default is AMD64. If the caller requests ARM64 without
+	// picking a machine type, use C4A and preserve roachprod's local SSD default.
+	if len(gceProviderOpts.MachineTypeSpecs) != 1 ||
+		gceProviderOpts.MachineTypeSpecs[0] != gce.DefaultMachineType ||
+		vm.ParseArch(createVMOpts.Arch) != vm.ArchARM64 {
+		return gceProviderOpts.MachineTypeSpecs
+	}
+	if createVMOpts.SSDOpts.UseLocalSSD {
+		return []string{gce.DefaultARM64LSSDMachineType}
+	}
+	return []string{gce.DefaultARM64MachineType}
 }
 
 func providerEnabled(providers []string, name string) bool {

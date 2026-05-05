@@ -99,8 +99,14 @@ To update the code, consult the following Google Cloud documentation pages:
      fixed (not variable) counts. For these families, `AllowedLocalSSDCount` should
      be empty for base types.
 
-   **Important**: The full list of allowed local SSD counts for each machine type
-   and vCPU configuration is documented at:
+   **IMPORTANT — `-lssd` is NOT available for all variants.** The `-lssd` suffix is
+   only offered for specific variants, and the code MUST gate on variant before
+   setting `AllowedLocalSSDCount`:
+   - **C3**: `-lssd` is only available for the `standard` variant (NOT `highmem` or `highcpu`).
+   - **C3D, C4, C4A, C4D**: `-lssd` is available for `standard` and `highmem` variants
+     (NOT `highcpu`).
+
+   Verify the supported variants at:
    https://docs.cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds
 
    When updating the `localSSDCounts*` and `lssdCount*` functions in the code,
@@ -249,9 +255,15 @@ When adding or modifying machine families, verify the following:
      attaching local SSDs with varying counts.
    - **Newer families (C3, C3D, C4, C4A, C4D)**: Base types do NOT support
      local SSD. Only `-lssd` variants do, with fixed (not variable) counts.
+   - **`-lssd` variant restrictions**: Not all variants support `-lssd`. The
+     code must gate on the variant name (e.g., `variant == "standard"`) before
+     setting `AllowedLocalSSDCount`. See the `-lssd` variant table in the
+     "Implementation Patterns" section above.
 
 3. **Test coverage**: Add test cases for both base types AND `-lssd` variants
-   to verify the local SSD behavior is correct for both.
+   to verify the local SSD behavior is correct for both. Include negative test
+   cases for unsupported `-lssd` variants (e.g., `c4a-highcpu-32-lssd` should
+   have an empty `AllowedLocalSSDCount`).
 
 4. **CPU platforms**: Check the machine family documentation for CPU platform
    information. Add the appropriate `platformsXXX` slice assignment and update
