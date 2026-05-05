@@ -26,6 +26,7 @@ go_library(
         "parallel_io.go",
         "parquet.go",
         "parquet_sink_cloudstorage.go",
+        "pending_buffer.go",
         "protected_timestamps.go",
         "retry.go",
         "scheduled_changefeed.go",
