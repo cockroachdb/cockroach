@@ -6,12 +6,15 @@
 package norm
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -75,6 +78,61 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 		}
 	}
 	return result
+}
+
+// CanTimeZoneFunctionOverflow returns true if the NormalizeCmpTimeZoneFunction
+// or NormalizeCmpTimeZoneFunctionTZ rewrite could mask a runtime
+// "exceeds supported timestamp bounds" error. The rewrite hoists a per-row
+// timezone(zone, ts) call out of a comparison; if any value in the column
+// domain would push the timezone-shifted result past the supported timestamp
+// bounds, the original expression would have errored at evaluation while the
+// rewritten predicate would not. The rewrite is only safe when applying the
+// timezone shift to both MinSupportedTime and MaxSupportedTime succeeds, which
+// is a sufficient condition that no value in the column can trigger the
+// bounds error.
+//
+// Returns true (rewrite is unsafe) if zone is not a constant string, or if
+// applying the timezone shift to either supported-time bound errors.
+func (c *CustomFuncs) CanTimeZoneFunctionOverflow(zone, ts opt.ScalarExpr) bool {
+	zoneConst, ok := zone.(*memo.ConstExpr)
+	if !ok {
+		return true
+	}
+	zoneStr, ok := zoneConst.Value.(*tree.DString)
+	if !ok {
+		return true
+	}
+	loc, err := timeutil.TimeZoneStringToLocation(
+		string(*zoneStr), timeutil.TimeZoneStringToLocationPOSIXStandard,
+	)
+	if err != nil {
+		return true
+	}
+	// The rule normalizes timezone(zone, ts) where ts is of type TIMESTAMP or
+	// TIMESTAMPTZ. The timezone() overload chosen by MakeTimeZoneFunction
+	// determines whether the shift is AddTimeZone (TIMESTAMP -> TIMESTAMPTZ)
+	// or EvalAtAndRemoveTimeZone (TIMESTAMPTZ -> TIMESTAMP). Either direction
+	// is an additive shift that can push a boundary value out of bounds.
+	minTS := &tree.DTimestamp{Time: tree.MinSupportedTime}
+	maxTS := &tree.DTimestamp{Time: tree.MaxSupportedTime}
+	if ts.DataType().Family() == types.TimestampFamily {
+		if _, err := minTS.AddTimeZone(loc, time.Microsecond); err != nil {
+			return true
+		}
+		if _, err := maxTS.AddTimeZone(loc, time.Microsecond); err != nil {
+			return true
+		}
+		return false
+	}
+	minTZ := &tree.DTimestampTZ{Time: tree.MinSupportedTime}
+	maxTZ := &tree.DTimestampTZ{Time: tree.MaxSupportedTime}
+	if _, err := minTZ.EvalAtAndRemoveTimeZone(loc, time.Microsecond); err != nil {
+		return true
+	}
+	if _, err := maxTZ.EvalAtAndRemoveTimeZone(loc, time.Microsecond); err != nil {
+		return true
+	}
+	return false
 }
 
 // MakeTimeZoneFunction constructs a new timezone() function with the given zone

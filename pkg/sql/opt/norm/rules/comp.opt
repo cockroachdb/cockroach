@@ -206,6 +206,10 @@
 #   1. The left side of the comparison is a timezone() function.
 #   2. The second argument to timezone() is a variable of type TIMESTAMP.
 #   3. The right side of the comparison is a constant value TIMESTAMPTZ.
+#   4. Applying the zone shift to the supported timestamp bounds does not
+#      overflow. This ensures the rewrite cannot mask a per-row
+#      "exceeds supported timestamp bounds" error that the original
+#      expression would have produced (see #169202).
 #
 # Here's an example:
 #
@@ -221,7 +225,8 @@
     $right:(ConstValue) &
         (IsTimestampTZ $right) &
         (Let ($zone $ts $ok):(ScalarPair $args) $ok) &
-        (IsTimestamp $ts)
+        (IsTimestamp $ts) &
+        ^(CanTimeZoneFunctionOverflow $zone $ts)
 )
 =>
 ((OpName) $ts (MakeTimeZoneFunction $zone $right))
@@ -232,6 +237,10 @@
 #   1. The left side of the comparison is a timezone() function.
 #   2. The second argument to timezone() is a variable of type TIMESTAMPTZ.
 #   3. The right side of the comparison is a constant value TIMESTAMP.
+#   4. Applying the zone shift to the supported timestamp bounds does not
+#      overflow. This ensures the rewrite cannot mask a per-row
+#      "exceeds supported timestamp bounds" error that the original
+#      expression would have produced (see #169202).
 #
 # Here's an example:
 #
@@ -248,7 +257,8 @@
         (IsTimestamp $right) &
         (Let ($zone $tz $ok):(ScalarPair $args) $ok) &
         (IsTimestampTZ $tz) &
-        ^(IsConstValueOrGroupOfConstValues $tz)
+        ^(IsConstValueOrGroupOfConstValues $tz) &
+        ^(CanTimeZoneFunctionOverflow $zone $tz)
 )
 =>
 ((OpName) $tz (MakeTimeZoneFunction $zone $right))

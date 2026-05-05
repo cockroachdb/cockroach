@@ -829,3 +829,36 @@ SELECT '-infinity'::timestamp + '1 second'::interval, '-infinity'::timestamp - '
 -infinity -infinity
 
 subtest end
+
+# Regression test for #169202. The NormalizeCmpTimeZoneFunction rule must not
+# rewrite timezone(zone, ts) op const into ts op timezone(zone, const) when
+# the rewrite could hide a runtime "exceeds supported timestamp bounds" error
+# that the original expression would have produced for boundary input rows.
+subtest regression_normalize_cmp_timezone_bounds
+
+statement ok
+CREATE TABLE timezone_bounds_t (ts TIMESTAMP)
+
+statement ok
+INSERT INTO timezone_bounds_t VALUES ('294276-12-31 23:59:59.999999')
+
+# Sanity check: with the rule disabled, per-row evaluation errors as
+# expected on the boundary row.
+statement ok
+SET disable_optimizer_rules = 'NormalizeCmpTimeZoneFunction'
+
+query error exceeds supported timestamp bounds
+SELECT timezone('America/Denver', ts) >= '2020-06-01 12:35:55-07' FROM timezone_bounds_t
+
+statement ok
+SET disable_optimizer_rules = ''
+
+# With the rule enabled (default), the rewrite must not silently mask
+# the bounds error.
+query error exceeds supported timestamp bounds
+SELECT timezone('America/Denver', ts) >= '2020-06-01 12:35:55-07' FROM timezone_bounds_t
+
+statement ok
+DROP TABLE timezone_bounds_t
+
+subtest end
