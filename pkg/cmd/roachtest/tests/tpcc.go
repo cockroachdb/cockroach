@@ -297,6 +297,66 @@ func tpccImportCmdWithCockroachBinary(
 		String()
 }
 
+func waitForRunningImportJobs(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, timeout time.Duration,
+) error {
+	l.Printf("querying for running IMPORT jobs...")
+	rows, err := db.QueryContext(ctx,
+		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status IN ('running', 'pending', 'reverting')`)
+	if err != nil {
+		return err
+	}
+	var jobIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		jobIDs = append(jobIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(jobIDs) == 0 {
+		return errors.New("no running IMPORT jobs found after node liveness error")
+	}
+
+	l.Printf("waiting for %d IMPORT job(s) to complete (timeout %s)...", len(jobIDs), timeout)
+	deadline := timeutil.Now().Add(timeout)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			allDone := true
+			for _, id := range jobIDs {
+				var status string
+				if err := db.QueryRowContext(ctx,
+					`SELECT status FROM [SHOW JOB $1]`, id).Scan(&status); err != nil {
+					return errors.Wrapf(err, "checking status of job %d", id)
+				}
+				switch status {
+				case "succeeded":
+				case "running", "pending", "reverting":
+					allDone = false
+				default:
+					return errors.Newf("IMPORT job %d in unexpected state: %s", id, status)
+				}
+			}
+			if allDone {
+				l.Printf("all IMPORT jobs succeeded")
+				return nil
+			}
+			if timeutil.Now().After(deadline) {
+				return errors.Newf("timed out waiting for IMPORT jobs to complete after %s", timeout)
+			}
+		}
+	}
+}
+
 func setupTPCC(
 	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, opts tpccOptions,
 ) {
@@ -348,7 +408,21 @@ func setupTPCC(
 			// Do nothing.
 		case usingImport:
 			t.Status("loading fixture" + estimatedSetupTimeStr)
-			c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, opts.DB, opts.getWorkloadCmd(), opts.Warehouses, opts.ExtraSetupArgs, "{pgurl:1}"))
+			importCmd := tpccImportCmdWithCockroachBinary(
+				test.DefaultCockroachPath, opts.DB, opts.getWorkloadCmd(),
+				opts.Warehouses, opts.ExtraSetupArgs, "{pgurl:1}",
+			)
+			if err := c.RunE(ctx, option.WithNodes(c.Node(1)), importCmd); err != nil {
+				if strings.Contains(err.Error(), "node liveness error") {
+					l.Printf("import command failed with node liveness error: %s", err)
+					l.Printf("jobs framework will restart the import; waiting for completion...")
+					if waitErr := waitForRunningImportJobs(ctx, l, db, 30*time.Minute); waitErr != nil {
+						t.Fatal(waitErr)
+					}
+				} else {
+					t.Fatal(err)
+				}
+			}
 		case usingInit:
 			l.Printf("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs

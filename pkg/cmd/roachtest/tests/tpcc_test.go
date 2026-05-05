@@ -123,3 +123,4 @@ func TestGetMaxWarehousesAboveEfficiency(t *testing.T) {
 		require.Equal(t, float64(maxWarehouse), float64(aggregatedMetrics[len(aggregatedMetrics)-1].Value) /* The last metric emitted is the max warehouse number */)
 	})
 }
+
