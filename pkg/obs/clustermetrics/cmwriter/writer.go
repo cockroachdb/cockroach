@@ -87,7 +87,8 @@ func (w *Writer) AddMetric(m metric.Iterable) {
 }
 
 // AddMetricStruct registers all metric.Iterable fields in the given
-// struct with the Writer.
+// struct with the Writer. Walks nested structs, arrays, slices, and
+// maps to find Iterable values; nil pointer entries are skipped.
 func (w *Writer) AddMetricStruct(s interface{}) {
 	v := reflect.ValueOf(s)
 	if v.Kind() == reflect.Ptr {
@@ -98,11 +99,37 @@ func (w *Writer) AddMetricStruct(s interface{}) {
 		if !field.CanInterface() {
 			continue
 		}
-		if m, ok := field.Interface().(metric.Iterable); ok {
-			w.AddMetric(m)
-		} else if ms, ok := field.Interface().(metric.Struct); ok {
-			w.AddMetricStruct(ms)
+		switch field.Kind() {
+		case reflect.Array, reflect.Slice:
+			for j := 0; j < field.Len(); j++ {
+				w.addMetricValue(field.Index(j))
+			}
+		case reflect.Map:
+			iter := field.MapRange()
+			for iter.Next() {
+				w.addMetricValue(iter.Value())
+			}
+		default:
+			w.addMetricValue(field)
 		}
+	}
+}
+
+// addMetricValue inspects a single reflect.Value: it registers the
+// value if it is an Iterable, recurses if it is a metric.Struct, and
+// silently skips otherwise. Nil pointers are skipped.
+func (w *Writer) addMetricValue(val reflect.Value) {
+	if val.Kind() == reflect.Ptr && val.IsNil() {
+		return
+	}
+	if !val.CanInterface() {
+		return
+	}
+	switch typ := val.Interface().(type) {
+	case metric.Iterable:
+		w.AddMetric(typ)
+	case metric.Struct:
+		w.AddMetricStruct(typ)
 	}
 }
 
