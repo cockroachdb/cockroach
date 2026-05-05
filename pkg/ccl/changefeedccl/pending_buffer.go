@@ -5,7 +5,12 @@
 
 package changefeedccl
 
-import "sync"
+import (
+	"context"
+	"sync"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 // pendingBufferConfig configures a pendingBuffer.
 type pendingBufferConfig struct {
@@ -70,4 +75,47 @@ func newPendingBuffer(cfg pendingBufferConfig) *pendingBuffer {
 	}
 	b.cond = sync.NewCond(&b.mu)
 	return b
+}
+
+// addRow enqueues ev for eventual delivery in some future batch. The
+// caller transfers ownership of ev (and its kvevent.Alloc) to the buffer;
+// completeBatch will release the alloc and recycle the rowEvent once the
+// batch containing ev is finished.
+//
+// In M2 addRow does not block on the buffer being full. Backpressure is
+// added in a subsequent commit; for now ctx is checked only as a
+// best-effort cancellation surface before taking the lock.
+func (b *pendingBuffer) addRow(ctx context.Context, ev *rowEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, ev)
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "pendingBuffer addRow key=%x (depth=%d)", ev.key, len(b.events))
+	}
+	// Signal one waiter: a new event can be claimed by at most one worker.
+	b.cond.Signal()
+	return nil
+}
+
+// completeBatch releases the inflight keys held by batch and returns its
+// events to the rowEvent pool, releasing each event's kvevent.Alloc.
+// After this returns, the keys in batch.inflightKeys may appear in
+// subsequent batches.
+func (b *pendingBuffer) completeBatch(ctx context.Context, batch *pendingBatch) {
+	b.mu.Lock()
+	for _, k := range batch.inflightKeys {
+		delete(b.inflight, string(k))
+	}
+	for _, ev := range batch.events {
+		ev.alloc.Release(ctx)
+		freeRowEvent(ev)
+	}
+	// Broadcast: releasing inflight keys may newly unblock multiple
+	// workers (events that were skipped because their key was inflight),
+	// and once backpressure lands, addRow waiters too.
+	b.cond.Broadcast()
+	b.mu.Unlock()
 }
