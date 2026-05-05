@@ -1233,15 +1233,19 @@ func getOrComputeMetricName(
 	return metricName + suffix
 }
 
-// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
-// for those that have TsdbRecordLabeled set to true in their metadata.
-// Records up to 1024 child metrics per metric to prevent unbounded memory usage and performance issues.
+// recordChangefeedChildMetrics iterates through changefeed metrics in the
+// registry and processes child metrics for those that have TsdbRecordLabeled
+// set to true in their metadata. Records up to 1024 child metrics per metric
+// to prevent unbounded memory usage and performance issues.
+//
+// A metric whose runtime type does not match its declared class is skipped.
 func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
 	maxChildMetricsPerMetric := 1024
 
 	labels := rr.registry.GetLabels()
 	rr.registry.Each(func(name string, v interface{}) {
-		if _, allowed := tsutil.AllowedChildMetrics[name]; !allowed {
+		class, allowed := tsutil.LookupChildMetricClass(name)
+		if !allowed {
 			return
 		}
 		// Check if the metric has child collection enabled in its metadata
@@ -1254,8 +1258,14 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			return // Skip this metric if child collection is not enabled
 		}
 
-		// Handle AggHistogram - use direct child access for per-child snapshots
-		if aggHist, isAggHist := v.(*aggmetric.AggHistogram); isAggHist {
+		switch class {
+		case tsutil.Histogram:
+			aggHist, ok := v.(*aggmetric.AggHistogram)
+			if !ok {
+				// Runtime type doesn't match the declared class; skip rather
+				// than silently emit under the wrong shape.
+				return
+			}
 			var childMetricsCount int
 			aggHist.EachChild(func(labelNames, labelVals []string, child *aggmetric.Histogram) {
 				if childMetricsCount >= maxChildMetricsPerMetric {
@@ -1304,53 +1314,58 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 				}
 				childMetricsCount++
 			})
-			return
-		}
 
-		// Handle Counter and Gauge metrics via Prometheus export
-		prom, ok := v.(metric.PrometheusExportable)
-		if !ok {
-			return
-		}
-		promIter, ok := v.(metric.PrometheusIterable)
-		if !ok {
-			return
-		}
-		m := prom.ToPrometheusMetric()
-		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
-
-		var childMetricsCount int
-		processChildMetric := func(childMetric *prometheusgo.Metric) {
-			if childMetricsCount >= maxChildMetricsPerMetric {
+		case tsutil.Counter, tsutil.Gauge:
+			prom, ok := v.(metric.PrometheusExportable)
+			if !ok {
 				return
 			}
-
-			var value float64
-			if childMetric.Gauge != nil {
-				value = *childMetric.Gauge.Value
-			} else if childMetric.Counter != nil {
-				value = *childMetric.Counter.Value
-			} else {
+			promIter, ok := v.(metric.PrometheusIterable)
+			if !ok {
 				return
 			}
-
-			// Check cache for encoded name
+			m := prom.ToPrometheusMetric()
+			m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
 			promName := prom.GetName(false /* useStaticLabels */)
-			metricName := getOrComputeMetricName(rr.childMetricNameCache, promName, childMetric.Label)
 
-			*dest = append(*dest, tspb.TimeSeriesData{
-				Name:   fmt.Sprintf(rr.format, metricName),
-				Source: rr.source,
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					{
-						TimestampNanos: rr.timestampNanos,
-						Value:          value,
+			var childMetricsCount int
+			promIter.Each(m.Label, func(childMetric *prometheusgo.Metric) {
+				if childMetricsCount >= maxChildMetricsPerMetric {
+					return
+				}
+
+				var value float64
+				switch class {
+				case tsutil.Counter:
+					if childMetric.Counter == nil {
+						return
+					}
+					value = *childMetric.Counter.Value
+				case tsutil.Gauge:
+					if childMetric.Gauge == nil {
+						return
+					}
+					value = *childMetric.Gauge.Value
+				default:
+					return
+				}
+
+				// Check cache for encoded name
+				metricName := getOrComputeMetricName(rr.childMetricNameCache, promName, childMetric.Label)
+
+				*dest = append(*dest, tspb.TimeSeriesData{
+					Name:   fmt.Sprintf(rr.format, metricName),
+					Source: rr.source,
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{
+							TimestampNanos: rr.timestampNanos,
+							Value:          value,
+						},
 					},
-				},
+				})
+				childMetricsCount++
 			})
-			childMetricsCount++
 		}
-		promIter.Each(m.Label, processChildMetric)
 	})
 }
 

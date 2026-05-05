@@ -1284,7 +1284,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 
 		// Test with counter
 		counter := aggmetric.NewCounter(metric.Metadata{
-			Name:     "changefeed.internal_retry_message_count",
+			Name:     "changefeed.error_retries",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "type")
 		reg.AddMetric(counter)
@@ -1407,17 +1407,106 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		require.Equal(t, float64(7), seen[wantErrorRetries])
 		require.Equal(t, float64(99), seen[wantLaggingRanges])
 	})
+
+	// Dispatch is driven by tsutil.LookupChildMetricClass, not by the runtime
+	// Go type. If a metric is allowlisted as one class but registered as another
+	// (e.g., via a future implementation change), it must be skipped.
+	t.Run("runtime type mismatch with declared class is skipped", func(t *testing.T) {
+		// Pre-assert each class so the test fails if the allowlist is reshaped.
+		const (
+			counterName   = "changefeed.error_retries"
+			gaugeName     = "changefeed.lagging_ranges"
+			histogramName = "changefeed.emitted_batch_sizes"
+		)
+		assertClass := func(name string, want tsutil.ChildMetricClass) {
+			t.Helper()
+			got, ok := tsutil.LookupChildMetricClass(name)
+			require.Truef(t, ok, "%q is not allowlisted", name)
+			require.Equalf(t, want, got, "%q is allowlisted as %v, want %v", name, got, want)
+		}
+		assertClass(counterName, tsutil.Counter)
+		assertClass(gaugeName, tsutil.Gauge)
+		assertClass(histogramName, tsutil.Histogram)
+
+		registerCounter := func(reg *metric.Registry, name string) {
+			m := aggmetric.NewCounter(metric.Metadata{
+				Name:     name,
+				Category: metric.Metadata_CHANGEFEEDS,
+			}, "scope")
+			m.AddChild("default").Inc(42)
+			reg.AddMetric(m)
+		}
+		registerGauge := func(reg *metric.Registry, name string) {
+			m := aggmetric.NewGauge(metric.Metadata{
+				Name:     name,
+				Category: metric.Metadata_CHANGEFEEDS,
+			}, "scope")
+			m.AddChild("default").Update(42)
+			reg.AddMetric(m)
+		}
+		registerHistogram := func(reg *metric.Registry, name string) {
+			m := aggmetric.NewHistogram(metric.HistogramOptions{
+				Metadata: metric.Metadata{
+					Name:     name,
+					Category: metric.Metadata_CHANGEFEEDS,
+				},
+				Duration:     10 * time.Second,
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+			}, "scope")
+			m.AddChild("default").RecordValue(42)
+			reg.AddMetric(m)
+		}
+
+		// Cover every mismatch direction in the dispatch matrix.
+		tests := []struct {
+			name       string
+			metricName string
+			register   func(*metric.Registry, string)
+		}{
+			{name: "counter declared, gauge runtime", metricName: counterName, register: registerGauge},
+			{name: "counter declared, histogram runtime", metricName: counterName, register: registerHistogram},
+			{name: "gauge declared, counter runtime", metricName: gaugeName, register: registerCounter},
+			{name: "gauge declared, histogram runtime", metricName: gaugeName, register: registerHistogram},
+			{name: "histogram declared, counter runtime", metricName: histogramName, register: registerCounter},
+			{name: "histogram declared, gauge runtime", metricName: histogramName, register: registerGauge},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				reg := metric.NewRegistry()
+				tc.register(reg, tc.metricName)
+
+				var cache syncutil.Map[uint64, cacheEntry]
+				recorder := registryRecorder{
+					registry:             reg,
+					format:               nodeTimeSeriesPrefix,
+					source:               "test-source",
+					timestampNanos:       manual.Now().UnixNano(),
+					childMetricNameCache: &cache,
+				}
+
+				var dest []tspb.TimeSeriesData
+				recorder.recordChangefeedChildMetrics(&dest)
+
+				require.Empty(t, dest,
+					"metric whose runtime type disagrees with declared class must not be recorded; got %v", dest)
+				cacheEntries := 0
+				cache.Range(func(uint64, *cacheEntry) bool { cacheEntries++; return true })
+				require.Zero(t, cacheEntries,
+					"skipped metrics must not poison the child metric name cache")
+			})
+		}
+	})
 }
 
 func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
 	enableChildCollection := true
 
-	// Get metrics from the allowed list and convert to slice for indexing
-	allowedMetricsList := make([]string, 0, len(tsutil.AllowedChildMetrics))
-	for metricName := range tsutil.AllowedChildMetrics {
-		allowedMetricsList = append(allowedMetricsList, metricName)
-	}
+	// Pick a known gauge-allowlisted metric name so the dispatch consistently
+	// routes through the scalar path under benchmark.
+	const gaugeMetricName = "changefeed.lagging_ranges"
 
 	// Benchmark with varying numbers of child metrics
 	for childCount := 10; childCount <= 1024; childCount *= 10 {
@@ -1427,7 +1516,7 @@ func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 			// Create a single gauge with varying numbers of children
 			gauge := aggmetric.NewGauge(
 				metric.Metadata{
-					Name:              allowedMetricsList[0],
+					Name:              gaugeMetricName,
 					TsdbRecordLabeled: &enableChildCollection,
 					Category:          metric.Metadata_CHANGEFEEDS,
 				},
