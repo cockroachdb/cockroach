@@ -61,6 +61,7 @@ func (cs *clusterState) snapshot() *mmasnappb.ClusterStateSnapshot {
 		DiskUtilRefuseThreshold: cs.diskUtilRefuseThreshold,
 		DiskUtilShedThreshold:   cs.diskUtilShedThreshold,
 		ChangeSeqGen:            uint64(cs.changeSeqGen),
+		CapturedAt:              cs.ts.Now(),
 		Nodes:                   make(map[int32]*mmasnappb.NodeSnapshot, len(cs.nodes)),
 		Stores:                  make(map[int32]*mmasnappb.StoreSnapshot, len(cs.stores)),
 		Ranges:                  make(map[int64]*mmasnappb.RangeSnapshot, len(cs.ranges)),

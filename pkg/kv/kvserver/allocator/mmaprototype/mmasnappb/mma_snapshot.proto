@@ -55,6 +55,13 @@ message ClusterStateSnapshot {
   // id; a node with 10k ranges and ~10 distinct configs has ~10 entries
   // here.
   map<uint32, roachpb.SpanConfig> span_configs = 9;
+  // captured_at is the wall-clock time at which the snapshot was taken,
+  // sourced from clusterState.ts (the same TimeSource MMA uses to populate
+  // its other timestamps). Use it as the "now" reference when interpreting
+  // any other time-typed field in the snapshot, e.g. to decide whether
+  // overload_start_time is still active or how soon a pending change is
+  // about to be GC'd.
+  google.protobuf.Timestamp captured_at = 10 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 // NodeSnapshot mirrors mmaprototype.nodeState.

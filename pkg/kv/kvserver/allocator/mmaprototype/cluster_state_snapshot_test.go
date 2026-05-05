@@ -333,6 +333,9 @@ func TestSnapshotProtoRoundTrip(t *testing.T) {
 	require.EqualValues(t, 42, snap.MMAID)
 	require.InDelta(t, 0.925, snap.DiskUtilRefuseThreshold, 1e-9)
 	require.InDelta(t, 0.95, snap.DiskUtilShedThreshold, 1e-9)
+	require.True(t, snap.CapturedAt.Equal(ts.Now()),
+		"captured_at should equal cs.ts.Now(): got %v, want %v",
+		snap.CapturedAt, ts.Now())
 
 	buf, err := protoutil.Marshal(snap)
 	require.NoError(t, err)
@@ -340,6 +343,7 @@ func TestSnapshotProtoRoundTrip(t *testing.T) {
 	require.NoError(t, protoutil.Unmarshal(buf, &got))
 	require.EqualValues(t, snap.MMAID, got.MMAID)
 	require.InDelta(t, snap.DiskUtilRefuseThreshold, got.DiskUtilRefuseThreshold, 1e-9)
+	require.True(t, snap.CapturedAt.Equal(got.CapturedAt))
 }
 
 // TestSnapshotRecoversFromPanic verifies that Snapshot's deferred recover
