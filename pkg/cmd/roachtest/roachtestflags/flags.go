@@ -392,6 +392,12 @@ var (
 			"If the table does not exist, the operation fails. If not provided, a random table is selected.",
 	})
 
+	SnapshotPrefix string = ""
+	_                     = registerRunOpsFlag(&SnapshotPrefix, FlagInfo{
+		Name:  "snapshot-prefix",
+		Usage: "Snapshot name prefix for the disk-snapshot operation. If not provided, the cluster name is used.",
+	})
+
 	OperationParallelism int = 1
 	_                        = registerRunOpsFlag(&OperationParallelism, FlagInfo{
 		Name:  "parallelism",

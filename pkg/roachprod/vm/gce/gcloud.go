@@ -742,8 +742,9 @@ func (p *Provider) CreateVolumeSnapshot(
 		return vm.VolumeSnapshot{}, err
 	}
 	return vm.VolumeSnapshot{
-		ID:   createJsonResponse.ID,
-		Name: createJsonResponse.Name,
+		ID:     createJsonResponse.ID,
+		Name:   createJsonResponse.Name,
+		Status: createJsonResponse.Status,
 	}, nil
 }
 
@@ -755,7 +756,7 @@ func (p *Provider) ListVolumeSnapshots(
 		"--project", p.GetProject(),
 		"snapshots",
 		"list",
-		"--format", "json(name,id)",
+		"--format", "json(name,id,status)",
 	}
 	var filters []string
 	// Only list snapshots that are fully created. Without this filter,
@@ -786,8 +787,9 @@ func (p *Provider) ListVolumeSnapshots(
 			continue
 		}
 		snapshots = append(snapshots, vm.VolumeSnapshot{
-			ID:   snapshotJson.ID,
-			Name: snapshotJson.Name,
+			ID:     snapshotJson.ID,
+			Name:   snapshotJson.Name,
+			Status: snapshotJson.Status,
 		})
 	}
 	sort.Sort(vm.VolumeSnapshots(snapshots))

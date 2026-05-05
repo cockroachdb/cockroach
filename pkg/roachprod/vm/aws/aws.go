@@ -2622,6 +2622,7 @@ func (p *Provider) CreateVolume(
 		args = append(args, "--volume-type", vco.Type)
 	case "":
 		// Use the default.
+		args = append(args, "--volume-type", defaultEBSVolumeType)
 	default:
 		return vol, errors.Newf("Invalid volume type %q", vco.Type)
 	}
@@ -2718,8 +2719,73 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, v *vm.VM) er
 	return nil
 }
 
-func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
-	return vm.NonBootAttachedVolumes, nil
+func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) {
+	if v.ProviderID == "" {
+		return nil, nil
+	}
+	region := v.Zone[:len(v.Zone)-1]
+
+	// Describe this instance to get block device mappings and the root device
+	// name, which we need to identify (and exclude) the boot volume.
+	var descResp DescribeInstancesOutput
+	descArgs := []string{
+		"ec2", "describe-instances",
+		"--region", region,
+		"--instance-ids", v.ProviderID,
+	}
+	if err := p.runJSONCommand(l, descArgs, &descResp); err != nil {
+		return nil, err
+	}
+	var instance *DescribeInstancesOutputInstance
+	for _, res := range descResp.Reservations {
+		for i := range res.Instances {
+			if res.Instances[i].InstanceID == v.ProviderID {
+				instance = &res.Instances[i]
+				break
+			}
+		}
+	}
+	if instance == nil {
+		l.Printf("WARNING: instance %s not found in describe-instances response for region %s", v.ProviderID, region)
+		return nil, nil
+	}
+
+	// Collect non-boot volume device names from the block device
+	// mappings. The root device is excluded so we only return data volumes.
+	deviceByVolumeID := make(map[string]string)
+	for _, bdm := range instance.BlockDeviceMappings {
+		if bdm.DeviceName != instance.RootDeviceName {
+			deviceByVolumeID[bdm.Disk.VolumeID] = bdm.DeviceName
+		}
+	}
+	if len(deviceByVolumeID) == 0 {
+		return nil, nil
+	}
+
+	// Describe the non-boot volumes to get their full metadata.
+	volsByInstance, err := p.getVolumesForInstances(
+		context.Background(), l, region, []string{v.ProviderID},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var volumes []vm.Volume
+	for _, vol := range volsByInstance[v.ProviderID] {
+		if _, ok := deviceByVolumeID[vol.ProviderResourceID]; ok {
+			volumes = append(volumes, vol)
+		}
+	}
+
+	// Sort by device name to ensure deterministic ordering that matches
+	// the mount point assignment (/mnt/data1, /mnt/data2, etc.).
+	slices.SortFunc(volumes, func(a, b vm.Volume) int {
+		return strings.Compare(
+			deviceByVolumeID[a.ProviderResourceID],
+			deviceByVolumeID[b.ProviderResourceID],
+		)
+	})
+	return volumes, nil
 }
 
 type snapshotOutput struct {
@@ -2761,21 +2827,11 @@ func (p *Provider) CreateVolumeSnapshot(
 		return vm.VolumeSnapshot{}, err
 	}
 
-	// Wait for the snapshot to complete before returning. AWS snapshots
-	// are asynchronous and cannot be used to create volumes while pending.
-	waitArgs := []string{
-		"ec2", "wait", "snapshot-completed",
-		"--region", region,
-		"--snapshot-ids", so.SnapshotID,
-	}
-	if _, err := p.runCommand(l, waitArgs); err != nil {
-		return vm.VolumeSnapshot{}, errors.Wrapf(err, "waiting for snapshot %s to complete", so.SnapshotID)
-	}
-
 	return vm.VolumeSnapshot{
 		ID:     so.SnapshotID,
 		Name:   vsco.Name,
 		Region: region,
+		Status: so.State,
 	}, nil
 }
 
@@ -2839,6 +2895,7 @@ func (p *Provider) ListVolumeSnapshots(
 					ID:     so.SnapshotID,
 					Name:   name,
 					Region: r,
+					Status: so.State,
 				})
 			}
 			mu.Lock()
