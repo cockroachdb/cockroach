@@ -191,7 +191,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -685,6 +684,13 @@ func maybeRevertToCutoverTimestamp(
 	ctx, span := tracing.ChildSpan(ctx, "physical.revertToCutoverTimestamp")
 	defer span.Finish()
 
+	cm := p.ExecCfg().JobRegistry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	clusterMetrics := labeledClusterMetrics{
+		ClusterMetrics: cm,
+		labels:         cm.makeLabels(ingestionJob.Details().(jobspb.StreamIngestionDetails).DestinationTenantID),
+	}
+
 	// The update below sets the ReplicationStatus to
 	// CuttingOver. Once set, the cutoverTimestamp cannot be
 	// changed. We want to be sure to read the timestamp that
@@ -750,9 +756,8 @@ func maybeRevertToCutoverTimestamp(
 	}
 
 	minProgressUpdateInterval := 15 * time.Second
-	progMetric := p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicationCutoverProgress
 	progUpdater, err := newCutoverProgressTracker(ctx, p, originalSpanToRevert, remainingSpansToRevert, ingestionJob,
-		progMetric, minProgressUpdateInterval)
+		clusterMetrics, minProgressUpdateInterval)
 	if err != nil {
 		return cutoverTimestamp, false, err
 	}
@@ -762,7 +767,7 @@ func maybeRevertToCutoverTimestamp(
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
 	// On cutover, replication has stopped so therefore should set replicated time to 0
-	p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
+	clusterMetrics.ReplicatedTimeSeconds.Update(clusterMetrics.labels, 0)
 	if err := revert.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
@@ -846,12 +851,13 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// ingestion anymore.
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	completeProducerJob(ctx, s.job, jobExecCtx.ExecCfg().InternalDB, false)
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	// On a job fail or cancel, replication has permanently stopped so set replicated time to 0.
 	// This value can be inadvertently overriden due to the race condition between job cancellation/failure
 	// and the shutdown of ingestion processors.
-	jobExecCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
-
-	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	cm := jobExecCtx.ExecCfg().JobRegistry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	cm.ReplicatedTimeSeconds.Update(cm.makeLabels(details.DestinationTenantID), 0)
 	execCfg := jobExecCtx.ExecCfg()
 	// If we got replicated into another tenant, bail out.
 	if !execCfg.Codec.ForSystemTenant() {
@@ -934,7 +940,7 @@ func closeAndLog(ctx context.Context, d streamclient.Client) {
 // the cutover process.
 type cutoverProgressTracker struct {
 	minProgressUpdateInterval time.Duration
-	progMetric                *metric.Gauge
+	clusterMetrics            labeledClusterMetrics
 	job                       *jobs.Job
 
 	remainingSpans     roachpb.SpanGroup
@@ -952,7 +958,7 @@ func newCutoverProgressTracker(
 	originalSpanToRevert roachpb.Span,
 	remainingSpansToRevert roachpb.Spans,
 	job *jobs.Job,
-	progMetric *metric.Gauge,
+	clusterMetrics labeledClusterMetrics,
 	minProgressUpdateInterval time.Duration,
 ) (*cutoverProgressTracker, error) {
 	var sg roachpb.SpanGroup
@@ -967,7 +973,7 @@ func newCutoverProgressTracker(
 	}
 	c := &cutoverProgressTracker{
 		job:                       job,
-		progMetric:                progMetric,
+		clusterMetrics:            clusterMetrics,
 		minProgressUpdateInterval: minProgressUpdateInterval,
 
 		remainingSpans:     sg,
@@ -1000,7 +1006,7 @@ func (c *cutoverProgressTracker) updateJobProgress(
 		return err
 	}
 
-	c.progMetric.Update(int64(nRanges))
+	c.clusterMetrics.ReplicationCutoverProgress.Update(c.clusterMetrics.labels, int64(nRanges))
 
 	// We set lastUpdatedAt even though we might not actually
 	// update the job record below. We do this to avoid asking for
@@ -1063,5 +1069,7 @@ func init() {
 			return s
 		},
 		jobs.UsesTenantCostControl,
+		jobs.WithJobMetrics(MakeMetrics()),
+		jobs.WithJobClusterMetrics(MakeClusterMetrics()),
 	)
 }

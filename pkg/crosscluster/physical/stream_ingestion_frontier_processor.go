@@ -54,8 +54,7 @@ type streamIngestionFrontier struct {
 	// span set.
 	frontier span.Frontier
 
-	// metrics are monitoring all running ingestion jobs.
-	metrics *Metrics
+	clusterMetrics labeledClusterMetrics
 
 	client streamclient.Client
 	// heartbeatSender sends heartbeats to the source cluster to keep the replication
@@ -134,7 +133,6 @@ func newStreamIngestionFrontierProcessor(
 		input:                 input,
 		replicatedTimeAtStart: spec.ReplicatedTimeAtStart,
 		frontier:              frontier,
-		metrics:               flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		client:                streamClient,
 		heartbeatSender: streamclient.NewHeartbeatSender(ctx, streamClient, streamID, func() time.Duration {
 			return crosscluster.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.Cfg.Settings.SV)
@@ -144,6 +142,9 @@ func newStreamIngestionFrontierProcessor(
 			int(spec.NumIngestionProcessors),
 		),
 	}
+	sf.clusterMetrics.ClusterMetrics = flowCtx.Cfg.JobRegistry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	sf.clusterMetrics.labels = sf.clusterMetrics.makeLabels(spec.DestinationTenantID)
 	if err := sf.Init(
 		ctx,
 		sf,
@@ -173,7 +174,7 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 // Start is part of the RowSource interface.
 func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
-	sf.metrics.RunningCount.Inc(1)
+	sf.clusterMetrics.RunningCount.Inc(sf.clusterMetrics.labels, 1)
 	sf.input.Start(ctx)
 	sf.heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
 }
@@ -267,7 +268,7 @@ func (sf *streamIngestionFrontier) close() {
 		log.Dev.Errorf(sf.Ctx(), "client exited with error: %s", err)
 	}
 	if sf.InternalClose() {
-		sf.metrics.RunningCount.Dec(1)
+		sf.clusterMetrics.RunningCount.Dec(sf.clusterMetrics.labels, 1)
 	}
 }
 
@@ -423,7 +424,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 
 	sf.persistedReplicatedTime = f.Frontier()
-	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
+	sf.clusterMetrics.ReplicatedTimeSeconds.Update(sf.clusterMetrics.labels, sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }
 
@@ -449,8 +450,8 @@ func (sf *streamIngestionFrontier) maybeCollectRangeStats(
 func (sf *streamIngestionFrontier) aggregateAndUpdateRangeMetrics() {
 	aggRangeStats, _, _ := sf.rangeStats.RollupStats()
 	if aggRangeStats.RangeCount != 0 {
-		sf.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
-		sf.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
+		sf.clusterMetrics.ScanningRanges.Update(sf.clusterMetrics.labels, aggRangeStats.ScanningRangeCount)
+		sf.clusterMetrics.CatchupRanges.Update(sf.clusterMetrics.labels, aggRangeStats.LaggingRangeCount)
 	}
 }
 

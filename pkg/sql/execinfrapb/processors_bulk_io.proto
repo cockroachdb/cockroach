@@ -365,6 +365,9 @@ message StreamIngestionFrontierSpec {
 
   // NumIngestionProcessors is the number of ingestion processors in the job.
   optional int32 num_ingestion_processors = 10 [(gogoproto.nullable) = false];
+
+  // DestinationTenantID is the tenant ID on the destination cluster.
+  optional roachpb.TenantID destination_tenant_id = 11 [(gogoproto.nullable) = false, (gogoproto.customname) = "DestinationTenantID"];
 }
 
 enum ElidePrefix {

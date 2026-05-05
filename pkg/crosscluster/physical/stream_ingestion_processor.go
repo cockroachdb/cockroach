@@ -276,8 +276,10 @@ type streamIngestionProcessor struct {
 	// cutover.
 	cutoverCh chan struct{}
 
-	// metrics are monitoring all running ingestion jobs.
-	metrics *Metrics
+	// nodeMetrics holds metrics for all ingestion jobs this node is running.
+	nodeMetrics *Metrics
+	// clusterMetrics holds metrics and labels for this ingestion job, across the full cluster.
+	clusterMetrics labeledClusterMetrics
 
 	// debugStatus tracks the current state for debugging/observability.
 	debugStatus streampb.DebugPhysicalConsumerStatusHolder
@@ -409,7 +411,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
-	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+	sip.nodeMetrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*Metrics)
+	sip.clusterMetrics.ClusterMetrics = sip.FlowCtx.Cfg.JobRegistry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	sip.clusterMetrics.labels = sip.clusterMetrics.makeLabels(sip.spec.TenantRekey.NewID)
 
 	// Initialize and register debug status for observability.
 	sip.debugStatus.Setup(streampb.StreamID(sip.spec.StreamID), sip.ProcessorID)
@@ -685,7 +691,7 @@ func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
 }
 
 func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb.BulkOpSummary) {
-	sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
+	sip.clusterMetrics.IngestedLogicalBytes.Inc(sip.clusterMetrics.labels, batchSummary.DataSize)
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -702,7 +708,7 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 		select {
 		case event, ok := <-sip.mergedSubscription.Events():
 			waitNanos := timeutil.Since(receiveStart).Nanoseconds()
-			sip.metrics.ReceiveWaitNanos.Inc(waitNanos)
+			sip.clusterMetrics.ReceiveWaitNanos.Inc(sip.clusterMetrics.labels, waitNanos)
 			sip.debugStatus.ReceivedEvent(waitNanos)
 			if !ok {
 				// eventCh is closed, flush and exit.
@@ -738,7 +744,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	sv := &sip.FlowCtx.Cfg.Settings.SV
 
 	if event.Type() == crosscluster.KVEvent {
-		sip.metrics.AdmitLatency.RecordValue(
+		sip.nodeMetrics.AdmitLatency.RecordValue(
 			timeutil.Since(event.GetKVs()[0].KeyValue.Value.Timestamp.GoTime()).Nanoseconds())
 	}
 
@@ -976,7 +982,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-	sip.metrics.ResolvedEvents.Inc(1)
+	sip.clusterMetrics.ResolvedEvents.Inc(sip.clusterMetrics.labels, 1)
 
 	if checkpointEvent.RangeStats != nil {
 		select {
@@ -1344,7 +1350,7 @@ func (sip *streamIngestionProcessor) flush() error {
 		checkpoint: checkpoint,
 	}:
 		waitNanos := timeutil.Since(flushWaitStart).Nanoseconds()
-		sip.metrics.FlushWaitNanos.Inc(waitNanos)
+		sip.clusterMetrics.FlushWaitNanos.Inc(sip.clusterMetrics.labels, waitNanos)
 		sip.debugStatus.FlushEnqueued(waitNanos)
 		sip.lastFlushTime = timeutil.Now()
 		return nil
@@ -1398,11 +1404,11 @@ func (sip *streamIngestionProcessor) flushBuffer(
 	}
 
 	// Update the flush metrics.
-	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
-	sip.metrics.CommitLatency.RecordValue(timeutil.Since(b.buffer.minTimestamp.GoTime()).Nanoseconds())
-	sip.metrics.Flushes.Inc(1)
-	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
-	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curRangeKVBatch)))
+	sip.nodeMetrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+	sip.nodeMetrics.CommitLatency.RecordValue(timeutil.Since(b.buffer.minTimestamp.GoTime()).Nanoseconds())
+	sip.clusterMetrics.Flushes.Inc(sip.clusterMetrics.labels, 1)
+	sip.clusterMetrics.IngestedEvents.Inc(sip.clusterMetrics.labels, int64(len(b.buffer.curKVBatch)))
+	sip.clusterMetrics.IngestedEvents.Inc(sip.clusterMetrics.labels, int64(len(b.buffer.curRangeKVBatch)))
 
 	releaseBuffer(b.buffer)
 

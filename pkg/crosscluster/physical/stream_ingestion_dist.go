@@ -294,7 +294,9 @@ func startDistIngestion(
 
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs, refreshConn)
 	if errors.Is(err, sql.ErrPlanChanged) {
-		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
+		cm := execCtx.ExecCfg().JobRegistry.ClusterMetrics().
+			JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+		cm.ReplanCount.Inc(cm.makeLabels(details.DestinationTenantID), 1)
 	}
 	return err
 }
@@ -890,6 +892,7 @@ func constructStreamIngestionPlanSpecs(
 		Checkpoint:             checkpoint,
 		PartitionSpecs:         repackagePartitionSpecs(streamIngestionSpecs),
 		NumIngestionProcessors: int32(len(topology.Partitions)),
+		DestinationTenantID:    destinationTenantID,
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

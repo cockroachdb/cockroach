@@ -509,8 +509,9 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return nil
 	}))
 
-	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
-	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+	metrics := registry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	require.Empty(t, metrics.ReplicationCutoverProgress.ToPrometheusMetrics())
 
 	loadProgress := func() jobspb.Progress {
 		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
@@ -533,7 +534,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 					lastFraction,
 					curProgress)
 			}
-			rangesLeft := metrics.ReplicationCutoverProgress.Value()
+			rangesLeft := int64(metrics.ReplicationCutoverProgress.ToPrometheusMetrics()[0].GetGauge().GetValue())
 			if lastRangesLeft < rangesLeft {
 				return errors.Newf("unexpected range count from metric: %d (current) > %d (previous)",
 					rangesLeft, lastRangesLeft)
@@ -553,7 +554,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	sip := loadProgress()
 	require.Equal(t, float32(1), sip.GetFractionCompleted())
-	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+	require.Equal(t, int64(0), int64(metrics.ReplicationCutoverProgress.ToPrometheusMetrics()[0].GetGauge().GetValue()))
 	require.True(t, progressUpdates > 1)
 }
 
