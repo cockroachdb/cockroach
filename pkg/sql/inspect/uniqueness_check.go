@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,13 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-)
-
-var uniquenessCheckComplexKeysEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.inspect.uniqueness_check.complex_keys.enabled",
-	"if true, the uniqueness check is enabled for INSPECT jobs on indexes where the unique column does not immediately follow the region column",
-	false,
 )
 
 type uniquenessCheck struct {
@@ -422,7 +414,6 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 		index,
 		tableDesc,
 		c.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2),
-		true, /* isComplexKeysEnabled */ // The cluster setting gates when the job is specced.
 	)
 	if err != nil {
 		return err

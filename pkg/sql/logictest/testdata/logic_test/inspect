@@ -813,20 +813,6 @@ statement ok
 INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 300, 'titi');
 INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west4', 'filler1', 300, 'tata');
 
-# Run INSPECT which will not use the uniqueness check because it's a complex key.
-
-statement ok
-INSPECT TABLE uniqueness_check_complex;
-
-skipif config local-mixed-25.4 local-mixed-26.1
-statement error pq: no supported checks for index "uniqueness_check_complex_pkey" on table "uniqueness_check_complex" \(cannot check primary index consistency against itself; uniqueness: complex key layout requires the cluster setting to opt in to \(expensive\) validation\)
-INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
-
-# Enable and run again to see the unique validations.
-
-statement ok
-SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
-
 skipif config local-mixed-25.4 local-mixed-26.1
 statement error pq: INSPECT found inconsistencies
 INSPECT TABLE uniqueness_check_complex;

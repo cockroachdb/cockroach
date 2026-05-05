@@ -47,9 +47,6 @@ INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('ca
 INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('ap-southeast-2', 'filler1', 300, 'tata');
 
 statement ok
-SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
-
-statement ok
 INSPECT TABLE uniqueness_check_complex;
 
 statement ok
