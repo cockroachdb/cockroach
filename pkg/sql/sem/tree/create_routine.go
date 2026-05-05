@@ -286,6 +286,62 @@ type RoutineBody struct {
 	Stmts Statements
 }
 
+// ConvertInlineRoutineBodyToOption rewrites a parsed inline routine body
+// (the SQL-standard `BEGIN ATOMIC ... END` or bare `RETURN expr` forms) into
+// the legacy string body form by serializing each statement and appending the
+// result as a RoutineBodyStr option. After this runs, cf.RoutineBody is
+// cleared so downstream code can process the routine as if the user had
+// written `AS $$ ... $$`.
+//
+// CockroachDB already does early binding for SQL routines, so the inline and
+// string forms are semantically equivalent; only the input syntax differs.
+func ConvertInlineRoutineBodyToOption(cf *CreateRoutine) error {
+	var hasStringBody, hasLang bool
+	var lang RoutineLanguage
+	for _, opt := range cf.Options {
+		switch t := opt.(type) {
+		case RoutineBodyStr:
+			hasStringBody = true
+		case RoutineLanguage:
+			lang = t
+			hasLang = true
+		}
+	}
+	if hasStringBody {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"duplicate function body specified")
+	}
+	if hasLang && lang != RoutineLangSQL {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"inline SQL function body only valid for language SQL")
+	}
+
+	fmtCtx := NewFmtCtx(FmtParsable)
+	for i, stmt := range cf.RoutineBody.Stmts {
+		if i > 0 {
+			fmtCtx.WriteString(" ")
+		}
+		// `RETURN expr` is only valid as a routine-body statement, so it
+		// cannot round-trip through the legacy parser. Emit it as `SELECT
+		// expr` instead — semantically equivalent for SQL routines, since
+		// the result is the value of the final query.
+		if r, ok := stmt.(*RoutineReturn); ok {
+			sel := &Select{
+				Select: &SelectClause{
+					Exprs: SelectExprs{{Expr: r.ReturnVal}},
+				},
+			}
+			fmtCtx.FormatNode(sel)
+		} else {
+			fmtCtx.FormatNode(stmt)
+		}
+		fmtCtx.WriteString(";")
+	}
+	cf.Options = append(cf.Options, RoutineBodyStr(fmtCtx.CloseAndGetString()))
+	cf.RoutineBody = nil
+	return nil
+}
+
 // RoutineReturn represent a RETURN statement in a UDF body.
 type RoutineReturn struct {
 	ReturnVal Expr
