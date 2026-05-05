@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -81,6 +82,11 @@ type Outbox struct {
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
 	runnerCtx context.Context
+
+	// cpuStopWatch measures goroutine CPU time for the outbox goroutine.
+	// The zero value is valid; Stop() returns 0 if grunning is not
+	// supported or Start was not called.
+	cpuStopWatch timeutil.CPUStopWatch
 }
 
 // NewOutbox creates a new Outbox.
@@ -209,6 +215,9 @@ func (o *Outbox) Run(
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	if o.flowCtx != nil {
+		o.cpuStopWatch.Start()
+	}
 	flowCtx := ctx
 	// Derive a child context so that we can cancel all components rooted in
 	// this outbox.
@@ -422,6 +431,16 @@ func (o *Outbox) sendDrainedMetadata(
 		for _, meta := range o.inputMetaInfo.MetadataSources.DrainMeta() {
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
+	}
+	// Always-on: each outbox emits its goroutine's CPU time via Metrics
+	// metadata. The gateway sums all SQLCPUTime entries and subtracts
+	// total LocalKVCPUTime to derive SQL CPU.
+	if delta := o.cpuStopWatch.Stop(); delta > 0 {
+		sqlCPUMeta := execinfrapb.ProducerMetadata{}
+		sqlCPUMeta.Metrics = execinfrapb.GetMetricsMeta()
+		sqlCPUMeta.Metrics.SQLCPUTime = int64(delta)
+		msg.Data.Metadata = append(msg.Data.Metadata,
+			execinfrapb.LocalMetaToRemoteProducerMeta(ctx, sqlCPUMeta))
 	}
 	if !o.flowCtx.Gateway {
 		if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {

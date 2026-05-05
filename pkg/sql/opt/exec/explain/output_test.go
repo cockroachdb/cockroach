@@ -199,9 +199,9 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 		}
 	}
 
-	// Mutation queries shouldn't output CPU time.
-	runQuery("CREATE TABLE t (x INT PRIMARY KEY, y INT);", true /* hideCPU */)
-	runQuery("INSERT INTO t (SELECT t, t%127 FROM generate_series(1, 10000) g(t));", true /* hideCPU */)
+	// Mutation queries should also output CPU time with always-on measurement.
+	runQuery("CREATE TABLE t (x INT PRIMARY KEY, y INT);", false /* hideCPU */)
+	runQuery("INSERT INTO t (SELECT t, t%127 FROM generate_series(1, 10000) g(t));", false /* hideCPU */)
 
 	// Split the table across the nodes in order to make the following test cases
 	// more interesting.

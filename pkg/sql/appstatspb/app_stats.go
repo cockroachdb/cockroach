@@ -131,6 +131,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.BytesRead.Add(other.BytesRead, transactionStatsCount, other.Count)
 	t.RowsWritten.Add(other.RowsWritten, transactionStatsCount, other.Count)
 	t.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, transactionStatsCount, other.Count)
+	t.SQLCPUTimeNanos.Add(other.SQLCPUTimeNanos, transactionStatsCount, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -187,6 +188,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.RowsRead.Add(other.RowsRead, statementStatsCount, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, statementStatsCount, other.Count)
 	s.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, statementStatsCount, other.Count)
+	s.SQLCPUTimeNanos.Add(other.SQLCPUTimeNanos, statementStatsCount, other.Count)
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)

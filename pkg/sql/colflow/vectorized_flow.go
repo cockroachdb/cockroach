@@ -496,7 +496,6 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
-					ConsumedRU:   optional.MakeUint(uint64(flowCtx.TenantCPUMonitor.EndCollection(ctx))),
 				},
 			})
 		}

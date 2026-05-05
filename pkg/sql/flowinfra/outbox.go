@@ -89,6 +89,11 @@ type Outbox struct {
 
 	// isGatewayNode specifies whether this outbox is running on the gateway node.
 	isGatewayNode bool
+
+	// cpuStopWatch measures goroutine CPU time for the outbox goroutine.
+	// The zero value is valid; Stop() returns 0 if grunning is not
+	// supported or Start was not called.
+	cpuStopWatch timeutil.CPUStopWatch
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -309,6 +314,20 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 		case msg, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
+
+				// Always-on: each outbox emits its goroutine's CPU
+				// time via Metrics metadata. The gateway sums all
+				// SQLCPUTime entries and subtracts total
+				// LocalKVCPUTime to derive SQL CPU.
+				if delta := m.cpuStopWatch.Stop(); delta > 0 {
+					meta := &execinfrapb.ProducerMetadata{}
+					meta.Metrics = execinfrapb.GetMetricsMeta()
+					meta.Metrics.SQLCPUTime = int64(delta)
+					if err := m.AddRow(ctx, nil, meta); err != nil {
+						return err
+					}
+				}
+
 				if m.statsCollectionEnabled {
 					err := m.flush(ctx)
 					if err != nil {
@@ -317,7 +336,6 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 					if !m.isGatewayNode && m.numOutboxes != nil && atomic.AddInt32(m.numOutboxes, -1) == 0 {
 						m.flowStats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.Mon.MaximumBytes()))
 						m.flowStats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
-						m.flowStats.FlowStats.ConsumedRU.Set(uint64(m.flowCtx.TenantCPUMonitor.EndCollection(ctx)))
 					}
 					span.RecordStructured(&m.streamStats)
 					span.RecordStructured(&m.flowStats)
@@ -435,6 +453,7 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 			gh := cpuHandle.RegisterGoroutine()
 			defer gh.Close(ctx)
 		}
+		m.cpuStopWatch.Start()
 		growstack.Grow()
 		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))

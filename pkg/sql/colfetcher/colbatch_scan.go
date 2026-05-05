@@ -8,7 +8,6 @@ package colfetcher
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -289,6 +288,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
 	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
+	meta.Metrics.LocalKVCPUTime = s.GetLocalKVCPUTime()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
@@ -322,9 +322,11 @@ func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 	return s.cf.getBatchRequestsIssued()
 }
 
-// GetKVCPUTime is part of the colexecop.KVReader interface.
-func (s *ColBatchScan) GetKVCPUTime() time.Duration {
-	return s.cf.cpuStopWatch.Elapsed()
+// GetLocalKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetLocalKVCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getLocalKVCPUTime()
 }
 
 // Release implements the execreleasable.Releasable interface.

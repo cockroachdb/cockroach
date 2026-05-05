@@ -160,14 +160,9 @@ message KVStats {
   optional util.optional.Uint range_key_contained_points = 19 [(gogoproto.nullable) = false];
   optional util.optional.Uint range_key_skipped_points = 20 [(gogoproto.nullable) = false];
 
-  // Cumulated CPU time spent fulfilling KV requests on a SQL goroutine. This
-  // would not include CPU time spent on a remote node, but would include time
-  // spent on a Scan's goroutine. This is only used to calculate SQL CPU time
-  // for processors in the row-engine that perform KV requests.
-  // TODO(drewk): measure wall-clock KV time directly as well, and display it
-  // alongside total execution time for operators that perform KV work.
-  optional util.optional.Duration kv_cpu_time = 11 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "KVCPUTime"];
+  // Field 11 was KVCPUTime, removed in favor of grunning-based measurement
+  // at the KV send layer.
+  reserved 11;
 
   optional util.optional.Uint num_gets = 21 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_scans = 22 [(gogoproto.nullable) = false];
@@ -218,8 +213,5 @@ message OutputStats {
 message FlowStats {
   optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
-  // Amount of RUs consumed due to CPU usage while executing the flow. Currently
-  // only used for remote flows.
-  optional util.optional.Uint consumed_ru = 3 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "ConsumedRU"];
+  reserved 3;
 }

@@ -147,6 +147,10 @@ message StatementStatistics {
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 
+  // sql_cpu_time_nanos is the SQL-only CPU time in nanoseconds, computed as
+  // total grunning (gateway + remote) minus local KV CPU time.
+  optional NumericStat sql_cpu_time_nanos = 41 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLCPUTimeNanos"];
+
   // canary_stats tracks execution statistics for the subset of executions
   // that used canary (newest) table statistics for planning. This is used
   // to compare performance between canary and stable statistics rollout
@@ -211,6 +215,10 @@ message TransactionStatistics {
   // representative of the "synchronous" portion of work performed by KV
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 12 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
+
+  // sql_cpu_time_nanos is the SQL-only CPU time in nanoseconds, computed as
+  // total grunning (gateway + remote) minus local KV CPU time.
+  optional NumericStat sql_cpu_time_nanos = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLCPUTimeNanos"];
 }
 
 

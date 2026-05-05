@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2976,12 +2975,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// https://github.com/cockroachdb/cockroach/issues/99410
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, crtime.NowMono())
 
-	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(ex.server.cfg.SV()) {
-		if server := ex.server.cfg.DistSQLSrv; server != nil {
-			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
-			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
-		}
-	}
+	// Start measuring goroutine CPU time for SQL CPU measurement.
+	var cpuStopWatch timeutil.CPUStopWatch
+	cpuStopWatch.Start()
 
 	// If we've been tasked with backfilling a schema change operation at a
 	// particular system time, it's important that we do planning for the
@@ -3215,6 +3211,19 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 	ex.extraTxnState.kvCPUTimeNanos += stats.kvCPUTimeNanos
 
+	// Compute corrected SQL CPU time: add gateway grunning to the
+	// accumulated remote grunning, then subtract local KV CPU time
+	// (which overlaps with grunning).
+	gatewayGrunning := cpuStopWatch.Stop()
+	if gatewayGrunning > 0 {
+		stats.sqlCPUTime += gatewayGrunning
+		stats.sqlCPUTime -= stats.localKVCPUTime
+		if stats.sqlCPUTime < 0 {
+			stats.sqlCPUTime = 0
+		}
+	}
+	ex.extraTxnState.sqlCPUTime += stats.sqlCPUTime
+
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
@@ -3222,7 +3231,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// Note that here we append the cleanup function without a defer since
 		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
+			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
 				ctx, &curPlanner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
 				ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(),
@@ -3230,7 +3239,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			)
 		})
 	} else {
-		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats)
 		ex.recordStatementSummary(
 			ctx, planner, int(ex.state.mu.autoRetryCounter), planner.autoRetryStmtCounter,
 			res.RowsAffected(), res.Err(), stats,
@@ -3254,11 +3263,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 //   - queryLevelStatsWithErr contains query-level execution statistics are
 //     collected using the statement's trace and the plan's flow metadata.
 func populateQueryLevelStats(
-	ctx context.Context,
-	p *planner,
-	cfg *ExecutorConfig,
-	topLevelStats *topLevelQueryStats,
-	cpuStats *multitenantcpu.CPUUsageHelper,
+	ctx context.Context, p *planner, cfg *ExecutorConfig, topLevelStats *topLevelQueryStats,
 ) {
 	ih := &p.instrumentation
 	ih.topLevelStats = *topLevelStats
@@ -3285,6 +3290,12 @@ func populateQueryLevelStats(
 		}
 		log.Dev.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
+		// Use the always-on SQL CPU measurement if it exceeds the trace-derived
+		// value. This ensures always-on accuracy even when tracing provides a
+		// partial picture.
+		if topLevelStats.sqlCPUTime > ih.queryLevelStatsWithErr.Stats.SQLCPUTime {
+			ih.queryLevelStatsWithErr.Stats.SQLCPUTime = topLevelStats.sqlCPUTime
+		}
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
@@ -3292,7 +3303,11 @@ func populateQueryLevelStats(
 				if costCfg := costController.GetRequestUnitModel(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
 					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(networkEgressRUEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += cpuStats.EndCollection(ctx)
+					// Use the always-on SQL CPU measurement (gateway +
+					// remote, corrected for local KV) for the CPU portion
+					// of the RU estimate.
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(
+						costCfg.PodCPUCost(topLevelStats.sqlCPUTime.Seconds()))
 				}
 			}
 		}
@@ -3617,6 +3632,15 @@ type topLevelQueryStats struct {
 	clientTime time.Duration
 	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
 	kvCPUTimeNanos time.Duration
+	// localKVCPUTime is the goroutine CPU time spent in KV calls on the local
+	// node, as measured by the grunning library. It is subtracted from the
+	// grunning measurement to compute the SQL-only CPU time.
+	localKVCPUTime time.Duration
+	// sqlCPUTime accumulates uncorrected grunning time from remote flows
+	// (via Metrics.SQLCPUTime metadata). After the statement completes, the
+	// gateway grunning is added and localKVCPUTime is subtracted to
+	// produce the corrected SQL CPU time.
+	sqlCPUTime time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3630,6 +3654,8 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
 	s.kvCPUTimeNanos += other.kvCPUTimeNanos
+	s.localKVCPUTime += other.localKVCPUTime
+	s.sqlCPUTime += other.sqlCPUTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -4492,6 +4518,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
 		ex.extraTxnState.kvCPUTimeNanos = 0
+		ex.extraTxnState.sqlCPUTime = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
@@ -4525,6 +4552,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.kvCPUTimeNanos = 0
+	ex.extraTxnState.sqlCPUTime = 0
 	ex.extraTxnState.bytesRead = 0
 	ex.extraTxnState.rowsWritten = 0
 	ex.extraTxnState.rowsWrittenLogged = false
@@ -4638,6 +4666,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
 		KVCPUTimeNanos:          ex.extraTxnState.kvCPUTimeNanos,
+		SQLCPUTimeNanos:         ex.extraTxnState.sqlCPUTime,
 		Priority:                ex.state.mu.priority,
 		// TODO(107318): add isolation level
 		// TODO(107318): add qos

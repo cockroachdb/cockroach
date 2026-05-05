@@ -146,6 +146,10 @@ func (u *updateSwapNode) kvCPUTime() int64 {
 	return u.run.tu.kvCPUTime
 }
 
+func (u *updateSwapNode) localKVCPUTime() int64 {
+	return u.run.tu.localKVCPUTime
+}
+
 func (u *updateSwapNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }
