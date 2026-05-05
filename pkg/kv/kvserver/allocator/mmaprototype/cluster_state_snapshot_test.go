@@ -446,6 +446,249 @@ func TestSnapshotSpanConfigDedup(t *testing.T) {
 	require.EqualValues(t, 5, snap.SpanConfigs[r3.ConfID].NumReplicas)
 }
 
+// TestSnapshotRangeAnalysis builds a small range whose voter placement
+// violates one VoterConstraints entry but satisfies the (synthesized
+// empty) general Constraints, with two LeasePreferences ordered such that
+// the leaseholder matches the first. It pins down each field of the
+// snapshot's RangeAnalysis.
+func TestSnapshotRangeAnalysis(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cs := newClusterState(ts, newStringInterner())
+	cs.diskUtilRefuseThreshold = 0.9
+	cs.diskUtilShedThreshold = 0.9
+
+	// s1, s2 in us-east; s3 in us-west.
+	locs := map[roachpb.NodeID]roachpb.Locality{
+		1: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}},
+		2: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}},
+		3: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}}},
+	}
+	for i := 1; i <= 3; i++ {
+		sal := StoreAttributesAndLocality{
+			StoreID:      roachpb.StoreID(i),
+			NodeID:       roachpb.NodeID(i),
+			NodeLocality: locs[roachpb.NodeID(i)],
+		}
+		cs.setStore(sal.withNodeTier())
+	}
+	for i := 1; i <= 3; i++ {
+		cs.processStoreLoadMsg(ctx, &StoreLoadMsg{
+			NodeID:   roachpb.NodeID(i),
+			StoreID:  roachpb.StoreID(i),
+			Load:     LoadVector{1, 0, 0},
+			Capacity: LoadVector{1000, 1000, 1000},
+		}, nil)
+	}
+
+	replicas := []StoreIDAndReplicaState{
+		{StoreID: 1, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   1,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: true},
+		}}},
+		{StoreID: 2, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   2,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+		{StoreID: 3, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   3,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+	}
+	// VoterConstraints REQUIRE all 3 voters in us-east: s3 (us-west) violates.
+	// LeasePreferences prefer us-east, then us-west: leaseholder s1 matches index 0.
+	conf := roachpb.SpanConfig{
+		NumReplicas: 3,
+		NumVoters:   3,
+		VoterConstraints: []roachpb.ConstraintsConjunction{{
+			NumReplicas: 3,
+			Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-east",
+			}},
+		}},
+		LeasePreferences: []roachpb.LeasePreference{
+			{Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-east",
+			}}},
+			{Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-west",
+			}}},
+		},
+	}
+	cs.processStoreLeaseholderMsg(ctx, &StoreLeaseholderMsg{
+		StoreID: 1,
+		Ranges: []RangeMsg{{
+			RangeID:                  1,
+			Replicas:                 replicas,
+			MaybeSpanConfIsPopulated: true,
+			MaybeSpanConf:            conf,
+		}},
+	}, nil)
+
+	snap, err := cs.Snapshot()
+	require.NoError(t, err)
+	a := snap.Ranges[1].Analysis
+	require.EqualValues(t, 0, a.VoterBalance,
+		"3 voters with NumVoters=3 should be balanced")
+	require.EqualValues(t, 0, a.NonVoterBalance,
+		"0 non-voters with NumReplicas-NumVoters=0 should be balanced")
+	require.Empty(t, a.UnsatisfiedConstraintVoterStoreIds,
+		"no general Constraints, every voter should be conforming")
+	require.Empty(t, a.UnsatisfiedConstraintNonVoterStoreIds,
+		"range has no non-voters")
+	require.Equal(t, []roachpb.StoreID{3}, a.UnsatisfiedVoterConstraintStoreIds,
+		"s3 in us-west should violate the us-east voter constraint")
+	require.EqualValues(t, 0, a.LeaseholderLeasePreferenceIndex,
+		"leaseholder s1 should match the first (us-east) lease preference")
+}
+
+// TestSnapshotRangeAnalysisBalances exercises the voter_balance and
+// non_voter_balance fields across the four interesting cases (matched,
+// surplus voter, missing voter, surplus non-voter), confirming that a
+// fully-conforming range produces all-zero balances and that surplus /
+// deficit show up with the expected sign.
+func TestSnapshotRangeAnalysisBalances(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	repl := func(storeID roachpb.StoreID, typ roachpb.ReplicaType, isLH bool) StoreIDAndReplicaState {
+		return StoreIDAndReplicaState{
+			StoreID: storeID,
+			ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+				ReplicaID:   roachpb.ReplicaID(storeID),
+				ReplicaType: ReplicaType{ReplicaType: typ, IsLeaseholder: isLH},
+			}},
+		}
+	}
+
+	tests := []struct {
+		name                    string
+		numReplicas, numVoters  int32
+		replicas                []StoreIDAndReplicaState
+		expectedVoterBalance    int32
+		expectedNonVoterBalance int32
+	}{
+		{
+			name:        "matched 3 voters",
+			numReplicas: 3, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+			},
+		},
+		{
+			name:        "matched 3 voters + 2 non-voters",
+			numReplicas: 5, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+				repl(4, roachpb.NON_VOTER, false),
+				repl(5, roachpb.NON_VOTER, false),
+			},
+		},
+		{
+			name:        "one extra voter",
+			numReplicas: 3, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+				repl(4, roachpb.VOTER_FULL, false),
+			},
+			expectedVoterBalance: 1,
+		},
+		{
+			name:        "missing voter",
+			numReplicas: 3, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+			},
+			expectedVoterBalance: -1,
+		},
+		{
+			name:        "missing non-voter",
+			numReplicas: 5, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+				repl(4, roachpb.NON_VOTER, false),
+			},
+			expectedNonVoterBalance: -1,
+		},
+		{
+			name:        "extra non-voter",
+			numReplicas: 4, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+				repl(4, roachpb.NON_VOTER, false),
+				repl(5, roachpb.NON_VOTER, false),
+			},
+			expectedNonVoterBalance: 1,
+		},
+		{
+			name:        "LEARNER and VOTER_DEMOTING_LEARNER excluded from both buckets",
+			numReplicas: 3, numVoters: 3,
+			replicas: []StoreIDAndReplicaState{
+				repl(1, roachpb.VOTER_FULL, true),
+				repl(2, roachpb.VOTER_FULL, false),
+				repl(3, roachpb.VOTER_FULL, false),
+				repl(4, roachpb.LEARNER, false),
+				repl(5, roachpb.VOTER_DEMOTING_LEARNER, false),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+			cs := newClusterState(ts, newStringInterner())
+			cs.diskUtilRefuseThreshold = 0.9
+			cs.diskUtilShedThreshold = 0.9
+
+			// Register every store referenced by any replica in any case so
+			// constraint matching has somewhere to look.
+			for i := 1; i <= 5; i++ {
+				cs.setStore(StoreAttributesAndLocality{
+					StoreID: roachpb.StoreID(i),
+					NodeID:  roachpb.NodeID(i),
+				}.withNodeTier())
+				cs.processStoreLoadMsg(ctx, &StoreLoadMsg{
+					NodeID:   roachpb.NodeID(i),
+					StoreID:  roachpb.StoreID(i),
+					Load:     LoadVector{1, 0, 0},
+					Capacity: LoadVector{1000, 1000, 1000},
+				}, nil)
+			}
+
+			cs.processStoreLeaseholderMsg(ctx, &StoreLeaseholderMsg{
+				StoreID: 1,
+				Ranges: []RangeMsg{{
+					RangeID:                  1,
+					Replicas:                 tc.replicas,
+					MaybeSpanConfIsPopulated: true,
+					MaybeSpanConf: roachpb.SpanConfig{
+						NumReplicas: tc.numReplicas,
+						NumVoters:   tc.numVoters,
+					},
+				}},
+			}, nil)
+
+			snap, err := cs.Snapshot()
+			require.NoError(t, err)
+			a := snap.Ranges[1].Analysis
+			require.Equal(t, tc.expectedVoterBalance, a.VoterBalance)
+			require.Equal(t, tc.expectedNonVoterBalance, a.NonVoterBalance)
+		})
+	}
+}
+
 // TestSnapshotCoversAllFields enforces three invariants on every owned
 // struct registered in snapshotFieldDispositions:
 //

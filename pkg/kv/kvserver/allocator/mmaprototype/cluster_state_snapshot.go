@@ -216,7 +216,79 @@ func snapshotRange(
 		LastFailedChange:                   nullableTime(r.lastFailedChange),
 		DiversityIncreaseLastFailedAttempt: nullableTime(r.diversityIncreaseLastFailedAttempt),
 		ConfID:                             reg.intern(snapshotNormalizedSpanConfig(r.conf, cs.localityTierInterner.si)),
+		Analysis:                           snapshotRangeAnalysis(r, cs),
 	}
+}
+
+// snapshotRangeAnalysis materializes the subset of MMA's per-range
+// constraint analysis exposed by mmasnappb.RangeAnalysis. It is computed
+// directly from r.replicas and r.conf rather than reading the
+// rangeState.constraints cache (which may be stale or unpopulated, since
+// it is built on demand by the allocator). LEARNER and
+// VOTER_DEMOTING_LEARNER replicas are skipped, matching the source-side
+// rangeAnalyzedConstraints semantics.
+func snapshotRangeAnalysis(r *rangeState, cs *clusterState) mmasnappb.RangeAnalysis {
+	if r.conf == nil {
+		return mmasnappb.RangeAnalysis{}
+	}
+	out := mmasnappb.RangeAnalysis{
+		LeaseholderLeasePreferenceIndex: notMatchedLeasePreferenceIndex,
+	}
+	var voters, nonVoters int32
+	for _, sr := range r.replicas {
+		typ := sr.ReplicaState.ReplicaType.ReplicaType
+		switch {
+		case isVoter(typ):
+			voters++
+			if !storeSatisfiesAnyConjunction(cs, sr.StoreID, r.conf.constraints) {
+				out.UnsatisfiedConstraintVoterStoreIds = append(
+					out.UnsatisfiedConstraintVoterStoreIds, sr.StoreID)
+			}
+			if len(r.conf.voterConstraints) > 0 &&
+				!storeSatisfiesAnyConjunction(cs, sr.StoreID, r.conf.voterConstraints) {
+				out.UnsatisfiedVoterConstraintStoreIds = append(
+					out.UnsatisfiedVoterConstraintStoreIds, sr.StoreID)
+			}
+		case isNonVoter(typ):
+			nonVoters++
+			if !storeSatisfiesAnyConjunction(cs, sr.StoreID, r.conf.constraints) {
+				out.UnsatisfiedConstraintNonVoterStoreIds = append(
+					out.UnsatisfiedConstraintNonVoterStoreIds, sr.StoreID)
+			}
+		}
+		// The leaseholder may transiently be a VOTER_DEMOTING_NON_VOTER
+		// (already classified as a non-voter by isNonVoter above), so the
+		// leaseholder-pref check sits outside the voter-only branch.
+		if sr.ReplicaState.IsLeaseholder {
+			out.LeaseholderLeasePreferenceIndex = matchedLeasePreferenceIndex(
+				sr.StoreID, r.conf.leasePreferences, cs.constraintMatcher)
+		}
+	}
+	out.VoterBalance = voters - r.conf.numVoters
+	out.NonVoterBalance = nonVoters - (r.conf.numReplicas - r.conf.numVoters)
+	return out
+}
+
+// storeSatisfiesAnyConjunction returns true iff storeID matches at least
+// one of the given normalized conjunctions. An empty conjunction list
+// trivially matches every store, mirroring the convention used elsewhere
+// in MMA (an absent constraint set is a vacuous one).
+//
+// Goes through cs.constraintMatcher.storeMatches, which lazily populates
+// cm.constraints; safe under the writer mutex held by the snapshot
+// caller.
+func storeSatisfiesAnyConjunction(
+	cs *clusterState, storeID roachpb.StoreID, conjs []internedConstraintsConjunction,
+) bool {
+	if len(conjs) == 0 {
+		return true
+	}
+	for _, conj := range conjs {
+		if cs.constraintMatcher.storeMatches(storeID, conj.constraints) {
+			return true
+		}
+	}
+	return false
 }
 
 // snapshotNormalizedSpanConfig un-interns conf back into the

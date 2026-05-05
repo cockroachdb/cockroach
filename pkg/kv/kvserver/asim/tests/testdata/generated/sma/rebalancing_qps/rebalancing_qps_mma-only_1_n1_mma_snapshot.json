@@ -828,7 +828,10 @@
       },
       "pendingChangeIds": [
       ],
-      "confId": 1
+      "confId": 1,
+      "analysis": {
+
+      }
     },
     "2": {
       "localRangeOwner": 1,
@@ -876,7 +879,10 @@
       },
       "pendingChangeIds": [
       ],
-      "confId": 1
+      "confId": 1,
+      "analysis": {
+
+      }
     },
     "3": {
       "localRangeOwner": 1,
@@ -924,7 +930,10 @@
       },
       "pendingChangeIds": [
       ],
-      "confId": 1
+      "confId": 1,
+      "analysis": {
+
+      }
     },
     "5": {
       "localRangeOwner": 1,
@@ -972,7 +981,10 @@
       },
       "pendingChangeIds": [
       ],
-      "confId": 1
+      "confId": 1,
+      "analysis": {
+
+      }
     }
   },
   "pendingChanges": {

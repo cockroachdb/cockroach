@@ -232,8 +232,64 @@ message ReplicaLoad {
   int64 load = 2;
 }
 
+// RangeAnalysis is the post-analysis view of one range's constraint
+// satisfaction and lease-preference matching, computed at snapshot time
+// from the SpanConfig referenced by RangeSnapshot.conf_id, the replica
+// list in RangeSnapshot.replicas, and per-store StoreAttributes. Mirrors
+// the subset of mmaprototype.rangeAnalyzedConstraints most useful for
+// "is this range conforming?" diagnostics.
+//
+// All fields are intentionally framed so that a fully-conforming range
+// has the zero value: balances are zero, the unsatisfied-store lists are
+// empty, and the leaseholder lease-preference index is zero (which
+// doubles as the "no preferences configured" sentinel; see below). This
+// keeps a per-range debug snapshot compact when there is nothing
+// noteworthy to report.
+//
+// LEARNER and VOTER_DEMOTING_LEARNER replicas are excluded from both the
+// voter and non-voter buckets, matching MMA's analysis semantics. Voters
+// are VOTER_FULL or VOTER_INCOMING; non-voters are NON_VOTER or
+// VOTER_DEMOTING_NON_VOTER. Empty (all zeros) when the range has no
+// SpanConfig attached (RangeSnapshot.conf_id == 0).
+message RangeAnalysis {
+  // voter_balance is (current voter count) - SpanConfig.NumVoters. Zero
+  // means the range has the configured number of voters; positive means
+  // there are surplus voters; negative means voters are missing.
+  int32 voter_balance = 1;
+  // non_voter_balance is (current non-voter count) -
+  // (SpanConfig.NumReplicas - SpanConfig.NumVoters). Zero means the
+  // range has the configured number of non-voters; positive means there
+  // are surplus non-voters; negative means non-voters are missing.
+  int32 non_voter_balance = 2;
+  // unsatisfied_constraint_voter_store_ids lists the stores whose voter
+  // replica on this range satisfies no SpanConfig.Constraints conjunction.
+  // These voters are non-conforming under the general constraint set and
+  // are MMA's preferred eviction candidates for replicas-in-general.
+  repeated int32 unsatisfied_constraint_voter_store_ids = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  // unsatisfied_constraint_non_voter_store_ids lists the stores whose
+  // non-voter replica on this range satisfies no SpanConfig.Constraints
+  // conjunction.
+  repeated int32 unsatisfied_constraint_non_voter_store_ids = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  // unsatisfied_voter_constraint_store_ids lists the stores whose voter
+  // replica on this range satisfies no SpanConfig.VoterConstraints
+  // conjunction. Always empty when SpanConfig.VoterConstraints is empty
+  // (in that case voter conformance collapses to general constraint
+  // conformance).
+  repeated int32 unsatisfied_voter_constraint_store_ids = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  // leaseholder_lease_preference_index is the index of the earliest
+  // SpanConfig.LeasePreferences entry matched by the current leaseholder.
+  // Special values:
+  //   0    when SpanConfig.LeasePreferences is empty (vacuous match;
+  //        every store is equally preferred).
+  //   2^31-1 (math.MaxInt32) when the leaseholder matches no preference,
+  //        or no leaseholder is present in replicas.
+  int32 leaseholder_lease_preference_index = 6;
+}
+
 // RangeSnapshot mirrors mmaprototype.rangeState. The analyzed-constraints
-// cache is omitted because it is recomputable from conf and replicas.
+// cache is omitted because it is recomputable from conf and replicas; the
+// most useful pieces of that analysis are materialized into the
+// `analysis` field below.
 message RangeSnapshot {
   // local_range_owner is the local store that last claimed leaseholdership of
   // this range in a StoreLeaseholderMsg. Used by GC.
@@ -264,6 +320,9 @@ message RangeSnapshot {
   // message). The dedup table is populated such that any two ranges with
   // structurally identical normalized span configs share a conf_id.
   uint32 conf_id = 8 [(gogoproto.customname) = "ConfID"];
+  // analysis is the materialized constraint and lease-preference analysis
+  // for this range. Empty (all zeros) when conf_id == 0. See RangeAnalysis.
+  RangeAnalysis analysis = 9 [(gogoproto.nullable) = false];
 }
 
 // StoreIDAndReplicaState mirrors mmaprototype.StoreIDAndReplicaState (a
