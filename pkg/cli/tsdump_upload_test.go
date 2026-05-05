@@ -1274,6 +1274,27 @@ func TestBuildDashboardLink(t *testing.T) {
 	}
 }
 
+// TestSysUptimeMetricMapping verifies that the sys.uptime metric is mapped
+// to sys.uptime.count in the Datadog upload, so it doesn't conflict with
+// the gauge variant (sys.uptime) emitted via the OTel pipeline.
+func TestSysUptimeMetricMapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+	kv, err := createMockTimeSeriesKV("cr.node.sys.uptime", "1", timestamp, 12345)
+	require.NoError(t, err)
+
+	series, err := writer.dump(&kv)
+	require.NoError(t, err)
+
+	require.Equal(t, "sys.uptime.count", series.Metric,
+		"sys.uptime should be mapped to sys.uptime.count to avoid type conflict with OTel gauge")
+}
+
 // TestChildMetricDumpParsing tests that child metrics with labels are correctly
 // parsed and converted to Datadog format.
 func TestChildMetricDumpParsing(t *testing.T) {
