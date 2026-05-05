@@ -475,3 +475,31 @@ FROM crdb_internal.kv_store_status
 	// Restart the down nodes to prevent the dead node detector from complaining.
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(7, 9))
 }
+
+// collectDebugZipOnPass fetches a debug zip into the test's artifacts dir, but
+// only when the test has not failed. On failure, the test runner already
+// collects a debug zip via collectArtifacts; passing tests get nothing by
+// default. The intent is to capture the multi-metric allocator's
+// mma_state.json for offline analysis, and to exercise the full RPC + proto
+// marshal path so a regression that breaks marshaling surfaces in CI rather
+// than only on real clusters.
+//
+// Only useful for tests where the cluster is in an interesting steady state
+// at exit (e.g. rebalance/by-load, where MMA decisions have been driven by
+// real load). Tests that tear the cluster down or quiesce it before
+// returning produce a snapshot with little diagnostic value.
+//
+// Intended usage: defer collectDebugZipOnPass(t, c) right after Start.
+//
+// Errors are logged, never fatal: this is best-effort diagnostics. Runs with a
+// fresh context with timeout so a canceled test ctx doesn't kill the fetch.
+func collectDebugZipOnPass(t test.Test, c cluster.Cluster) {
+	if t.Failed() {
+		return
+	}
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	if err := c.FetchDebugZip(fetchCtx, t.L(), "debug.zip"); err != nil {
+		t.L().Errorf("collectDebugZipOnPass: %v", err)
+	}
+}
