@@ -933,6 +933,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if cost.Penalties&HugeCostPenalty != 0 {
 				b.WriteString(" huge-cost-penalty")
 			}
+			if cost.Penalties&PlanGramMismatchPenalty != 0 {
+				b.WriteString(" plangram-mismatch")
+			}
 			if cost.Penalties&UnboundedCardinalityPenalty != 0 {
 				b.WriteString(" unbounded-cardinality")
 			}

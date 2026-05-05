@@ -36,7 +36,7 @@ type Cost struct {
 // member will have a lower cost.
 var MaxCost = Cost{
 	C:         math.Inf(+1),
-	Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinalityPenalty,
+	Penalties: HugeCostPenalty | FullScanPenalty | PlanGramMismatchPenalty | UnboundedCardinalityPenalty,
 }
 
 // Less returns true if this cost is lower than the given cost.
@@ -105,6 +105,11 @@ const (
 	// plan is possible.
 	FullScanPenalty
 
+	// PlanGramMismatchPenalty is true if the plan does not match the required
+	// PlanGram pattern, indicating that this plan should only be used if no
+	// PlanGram-matching plan is possible.
+	PlanGramMismatchPenalty
+
 	// UnboundedCardinalityPenalty is true if the operator or any of its
 	// descendants have no guaranteed upperbound on the number of rows that they
 	// can produce. See props.AnyCardinality.
@@ -121,8 +126,9 @@ const (
 // Where:
 //
 //	<Cost> is the floating point cost value.
-//	<Penalties> contains "H", "F", or "U" for HugeCostPenalty, FullScanPenalty,
-//	  and UnboundedCardinalityPenalty, respectively.
+//	<Penalties> contains "H", "F", "P", or "U" for HugeCostPenalty,
+//	  FullScanPenalty, PlanGramMismatchPenalty, and
+//	  UnboundedCardinalityPenalty, respectively.
 //	<aux> contains the number of full scans and unbounded reads.
 //
 // For example, the summary "1.23:HF:5f6u" indicates a cost of 1.23 with the
@@ -136,6 +142,9 @@ func (c Cost) Summary() string {
 	}
 	if c.Penalties&FullScanPenalty != 0 {
 		sb.WriteByte('F')
+	}
+	if c.Penalties&PlanGramMismatchPenalty != 0 {
+		sb.WriteByte('P')
 	}
 	if c.Penalties&UnboundedCardinalityPenalty != 0 {
 		sb.WriteByte('U')
