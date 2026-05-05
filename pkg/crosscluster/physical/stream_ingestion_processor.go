@@ -276,7 +276,7 @@ type streamIngestionProcessor struct {
 	// cutover.
 	cutoverCh chan struct{}
 
-	// metrics are monitoring all running ingestion jobs.
+	// metrics holds metrics for all ingestion jobs this node is running.
 	metrics *Metrics
 
 	// debugStatus tracks the current state for debugging/observability.
@@ -409,7 +409,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
-	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*Metrics)
 
 	// Initialize and register debug status for observability.
 	sip.debugStatus.Setup(streampb.StreamID(sip.spec.StreamID), sip.ProcessorID)

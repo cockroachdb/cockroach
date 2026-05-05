@@ -6,9 +6,16 @@
 package physical
 
 import (
+	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -16,6 +23,9 @@ const (
 	streamingFlushHistMaxLatency   = 1 * time.Minute
 	streamingAdmitLatencyMaxValue  = 3 * time.Minute
 	streamingCommitLatencyMaxValue = 10 * time.Minute
+
+	streamingSourceTenantLabelName      = "source_tenant_name"
+	streamingDestinationTenantLabelName = "destination_tenant_name"
 )
 
 var (
@@ -126,38 +136,64 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	metaClusterReplicatedTimeSeconds = metric.Metadata{
+		Name:        "physical_replication.cluster.replicated_time_seconds",
+		Help:        "The replicated time of the physical replication stream in seconds since the unix epoch.",
+		Measurement: "Seconds",
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
+		Unit:        metric.Unit_SECONDS,
+		HowToUse:    "Track replication lag via current time - physical_replication.cluster.replicated_time_seconds",
+	}
 )
 
-// Metrics are for production monitoring of stream ingestion jobs.
+// Metrics holds per-node metrics for stream ingestion jobs.
 type Metrics struct {
-	IngestedEvents             *metric.Counter
-	IngestedLogicalBytes       *metric.Counter
-	Flushes                    *metric.Counter
-	ResolvedEvents             *metric.Counter
-	ReplanCount                *metric.Counter
-	FlushHistNanos             metric.IHistogram
-	CommitLatency              metric.IHistogram
-	AdmitLatency               metric.IHistogram
-	ReceiveWaitNanos           *metric.Counter
-	FlushWaitNanos             *metric.Counter
-	RunningCount               *metric.Gauge
-	ReplicatedTimeSeconds      *metric.Gauge
-	ReplicationCutoverProgress *metric.Gauge
-	ScanningRanges             *metric.Gauge
-	CatchupRanges              *metric.Gauge
+	FlushHistNanos metric.IHistogram
+	CommitLatency  metric.IHistogram
+	AdmitLatency   metric.IHistogram
+
+	IngestedEvents       *metric.Counter
+	ResolvedEvents       *metric.Counter
+	IngestedLogicalBytes *metric.Counter
+	Flushes              *metric.Counter
+	ReceiveWaitNanos     *metric.Counter
+	FlushWaitNanos       *metric.Counter
+
+	// ReplicatedTimeSeconds is a per-node variant of the identical field in ClusterMetrics,
+	// kept here to maintain backwards compatability with existing customer monitoring stacks.
+	// This field could likely be removed in the future.
+	ReplicatedTimeSeconds *metric.Gauge
+}
+
+// ClusterMetrics holds per-cluster metrics for stream ingestion jobs.
+type ClusterMetrics struct {
+	ReplanCount                *clustermetrics.CounterVec
+	RunningCount               *clustermetrics.GaugeVec
+	ReplicatedTimeSeconds      *clustermetrics.GaugeVec
+	ScanningRanges             *clustermetrics.GaugeVec
+	CatchupRanges              *clustermetrics.GaugeVec
+	ReplicationCutoverProgress *clustermetrics.GaugeVec
 }
 
 // MetricStruct implements the metric.Struct interface.
 func (*Metrics) MetricStruct() {}
 
-// MakeMetrics makes the metrics for stream ingestion job monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
-	m := &Metrics{
-		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
-		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
-		Flushes:              metric.NewCounter(metaReplicationFlushes),
-		ResolvedEvents:       metric.NewCounter(metaReplicationResolvedEventsIngested),
-		ReplanCount:          metric.NewCounter(metaDistSQLReplanCount),
+// MetricStruct implements the metric.Struct interface.
+func (*ClusterMetrics) MetricStruct() {}
+
+// labeledClusterMetrics pairs a ClusterMetrics with precomputed labels
+// for a specific ingest job.
+type labeledClusterMetrics struct {
+	*ClusterMetrics
+	labels map[string]string
+}
+
+// MakeMetrics constructs the per-node metrics for stream ingestion.
+func MakeMetrics() *Metrics {
+	histogramWindow := base.DefaultHistogramWindowInterval()
+	return &Metrics{
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaReplicationFlushHistNanos,
 			Duration:     histogramWindow,
@@ -179,17 +215,46 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:      1,
 		}),
-		ReceiveWaitNanos:           metric.NewCounter(metaReceiveWaitNanos),
-		FlushWaitNanos:             metric.NewCounter(metaFlushWaitNanos),
-		RunningCount:               metric.NewGauge(metaStreamsRunning),
-		ReplicatedTimeSeconds:      metric.NewGauge(metaReplicatedTimeSeconds),
-		ReplicationCutoverProgress: metric.NewGauge(metaReplicationCutoverProgress),
-		ScanningRanges:             metric.NewGauge(metaScanningRanges),
-		CatchupRanges:              metric.NewGauge(metaCatchupRanges),
+
+		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
+		ResolvedEvents:       metric.NewCounter(metaReplicationResolvedEventsIngested),
+		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
+		Flushes:              metric.NewCounter(metaReplicationFlushes),
+		ReceiveWaitNanos:     metric.NewCounter(metaReceiveWaitNanos),
+		FlushWaitNanos:       metric.NewCounter(metaFlushWaitNanos),
+
+		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),
 	}
-	return m
 }
 
-func init() {
-	jobs.MakeStreamIngestMetricsHook = MakeMetrics
+// MakeClusterMetrics constructs the per-cluster metrics for stream
+// ingestion. Must be called from an init() function: clustermetrics
+// constructors panic in test builds when called outside init.
+func MakeClusterMetrics() *ClusterMetrics {
+	return &ClusterMetrics{
+		ReplanCount: clustermetrics.NewCounterVec(
+			metaDistSQLReplanCount,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+		RunningCount: clustermetrics.NewGaugeVec(
+			metaStreamsRunning,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+		ReplicatedTimeSeconds: clustermetrics.NewGaugeVec(
+			metaClusterReplicatedTimeSeconds,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+		ScanningRanges: clustermetrics.NewGaugeVec(
+			metaScanningRanges,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+		CatchupRanges: clustermetrics.NewGaugeVec(
+			metaCatchupRanges,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+		ReplicationCutoverProgress: clustermetrics.NewGaugeVec(
+			metaReplicationCutoverProgress,
+			streamingSourceTenantLabelName, streamingDestinationTenantLabelName,
+		),
+	}
 }

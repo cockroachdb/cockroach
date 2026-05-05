@@ -187,11 +187,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -206,6 +206,10 @@ var maxIngestionProcessorShutdownWait = 5 * time.Minute
 type streamIngestionResumer struct {
 	job *jobs.Job
 
+	// clusterMetrics holds this stream's cluster metrics paired with their labels,
+	// populated on first call to resolveClusterMetrics.
+	clusterMetrics labeledClusterMetrics
+
 	mu struct {
 		syncutil.Mutex
 		// perNodeAggregatorStats is a per component running aggregate of trace
@@ -213,6 +217,27 @@ type streamIngestionResumer struct {
 		// processors running the backup.
 		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
 	}
+}
+
+// resolveClusterMetrics populates s.clusterMetrics on first call. Subsequent
+// calls are no-ops.
+func (s *streamIngestionResumer) resolveClusterMetrics(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	if s.clusterMetrics.labels != nil {
+		return nil
+	}
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	labels, err := resolveClusterMetricsLabels(ctx, execCfg.InternalDB, execCfg.Settings, details)
+	if err != nil {
+		return err
+	}
+	s.clusterMetrics = labeledClusterMetrics{
+		ClusterMetrics: execCfg.JobRegistry.ClusterMetrics().
+			JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics),
+		labels: labels,
+	}
+	return nil
 }
 
 func getClusterUris(
@@ -506,6 +531,10 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	// Protect the destination tenant's keyspan from garbage collection.
 	jobExecCtx := execCtx.(sql.JobExecContext)
 
+	if err := s.resolveClusterMetrics(ctx, jobExecCtx.ExecCfg()); err != nil {
+		return errors.Wrap(err, "resolving cluster metrics")
+	}
+
 	if err := jobExecCtx.ExecCfg().JobRegistry.CheckPausepoint("stream_ingestion.before_protection"); err != nil {
 		return err
 	}
@@ -567,7 +596,7 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	ro := getRetryPolicy(execCfg.StreamingTestingKnobs)
 	for r := retry.Start(ro); r.Next(); {
 		var reverted bool
-		cutoverTimestamp, reverted, err = maybeRevertToCutoverTimestamp(ctx, jobExecCtx, s.job)
+		cutoverTimestamp, reverted, err = maybeRevertToCutoverTimestamp(ctx, jobExecCtx, s.job, s.clusterMetrics)
 		if err != nil {
 			if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
 				return s.handleResumeError(ctx, jobExecCtx, err)
@@ -679,11 +708,17 @@ func cutoverTimeIsEligibleForCutover(
 // with the target time set to that cutover time, to bring the ingesting cluster
 // to a consistent state.
 func maybeRevertToCutoverTimestamp(
-	ctx context.Context, p sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context,
+	p sql.JobExecContext,
+	ingestionJob *jobs.Job,
+	clusterMetrics labeledClusterMetrics,
 ) (hlc.Timestamp, bool, error) {
 
 	ctx, span := tracing.ChildSpan(ctx, "physical.revertToCutoverTimestamp")
 	defer span.Finish()
+
+	metrics := p.ExecCfg().JobRegistry.MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*Metrics)
 
 	// The update below sets the ReplicationStatus to
 	// CuttingOver. Once set, the cutoverTimestamp cannot be
@@ -750,9 +785,8 @@ func maybeRevertToCutoverTimestamp(
 	}
 
 	minProgressUpdateInterval := 15 * time.Second
-	progMetric := p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicationCutoverProgress
 	progUpdater, err := newCutoverProgressTracker(ctx, p, originalSpanToRevert, remainingSpansToRevert, ingestionJob,
-		progMetric, minProgressUpdateInterval)
+		clusterMetrics, minProgressUpdateInterval)
 	if err != nil {
 		return cutoverTimestamp, false, err
 	}
@@ -762,7 +796,9 @@ func maybeRevertToCutoverTimestamp(
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
 	// On cutover, replication has stopped so therefore should set replicated time to 0
-	p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
+	clusterMetrics.ReplicatedTimeSeconds.Update(clusterMetrics.labels, 0)
+	metrics.ReplicatedTimeSeconds.Update(0)
+
 	if err := revert.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
@@ -846,12 +882,20 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	// ingestion anymore.
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	completeProducerJob(ctx, s.job, jobExecCtx.ExecCfg().InternalDB, false)
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	metrics := jobExecCtx.ExecCfg().JobRegistry.MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*Metrics)
 	// On a job fail or cancel, replication has permanently stopped so set replicated time to 0.
 	// This value can be inadvertently overriden due to the race condition between job cancellation/failure
 	// and the shutdown of ingestion processors.
-	jobExecCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
-
-	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	besteffort.Warning(ctx, "physical-replication-cluster-replicated-time-reset", func(ctx context.Context) error {
+		if err := s.resolveClusterMetrics(ctx, jobExecCtx.ExecCfg()); err != nil {
+			return err
+		}
+		s.clusterMetrics.ReplicatedTimeSeconds.Update(s.clusterMetrics.labels, 0)
+		return nil
+	})
+	metrics.ReplicatedTimeSeconds.Update(0)
 	execCfg := jobExecCtx.ExecCfg()
 	// If we got replicated into another tenant, bail out.
 	if !execCfg.Codec.ForSystemTenant() {
@@ -934,7 +978,7 @@ func closeAndLog(ctx context.Context, d streamclient.Client) {
 // the cutover process.
 type cutoverProgressTracker struct {
 	minProgressUpdateInterval time.Duration
-	progMetric                *metric.Gauge
+	clusterMetrics            labeledClusterMetrics
 	job                       *jobs.Job
 
 	remainingSpans     roachpb.SpanGroup
@@ -952,7 +996,7 @@ func newCutoverProgressTracker(
 	originalSpanToRevert roachpb.Span,
 	remainingSpansToRevert roachpb.Spans,
 	job *jobs.Job,
-	progMetric *metric.Gauge,
+	clusterMetrics labeledClusterMetrics,
 	minProgressUpdateInterval time.Duration,
 ) (*cutoverProgressTracker, error) {
 	var sg roachpb.SpanGroup
@@ -967,7 +1011,7 @@ func newCutoverProgressTracker(
 	}
 	c := &cutoverProgressTracker{
 		job:                       job,
-		progMetric:                progMetric,
+		clusterMetrics:            clusterMetrics,
 		minProgressUpdateInterval: minProgressUpdateInterval,
 
 		remainingSpans:     sg,
@@ -1000,7 +1044,7 @@ func (c *cutoverProgressTracker) updateJobProgress(
 		return err
 	}
 
-	c.progMetric.Update(int64(nRanges))
+	c.clusterMetrics.ReplicationCutoverProgress.Update(c.clusterMetrics.labels, int64(nRanges))
 
 	// We set lastUpdatedAt even though we might not actually
 	// update the job record below. We do this to avoid asking for
@@ -1063,5 +1107,7 @@ func init() {
 			return s
 		},
 		jobs.UsesTenantCostControl,
+		jobs.WithJobMetrics(MakeMetrics()),
+		jobs.WithJobClusterMetrics(MakeClusterMetrics()),
 	)
 }

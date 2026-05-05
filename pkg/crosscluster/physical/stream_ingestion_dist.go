@@ -294,7 +294,7 @@ func startDistIngestion(
 
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs, refreshConn)
 	if errors.Is(err, sql.ErrPlanChanged) {
-		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
+		resumer.clusterMetrics.ReplanCount.Inc(resumer.clusterMetrics.labels, 1)
 	}
 	return err
 }

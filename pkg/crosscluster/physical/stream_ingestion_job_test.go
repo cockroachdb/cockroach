@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -430,6 +431,9 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(art): remove once changefeeds migrate to jobs system cluster metrics registration
+	defer cmmetrics.TestingAllowNonInitConstruction()()
+
 	ctx := context.Background()
 
 	progressUpdated := make(chan struct{})
@@ -509,8 +513,9 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return nil
 	}))
 
-	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
-	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+	metrics := registry.ClusterMetrics().
+		JobSpecificMetrics[jobspb.TypeReplicationStreamIngestion].(*ClusterMetrics)
+	require.Empty(t, metrics.ReplicationCutoverProgress.ToPrometheusMetrics())
 
 	loadProgress := func() jobspb.Progress {
 		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
@@ -533,7 +538,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 					lastFraction,
 					curProgress)
 			}
-			rangesLeft := metrics.ReplicationCutoverProgress.Value()
+			rangesLeft := int64(metrics.ReplicationCutoverProgress.ToPrometheusMetrics()[0].GetGauge().GetValue())
 			if lastRangesLeft < rangesLeft {
 				return errors.Newf("unexpected range count from metric: %d (current) > %d (previous)",
 					rangesLeft, lastRangesLeft)
@@ -544,7 +549,14 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return nil
 	})
 
-	_, revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, replicationJob)
+	clusterMetrics := labeledClusterMetrics{
+		ClusterMetrics: metrics,
+		labels: map[string]string{
+			streamingSourceTenantLabelName:      "test-source",
+			streamingDestinationTenantLabelName: "test-destination",
+		},
+	}
+	_, revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, replicationJob, clusterMetrics)
 	require.NoError(t, err)
 	require.True(t, revert)
 
@@ -553,7 +565,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 
 	sip := loadProgress()
 	require.Equal(t, float32(1), sip.GetFractionCompleted())
-	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+	require.Equal(t, int64(0), int64(metrics.ReplicationCutoverProgress.ToPrometheusMetrics()[0].GetGauge().GetValue()))
 	require.True(t, progressUpdates > 1)
 }
 
