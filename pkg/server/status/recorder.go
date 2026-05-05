@@ -1162,21 +1162,16 @@ func (rr registryRecorder) recordChild(
 	})
 }
 
-// hashSep is the field separator written between hashed components in
-// hashLabels. Hoisted to package scope to avoid per-call allocation on the
-// recording hot path.
-var hashSep = []byte{0}
-
-// hashLabels computes a stable hash of a label set. The zero-byte separators
-// close a collision where adjacent fields could otherwise be reassociated
-// (e.g. {name="ab", value="c"} vs {name="a", value="bc"}).
+// hashLabels computes a stable hash of a label set. The zero-byte separator
+// after each field prevents collisions where boundaries could otherwise shift
+// (e.g. without it, {a="bc"} and {ab="c"} would both hash "abc").
 func hashLabels(labels []*prometheusgo.LabelPair) uint64 {
 	h := fnv.New64a()
 	for _, label := range labels {
 		h.Write([]byte(label.GetName()))
-		h.Write(hashSep)
+		h.Write([]byte{0})
 		h.Write([]byte(label.GetValue()))
-		h.Write(hashSep)
+		h.Write([]byte{0})
 	}
 	return h.Sum64()
 }
@@ -1238,15 +1233,19 @@ func getOrComputeMetricName(
 	return metricName + suffix
 }
 
-// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
-// for those that have TsdbRecordLabeled set to true in their metadata.
-// Records up to 1024 child metrics per metric to prevent unbounded memory usage and performance issues.
+// recordChangefeedChildMetrics iterates through changefeed metrics in the
+// registry and processes child metrics for those that have TsdbRecordLabeled
+// set to true in their metadata. Records up to 1024 child metrics per metric
+// to prevent unbounded memory usage and performance issues.
+//
+// A metric whose runtime type does not match its declared class is skipped.
 func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
-	maxChildMetricsPerMetric := 1024
+	const maxChildMetricsPerMetric = 1024
 
 	labels := rr.registry.GetLabels()
 	rr.registry.Each(func(name string, v interface{}) {
-		if _, allowed := tsutil.AllowedChildMetrics[name]; !allowed {
+		class, allowed := tsutil.LookupChildMetricClass(name)
+		if !allowed {
 			return
 		}
 		// Check if the metric has child collection enabled in its metadata
@@ -1259,105 +1258,135 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			return // Skip this metric if child collection is not enabled
 		}
 
-		// Handle AggHistogram - use direct child access for per-child snapshots
-		if aggHist, isAggHist := v.(*aggmetric.AggHistogram); isAggHist {
-			var childMetricsCount int
-			aggHist.EachChild(func(labelNames, labelVals []string, child *aggmetric.Histogram) {
-				if childMetricsCount >= maxChildMetricsPerMetric {
-					return
-				}
-
-				// Create label pairs for this child
-				childLabels := make([]*prometheusgo.LabelPair, len(labels), len(labels)+len(labelVals))
-				copy(childLabels, labels)
-
-				for i, val := range labelVals {
-					if i < len(labelNames) {
-						name := labelNames[i]
-						value := val
-						childLabels = append(childLabels, &prometheusgo.LabelPair{
-							Name:  &name,
-							Value: &value,
-						})
-					}
-				}
-
-				// Check cache for encoded name
-				baseName := getOrComputeMetricName(rr.childMetricNameCache, metadata.Name, childLabels)
-				// Record all histogram computed metrics using child-specific snapshots
-				for _, c := range metric.HistogramMetricComputers {
-					var snapshot metric.HistogramSnapshot
-					if c.IsSummaryMetric {
-						snapshot = child.WindowedSnapshot()
-					} else {
-						snapshot = child.CumulativeSnapshot()
-					}
-					count, _ := snapshot.Total()
-					if count < 0 {
-						continue // Skip malformed snapshots
-					}
-					value := c.ComputedMetric(snapshot)
-					metricName := baseName + c.Suffix
-					*dest = append(*dest, tspb.TimeSeriesData{
-						Name:   fmt.Sprintf(rr.format, metricName),
-						Source: rr.source,
-						Datapoints: []tspb.TimeSeriesDatapoint{
-							{
-								TimestampNanos: rr.timestampNanos,
-								Value:          value,
-							},
-						},
-					})
-				}
-				childMetricsCount++
-			})
-			return
-		}
-
-		// Handle Counter and Gauge metrics via Prometheus export
-		prom, ok := v.(metric.PrometheusExportable)
-		if !ok {
-			return
-		}
-		promIter, ok := v.(metric.PrometheusIterable)
-		if !ok {
-			return
-		}
-		m := prom.ToPrometheusMetric()
-		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
-
-		var childMetricsCount int
-		processChildMetric := func(childMetric *prometheusgo.Metric) {
-			if childMetricsCount >= maxChildMetricsPerMetric {
+		switch class {
+		case tsutil.Histogram:
+			aggHist, ok := v.(*aggmetric.AggHistogram)
+			if !ok {
+				// Runtime type doesn't match the declared class; skip rather
+				// than silently emit under the wrong shape.
 				return
 			}
+			rr.recordHistogramChildren(dest, metadata.Name, labels, aggHist, maxChildMetricsPerMetric)
 
-			var value float64
-			if childMetric.Gauge != nil {
-				value = *childMetric.Gauge.Value
-			} else if childMetric.Counter != nil {
-				value = *childMetric.Counter.Value
+		case tsutil.Counter, tsutil.Gauge:
+			prom, ok := v.(metric.PrometheusExportable)
+			if !ok {
+				return
+			}
+			promIter, ok := v.(metric.PrometheusIterable)
+			if !ok {
+				return
+			}
+			rr.recordScalarChildren(dest, class, labels, prom, promIter, maxChildMetricsPerMetric)
+		}
+	})
+}
+
+// recordHistogramChildren emits one row per HistogramMetricComputer suffix per
+// child of the given AggHistogram, up to maxChildren children.
+func (rr registryRecorder) recordHistogramChildren(
+	dest *[]tspb.TimeSeriesData,
+	metricName string,
+	registryLabels []*prometheusgo.LabelPair,
+	aggHist *aggmetric.AggHistogram,
+	maxChildren int,
+) {
+	var childCount int
+	aggHist.EachChild(func(labelNames, labelVals []string, child *aggmetric.Histogram) {
+		if childCount >= maxChildren {
+			return
+		}
+
+		childLabels := make([]*prometheusgo.LabelPair, len(registryLabels), len(registryLabels)+len(labelVals))
+		copy(childLabels, registryLabels)
+		for i, val := range labelVals {
+			if i < len(labelNames) {
+				name := labelNames[i]
+				value := val
+				childLabels = append(childLabels, &prometheusgo.LabelPair{
+					Name:  &name,
+					Value: &value,
+				})
+			}
+		}
+
+		baseName := getOrComputeMetricName(rr.childMetricNameCache, metricName, childLabels)
+		// Record all histogram computed metrics using child-specific snapshots
+		for _, c := range metric.HistogramMetricComputers {
+			var snapshot metric.HistogramSnapshot
+			if c.IsSummaryMetric {
+				snapshot = child.WindowedSnapshot()
 			} else {
-				return
+				snapshot = child.CumulativeSnapshot()
 			}
-
-			// Check cache for encoded name
-			promName := prom.GetName(false /* useStaticLabels */)
-			metricName := getOrComputeMetricName(rr.childMetricNameCache, promName, childMetric.Label)
-
+			count, _ := snapshot.Total()
+			if count < 0 {
+				continue // Skip malformed snapshots
+			}
 			*dest = append(*dest, tspb.TimeSeriesData{
-				Name:   fmt.Sprintf(rr.format, metricName),
+				Name:   fmt.Sprintf(rr.format, baseName+c.Suffix),
 				Source: rr.source,
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: rr.timestampNanos,
-						Value:          value,
+						Value:          c.ComputedMetric(snapshot),
 					},
 				},
 			})
-			childMetricsCount++
 		}
-		promIter.Each(m.Label, processChildMetric)
+		childCount++
+	})
+}
+
+// recordScalarChildren emits one row per child of the given counter or gauge
+// metric, up to maxChildren children. Children whose Prometheus export does
+// not populate the field corresponding to class are skipped.
+func (rr registryRecorder) recordScalarChildren(
+	dest *[]tspb.TimeSeriesData,
+	class tsutil.ChildMetricClass,
+	registryLabels []*prometheusgo.LabelPair,
+	prom metric.PrometheusExportable,
+	promIter metric.PrometheusIterable,
+	maxChildren int,
+) {
+	m := prom.ToPrometheusMetric()
+	m.Label = append(registryLabels, prom.GetLabels(false /* useStaticLabels */)...)
+	promName := prom.GetName(false /* useStaticLabels */)
+
+	var childCount int
+	promIter.Each(m.Label, func(childMetric *prometheusgo.Metric) {
+		if childCount >= maxChildren {
+			return
+		}
+		var value float64
+		switch class {
+		case tsutil.Counter:
+			if childMetric.Counter == nil {
+				return
+			}
+			value = *childMetric.Counter.Value
+		case tsutil.Gauge:
+			if childMetric.Gauge == nil {
+				return
+			}
+			value = *childMetric.Gauge.Value
+		default:
+			return
+		}
+
+		metricName := getOrComputeMetricName(rr.childMetricNameCache, promName, childMetric.Label)
+
+		*dest = append(*dest, tspb.TimeSeriesData{
+			Name:   fmt.Sprintf(rr.format, metricName),
+			Source: rr.source,
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: rr.timestampNanos,
+					Value:          value,
+				},
+			},
+		})
+		childCount++
 	})
 }
 

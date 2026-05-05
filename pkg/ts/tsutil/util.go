@@ -14,35 +14,57 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
-// AllowedChildMetrics is the list of metrics that should have child metrics
-// collected and recorded to TSDB. This is a curated list to prevent unbounded
-// cardinality while still capturing the most important per-changefeed metrics.
-var AllowedChildMetrics = map[string]struct{}{
-	"changefeed.max_behind_nanos":                     {},
-	"changefeed.error_retries":                        {},
-	"changefeed.internal_retry_message_count":         {},
-	"changefeed.stage.downstream_client_send.latency": {},
-	"changefeed.emitted_messages":                     {},
-	"changefeed.sink_backpressure_nanos":              {},
-	"changefeed.backfill_pending_ranges":              {},
-	"changefeed.sink_io_inflight":                     {},
-	"changefeed.lagging_ranges":                       {},
-	"changefeed.aggregator_progress":                  {},
-	"changefeed.checkpoint_progress":                  {},
-	"changefeed.emitted_batch_sizes":                  {},
-	"changefeed.total_ranges":                         {},
+// ChildMetricClass identifies the class an entry in allowedChildMetrics is
+// expected to be.
+type ChildMetricClass int
+
+const (
+	// Counter expects a Prometheus counter at runtime.
+	Counter ChildMetricClass = iota + 1
+	// Gauge expects a Prometheus gauge at runtime.
+	Gauge
+	// Histogram expects an aggmetric.AggHistogram at runtime.
+	Histogram
+)
+
+// allowedChildMetrics is the list of metrics that should have child metrics
+// collected and recorded to TSDB, mapped to the type each metric is expected
+// to be. This is a curated list to prevent unbounded cardinality while still
+// capturing the most important per-changefeed metrics.
+//
+// Use LookupChildMetricClass to read entries.
+var allowedChildMetrics = map[string]ChildMetricClass{
+	"changefeed.aggregator_progress":                  Gauge,
+	"changefeed.backfill_pending_ranges":              Gauge,
+	"changefeed.checkpoint_progress":                  Gauge,
+	"changefeed.emitted_batch_sizes":                  Histogram,
+	"changefeed.emitted_messages":                     Counter,
+	"changefeed.error_retries":                        Counter,
+	"changefeed.internal_retry_message_count":         Gauge,
+	"changefeed.lagging_ranges":                       Gauge,
+	"changefeed.max_behind_nanos":                     Gauge,
+	"changefeed.sink_backpressure_nanos":              Histogram,
+	"changefeed.sink_io_inflight":                     Gauge,
+	"changefeed.stage.downstream_client_send.latency": Histogram,
+	"changefeed.total_ranges":                         Gauge,
+}
+
+// LookupChildMetricClass returns the declared ChildMetricClass for an
+// child metric in allowedChildMetrics if it is present.
+func LookupChildMetricClass(name string) (ChildMetricClass, bool) {
+	class, ok := allowedChildMetrics[name]
+	return class, ok
 }
 
 // IsAllowedChildMetric checks if a metric name matches one of the allowed child metrics.
 func IsAllowedChildMetric(name string) bool {
-	metricName := name
 	for _, prefix := range []string{"cr.node.", "cr.store."} {
-		if strings.HasPrefix(metricName, prefix) {
-			metricName = strings.TrimPrefix(metricName, prefix)
+		if strings.HasPrefix(name, prefix) {
+			name = strings.TrimPrefix(name, prefix)
 			break
 		}
 	}
-	_, ok := AllowedChildMetrics[metricName]
+	_, ok := allowedChildMetrics[name]
 	return ok
 }
 
