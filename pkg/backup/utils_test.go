@@ -612,4 +612,5 @@ func getFullBackupPaths(t *testing.T, sqlDB *sqlutils.SQLRunner, uri string) []s
 func AllowORDownloadBestEffortFailures(t *testing.T) {
 	t.Helper()
 	t.Cleanup(besteffort.TestAllowFailure("or-download-failed-log"))
+	t.Cleanup(besteffort.TestAllowFailure("or-unsplit"))
 }

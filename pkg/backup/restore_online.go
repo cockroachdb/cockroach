@@ -816,18 +816,21 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	return ctx.Err()
 }
 
-func unstickRestoreSpans(
-	ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans,
-) error {
+func unstickRestoreSpans(ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans) {
 	for _, sp := range spans {
-		if err := execCfg.DB.AdminUnsplit(ctx, sp.Key); err != nil {
-			return errors.Wrapf(err, "failed to unsplit %s", sp)
+		if err := execCfg.DB.AdminUnsplit(ctx, sp.Key); err != nil &&
+			!kvpb.IsKeyNotStartOfRange(err) {
+			besteffort.Warning(ctx, "or-unsplit", func(_ context.Context) error {
+				return errors.Wrapf(err, "failed to unsplit %s", sp)
+			})
 		}
-		if err := execCfg.DB.AdminUnsplit(ctx, sp.EndKey); err != nil {
-			return errors.Wrapf(err, "failed to unsplit %s", sp.EndKey)
+		if err := execCfg.DB.AdminUnsplit(ctx, sp.EndKey); err != nil &&
+			!kvpb.IsKeyNotStartOfRange(err) {
+			besteffort.Warning(ctx, "or-unsplit", func(_ context.Context) error {
+				return errors.Wrapf(err, "failed to unsplit %s", sp.EndKey)
+			})
 		}
 	}
-	return nil
 }
 
 func getExternalBytesOverSpans(
@@ -985,7 +988,8 @@ func (r *restoreResumer) cleanupAfterDownload(
 			log.Dev.Warningf(ctx, "failed to re-enable auto stats on table %d", id)
 		}
 	}
-	return unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)
+	unstickRestoreSpans(ctx, r.execCfg, details.DownloadSpans)
+	return nil
 }
 
 func createImportRollbackJob(
@@ -1115,7 +1119,8 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 		return errors.Wrapf(err, "failed to get external data after excise")
 	}
 
-	return unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	unstickRestoreSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	return nil
 }
 
 // getNumOnlineRestoreLinkWorkers returns the total number of workers to use for
