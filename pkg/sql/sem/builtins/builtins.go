@@ -2727,12 +2727,18 @@ var regularBuiltins = map[string]builtinDefinition{
 				if year == 0 {
 					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
 				}
+				// PostgreSQL's make_date treats a negative year argument as
+				// "N BC" (no year zero in SQL semantics), but Go's time.Date
+				// uses astronomical numbering (year 0 = 1 BC). Shift negative
+				// inputs by one so e.g. -2013 maps to astronomical year -2012,
+				// matching PostgreSQL output. See #149950.
+				if year < 0 {
+					year++
+				}
 				location := evalCtx.GetLocation()
 				return tree.NewDDateFromTime(time.Date(year, month, day, 0, 0, 0, 0, location))
 			},
-			// For the ISO 8601 standard, the conversion from a negative year to BC changes the year value (ex. -2013 == 2014 BC).
-			// https://en.wikipedia.org/wiki/ISO_8601#Years
-			Info:       "Create date (formatted according to ISO 8601) from year, month, and day fields (negative years signify BC).",
+			Info:       "Create date from year, month, and day fields (negative years signify BC).",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -13097,9 +13103,7 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 	if !withOutputTZ && withInputTZ {
 		panic("Creating a timestamp without a timezone should not have an input timestamp attached to it.")
 	}
-	// For the ISO 8601 standard, the conversion from a negative year to BC changes the year value (ex. -2013 == 2014 BC).
-	// https://en.wikipedia.org/wiki/ISO_8601#Years
-	info := "Create timestamp (formatted according to ISO 8601) "
+	info := "Create timestamp "
 	vol := volatility.Immutable
 	typs := tree.ParamTypes{{Name: "year", Typ: types.Int}, {Name: "month", Typ: types.Int}, {Name: "day", Typ: types.Int},
 		{Name: "hour", Typ: types.Int}, {Name: "min", Typ: types.Int}, {Name: "sec", Typ: types.Float}}
@@ -13132,6 +13136,14 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			}
 			if year == 0 {
 				return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "year value of 0 is not valid")
+			}
+			// PostgreSQL's make_timestamp(tz) treats a negative year argument
+			// as "N BC" (no year zero in SQL semantics), but Go's time.Date
+			// uses astronomical numbering (year 0 = 1 BC). Shift negative
+			// inputs by one so e.g. -2013 maps to astronomical year -2012,
+			// matching PostgreSQL output. See #149950.
+			if year < 0 {
+				year++
 			}
 			hour := int(tree.MustBeDInt(args[3]))
 			min := int(tree.MustBeDInt(args[4]))

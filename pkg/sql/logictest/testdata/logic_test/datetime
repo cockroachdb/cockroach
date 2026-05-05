@@ -2046,11 +2046,20 @@ SELECT make_date(2013, 7, 15)::string
 make_date
 2013-07-15
 
+# Cast to text on the server so the assertion exercises the postgres-style
+# BC wire format and matches what real postgres outputs. See #149950.
 query T colnames,rowsort
-SELECT make_date(-2013, 7, 15)
+SELECT make_date(-2013, 7, 15)::string
 ----
 make_date
--2013-07-15 00:00:00 +0000 +0000
+2013-07-15 BC
+
+# Boundary: -1 maps to 1 BC, matching postgres (no year zero in SQL semantics).
+query T colnames,rowsort
+SELECT make_date(-1, 1, 1)::string
+----
+make_date
+0001-01-01 BC
 
 statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_date(0, 11, 11)
@@ -2066,10 +2075,17 @@ make_timestamp
 2013-07-15 08:15:23.5
 
 query T colnames,rowsort
-SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)::string
 ----
 make_timestamp
--2013-07-15 08:15:23.5 +0000 +0000
+2013-07-15 08:15:23.5 BC
+
+# Boundary: -1 maps to 1 BC.
+query T colnames,rowsort
+SELECT make_timestamp(-1, 1, 1, 0, 0, 0)::string
+----
+make_timestamp
+0001-01-01 00:00:00 BC
 
 query T colnames,rowsort
 SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
@@ -2113,7 +2129,7 @@ query T colnames,rowsort
 SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)::text
 ----
 make_timestamptz
-2014-07-15 08:15:23.5-05 BC
+2013-07-15 08:15:23.5-05 BC
 
 query T colnames,rowsort
 SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
