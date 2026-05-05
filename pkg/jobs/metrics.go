@@ -17,7 +17,7 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-// Metrics are for production monitoring of each job type.
+// Metrics are for per-node production monitoring of each job type.
 type Metrics struct {
 	JobMetrics    [jobspb.NumJobTypes]*JobTypeMetrics
 	JobPTSMetrics [jobspb.NumJobTypes]*JobTypePTSMetrics
@@ -55,6 +55,15 @@ type Metrics struct {
 	// without an adopt loop, e.g., through a StartableJob.
 	ResumedJobs *metric.Counter
 }
+
+// ClusterMetrics are for cluster-wide production monitoring of each job type.
+type ClusterMetrics struct {
+	// JobSpecificMetrics holds per-type cluster-metric structs indexed by jobspb.Type ordinal.
+	JobSpecificMetrics [jobspb.NumJobTypes]metric.Struct
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (ClusterMetrics) MetricStruct() {}
 
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
 type JobTypeMetrics struct {
@@ -389,8 +398,11 @@ var (
 // MetricStruct implements the metric.Struct interface.
 func (Metrics) MetricStruct() {}
 
-// init initializes the metrics for job monitoring.
-func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Lookup) {
+// initMetrics initializes both the per-node Metrics and the
+// per-cluster ClusterMetrics for job monitoring.
+func initMetrics(
+	m *Metrics, c *ClusterMetrics, histogramWindowInterval time.Duration, lookup *cidr.Lookup,
+) {
 	if MakeRowLevelTTLMetricsHook != nil {
 		m.RowLevelTTL = MakeRowLevelTTLMetricsHook(histogramWindowInterval)
 	}
@@ -437,6 +449,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 		if opts, ok := getRegisterOptions(jt); ok {
 			if opts.metrics != nil {
 				m.JobSpecificMetrics[jt] = opts.metrics
+			}
+			if opts.clusterMetrics != nil {
+				c.JobSpecificMetrics[jt] = opts.clusterMetrics
 			}
 			if opts.resolvedMetric != nil {
 				m.ResolvedMetrics[jt] = opts.resolvedMetric
