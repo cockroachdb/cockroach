@@ -6,8 +6,11 @@
 package spec
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,4 +136,256 @@ func TestClustersRetainClearedInfo(t *testing.T) {
 		require.Equal(t, "io2", s1.ExposedMetamorphicInfo["VolumeType"])
 		require.Equal(t, "gp3", s2.ExposedMetamorphicInfo["VolumeType"])
 	})
+}
+
+func TestGCEVolumeTypeForMachineType(t *testing.T) {
+	tests := []struct {
+		name                  string
+		opts                  []Option
+		arch                  vm.CPUArch
+		benchmark             bool
+		defaultPreferLocalSSD bool
+		expectedMachineType   string
+		expectedVolumeType    string
+		expectVolumeType      bool
+		expectedUseLocalSSD   bool
+		expectedArch          vm.CPUArch
+	}{
+		{
+			name:                "AMD64 gets pd-ssd",
+			arch:                vm.ArchAMD64,
+			expectedMachineType: "n2-standard-4",
+			expectedVolumeType:  "pd-ssd",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchAMD64,
+		},
+		{
+			name:                "ARM64 non-benchmark (C4A) gets hyperdisk-balanced",
+			arch:                vm.ArchARM64,
+			expectedMachineType: "c4a-standard-4",
+			expectedVolumeType:  "hyperdisk-balanced",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchARM64,
+		},
+		{
+			name:                  "ARM64 non-benchmark (C4A) gets -lssd machine when local SSD is preferred",
+			arch:                  vm.ArchARM64,
+			defaultPreferLocalSSD: true,
+			expectedMachineType:   "c4a-standard-4-lssd",
+			expectedUseLocalSSD:   true,
+			expectedArch:          vm.ArchARM64,
+		},
+		{
+			name:                  "ARM64 non-benchmark (C4A) falls back to hyperdisk-balanced when local SSD is unsupported",
+			opts:                  []Option{CPU(1)},
+			arch:                  vm.ArchARM64,
+			defaultPreferLocalSSD: true,
+			expectedMachineType:   "c4a-standard-1",
+			expectedVolumeType:    "hyperdisk-balanced",
+			expectVolumeType:      true,
+			expectedArch:          vm.ArchARM64,
+		},
+		{
+			name:                  "ARM64 benchmark default local SSD uses C4A local SSD",
+			arch:                  vm.ArchARM64,
+			benchmark:             true,
+			defaultPreferLocalSSD: true,
+			expectedMachineType:   "c4a-standard-4-lssd",
+			expectedUseLocalSSD:   true,
+			expectedArch:          vm.ArchARM64,
+		},
+		{
+			name:                "ARM64 benchmark with local SSD disabled preserves pd-ssd on T2A",
+			opts:                []Option{DisableLocalSSD()},
+			arch:                vm.ArchARM64,
+			benchmark:           true,
+			expectedMachineType: "t2a-standard-4",
+			expectedVolumeType:  "pd-ssd",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchARM64,
+		},
+		{
+			name:                "ARM64 benchmark with volume size preserves pd-ssd on T2A",
+			opts:                []Option{VolumeSize(500)},
+			arch:                vm.ArchARM64,
+			benchmark:           true,
+			expectedMachineType: "t2a-standard-4",
+			expectedVolumeType:  "pd-ssd",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchARM64,
+		},
+		{
+			name:                "ARM64 explicit pd-ssd uses T2A",
+			opts:                []Option{VolumeType("pd-ssd")},
+			arch:                vm.ArchARM64,
+			expectedMachineType: "t2a-standard-4",
+			expectedVolumeType:  "pd-ssd",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchARM64,
+		},
+		{
+			name:                "ARM64 explicit pd-ssd falls back to AMD64 when T2A cannot match Auto memory",
+			opts:                []Option{CPU(32), VolumeType("pd-ssd")},
+			arch:                vm.ArchARM64,
+			expectedMachineType: "n2-custom-32-65536",
+			expectedVolumeType:  "pd-ssd",
+			expectVolumeType:    true,
+			expectedArch:        vm.ArchAMD64,
+		},
+		{
+			name:                  "ARM64 benchmark local SSD falls back to AMD64 when C4A cannot match disk count",
+			opts:                  []Option{CPU(16), Disks(16)},
+			arch:                  vm.ArchARM64,
+			benchmark:             true,
+			defaultPreferLocalSSD: true,
+			expectedMachineType:   "n2-standard-16",
+			expectedUseLocalSSD:   true,
+			expectedArch:          vm.ArchAMD64,
+		},
+		{
+			name:                  "ARM64 C4A falls back to AMD64 when explicit zones are unsupported",
+			opts:                  []Option{Geo(), GCEZones("us-east1-b,us-west1-b")},
+			arch:                  vm.ArchARM64,
+			defaultPreferLocalSSD: true,
+			expectedMachineType:   "n2-standard-4",
+			expectedUseLocalSSD:   true,
+			expectedArch:          vm.ArchAMD64,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := MakeClusterSpec(4, tc.opts...)
+			params := RoachprodClusterConfig{
+				Cloud:         GCE,
+				PreferredArch: tc.arch,
+				Benchmark:     tc.benchmark,
+			}
+			params.Defaults.PreferLocalSSD = tc.defaultPreferLocalSSD
+			createOpts, providerOpts, _, selectedArch, err := s.RoachprodOpts(params)
+			require.NoError(t, err)
+			gceOpts, ok := providerOpts.(*gce.ProviderOpts)
+			require.True(t, ok)
+			require.Equal(t, tc.expectedMachineType, gceOpts.MachineType)
+			if tc.expectVolumeType {
+				require.Equal(t, tc.expectedVolumeType, gceOpts.PDVolumeType)
+			}
+			require.Equal(t, tc.expectedUseLocalSSD, createOpts.SSDOpts.UseLocalSSD)
+			if tc.expectedArch != "" {
+				require.Equal(t, tc.expectedArch, selectedArch)
+			}
+		})
+	}
+}
+
+func TestGCEWorkloadUsesMachineCompatibleVolumeType(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      []Option
+		benchmark bool
+	}{
+		{
+			name:      "benchmark remote storage",
+			opts:      []Option{DisableLocalSSD()},
+			benchmark: true,
+		},
+		{
+			name: "explicit pd-ssd",
+			opts: []Option{VolumeType("pd-ssd")},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := append([]Option{WorkloadNode(), WorkloadRequiresDisk()}, tc.opts...)
+			s := MakeClusterSpec(5, opts...)
+			params := RoachprodClusterConfig{
+				Cloud:         GCE,
+				PreferredArch: vm.ArchARM64,
+				Benchmark:     tc.benchmark,
+			}
+
+			_, providerOpts, workloadProviderOpts, _, err := s.RoachprodOpts(params)
+			require.NoError(t, err)
+
+			gceOpts, ok := providerOpts.(*gce.ProviderOpts)
+			require.True(t, ok)
+			require.Equal(t, "t2a-standard-4", gceOpts.MachineType)
+			require.Equal(t, "pd-ssd", gceOpts.PDVolumeType)
+
+			workloadGCEOpts, ok := workloadProviderOpts.(*gce.ProviderOpts)
+			require.True(t, ok)
+			require.Equal(t, "c4a-standard-4", workloadGCEOpts.MachineType)
+			require.Equal(t, "hyperdisk-balanced", workloadGCEOpts.PDVolumeType)
+			require.False(t, workloadGCEOpts.BootDiskOnly)
+		})
+	}
+}
+
+func TestGCELocalSSDWorkloadBootDiskOnlyAvoidsLSSDMachineType(t *testing.T) {
+	s := MakeClusterSpec(5, WorkloadNode())
+	params := RoachprodClusterConfig{
+		Cloud:         GCE,
+		PreferredArch: vm.ArchARM64,
+	}
+	params.Defaults.PreferLocalSSD = true
+
+	createOpts, providerOpts, workloadProviderOpts, _, err := s.RoachprodOpts(params)
+	require.NoError(t, err)
+	require.True(t, createOpts.SSDOpts.UseLocalSSD)
+
+	gceOpts, ok := providerOpts.(*gce.ProviderOpts)
+	require.True(t, ok)
+	require.Equal(t, "c4a-standard-4-lssd", gceOpts.MachineType)
+	require.False(t, gceOpts.BootDiskOnly)
+
+	workloadGCEOpts, ok := workloadProviderOpts.(*gce.ProviderOpts)
+	require.True(t, ok)
+	require.Equal(t, "c4a-standard-4", workloadGCEOpts.MachineType)
+	require.True(t, workloadGCEOpts.BootDiskOnly)
+}
+
+func TestGCET2ADefaultZones(t *testing.T) {
+	s := MakeClusterSpec(4, DisableLocalSSD())
+	params := RoachprodClusterConfig{
+		Cloud:         GCE,
+		PreferredArch: vm.ArchARM64,
+		Benchmark:     true,
+	}
+	_, providerOpts, workloadProviderOpts, selectedArch, err := s.RoachprodOpts(params)
+	require.NoError(t, err)
+
+	providerOpts, workloadProviderOpts = s.SetRoachprodOptsZones(
+		providerOpts, workloadProviderOpts, params, string(selectedArch),
+	)
+	gceOpts := providerOpts.(*gce.ProviderOpts)
+	workloadGCEOpts := workloadProviderOpts.(*gce.ProviderOpts)
+
+	require.Equal(t, "t2a-standard-4", gceOpts.MachineType)
+	require.True(t, gce.IsSupportedT2AZone(gceOpts.Zones))
+	require.Equal(t, gceOpts.Zones, workloadGCEOpts.Zones)
+}
+
+func TestGCEC4ADefaultZonesExcludeWest1B(t *testing.T) {
+	s := MakeClusterSpec(4, Geo())
+	params := RoachprodClusterConfig{
+		Cloud:         GCE,
+		PreferredArch: vm.ArchARM64,
+	}
+	params.Defaults.PreferLocalSSD = true
+	_, providerOpts, workloadProviderOpts, selectedArch, err := s.RoachprodOpts(params)
+	require.NoError(t, err)
+	require.Equal(t, vm.ArchARM64, selectedArch)
+
+	providerOpts, workloadProviderOpts = s.SetRoachprodOptsZones(
+		providerOpts, workloadProviderOpts, params, string(selectedArch),
+	)
+	gceOpts := providerOpts.(*gce.ProviderOpts)
+	workloadGCEOpts := workloadProviderOpts.(*gce.ProviderOpts)
+
+	require.True(t, strings.HasPrefix(gceOpts.MachineType, "c4a-"))
+	for _, z := range gceOpts.Zones {
+		require.NotEqual(t, "us-west1-b", z, "C4A is not available in us-west1-b")
+	}
+	require.Equal(t, gceOpts.Zones, workloadGCEOpts.Zones)
 }

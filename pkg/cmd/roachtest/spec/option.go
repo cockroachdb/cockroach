@@ -207,10 +207,14 @@ func DisableLocalSSD() Option {
 // RandomizeVolumeType is an Option which randomly picks the volume type
 // to be used. Unless SSD is forced, the volume type is picked randomly
 // between the available types for a provider:
-// - GCE: pd-ssd, local-ssd
-// - AWS: gp3, io2, local-ssd
-// - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
-// - IBM: 10iops-tier
+//   - GCE: local-ssd, plus one machine-compatible remote disk type. When both
+//     pd-ssd and hyperdisk are available, keep only pd-ssd for now to avoid
+//     splitting roachperf benchmark history; reevaluate once those runs can
+//     compare storage types explicitly.
+//   - AWS: gp3, io2, local-ssd
+//   - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
+//   - IBM: 10iops-tier
+//
 // Note: this option has no effect if VolumeType is explicitly set
 // or PreferLocalSSD/DisableLocalSSD is used.
 func RandomizeVolumeType() Option {

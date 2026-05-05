@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/gcedb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -561,6 +562,15 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "t2a-standard-%d", &v); err == nil {
 			return v
 		}
+		if _, err := fmt.Sscanf(s, "c4a-standard-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "c4a-highmem-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "c4a-highcpu-%d", &v); err == nil {
+			return v
+		}
 		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
 			return v
 		}
@@ -899,7 +909,8 @@ type clusterConfig struct {
 	// Specifies CPU architecture which may require a custom AMI and cockroach binary.
 	arch vm.CPUArch
 	// Specifies the OS which may require a custom AMI and cockroach binary.
-	os string
+	os        string
+	benchmark bool
 }
 
 // clusterFactory is a creator of clusters.
@@ -1048,6 +1059,7 @@ func (f *clusterFactory) newRoachprodCluster(
 		Cloud:                  clusterCloud,
 		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
 		PreferredArch:          cfg.arch,
+		Benchmark:              cfg.benchmark,
 	}
 	params.Defaults.MachineType = roachtestflags.InstanceType
 	params.Defaults.Zones = roachtestflags.Zones
@@ -3322,8 +3334,11 @@ func (c *roachprodCluster) MaybeExtendCluster(
 	return nil
 }
 
-// archForTest determines the CPU architecture to use for a test. If the test
-// doesn't specify it, one is chosen randomly depending on flags.
+// archForTest determines the CPU architecture to use for a test. It first
+// applies provider and test constraints, then uses the roachtest arch
+// probabilities to choose among the remaining candidates. Some provider-specific
+// checks below intentionally override a random ARM64 choice when the selected
+// cloud cannot satisfy the test's machine, zone, or storage requirements.
 func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSpec) vm.CPUArch {
 	if roachtestflags.Cloud == spec.IBM {
 		// N.B. IBM only supports S390x on the "s390x" architecture.
@@ -3337,20 +3352,107 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		validArchs = testSpec.Cluster.CompatibleArchs
 	}
 
+	if roachtestflags.Cloud == spec.GCE {
+		// An explicit GCE machine type is an architecture constraint. Apply it
+		// before random selection so a test that pins n2/n2d does not randomly
+		// request ARM64, and a test that pins c4a/t2a uses an ARM64 image.
+		machineType := testSpec.Cluster.GCE.MachineType
+		if machineType == "" {
+			machineType = roachtestflags.InstanceType
+		}
+		if machineType != "" {
+			info, err := gcedb.GetMachineInfo(machineType)
+			if err == nil {
+				switch info.Architecture {
+				case gcedb.ArchARM64:
+					l.PrintfCtx(ctx,
+						"GCE machine type %q is ARM64; using arch=%q, %s",
+						machineType, vm.ArchARM64, testSpec.Name,
+					)
+					return vm.ArchARM64
+				case gcedb.ArchAMD64:
+					if validArchs.Contains(spec.ArchARM64) {
+						validArchs = validArchs.NoARM64()
+						l.PrintfCtx(ctx,
+							"GCE machine type %q is AMD64; excluding ARM64 from architecture selection, %s",
+							machineType, testSpec.Name,
+						)
+						if validArchs.IsEmpty() {
+							return vm.ArchAMD64
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// This is the only randomized step. The rest of the function validates that
+	// the chosen architecture can preserve the test's GCE storage and zone
+	// semantics.
 	arch := randomArch(ctx, l, validArchs, prng, roachtestflags.ARM64Probability, roachtestflags.FIPSProbability)
 
 	if roachtestflags.Cloud == spec.GCE && arch == vm.ArchARM64 {
-		// N.B. T2A support is rather limited, both in terms of supported
-		// regions and no local SSDs. Thus, we must fall back to AMD64 in
-		// those cases. See #122035.
-		if testSpec.Cluster.GCE.Zones != "" &&
-			!gce.IsSupportedT2AZone(strings.Split(testSpec.Cluster.GCE.Zones, ",")) {
-			l.PrintfCtx(ctx, "%q specified one or more GCE regions unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
-			return vm.ArchAMD64
+		// The remaining GCE checks only rewrite auto-selected machine types. If
+		// the test or command line names a machine type explicitly, the explicit
+		// machine type is treated as authoritative and should have constrained
+		// validArchs above.
+		autoSelectedGCEMachineType := testSpec.Cluster.GCE.MachineType == "" && roachtestflags.InstanceType == ""
+		zones := testSpec.Cluster.GCE.Zones
+		if zones == "" {
+			zones = roachtestflags.Zones
 		}
-		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.DiskCount > 1 {
-			l.PrintfCtx(ctx, "%q specified multiple _local_ SSDs unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
-			return vm.ArchAMD64
+		gceStorageDecision := testSpec.Cluster.GCEStorageDecision(testSpec.Benchmark, roachtestflags.PreferLocalSSD)
+		if gceStorageDecision.RequiresPDSSD() && autoSelectedGCEMachineType {
+			// C4A cannot attach pd-ssd. For ARM64 runs, use T2A when it can
+			// preserve the requested shape and zones; otherwise fall back to
+			// AMD64 rather than silently changing storage or memory semantics.
+			pdSSDMachineType, selectedArch := spec.SelectGCEMachineTypeForPDSSD(
+				testSpec.Cluster.CPUs, testSpec.Cluster.Mem, vm.ArchARM64,
+			)
+			if selectedArch != vm.ArchARM64 {
+				l.PrintfCtx(ctx,
+					"%q needs pd-ssd on GCE because %s, but C4A cannot attach pd-ssd and T2A cannot represent this CPU/memory shape; falling back to AMD64 to preserve the storage configuration",
+					testSpec.Name, gceStorageDecision.Reason,
+				)
+				return vm.ArchAMD64
+			}
+			if zones != "" && !gce.IsSupportedT2AZone(strings.Split(zones, ",")) {
+				l.PrintfCtx(ctx,
+					"%q needs pd-ssd on GCE, which requires T2A for ARM64, but the configured zones %q are not supported by T2A; falling back to AMD64 to preserve pd-ssd",
+					testSpec.Name, zones,
+				)
+				return vm.ArchAMD64
+			}
+			l.PrintfCtx(ctx,
+				"%q needs pd-ssd on GCE because %s; using %s instead of C4A because C4A cannot attach pd-ssd and T2A is the ARM64 family that preserves pd-ssd",
+				testSpec.Name, gceStorageDecision.Reason, pdSSDMachineType,
+			)
+		}
+		if testSpec.Cluster.CPUs != 0 && autoSelectedGCEMachineType {
+			// For non-pd-ssd C4A selections, ensure any explicit zones and local
+			// SSD requirements are actually compatible with the C4A shape.
+			machineType, selectedArch := spec.SelectGCEMachineType(
+				testSpec.Cluster.CPUs, testSpec.Cluster.Mem, vm.ArchARM64,
+			)
+			if selectedArch == vm.ArchARM64 && strings.HasPrefix(strings.ToLower(machineType), "c4a-") {
+				if zones != "" && !gce.IsSupportedC4AZone(strings.Split(zones, ",")) {
+					l.PrintfCtx(ctx,
+						"%q would use %s on GCE, but the configured zones %q are not supported by C4A; falling back to AMD64",
+						testSpec.Name, machineType, zones,
+					)
+					return vm.ArchAMD64
+				}
+
+				if testSpec.Benchmark && gceStorageDecision.UsesLocalSSD() {
+					if _, ok := spec.GCEMachineTypeWithLocalSSD(machineType, testSpec.Cluster.DiskCount); !ok {
+						l.PrintfCtx(ctx,
+							"%q selected local SSDs on GCE, but auto-selected C4A machine type %s cannot satisfy the requested local SSD count; falling back to AMD64 to preserve local SSD/store-count semantics",
+							testSpec.Name, machineType,
+						)
+						return vm.ArchAMD64
+					}
+				}
+			}
 		}
 	}
 	l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testSpec.Name)
