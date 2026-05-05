@@ -229,17 +229,16 @@ func (mvb *mixedVersionBackup) configureGCPolicies(
 	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
 		return err
 	}
-	u, err := mvb.CommonTestUtils(ctx, h)
-	if err != nil {
-		return err
-	}
 	// The bank workload is an update-heavy workload, which means that by the end
 	// of the test, full revision history backups will be slowed significantly due
 	// to the amount of MVCC history. We set a shorter GC TTL for the bank
 	// database to bound the full backup durations.
+	//
+	// CONFIGURE ZONE is not supported in virtual clusters, so we use the
+	// system connection directly.
 	const bankTTLSeconds = uint64(2 * time.Hour / time.Second)
-	return u.Exec(
-		ctx, rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
+	return h.System.Exec(
+		rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
 	)
 }
 
