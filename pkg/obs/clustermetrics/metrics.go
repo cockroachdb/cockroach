@@ -13,6 +13,8 @@ import (
 
 type Gauge = cmmetrics.Gauge
 type Counter = cmmetrics.Counter
+type CounterVec = cmmetrics.CounterVec
+type GaugeVec = cmmetrics.GaugeVec
 type WriteStopwatch = cmmetrics.WriteStopwatch
 
 // Re-exports so callers can use a single clustermetrics import.

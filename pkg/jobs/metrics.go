@@ -38,11 +38,10 @@ type Metrics struct {
 	// RunningNonIdleJobs is the total number of running jobs that are not idle.
 	RunningNonIdleJobs *metric.Gauge
 
-	RowLevelTTL  metric.Struct
-	Changefeed   metric.Struct
-	StreamIngest metric.Struct
-	Backup       metric.Struct
-	Inspect      metric.Struct
+	RowLevelTTL metric.Struct
+	Changefeed  metric.Struct
+	Backup      metric.Struct
+	Inspect     metric.Struct
 
 	// AdoptIterations counts the number of adopt loops executed by Registry.
 	AdoptIterations *metric.Counter
@@ -409,9 +408,6 @@ func initMetrics(
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval, lookup)
 	}
-	if MakeStreamIngestMetricsHook != nil {
-		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
-	}
 	if MakeBackupMetricsHook != nil {
 		m.Backup = MakeBackupMetricsHook(histogramWindowInterval)
 	}
@@ -490,10 +486,6 @@ var MakeChangefeedMetricsHook func(time.Duration, *cidr.Lookup) metric.Struct
 // MakeChangefeedMemoryMetricsHook allows for registration of changefeed memory
 // metrics from ccl code.
 var MakeChangefeedMemoryMetricsHook func(time.Duration) (curCount *metric.Gauge, maxHist metric.IHistogram)
-
-// MakeStreamIngestMetricsHook allows for registration of streaming metrics from
-// ccl code.
-var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
 
 // MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
 var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
