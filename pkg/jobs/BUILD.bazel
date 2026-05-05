@@ -134,6 +134,8 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmwriter",
         "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
