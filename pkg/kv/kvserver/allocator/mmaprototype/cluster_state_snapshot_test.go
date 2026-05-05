@@ -446,6 +446,101 @@ func TestSnapshotSpanConfigDedup(t *testing.T) {
 	require.EqualValues(t, 5, snap.SpanConfigs[r3.ConfID].NumReplicas)
 }
 
+// TestSnapshotRangeAnalysis builds a small range whose voter placement
+// violates one VoterConstraints entry but satisfies the (synthesized
+// empty) general Constraints, with two LeasePreferences ordered such that
+// the leaseholder matches the first. It pins down each field of the
+// snapshot's RangeAnalysis.
+func TestSnapshotRangeAnalysis(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ts := timeutil.NewManualTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cs := newClusterState(ts, newStringInterner())
+	cs.diskUtilRefuseThreshold = 0.9
+	cs.diskUtilShedThreshold = 0.9
+
+	// s1, s2 in us-east; s3 in us-west.
+	locs := map[roachpb.NodeID]roachpb.Locality{
+		1: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}},
+		2: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}},
+		3: {Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}}},
+	}
+	for i := 1; i <= 3; i++ {
+		sal := StoreAttributesAndLocality{
+			StoreID:      roachpb.StoreID(i),
+			NodeID:       roachpb.NodeID(i),
+			NodeLocality: locs[roachpb.NodeID(i)],
+		}
+		cs.setStore(sal.withNodeTier())
+	}
+	for i := 1; i <= 3; i++ {
+		cs.processStoreLoadMsg(ctx, &StoreLoadMsg{
+			NodeID:   roachpb.NodeID(i),
+			StoreID:  roachpb.StoreID(i),
+			Load:     LoadVector{1, 0, 0},
+			Capacity: LoadVector{1000, 1000, 1000},
+		}, nil)
+	}
+
+	replicas := []StoreIDAndReplicaState{
+		{StoreID: 1, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   1,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: true},
+		}}},
+		{StoreID: 2, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   2,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+		{StoreID: 3, ReplicaState: ReplicaState{ReplicaIDAndType: ReplicaIDAndType{
+			ReplicaID:   3,
+			ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+		}}},
+	}
+	// VoterConstraints REQUIRE all 3 voters in us-east: s3 (us-west) violates.
+	// LeasePreferences prefer us-east, then us-west: leaseholder s1 matches index 0.
+	conf := roachpb.SpanConfig{
+		NumReplicas: 3,
+		NumVoters:   3,
+		VoterConstraints: []roachpb.ConstraintsConjunction{{
+			NumReplicas: 3,
+			Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-east",
+			}},
+		}},
+		LeasePreferences: []roachpb.LeasePreference{
+			{Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-east",
+			}}},
+			{Constraints: []roachpb.Constraint{{
+				Type: roachpb.Constraint_REQUIRED, Key: "region", Value: "us-west",
+			}}},
+		},
+	}
+	cs.processStoreLeaseholderMsg(ctx, &StoreLeaseholderMsg{
+		StoreID: 1,
+		Ranges: []RangeMsg{{
+			RangeID:                  1,
+			Replicas:                 replicas,
+			MaybeSpanConfIsPopulated: true,
+			MaybeSpanConf:            conf,
+		}},
+	}, nil)
+
+	snap, err := cs.Snapshot()
+	require.NoError(t, err)
+	a := snap.Ranges[1].Analysis
+	require.EqualValues(t, 3, a.NumNeededVoters)
+	require.EqualValues(t, 0, a.NumNeededNonVoters)
+	require.Empty(t, a.UnsatisfiedConstraintVoterStoreIds,
+		"no general Constraints, every voter should be conforming")
+	require.Empty(t, a.UnsatisfiedConstraintNonVoterStoreIds,
+		"range has no non-voters")
+	require.Equal(t, []roachpb.StoreID{3}, a.UnsatisfiedVoterConstraintStoreIds,
+		"s3 in us-west should violate the us-east voter constraint")
+	require.EqualValues(t, 0, a.LeaseholderLeasePreferenceIndex,
+		"leaseholder s1 should match the first (us-east) lease preference")
+}
+
 // TestSnapshotCoversAllFields enforces three invariants on every owned
 // struct registered in snapshotFieldDispositions:
 //
