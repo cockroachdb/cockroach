@@ -1,0 +1,9 @@
+name: Test Actions
+on:
+  pull_request:
+    branches: [ master ]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "Hello from Actions"
