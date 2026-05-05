@@ -124,15 +124,7 @@ func (sl StateLoader) SetRaftTruncatedState(
 	if (*truncState == kvserverpb.RaftTruncatedState{}) {
 		return errors.New("cannot persist empty RaftTruncatedState")
 	}
-	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(
-		ctx,
-		writer,
-		sl.RaftTruncatedStateKey(),
-		hlc.Timestamp{}, /* timestamp */
-		truncState,
-		storage.MVCCWriteOptions{}, /* txn */
-	)
+	return storage.MVCCBlindPutInlineProto(writer, sl.RaftTruncatedStateKey(), truncState, nil)
 }
 
 // ClearRaftTruncatedState clears the RaftTruncatedState.
@@ -158,15 +150,7 @@ func (sl StateLoader) LoadHardState(
 func (sl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
-	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(
-		ctx,
-		writer,
-		sl.RaftHardStateKey(),
-		hlc.Timestamp{}, /* timestamp */
-		&hs,
-		storage.MVCCWriteOptions{}, /* opts */
-	)
+	return storage.MVCCBlindPutInlineProto(writer, sl.RaftHardStateKey(), &hs, nil)
 }
 
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,

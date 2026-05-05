@@ -1982,6 +1982,39 @@ func MVCCBlindPut(
 	return mvccPutUsingIter(ctx, writer, nil, nil, key, timestamp, value, nil, opts)
 }
 
+// MVCCBlindPutInline writes an inline (unversioned) value directly, without
+// reading the existing value or checking for conflicts. This is a fast path for
+// non-transactional blind writes of inline values, such as raft log appends.
+func MVCCBlindPutInline(
+	writer Writer, key roachpb.Key, value roachpb.Value, ms *enginepb.MVCCStats,
+) error {
+	metaKey := MakeMVCCMetadataKey(key)
+	buf := newPutBuffer()
+	defer buf.release()
+	buf.newMeta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+	metaKeySize, metaValSize, err := buf.putInlineMeta(writer, metaKey, &buf.newMeta)
+	if err != nil {
+		return err
+	}
+	if ms != nil {
+		updateStatsForInline(ms, key, 0, 0, metaKeySize, metaValSize)
+	}
+	return nil
+}
+
+// MVCCBlindPutInlineProto is like MVCCBlindPutInline but accepts a protobuf
+// message which is serialized into a roachpb.Value.
+func MVCCBlindPutInlineProto(
+	writer Writer, key roachpb.Key, msg protoutil.Message, ms *enginepb.MVCCStats,
+) error {
+	var value roachpb.Value
+	if err := value.SetProto(msg); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+	return MVCCBlindPutInline(writer, key, value, ms)
+}
+
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
 //
