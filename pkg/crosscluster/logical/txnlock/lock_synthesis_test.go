@@ -191,6 +191,12 @@ func selfRefRow(id, parentID, data int) tree.Datums {
 	}
 }
 
+// pkFKRow builds datums for schemas (id INT PRIMARY KEY) and
+// (id INT PRIMARY KEY REFERENCES pk_fk_parent(id)).
+func pkFKRow(id int) tree.Datums {
+	return tree.Datums{tree.NewDInt(tree.DInt(id))}
+}
+
 // compositeFKParentRow builds datums for schema
 // (a INT, b INT, c INT, d INT, val INT, PRIMARY KEY (a, b), UNIQUE (c, d)).
 func compositeFKParentRow(a, b, c, d, val int) tree.Datums {
@@ -249,6 +255,11 @@ func TestDeriveLocks(t *testing.T) {
 			parent_id INT REFERENCES fk_self_ref(id),
 			data INT
 		)`)
+	runner.Exec(t, `CREATE TABLE pk_fk_parent (id INT PRIMARY KEY)`)
+	runner.Exec(t, `
+		CREATE TABLE pk_fk_child (
+			id INT PRIMARY KEY REFERENCES pk_fk_parent(id)
+		)`)
 	runner.Exec(t, `
 		CREATE TABLE composite_fk_parent (
 			a INT, b INT, c INT, d INT, val INT,
@@ -279,6 +290,12 @@ func TestDeriveLocks(t *testing.T) {
 	selfRefDesc := cdctest.GetHydratedTableDescriptor(
 		t, s.ExecutorConfig(), "fk_self_ref",
 	)
+	pkFKParentDesc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), "pk_fk_parent",
+	)
+	pkFKChildDesc := cdctest.GetHydratedTableDescriptor(
+		t, s.ExecutorConfig(), "pk_fk_child",
+	)
 	compositeFKParentDesc := cdctest.GetHydratedTableDescriptor(
 		t, s.ExecutorConfig(), "composite_fk_parent",
 	)
@@ -292,6 +309,8 @@ func TestDeriveLocks(t *testing.T) {
 	parentEB := ldrdecoder.NewTestEventBuilder(t, parentDesc.TableDesc())
 	childEB := ldrdecoder.NewTestEventBuilder(t, childDesc.TableDesc())
 	selfRefEB := ldrdecoder.NewTestEventBuilder(t, selfRefDesc.TableDesc())
+	pkFKParentEB := ldrdecoder.NewTestEventBuilder(t, pkFKParentDesc.TableDesc())
+	pkFKChildEB := ldrdecoder.NewTestEventBuilder(t, pkFKChildDesc.TableDesc())
 	compositeFKParentEB := ldrdecoder.NewTestEventBuilder(t, compositeFKParentDesc.TableDesc())
 	compositeChildEB := ldrdecoder.NewTestEventBuilder(t, compositeChildDesc.TableDesc())
 	txnTime := s.Clock().Now()
@@ -305,6 +324,8 @@ func TestDeriveLocks(t *testing.T) {
 			{SourceDescriptor: parentDesc, DestID: parentDesc.GetID()},
 			{SourceDescriptor: childDesc, DestID: childDesc.GetID()},
 			{SourceDescriptor: selfRefDesc, DestID: selfRefDesc.GetID()},
+			{SourceDescriptor: pkFKParentDesc, DestID: pkFKParentDesc.GetID()},
+			{SourceDescriptor: pkFKChildDesc, DestID: pkFKChildDesc.GetID()},
 			{SourceDescriptor: compositeFKParentDesc, DestID: compositeFKParentDesc.GetID()},
 			{SourceDescriptor: compositeChildDesc, DestID: compositeChildDesc.GetID()},
 		},
@@ -323,6 +344,8 @@ func TestDeriveLocks(t *testing.T) {
 			{DestID: parentDesc.GetID()},
 			{DestID: childDesc.GetID()},
 			{DestID: selfRefDesc.GetID()},
+			{DestID: pkFKParentDesc.GetID()},
+			{DestID: pkFKChildDesc.GetID()},
 			{DestID: compositeFKParentDesc.GetID()},
 			{DestID: compositeChildDesc.GetID()},
 		},
@@ -821,6 +844,28 @@ func TestDeriveLocks(t *testing.T) {
 				},
 				writeLockCount: 5,
 				readLockCount:  0,
+				order:          []int{1, 0},
+			},
+		},
+		{
+			// Deleting a child and its parent where the child's FK column is
+			// also its primary key.
+			//
+			// This test is a regression test for the following behavior (#169778):
+			//	1. We always emit the PK for a deleted row.
+			//	2. It's possible for a FK (but not a UC) to decode as
+			//	   the same exact value as its own PK.
+			// Deleting such a row would appear as though the fk was updated
+			// rather than deleted if we only checked the row values, instead
+			// of the actual decoded row IsDelete. This would cause this test
+			// to errornously detect a cycle.
+			name: "fk_delete_child_then_parent_pk_fk",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					pkFKParentEB.DeleteEvent(txnTime, pkFKRow(1)),
+					pkFKChildEB.DeleteEvent(txnTime, pkFKRow(1)),
+				},
+				writeLockCount: 3,
 				order:          []int{1, 0},
 			},
 		},

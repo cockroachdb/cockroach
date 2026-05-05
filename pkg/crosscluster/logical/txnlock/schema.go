@@ -310,17 +310,19 @@ func (t *tableConstraints) fkDependsOn(
 ) (bool, error) {
 	// a is the child, b is the parent. a depends on b if b is inserting a
 	// parent value that a's new row needs to reference.
-	for _, outbound := range t.OutboundForeignKeyConstraints {
-		inbound, ok := otherTC.InboundForeignKeyConstraints[outbound.mixin]
-		if !ok {
-			continue
-		}
-		eq, err := columnSetEqual(ctx, t.evalCtx, &outbound, &inbound, a.Row, b.Row)
-		if err != nil {
-			return false, err
-		}
-		if eq {
-			return true, nil
+	if !a.IsDelete && !b.IsDelete {
+		for _, outbound := range t.OutboundForeignKeyConstraints {
+			inbound, ok := otherTC.InboundForeignKeyConstraints[outbound.mixin]
+			if !ok {
+				continue
+			}
+			eq, err := columnSetEqual(ctx, t.evalCtx, &outbound, &inbound, a.Row, b.Row)
+			if err != nil {
+				return false, err
+			}
+			if eq {
+				return true, nil
+			}
 		}
 	}
 
