@@ -32,6 +32,7 @@ go_library(
         "schema_registry.go",
         "sink.go",
         "sink_cloudstorage.go",
+        "sink_event.go",
         "sink_external_connection.go",
         "sink_kafka.go",
         "sink_kafka_v2.go",
