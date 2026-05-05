@@ -49,10 +49,6 @@ type createFunctionNode struct {
 func (n *createFunctionNode) ReadingOwnWrites() {}
 
 func (n *createFunctionNode) startExec(params runParams) error {
-	if n.cf.RoutineBody != nil {
-		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
-	}
-
 	if err := params.p.canCreateOnSchema(
 		params.ctx, n.scDesc.GetID(), n.dbDesc.GetID(), params.p.User(), skipCheckPublicSchema,
 	); err != nil {

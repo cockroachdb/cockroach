@@ -72,8 +72,17 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}()
 
-	if cf.RoutineBody != nil {
-		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
+	// inlineBody records whether the user wrote the SQL-standard inline body
+	// syntax (`BEGIN ATOMIC ... END` or a bare `RETURN expr`). The conversion
+	// below rewrites it into the legacy string body form so the rest of this
+	// function can process both shapes uniformly. We retain the flag because
+	// some validation rules (e.g. polymorphic-arg rejection) only apply when
+	// the body was inline.
+	inlineBody := cf.RoutineBody != nil
+	if inlineBody {
+		if err := tree.ConvertInlineRoutineBodyToOption(cf); err != nil {
+			panic(err)
+		}
 	}
 
 	if err := tree.ValidateRoutineOptions(cf.Options, cf.IsProcedure); err != nil {
@@ -280,6 +289,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				class: param.Class,
 			})
 		}
+	}
+
+	if inlineBody && sawPolymorphicInParam {
+		// PostgreSQL forbids polymorphic IN parameters with inline body syntax
+		// because early binding requires concrete argument types at parse time.
+		panic(pgerror.New(pgcode.InvalidFunctionDefinition,
+			"SQL function with unquoted function body cannot have polymorphic arguments"))
 	}
 
 	// Determine OUT parameter based return type.
