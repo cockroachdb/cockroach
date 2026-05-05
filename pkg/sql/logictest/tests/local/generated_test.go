@@ -2563,6 +2563,13 @@ func TestLogic_show_default_privileges(
 	runLogicTest(t, "show_default_privileges")
 }
 
+func TestLogic_show_eventlog_privilege(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_eventlog_privilege")
+}
+
 func TestLogic_show_external_connections(
 	t *testing.T,
 ) {
