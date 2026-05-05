@@ -568,7 +568,7 @@ func restore(
 		// Only update the job progress on the main data bundle. This should account
 		// for the bulk of the data to restore. Other data (e.g. zone configs in
 		// cluster restores) may be restored first.
-		progressLogger := jobs.DeprecatedNewChunkProgressLoggerForJob(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
+		progressLogger := jobs.DeprecatedNewChunkProgressLoggerForJob(job, numImportSpans, job.FractionCompleted(), 1.0, progressTracker.updateJobCallback)
 
 		jobProgressLoop := func(ctx context.Context) error {
 			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-loop")
