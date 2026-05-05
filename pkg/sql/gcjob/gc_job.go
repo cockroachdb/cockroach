@@ -7,7 +7,6 @@ package gcjob
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -189,7 +188,7 @@ func unsplitRangesInSpan(
 			// that the sticky bit was removed and merged concurrently. DROP TABLE
 			// should not fail because of this.
 			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
-				!strings.Contains(err.Error(), "is not the start of a range") {
+				!kvpb.IsKeyNotStartOfRange(err) {
 				return err
 			}
 		}
@@ -222,7 +221,7 @@ func unsplitRangesInSpanForSecondaryTenant(
 			// Swallow "key is not the start of a range" errors because it would mean
 			// that the sticky bit was removed and merged concurrently. DROP TABLE
 			// should not fail because of this.
-			if strings.Contains(err.Error(), "is not the start of a range") {
+			if kvpb.IsKeyNotStartOfRange(err) {
 				continue
 			}
 			// If we are in a secondary tenant and get an auth
