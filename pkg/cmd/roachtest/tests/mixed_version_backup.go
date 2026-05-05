@@ -229,17 +229,31 @@ func (mvb *mixedVersionBackup) configureGCPolicies(
 	if err := mvb.waitForDBs(ctx, l, rng, h); err != nil {
 		return err
 	}
-	u, err := mvb.CommonTestUtils(ctx, h)
-	if err != nil {
-		return err
-	}
 	// The bank workload is an update-heavy workload, which means that by the end
 	// of the test, full revision history backups will be slowed significantly due
 	// to the amount of MVCC history. We set a shorter GC TTL for the bank
 	// database to bound the full backup durations.
+	//
+	// The bank database lives in the tenant, so we must configure zone
+	// settings through the tenant connection. In older versions (pre-24.1),
+	// zone configs must be explicitly enabled for virtual clusters.
+	if h.IsMultitenant() && !h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
+		for _, name := range []string{
+			"sql.virtual_cluster.feature_access.zone_configs.enabled",
+			"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
+		} {
+			if err := h.System.Exec(
+				rng,
+				fmt.Sprintf(`ALTER TENANT $1 SET CLUSTER SETTING %s = $2`, name),
+				h.Tenant.Descriptor.Name, true,
+			); err != nil {
+				return errors.Wrapf(err, "setting %s", name)
+			}
+		}
+	}
 	const bankTTLSeconds = uint64(2 * time.Hour / time.Second)
-	return u.Exec(
-		ctx, rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
+	return h.Exec(
+		rng, `ALTER DATABASE bank CONFIGURE ZONE USING gc.ttlseconds = $1`, bankTTLSeconds,
 	)
 }
 
