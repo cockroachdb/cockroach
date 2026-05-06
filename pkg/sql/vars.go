@@ -537,7 +537,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DefaultTxnReadOnly), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return formatBoolAsPostgresSetting(sd.DefaultTxnReadOnly)
+		},
 		GlobalDefault: globalFalse,
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.DefaultTxnReadOnly == b.DefaultTxnReadOnly
+		},
 	},
 
 	// CockroachDB extension.
@@ -1288,6 +1294,9 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// See https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-IN-HOT-STANDBY
+	`in_hot_standby`: makeReadOnlyVar("off", sessionVarDescriptions["in_hot_standby"]),
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html
 	`integer_datetimes`: makeReadOnlyVar("on", sessionVarDescriptions["integer_datetimes"]),
 
@@ -1589,8 +1598,14 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return evalCtx.SessionData().SearchPath.String(), nil
 		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.SearchPath.String()
+		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DefaultSearchPath.String()
+		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.SearchPath.Equals(&b.SearchPath)
 		},
 	},
 
@@ -1790,6 +1805,17 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return security.GetConfiguredPasswordHashMethod(sv).String()
+		},
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html#GUC-SCRAM-ITERATIONS
+	`scram_iterations`: {
+		Description: sessionVarDescriptions["scram_iterations"],
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(security.SCRAMCost.Get(&evalCtx.Settings.SV), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(security.SCRAMCost.Get(sv), 10)
 		},
 	},
 

@@ -3950,6 +3950,7 @@ force_savepoint_restart                                          off
 foreign_key_cascades_limit                                       10000
 idle_in_transaction_session_timeout                              0
 idle_session_timeout                                             0
+in_hot_standby                                                   off
 index_join_streamer_batch_size                                   8.0 MiB
 index_recommendations_enabled                                    off
 initial_retry_backoff_for_read_committed                         2
@@ -4048,6 +4049,7 @@ require_explicit_primary_keys                                    off
 results_buffer_size                                              524288
 role                                                             none
 row_security                                                     on
+scram_iterations                                                 10610
 search_path                                                      "$user", public
 serial_normalization                                             rowid
 server_encoding                                                  UTF8
