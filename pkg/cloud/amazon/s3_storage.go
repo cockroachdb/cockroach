@@ -626,12 +626,26 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
 	addLoadOption(config.WithRetryer(func() aws.Retryer {
-		return retry.NewStandard(func(opts *retry.StandardOptions) {
+		standard := retry.NewStandard(func(opts *retry.StandardOptions) {
 			opts.MaxAttempts = int(maxRetries.Get(&s.settings.SV))
 			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
 				opts.RateLimiter = ratelimit.None
 			}
 		})
+		// Treat credential-expiry errors as retryable. When the configured
+		// credentials provider issues short-lived tokens, a long-running upload
+		// can race their expiry: a request signed just before the credentials
+		// expire can arrive at S3 just after, surfacing as ExpiredToken /
+		// ExpiredTokenException / RequestExpired and failing the operation. The
+		// v1 SDK swallowed this race by classifying these codes as retryable
+		// (aws-sdk-go aws/request/retryer.go: credsExpiredCodes); aws-sdk-go-v2's
+		// default retryable set dropped them, so what was a transparent retry in
+		// v1 became a hard, user-visible failure in v2. Restore the v1 behavior.
+		// The codes mirror v1's credsExpiredCodes set exactly. The cache itself
+		// notices it is past Expires by the time the retry's backoff completes,
+		// so an explicit Invalidate() is not required to force a fresh retrieve.
+		return retry.AddWithErrorCodes(standard,
+			"ExpiredToken", "ExpiredTokenException", "RequestExpired")
 	}))
 
 	switch s.opts.auth {
