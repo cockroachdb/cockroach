@@ -1322,6 +1322,8 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> drop_resource_group_stmt
 %type <tree.Statement> show_resource_group_stmt
 %type <tree.Statement> show_resource_groups_stmt
+%type <[]tree.KVOption> opt_with_resource_group_options resource_group_option_list
+%type <tree.KVOption> resource_group_option
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -4280,28 +4282,58 @@ drop_external_connection_stmt:
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
+opt_with_resource_group_options:
+  /* EMPTY */
+  {
+    $$.val = ([]tree.KVOption)(nil)
+  }
+| WITH resource_group_option_list
+  {
+    $$.val = $2.kvOptions()
+  }
+| WITH '(' resource_group_option_list ')'
+  {
+    $$.val = $3.kvOptions()
+  }
+
+resource_group_option_list:
+  resource_group_option
+  {
+    $$.val = []tree.KVOption{$1.kvOption()}
+  }
+| resource_group_option_list ',' resource_group_option
+  {
+    $$.val = append($1.kvOptions(), $3.kvOption())
+  }
+
+resource_group_option:
+  name '=' var_value
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: $3.expr()}
+  }
+
 // %Help: CREATE RESOURCE GROUP - create a resource group for the resource manager
 // %Category: Misc
 // %Text:
-// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> [WITH (<option> = <value>, ...)]
+// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> [WITH <option> = <value>, ...]
 //
 // Options:
 //   cpu_weight = <int>   relative CPU share (must be > 0)
 //   max_cpu    = <bool>  whether the group may burst to the cluster's max CPU
 create_resource_group_stmt:
-  CREATE RESOURCE GROUP name opt_with_storage_parameter_list
+  CREATE RESOURCE GROUP name opt_with_resource_group_options
   {
     $$.val = &tree.CreateResourceGroup{
       Name:    tree.Name($4),
-      Options: tree.StorageParams($5.storageParams()),
+      Options: $5.kvOptions(),
     }
   }
-| CREATE RESOURCE GROUP IF NOT EXISTS name opt_with_storage_parameter_list
+| CREATE RESOURCE GROUP IF NOT EXISTS name opt_with_resource_group_options
   {
     $$.val = &tree.CreateResourceGroup{
       IfNotExists: true,
       Name:        tree.Name($7),
-      Options:     tree.StorageParams($8.storageParams()),
+      Options:     $8.kvOptions(),
     }
   }
 | CREATE RESOURCE GROUP error // SHOW HELP: CREATE RESOURCE GROUP
@@ -4309,23 +4341,23 @@ create_resource_group_stmt:
 // %Help: ALTER RESOURCE GROUP - alter an existing resource group
 // %Category: Misc
 // %Text:
-// ALTER RESOURCE GROUP [IF EXISTS] <name> WITH (<option> = <value>, ...)
+// ALTER RESOURCE GROUP [IF EXISTS] <name> WITH <option> = <value>, ...
 //
 // Only the options named are updated; unspecified options are left unchanged.
 alter_resource_group_stmt:
-  ALTER RESOURCE GROUP name opt_with_storage_parameter_list
+  ALTER RESOURCE GROUP name opt_with_resource_group_options
   {
     $$.val = &tree.AlterResourceGroup{
       Name:    tree.Name($4),
-      Options: tree.StorageParams($5.storageParams()),
+      Options: $5.kvOptions(),
     }
   }
-| ALTER RESOURCE GROUP IF EXISTS name opt_with_storage_parameter_list
+| ALTER RESOURCE GROUP IF EXISTS name opt_with_resource_group_options
   {
     $$.val = &tree.AlterResourceGroup{
       IfExists: true,
       Name:     tree.Name($6),
-      Options:  tree.StorageParams($7.storageParams()),
+      Options:  $7.kvOptions(),
     }
   }
 | ALTER RESOURCE GROUP error // SHOW HELP: ALTER RESOURCE GROUP

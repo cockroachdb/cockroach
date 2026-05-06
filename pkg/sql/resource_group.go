@@ -71,7 +71,7 @@ func applyResourceGroupOptions(
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	cfg *admissionpb.ResourceGroupConfig,
-	opts tree.StorageParams,
+	opts tree.KVOptions,
 ) error {
 	evalOpt := func(expr tree.Expr) (tree.Datum, error) {
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
@@ -81,34 +81,35 @@ func applyResourceGroupOptions(
 		return eval.Expr(ctx, evalCtx, typedExpr)
 	}
 	for _, opt := range opts {
-		switch opt.Key {
+		key := string(opt.Key)
+		switch key {
 		case resourceGroupOptCPUWeight:
 			datum, err := evalOpt(opt.Value)
 			if err != nil {
-				return errors.Wrapf(err, "evaluating %s", opt.Key)
+				return errors.Wrapf(err, "evaluating %s", key)
 			}
-			v, err := paramparse.DatumAsInt(ctx, evalCtx, opt.Key, datum)
+			v, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
 				return err
 			}
 			if v <= 0 {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
-					"%s must be a positive integer, got %d", opt.Key, v)
+					"%s must be a positive integer, got %d", key, v)
 			}
 			cfg.CPUWeight = v
 		case resourceGroupOptMaxCPU:
 			datum, err := evalOpt(opt.Value)
 			if err != nil {
-				return errors.Wrapf(err, "evaluating %s", opt.Key)
+				return errors.Wrapf(err, "evaluating %s", key)
 			}
-			b, err := paramparse.DatumAsBool(ctx, evalCtx, opt.Key, datum)
+			b, err := paramparse.DatumAsBool(ctx, evalCtx, key, datum)
 			if err != nil {
 				return err
 			}
 			cfg.MaxCPU = b
 		default:
 			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"unknown resource group option %q", opt.Key)
+				"unknown resource group option %q", key)
 		}
 	}
 	return nil
