@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -398,9 +399,7 @@ func TestPendingBuffer_PreCancelledCtx(t *testing.T) {
 //
 // Real cluster validation lives in the noLingerSink demo (later).
 func TestPendingBuffer_Demo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("logs-only demo; run with -v to see lifecycle")
-	}
+	skip.WithIssue(t, 165385, "logs-only demo; run with -v to see lifecycle")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
