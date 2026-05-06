@@ -211,8 +211,9 @@ func alterTypeAddValue(
 	}
 	b.Add(enumValue)
 
-	b.LogEventForExistingPayload(enumValue, &eventpb.AlterType{
+	b.LogEventForExistingPayload(enumValue, &eventpb.AlterTypeAddValue{
 		TypeName: tn.FQString(),
+		Value:    newVal,
 	})
 }
 
@@ -272,8 +273,10 @@ func alterTypeRenameValue(
 	}
 	b.Add(enumValue)
 
-	b.LogEventForExistingPayload(enumValue, &eventpb.AlterType{
+	b.LogEventForExistingPayload(enumValue, &eventpb.AlterTypeRenameValue{
 		TypeName: tn.FQString(),
+		OldValue: oldVal,
+		NewValue: newVal,
 	})
 }
 
@@ -404,8 +407,9 @@ func alterTypeDropValue(
 			}
 			found = true
 			b.Drop(e)
-			b.LogEventForExistingPayload(e, &eventpb.AlterType{
+			b.LogEventForExistingPayload(e, &eventpb.AlterTypeDropValue{
 				TypeName: tn.FQString(),
+				Value:    dropVal,
 			})
 		},
 	)

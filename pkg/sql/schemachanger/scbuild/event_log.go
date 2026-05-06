@@ -566,22 +566,11 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			SequenceName: fullyQualifiedName(b, seq),
 		}
 	}
-	if _, _, enumType := scpb.FindEnumType(b.QueryByID(screl.GetDescID(pb.Element()))); enumType != nil {
-		// If the enum type has a payload attached use that instead of ALTER TYPE.
-		if pb.maybePayload != nil {
-			return pb.maybePayload
-		}
-		return &eventpb.AlterType{
-			TypeName: fullyQualifiedName(b, enumType),
-		}
+	if _, _, e := scpb.FindEnumType(b.QueryByID(screl.GetDescID(pb.Element()))); e != nil {
+		return pb.maybePayload
 	}
-	if _, _, aliasType := scpb.FindAliasType(b.QueryByID(screl.GetDescID(pb.Element()))); aliasType != nil {
-		if pb.maybePayload != nil {
-			return pb.maybePayload
-		}
-		return &eventpb.AlterType{
-			TypeName: fullyQualifiedName(b, aliasType),
-		}
+	if _, _, e := scpb.FindAliasType(b.QueryByID(screl.GetDescID(pb.Element()))); e != nil {
+		return pb.maybePayload
 	}
 	return nil
 }
