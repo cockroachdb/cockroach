@@ -1685,7 +1685,7 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 // hundreds or thousands, mirror SetTenantWeights's pattern:
 // pre-compute under a sub-mutex (configHolder already does this),
 // then take q.mu in short batches.
-func (q *WorkQueue) applyConfigLocked(config map[groupKey]ResourceGroupConfig) {
+func (q *WorkQueue) applyConfigLocked(config ResourceGroupConfigSet) {
 	// rgKind weights are not stored in groupWeights.active. The map is
 	// tenant-only; rgKind groups carry their weight on groupInfo.weight
 	// (written below for existing groups, and at lazy-create time from

@@ -172,7 +172,7 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	rmQueue.setUseResourceGroup(true)
 
 	// Public API call. This is the only thing under test.
-	cpuCoords.SetResourceGroupConfig(map[groupKey]ResourceGroupConfig{
+	cpuCoords.SetResourceGroupConfig(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
 		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
 	})

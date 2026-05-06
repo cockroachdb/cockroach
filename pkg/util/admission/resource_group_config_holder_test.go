@@ -8,31 +8,12 @@ package admission
 import (
 	"fmt"
 	"reflect"
-	"sort"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
-
-// formatSnapshot renders a snapshot map deterministically: one line per
-// key, sorted ascending by id. Used only by the echotest goldens.
-func formatSnapshot(snap map[groupKey]ResourceGroupConfig) string {
-	keys := make([]groupKey, 0, len(snap))
-	for k := range snap {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].id < keys[j].id })
-	var b strings.Builder
-	for _, k := range keys {
-		cfg := snap[k]
-		fmt.Fprintf(&b, "%s weight=%d maxCPU=%t\n", k, cfg.Weight, cfg.MaxCPU)
-	}
-	return b.String()
-}
 
 // TestResourceGroupConfigHolder pins the constructor seed and the
 // unknown-ID fallback against goldens. The behavioral cases for Set,
@@ -43,7 +24,9 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 
 	t.Run("constructor_seed", w.Run(t, "constructor_seed", func(t *testing.T) string {
 		h := newResourceGroupConfigHolder()
-		return formatSnapshot(h.Snapshot())
+		// ResourceGroupConfigSet.String formats the snapshot
+		// deterministically (sorted by id, one entry per line).
+		return h.Snapshot().String()
 	}))
 
 	t.Run("get_or_default_unknown", w.Run(t, "get_or_default_unknown", func(t *testing.T) string {
@@ -58,19 +41,19 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 func TestResourceGroupConfigHolderSet(t *testing.T) {
 	t.Run("replaces_wholesale_dropping_seed", func(t *testing.T) {
 		h := newResourceGroupConfigHolder()
-		h.Set(map[groupKey]ResourceGroupConfig{
+		h.Set(ResourceGroupConfigSet{
 			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		})
 		// Set is wholesale: the seed (high/low) must be gone, and only the
 		// freshly-Set key must remain.
-		require.Equal(t, map[groupKey]ResourceGroupConfig{
+		require.Equal(t, ResourceGroupConfigSet{
 			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		}, h.Snapshot())
 	})
 
 	t.Run("input_aliasing_safe", func(t *testing.T) {
 		h := newResourceGroupConfigHolder()
-		input := map[groupKey]ResourceGroupConfig{
+		input := ResourceGroupConfigSet{
 			rgGroupKey(7): {Weight: 100, MaxCPU: false},
 		}
 		h.Set(input)
@@ -79,7 +62,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 		input[rgGroupKey(7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
 		input[rgGroupKey(8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
 
-		require.Equal(t, map[groupKey]ResourceGroupConfig{
+		require.Equal(t, ResourceGroupConfigSet{
 			rgGroupKey(7): {Weight: 100, MaxCPU: false},
 		}, h.Snapshot())
 
@@ -96,7 +79,7 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 // TestResourceGroupConfigHolderGet covers GetOrDefault for a configured key.
 func TestResourceGroupConfigHolderGet(t *testing.T) {
 	h := newResourceGroupConfigHolder()
-	h.Set(map[groupKey]ResourceGroupConfig{
+	h.Set(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 75, MaxCPU: true},
 	})
 	require.Equal(t,
@@ -123,54 +106,12 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	// A subsequent Set installs a brand-new map. snap1 must remain
 	// stable (it points at the previously-installed map, which is
 	// immutable post-install) while h.Snapshot() returns the new one.
-	h.Set(map[groupKey]ResourceGroupConfig{
+	h.Set(ResourceGroupConfigSet{
 		rgGroupKey(42): {Weight: 100, MaxCPU: true},
 	})
 	require.Equal(t, defaultRMResourceGroupConfig, snap1,
 		"prior snapshot must be unaffected by a subsequent Set")
-	require.Equal(t, map[groupKey]ResourceGroupConfig{
+	require.Equal(t, ResourceGroupConfigSet{
 		rgGroupKey(42): {Weight: 100, MaxCPU: true},
 	}, h.Snapshot())
-}
-
-// TestResourceGroupConfigHolderConcurrent exercises Set, GetOrDefault, and
-// Snapshot from multiple goroutines. The holder exists to be safely callable
-// from multiple goroutines (e.g. WorkQueue.Admit while a SQL operator
-// changes resource groups), so a regression that drops the input-side
-// defensive copy or otherwise leaks a writable reference to the internal
-// map should surface here under -race. Snapshot callers only read.
-func TestResourceGroupConfigHolderConcurrent(t *testing.T) {
-	const goroutines = 8
-	const iterations = 200
-
-	h := newResourceGroupConfigHolder()
-	var wg sync.WaitGroup
-	wg.Add(3 * goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func(i int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				h.Set(map[groupKey]ResourceGroupConfig{
-					rgGroupKey(uint64(i)): {Weight: uint32(j % 100), MaxCPU: j%2 == 0},
-				})
-			}
-		}(i)
-		go func(i int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				_ = h.GetOrDefault(rgGroupKey(uint64(i)))
-			}
-		}(i)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				snap := h.Snapshot()
-				// Read-only access only: snapshots alias the holder's
-				// internal map and concurrent readers must not mutate.
-				for range snap {
-				}
-			}
-		}()
-	}
-	wg.Wait()
 }

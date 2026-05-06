@@ -1319,7 +1319,7 @@ func TestSetUseResourceGroupAppliesHolderSnapshot(t *testing.T) {
 	defer cleanup()
 
 	// Custom config replaces the default seed.
-	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+	q.configHolder.Set(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
 		rgGroupKey(lowResourceGroupID):  {Weight: 40, MaxCPU: false},
 	})
@@ -1355,7 +1355,7 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	defer cleanup()
 	// Stay in serverless mode (default).
 
-	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+	q.configHolder.Set(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
@@ -1383,7 +1383,7 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	q.configHolder.Set(map[groupKey]ResourceGroupConfig{
+	q.configHolder.Set(ResourceGroupConfigSet{
 		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
 		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
 	})
