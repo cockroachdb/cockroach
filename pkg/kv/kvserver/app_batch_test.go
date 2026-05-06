@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -123,4 +124,52 @@ func TestAppBatchApplyEntry(t *testing.T) {
 		require.Len(t, kvs, 1)
 		require.Equal(t, []byte(kv.v), kvs[0].Value)
 	}
+}
+
+// TestLoadRangeDescriptor verifies that loadRangeDescriptor finds a descriptor
+// by range ID when scanning all descriptors on disk.
+func TestLoadRangeDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write two descriptors.
+	for _, tc := range []struct {
+		rangeID  roachpb.RangeID
+		startKey string
+		endKey   string
+	}{
+		{rangeID: 1, startKey: "a", endKey: "m"},
+		{rangeID: 2, startKey: "m", endKey: "z"},
+	} {
+		desc := roachpb.RangeDescriptor{
+			RangeID:  tc.rangeID,
+			StartKey: keys.MustAddr(roachpb.Key(tc.startKey)),
+			EndKey:   keys.MustAddr(roachpb.Key(tc.endKey)),
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			},
+		}
+		descKey := keys.RangeDescriptorKey(desc.StartKey)
+		require.NoError(t, storage.MVCCPutProto(
+			ctx, eng, descKey, hlc.Timestamp{WallTime: 1}, &desc, storage.MVCCWriteOptions{},
+		))
+	}
+
+	// Find each by range ID.
+	desc, err := loadRangeDescriptor(ctx, eng, 1)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.RangeID(1), desc.RangeID)
+	require.Equal(t, keys.MustAddr(roachpb.Key("a")), desc.StartKey)
+
+	desc, err = loadRangeDescriptor(ctx, eng, 2)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.RangeID(2), desc.RangeID)
+
+	// Missing range ID returns an error.
+	_, err = loadRangeDescriptor(ctx, eng, 99)
+	require.ErrorContains(t, err, "descriptor not found for r99")
 }

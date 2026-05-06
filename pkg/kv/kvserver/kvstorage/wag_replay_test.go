@@ -187,7 +187,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 3, Index: 51}, Type: wagpb.EventApply},
 			}},
 			shouldApply: true,
-			expCatchUps: []raftCatchUpTarget{{rangeID: 1, replicaID: 3, index: 51}},
+			expCatchUps: []raftCatchUpTarget{{rangeID: 1, index: 51}},
 		}, {
 			name: "single event, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{
@@ -211,7 +211,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 				{Addr: wagpb.Addr{RangeID: 2, ReplicaID: 1, Index: 10}, Type: wagpb.EventInit},
 			}},
 			shouldApply: true,
-			expCatchUps: []raftCatchUpTarget{{rangeID: 1, replicaID: 3, index: 99}},
+			expCatchUps: []raftCatchUpTarget{{rangeID: 1, index: 99}},
 		}, {
 			name: "multi-event split, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{

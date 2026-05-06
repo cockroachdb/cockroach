@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
@@ -306,4 +308,98 @@ func (b *appBatch) addAppliedStateToBatch(ctx context.Context) error {
 	// lease index along with the MVCC stats, all in one key.
 	b.asAlloc = b.state.ToRangeAppliedState()
 	return b.sl.SetRangeAppliedState(ctx, b.batch.State(), &b.asAlloc)
+}
+
+// loadRangeDescriptor finds the range descriptor for the given range ID by
+// scanning all descriptors on disk.
+func loadRangeDescriptor(
+	ctx context.Context, reader kvstorage.StateRO, rangeID roachpb.RangeID,
+) (roachpb.RangeDescriptor, error) {
+	var found roachpb.RangeDescriptor
+	err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, reader, func(desc roachpb.RangeDescriptor) error {
+		if desc.RangeID == rangeID {
+			found = desc
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err := iterutil.Map(err); err != nil {
+		return roachpb.RangeDescriptor{}, errors.Wrapf(err, "scanning for descriptor of r%d", rangeID)
+	}
+	if found.RangeID == 0 {
+		return roachpb.RangeDescriptor{}, errors.Errorf("descriptor not found for r%d", rangeID)
+	}
+	return found, nil
+}
+
+// replayBatch implements kvstorage.ReplayBatch using appBatch.
+type replayBatch struct {
+	ab  appBatch
+	cmd replicatedCmd // reused across ApplyEntry calls
+}
+
+// AppliedIndex implements kvstorage.ReplayBatch.
+func (rb *replayBatch) AppliedIndex() kvpb.RaftIndex {
+	return rb.ab.state.RaftAppliedIndex
+}
+
+// ApplyEntry implements kvstorage.ReplayBatch.
+func (rb *replayBatch) ApplyEntry(ctx context.Context, ent raftpb.Entry) (bool, error) {
+	if err := rb.cmd.Decode(&ent); err != nil {
+		return false, err
+	}
+	if err := rb.ab.applyEntry(ctx, &rb.cmd); err != nil {
+		return false, err
+	}
+	return rb.cmd.IsTrivial(), nil
+}
+
+// Commit implements kvstorage.ReplayBatch.
+func (rb *replayBatch) Commit(ctx context.Context) error {
+	if err := rb.ab.addAppliedStateToBatch(ctx); err != nil {
+		return err
+	}
+	return rb.ab.batch.Commit(false /* sync */)
+}
+
+// Close implements kvstorage.ReplayBatch.
+func (rb *replayBatch) Close() {
+	rb.ab.batch.Close()
+}
+
+// MakeNewReplayBatchFn returns a NewReplayBatchFn that creates ReplayBatch
+// instances backed by appBatch. Each call loads the range's ReplicaState from
+// the engine and returns a fresh batch ready to apply entries.
+func MakeNewReplayBatchFn(
+	stateRO kvstorage.StateRO, bf *kvstorage.BatchFactory,
+) kvstorage.NewReplayBatchFn {
+	return func(ctx context.Context, rangeID roachpb.RangeID) (kvstorage.ReplayBatch, error) {
+		// Load the descriptor for this range. CheckForcedErr needs it to
+		// validate lease requests (GetReplicaDescriptor check). Descriptors
+		// are keyed by start key, so we scan to find the one with the
+		// matching RangeID.
+		//
+		// TODO(mira): This is O(n) in the number of ranges per call. To
+		// optimize, the caller could pass in a descriptor and ensure it's
+		// kept up-to-date across calls.
+		desc, err := loadRangeDescriptor(ctx, stateRO, rangeID)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(mira): Consider caching the StateLoader across calls for the
+		// same rangeID to avoid re-constructing key prefixes.
+		sl := kvstorage.MakeStateLoader(rangeID)
+		state, err := sl.Load(ctx, stateRO, &desc)
+		if err != nil {
+			return nil, err
+		}
+		return &replayBatch{
+			ab: appBatch{
+				state:                  state,
+				batch:                  bf.NewBatch(),
+				sl:                     sl,
+				initialForceFlushIndex: state.ForceFlushIndex,
+			},
+		}, nil
+	}
 }

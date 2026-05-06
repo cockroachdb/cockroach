@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -75,13 +76,33 @@ func loadPersistedRangeState(
 	}, nil
 }
 
-// raftCatchUpTarget identifies a range/replica that must be caught up to a
-// specific raft index via raft log replay before a WAG node can be applied.
+// raftCatchUpTarget identifies a range that must be caught up to a specific
+// raft index via raft log replay before a WAG node can be applied.
 type raftCatchUpTarget struct {
-	rangeID   roachpb.RangeID
-	replicaID roachpb.ReplicaID
-	index     kvpb.RaftIndex
+	rangeID roachpb.RangeID
+	index   kvpb.RaftIndex
 }
+
+// ReplayBatch applies raft entries to the state machine via an internal storage
+// batch. The implementation is responsible for decoding entries and staging
+// their writes. The caller must call Close when done, whether or not Commit
+// was called.
+type ReplayBatch interface {
+	// ApplyEntry applies a single raft entry. Returns whether the entry had
+	// only trivial side effects (no lease change, GC threshold bump, etc.).
+	ApplyEntry(ctx context.Context, ent raftpb.Entry) (trivial bool, _ error)
+	// AppliedIndex returns the raft applied index after the last ApplyEntry,
+	// or the initial applied index if no entries have been applied yet.
+	AppliedIndex() kvpb.RaftIndex
+	// Commit writes the applied state and commits the batch.
+	Commit(ctx context.Context) error
+	// Close releases batch resources. Safe to call after Commit.
+	Close()
+}
+
+// NewReplayBatchFn creates a fresh ReplayBatch for a range by loading the
+// current ReplicaState from the engine.
+type NewReplayBatchFn func(ctx context.Context, rangeID roachpb.RangeID) (ReplayBatch, error)
 
 func assert(cond bool, msg string, e wagpb.Event, s persistedRangeState) {
 	if !cond {
@@ -212,9 +233,8 @@ func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
 	return func(yield func(raftCatchUpTarget) bool) {
 		for _, e := range node.Events {
 			if catchUp := raftCatchUp(e); catchUp > 0 && !yield(raftCatchUpTarget{
-				rangeID:   e.Addr.RangeID,
-				replicaID: e.Addr.ReplicaID,
-				index:     catchUp,
+				rangeID: e.Addr.RangeID,
+				index:   catchUp,
 			}) {
 				return
 			}
