@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -488,7 +489,8 @@ func TestPendingBuffer_NoEventLoss(t *testing.T) {
 
 	var delivered atomic.Int64
 	var consumerWG sync.WaitGroup
-	var seen sync.Map // val -> struct{}; detects duplicates
+	var seen syncutil.Map[string, struct{}] // val -> sentinel; detects duplicates
+	sentinel := struct{}{}
 	for c := 0; c < numConsumers; c++ {
 		consumerWG.Add(1)
 		go func() {
@@ -499,7 +501,7 @@ func TestPendingBuffer_NoEventLoss(t *testing.T) {
 					return
 				}
 				for _, ev := range batch.events {
-					if _, dup := seen.LoadOrStore(string(ev.val), struct{}{}); dup {
+					if _, dup := seen.LoadOrStore(string(ev.val), &sentinel); dup {
 						t.Errorf("duplicate event delivered: %s", ev.val)
 					}
 				}
