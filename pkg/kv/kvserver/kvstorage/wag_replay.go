@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -82,6 +83,28 @@ type raftCatchUpTarget struct {
 	replicaID roachpb.ReplicaID
 	index     kvpb.RaftIndex
 }
+
+// ReplayBatch applies raft entries to the state machine via an internal storage
+// batch. The implementation is responsible for decoding entries and staging
+// their writes. The caller must call Close when done, whether or not Commit
+// was called.
+type ReplayBatch interface {
+	// ApplyEntry applies a single raft entry. Returns whether the entry had
+	// only trivial side effects (no lease change, GC threshold bump, etc.).
+	ApplyEntry(context.Context, raftpb.Entry) (trivial bool, _ error)
+	// AppliedIndex returns the raft applied index after the last ApplyEntry,
+	// or the initial applied index if no entries have been applied yet.
+	AppliedIndex() kvpb.RaftIndex
+	// Commit writes the applied state and commits the batch.
+	Commit(context.Context) error
+	// Close releases batch resources. Safe to call after Commit.
+	Close()
+}
+
+// NewReplayBatchFn creates a fresh ReplayBatch for a range by loading the
+// current ReplicaState from the engine. The startKey is used to locate the
+// range descriptor via a point read.
+type NewReplayBatchFn func(ctx context.Context, rangeID roachpb.RangeID, startKey roachpb.RKey) (ReplayBatch, error)
 
 func assert(cond bool, msg string, e wagpb.Event, s persistedRangeState) {
 	if !cond {
