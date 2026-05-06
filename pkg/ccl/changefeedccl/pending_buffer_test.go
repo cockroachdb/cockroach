@@ -389,6 +389,73 @@ func TestPendingBuffer_PreCancelledCtx(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// TestPendingBuffer_Demo is a logs-only walkthrough of the addRow →
+// getBatch → completeBatch lifecycle. It is skipped in -short runs (so
+// CI doesn't waste time on it) and uses t.Logf so the lifecycle is
+// visible with `./dev test pkg/ccl/changefeedccl -f
+// TestPendingBuffer_Demo -v`.
+//
+// Real cluster validation lives in the noLingerSink demo (later).
+func TestPendingBuffer_Demo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("logs-only demo; run with -v to see lifecycle")
+	}
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	cfg := defaultTestCfg()
+	cfg.maxMessages = 30
+	cfg.bufferLimit = 400
+	b := newPendingBuffer(cfg)
+
+	const runFor = 300 * time.Millisecond
+	const tickEvery = 5 * time.Millisecond
+
+	var producerWG, consumerWG sync.WaitGroup
+	producerWG.Add(1)
+	go func() {
+		defer producerWG.Done()
+		deadline := time.Now().Add(runFor)
+		for i := 0; time.Now().Before(deadline); i++ {
+			key := fmt.Sprintf("k%d", i%3)
+			val := fmt.Sprintf("v%d", i)
+			t.Logf("producer: addRow key=%s val=%s", key, val)
+			if err := b.addRow(ctx, mkEvent(key, val)); err != nil {
+				t.Errorf("addRow: %v", err)
+				return
+			}
+			if i%10 == 0 {
+				time.Sleep(tickEvery)
+			}
+		}
+	}()
+
+	consumerWG.Add(1)
+	go func() {
+		defer consumerWG.Done()
+		for {
+			batch, err := b.getBatch(ctx)
+			if err != nil {
+				t.Logf("consumer: getBatch -> %v (exiting)", err)
+				return
+			}
+			keys := make([]string, len(batch.events))
+			for i, ev := range batch.events {
+				keys[i] = string(ev.key)
+			}
+			t.Logf("consumer: got batch n=%d bytes=%d keys=%v",
+				len(batch.events), batch.numBytes, keys)
+			b.completeBatch(ctx, batch)
+			t.Logf("consumer: completeBatch released %d keys", len(batch.inflightKeys))
+		}
+	}()
+
+	producerWG.Wait()
+	t.Logf("producer done; closing buffer")
+	b.close()
+	consumerWG.Wait()
+}
+
 func TestPendingBuffer_NoEventLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
