@@ -1,0 +1,62 @@
+# LogicTest: local
+
+# Verify that SHOW SCHEDULES requires the VIEWSCHEDULE privilege.
+
+# testuser should not be able to SHOW SCHEDULES.
+user testuser
+
+statement error user testuser does not have VIEWSCHEDULE system privilege
+SHOW SCHEDULES
+
+user root
+
+# Grant VIEWSCHEDULE to testuser.
+statement ok
+GRANT SYSTEM VIEWSCHEDULE TO testuser
+
+user testuser
+
+# testuser should now be able to SHOW SCHEDULES.
+statement ok
+SHOW SCHEDULES
+
+user root
+
+# Revoke VIEWSCHEDULE from testuser.
+statement ok
+REVOKE SYSTEM VIEWSCHEDULE FROM testuser
+
+user testuser
+
+# testuser should no longer be able to SHOW SCHEDULES.
+statement error user testuser does not have VIEWSCHEDULE system privilege
+SHOW SCHEDULES
+
+user root
+
+# Test that inheriting VIEWSCHEDULE through a role works.
+statement ok
+CREATE ROLE scheduleviewer
+
+statement ok
+GRANT SYSTEM VIEWSCHEDULE TO scheduleviewer
+
+statement ok
+GRANT scheduleviewer TO testuser
+
+user testuser
+
+# testuser should be able to SHOW SCHEDULES through role membership.
+statement ok
+SHOW SCHEDULES
+
+user root
+
+statement ok
+REVOKE scheduleviewer FROM testuser
+
+user testuser
+
+# testuser should no longer be able to SHOW SCHEDULES.
+statement error user testuser does not have VIEWSCHEDULE system privilege
+SHOW SCHEDULES
