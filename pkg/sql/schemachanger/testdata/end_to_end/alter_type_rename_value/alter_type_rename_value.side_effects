@@ -13,7 +13,9 @@ begin transaction #1
 checking for feature: ALTER TYPE
 increment telemetry for sql.schema.alter_type.rename_value
 increment telemetry for sql.udts.alter_enum
-write *eventpb.AlterType to event log:
+write *eventpb.AlterTypeRenameValue to event log:
+  newValue: coho
+  oldValue: atlantic
   sql:
     descriptorId: 104
     statement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› RENAME VALUE ‹'atlantic'› TO ‹'coho'›

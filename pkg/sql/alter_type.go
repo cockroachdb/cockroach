@@ -93,25 +93,35 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("type", n.n.Cmd.TelemetryName()))
 
 	typeName := tree.AsStringWithFQNames(n.n.Type, params.p.Ann())
-	eventLogDone := false
-	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann()))
-	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
-	case *tree.AlterTypeRename:
-		if err = params.p.renameType(params.ctx, n, string(t.NewName)); err != nil {
+		if err := params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann())); err != nil {
 			return err
 		}
-		err = params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeAddValue{
+			TypeName: typeName,
+			Value:    string(t.NewVal),
+		})
+	case *tree.AlterTypeRenameValue:
+		if err := params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal)); err != nil {
+			return err
+		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeRenameValue{
+			TypeName: typeName,
+			OldValue: string(t.OldVal),
+			NewValue: string(t.NewVal),
+		})
+	case *tree.AlterTypeRename:
+		if err := params.p.renameType(params.ctx, n, string(t.NewName)); err != nil {
+			return err
+		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
 			TypeName:    typeName,
 			NewTypeName: string(t.NewName),
 		})
-		eventLogDone = true
 	case *tree.AlterTypeSetSchema:
-		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
-		eventLogDone = true // done inside setTypeSchema().
+		// Event logged inside setTypeSchema.
+		return params.p.setTypeSchema(params.ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
 		owner, err := decodeusername.FromRoleSpec(
 			params.SessionData(), username.PurposeValidation, t.Owner,
@@ -119,30 +129,19 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.alterTypeOwner(params.ctx, n, owner); err != nil {
-			return err
-		}
-		eventLogDone = true // done inside alterTypeOwner().
+		// Event logged inside alterTypeOwner.
+		return params.p.alterTypeOwner(params.ctx, n, owner)
 	case *tree.AlterTypeDropValue:
-		err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
-	default:
-		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
-	}
-	if err != nil {
-		return err
-	}
-
-	if !eventLogDone {
-		// Write a log event.
-		if err := params.p.logEvent(params.ctx,
-			n.desc.ID,
-			&eventpb.AlterType{
-				TypeName: typeName,
-			}); err != nil {
+		if err := params.p.dropEnumValue(params.ctx, n.desc, t.Val); err != nil {
 			return err
 		}
+		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeDropValue{
+			TypeName: typeName,
+			Value:    string(t.Val),
+		})
+	default:
+		return errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
-	return nil
 }
 
 func findEnumMemberByName(
