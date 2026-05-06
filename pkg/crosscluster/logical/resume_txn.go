@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -86,7 +87,10 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 	// r.checkpointPartitionURIs once plan generation is added.
 
 	// Build the DistSQL physical plan before starting concurrent work.
-	replicatedTime := replicatedTimeFromJob(r.job)
+	replicatedTime, err := replicatedTimeFromJob(ctx, jobExecCtx.ExecCfg().InternalDB, r.job)
+	if err != nil {
+		return err
+	}
 	flowPlan, planCtx, applierInstanceIDs, err :=
 		txnmode.PlanTxnReplication(ctx, r.job, jobExecCtx, sourcePlan, replicatedTime, endTime)
 	if err != nil {
@@ -122,13 +126,20 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 	return ctxgroup.GoAndWait(ctx, runFlow, startHeartbeat)
 }
 
-// replicatedTimeFromJob returns the replicated time from job progress,
+// replicatedTimeFromJob returns the replicated time from ProgressStorage,
 // falling back to the replication start time if no checkpoint exists.
-func replicatedTimeFromJob(job *jobs.Job) hlc.Timestamp {
-	payload := job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
-	progress := job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-	if !progress.ReplicatedTime.IsEmpty() {
-		return progress.ReplicatedTime
+func replicatedTimeFromJob(ctx context.Context, db isql.DB, job *jobs.Job) (hlc.Timestamp, error) {
+	var resolved hlc.Timestamp
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		_, resolved, _, err = job.ProgressStorage().Get(ctx, txn)
+		return err
+	}); err != nil {
+		return hlc.Timestamp{}, err
 	}
-	return payload.ReplicationStartTime
+	if !resolved.IsEmpty() {
+		return resolved, nil
+	}
+	payload := job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+	return payload.ReplicationStartTime, nil
 }
