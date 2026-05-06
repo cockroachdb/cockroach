@@ -60,10 +60,11 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name                string
-		setup               func(t *testing.T, kvAccessor *manualKVAccessor)
-		droppedAtTime       int64
-		expectedIsProtected bool
+		name                          string
+		setup                         func(t *testing.T, kvAccessor *manualKVAccessor)
+		droppedAtTime                 int64
+		expectedProtectedForDataGC    bool
+		expectedProtectedForDescClean bool
 	}{
 		{
 			name: "span-config-pts-applies",
@@ -72,8 +73,9 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(10, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       13, // The table/index was dropped after the PTS was laid
-			expectedIsProtected: true,
+			droppedAtTime:                 13, // The table/index was dropped after the PTS was laid
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "span-config-pts-exists-but-does-not-apply",
@@ -82,8 +84,9 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(10, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8, // The table/index was dropped before the PTS was laid
-			expectedIsProtected: false,
+			droppedAtTime:                 8, // The table/index was dropped before the PTS was laid
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: false,
 		},
 		{
 			name: "system-span-config-pts-applies",
@@ -100,10 +103,17 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: true,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
+			// In the data-GC scope, the backup PTS is filtered out (the
+			// existing exclude_data_from_backup contract). In the
+			// descriptor-cleanup scope, the same PTS is honored: tearing
+			// down the descriptor would remove the span config record
+			// carrying ExcludeDataFromBackup, breaking the backup
+			// processor's ability to recover from the resulting GC error.
 			name: "system-span-config-pts-is-active-but-excluded-because-of-backup",
 			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				// PTS records on span configs exist, but they were laid after the drop
@@ -120,8 +130,9 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, true /* excludeFromBackup */, true /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: false,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "system-span-config-pts-is-active-excluded-from-backup-but-not-ignored",
@@ -140,8 +151,9 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, true /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: true,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "pts-records-exist-but-none-apply",
@@ -159,22 +171,34 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(8, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       2,
-			expectedIsProtected: false,
+			droppedAtTime:                 2,
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			kvAccessor := &manualKVAccessor{}
-			tc.setup(t, kvAccessor)
 			scratchRange := roachpb.Span{
 				Key:    keys.ScratchRangeMin,
 				EndKey: keys.SystemSpanConfigKeyMax,
 			}
-			isProtected, err := isProtected(
-				ctx, jobspb.InvalidJobID, tc.droppedAtTime, &execCfg, kvAccessor, scratchRange,
-			)
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedIsProtected, isProtected)
+			for _, sc := range []struct {
+				name     string
+				scope    protectionScope
+				expected bool
+			}{
+				{name: "data-GC", scope: protectionScopeForDataGC, expected: tc.expectedProtectedForDataGC},
+				{name: "descriptor-cleanup", scope: protectionScopeForDescriptorCleanup, expected: tc.expectedProtectedForDescClean},
+			} {
+				t.Run(sc.name, func(t *testing.T) {
+					kvAccessor := &manualKVAccessor{}
+					tc.setup(t, kvAccessor)
+					isProtected, err := isProtected(
+						ctx, jobspb.InvalidJobID, tc.droppedAtTime, &execCfg, kvAccessor, scratchRange, sc.scope,
+					)
+					require.NoError(t, err)
+					require.Equal(t, sc.expected, isProtected)
+				})
+			}
 		})
 	}
 }
