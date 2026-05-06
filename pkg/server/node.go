@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -3083,4 +3085,46 @@ func (n *tenantServiceServer) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCTenantService_GetRangeDescriptorsStream,
 ) error {
 	return (*Node)(n).getRangeDescriptors(args, stream)
+}
+
+// UpdateResourceGroups implements the kvpb.InternalServer interface.
+// It applies the request batch to system.tenant_resource_groups
+// partitioned by the caller's TLS-derived tenant ID.
+func (n *Node) UpdateResourceGroups(
+	ctx context.Context, req *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
+	ctx = n.AnnotateCtx(ctx)
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		return nil, grpcstatus.Error(codes.Unauthenticated,
+			"UpdateResourceGroups requires an authenticated tenant client")
+	}
+	w := rgkvaccessor.NewWriter(n.execCfg.InternalDB)
+	upserts := make([]*rgpb.ResourceGroupUpsert, len(req.Upserts))
+	for i := range req.Upserts {
+		upserts[i] = &req.Upserts[i]
+	}
+	deletes := make([]*rgpb.ResourceGroupDelete, len(req.Deletes))
+	for i := range req.Deletes {
+		deletes[i] = &req.Deletes[i]
+	}
+	if err := w.Apply(ctx, tenantID, upserts, deletes); err != nil {
+		return nil, err
+	}
+	return &rgpb.UpdateResourceGroupsResponse{}, nil
+}
+
+type tenantResourceGroupServer Node
+
+// AsDRPCTenantResourceGroupServer returns the DRPC-side server adapter.
+func (n *Node) AsDRPCTenantResourceGroupServer() kvpb.DRPCTenantResourceGroupServer {
+	return (*tenantResourceGroupServer)(n)
+}
+
+// UpdateResourceGroups implements the kvpb.DRPCTenantResourceGroupServer
+// interface.
+func (n *tenantResourceGroupServer) UpdateResourceGroups(
+	ctx context.Context, req *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
+	return (*Node)(n).UpdateResourceGroups(ctx, req)
 }

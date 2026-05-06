@@ -1921,6 +1921,11 @@ type ExecutorConfig struct {
 	// SystemTableIDResolver is used to obtain dynamic IDs for system tables.
 	SystemTableIDResolver catalog.SystemTableIDResolver
 
+	// TenantConnector is set on application-tenant SQL servers. It is the
+	// connector used to push resource group updates to the host. nil on
+	// the system tenant.
+	TenantConnector kvtenant.Connector
+
 	// SpanConfigReconciler is used to drive the span config reconciliation job
 	// and related upgrades.
 	SpanConfigReconciler spanconfig.Reconciler

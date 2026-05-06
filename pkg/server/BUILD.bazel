@@ -175,6 +175,8 @@ go_library(
         "//pkg/obs/clustermetrics/utils",
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/resourcegroup/rgkvaccessor",
+        "//pkg/resourcegroup/rgpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

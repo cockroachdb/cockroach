@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -165,6 +166,12 @@ func (m *mockServer) SpanConfigConformance(
 func (m *mockServer) GetRangeDescriptors(
 	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (m *mockServer) UpdateResourceGroups(
+	context.Context, *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
 	panic("unimplemented")
 }
 

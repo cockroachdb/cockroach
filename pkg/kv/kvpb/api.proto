@@ -25,6 +25,7 @@ import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "multitenant/tenantcapabilitiespb/capabilities.proto";
+import "resourcegroup/rgpb/rg.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -3793,6 +3794,17 @@ service TenantSpanConfig {
   rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
 }
 
+// TenantResourceGroup is used by secondary tenants to push their
+// resource group configuration changes to the host's
+// system.tenant_resource_groups table.
+service TenantResourceGroup {
+  // UpdateResourceGroups applies a batch of upserts and deletes for
+  // the calling tenant. The host writes the entire batch
+  // transactionally and returns once the rows are durable.
+  rpc UpdateResourceGroups(resourcegroup.rgpb.UpdateResourceGroupsRequest)
+      returns (resourcegroup.rgpb.UpdateResourceGroupsResponse) {}
+}
+
 // Node service offers RPCs for inter-node communication essential for
 // cluster bootstrapping and operation.
 service Node {
@@ -3858,6 +3870,10 @@ service Internal {
   // GetRangeDescriptors is used by tenants to get range descriptors for their
   // own ranges.
  rpc GetRangeDescriptors (GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
+
+  // UpdateResourceGroups is used by tenants to push resource group
+  // configuration changes to the host. See TenantResourceGroup.
+  rpc UpdateResourceGroups (resourcegroup.rgpb.UpdateResourceGroupsRequest) returns (resourcegroup.rgpb.UpdateResourceGroupsResponse) {}
 }
 
 // GetRangeDescriptorsRequest is used to fetch range descriptors.

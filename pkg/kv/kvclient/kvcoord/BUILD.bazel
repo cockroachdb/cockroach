@@ -199,6 +199,7 @@ go_test(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft/raftpb",
+        "//pkg/resourcegroup/rgpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

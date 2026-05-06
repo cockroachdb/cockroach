@@ -141,6 +141,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft/raftpb",
+        "//pkg/resourcegroup/rgpb",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
         "//pkg/security",

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -394,6 +395,12 @@ func (*internalServer) TenantSettings(
 func (n *internalServer) GetRangeDescriptors(
 	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) UpdateResourceGroups(
+	context.Context, *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
 	panic("unimplemented")
 }
 

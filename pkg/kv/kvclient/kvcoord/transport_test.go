@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -326,4 +327,10 @@ func (n *mockInternalClient) GetRangeDescriptors(
 	context.Context, *kvpb.GetRangeDescriptorsRequest,
 ) (kvpb.RPCInternal_GetRangeDescriptorsClient, error) {
 	return nil, fmt.Errorf("unsupported GetRangeDescriptors call")
+}
+
+func (n *mockInternalClient) UpdateResourceGroups(
+	context.Context, *rgpb.UpdateResourceGroupsRequest,
+) (*rgpb.UpdateResourceGroupsResponse, error) {
+	return nil, fmt.Errorf("unsupported UpdateResourceGroups call")
 }

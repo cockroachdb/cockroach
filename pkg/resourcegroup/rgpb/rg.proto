@@ -1,0 +1,40 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.resourcegroup.rgpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/resourcegroup/rgpb";
+
+import "gogoproto/gogo.proto";
+import "util/admission/admissionpb/resource_group.proto";
+
+// ResourceGroupUpsert reports the current state of a single resource
+// group row. The host writes (or overwrites) the corresponding row in
+// system.tenant_resource_groups for the calling tenant.
+message ResourceGroupUpsert {
+  int64 id = 1;
+  string name = 2;
+  util.admission.admissionpb.ResourceGroupConfig config = 3
+      [(gogoproto.nullable) = false];
+}
+
+// ResourceGroupDelete reports that a resource group has been removed.
+message ResourceGroupDelete {
+  int64 id = 1;
+}
+
+// UpdateResourceGroupsRequest is one batch of changes pushed by a
+// tenant's reconciler to the host. The tenant identity is taken from
+// the RPC's TLS certificate, not from this message — there is no
+// tenant_id field.
+message UpdateResourceGroupsRequest {
+  repeated ResourceGroupUpsert upserts = 1 [(gogoproto.nullable) = false];
+  repeated ResourceGroupDelete deletes = 2 [(gogoproto.nullable) = false];
+}
+
+// UpdateResourceGroupsResponse acknowledges a successful apply. The
+// host writes the entire request transactionally; partial success is
+// not exposed.
+message UpdateResourceGroupsResponse {}
