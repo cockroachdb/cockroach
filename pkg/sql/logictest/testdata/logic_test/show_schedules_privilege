@@ -60,3 +60,25 @@ user testuser
 # testuser should no longer be able to SHOW SCHEDULES.
 statement error user testuser does not have VIEWSCHEDULE system privilege
 SHOW SCHEDULES
+
+user root
+
+# Test that VIEWSYSTEMTABLE also grants access to SHOW SCHEDULES (no
+# regression for users who previously relied on this broader privilege).
+statement ok
+GRANT SYSTEM VIEWSYSTEMTABLE TO testuser
+
+user testuser
+
+statement ok
+SHOW SCHEDULES
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWSYSTEMTABLE FROM testuser
+
+user testuser
+
+statement error user testuser does not have VIEWSCHEDULE system privilege
+SHOW SCHEDULES

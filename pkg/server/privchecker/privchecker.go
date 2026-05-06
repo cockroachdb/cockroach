@@ -190,6 +190,33 @@ func (c *adminPrivilegeChecker) RequireViewDebugPermission(ctx context.Context) 
 		privilege.VIEWDEBUG.DisplayName())
 }
 
+// RequireViewEventLogPermission requires the user have admin or the
+// VIEWEVENTLOG or VIEWCLUSTERMETADATA system privilege and returns an
+// error if the user does not have it.
+func (c *adminPrivilegeChecker) RequireViewEventLogPermission(ctx context.Context) (err error) {
+	userName, isAdmin, err := c.GetUserAndRole(ctx)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if isAdmin {
+		return nil
+	}
+	if hasViewEventLog, err := c.HasGlobalPrivilege(ctx, userName, privilege.VIEWEVENTLOG); err != nil {
+		return srverrors.ServerError(ctx, err)
+	} else if hasViewEventLog {
+		return nil
+	}
+	if hasViewClusterMetadata, err := c.HasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); err != nil {
+		return srverrors.ServerError(ctx, err)
+	} else if hasViewClusterMetadata {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s or %s system privilege",
+		privilege.VIEWEVENTLOG.DisplayName(),
+		privilege.VIEWCLUSTERMETADATA.DisplayName())
+}
+
 // GetUserAndRole is part of the CheckerForRPCHandlers interface.
 func (c *adminPrivilegeChecker) GetUserAndRole(
 	ctx context.Context,
