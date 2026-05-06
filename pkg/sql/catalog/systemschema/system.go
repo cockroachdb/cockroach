@@ -1410,6 +1410,34 @@ CREATE TABLE system.statements (
     INDEX statements_fingerprint_idx (fingerprint ASC),
     FAMILY "primary" (fingerprint_id, fingerprint, summary, db, metadata, created_at, last_upserted)
 );`
+
+	// ResourceGroupsTableSchema defines the schema for the
+	// system.resource_groups table, which stores the user-defined resource
+	// group configurations used by the resource manager. The table holds
+	// the configurations for the tenant it lives on; a future host-side
+	// table will hold the host's reconciled view of every tenant's groups.
+	//
+	// IDs < 16 are reserved for built-in groups that are hardcoded in code
+	// rather than stored in this table. The CHECK on this table and the
+	// MINVALUE on system.resource_group_id_seq are both set to 16 so neither
+	// path can produce an id in the reserved range.
+	ResourceGroupsTableSchema = `
+CREATE TABLE system.resource_groups (
+    id     INT8   NOT NULL,
+    name   STRING NOT NULL,
+    config BYTES  NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    CONSTRAINT check_id_reserved_range CHECK (id >= 16),
+    UNIQUE INDEX resource_groups_name_idx (name ASC),
+    FAMILY "primary" (id, name, config)
+);`
+
+	// ResourceGroupIDSequenceSchema defines the schema for the
+	// system.resource_group_id_seq sequence used to allocate new resource
+	// group ids. MINVALUE matches the table's CHECK so allocated ids never
+	// fall in the reserved range.
+	ResourceGroupIDSequenceSchema = `
+CREATE SEQUENCE system.resource_group_id_seq START 16 MINVALUE 16 MAXVALUE 9223372036854775807;`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1454,7 +1482,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AlterStatementsTablePK.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddResourceGroupsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1658,6 +1686,8 @@ func MakeSystemTables() []SystemTable {
 		TableStatisticsLocksTable,
 		AdvisoryLocksTable,
 		StatementsTable,
+		ResourceGroupsTable,
+		ResourceGroupIDSequence,
 	}
 }
 
@@ -5553,6 +5583,100 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),
+	)
+
+	ResourceGroupsTable = makeSystemTable(
+		ResourceGroupsTableSchema,
+		systemTable(
+			catconstants.ResourceGroupsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "config", ID: 3, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"id", "name", "config"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:                "resource_groups_name_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"name"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:         "check_id_reserved_range",
+				Expr:         descpb.Expression("id >= 16:::INT8"),
+				ColumnIDs:    []descpb.ColumnID{1},
+				ConstraintID: tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
+	)
+
+	// ResourceGroupIDSequence is the descriptor for the resource group id
+	// sequence. It starts at 16 to keep allocated IDs out of the reserved
+	// range used by built-in groups (see ResourceGroupsTableSchema).
+	ResourceGroupIDSequence = makeSystemTable(
+		ResourceGroupIDSequenceSchema,
+		systemTable(
+			catconstants.ResourceGroupIDSequenceName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
+				Increment:        1,
+				MinValue:         16,
+				MaxValue:         math.MaxInt64,
+				Start:            16,
+				SessionCacheSize: 1,
+			}
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints, so all
+			// IDs will be left at zero. CREATE SEQUENCE has the same
+			// behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
 	)
 )
 

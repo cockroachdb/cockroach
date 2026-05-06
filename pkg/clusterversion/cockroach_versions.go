@@ -285,6 +285,11 @@ const (
 	// to fingerprint_id and drops the legacy id column.
 	V26_3_AlterStatementsTablePK
 
+	// V26_3_AddResourceGroupsTable adds the system.resource_groups table and
+	// the system.resource_group_id_seq sequence used by the resource manager
+	// to persist per-tenant resource group configurations.
+	V26_3_AddResourceGroupsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -373,6 +378,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
 
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
+
+	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
