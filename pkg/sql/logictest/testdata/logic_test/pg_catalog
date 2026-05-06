@@ -3344,6 +3344,7 @@ force_savepoint_restart                                          off            
 foreign_key_cascades_limit                                       10000               NULL      NULL        NULL        string
 idle_in_transaction_session_timeout                              0                   NULL      NULL        NULL        string
 idle_session_timeout                                             0                   NULL      NULL        NULL        string
+in_hot_standby                                                   off                 NULL      NULL        NULL        string
 index_join_streamer_batch_size                                   8.0 MiB             NULL      NULL        NULL        string
 index_recommendations_enabled                                    off                 NULL      NULL        NULL        string
 initial_retry_backoff_for_read_committed                         2                   NULL      NULL        NULL        string
@@ -3441,6 +3442,7 @@ require_explicit_primary_keys                                    off            
 results_buffer_size                                              524288              NULL      NULL        NULL        string
 role                                                             none                NULL      NULL        NULL        string
 row_security                                                     on                  NULL      NULL        NULL        string
+scram_iterations                                                 10610               NULL      NULL        NULL        string
 search_path                                                      "$user", public     NULL      NULL        NULL        string
 serial_normalization                                             rowid               NULL      NULL        NULL        string
 server_encoding                                                  UTF8                NULL      NULL        NULL        string
@@ -3604,6 +3606,7 @@ force_savepoint_restart                                          off            
 foreign_key_cascades_limit                                       10000               NULL  user     NULL      10000               10000
 idle_in_transaction_session_timeout                              0                   ms    user     NULL      0s                  0s
 idle_session_timeout                                             0                   ms    user     NULL      0s                  0s
+in_hot_standby                                                   off                 NULL  user     NULL      off                 off
 index_join_streamer_batch_size                                   8.0 MiB             B     user     NULL      8.0 MiB             8.0 MiB
 index_recommendations_enabled                                    off                 NULL  user     NULL      on                  false
 initial_retry_backoff_for_read_committed                         2                   NULL  user     NULL      2ms                 2ms
@@ -3701,6 +3704,7 @@ require_explicit_primary_keys                                    off            
 results_buffer_size                                              524288              NULL  user     NULL      524288              524288
 role                                                             none                NULL  user     NULL      none                none
 row_security                                                     on                  NULL  user     NULL      on                  on
+scram_iterations                                                 10610               NULL  user     NULL      10610               10610
 search_path                                                      "$user", public     NULL  user     NULL      "$user", public     "$user", public
 serial_normalization                                             rowid               NULL  user     NULL      rowid               rowid
 server_encoding                                                  UTF8                NULL  user     NULL      UTF8                UTF8
@@ -3852,6 +3856,7 @@ force_savepoint_restart                                          NULL    NULL   
 foreign_key_cascades_limit                                       NULL    NULL     NULL     NULL        NULL
 idle_in_transaction_session_timeout                              NULL    NULL     NULL     NULL        NULL
 idle_session_timeout                                             NULL    NULL     NULL     NULL        NULL
+in_hot_standby                                                   NULL    NULL     NULL     NULL        NULL
 index_join_streamer_batch_size                                   NULL    NULL     NULL     NULL        NULL
 index_recommendations_enabled                                    NULL    NULL     NULL     NULL        NULL
 initial_retry_backoff_for_read_committed                         NULL    NULL     NULL     NULL        NULL
@@ -3952,6 +3957,7 @@ require_explicit_primary_keys                                    NULL    NULL   
 results_buffer_size                                              NULL    NULL     NULL     NULL        NULL
 role                                                             NULL    NULL     NULL     NULL        NULL
 row_security                                                     NULL    NULL     NULL     NULL        NULL
+scram_iterations                                                 NULL    NULL     NULL     NULL        NULL
 search_path                                                      NULL    NULL     NULL     NULL        NULL
 serial_normalization                                             NULL    NULL     NULL     NULL        NULL
 server_encoding                                                  NULL    NULL     NULL     NULL        NULL

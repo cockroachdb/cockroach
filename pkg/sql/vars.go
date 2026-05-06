@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1291,6 +1292,9 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html
 	`integer_datetimes`: makeReadOnlyVar("on", sessionVarDescriptions["integer_datetimes"]),
 
+	// See https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-IN-HOT-STANDBY
+	`in_hot_standby`: makeReadOnlyVar("off", sessionVarDescriptions["in_hot_standby"]),
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
 	`intervalstyle`: {
 		Description:        sessionVarDescriptions["intervalstyle"],
@@ -1792,6 +1796,12 @@ var varGen = map[string]sessionVar{
 			return security.GetConfiguredPasswordHashMethod(sv).String()
 		},
 	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html#GUC-SCRAM-ITERATIONS
+	`scram_iterations`: makeReadOnlyVar(
+		strconv.Itoa(password.DefaultSCRAMCost),
+		sessionVarDescriptions["scram_iterations"],
+	),
 
 	// CockroachDB extension.
 	`pg_dump_compatibility`: {

@@ -190,7 +190,6 @@ var npgsqlBlocklist = blocklist{
 	`Npgsql.Tests.FunctionTests.Param_Output`:                                                                                                       "unknown",
 	`Npgsql.Tests.FunctionTests.Resultset`:                                                                                                          "unknown",
 	`Npgsql.Tests.LargeObjectTests.Test`:                                                                                                            "unknown",
-	`Npgsql.Tests.MultipleHostsTests.Offline_state_on_query_execution_pg_non_critical_failure`:                                                      "169330",
 	`Npgsql.Tests.NestedDataReaderTests.Basic`:                                                                                                      "unknown",
 	`Npgsql.Tests.NestedDataReaderTests.Composite`:                                                                                                  "51480",
 	`Npgsql.Tests.NestedDataReaderTests.Different_field_count`:                                                                                      "unknown",
