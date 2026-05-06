@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -18,6 +19,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// makeBatchingOrNoLingerSink dispatches between makeBatchingSink and
+// makeNoLingerSink based on the changefeed.no_linger_sink.enabled
+// cluster setting. Both helpers share an identical signature so the
+// v2 sink construction sites only have to call this in place of
+// makeBatchingSink.
+func makeBatchingOrNoLingerSink(
+	ctx context.Context,
+	concreteType sinkType,
+	client SinkClient,
+	minFlushFrequency time.Duration,
+	retryOpts retry.Options,
+	numWorkers int,
+	topicNamer *TopicNamer,
+	pacerFactory func() *admission.Pacer,
+	timeSource timeutil.TimeSource,
+	metrics metricsRecorder,
+	settings *cluster.Settings,
+) Sink {
+	if changefeedbase.NoLingerSinkEnabled.Get(&settings.SV) {
+		return makeNoLingerSink(ctx, concreteType, client, minFlushFrequency,
+			retryOpts, numWorkers, topicNamer, pacerFactory, timeSource,
+			metrics, settings)
+	}
+	return makeBatchingSink(ctx, concreteType, client, minFlushFrequency,
+		retryOpts, numWorkers, topicNamer, pacerFactory, timeSource,
+		metrics, settings)
+}
 
 // noLingerSink is the M2-prototype Sink that pushes EmitRow payloads
 // into a pendingBuffer with no consumer attached. It exists to demo the

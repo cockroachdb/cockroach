@@ -229,6 +229,7 @@ go_test(
         "helpers_test.go",
         "main_test.go",
         "nemeses_test.go",
+        "no_linger_sink_test.go",
         "parquet_test.go",
         "pending_buffer_test.go",
         "protected_timestamps_test.go",
