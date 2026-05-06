@@ -184,7 +184,7 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 				CreateTime: timeutil.Now().UnixNano(),
 			}, false /* atGateway */)
 		},
-		m,
+		m, p.spec.MetricsLabel,
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating applier")

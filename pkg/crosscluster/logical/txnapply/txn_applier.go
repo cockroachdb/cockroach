@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
@@ -132,10 +133,11 @@ type Checkpoint struct{ Timestamp hlc.Timestamp }
 // Also note that the applier assumes it is sent transactions in increasing
 // timestamp order.
 type Applier struct {
-	id          ldrdecoder.ApplierID
-	settings    *cluster.Settings
-	depResolver DependencyResolverClient
-	metrics     *metrics.Metrics
+	id           ldrdecoder.ApplierID
+	settings     *cluster.Settings
+	depResolver  DependencyResolverClient
+	metrics      *metrics.Metrics
+	metricsLabel string
 
 	mu struct {
 		syncutil.Mutex
@@ -193,6 +195,7 @@ func NewApplier(
 	allApplierIDs []ldrdecoder.ApplierID,
 	newCPUHandle func() *admission.SQLCPUHandle,
 	metrics *metrics.Metrics,
+	metricsLabel string,
 ) (_ *Applier, retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -218,6 +221,7 @@ func NewApplier(
 		settings:          settings,
 		depResolver:       depResolver,
 		metrics:           metrics,
+		metricsLabel:      metricsLabel,
 		txnWriters:        writers,
 		newCPUHandle:      newCPUHandle,
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
@@ -438,6 +442,7 @@ func (a *Applier) writer(
 			ticker.Reset(leaseReleaseInterval.Get(&a.settings.SV))
 			txnWriter.ReleaseLeases(ctx)
 		case transaction := <-ready:
+			preBatchTime := timeutil.Now()
 			// TODO(jeffswenson): build up a batch to apply by pulling from the
 			// ready channel.
 			results, err := txnWriter.ApplyBatch(
@@ -455,6 +460,17 @@ func (a *Applier) writer(
 					Timestamp: transaction.TxnID.Timestamp,
 				}
 			}
+			a.metrics.AppliedRowUpdates.Inc(int64(txn.applyResult.AppliedRows))
+			if a.metricsLabel != "" {
+				a.metrics.LabeledEventsIngested.Inc(map[string]string{"label": a.metricsLabel}, int64(txn.applyResult.AppliedRows))
+			}
+			a.metrics.ReceivedLogicalBytes.Inc(transaction.Bytes)
+			a.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(transaction.TxnID.Timestamp.GoTime()).Nanoseconds())
+			nanosPerRow := timeutil.Since(preBatchTime).Nanoseconds()
+			if rows := len(transaction.WriteSet); rows > 0 {
+				nanosPerRow /= int64(rows)
+			}
+			a.metrics.ApplyBatchNanosHist.RecordValue(nanosPerRow)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

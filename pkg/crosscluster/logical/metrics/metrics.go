@@ -200,7 +200,7 @@ var (
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
-	metaLabeledEventsIngetsted = metric.Metadata{
+	metaLabeledEventsIngested = metric.Metadata{
 		Name:        "logical_replication.events_ingested_by_label",
 		Help:        "Events ingested by all replication jobs by label",
 		Measurement: "Events",
@@ -333,7 +333,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 
 		// Labeled export-only metrics.
 		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
-		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngetsted, []string{"label"}),
+		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngested, []string{"label"}),
 		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
 		LabeledScanningRanges: metric.NewExportedGaugeVec(metaLabeledScanningRanges, []string{"label"}),
 		LabeledCatchupRanges:  metric.NewExportedGaugeVec(metaLabeledCatchupRanges, []string{"label"}),

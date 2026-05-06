@@ -95,7 +95,11 @@ message TxnLDRApplierSpec {
 
   optional LDRSchema schema = 4 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 5.
+  // MetricsLabel is the label used to group LDR metrics when multiple
+  // logical replication jobs are running.
+  optional string metrics_label = 5 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 6.
 }
 
 // TxnLDRDepResolverSpec is the specification for a dependency resolver processor

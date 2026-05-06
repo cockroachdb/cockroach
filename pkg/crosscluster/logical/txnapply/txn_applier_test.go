@@ -406,7 +406,7 @@ func TestWaitingTxnMetrics(t *testing.T) {
 		depCtx, cancel := context.WithCancel(ctx)
 		depTracker, depTrackerCleanup := NewTestDependencyTrackerClient(depCtx, allIDs)
 		a, err := NewApplier(ctx, localID, st, writers,
-			depTracker, allIDs, testNewCPUHandle, m)
+			depTracker, allIDs, testNewCPUHandle, m, "" /* metricsLabel */)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			a.Close(ctx)
@@ -613,7 +613,7 @@ func runDistributedApplier(
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle, metrics.MakeMetrics(0).(*metrics.Metrics))
+		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle, metrics.MakeMetrics(0).(*metrics.Metrics), "" /* metricsLabel */)
 		require.NoError(t, err)
 
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
@@ -771,7 +771,7 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle, metrics.MakeMetrics(0).(*metrics.Metrics))
+		a, err := NewApplier(ctx, id, st, writers, depTracker, ids, testNewCPUHandle, metrics.MakeMetrics(0).(*metrics.Metrics), "" /* metricsLabel */)
 		require.NoError(b, err)
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
 		appliers[id] = a
