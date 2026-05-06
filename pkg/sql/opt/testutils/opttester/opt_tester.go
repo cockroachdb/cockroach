@@ -270,6 +270,9 @@ type Flags struct {
 	// MaxStackBytes specifies the number of bytes to limit the stack size to.
 	// If it is zero, the stack size has the default Go limit.
 	MaxStackBytes int
+
+	// PlanGram sets the PlanGram physical property for the root expression.
+	PlanGram physical.PlanGram
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -568,6 +571,8 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //   - max-stack: sets the maximum stack size for the goroutine that optimizes
 //     the query. See debug.SetMaxStack.
+//
+//   - plangram: sets the PlanGram physical property for the root expression.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Apply "session" defaults.
 	ot.catalog.(*testcat.Catalog).ForEachSessionVar(func(name string, value string) {
@@ -1180,6 +1185,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return err
 		}
 		f.MaxStackBytes = int(bytes)
+
+	case "plangram":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("plangram requires one argument")
+		}
+		var err error
+		f.PlanGram, err = physical.ParsePlanGram(strings.NewReader(arg.Vals[0]))
+		if err != nil {
+			return err
+		}
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -2360,6 +2375,12 @@ func (ot *OptTester) optimizeExpr(
 	}
 	if tables != nil {
 		o.Memo().Metadata().UpdateTableMeta(ot.ctx, &ot.evalCtx, tables)
+	}
+	if !ot.Flags.PlanGram.Any() {
+		root := o.Memo().RootExpr()
+		props := *o.Memo().RootProps()
+		props.PlanGram = ot.Flags.PlanGram
+		o.Memo().SetRoot(root, &props)
 	}
 	root, err := o.Optimize()
 	if err != nil {
