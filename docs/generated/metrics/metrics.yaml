@@ -11974,6 +11974,14 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+    - name: intentresolver.async.queue.latency
+      exported_name: intentresolver_async_queue_latency
+      description: Time intent resolution requests spend in the async queue before processing begins.
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: intentresolver.async.throttled
       exported_name: intentresolver_async_throttled
       description: Number of intent resolution attempts not run asynchronously due to throttling
@@ -11993,6 +12001,14 @@ layers:
     - name: intentresolver.intents.failed
       exported_name: intentresolver_intents_failed
       description: Number of intent resolution failures. The unit of measurement is a single intent, so if a batch of intent resolution requests fails, the metric will be incremented for each request in the batch.
+      y_axis_label: Intent Resolutions
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: intentresolver.intents.resolved_locally
+      exported_name: intentresolver_intents_resolved_locally
+      description: Number of intent resolution requests handled inline on the local fast-path, without being enqueued for asynchronous processing.
       y_axis_label: Intent Resolutions
       type: COUNTER
       unit: COUNT

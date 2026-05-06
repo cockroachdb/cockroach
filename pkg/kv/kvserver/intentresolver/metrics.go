@@ -5,7 +5,10 @@
 
 package intentresolver
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 var (
 	// Intent resolver metrics.
@@ -31,6 +34,20 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaIntentsResolvedLocally = metric.Metadata{
+		Name: "intentresolver.intents.resolved_locally",
+		Help: "Number of intent resolution requests handled inline on the local " +
+			"fast-path, without being enqueued for asynchronous processing.",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAsyncQueueLatency = metric.Metadata{
+		Name: "intentresolver.async.queue.latency",
+		Help: "Time intent resolution requests spend in the async queue before " +
+			"processing begins.",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics contains the metrics for the IntentResolver.
@@ -42,6 +59,12 @@ type Metrics struct {
 
 	// Counter tracking intent cleanup failures.
 	IntentResolutionFailed *metric.Counter
+
+	// Counter tracking intents resolved on the local fast-path (no async dispatch).
+	IntentsResolvedLocally *metric.Counter
+
+	// Histogram of time spent in the async resolver queue before processing.
+	AsyncQueueLatency metric.IHistogram
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -52,5 +75,12 @@ func makeMetrics() Metrics {
 		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
 		FinalizedTxnCleanupFailed:    metric.NewCounter(metaFinalizedTxnCleanupFailed),
 		IntentResolutionFailed:       metric.NewCounter(metaIntentCleanupFailed),
+		IntentsResolvedLocally:       metric.NewCounter(metaIntentsResolvedLocally),
+		AsyncQueueLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaAsyncQueueLatency,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 	}
 }
