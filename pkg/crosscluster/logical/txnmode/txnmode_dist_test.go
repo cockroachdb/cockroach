@@ -7,16 +7,26 @@ package txnmode
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,4 +143,286 @@ func TestBuildTxnReplicationPlan(t *testing.T) {
 				"expected %d streams", expectedStreams)
 		})
 	}
+}
+
+func TestBoundingSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sp := func(start, end string) roachpb.Span {
+		return roachpb.Span{
+			Key: roachpb.Key(start), EndKey: roachpb.Key(end),
+		}
+	}
+	ps := func(spans ...roachpb.Span) execinfrapb.StreamIngestionPartitionSpec {
+		return execinfrapb.StreamIngestionPartitionSpec{Spans: spans}
+	}
+
+	tests := []struct {
+		name     string
+		specs    []execinfrapb.StreamIngestionPartitionSpec
+		expected roachpb.Span
+	}{
+		{
+			name:     "single partition single span",
+			specs:    []execinfrapb.StreamIngestionPartitionSpec{ps(sp("b", "d"))},
+			expected: sp("b", "d"),
+		},
+		{
+			name:     "single partition multiple spans",
+			specs:    []execinfrapb.StreamIngestionPartitionSpec{ps(sp("b", "d"), sp("a", "f"))},
+			expected: sp("a", "f"),
+		},
+		{
+			name: "multiple partitions",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(sp("c", "e")),
+				ps(sp("a", "g")),
+			},
+			expected: sp("a", "g"),
+		},
+		{
+			name: "partition zero empty",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(),
+				ps(sp("b", "d")),
+				ps(sp("a", "f")),
+			},
+			expected: sp("a", "f"),
+		},
+		{
+			name: "middle partition empty",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(sp("b", "d")),
+				ps(),
+				ps(sp("a", "f")),
+			},
+			expected: sp("a", "f"),
+		},
+		{
+			name: "all partitions empty",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(), ps(),
+			},
+			expected: roachpb.Span{},
+		},
+		{
+			name:     "no partitions",
+			specs:    []execinfrapb.StreamIngestionPartitionSpec{},
+			expected: roachpb.Span{},
+		},
+		{
+			name:     "nil input",
+			specs:    nil,
+			expected: roachpb.Span{},
+		},
+		{
+			name: "overlapping spans across partitions",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(sp("b", "e"), sp("c", "d")),
+				ps(sp("a", "c"), sp("d", "g")),
+			},
+			expected: sp("a", "g"),
+		},
+		{
+			name: "disjoint spans",
+			specs: []execinfrapb.StreamIngestionPartitionSpec{
+				ps(sp("a", "b")),
+				ps(sp("x", "z")),
+			},
+			expected: sp("a", "z"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := boundingSpan(tc.specs)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func mkts(wallTime int64) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: wallTime}
+}
+
+func makeFrontierMeta(
+	applierID base.SQLInstanceID, frontier hlc.Timestamp,
+) *execinfrapb.ProducerMetadata {
+	marshalled, err := pbtypes.MarshalAny(&frontier)
+	if err != nil {
+		panic(err)
+	}
+	return &execinfrapb.ProducerMetadata{
+		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+			ProgressDetails: *marshalled,
+			NodeID:          applierID,
+		},
+	}
+}
+
+func TestMinFrontier(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name             string
+		applierFrontiers map[base.SQLInstanceID]hlc.Timestamp
+		expected         hlc.Timestamp
+	}{
+		{
+			name:             "single applier set",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: mkts(10)},
+			expected:         mkts(10),
+		},
+		{
+			name:             "single applier unset",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: {}},
+			expected:         hlc.Timestamp{},
+		},
+		{
+			name:             "two appliers both set same",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: mkts(5), 2: mkts(5)},
+			expected:         mkts(5),
+		},
+		{
+			name:             "two appliers both set different",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: mkts(5), 2: mkts(10)},
+			expected:         mkts(5),
+		},
+		{
+			name:             "two appliers one unset",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: mkts(5), 2: {}},
+			expected:         hlc.Timestamp{},
+		},
+		{
+			name:             "two appliers both unset",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{1: {}, 2: {}},
+			expected:         hlc.Timestamp{},
+		},
+		{
+			name: "three appliers min in middle",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{
+				1: mkts(10), 2: mkts(3), 3: mkts(7),
+			},
+			expected: mkts(3),
+		},
+		{
+			name:             "empty map",
+			applierFrontiers: map[base.SQLInstanceID]hlc.Timestamp{},
+			expected:         hlc.Timestamp{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := &checkpointHandler{applierFrontiers: tc.applierFrontiers}
+			require.Equal(t, tc.expected, ch.minFrontier())
+		})
+	}
+}
+
+func TestCheckpointHandler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	idb := s.InternalDB().(isql.DB)
+	db := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	createJob := func(t *testing.T) *jobs.Job {
+		t.Helper()
+		record := jobs.Record{
+			Details:  jobspb.BackupDetails{},
+			Progress: jobspb.BackupProgress{},
+			Username: username.TestUserName(),
+		}
+		job, err := registry.CreateJobWithTxn(ctx, record, registry.MakeJobID(), nil)
+		require.NoError(t, err)
+		return job
+	}
+
+	drainChannel := func(ch <-chan hlc.Timestamp) []hlc.Timestamp {
+		var result []hlc.Timestamp
+		for {
+			select {
+			case ts := <-ch:
+				result = append(result, ts)
+			default:
+				return result
+			}
+		}
+	}
+
+	t.Run("fresh_start", func(t *testing.T) {
+		job := createJob(t)
+		frontierCh := make(chan hlc.Timestamp, 100)
+		applierIDs := []base.SQLInstanceID{1, 2}
+
+		ch := newCheckpointHandler(
+			job, idb, nil, frontierCh, applierIDs, hlc.Timestamp{},
+		)
+
+		// Only applier 1 reports: minFrontier blocked by applier 2.
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(5))))
+		require.Empty(t, drainChannel(frontierCh))
+
+		// Applier 2 reports: min is now ts(5).
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(2, mkts(10))))
+		updates := drainChannel(frontierCh)
+		require.Len(t, updates, 1)
+		require.Equal(t, mkts(5), updates[0])
+
+		// Verify exactly one progress history row with the right resolved value.
+		db.CheckQueryResults(t,
+			fmt.Sprintf(
+				"SELECT resolved FROM system.job_progress_history WHERE job_id = %d",
+				job.ID(),
+			),
+			[][]string{{mkts(5).AsOfSystemTime()}},
+		)
+	})
+
+	t.Run("resume", func(t *testing.T) {
+		job := createJob(t)
+		frontierCh := make(chan hlc.Timestamp, 100)
+		applierIDs := []base.SQLInstanceID{1, 2}
+		resumeTS := mkts(10)
+
+		ch := newCheckpointHandler(
+			job, idb, nil, frontierCh, applierIDs, resumeTS,
+		)
+
+		// Applier 1 at ts(12): min is ts(10) from applier 2's seed.
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(12))))
+		require.Equal(t, mkts(10), drainChannel(frontierCh)[0])
+
+		// Applier 2 at ts(15): min advances to ts(12).
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(2, mkts(15))))
+		require.Equal(t, mkts(12), drainChannel(frontierCh)[0])
+
+		// Applier 1 at ts(20): min advances to ts(15).
+		require.NoError(t, ch.handleMeta(ctx, makeFrontierMeta(1, mkts(20))))
+		require.Equal(t, mkts(15), drainChannel(frontierCh)[0])
+
+		// Verify all persisted checkpoints are monotonically non-decreasing.
+		rows := db.QueryStr(t,
+			fmt.Sprintf(
+				"SELECT resolved FROM system.job_progress_history "+
+					"WHERE job_id = %d ORDER BY written ASC",
+				job.ID(),
+			),
+		)
+		require.GreaterOrEqual(t, len(rows), 2)
+		for i := 1; i < len(rows); i++ {
+			require.LessOrEqual(t, rows[i-1][0], rows[i][0],
+				"checkpoint regressed at row %d: %s > %s",
+				i, rows[i-1][0], rows[i][0],
+			)
+		}
+	})
 }

@@ -161,7 +161,7 @@ func (p *ldrDepResolverProcessor) sendUpdate(
 	// DistDepResolverClient will forward updates that are not for the
 	// local applier.
 	update.TargetApplierID = targetApplierID
-	// TODO(michaelbutler): this ctx select may not be necessary once we add a
+	// TODO(butler): this ctx select may not be necessary once we add a
 	// real buffer for the loopback channel.
 	select {
 	case p.loopbackChs.updateCh <- update:
@@ -177,8 +177,10 @@ func (p *ldrDepResolverProcessor) close() []execinfrapb.ProducerMetadata {
 	if p.Closed {
 		return nil
 	}
-	ldrLoopback.cleanup(p.FlowCtx, p.spec.ApplierID)
+	// Call InternalClose first, preventing sending updates on a closed loopback
+	// channel (leading to panics).
 	p.InternalClose()
+	ldrLoopback.cleanup(p.FlowCtx, p.spec.ApplierID)
 	return nil
 }
 

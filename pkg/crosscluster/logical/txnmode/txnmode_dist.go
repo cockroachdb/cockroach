@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,7 +29,7 @@ import (
 // transactional LDR:
 //
 //	Stage 1: LDR Coordinator (pinned to gateway) → BY_RANGE → N appliers
-//	Stage 2: N LDR Appliers (one per leaseholder instance) → BY_RANGE → N dep resolvers
+//	Stage 2: N LDR Appliers (one per SQL instance) → BY_RANGE → N dep resolvers
 //	Stage 3: N LDR Dep Resolvers (co-located with appliers) → PASS_THROUGH → noop (gateway)
 func PlanTxnReplication(
 	ctx context.Context,
@@ -41,33 +40,15 @@ func PlanTxnReplication(
 ) (_ *sql.PhysicalPlan, _ *sql.PlanningCtx, applierInstanceIDs []base.SQLInstanceID, _ error) {
 	dsp := execCtx.DistSQLPlanner()
 
-	planCtx := dsp.NewPlanningCtx(
-		ctx, execCtx.ExtendedEvalContext(),
-		nil /* planner */, nil /* txn */, sql.FullDistribution,
-	)
-
-	// Compute replicating spans for partition assignment.
-	replicatingSpans := make(roachpb.Spans, len(sourcePlan.SourceSpans))
-	copy(replicatingSpans, sourcePlan.SourceSpans)
-
-	// Determine which instances are leaseholders for the replicating spans.
-	partitions, err := dsp.PartitionSpans(
-		ctx, planCtx, replicatingSpans, sql.PartitionSpansBoundDefault,
+	// Set up planning across all available SQL instances.
+	//
+	// TODO(msbutler): restrict to instances that are leaseholders for the
+	// destination key spans. Doing this accurately requires addressing #169815.
+	planCtx, applierInstanceIDs, err := dsp.SetupAllNodesPlanning(
+		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
 	)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "partitioning spans")
-	}
-
-	// Deduplicate instance IDs from partitions. These are the instances that
-	// will run applier and dep resolver processors.
-	instanceSet := make(map[base.SQLInstanceID]struct{}, len(partitions))
-	for _, p := range partitions {
-		instanceSet[p.SQLInstanceID] = struct{}{}
-	}
-
-	applierInstanceIDs = make([]base.SQLInstanceID, 0, len(instanceSet))
-	for id := range instanceSet {
-		applierInstanceIDs = append(applierInstanceIDs, id)
+		return nil, nil, nil, errors.Wrap(err, "setting up all-nodes planning")
 	}
 
 	// ApplierID is an identity mapping to SQL instance ID.
@@ -132,7 +113,7 @@ func buildTxnReplicationPlan(
 		},
 	})
 
-	// --- Stage 2: Applier processors (one per leaseholder instance) ---
+	// --- Stage 2: Applier processors (one per SQL instance) ---
 
 	applierToDepResolverRouter, err := physicalplan.MakeInstanceRouter(
 		applierInstanceIDs,
@@ -303,6 +284,7 @@ func RunDistSQLFlow(
 ) error {
 	ch := newCheckpointHandler(
 		job,
+		execCtx.ExecCfg().InternalDB,
 		&execCtx.ExecCfg().Settings.SV,
 		frontierUpdates,
 		applierInstanceIDs,
@@ -345,6 +327,7 @@ func RunDistSQLFlow(
 // setting and finer grain frontier updates.
 type checkpointHandler struct {
 	job             *jobs.Job
+	db              isql.DB
 	sv              *settings.Values
 	frontierUpdates chan<- hlc.Timestamp
 
@@ -358,6 +341,7 @@ type checkpointHandler struct {
 // immediately return the checkpoint while waiting for fresher updates.
 func newCheckpointHandler(
 	job *jobs.Job,
+	db isql.DB,
 	sv *settings.Values,
 	frontierUpdates chan<- hlc.Timestamp,
 	applierInstanceIDs []base.SQLInstanceID,
@@ -371,6 +355,7 @@ func newCheckpointHandler(
 	}
 	return &checkpointHandler{
 		job:              job,
+		db:               db,
 		sv:               sv,
 		frontierUpdates:  frontierUpdates,
 		applierFrontiers: applierFrontiers,
@@ -402,21 +387,9 @@ func (ch *checkpointHandler) handleMeta(
 	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s",
 		replicatedTime.GoTime())
 
-	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
-	if err := ch.job.DeprecatedNoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
-			if err := md.CheckRunningOrReverting(); err != nil {
-				return err
-			}
-			progress := md.Progress
-			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-			prog.ReplicatedTime = replicatedTime
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &replicatedTime,
-			}
-			ju.UpdateProgress(progress)
-			return nil
-		}); err != nil {
+	if err := ch.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return ch.job.ProgressStorage().SetResolved(ctx, txn, replicatedTime)
+	}); err != nil {
 		return err
 	}
 

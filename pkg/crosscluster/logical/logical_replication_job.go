@@ -263,19 +263,16 @@ func (r *logicalReplicationResumer) resumeWithRetries(
 func loadOnlineReplicatedTime(
 	ctx context.Context, db isql.DB, ingestionJob *jobs.Job,
 ) hlc.Timestamp {
-	// TODO(ssd): Isn't this load redundant? The Update API for
-	// the job also updates the local copy of the job with the
-	// latest progress.
-	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
-	if err != nil {
+	var resolved hlc.Timestamp
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		_, resolved, _, err = ingestionJob.ProgressStorage().Get(ctx, txn)
+		return err
+	}); err != nil {
 		log.Dev.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
 	}
-	if progress == nil {
-		log.Dev.Warningf(ctx, "no job progress yet: %s", err)
-		return hlc.Timestamp{}
-	}
-	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	return resolved
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical

@@ -98,9 +98,7 @@ func (p *ldrApplierProcessor) Start(ctx context.Context) {
 	// Forward loopback updates from the dep resolver to the Receive()
 	// channel or to the output.
 	p.grp.GoCtx(func(ctx context.Context) error {
-		chs := ldrLoopback.lookupOrCreate(p.FlowCtx, p.spec.ApplierID)
-		p.loopbackChs = chs
-		return p.depResolver.RunBackchannelForwarder(ctx, chs.updateCh)
+		return p.depResolver.RunBackchannelForwarder(ctx, p.loopbackChs.updateCh)
 	})
 }
 
@@ -155,6 +153,8 @@ func (p *ldrApplierProcessor) setup(ctx context.Context) error {
 	}
 
 	p.applierEvents = make(chan txnapply.ApplierEvent)
+
+	p.loopbackChs = ldrLoopback.lookupOrCreate(p.FlowCtx, p.spec.ApplierID)
 	return nil
 }
 

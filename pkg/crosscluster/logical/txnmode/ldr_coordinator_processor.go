@@ -50,7 +50,7 @@ var (
 // coordinatorOutputTypes defines the row format emitted by the coordinator
 // processor and consumed by applier processors.
 // Column 0: routing key (encoded SQL instance ID for the BY_RANGE router).
-// Column 1: serialized ApplierEvent (TODO: define serialization format).
+// Column 1: serialized txnpb.LDRApplierEvent proto.
 var coordinatorOutputTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
@@ -97,8 +97,6 @@ type ldrCoordinatorProcessor struct {
 // ctxgroup:
 //
 //	feed.Subscribe -> runDecode -> runScheduleAndRoute -> Next()
-//
-// All errors are reported to Next() via errCh, with the first error winning.
 func (p *ldrCoordinatorProcessor) Start(ctx context.Context) {
 	p.StartInternal(ctx, "ldrCoordinator")
 
@@ -414,6 +412,10 @@ func (p *ldrCoordinatorProcessor) hydrateApplierID(
 
 // destKeyFromRow extracts a destination key from a decoded row for range cache
 // lookups. It returns the table prefix for the row's destination table.
+//
+// TODO(msbutler): this implies a key will get routed to the range of the
+// tableID prefix, instead of to the random key. To address this, we need to fix
+// #169815.
 func destKeyFromRow(codec keys.SQLCodec, row ldrdecoder.DecodedRow) (roachpb.RKey, error) {
 	prefix := codec.TablePrefix(uint32(row.TableID))
 	return keys.Addr(prefix)
@@ -491,6 +493,30 @@ func (p *ldrCoordinatorProcessor) instanceIDForApplier(
 	return base.SQLInstanceID(applierID)
 }
 
+// boundingSpan computes the smallest span that covers all spans across the
+// given partition specs. Partitions with no spans are skipped. Returns a
+// zero-valued span if no spans exist in any partition.
+func boundingSpan(partitionSpecs []execinfrapb.StreamIngestionPartitionSpec) roachpb.Span {
+	var result roachpb.Span
+	first := true
+	for _, ps := range partitionSpecs {
+		for _, s := range ps.Spans {
+			if first {
+				result = s
+				first = false
+			} else {
+				if s.Key.Compare(result.Key) < 0 {
+					result.Key = s.Key
+				}
+				if result.EndKey.Compare(s.EndKey) < 0 {
+					result.EndKey = s.EndKey
+				}
+			}
+		}
+	}
+	return result
+}
+
 // createTxnFeed creates a merged feed from all partition specs in the coordinator spec.
 // This follows the pattern from LogicalReplicationWriterSpec where each processor
 // creates its own stream clients and subscriptions.
@@ -499,32 +525,7 @@ func (p *ldrCoordinatorProcessor) createTxnFeed(
 ) (streamclient.Subscription, error) {
 	db := p.FlowCtx.Cfg.DB
 
-	// Compute covering span for the merge feed.
-	var coveringSpan roachpb.Span
-	for i, partitionSpec := range p.spec.PartitionSpecs {
-		if len(partitionSpec.Spans) == 0 {
-			continue
-		}
-		partSpan := partitionSpec.Spans[0]
-		for _, s := range partitionSpec.Spans[1:] {
-			if s.Key.Compare(partSpan.Key) < 0 {
-				partSpan.Key = s.Key
-			}
-			if partSpan.EndKey.Compare(s.EndKey) < 0 {
-				partSpan.EndKey = s.EndKey
-			}
-		}
-		if i == 0 {
-			coveringSpan = partSpan
-		} else {
-			if partSpan.Key.Compare(coveringSpan.Key) < 0 {
-				coveringSpan.Key = partSpan.Key
-			}
-			if coveringSpan.EndKey.Compare(partSpan.EndKey) < 0 {
-				coveringSpan.EndKey = partSpan.EndKey
-			}
-		}
-	}
+	coveringSpan := boundingSpan(p.spec.PartitionSpecs)
 
 	var orderedFeeds []streamclient.Subscription
 	for i, partitionSpec := range p.spec.PartitionSpecs {
