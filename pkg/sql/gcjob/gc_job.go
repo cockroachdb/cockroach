@@ -394,10 +394,10 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	}
 	persistProgress(ctx, &execCfg, r.job, progress, sql.StatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
-	return waitForGC(ctx, &execCfg, details, progress)
+	return r.waitForGC(ctx, &execCfg, details, progress)
 }
 
-func waitForGC(
+func (r schemaChangeGCResumer) waitForGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details *jobspb.SchemaChangeGCDetails,
@@ -411,7 +411,7 @@ func waitForGC(
 		)
 	case details.Tables != nil:
 		return errors.Wrap(
-			deleteTableDescriptorsAfterGC(ctx, execCfg, details, progress),
+			deleteTableDescriptorsAfterGC(ctx, execCfg, r.job, details, progress),
 			"attempted to delete table data",
 		)
 	default:
