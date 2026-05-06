@@ -6,8 +6,12 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -21,8 +25,82 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// recordingSinkClient captures payloads passed to Flush. errs, if
+// non-empty, is consumed one entry per Flush call: a non-nil entry
+// makes that Flush fail without recording the payload.
+type recordingSinkClient struct {
+	mu       sync.Mutex
+	flushed  [][]byte // successful payloads, in arrival order
+	attempts int      // total Flush call count, regardless of outcome
+	errs     []error  // optional sequence of errors to return
+}
+
+func (r *recordingSinkClient) MakeBatchBuffer(string) BatchBuffer {
+	return &recordingBatchBuffer{}
+}
+
+func (r *recordingSinkClient) FlushResolvedPayload(
+	context.Context, []byte, func(func(string) error) error, retry.Options,
+) error {
+	return nil
+}
+
+func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.attempts++
+	if len(r.errs) > 0 {
+		err := r.errs[0]
+		r.errs = r.errs[1:]
+		if err != nil {
+			return err
+		}
+	}
+	r.flushed = append(r.flushed, append([]byte(nil), p.([]byte)...))
+	return nil
+}
+
+func (r *recordingSinkClient) Close() error                          { return nil }
+func (r *recordingSinkClient) CheckConnection(context.Context) error { return nil }
+
+// recordingBatchBuffer accumulates "key=value\n" lines into a payload.
+type recordingBatchBuffer struct {
+	payload []byte
+}
+
+func (b *recordingBatchBuffer) Append(_ context.Context, k, v []byte, _ attributes) {
+	b.payload = append(b.payload, k...)
+	b.payload = append(b.payload, '=')
+	b.payload = append(b.payload, v...)
+	b.payload = append(b.payload, '\n')
+}
+func (b *recordingBatchBuffer) ShouldFlush() bool           { return false }
+func (b *recordingBatchBuffer) Close() (SinkPayload, error) { return b.payload, nil }
+
+// makeRecordingSink constructs a noLingerSink wired to the given
+// recording client. Caller should defer sink.Close().
+func makeRecordingSink(t *testing.T, rec *recordingSinkClient) Sink {
+	t.Helper()
+	settings := cluster.MakeTestingClusterSettings()
+	changefeedbase.NoLingerSinkEnabled.Override(context.Background(), &settings.SV, true)
+	return makeBatchingOrNoLingerSink(
+		context.Background(), sinkTypeWebhook, rec, 0, retry.Options{}, 1, nil,
+		func() *admission.Pacer { return nil },
+		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
+	)
+}
+
+// emitKV is shorthand for sink.EmitRow with a stubTopic.
+func emitKV(t *testing.T, sink Sink, topic, key, value string) {
+	t.Helper()
+	require.NoError(t, sink.EmitRow(context.Background(), stubTopic{name: topic},
+		[]byte(key), []byte(value), nil, hlc.Timestamp{}, hlc.Timestamp{},
+		kvevent.Alloc{}, nil))
+}
 
 // stubTopic is a minimal TopicDescriptor whose GetTableName returns
 // the name we set. Other methods return zero values; only
@@ -37,11 +115,19 @@ func (t stubTopic) GetVersion() descpb.DescriptorVersion          { return 0 }
 func (t stubTopic) GetTargetSpecification() changefeedbase.Target { return changefeedbase.Target{} }
 func (t stubTopic) GetTableName() string                          { return t.name }
 
+// noopBatchBuffer is a BatchBuffer whose methods do nothing. Used by
+// stub sinks that don't care about the flush path.
+type noopBatchBuffer struct{}
+
+func (noopBatchBuffer) Append(context.Context, []byte, []byte, attributes) {}
+func (noopBatchBuffer) ShouldFlush() bool                                  { return false }
+func (noopBatchBuffer) Close() (SinkPayload, error)                        { return nil, nil }
+
 // stubSinkClient is a minimal SinkClient used to drive
 // makeBatchingOrNoLingerSink in tests. Its methods are no-ops.
 type stubSinkClient struct{}
 
-func (stubSinkClient) MakeBatchBuffer(string) BatchBuffer { return nil }
+func (stubSinkClient) MakeBatchBuffer(string) BatchBuffer { return noopBatchBuffer{} }
 func (stubSinkClient) FlushResolvedPayload(
 	context.Context, []byte, func(func(string) error) error, retry.Options,
 ) error {
@@ -150,4 +236,65 @@ func TestNoLingerSinkBasicHappyPath(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
+// TestNoLingerSinkCloseDrains pins the contract that all events
+// successfully passed to EmitRow before Close are flushed before Close
+// returns. A regression that re-introduces eager ctx-cancel on Close
+// would silently drop in-flight drains and fail this test.
+func TestNoLingerSinkCloseDrains(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rec := &recordingSinkClient{}
+	sink := makeRecordingSink(t, rec)
+
+	const n = 10
+	for i := 0; i < n; i++ {
+		emitKV(t, sink, "foo", fmt.Sprintf("k%d", i), fmt.Sprintf("v%d", i))
+	}
+	require.NoError(t, sink.Close())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	combined := bytes.Join(rec.flushed, nil)
+	for i := 0; i < n; i++ {
+		require.Contains(t, string(combined), fmt.Sprintf("k%d=v%d", i, i),
+			"event %d missing from delivered payloads", i)
+	}
+}
+
+// TestNoLingerSinkWorkerSurvivesFlushError pins the contract that a
+// transient Flush failure does not exit the worker. We arrange the
+// failure with errs[0]; a subsequent EmitRow after the failure has
+// been observed must still be delivered.
+func TestNoLingerSinkWorkerSurvivesFlushError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rec := &recordingSinkClient{errs: []error{errors.New("transient")}}
+	sink := makeRecordingSink(t, rec)
+
+	emitKV(t, sink, "foo", "k1", "v1")
+
+	// Wait until the first batch has been attempted (and failed).
+	require.Eventually(t, func() bool {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		return rec.attempts >= 1
+	}, time.Second, 5*time.Millisecond, "first Flush attempt never observed")
+
+	emitKV(t, sink, "foo", "k2", "v2")
+	require.NoError(t, sink.Close())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.GreaterOrEqual(t, rec.attempts, 2, "worker exited after first failure")
+	combined := bytes.Join(rec.flushed, nil)
+	require.Contains(t, string(combined), "k2=v2",
+		"event after the failed flush was not delivered")
+	// k1's batch was the failed one; with no retry (commit 2 still
+	// pending) it is not expected to appear.
+	require.NotContains(t, string(combined), "k1=v1",
+		"unexpectedly delivered the failed event (retry must not be implemented yet)")
 }
