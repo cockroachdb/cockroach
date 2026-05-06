@@ -989,6 +989,11 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// Restore after system.resource_groups so we can read max(id).
 		restoreInOrder: 1,
 	},
+	// Host-side aggregation; re-derived from per-tenant
+	// system.resource_groups by the reconciler jobs after restore.
+	systemschema.TenantResourceGroupsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func resourceGroupIDSeqRestoreFunc(

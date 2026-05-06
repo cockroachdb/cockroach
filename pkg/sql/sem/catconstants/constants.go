@@ -117,6 +117,7 @@ const (
 	AdvisoryLocksTableName                  SystemTableName = "advisory_locks"
 	ResourceGroupsTableName                 SystemTableName = "resource_groups"
 	ResourceGroupIDSequenceName             SystemTableName = "resource_group_id_seq"
+	TenantResourceGroupsTableName           SystemTableName = "tenant_resource_groups"
 )
 
 // Oid for virtual database and table.
