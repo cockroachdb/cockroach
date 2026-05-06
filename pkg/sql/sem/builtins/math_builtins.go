@@ -781,7 +781,7 @@ func ceilImpl() builtinDefinition {
 func powImpls() builtinDefinition {
 	return makeBuiltin(defProps(),
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
+			return eval.FloatPow(x, y)
 		}, "Calculates `x`^`y`.", volatility.Immutable),
 		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			dd := &tree.DDecimal{}

@@ -19924,7 +19924,11 @@ func (p projPowFloat64ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 						{
 
-							projCol[i] = math.Pow(float64(p.constArg), float64(arg))
+							res, err := eval.FloatPow(float64(p.constArg), float64(arg))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
 						}
 
 					}
@@ -19940,7 +19944,11 @@ func (p projPowFloat64ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 						{
 
-							projCol[i] = math.Pow(float64(p.constArg), float64(arg))
+							res, err := eval.FloatPow(float64(p.constArg), float64(arg))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							projCol[i] = float64(*res)
 						}
 
 					}
@@ -19955,7 +19963,11 @@ func (p projPowFloat64ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 					{
 
-						projCol[i] = math.Pow(float64(p.constArg), float64(arg))
+						res, err := eval.FloatPow(float64(p.constArg), float64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
 					}
 
 				}
@@ -19968,7 +19980,11 @@ func (p projPowFloat64ConstFloat64Op) Next() (coldata.Batch, *execinfrapb.Produc
 
 					{
 
-						projCol[i] = math.Pow(float64(p.constArg), float64(arg))
+						res, err := eval.FloatPow(float64(p.constArg), float64(arg))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						projCol[i] = float64(*res)
 					}
 
 				}

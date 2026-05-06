@@ -60,6 +60,20 @@ func DecimalPow(ctx *apd.Context, d, x, y *apd.Decimal) error {
 	return nil
 }
 
+// FloatPow computes the value of x^y for float64 arguments, returning errors
+// for cases that PostgreSQL rejects rather than returning NaN or Inf.
+func FloatPow(x, y float64) (*tree.DFloat, error) {
+	// Zero raised to a negative power is undefined.
+	if x == 0 && y < 0 {
+		return nil, errZeroToNegativePower
+	}
+	// A negative number raised to a non-integer power yields a complex result.
+	if x < 0 && y != math.Trunc(y) {
+		return nil, errNegativeToNonIntegerPower
+	}
+	return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
+}
+
 // Sqrt returns the square root of x.
 func Sqrt(x float64) (*tree.DFloat, error) {
 	if x < 0.0 {

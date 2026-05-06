@@ -1613,8 +1613,7 @@ func (e *evaluator) EvalPowDecimalOp(
 func (e *evaluator) EvalPowFloatOp(
 	ctx context.Context, _ *tree.PowFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	f := math.Pow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
-	return tree.NewDFloat(tree.DFloat(f)), nil
+	return FloatPow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
 }
 
 func (e *evaluator) EvalPowIntDecimalOp(

@@ -5885,7 +5885,7 @@ SELECT ST_AsText(ST_SnapToGrid(ST_MinimumBoundingCircle(ST_GeomFromText('POINT(0
 ----
 POINT (0 0)
 
-statement error value out of range: overflow
+statement error pq: a negative number raised to a non-integer power yields a complex result
 SELECT st_astext(st_minimumboundingcircle(
   st_makepoint(
     (-0.23349138300862382)::FLOAT8,
