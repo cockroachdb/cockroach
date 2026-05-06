@@ -58,13 +58,15 @@ var defaultGroupConfig = ResourceGroupConfig{
 // ResourceGroupConfigHolder owns the source-of-truth resource group
 // configuration for Resource Manager mode. The configuration is
 // pre-normalized by the caller (see ResourceGroupConfig); the holder
-// is pure storage behind a mutex.
+// is pure storage behind an RWMutex (reads vastly outnumber writes:
+// every Admit calls GetOrDefault, while Set fires only on a config
+// change).
 //
 // All keys must be rgKind groupKeys: the holder is RM-only and Set
 // asserts this invariant on entry.
 type ResourceGroupConfigHolder struct {
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		config map[groupKey]ResourceGroupConfig
 	}
 }
@@ -108,8 +110,8 @@ func (h *ResourceGroupConfigHolder) Set(config map[groupKey]ResourceGroupConfig)
 // groupInfo consults the holder to populate weight and maxCPU for
 // the new groupInfo (burstFrac is computed inline as Weight/100).
 func (h *ResourceGroupConfigHolder) GetOrDefault(k groupKey) ResourceGroupConfig {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if cfg, ok := h.mu.config[k]; ok {
 		return cfg
 	}
@@ -120,8 +122,8 @@ func (h *ResourceGroupConfigHolder) GetOrDefault(k groupKey) ResourceGroupConfig
 // reference to the returned map; subsequent Set calls do not affect
 // previously-returned snapshots.
 func (h *ResourceGroupConfigHolder) Snapshot() map[groupKey]ResourceGroupConfig {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	snap := make(map[groupKey]ResourceGroupConfig, len(h.mu.config))
 	maps.Copy(snap, h.mu.config)
 	return snap

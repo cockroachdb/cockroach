@@ -85,9 +85,9 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 
 		// And the holder's internal map is not aliased to the input.
 		// Same-package access lets us check the underlying pointer.
-		h.mu.Lock()
+		h.mu.RLock()
 		internalPtr := reflect.ValueOf(h.mu.config).Pointer()
-		h.mu.Unlock()
+		h.mu.RUnlock()
 		require.NotEqual(t, reflect.ValueOf(input).Pointer(), internalPtr,
 			"holder must not retain a reference to the caller's input map")
 	})
@@ -119,9 +119,9 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	// Snapshot must return a fresh map each call, not an alias of the
 	// internal storage. Pointer-identity check guards against a regression
 	// that returns the internal map directly.
-	h.mu.Lock()
+	h.mu.RLock()
 	internalPtr := reflect.ValueOf(h.mu.config).Pointer()
-	h.mu.Unlock()
+	h.mu.RUnlock()
 	snap2 := h.Snapshot()
 	require.NotEqual(t, internalPtr, reflect.ValueOf(snap2).Pointer(),
 		"Snapshot must not alias the holder's internal map")
