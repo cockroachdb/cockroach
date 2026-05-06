@@ -43,10 +43,12 @@ var authenticate = func(
 		return nil
 	}
 
-	// The auth step should require only a few back and forths so 20 iterations
-	// should be enough.
+	// The auth step should require only a few back and forths so 30 iterations
+	// should be enough. Note that each ParameterStatus message sent after
+	// authentication counts as one iteration, and there can be 15+ of these
+	// in addition to auth exchange messages (e.g. 4 for SCRAM-SHA-256).
 	var i int
-	for ; i < 20; i++ {
+	for ; i < 30; i++ {
 		// Read the server response and forward it to the client.
 		// TODO(spaskob): in verbose mode, log these messages.
 		backendMsg, err := be.Receive()
@@ -202,10 +204,11 @@ var readTokenAuthResult = func(conn net.Conn) (*pgproto3.BackendKeyData, error) 
 	serverConn := interceptor.NewFrontendConn(conn)
 
 	var backendKeyData *pgproto3.BackendKeyData
-	// The auth step should require only a few back and forths so 20 iterations
-	// should be enough.
+	// The auth step should require only a few back and forths so 30 iterations
+	// should be enough. Note that each ParameterStatus message sent after
+	// authentication counts as one iteration.
 	var i int
-	for ; i < 20; i++ {
+	for ; i < 30; i++ {
 		backendMsg, err := serverConn.ReadMsg()
 		if err != nil {
 			return nil, withCode(

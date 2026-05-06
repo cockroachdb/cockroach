@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/tcpkeepalive"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -322,9 +323,16 @@ func (c *conn) sendInitialConnData(
 			return sql.ConnectionHandler{}, err
 		}
 	}
-	// The two following status parameters have no equivalent session
-	// variable.
+	// The following status parameters have no equivalent session variable.
 	if err := c.bufferParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+	if err := c.bufferParamStatus("in_hot_standby", "off"); err != nil {
+		return sql.ConnectionHandler{}, err
+	}
+	if err := c.bufferParamStatus(
+		"scram_iterations", strconv.FormatInt(security.SCRAMCost.Get(sv), 10),
+	); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -1485,19 +1493,23 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // initialization.
 //
 // The standard PostgreSQL status vars are listed here:
-// https://www.postgresql.org/docs/10/static/libpq-status.html
+// https://www.postgresql.org/docs/18/libpq-status.html
 var statusReportParams = []string{
 	"server_version",
 	"server_encoding",
 	"client_encoding",
 	"application_name",
-	// Note: session_authorization is handled specially in serveImpl().
+	// Note: session_authorization is handled specially in sendInitialConnData().
 	"DateStyle",
 	"IntervalStyle",
 	"is_superuser",
 	"TimeZone",
 	"integer_datetimes",
 	"standard_conforming_strings",
+	"default_transaction_read_only",
+	"search_path",
+	// Note: in_hot_standby and scram_iterations are handled specially in
+	// sendInitialConnData().
 	"crdb_version", // CockroachDB extension.
 }
 
