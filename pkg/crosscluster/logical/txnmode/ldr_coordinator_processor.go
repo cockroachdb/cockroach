@@ -13,12 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/metrics"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnscheduler"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -76,6 +78,8 @@ type ldrCoordinatorProcessor struct {
 	router          *nodeRouter
 
 	applierIDs []ldrdecoder.ApplierID
+
+	metrics *metrics.Metrics
 
 	// Internal pipeline channels.
 	batches      chan decodedBatch
@@ -294,6 +298,7 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 					return ctx.Err()
 				case p.batches <- decodedBatch{checkpoint: checkpoint}:
 				}
+				p.metrics.CheckpointEvents.Inc(1)
 			default:
 				continue
 			}
@@ -596,7 +601,11 @@ func init() {
 		spec execinfrapb.TxnLDRCoordinatorSpec,
 		post *execinfrapb.PostProcessSpec,
 	) (execinfra.Processor, error) {
-		proc := &ldrCoordinatorProcessor{spec: spec}
+		proc := &ldrCoordinatorProcessor{
+			spec: spec,
+			metrics: flowCtx.Cfg.JobRegistry.MetricsStruct().
+				JobSpecificMetrics[jobspb.TypeLogicalReplication].(*metrics.Metrics),
+		}
 		err := proc.Init(
 			ctx, proc, post, coordinatorOutputTypes, flowCtx, processorID, nil,
 			execinfra.ProcStateOpts{
