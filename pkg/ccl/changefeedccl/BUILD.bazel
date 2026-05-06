@@ -23,6 +23,7 @@ go_library(
         "event_processing.go",
         "fetch_table_bytes.go",
         "metrics.go",
+        "no_linger_sink.go",
         "parallel_io.go",
         "parquet.go",
         "parquet_sink_cloudstorage.go",

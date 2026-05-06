@@ -461,7 +461,10 @@ func makeWebhookSink(
 		return nil, err
 	}
 
-	return makeBatchingSink(
+	// PROTOTYPE: M2 demo. Webhook v2 sink construction is hard-wired to
+	// noLingerSink so a real changefeed against this sink demonstrates the
+	// pendingBuffer addRow path. Do not merge.
+	return makeNoLingerSink(
 		ctx,
 		sinkTypeWebhook,
 		sinkClient,
