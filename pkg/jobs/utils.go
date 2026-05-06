@@ -169,7 +169,10 @@ func JobCoordinatorID(
 		return 0, err
 	}
 	if row == nil {
-		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+		return 0, &JobNotFoundError{jobID: jobID}
+	}
+	if row[0] == tree.DNull {
+		return 0, &JobNotClaimedError{jobID: jobID}
 	}
 	coordinatorID, ok := row[0].(*tree.DInt)
 	if !ok {

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // errRetryJobSentinel exists so the errors returned from MarkAsRetryJobError can
@@ -73,6 +74,30 @@ const PauseRequestExplained = "pausing due to error; use RESUME JOB to try to pr
 // errJobLeaseNotHeld is a marker error for returning from a job execution if it
 // knows or finds out it no longer has a job lease.
 var errJobLeaseNotHeld = errors.New("job lease not held")
+
+// JobNotClaimedError is returned when a job exists but is not currently
+// claimed by any node (i.e. claim_instance_id is NULL).
+type JobNotClaimedError struct {
+	jobID jobspb.JobID
+}
+
+var _ errors.SafeFormatter = (*JobNotClaimedError)(nil)
+
+func (e *JobNotClaimedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("job %d is not currently claimed by any node", e.jobID)
+	return nil
+}
+
+// Error makes JobNotClaimedError an error.
+func (e *JobNotClaimedError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+// HasJobNotClaimedError returns true if the error contains a
+// JobNotClaimedError.
+func HasJobNotClaimedError(err error) bool {
+	return errors.HasType(err, (*JobNotClaimedError)(nil))
+}
 
 // InvalidStateError is the error returned when the desired operation is
 // invalid given the job's current state.
