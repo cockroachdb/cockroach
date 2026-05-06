@@ -202,6 +202,16 @@ var upgrades = []upgradebase.Upgrade{
 		createAdvisoryLocksTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"create resource_groups table and resource_group_id_seq",
+		clusterversion.V26_3_AddResourceGroupsTable.Version(),
+		upgrade.NoPrecondition,
+		createResourceGroupsTable,
+		upgrade.RestoreActionNotRequired(
+			"restore for a cluster predating this table can leave it empty",
+		),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

@@ -1536,6 +1536,20 @@ var zipSystemTables = DebugZipTableRegistry{
 			"generated",
 		},
 	},
+	"system.resource_group_id_seq": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"last_value",
+			"log_cnt",
+			"is_called",
+		},
+	},
+	"system.resource_groups": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"id",
+			"name",
+			"config",
+		},
+	},
 	"system.role_id_seq": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"last_value",

@@ -166,6 +166,8 @@ state offset=47
 /Table/7{8-9}                              database system (host)
 /Table/{79-80}                             database system (host)
 /Table/8{0-1}                              database system (host)
+/Table/8{1-2}                              database system (host)
+/Table/8{2-3}                              database system (host)
 /Table/10{6-7}                             ttl_seconds=50
 
 # Make sure future descendants observe the same.
@@ -215,6 +217,8 @@ state offset=47
 /Table/7{8-9}                              database system (host)
 /Table/{79-80}                             database system (host)
 /Table/8{0-1}                              database system (host)
+/Table/8{1-2}                              database system (host)
+/Table/8{2-3}                              database system (host)
 /Table/10{6-7}                             ttl_seconds=50
 /Table/10{7-8}                             ttl_seconds=50
 
