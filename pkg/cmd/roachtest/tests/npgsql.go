@@ -65,7 +65,7 @@ func registerNpgsql(r registry.Registry) {
 		}
 
 		// Install dotnet as per these docs:
-		// https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu
+		// https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#scripted-install
 		t.Status("setting up dotnet")
 		if err := repeatRunE(
 			ctx,
@@ -73,9 +73,9 @@ func registerNpgsql(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo snap install dotnet-sdk --channel=7.0/stable --classic && \
-sudo snap alias dotnet-sdk.dotnet dotnet && \
-sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
+			`curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+chmod +x /tmp/dotnet-install.sh && \
+/tmp/dotnet-install.sh --channel 7.0`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		// Running the test suite is expected to error out, so swallow the error.
 		result, err = c.RunWithDetailsSingleNode(
 			ctx, t.L(), option.WithNodes(node),
-			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
+			`export PATH="$HOME/.dotnet:$PATH" && cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
 		)
 
 		rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
