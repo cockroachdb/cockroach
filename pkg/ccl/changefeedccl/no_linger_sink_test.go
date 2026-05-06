@@ -82,13 +82,19 @@ func (b *recordingBatchBuffer) ShouldFlush() bool           { return false }
 func (b *recordingBatchBuffer) Close() (SinkPayload, error) { return b.payload, nil }
 
 // makeRecordingSink constructs a noLingerSink wired to the given
-// recording client. Caller should defer sink.Close().
-func makeRecordingSink(t *testing.T, rec *recordingSinkClient) Sink {
+// recording client. Caller should defer sink.Close(). retryOpts
+// defaults to no retries (MaxRetries: 0 = single attempt) when not
+// provided.
+func makeRecordingSink(t *testing.T, rec *recordingSinkClient, retryOpts ...retry.Options) Sink {
 	t.Helper()
+	opts := retry.Options{}
+	if len(retryOpts) > 0 {
+		opts = retryOpts[0]
+	}
 	settings := cluster.MakeTestingClusterSettings()
 	changefeedbase.NoLingerSinkEnabled.Override(context.Background(), &settings.SV, true)
 	return makeBatchingOrNoLingerSink(
-		context.Background(), sinkTypeWebhook, rec, 0, retry.Options{}, 1, nil,
+		context.Background(), sinkTypeWebhook, rec, 0, opts, 1, nil,
 		func() *admission.Pacer { return nil },
 		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
 	)
@@ -268,6 +274,36 @@ func TestNoLingerSinkCloseDrains(t *testing.T) {
 		require.Contains(t, string(combined), fmt.Sprintf("k%d=v%d", i, i),
 			"event %d missing from delivered payloads", i)
 	}
+}
+
+// TestNoLingerSinkRetriesTransientFailures pins the contract that a
+// Flush call that fails transiently is retried, and the event is
+// eventually delivered. EXPECTED TO FAIL until M3 commit 3 (retries)
+// lands.
+func TestNoLingerSinkRetriesTransientFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// First two Flush calls fail; third succeeds.
+	rec := &recordingSinkClient{errs: []error{
+		errors.New("transient 1"),
+		errors.New("transient 2"),
+	}}
+	sink := makeRecordingSink(t, rec, retry.Options{
+		InitialBackoff: time.Microsecond,
+		MaxBackoff:     time.Millisecond,
+		MaxRetries:     5,
+	})
+
+	emitKV(t, sink, "foo", "k1", "v1")
+	require.NoError(t, sink.Close())
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	require.GreaterOrEqual(t, rec.attempts, 3, "expected at least 3 Flush attempts (2 failures + 1 success)")
+	combined := bytes.Join(rec.flushed, nil)
+	require.Contains(t, string(combined), "k1=v1",
+		"event should have been delivered after retries succeeded")
 }
 
 // TestNoLingerSinkWorkerSurvivesFlushError pins the contract that a

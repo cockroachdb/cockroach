@@ -198,7 +198,11 @@ func (s *noLingerSink) flushBatch(ctx context.Context, batch *pendingBatch) erro
 		if err != nil {
 			return err
 		}
-		if err := s.client.Flush(ctx, payload); err != nil {
+		// Retry transient Flush failures up to retryOpts.MaxRetries
+		// before giving up. Mirrors the parallelIO retry loop.
+		if err := retry.WithMaxAttempts(ctx, s.retryOpts, s.retryOpts.MaxRetries+1, func() error {
+			return s.client.Flush(ctx, payload)
+		}); err != nil {
 			return err
 		}
 		bb = s.client.MakeBatchBuffer(topicStr)
