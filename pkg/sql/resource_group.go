@@ -334,6 +334,7 @@ func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 			defer func() { _ = it.Close() }()
 
 			v := p.newContainerValuesNode(showResourceGroupColumns, 0)
+			seen := false
 			for {
 				ok, err := it.Next(ctx)
 				if err != nil {
@@ -343,6 +344,7 @@ func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 				if !ok {
 					break
 				}
+				seen = true
 				row := it.Cur()
 				var cfg admissionpb.ResourceGroupConfig
 				if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(row[2])), &cfg); err != nil {
@@ -360,6 +362,14 @@ func (p *planner) showResourceGroupsImpl(name string) (planNode, error) {
 					v.Close(ctx)
 					return nil, err
 				}
+			}
+			// SHOW RESOURCE GROUP <name> errors if the named group does not
+			// exist, matching SHOW HISTOGRAM / SHOW CREATE TABLE. SHOW
+			// RESOURCE GROUPS (no name) is allowed to return zero rows.
+			if name != "" && !seen {
+				v.Close(ctx)
+				return nil, pgerror.Newf(pgcode.UndefinedObject,
+					"resource group %q does not exist", name)
 			}
 			return v, nil
 		},

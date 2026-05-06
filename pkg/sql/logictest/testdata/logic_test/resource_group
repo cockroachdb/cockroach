@@ -74,6 +74,13 @@ id  name    cpu_weight  max_cpu
 17  high    100         true
 19  medium  50          false
 
+# SHOW RESOURCE GROUP <name> errors when the named group does not exist.
+statement error pq: resource group "ghost" does not exist
+SHOW RESOURCE GROUP ghost
+
+# SHOW RESOURCE GROUPS (no name) returns zero rows when none match,
+# without erroring; covered above by the empty/initial states.
+
 # Duplicate name is rejected; IF NOT EXISTS swallows the conflict.
 statement error pq: resource group "high" already exists
 CREATE RESOURCE GROUP high WITH cpu_weight = 999
