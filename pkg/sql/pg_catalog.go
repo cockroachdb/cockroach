@@ -3257,8 +3257,8 @@ https://www.postgresql.org/docs/18/view-pg-prepared-statements.html`,
 				paramTypes,
 				resultTypes, // result_types
 				fromSQL,
-				tree.DNull, // custom_plans
-				tree.DNull, // generic_plans
+				tree.NewDInt(tree.DInt(stmt.CustomPlanCount)),  // custom_plans
+				tree.NewDInt(tree.DInt(stmt.GenericPlanCount)), // generic_plans
 			); err != nil {
 				return err
 			}

@@ -687,6 +687,9 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 		// The query could have been already fully optimized in
 		// buildReusableMemo, in which case it is considered a "generic" plan.
 		opc.flags.Set(planFlagGeneric)
+		if prep := opc.p.stmt.Prepared; prep != nil {
+			prep.GenericPlanCount++
+		}
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()
@@ -707,6 +710,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 		costWithOptimizationCost := mem.RootExpr().Cost()
 		costWithOptimizationCost.Add(mem.OptimizationCost())
 		prep.Costs.AddCustom(costWithOptimizationCost)
+		prep.CustomPlanCount++
 	}
 	return mem, nil
 }
