@@ -1,3 +1,3 @@
 echo
 ----
-weight=5 maxCPU=false
+weight=20 maxCPU=false

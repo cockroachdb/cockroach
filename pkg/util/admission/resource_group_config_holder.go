@@ -39,17 +39,26 @@ var defaultRMResourceGroupConfig = map[groupKey]ResourceGroupConfig{
 }
 
 // defaultGroupConfig is the safety fallback returned by
-// ResourceGroupConfigHolder.GetOrDefault for keys that aren't explicitly
-// configured. Weight=5 (Weight/100 = 5% burst share) lets the request
-// compete in fair sharing while granting only a small burst budget. The
-// value is RM-specific and intentionally not tied to defaultGroupWeight
-// (which is the serverless minimum tenant weight, in a different scale).
-// In practise, this should only fire when there is a race where the
-// request is received before the holder has been populated with the
-// resource group config (e.g. Admit lands during the startup window
-// before SetResourceGroupConfig has been called for that key).
+// ResourceGroupConfigHolder.GetOrDefault for keys that aren't in the
+// installed configuration. In current code the only producers of
+// rgKind keys are priorityToResourceGroupKey (high/low), and both
+// are seeded by defaultRMResourceGroupConfig at construction, so
+// this fallback is unreachable in steady state. It exists to keep
+// the lazy-create path on Admit total — if a future caller installs
+// a config that omits high/low (or introduces new rg IDs without
+// wiring them through Set first), Admit gets a usable weight rather
+// than a panic or a zero-weight group.
+//
+// Weight=20 mirrors the low default: an unconfigured group should
+// participate in fair sharing but is treated as the lowest tier.
+// MaxCPU=false because we don't want an unconfigured group to bypass
+// the burst-fullness gate.
+//
+// TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is
+// wired through, decide whether unknown rgKind IDs should be a hard
+// error instead of falling back here.
 var defaultGroupConfig = ResourceGroupConfig{
-	Weight: 5,
+	Weight: 20,
 	MaxCPU: false,
 }
 
