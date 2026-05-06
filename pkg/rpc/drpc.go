@@ -65,12 +65,14 @@ func DialDRPC(
 			drpcclient.WithShouldRecordFunc(shouldRecordFunc))
 
 		drpcPoolMetrics := rpcCtx.DRPCPoolMetrics()
+		logger := drpcLogger{ctx: ctx, depth: 1}
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
 			Expiration:   defaultDRPCConnIdleTimeout,
 			Metrics:      drpcPoolMetrics,
 			Labels:       map[string]string{"target": target, "class": class.String()},
 			ShouldRecord: shouldRecordFunc,
+			Logger:       logger,
 		})
 
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
@@ -327,7 +329,7 @@ func makeStopperInterceptors(
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DRPCServer, error) {
+func NewDRPCServer(ctx context.Context, rpcCtx *Context, opts ...ServerOption) (DRPCServer, error) {
 	d := &drpcServer{}
 
 	var o serverOpts
@@ -403,7 +405,10 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 
 	mux := drpcmux.NewWithInterceptors(unaryInterceptors, streamInterceptors)
 
+	logger := drpcLogger{ctx: ctx, depth: 1}
+
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
+		Logger: logger,
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.
 		Manager: drpcmanager.Options{

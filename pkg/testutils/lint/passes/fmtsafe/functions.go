@@ -80,6 +80,10 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
+	"(github.com/cockroachdb/cockroach/pkg/rpc.drpcLogger).Debugf":    true,
+	"(github.com/cockroachdb/cockroach/pkg/rpc.drpcLogger).Infof":     true,
+	"(github.com/cockroachdb/cockroach/pkg/rpc.drpcLogger).Errorf":    true,
+	"(github.com/cockroachdb/cockroach/pkg/rpc.drpcLogger).Fatalf":    true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc.Tree).errorf": true,
 
