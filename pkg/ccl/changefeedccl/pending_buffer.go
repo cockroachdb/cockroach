@@ -112,6 +112,75 @@ func (b *pendingBuffer) addRow(ctx context.Context, ev *rowEvent) error {
 	return nil
 }
 
+// getBatch returns the next batch of work, blocking until at least one
+// non-inflight event is available. The caller owns the returned batch
+// until it calls completeBatch, which releases the inflight keys back
+// to the buffer.
+//
+// In M2 cancellation via ctx is best-effort: ctx is checked once,
+// before the first lock acquisition, and not re-checked across
+// cond.Wait iterations. A goroutine blocked in cond.Wait will not wake
+// on ctx.Done; close (not yet implemented) is the supported wakeup
+// path.
+func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for {
+		if batch := b.buildBatchLocked(); batch != nil {
+			return batch, nil
+		}
+		// TODO: when close lands, this loop must check b.mu.closed and
+		// return a sentinel; otherwise a broadcasted close-wake will
+		// just re-Wait and leak the goroutine.
+		b.mu.cond.Wait()
+	}
+}
+
+// buildBatchLocked walks the FIFO and picks events whose key is not
+// inflight, up to maxMessages and maxBytes. Returns nil if no event can
+// be selected. On success, marks the batch's keys as inflight and
+// removes the chosen events from the FIFO. b.mu must be held.
+//
+// A single event whose own size already exceeds maxBytes is admitted
+// (otherwise it would never be sent); the limit is then respected as a
+// "no further events" rule for that batch.
+func (b *pendingBuffer) buildBatchLocked() *pendingBatch {
+	batch := &pendingBatch{}
+	batchHasKey := make(map[string]struct{})
+	keep := make([]*rowEvent, 0, len(b.mu.events))
+	for _, ev := range b.mu.events {
+		if len(batch.events) >= b.cfg.maxMessages {
+			keep = append(keep, ev)
+			continue
+		}
+		keyStr := string(ev.key)
+		if _, conflict := b.mu.inflight[keyStr]; conflict {
+			keep = append(keep, ev)
+			continue
+		}
+		sz := len(ev.key) + len(ev.val)
+		if len(batch.events) > 0 && batch.numBytes+sz > b.cfg.maxBytes {
+			keep = append(keep, ev)
+			continue
+		}
+		batch.events = append(batch.events, ev)
+		batch.numBytes += sz
+		if _, dup := batchHasKey[keyStr]; !dup {
+			batchHasKey[keyStr] = struct{}{}
+			batch.inflightKeys = append(batch.inflightKeys, ev.key)
+			b.mu.inflight[keyStr] = struct{}{}
+		}
+	}
+	if len(batch.events) == 0 {
+		return nil
+	}
+	b.mu.events = keep
+	return batch
+}
+
 // completeBatch releases the inflight keys held by batch and returns its
 // events to the rowEvent pool, releasing each event's kvevent.Alloc. The
 // per-event releases happen after the lock is dropped so that N event
