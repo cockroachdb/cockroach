@@ -10,14 +10,30 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+// stubTopic is a minimal TopicDescriptor whose GetTableName returns
+// the name we set. Other methods return zero values; only
+// GetTableName is exercised by the multi-topic guard.
+type stubTopic struct{ name string }
+
+func (t stubTopic) GetNameComponents() (changefeedbase.StatementTimeName, []string) {
+	return changefeedbase.StatementTimeName(t.name), nil
+}
+func (t stubTopic) GetTopicIdentifier() TopicIdentifier           { return TopicIdentifier{} }
+func (t stubTopic) GetVersion() descpb.DescriptorVersion          { return 0 }
+func (t stubTopic) GetTargetSpecification() changefeedbase.Target { return changefeedbase.Target{} }
+func (t stubTopic) GetTableName() string                          { return t.name }
 
 // stubSinkClient is a minimal SinkClient used to drive
 // makeBatchingOrNoLingerSink in tests. Its methods are no-ops.
@@ -71,4 +87,31 @@ func TestNoLingerSinkDispatch(t *testing.T) {
 		defer func() { require.NoError(t, sink.Close()) }()
 		require.IsType(t, &noLingerSink{}, sink)
 	})
+}
+
+func TestNoLingerSinkRejectsMultiTopic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	changefeedbase.NoLingerSinkEnabled.Override(ctx, &settings.SV, true)
+	sink := makeStubSink(t, settings).(*noLingerSink)
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	emit := func(topicName string) error {
+		return sink.EmitRow(ctx, stubTopic{name: topicName},
+			[]byte("k"), []byte("v"), nil, hlc.Timestamp{}, hlc.Timestamp{},
+			kvevent.Alloc{}, nil)
+	}
+
+	// First topic is accepted; same topic again is accepted.
+	require.NoError(t, emit("foo"))
+	require.NoError(t, emit("foo"))
+
+	// Different topic is rejected with a clear error.
+	err := emit("bar")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "multi-topic")
+	require.Contains(t, err.Error(), "foo")
+	require.Contains(t, err.Error(), "bar")
 }

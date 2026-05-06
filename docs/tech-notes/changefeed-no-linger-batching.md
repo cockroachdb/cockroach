@@ -307,6 +307,16 @@ conflict optimization. Includes `sync.Cond` wiring. Unit tested in isolation
 for correctness: ordering, blocking behavior, basic conflict avoidance (skip
 inflight keys).
 
+### Prototype limitation: single-topic only
+
+While M3's worker pool is being built and before M4's per-topic batching
+lands, the noLingerSink (gated by `changefeed.no_linger_sink.enabled`,
+off by default) only supports single-topic changefeeds. EmitRow records
+the first topic it sees and returns an error on any subsequent row
+whose topic differs, so multi-target changefeeds opting into the
+setting fail fast instead of silently producing wrong output for
+pubsub/webhook. The guard is removed when M4 lands.
+
 ### M3: IO Loop + Sink Integration
 
 Wire the worker loop to the `PendingBuffer` and connect to the `SinkClient`

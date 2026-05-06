@@ -82,6 +82,16 @@ Findings from `/review-crdb` on PR #169760 (commits through `8e47ca14e47`,
       its own case. Verified `kvevent.Alloc.Release` does not check
       ctx.Err so memory still releases — lock down with a test.
 
+## Multi-topic support (M4)
+
+- [ ] **Remove the single-topic guard in noLingerSink.** EmitRow
+      currently rejects a second distinct topic with a clear error
+      because the M2 buffer is FIFO across topics and pubsub/webhook
+      can't flush mixed-topic batches. Once the two-level heap
+      (`topicHeap` + per-topic `keyHeaps`) is in place, multi-topic
+      changefeeds can flow through and the `topicGuard` field +
+      `checkSingleTopic` method on noLingerSink can be deleted.
+
 ## Performance / future polish (defer)
 
 - [ ] `log.V(2)` formats `%x` of every key — args evaluate even when

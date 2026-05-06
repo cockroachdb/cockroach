@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // makeBatchingOrNoLingerSink dispatches between makeBatchingSink and
@@ -63,6 +65,15 @@ type noLingerSink struct {
 	retryOpts    retry.Options
 	metrics      metricsRecorder
 	buffer       *pendingBuffer
+
+	// TODO(M4): the noLingerSink prototype only supports single-topic
+	// changefeeds. Once the two-level (topicHeap + per-topic keyHeaps)
+	// design lands, multi-topic changefeeds should work and this guard
+	// goes away. See docs/tech-notes/changefeed-no-linger-batching.md.
+	topicGuard struct {
+		syncutil.Mutex
+		seen string // first observed topic; "" until first EmitRow
+	}
 }
 
 var _ Sink = (*noLingerSink)(nil)
@@ -108,6 +119,10 @@ func (s *noLingerSink) EmitRow(
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
+	if err := s.checkSingleTopic(topic); err != nil {
+		return err
+	}
+
 	s.metrics.recordMessageSize(int64(len(key) + len(value) + headersLen(headers)))
 
 	ev := newRowEvent()
@@ -124,6 +139,29 @@ func (s *noLingerSink) EmitRow(
 	}
 	log.Changefeed.Infof(ctx, "noLingerSink addRow key=%x val_size=%d", key, len(value))
 	return nil
+}
+
+// checkSingleTopic enforces the prototype's single-topic restriction.
+// The first EmitRow records its topic; any subsequent row with a
+// different topic returns a clear error so the changefeed job fails
+// fast instead of silently producing wrong output. See the topicGuard
+// TODO on the struct.
+func (s *noLingerSink) checkSingleTopic(topic TopicDescriptor) error {
+	name := topic.GetTableName()
+	s.topicGuard.Lock()
+	defer s.topicGuard.Unlock()
+	if s.topicGuard.seen == "" {
+		s.topicGuard.seen = name
+		return nil
+	}
+	if s.topicGuard.seen == name {
+		return nil
+	}
+	return errors.Newf(
+		"changefeed.no_linger_sink.enabled does not yet support multi-topic "+
+			"changefeeds (saw both %q and %q); disable the setting or restrict "+
+			"the changefeed to a single table",
+		s.topicGuard.seen, name)
 }
 
 // Flush implements the Sink interface. M2 demo: no-op. Resolved
