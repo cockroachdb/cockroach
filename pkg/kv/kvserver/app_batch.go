@@ -8,15 +8,19 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
@@ -241,6 +245,9 @@ func (b *appBatch) runPostAddTriggers(
 // WriteBatch and ReplicatedEvalResult are zeroed out, but the applied index
 // still advances. This matches the online path's behavior.
 //
+// TODO(mira): Apply non-trivial side effects such as AddSSTable ingestions
+// (runPostAddTriggers). Currently only the WriteBatch is applied.
+//
 // The caller is responsible for calling addAppliedStateToBatch and committing
 // the batch after applying one or more entries.
 func (b *appBatch) applyEntry(ctx context.Context, cmd *replicatedCmd) error {
@@ -307,4 +314,104 @@ func (b *appBatch) addAppliedStateToBatch(ctx context.Context) error {
 	// lease index along with the MVCC stats, all in one key.
 	b.asAlloc = b.state.ToRangeAppliedState()
 	return b.sl.SetRangeAppliedState(ctx, b.batch.State(), &b.asAlloc)
+}
+
+// replayBatch implements kvstorage.ReplayBatch using appBatch.
+type replayBatch struct {
+	ab appBatch
+	// cmd is reused across ApplyEntry calls. Decode resets all fields before
+	// populating, so no state leaks between entries.
+	cmd replicatedCmd
+}
+
+// AppliedIndex implements kvstorage.ReplayBatch.
+func (rb *replayBatch) AppliedIndex() kvpb.RaftIndex {
+	return rb.ab.state.RaftAppliedIndex
+}
+
+// ApplyEntry implements kvstorage.ReplayBatch.
+func (rb *replayBatch) ApplyEntry(ctx context.Context, ent raftpb.Entry) (bool, error) {
+	if err := rb.cmd.Decode(&ent); err != nil {
+		return false, err
+	}
+	if err := rb.ab.applyEntry(ctx, &rb.cmd); err != nil {
+		return false, err
+	}
+	return rb.cmd.IsTrivial(), nil
+}
+
+// Commit implements kvstorage.ReplayBatch.
+func (rb *replayBatch) Commit(ctx context.Context) error {
+	if err := rb.ab.addAppliedStateToBatch(ctx); err != nil {
+		return err
+	}
+	return rb.ab.batch.Commit(false /* sync */)
+}
+
+// Close implements kvstorage.ReplayBatch.
+func (rb *replayBatch) Close() {
+	rb.ab.batch.Close()
+}
+
+// MakeNewReplayBatchFn returns a NewReplayBatchFn that creates ReplayBatch
+// instances backed by appBatch. Each call loads the range's descriptor via a
+// point read using the provided start key, then loads the full ReplicaState.
+//
+// The state engine (not a snapshot) must be passed so that reads see writes
+// committed by previous replay batches.
+func MakeNewReplayBatchFn(
+	stateEng storage.Engine, bf *kvstorage.BatchFactory,
+) kvstorage.NewReplayBatchFn {
+	return func(
+		ctx context.Context, rangeID roachpb.RangeID, startKey roachpb.RKey,
+	) (kvstorage.ReplayBatch, error) {
+		desc, err := loadRangeDescriptor(ctx, stateEng, rangeID, startKey)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(mira): Consider caching the StateLoader across calls for the
+		// same rangeID to avoid re-constructing key prefixes.
+		sl := kvstorage.MakeStateLoader(rangeID)
+		state, err := sl.Load(ctx, stateEng, &desc)
+		if err != nil {
+			return nil, err
+		}
+		return &replayBatch{
+			ab: appBatch{
+				state:                  state,
+				batch:                  bf.NewBatch(),
+				sl:                     sl,
+				initialForceFlushIndex: state.ForceFlushIndex,
+			},
+		}, nil
+	}
+}
+
+// loadRangeDescriptor loads the descriptor for the given range using a point
+// read at the provided start key. We read at MaxTimestamp because descriptors
+// are versioned MVCC keys. Inconsistent mode reads the latest committed value,
+// skipping any intents. This is safe because descriptor intents from
+// split/merge transactions are always resolved synchronously with the
+// transaction commit, so there is no window in which a committed intent
+// could be missed.
+func loadRangeDescriptor(
+	ctx context.Context, reader kvstorage.StateRO, rangeID roachpb.RangeID, startKey roachpb.RKey,
+) (roachpb.RangeDescriptor, error) {
+	var desc roachpb.RangeDescriptor
+	descKey := keys.RangeDescriptorKey(startKey)
+	ok, err := storage.MVCCGetProto(ctx, reader, descKey,
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, ReadCategory: fs.UnknownReadCategory})
+	if err != nil {
+		return roachpb.RangeDescriptor{}, errors.Wrapf(err, "reading descriptor for r%d", rangeID)
+	}
+	if !ok {
+		return roachpb.RangeDescriptor{}, errors.Errorf(
+			"descriptor not found for r%d at key %s", rangeID, descKey)
+	}
+	if desc.RangeID != rangeID {
+		return roachpb.RangeDescriptor{}, errors.AssertionFailedf(
+			"descriptor at key %s has r%d, expected r%d", descKey, desc.RangeID, rangeID)
+	}
+	return desc, nil
 }
