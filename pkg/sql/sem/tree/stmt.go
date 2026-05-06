@@ -1078,6 +1078,51 @@ func (*AlterExternalConnection) StatementType() StatementType { return TypeDDL }
 func (*AlterExternalConnection) StatementTag() string { return "ALTER EXTERNAL CONNECTION" }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CreateResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateResourceGroup) StatementTag() string { return "CREATE RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*AlterResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterResourceGroup) StatementTag() string { return "ALTER RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*DropResourceGroup) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*DropResourceGroup) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropResourceGroup) StatementTag() string { return "DROP RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowResourceGroup) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowResourceGroup) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowResourceGroup) StatementTag() string { return "SHOW RESOURCE GROUP" }
+
+// StatementReturnType implements the Statement interface.
+func (*ShowResourceGroups) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowResourceGroups) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowResourceGroups) StatementTag() string { return "SHOW RESOURCE GROUPS" }
+
+// StatementReturnType implements the Statement interface.
 func (*CheckExternalConnection) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2766,6 +2811,11 @@ func (n *CreateExternalConnection) String() string            { return AsString(
 func (n *AlterExternalConnection) String() string             { return AsString(n) }
 func (n *CheckExternalConnection) String() string             { return AsString(n) }
 func (n *DropExternalConnection) String() string              { return AsString(n) }
+func (n *CreateResourceGroup) String() string                 { return AsString(n) }
+func (n *AlterResourceGroup) String() string                  { return AsString(n) }
+func (n *DropResourceGroup) String() string                   { return AsString(n) }
+func (n *ShowResourceGroup) String() string                   { return AsString(n) }
+func (n *ShowResourceGroups) String() string                  { return AsString(n) }
 func (n *FetchCursor) String() string                         { return AsString(n) }
 func (n *Grant) String() string                               { return AsString(n) }
 func (n *GrantRole) String() string                           { return AsString(n) }

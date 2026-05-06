@@ -108,6 +108,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 			"See: https://github.com/cockroachdb/cockroach/issues/27796")
 	case *tree.AlterExternalConnection:
 		return p.AlterExternalConnection(ctx, n)
+	case *tree.AlterResourceGroup:
+		return p.AlterResourceGroup(ctx, n)
 	case *tree.AlterFunctionOptions:
 		return p.AlterFunctionOptions(ctx, n)
 	case *tree.AlterRoutineRename:
@@ -207,8 +209,12 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateTenantNode(ctx, n)
 	case *tree.CheckExternalConnection:
 		return p.CheckExternalConnection(ctx, n)
+	case *tree.CreateResourceGroup:
+		return p.CreateResourceGroup(ctx, n)
 	case *tree.DropExternalConnection:
 		return p.DropExternalConnection(ctx, n)
+	case *tree.DropResourceGroup:
+		return p.DropResourceGroup(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
 	case *tree.DeclareCursor:
@@ -297,6 +303,10 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowCreateExternalConnection(ctx, n)
 	case *tree.ShowExternalConnections:
 		return p.ShowExternalConnection(ctx, n)
+	case *tree.ShowResourceGroup:
+		return p.ShowResourceGroup(ctx, n)
+	case *tree.ShowResourceGroups:
+		return p.ShowResourceGroups(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowTableStats:
@@ -405,6 +415,8 @@ func init() {
 		&tree.CreateLanguage{},
 		&tree.CreateExternalConnection{},
 		&tree.AlterExternalConnection{},
+		&tree.CreateResourceGroup{},
+		&tree.AlterResourceGroup{},
 		&tree.CreateTenant{},
 		&tree.CreateIndex{},
 		&tree.CreatePolicy{},
@@ -418,6 +430,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropExternalConnection{},
+		&tree.DropResourceGroup{},
 		&tree.DropRoutine{},
 		&tree.DropTrigger{},
 		&tree.DropIndex{},
@@ -458,6 +471,8 @@ func init() {
 		&tree.ShowCreateSchedules{},
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
+		&tree.ShowResourceGroup{},
+		&tree.ShowResourceGroups{},
 		&tree.ShowHistogram{},
 		&tree.ShowInspectErrors{},
 		&tree.ShowTableStats{},
