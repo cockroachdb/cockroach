@@ -402,6 +402,14 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var experimentalResourceGroupsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.experimental_resource_groups.enabled",
+	"if true, enables CREATE/ALTER/DROP/SHOW RESOURCE GROUP SQL syntax; "+
+		"the resource manager is in development and not yet for production use",
+	false,
+)
+
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.experimental_implicit_column_partitioning.enabled",

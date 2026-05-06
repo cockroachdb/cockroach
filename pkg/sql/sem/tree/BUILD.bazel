@@ -94,6 +94,7 @@ go_library(
         "region.go",
         "rename.go",
         "replace_scalars.go",
+        "resource_group.go",
         "returning.go",
         "revoke.go",
         "role_spec.go",

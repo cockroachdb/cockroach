@@ -1499,6 +1499,13 @@ func TestLogic_rename_view(
 	runLogicTest(t, "rename_view")
 }
 
+func TestLogic_resource_group(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "resource_group")
+}
+
 func TestLogic_retry(
 	t *testing.T,
 ) {

@@ -203,6 +203,7 @@ legacy_end_stmt ::=
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_external_connection_stmt
+	| alter_resource_group_stmt
 	| alter_role_stmt
 	| alter_virtual_cluster_stmt
 
@@ -224,6 +225,7 @@ create_stmt ::=
 	| create_changefeed_stmt
 	| create_extension_stmt
 	| create_external_connection_stmt
+	| create_resource_group_stmt
 	| create_logical_replication_stream_stmt
 	| create_schedule_stmt
 
@@ -238,6 +240,7 @@ drop_stmt ::=
 	| drop_role_stmt
 	| drop_schedule_stmt
 	| drop_external_connection_stmt
+	| drop_resource_group_stmt
 
 explain_stmt ::=
 	'EXPLAIN' explainable_stmt
@@ -307,6 +310,8 @@ show_stmt ::=
 	| show_create_stmt
 	| show_create_schedules_stmt
 	| show_create_external_connections_stmt
+	| show_resource_group_stmt
+	| show_resource_groups_stmt
 	| show_databases_stmt
 	| show_enums_stmt
 	| show_external_connections_stmt
@@ -612,6 +617,10 @@ alter_external_connection_stmt ::=
 	'ALTER' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
 	| 'ALTER' 'EXTERNAL' 'CONNECTION' 'IF' 'EXISTS' label_spec 'AS' string_or_placeholder
 
+alter_resource_group_stmt ::=
+	'ALTER' 'RESOURCE' 'GROUP' name opt_with_resource_group_options
+	| 'ALTER' 'RESOURCE' 'GROUP' 'IF' 'EXISTS' name opt_with_resource_group_options
+
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
 	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_role_options
@@ -696,6 +705,10 @@ create_extension_stmt ::=
 create_external_connection_stmt ::=
 	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
 
+create_resource_group_stmt ::=
+	'CREATE' 'RESOURCE' 'GROUP' name opt_with_resource_group_options
+	| 'CREATE' 'RESOURCE' 'GROUP' 'IF' 'NOT' 'EXISTS' name opt_with_resource_group_options
+
 create_logical_replication_stream_stmt ::=
 	'CREATE' 'LOGICALLY' 'REPLICATED' logical_replication_resources 'FROM' logical_replication_resources 'ON' string_or_placeholder opt_logical_replication_create_table_options
 
@@ -760,6 +773,10 @@ drop_schedule_stmt ::=
 
 drop_external_connection_stmt ::=
 	'DROP' 'EXTERNAL' 'CONNECTION' string_or_placeholder
+
+drop_resource_group_stmt ::=
+	'DROP' 'RESOURCE' 'GROUP' name
+	| 'DROP' 'RESOURCE' 'GROUP' 'IF' 'EXISTS' name
 
 explainable_stmt ::=
 	preparable_stmt
@@ -926,6 +943,12 @@ show_create_schedules_stmt ::=
 show_create_external_connections_stmt ::=
 	'SHOW' 'CREATE' 'ALL' 'EXTERNAL' 'CONNECTIONS'
 	| 'SHOW' 'CREATE' 'EXTERNAL' 'CONNECTION' string_or_placeholder
+
+show_resource_group_stmt ::=
+	'SHOW' 'RESOURCE' 'GROUP' name
+
+show_resource_groups_stmt ::=
+	'SHOW' 'RESOURCE' 'GROUPS'
 
 show_databases_stmt ::=
 	'SHOW' 'DATABASES' with_comment
@@ -1502,6 +1525,7 @@ unreserved_keyword ::=
 	| 'REPLICATION'
 	| 'RESET'
 	| 'RESOLVED'
+	| 'RESOURCE'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
@@ -1910,6 +1934,10 @@ alter_job_stmt ::=
 label_spec ::=
 	string_or_placeholder
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
+opt_with_resource_group_options ::=
+	'WITH' resource_group_option_list
+	| 'WITH' '(' resource_group_option_list ')'
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -2713,6 +2741,9 @@ opt_policy_exprs ::=
 	| 'USING' '(' a_expr ')'
 	| 
 
+resource_group_option_list ::=
+	( resource_group_option ) ( ( ',' resource_group_option ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -3515,6 +3546,9 @@ alter_backup_schedule_cmd ::=
 	| 'SET' 'SCHEDULE' 'OPTION' kv_option
 	| 'EXECUTE' 'IMMEDIATELY'
 	| 'EXECUTE' 'FULL' 'IMMEDIATELY'
+
+resource_group_option ::=
+	name '=' var_value
 
 role_option ::=
 	'CREATEROLE'
@@ -4589,6 +4623,7 @@ bare_label_keywords ::=
 	| 'REPLICATION'
 	| 'RESET'
 	| 'RESOLVED'
+	| 'RESOURCE'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'

@@ -148,6 +148,7 @@ PROTO_FILES = [
     "//pkg/ts/tspb:timeseries.proto",
     "//pkg/util/admission/admissionpb:admission_stats.proto",
     "//pkg/util/admission/admissionpb:io_threshold.proto",
+    "//pkg/util/admission/admissionpb:resource_group.proto",
     "//pkg/util/duration:duration.proto",
     "//pkg/util/hlc:legacy_timestamp.proto",
     "//pkg/util/hlc:timestamp.proto",
