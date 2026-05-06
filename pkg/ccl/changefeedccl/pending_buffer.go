@@ -11,7 +11,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
+
+// errPendingBufferClosed is returned by addRow and getBatch after close
+// has been called.
+var errPendingBufferClosed = errors.New("pendingBuffer is closed")
 
 // pendingBufferConfig configures a pendingBuffer.
 type pendingBufferConfig struct {
@@ -61,22 +66,21 @@ type pendingBuffer struct {
 	cfg pendingBufferConfig
 
 	// mu groups the buffer's mutable state. cond is signaled (or
-	// broadcast) by addRow, completeBatch, and close (close is not yet
-	// implemented) to wake waiters in getBatch and addRow.
+	// broadcast) by addRow, completeBatch, and close to wake waiters in
+	// getBatch and addRow.
 	mu struct {
 		syncutil.Mutex
 		cond *sync.Cond
 		// events is the FIFO of pending rows. addRow appends; getBatch
-		// (not yet implemented) will remove in order, skipping rows
-		// whose key is in inflight.
+		// removes in order, skipping rows whose key is in inflight.
 		events []*rowEvent
 		// inflight is the set of keys currently held by some worker
 		// (between getBatch and completeBatch). Map keys are
-		// string([]byte). Will be excluded from new batches by getBatch
-		// (not yet implemented).
+		// string([]byte). Excluded from new batches by getBatch.
 		inflight map[string]struct{}
-		// closed will be set by close (not yet implemented). Once true,
-		// getBatch and addRow waiters wake and return a sentinel error.
+		// closed is set by close. Once true, addRow returns
+		// errPendingBufferClosed; getBatch returns it once the FIFO
+		// drains.
 		closed bool
 	}
 }
@@ -94,15 +98,22 @@ func newPendingBuffer(cfg pendingBufferConfig) *pendingBuffer {
 // completeBatch will release the alloc and recycle the rowEvent once the
 // batch containing ev is finished.
 //
-// In M2 addRow does not block on the buffer being full. Backpressure is
-// added in a subsequent commit; for now ctx is checked only as a
-// best-effort cancellation surface before taking the lock.
+// addRow blocks while the buffer holds bufferLimit events, returning
+// only once a worker drains it (or close is called). ctx is checked
+// once before the lock and not re-checked across cond.Wait iterations;
+// close is the supported wakeup path on cancellation.
 func (b *pendingBuffer) addRow(ctx context.Context, ev *rowEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	for !b.mu.closed && len(b.mu.events) >= b.cfg.bufferLimit {
+		b.mu.cond.Wait()
+	}
+	if b.mu.closed {
+		return errPendingBufferClosed
+	}
 	b.mu.events = append(b.mu.events, ev)
 	if log.V(2) {
 		log.Changefeed.Infof(ctx, "pendingBuffer addRow key=%x (depth=%d)", ev.key, len(b.mu.events))
@@ -117,11 +128,10 @@ func (b *pendingBuffer) addRow(ctx context.Context, ev *rowEvent) error {
 // until it calls completeBatch, which releases the inflight keys back
 // to the buffer.
 //
-// In M2 cancellation via ctx is best-effort: ctx is checked once,
-// before the first lock acquisition, and not re-checked across
-// cond.Wait iterations. A goroutine blocked in cond.Wait will not wake
-// on ctx.Done; close (not yet implemented) is the supported wakeup
-// path.
+// ctx is checked once, before the first lock acquisition, and not
+// re-checked across cond.Wait iterations. A goroutine blocked in
+// cond.Wait will not wake on ctx.Done; close is the supported wakeup
+// path on cancellation.
 func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -129,12 +139,14 @@ func (b *pendingBuffer) getBatch(ctx context.Context) (*pendingBatch, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for {
+		// Drain has precedence over closed: a closed buffer with
+		// remaining non-inflight events still serves them.
 		if batch := b.buildBatchLocked(); batch != nil {
 			return batch, nil
 		}
-		// TODO: when close lands, this loop must check b.mu.closed and
-		// return a sentinel; otherwise a broadcasted close-wake will
-		// just re-Wait and leak the goroutine.
+		if b.mu.closed {
+			return nil, errPendingBufferClosed
+		}
 		b.mu.cond.Wait()
 	}
 }
@@ -178,6 +190,9 @@ func (b *pendingBuffer) buildBatchLocked() *pendingBatch {
 		return nil
 	}
 	b.mu.events = keep
+	// Broadcast: a batch can free many slots at once, potentially
+	// admitting multiple addRow waiters.
+	b.mu.cond.Broadcast()
 	return batch
 }
 
@@ -199,13 +214,34 @@ func (b *pendingBuffer) completeBatch(ctx context.Context, batch *pendingBatch) 
 
 // releaseInflight removes keys from the inflight set under the lock and
 // broadcasts so any worker waiting because its candidate key was inflight
-// (or, once backpressure lands, any addRow waiting on a full buffer) can
-// make progress.
+// (or any addRow waiting on a full buffer) can make progress.
 func (b *pendingBuffer) releaseInflight(keys [][]byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, k := range keys {
 		delete(b.mu.inflight, string(k))
 	}
+	b.mu.cond.Broadcast()
+}
+
+// close marks the buffer closed and wakes all waiters. Subsequent
+// addRow calls return errPendingBufferClosed immediately. Pending
+// events still drain through getBatch until the FIFO is empty, after
+// which getBatch returns errPendingBufferClosed. In-flight batches
+// already returned by getBatch can still be completed (completeBatch
+// does not consult closed).
+//
+// Events buffered at close time but not pulled by any getBatch are
+// dropped without releasing their kvevent.Allocs. This matches the
+// existing batchingSink.Close semantics — the changefeed restarts from
+// its last resolved checkpoint after a sink shutdown — but should be
+// revisited once the noLingerSink worker pool lands and we can reason
+// about who owns cleanup on shutdown.
+//
+// close is idempotent.
+func (b *pendingBuffer) close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.closed = true
 	b.mu.cond.Broadcast()
 }
