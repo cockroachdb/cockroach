@@ -9,10 +9,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -114,4 +116,38 @@ func TestNoLingerSinkRejectsMultiTopic(t *testing.T) {
 	require.Contains(t, err.Error(), "multi-topic")
 	require.Contains(t, err.Error(), "foo")
 	require.Contains(t, err.Error(), "bar")
+}
+
+// TestNoLingerSinkBasicHappyPath is the end-to-end happy-path check for
+// noLingerSink against a real webhook test feed. Insert rows with the
+// setting on; expect their payloads to arrive at the sink.
+//
+// Until the worker pool lands, this test times out in assertPayloads
+// because noLingerSink accumulates events in pendingBuffer with no
+// consumer.
+func TestNoLingerSinkBasicHappyPath(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.no_linger_sink.enabled = true`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
