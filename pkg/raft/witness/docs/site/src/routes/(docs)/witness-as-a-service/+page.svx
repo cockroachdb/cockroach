@@ -102,6 +102,31 @@ back up, it would certainly fail the log completeness check regardless of
 perfact information at the witness. In 5x replication, there could be an
 up-to-date voter, so the window is a little larger, but still relatively small.
 
+### Availability and Durability
+
+In modern environments, witness state will be persisted on a datastore that is
+internally replicated, i.e. something like EBS or basalt. Consequently, loss of
+durability - i.e. forgetting about acked data - is a lesser concern.
+
+Availability is the dimension on which witnesses make a meaningful trade-off. In
+our design, witnesses never campaign, so they cannot hold leadership. However,
+if the most recent quorum-replicated entry used the witness, then theoretically
+that quorum forms the eligible set of next-term leaders. However, due to the
+false negative problem, the witness may not vote for any candidate (except the
+old leader, which may be unavailable), thus rendering the raft group unavailable
+until any traditional quorum becomes available again.
+
+For example, if in a 5x-replicated group the leader `v1` commits entries using
+voters `v2` and the witness `w` while `v3` and `v4` are down, even if `v3` comes
+back online after `v1` fails, no leader can be elected. This is because `v3` is
+not up to date on the log (so nobody will vote for it) while `v2` is up to date
+on the log (and `v3` will vote for it) but the witness will not (because it is
+unaware of its own exact set of acknowledged entries and will thus reject the
+vote). Engaging the witness for single entries at a time would solve this
+problem, but note that in the common case of 3x replication, a leader failure
+while the witness is active means there aren't any traditional voters left, so
+the distinction is moot.
+
 ## Partial-Log Witnesses
 
 Partial-Log witnesses are an interesting extension. The idea is that we use

@@ -31,6 +31,10 @@ export default {
       layout: {
         _: join(__dirname, './src/lib/layouts/ArticleLayout.svelte')
       },
+      // Smartypants would convert straight quotes to curly ones, which then
+      // mangles Svelte expressions inside .svx bodies (e.g. {'literal {curly}
+      // text'} stops being valid JS). Straight quotes are fine for tech docs.
+      smartypants: false,
       remarkPlugins: [remarkGfm],
       rehypePlugins: [rehypeSlug],
       highlight: {
