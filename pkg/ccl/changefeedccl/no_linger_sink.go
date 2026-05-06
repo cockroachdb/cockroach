@@ -81,6 +81,15 @@ type noLingerSink struct {
 		syncutil.Mutex
 		seen string // first observed topic; "" until first EmitRow
 	}
+
+	// termErrGuard.err is set by a worker when client.Flush fails
+	// after retries are exhausted. EmitRow checks it and returns the
+	// error so the changefeed processor restarts the changefeed.
+	// Latches once -- subsequent failures don't overwrite.
+	termErrGuard struct {
+		syncutil.Mutex
+		err error
+	}
 }
 
 var _ Sink = (*noLingerSink)(nil)
@@ -145,18 +154,39 @@ func (s *noLingerSink) runWorker(ctx context.Context) {
 			return
 		}
 		if flushErr := s.flushBatch(ctx, batch); flushErr != nil {
-			// WARNING: until M3 commits 2 (retries) and 3 (termErr)
-			// land, a Flush failure here is a silent data loss: the
-			// completeBatch below releases each event's
-			// kvevent.Alloc, which lets the resolved-timestamp
-			// frontier advance past undelivered MVCC timestamps with
-			// no replay. This is acceptable only because
-			// changefeed.no_linger_sink.enabled is off by default;
-			// users who flip it on get the no-retry behavior.
+			// Retries exhausted (or no retries configured). Record
+			// the terminal error so EmitRow callers see it on the
+			// next call and the changefeed processor can restart,
+			// then close the buffer to wake every other worker for
+			// the same exit. completeBatch below still releases this
+			// batch's allocs -- like batchingSink, we don't replay
+			// events from a failed flush.
 			log.Changefeed.Errorf(ctx, "noLingerSink flush failed: %v", flushErr)
+			s.setTermErr(flushErr)
+			s.buffer.close()
 		}
 		s.buffer.completeBatch(ctx, batch)
+		if s.termErr() != nil {
+			return
+		}
 	}
+}
+
+// setTermErr latches the terminal flush error. The first non-nil
+// error wins; subsequent failures don't overwrite.
+func (s *noLingerSink) setTermErr(err error) {
+	s.termErrGuard.Lock()
+	defer s.termErrGuard.Unlock()
+	if s.termErrGuard.err == nil {
+		s.termErrGuard.err = err
+	}
+}
+
+// termErr returns the latched terminal error, if any.
+func (s *noLingerSink) termErr() error {
+	s.termErrGuard.Lock()
+	defer s.termErrGuard.Unlock()
+	return s.termErrGuard.err
 }
 
 // flushBatch translates a pendingBatch into a SinkClient.Flush call by
@@ -240,6 +270,9 @@ func (s *noLingerSink) EmitRow(
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
+	if err := s.termErr(); err != nil {
+		return err
+	}
 	if err := s.checkSingleTopic(topic); err != nil {
 		return err
 	}

@@ -31,12 +31,15 @@ import (
 
 // recordingSinkClient captures payloads passed to Flush. errs, if
 // non-empty, is consumed one entry per Flush call: a non-nil entry
-// makes that Flush fail without recording the payload.
+// makes that Flush fail without recording the payload. alwaysErr,
+// if non-nil, takes precedence over errs and makes every Flush fail
+// with the same error.
 type recordingSinkClient struct {
-	mu       sync.Mutex
-	flushed  [][]byte // successful payloads, in arrival order
-	attempts int      // total Flush call count, regardless of outcome
-	errs     []error  // optional sequence of errors to return
+	mu        sync.Mutex
+	flushed   [][]byte // successful payloads, in arrival order
+	attempts  int      // total Flush call count, regardless of outcome
+	errs      []error  // optional sequence of errors to return
+	alwaysErr error    // optional permanent failure
 }
 
 func (r *recordingSinkClient) MakeBatchBuffer(string) BatchBuffer {
@@ -53,6 +56,9 @@ func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.attempts++
+	if r.alwaysErr != nil {
+		return r.alwaysErr
+	}
 	if len(r.errs) > 0 {
 		err := r.errs[0]
 		r.errs = r.errs[1:]
@@ -306,37 +312,73 @@ func TestNoLingerSinkRetriesTransientFailures(t *testing.T) {
 		"event should have been delivered after retries succeeded")
 }
 
-// TestNoLingerSinkWorkerSurvivesFlushError pins the contract that a
-// transient Flush failure does not exit the worker. We arrange the
-// failure with errs[0]; a subsequent EmitRow after the failure has
-// been observed must still be delivered.
+// TestNoLingerSinkWorkerSurvivesFlushError pins the contract that
+// when a transient Flush failure is masked by a retry success, the
+// worker is not driven into a terminal state -- subsequent EmitRow
+// calls keep working and their events get delivered. This is the
+// counterpart to TestNoLingerSinkPropagatesTerminalFlushError, which
+// covers the case where retries are exhausted.
 func TestNoLingerSinkWorkerSurvivesFlushError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// First Flush fails; the retry succeeds.
 	rec := &recordingSinkClient{errs: []error{errors.New("transient")}}
-	sink := makeRecordingSink(t, rec)
+	sink := makeRecordingSink(t, rec, retry.Options{
+		InitialBackoff: time.Microsecond,
+		MaxBackoff:     time.Millisecond,
+		MaxRetries:     2,
+	})
 
 	emitKV(t, sink, "foo", "k1", "v1")
 
-	// Wait until the first batch has been attempted (and failed).
+	// Wait until the first batch has been delivered (1 failure + 1
+	// retry success = at least 2 attempts).
 	require.Eventually(t, func() bool {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
-		return rec.attempts >= 1
-	}, time.Second, 5*time.Millisecond, "first Flush attempt never observed")
+		return rec.attempts >= 2 && len(rec.flushed) >= 1
+	}, time.Second, 5*time.Millisecond, "first batch never delivered")
 
+	// The worker should still be alive and accepting work.
 	emitKV(t, sink, "foo", "k2", "v2")
 	require.NoError(t, sink.Close())
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	require.GreaterOrEqual(t, rec.attempts, 2, "worker exited after first failure")
 	combined := bytes.Join(rec.flushed, nil)
+	require.Contains(t, string(combined), "k1=v1",
+		"first event was not delivered after retry")
 	require.Contains(t, string(combined), "k2=v2",
-		"event after the failed flush was not delivered")
-	// k1's batch was the failed one; with no retry (commit 2 still
-	// pending) it is not expected to appear.
-	require.NotContains(t, string(combined), "k1=v1",
-		"unexpectedly delivered the failed event (retry must not be implemented yet)")
+		"second event was not delivered (worker may have terminated)")
+}
+
+// TestNoLingerSinkPropagatesTerminalFlushError pins the contract that
+// when a worker exhausts retries on Flush, the terminal error
+// surfaces to subsequent EmitRow callers so the changefeed processor
+// can restart instead of silently losing events. EXPECTED TO FAIL
+// until termErr propagation lands.
+func TestNoLingerSinkPropagatesTerminalFlushError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rec := &recordingSinkClient{alwaysErr: errors.New("permanent failure")}
+	sink := makeRecordingSink(t, rec) // default MaxRetries: 0 -> single attempt
+	defer func() { _ = sink.Close() }()
+
+	// First emit succeeds at addRow time -- the worker hasn't observed
+	// the failure yet.
+	emitKV(t, sink, "foo", "k1", "v1")
+
+	// Eventually the worker attempts the flush, fails, and sets
+	// termErr. From then on, EmitRow returns the terminal error.
+	require.Eventually(t, func() bool {
+		err := sink.EmitRow(context.Background(), stubTopic{name: "foo"},
+			[]byte("k2"), []byte("v2"), nil, hlc.Timestamp{}, hlc.Timestamp{},
+			kvevent.Alloc{}, nil)
+		return err != nil &&
+			(errors.Is(err, rec.alwaysErr) ||
+				bytes.Contains([]byte(err.Error()), []byte("permanent failure")))
+	}, time.Second, 5*time.Millisecond,
+		"EmitRow never returned the terminal Flush error")
 }
