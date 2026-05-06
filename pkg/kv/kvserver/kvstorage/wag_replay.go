@@ -12,8 +12,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,12 +78,13 @@ func loadPersistedRangeState(
 	}, nil
 }
 
-// raftCatchUpTarget identifies a range/replica that must be caught up to a
-// specific raft index via raft log replay before a WAG node can be applied.
+// raftCatchUpTarget identifies a range that must be caught up to a specific
+// raft index via raft log replay before a WAG node can be applied. The start
+// key is used to load the range descriptor via a point read.
 type raftCatchUpTarget struct {
-	rangeID   roachpb.RangeID
-	replicaID roachpb.ReplicaID
-	index     kvpb.RaftIndex
+	rangeID  roachpb.RangeID
+	startKey roachpb.RKey
+	index    kvpb.RaftIndex
 }
 
 // ReplayBatch applies raft entries to the state machine via an internal storage
@@ -235,9 +238,9 @@ func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
 	return func(yield func(raftCatchUpTarget) bool) {
 		for _, e := range node.Events {
 			if catchUp := raftCatchUp(e); catchUp > 0 && !yield(raftCatchUpTarget{
-				rangeID:   e.Addr.RangeID,
-				replicaID: e.Addr.ReplicaID,
-				index:     catchUp,
+				rangeID:  e.Addr.RangeID,
+				startKey: e.StartKey,
+				index:    catchUp,
 			}) {
 				return
 			}
@@ -247,8 +250,14 @@ func wagNodeCatchUps(node wagpb.Node) iter.Seq[raftCatchUpTarget] {
 
 // ReplayWAG iterates over the WAG in the log engine and applies any unapplied
 // nodes to the state machine. It is called during store startup, before the
-// store goes online.
-func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
+// store goes online. For each unapplied node, it first replays raft log entries
+// to catch up the affected ranges, then applies the node's mutation.
+//
+// The newBatch callback creates ReplayBatch instances that apply raft entries
+// to the state machine. It is the only injection point from kvserver.
+func ReplayWAG(
+	ctx context.Context, raftRO RaftRO, stateRW StateRW, newBatch NewReplayBatchFn,
+) error {
 	var it wag.Iterator
 	for wagIdx, node := range it.Iter(ctx, raftRO) {
 		if apply, err := canApplyWAGNode(ctx, node, stateRW); err != nil {
@@ -256,17 +265,81 @@ func ReplayWAG(ctx context.Context, raftRO RaftRO, stateRW StateRW) error {
 		} else if !apply {
 			continue
 		}
-		// TODO(mira): For each target in wagNodeCatchUps(node), replay raft log
-		// entries for the target range/replica up to the target index before
-		// applying the WAG node. The current raft log replay in
-		// handleRaftReadyRaftMuLocked needs to be factored out and invoked here.
-		// The catch-up code should assert that the target index is >= the
-		// replica's current applied index.
+		for target := range wagNodeCatchUps(node) {
+			if err := replayRaftLog(ctx, raftRO, target, newBatch); err != nil {
+				return errors.Wrapf(err, "WAG node %d: catch-up r%d", wagIdx, target.rangeID)
+			}
+		}
 		if err := applyMutation(ctx, stateRW, node.Mutation); err != nil {
 			return errors.Wrapf(err, "WAG node %d", wagIdx)
 		}
 	}
 	return it.Error()
+}
+
+// replayRaftLog replays raft log entries for a range from its current applied
+// index up to the target index. It creates a ReplayBatch, iterates entries via
+// raftlog.Visit, and applies each one. Non-trivial entries (lease changes, GC
+// threshold bumps, etc.) trigger a batch flush and state reload so that
+// subsequent entries are checked against up-to-date state.
+func replayRaftLog(
+	ctx context.Context, raftRO RaftRO, target raftCatchUpTarget, newBatch NewReplayBatchFn,
+) error {
+	for {
+		done, err := replayRaftLogBatch(ctx, raftRO, target, newBatch)
+		if err != nil {
+			return errors.Wrapf(err, "replaying raft log for r%d", target.rangeID)
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+// replayRaftLogBatch creates a ReplayBatch and applies entries from the
+// current applied index up to the target. It returns done=true when all
+// entries have been applied, or done=false if a non-trivial entry was
+// encountered and the caller should invoke this function again so that a
+// fresh batch is created with reloaded state.
+func replayRaftLogBatch(
+	ctx context.Context, raftRO RaftRO, target raftCatchUpTarget, newBatch NewReplayBatchFn,
+) (done bool, _ error) {
+	rb, err := newBatch(ctx, target.rangeID, target.startKey)
+	if err != nil {
+		return false, err
+	}
+	defer rb.Close()
+
+	if target.index <= rb.AppliedIndex() {
+		return true, nil
+	}
+
+	lo := rb.AppliedIndex() + 1
+	hi := target.index + 1 // Visit uses [lo, hi)
+	// TODO(mira): Add a max batch size policy to bound memory usage. Large
+	// ranges with many entries could produce an oversized batch here.
+	var needsReload bool
+	err = raftlog.Visit(ctx, raftRO, target.rangeID, lo, hi, func(ent raftpb.Entry) error {
+		trivial, err := rb.ApplyEntry(ctx, ent)
+		if err != nil {
+			return err
+		}
+		if !trivial {
+			// Non-trivial entries may change state (lease, GC threshold)
+			// that affects accept/reject decisions for subsequent entries.
+			// Stop iteration so the caller can flush and reload.
+			needsReload = true
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err = iterutil.Map(err); err != nil {
+		return false, err
+	}
+	if err := rb.Commit(ctx); err != nil {
+		return false, err
+	}
+	return !needsReload, nil
 }
 
 // applyMutation applies a WAG node's mutation to the state machine. It handles

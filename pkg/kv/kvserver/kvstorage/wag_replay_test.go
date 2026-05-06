@@ -10,12 +10,15 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -148,6 +151,23 @@ func TestCanApply(t *testing.T) {
 	}
 }
 
+// writeRaftLogEntries writes empty raft log entries for the given range and
+// index range [lo, hi] to the log engine so that raftlog.Visit can iterate
+// over them during catch-up replay.
+func writeRaftLogEntries(
+	t *testing.T, logEng storage.Engine, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex,
+) {
+	t.Helper()
+	ctx := context.Background()
+	for idx := lo; idx <= hi; idx++ {
+		ent := raftpb.Entry{Index: uint64(idx), Term: 1}
+		key := keys.RaftLogKey(rangeID, idx)
+		require.NoError(t, storage.MVCCPutProto(
+			ctx, logEng, key, hlc.Timestamp{}, &ent, storage.MVCCWriteOptions{},
+		))
+	}
+}
+
 // writePersistedRangeState writes the replay-relevant state for a range to the
 // state machine.
 func writePersistedRangeState(
@@ -187,7 +207,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 				{Addr: wagpb.Addr{RangeID: 1, ReplicaID: 3, Index: 51}, Type: wagpb.EventApply},
 			}},
 			shouldApply: true,
-			expCatchUps: []raftCatchUpTarget{{rangeID: 1, replicaID: 3, index: 51}},
+			expCatchUps: []raftCatchUpTarget{{rangeID: 1, index: 51}},
 		}, {
 			name: "single event, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{
@@ -211,7 +231,7 @@ func TestCanApplyWAGNode(t *testing.T) {
 				{Addr: wagpb.Addr{RangeID: 2, ReplicaID: 1, Index: 10}, Type: wagpb.EventInit},
 			}},
 			shouldApply: true,
-			expCatchUps: []raftCatchUpTarget{{rangeID: 1, replicaID: 3, index: 99}},
+			expCatchUps: []raftCatchUpTarget{{rangeID: 1, index: 99}},
 		}, {
 			name: "multi-event split, already applied",
 			states: map[roachpb.RangeID]persistedRangeState{
@@ -260,6 +280,41 @@ func TestCanApplyWAGNode(t *testing.T) {
 	}
 }
 
+// simpleReplayBatch is a test-only ReplayBatch that advances the applied index
+// for each entry without decoding. It persists the updated applied state on
+// Commit.
+type simpleReplayBatch struct {
+	sl      StateLoader
+	stateRW StateRW
+	as      *kvserverpb.RangeAppliedState
+}
+
+func (b *simpleReplayBatch) AppliedIndex() kvpb.RaftIndex {
+	return b.as.RaftAppliedIndex
+}
+
+func (b *simpleReplayBatch) ApplyEntry(_ context.Context, ent raftpb.Entry) (bool, error) {
+	b.as.RaftAppliedIndex = kvpb.RaftIndex(ent.Index)
+	return true, nil
+}
+
+func (b *simpleReplayBatch) Commit(ctx context.Context) error {
+	return b.sl.SetRangeAppliedState(ctx, b.stateRW, b.as)
+}
+
+func (b *simpleReplayBatch) Close() {}
+
+func simpleNewBatch(stateRW StateRW) NewReplayBatchFn {
+	return func(ctx context.Context, rangeID roachpb.RangeID, _ roachpb.RKey) (ReplayBatch, error) {
+		sl := MakeStateLoader(rangeID)
+		as, err := sl.LoadRangeAppliedState(ctx, StateRO(stateRW))
+		if err != nil {
+			return nil, err
+		}
+		return &simpleReplayBatch{sl: sl, stateRW: stateRW, as: as}, nil
+	}
+}
+
 // TestReplayWAG is a basic end-to-end test for WAG replay, verifying that applied
 // nodes are skipped and unapplied nodes have their mutations applied to the
 // state machine.
@@ -270,10 +325,10 @@ func TestReplayWAG(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	// getKey reads a single unversioned key from the given engine.
-	getKey := func(t *testing.T, eng storage.Engine, key string) []byte {
+	// getKey reads a single unversioned key from the given reader.
+	getKey := func(t *testing.T, r storage.Reader, key string) []byte {
 		t.Helper()
-		kvs, err := storage.Scan(ctx, eng, roachpb.Key(key), roachpb.Key(key).Next(), 1)
+		kvs, err := storage.Scan(ctx, r, roachpb.Key(key), roachpb.Key(key).Next(), 1)
 		require.NoError(t, err)
 		if len(kvs) == 0 {
 			return nil
@@ -300,8 +355,14 @@ func TestReplayWAG(t *testing.T) {
 			storage.NewDefaultInMemForTesting(), storage.NewDefaultInMemForTesting(),
 		)
 		defer eng.Close()
+		raftRO := RaftRO(eng.LogEngine())
+		stateRW := StateRW(eng.StateEngine())
 
-		require.NoError(t, ReplayWAG(ctx, RaftRO(eng.LogEngine()), StateRW(eng.StateEngine())))
+		noReplay := func(context.Context, roachpb.RangeID, roachpb.RKey) (ReplayBatch, error) {
+			t.Fatal("unexpected newBatch call")
+			return nil, nil
+		}
+		require.NoError(t, ReplayWAG(ctx, raftRO, stateRW, noReplay))
 	})
 
 	t.Run("unapplied nodes are applied", func(t *testing.T) {
@@ -311,31 +372,28 @@ func TestReplayWAG(t *testing.T) {
 		defer eng.Close()
 		var seq wag.Seq
 		bf := MakeBatchFactory(&eng, &seq)
+		raftRO := RaftRO(eng.LogEngine())
+		stateRW := StateRW(eng.StateEngine())
 
-		// Establish the replica in the state engine as initialized. In practice,
-		// EventCreate and EventInit would have done this; here we pre-write the
-		// mark and applied index so that EventApply nodes target an initialized
-		// replica.
-		writePersistedRangeState(t, StateRW(eng.StateEngine()), 1, persistedRangeState{
-			mark: replicaMark(1, 0), appliedIndex: 9,
+		// Establish the replica in the state engine as initialized at index 10.
+		writePersistedRangeState(t, stateRW, 1, persistedRangeState{
+			mark: replicaMark(1, 0), appliedIndex: 10,
 		})
+		// Write raft log entries covering the full catch-up range.
+		writeRaftLogEntries(t, eng.LogEngine(), 1, 11, 25)
 
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 10}, wagpb.EventApply, "key1", "val1")
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 11}, wagpb.EventApply, "key2", "val2")
+		// WAG node at index 15: catch-up replays entries 11-15.
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 15}, wagpb.EventApply, "key1", "val1")
 
-		require.NoError(t, ReplayWAG(ctx, RaftRO(eng.LogEngine()), StateRW(eng.StateEngine())))
-		require.Equal(t, []byte("val1"), getKey(t, eng.StateEngine(), "key1"))
-		require.Equal(t, []byte("val2"), getKey(t, eng.StateEngine(), "key2"))
+		require.NoError(t, ReplayWAG(ctx, raftRO, stateRW, simpleNewBatch(stateRW)))
+		require.Equal(t, []byte("val1"), getKey(t, stateRW, "key1"))
 
-		// Write two more nodes, then replay again. The first two nodes should
-		// be skipped and only the new ones applied.
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 12}, wagpb.EventApply, "key3", "val3")
-		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 13}, wagpb.EventApply, "key4", "val4")
+		// Second WAG node at index 25: catch-up replays entries 16-25.
+		// The first node should be skipped on this replay.
+		writeWAGNode(t, &bf, wagpb.Addr{RangeID: 1, ReplicaID: 1, Index: 25}, wagpb.EventApply, "key2", "val2")
 
-		require.NoError(t, ReplayWAG(ctx, RaftRO(eng.LogEngine()), StateRW(eng.StateEngine())))
-		require.Equal(t, []byte("val1"), getKey(t, eng.StateEngine(), "key1"))
-		require.Equal(t, []byte("val2"), getKey(t, eng.StateEngine(), "key2"))
-		require.Equal(t, []byte("val3"), getKey(t, eng.StateEngine(), "key3"))
-		require.Equal(t, []byte("val4"), getKey(t, eng.StateEngine(), "key4"))
+		require.NoError(t, ReplayWAG(ctx, raftRO, stateRW, simpleNewBatch(stateRW)))
+		require.Equal(t, []byte("val1"), getKey(t, stateRW, "key1"))
+		require.Equal(t, []byte("val2"), getKey(t, stateRW, "key2"))
 	})
 }
