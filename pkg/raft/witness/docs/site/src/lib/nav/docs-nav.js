@@ -13,6 +13,7 @@ export const crossLinks = [
 ];
 
 export const pages = [
-  { type: 'page', href: '/introduction',    label: 'Introduction' },
-  { type: 'page', href: '/cost-details',    label: 'Cost of raft replication' }
+  { type: 'page', href: '/introduction',          label: 'Introduction' },
+  { type: 'page', href: '/witness-as-a-service',  label: 'Witness as a Service' },
+  { type: 'page', href: '/cost-details',          label: 'Details: Cost Analysis' }
 ];

@@ -13,15 +13,21 @@ on how they participate in log replication. Common across all of them is that
 they do not maintain a state machine, i.e. fully materialized view of the raft
 log.
 
-| type of witness   | state machine | stores (log) |
-|-------------------|---------------|--------------|
-| full (log)        | no            | yes, full    |
-| partial (log)     | no            | yes, partial |
-| logless           | no            | no           |
+| type of witness   | state machine | stores (log)                               |
+|-------------------|---------------|--------------------------------------------|
+| full (log)        | no            | always                                     |
+| partial (log)     | no            | only when traditional quorum not available |
+| logless           | no            | never                                      |
 
 The primary motivation is cost: disk-related, network-related, and CPU-related
 costs roughly tripartition share the hardware cost of a cluster; reducing cost
 of TCO is an Engineering priority.
+
+The prototyping in this branch focuses on the logless design, as it has the the
+smallest infrastructure footprint. It has a clear extension path into the
+partial and full-log designs, if ever desired.
+
+### Cost reductions
 
 Replacing **one full voter** with a witness reduces the write-related cost
 across each dimension as follows.
@@ -32,7 +38,8 @@ for more holistic estimates. The Cost column assumes that CPU, Network, and Disk
 equipartition the hardware TCO of a cluster, which is directionally correct according to
 Peter Mattis [here](https://cockroachlabs.slack.com/archives/C0KB9Q03D/p1755173490866979?thread_ts=1755129518.896309&cid=C0KB9Q03D).
 
-### Logless witness
+
+#### Logless witness
 
 | dimension       | n=3      | n=5      |
 |-----------------|----------|----------|
@@ -42,7 +49,7 @@ Peter Mattis [here](https://cockroachlabs.slack.com/archives/C0KB9Q03D/p17551734
 | Disk usage      | 33%      | 20%      |
 | **Cost**        | **~37%** | **~21%** |
 
-### Full-log witness
+#### Full-log witness
 
 | dimension       | n=3      | n=5      |
 |-----------------|----------|----------|

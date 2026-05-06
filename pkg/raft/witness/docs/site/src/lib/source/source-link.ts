@@ -18,5 +18,14 @@ export function fileUrl(filePath: string): string {
   return `https://github.com/${ORG}/${REPO}/blob/${__GIT_SHA__}/${filePath}`;
 }
 
+/**
+ * Rendered preview of an HTML file in the repo, via the
+ * refined-github-html-preview Cloudflare worker. Use for generated viz pages
+ * that should render as HTML rather than show as source on GitHub.
+ */
+export function htmlPreviewUrl(filePath: string): string {
+  return `https://refined-github-html-preview.kidonng.workers.dev/${ORG}/${REPO}/raw/${__GIT_SHA__}/${filePath}`;
+}
+
 /** Path of the witness package, for use as a base when building file links. */
 export const witnessPkg = 'pkg/raft/witness';

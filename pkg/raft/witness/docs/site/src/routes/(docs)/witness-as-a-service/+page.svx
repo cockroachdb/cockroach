@@ -1,0 +1,150 @@
+---
+title: Witness as a Service
+subtitle: Hosting witnesses outside the data plane
+---
+
+## Witnesses as a Service
+
+<script>
+  import WitnessAsAServiceDiagram from '$lib/components/diagrams/WitnessAsAServiceDiagram.svelte';
+  import { fileUrl, htmlPreviewUrl, witnessPkg } from '$lib/source/source-link';
+  const witnessGoUrl = fileUrl(witnessPkg + '/witness.go');
+  const testdataUrl = fileUrl(witnessPkg + '/testdata');
+  const scenario3xUrl = htmlPreviewUrl(witnessPkg + '/generated/scenario/commit_using_witness_3x.html');
+</script>
+
+We have traditionally thought of witnesses as a new type of replica. However,
+instead we should think of them as a lightweight service that can be deployed
+alongside CRDB, which allows for independent lifecycles and a tightly scoped
+interface that can be shared by multiple clusters.
+
+Concretely, multiple (logical or dedicated) KV clusters could share a witness
+service in CockroachCloud, and customers deployed on-prem on two physical
+datacenters could point their clusters at a CRL-provided witness service in a
+third datacenter.
+
+<WitnessAsAServiceDiagram />
+
+This works because in the proposed design, the witness is a "passive" service:
+it responds to incoming messages, but never campaigns and has no requirement to
+track which clusters it provides the witness service to. That is, it is much
+closer in spirit to an object store than a subsystem of CockroachDB.
+
+We describe the pure logless minimum-communication service first, as it has the
+smallest footprint. In principle, a small amount of compute and storage can
+provide witnesses to all CockroachDB clusters in the world, since a witness
+consists of only a few dozen bytes of durable state per cluster, and needs to be
+contacted only ~once per range per outage. This access pattern is correlated -
+when an az fails, many clusters and ranges will want to use a witness
+simultaneously - but the server can batch these requests efficiently.
+
+## Logless Witnesses
+
+```go
+type ClusterID string   // corresponds to cluster ID
+type Peer uint64        // corresponds to ReplicaID
+type Term uint64        // corresponds to Raft term
+type LogMark struct {   // corresponds to raftpb.LogMark
+  Term uint64
+  Index uint64
+}
+
+type LoglessWitnessServer interface {
+  // HandleVote responds to a vote request from a Raft candidate. The witness
+  // votes only if the last log mark of the candidate is at least as up to date
+  // as that of any entry the witness may have implicitly acked for that
+  // cluster.
+  //
+  // NB: PreVote would also be available in practice, omitted here for brevity.
+  HandleVote(clusterID ClusterID, from Peer, term Term, lastLog LogMark) error
+  // HandleMsgEngage informs the witness that peer `from` is leader in term
+  // `term` and (assuming the witness doesn't return an error) that for any
+  // entry (in the same term) after `atLog`, the witness will be considered to
+  // have acked the entry.
+  //
+  // The leader is expected to send this RPC when a traditional quorum is
+  // unavailable.
+  HandleMsgEngage(clusterID ClusterID, from Peer, term Term, atLog LogMark) error
+  // HandleMsgRelease informs the witness that leader `from` in term `term` will
+  // no longer consider the witness to have acked any entries after `atLog`.
+  //
+  // The leader is expected to send this RPC when a traditional quorum has
+  // become available again.
+  HandleMsgRelease(clusterID ClusterID, from Peer, term Term, atLog raft.LogMark) error
+}
+```
+
+The basic idea is that the witness votes just like a Raft peer would, which
+requires a log completeness check: the candidate's last log mark must have a
+higher term, or the same term and a higher index, than the last log mark the
+witness has seen from that cluster. The witness has no log: but it does track
+the highest log mark that it may have "implicitly" have acked, and only votes
+when that log mark passes the check.
+This has false negatives, where the witness may not vote despite the candidate
+being up to date.
+
+### Reference Implementation
+
+An isolated but working toy implementation can be found in <a
+href={witnessGoUrl} target="_blank" rel="noopener">witness.go</a>. Datadriven
+tests explore the edge cases (see <a href={testdataUrl} target="_blank"
+rel="noopener">testdata/</a>); each such test generates a corresponding
+visualization (for example <a href={scenario3xUrl} target="_blank"
+rel="noopener">commit_using_witness_3x</a>).
+
+Note that if we always used `Engage` and `Release` in a batch, the witness could
+have perfect information about the log entries it has acked, and thus the false
+negative problem could be avoided at the cost of much more frequent
+communication. However, the improvement would be marginal, as false negatives
+are presumably very rare in practice: in 3x replication, if the leader goes down
+while using the witness, there is no voter left, and if the other voter came
+back up, it would certainly fail the log completeness check regardless of
+perfact information at the witness. In 5x replication, there could be an
+up-to-date voter, so the window is a little larger, but still relatively small.
+
+## Partial-Log Witnesses
+
+Partial-Log witnesses are an interesting extension. The idea is that we use
+an interface that acks on a per-entry basis, but only for log entries that the
+leader needed help achieving quorum for.
+
+```go
+type PartialLogWitnessServer interface {
+  // HandleVote responds to a vote request from a Raft candidate. The witness
+  // votes only if the last log mark of the candidate is at least as up to date
+  // as the last log entry of the witness for that cluster.
+  //
+  // NB: PreVote would also be available in practice, omitted here for brevity.
+  HandleVote(clusterID ClusterID, from Peer, term Term, lastLog LogMark) error
+  // Append is sent to the witness by leader `from` in term
+  // `term` and asks the witness to append (atLog,payload) to its log.
+  // The witness will remain the most recent contiguous suffix only, i.e.
+  // an Append that would result in a gap leads to all but the last contiguous
+  // piece being discarded.
+  //
+  // The leader is expected to send this RPC to reach quorum when a traditional
+  // quorum is unavailable.
+  Append(clusterID ClusterID, from Peer, term Term, atLog LogMark, payload []byte) error
+  // StreamLog allows retrieval of log entries stored on the witness.
+  //
+  // A candidate that was rejected by the witness (in PreVote or Vote) is
+  // expected to use this API to extend its log and to then retry the election.
+  StreamLog(clusterID ClusterID, from Peer, from, to LogMark) (chan LogEntry, error)
+  // HandleMsgRelease is sent by leader `from` in term `term` to indicate that
+  // the witness can delete all log entries up to and including `atLog`.
+  //
+  // The leader is expected to send this RPC when a traditional quorum has
+  // become available again.
+  HandleMsgRelease(clusterID ClusterID, from Peer, term Term, atLog raft.LogMark) error
+}
+```
+
+This is a sensible trade-off: in a healthy cluster, the witness stores no log
+entries, but while a traditional quorum is absent, it explicitly receives,
+stores, and acks the leader's log (in encrypted form, so no need to trust the
+witness). Because the witness cannot campaign, on leader failure situations
+exist in which the witness is the only "traditionally" electable candidate.
+However, since the witness now retains the log as of the last entry that did
+reach a traditional quorum, any candidate that formed part of this last quorum
+can become electable by using the StreamLog call to catch their log up to the
+witness'.
