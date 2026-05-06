@@ -74,7 +74,8 @@ const (
 	MAINTAIN               Kind = 43
 	TEMPORARY              Kind = 44
 	VIEWSCHEDULE           Kind = 45
-	largestKind                 = VIEWSCHEDULE
+	VIEWEVENTLOG           Kind = 46
+	largestKind                 = VIEWEVENTLOG
 
 	// RULE, SET, and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
 	// They exist solely for ACL character mapping used by acldefault, aclexplode,
@@ -190,6 +191,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "TEMPORARY"
 	case VIEWSCHEDULE:
 		return "VIEWSCHEDULE"
+	case VIEWEVENTLOG:
+		return "VIEWEVENTLOG"
 	case SET:
 		return "SET"
 	case ALTERSYSTEM:

@@ -1478,11 +1478,29 @@ func (s *adminServer) Events(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	// Accept either VIEWEVENTLOG or VIEWCLUSTERMETADATA.
+	userName, isAdmin, err := s.privilegeChecker.GetUserAndRole(ctx)
 	if err != nil {
-		// NB: not using srverrors.ServerError() here since the priv checker
-		// already returns a proper gRPC error status.
-		return nil, err
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	if !isAdmin {
+		hasEventLog, err := s.privilegeChecker.HasGlobalPrivilege(ctx, userName, privilege.VIEWEVENTLOG)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		if !hasEventLog {
+			hasClusterMeta, err := s.privilegeChecker.HasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA)
+			if err != nil {
+				return nil, srverrors.ServerError(ctx, err)
+			}
+			if !hasClusterMeta {
+				return nil, grpcstatus.Errorf(
+					codes.PermissionDenied,
+					"this operation requires the %s or %s system privilege",
+					privilege.VIEWEVENTLOG.DisplayName(),
+					privilege.VIEWCLUSTERMETADATA.DisplayName())
+			}
+		}
 	}
 	redactEvents := !req.UnredactedEvents
 
@@ -1491,10 +1509,6 @@ func (s *adminServer) Events(
 		limit = apiconstants.DefaultAPIEventLimit
 	}
 
-	userName, err := authserver.UserFromIncomingRPCContext(ctx)
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)

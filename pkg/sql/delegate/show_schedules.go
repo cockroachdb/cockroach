@@ -26,17 +26,22 @@ func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement
 	// delegated query would fail with "does not have SELECT privilege on
 	// relation scheduled_jobs", which doesn't tell the user what privilege
 	// they actually need. The authorization.go layer grants implicit SELECT
-	// on the underlying system tables when VIEWSCHEDULE is held.
-	if err := d.catalog.CheckPrivilege(
-		d.ctx, syntheticprivilege.GlobalPrivilegeObject,
-		d.catalog.GetCurrentUser(), privilege.VIEWSCHEDULE,
-	); err != nil {
-		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+	// on the underlying system tables when VIEWSCHEDULE or VIEWSYSTEMTABLE
+	// is held, so we let those users through.
+	cat := d.catalog
+	user := cat.GetCurrentUser()
+	hasViewSchedule := cat.CheckPrivilege(
+		d.ctx, syntheticprivilege.GlobalPrivilegeObject, user, privilege.VIEWSCHEDULE,
+	) == nil
+	if !hasViewSchedule {
+		hasViewSystemTable := cat.CheckPrivilege(
+			d.ctx, syntheticprivilege.GlobalPrivilegeObject, user, privilege.VIEWSYSTEMTABLE,
+		) == nil
+		if !hasViewSystemTable {
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s does not have %s system privilege",
-				d.catalog.GetCurrentUser(), privilege.VIEWSCHEDULE)
+				user, privilege.VIEWSCHEDULE)
 		}
-		return nil, err
 	}
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
