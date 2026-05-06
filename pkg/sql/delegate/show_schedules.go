@@ -10,14 +10,35 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 // commandColumn converts executor execution arguments into jsonb representation.
 const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
+	// Provide a clear privilege error upfront. Without this check, the
+	// delegated query would fail with "does not have SELECT privilege on
+	// relation scheduled_jobs", which doesn't tell the user what privilege
+	// they actually need. The authorization.go layer grants implicit SELECT
+	// on the underlying system tables when VIEWSCHEDULE is held.
+	if err := d.catalog.CheckPrivilege(
+		d.ctx, syntheticprivilege.GlobalPrivilegeObject,
+		d.catalog.GetCurrentUser(), privilege.VIEWSCHEDULE,
+	); err != nil {
+		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s system privilege",
+				d.catalog.GetCurrentUser(), privilege.VIEWSCHEDULE)
+		}
+		return nil, err
+	}
+
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
 
 	columnExprs := []string{
