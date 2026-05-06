@@ -22,11 +22,11 @@ type ResourceGroupConfig struct {
 	// the configured set. But the holder does not require this strictly as an
 	// invariant.
 	Weight uint32
-	// MaxCPU=true forces burstQualification to canBurst regardless of the bucket
-	// level. The bucket itself is still tracked and refilled at Weight/100;
-	// MaxCPU only exempts the group from the bucket-fullness gate. Within the
-	// same canBurst qualification, groups are still ordered by used/weight, so
-	// MaxCPU short-circuits the burst qualification gate.
+	// MaxCPU=true forces burstQualification to canBurst regardless of the
+	// bucket utilization. The bucket itself is still tracked and refilled at
+	// Weight/100; MaxCPU only exempts the group from the bucket-fullness gate.
+	// Within the same canBurst qualification, groups remain ordered by
+	// used/weight.
 	MaxCPU bool
 }
 
