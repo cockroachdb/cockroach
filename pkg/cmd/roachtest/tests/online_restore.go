@@ -896,15 +896,14 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		}
 
 		// We set this pausepoint so that the download job is paused before it
-		// begins downloading external files. This allows us to guarantee that when
-		// we delete an SST file, it won't have already been downloaded by the
-		// download phase and therefore not trigger a failure.
+		// begins downloading external files. This allows us to delete the backup
+		// SSTs before the download job attempts to read them.
 		// We also must set this BEFORE taking backups. In the event of a full
 		// cluster backup, the link phase of OR will reset the pausepoints back to
 		// the point of the backup, which means this pausepoint will be wiped if it
 		// is set after the backups.
 		if _, err := dbConn.ExecContext(
-			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'",
+			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'",
 		); err != nil {
 			return errors.Wrap(err, "failed to set pausepoint for online restore")
 		}
@@ -951,6 +950,15 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		if err != nil {
 			return err
 		}
+
+		// Delete the backup SSTs as soon as possible after the link phase
+		// completes to minimize the window in which regular LSM compaction
+		// could download and incorporate the external SSTs, which would cause
+		// the download job to see 0 external bytes and succeed immediately.
+		if err := d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection); err != nil {
+			return err
+		}
+
 		if err := WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
 			return errors.Wrapf(
 				err, "waiting for download job %v to reach paused state", downloadJobID,
@@ -967,10 +975,6 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
 		); err != nil {
 			return errors.Wrap(err, "failed to remove pausepoint for online restore")
-		}
-
-		if err := d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection); err != nil {
-			return err
 		}
 		if _, err := dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID); err != nil {
 			return errors.Wrapf(
