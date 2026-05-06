@@ -34,6 +34,9 @@ import (
 // 1. The flush is disabled by the cluster setting `sql.stats.flush.enabled`.
 // 2. The flush is called too soon after the last flush (`sql.stats.flush.minimum_interval`).
 // 3. We have reached the limit of the number of rows in the system table.
+// 4. Coordinated flush is enabled (`sql.stats.flush.coordinated.enabled`); in that
+// mode the cluster-wide coordinator job is the sole writer and per-node flushes
+// are suppressed to avoid duplicate writes.
 func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stopper) bool {
 	return s.MaybeFlushWithDrainer(ctx, stopper, s.SQLStats)
 }
@@ -43,6 +46,15 @@ func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 ) bool {
 	ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
 	defer stopCancel()
+
+	// When the cluster is using a coordinated flush, the per-node flush path
+	// must not write — otherwise the coordinator and the local loop would
+	// double-write. We return without draining so the in-memory stats stay
+	// available for the coordinator's next collection cycle.
+	if CoordinatedFlushEnabled(ctx, s.cfg.Settings) {
+		return false
+	}
+
 	now := s.getTimeNow()
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
