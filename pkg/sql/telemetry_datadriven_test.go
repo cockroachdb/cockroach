@@ -101,7 +101,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 			getTimeNow:       st.TimeNow,
 			getTracingStatus: sts.TracingStatus,
 		}
-		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &ExecutorTestingKnobs{
