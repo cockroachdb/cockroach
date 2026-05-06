@@ -15,11 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -523,11 +525,24 @@ func TestScheduleChainingWithDatabaseExpansion(t *testing.T) {
 // TestSchedulePTSChainingExcludeFromBackupDrop tests that a scheduled
 // incremental backup with revision_history succeeds when a table with
 // exclude_data_from_backup=true is dropped between full and incremental.
+//
+// This was the regression test for the backup-side fix in #169087, which
+// taught the backup processor to skip ExportRequests for spans whose
+// descriptors were dropped. The test deliberately sets up the bad state
+// (span config record removed because the descriptor was deleted) to
+// exercise that recovery path. Subsequent changes to the GC job
+// (#169148) prevent that bad state from arising naturally because
+// descriptor cleanup now waits for any covering PTS to be released, and
+// the chained schedule PTS would normally block it. The
+// SkipWaitingForPTSRelease knob is used here to bypass that wait so the
+// test can still set up the original scenario.
 func TestSchedulePTSChainingExcludeFromBackupDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanup := newTestHelper(t)
+	th, cleanup := newTestHelper(t, func(knobs *base.TestingKnobs) {
+		knobs.GCJob = &sql.GCJobTestingKnobs{SkipWaitingForPTSRelease: true}
+	})
 	defer cleanup()
 
 	th.sqlDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'`)

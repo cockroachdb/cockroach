@@ -109,6 +109,13 @@ const (
 	// StatusWaitingForMVCCGC is used for the GC job when it has cleared
 	// the data but is waiting for MVCC GC to remove the data.
 	StatusWaitingForMVCCGC jobs.StatusMessage = "waiting for MVCC GC"
+	// StatusWaitingForProtectedTimestamp is used for the GC job when it has
+	// observed an empty span but is holding off on deleting the table
+	// descriptor and zone config because a protected timestamp record still
+	// covers the span. Tearing down the descriptor would remove the span
+	// config record carrying ExcludeDataFromBackup, breaking the backup
+	// processor's ability to recover from BatchTimestampBeforeGCError.
+	StatusWaitingForProtectedTimestamp jobs.StatusMessage = "waiting for protected timestamp release"
 	// StatusDeletingData is used for the GC job when it is about
 	// to clear the data.
 	StatusDeletingData jobs.StatusMessage = "deleting data"
@@ -3000,12 +3007,21 @@ type GCJobTestingKnobs struct {
 	// protected timestamp status of a table or an index. The protection status is
 	// passed in along with the jobID.
 	RunAfterIsProtectedCheck func(jobID jobspb.JobID, isProtected bool)
+	// RunAfterPTSReleaseCheck is called after each poll of the
+	// protected-timestamp wait that gates descriptor cleanup. It receives
+	// the descriptor ID being inspected and whether the span is still
+	// protected.
+	RunAfterPTSReleaseCheck func(jobID jobspb.JobID, descID descpb.ID, isProtected bool)
 
 	// Notifier is used to optionally inject a new gcjobnotifier.Notifier.
 	Notifier *gcjobnotifier.Notifier
 
 	// If true, the GC job will not wait for MVCC GC.
 	SkipWaitingForMVCCGC bool
+	// If true, the GC job will not wait for protected timestamp records to
+	// be released before deleting a dropped table's descriptor and zone
+	// config.
+	SkipWaitingForPTSRelease bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
