@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/plangram"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -635,6 +636,11 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// row count of the local branch. Is there a better approach?
 	if required.RemoteBranch {
 		cost.C /= 10
+	}
+
+	// Penalize expressions that don't match the PlanGram.
+	if plangram.VisibleToPlanGram(candidate) && !required.PlanGram.Matches(candidate) {
+		cost.Penalties |= memo.PlanGramMismatchPenalty
 	}
 
 	// Add a one-time cost for any operator with unbounded cardinality. This

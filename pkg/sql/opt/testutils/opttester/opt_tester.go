@@ -2379,7 +2379,7 @@ func (ot *OptTester) optimizeExpr(
 	if !ot.Flags.PlanGram.Any() {
 		root := o.Memo().RootExpr()
 		props := *o.Memo().RootProps()
-		props.PlanGram = ot.Flags.PlanGram
+		props.PlanGram = ot.Flags.PlanGram.WithNoneFallback()
 		o.Memo().SetRoot(root, &props)
 	}
 	root, err := o.Optimize()

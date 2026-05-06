@@ -2395,6 +2395,7 @@ GO_TARGETS = [
     "//pkg/sql/opt/partialidx:partialidx_test",
     "//pkg/sql/opt/partition:partition",
     "//pkg/sql/opt/partition:partition_test",
+    "//pkg/sql/opt/plangram:plangram",
     "//pkg/sql/opt/props/physical:physical",
     "//pkg/sql/opt/props/physical:physical_test",
     "//pkg/sql/opt/props:props",

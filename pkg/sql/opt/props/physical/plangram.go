@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode"
@@ -18,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
-
-//lint:file-ignore U1000 While this is stubbed out, ignore unused code.
 
 // PlanGram is a regular tree grammar that describes the approved optimizer
 // plans for a statement.
@@ -62,6 +61,10 @@ import (
 //
 // For some background see https://en.wikipedia.org/wiki/Regular_tree_grammar
 // and https://en.wikipedia.org/wiki/Tree_automaton.
+//
+// PlanGram equality and hashing use pointer identity of the root term, which
+// requires that all PlanGram values being compared point into the same graph of
+// terms.
 type PlanGram struct {
 	// root is the starting term. "root" can also be considered a "pseudo
 	// nonterminal" in the grammar with a single production rule, but because of
@@ -77,8 +80,16 @@ type planGramTerm interface {
 	// visitProductions visits all left-hand-side nonterminals reachable from this
 	// term exactly once, using the visited map to avoid cycles. No particular
 	// traversal order is guaranteed. If the special "any" or "none" nonterminals
-	// are encountered, they are not visited.
+	// are encountered, they are not visited (but their parent is).
 	visitProductions(visited map[*planGramProduction]struct{}, visit func(*planGramProduction))
+	// visitAlternateExprs visits right-hand-side expressions that could be
+	// alternates for the current level. It does not recurse to visit all RHS
+	// expressions in the grammar. It uses the visited map to avoid cycles. No
+	// particular traversal order is guaranteed. If the special "any" or "none"
+	// nonterminals are encountered, they are also visited. All visited PlanGrams
+	// are guaranteed to have HasAlternates() == false. True is returned if at
+	// least one alternate was visited.
+	visitAlternateExprs(visited map[*planGramProduction]struct{}, visit func(PlanGram)) bool
 }
 
 // planGramProduction represents a left-hand-side nonterminal in the grammar,
@@ -103,6 +114,8 @@ type planGramProduction struct {
 // an optimizer expression. The optimizer expression could have children, in
 // which case those children are each represented by a term (e.g. InnerJoin), or
 // the optimizer expression could be nullary / a leaf (e.g. Scan).
+//
+// If the op is UnknownOp this is a wildcard expr.
 type planGramExpr struct {
 	op       opt.Operator
 	fields   []planGramExprField
@@ -143,6 +156,34 @@ func (p PlanGram) Any() bool {
 	return p.root == nil
 }
 
+// None is true if this PlanGram does not match any optimizer sub-tree.
+func (p PlanGram) None() bool {
+	if p.root == nonePlanGramTerm {
+		return true
+	}
+	if pp, ok := p.root.(*planGramProduction); ok && len(pp.rules) == 0 {
+		return true
+	}
+	return false
+}
+
+// WithNoneFallback wraps this PlanGram in a production that includes
+// NonePlanGram as a fallback alternate. This ensures the optimizer also
+// considers the unconstrained (default) plan, so that if the PlanGram cannot be
+// fully matched, the optimizer falls back to its natural cost-based
+// selection. This should be called on the root PlanGram before optimization
+// starts.
+func (p PlanGram) WithNoneFallback() PlanGram {
+	if p.Any() || p.None() {
+		return p
+	}
+	prod := &planGramProduction{
+		name:  "_fallback",
+		rules: []planGramTerm{p.root, nonePlanGramTerm},
+	}
+	return PlanGram{root: prod}
+}
+
 // FormatPretty writes the full PlanGram grammar to the buffer, starting with
 // the root, optionally with multiple lines.
 func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
@@ -153,7 +194,7 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 		b.WriteString("root: any;")
 		return
 	}
-	if p.root == nonePlanGramTerm {
+	if p.None() {
 		b.WriteString("root: none;")
 		return
 	}
@@ -502,6 +543,7 @@ func (p *planGramParser) parseExpr() (planGramTerm, error) {
 		}
 		expr.fields = append(expr.fields, planGramExprField{key: name, val: unquoted})
 	}
+	// TODO(michae2): check for correct number of children.
 	return expr, nil
 }
 
@@ -570,6 +612,89 @@ func tokenizePlanGram(data []byte, atEOF bool) (advance int, token []byte, err e
 	}
 }
 
+// Equals reports whether two PlanGrams point to the same grammar node. This
+// uses pointer equality of the root term, which is correct because the grammar
+// is parsed once into a single graph and all operations (Child, VisitAlternates)
+// return PlanGrams pointing into that same graph.
+func (p PlanGram) Equals(other PlanGram) bool {
+	return p.root == other.root
+}
+
+// RootHash returns a hash of the root pointer, for use by the interner.
+func (p PlanGram) RootHash() uint64 {
+	if p.root == nil {
+		return 0
+	}
+	return uint64(reflect.ValueOf(p.root).Pointer())
+}
+
+// Matches reports whether this PlanGram expression matches the given optimizer
+// expression. Any matches everything, None matches nothing. A concrete PlanGram
+// expression matches if the operator matches (or is a wildcard) and the child
+// count matches. This should only be called after alternates have been expanded,
+// so the root is always a planGramExpr or a special term.
+//
+// TODO(michae2): PlanGram matching currently only affects relational expressions
+// (via ComputeCost). Scalar children (e.g. Filters, Projections, ON conditions)
+// are not checked even if explicitly specified in the grammar, because scalar
+// optimization does not consult the PlanGram.
+func (p PlanGram) Matches(e opt.Expr) bool {
+	if p.Any() {
+		return true
+	}
+	if p.None() {
+		return false
+	}
+	switch t := p.root.(type) {
+	case *planGramExpr:
+		// TODO(michae2): check fields
+		return (t.op == opt.UnknownOp || t.op == e.Op()) && len(t.children) <= e.ChildCount()
+	default:
+		return false
+	}
+}
+
+// Child returns the PlanGram for the nth child of this expression. If this
+// PlanGram is Any, all children are Any. If the child index is beyond the
+// explicitly listed children, the child is implicitly Any (unspecified children
+// are unconstrained).
+func (p PlanGram) Child(nth int) PlanGram {
+	if p.Any() {
+		return AnyPlanGram
+	}
+	if p.None() {
+		return NonePlanGram
+	}
+	if pe, ok := p.root.(*planGramExpr); ok && len(pe.children) > nth {
+		return PlanGram{pe.children[nth]}
+	}
+	return AnyPlanGram
+}
+
+// HasAlternates returns true if this PlanGram points to a production rather
+// than a concrete expression.
+func (p PlanGram) HasAlternates() bool {
+	if p.Any() || p.None() {
+		return false
+	}
+	_, isExpr := p.root.(*planGramExpr)
+	return !isExpr
+}
+
+// VisitAlternates calls visit for each concrete alternate of this PlanGram.
+// Each visited PlanGram is guaranteed to have HasAlternates() == false.
+func (p PlanGram) VisitAlternates(visit func(alternate PlanGram)) {
+	if p.Any() || p.None() {
+		visit(p)
+		return
+	}
+	visited := make(map[*planGramProduction]struct{})
+	if !p.root.visitAlternateExprs(visited, visit) {
+		// If we didn't visit any alternates, at least visit NonePlanGram.
+		visit(NonePlanGram)
+	}
+}
+
 // visitProductions implements the planGramTerm interface.
 func (pp *planGramProduction) visitProductions(
 	visited map[*planGramProduction]struct{}, visit func(*planGramProduction),
@@ -595,4 +720,40 @@ func (pe *planGramExpr) visitProductions(
 			child.visitProductions(visited, visit)
 		}
 	}
+}
+
+// visitAlternateExprs implements the planGramTerm interface.
+func (pp *planGramProduction) visitAlternateExprs(
+	visited map[*planGramProduction]struct{}, visit func(PlanGram),
+) (visitedOne bool) {
+	if _, ok := visited[pp]; ok {
+		return visitedOne
+	}
+	visited[pp] = struct{}{}
+	for _, rule := range pp.rules {
+		if rule == nil {
+			visit(AnyPlanGram)
+			visitedOne = true
+			continue
+		}
+		if rule == nonePlanGramTerm {
+			visit(NonePlanGram)
+			visitedOne = true
+			continue
+		}
+		if rule.visitAlternateExprs(visited, visit) {
+			visitedOne = true
+		}
+	}
+	return visitedOne
+}
+
+// visitAlternateExprs implements the planGramTerm interface.
+func (pe *planGramExpr) visitAlternateExprs(
+	_ map[*planGramProduction]struct{}, visit func(PlanGram),
+) bool {
+	visit(PlanGram{pe})
+	// We don't recurse here, because expression children are down a level, not
+	// alternates for the current level.
+	return true
 }

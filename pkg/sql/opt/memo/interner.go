@@ -647,12 +647,17 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	h.HashDistribution(val.Distribution)
 	h.HashFloat64(val.LimitHint)
 	h.HashBool(val.RemoteBranch)
+	h.HashPlanGram(val.PlanGram)
 }
 
 func (h *hasher) HashDistribution(val physical.Distribution) {
 	for _, region := range val.Regions {
 		h.HashString(region)
 	}
+}
+
+func (h *hasher) HashPlanGram(val physical.PlanGram) {
+	h.HashUint64(val.RootHash())
 }
 
 func (h *hasher) HashLocking(val opt.Locking) {
