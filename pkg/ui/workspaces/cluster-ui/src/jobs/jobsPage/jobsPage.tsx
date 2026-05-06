@@ -50,6 +50,9 @@ export interface JobsPageStateProps {
   show: string;
   type: number;
   columns: string[];
+  // When true, suppresses the page header for use inside a parent layout
+  // that already provides its own heading (e.g. the console nav shell).
+  isEmbedded?: boolean;
 }
 
 export interface JobsPageDispatchProps {
@@ -74,6 +77,7 @@ export function JobsPage(props: JobsPageProps): React.ReactElement {
     setStatus,
     setShow,
     setType,
+    isEmbedded = false,
   } = props;
   const history = useHistory();
 
@@ -232,7 +236,7 @@ export function JobsPage(props: JobsPageProps): React.ReactElement {
   return (
     <div>
       <Helmet title="Jobs" />
-      <h3 className={commonStyles("base-heading")}>Jobs</h3>
+      {!isEmbedded && <h3 className={commonStyles("base-heading")}>Jobs</h3>}
       <div>
         <PageConfig>
           <PageConfigItem>
