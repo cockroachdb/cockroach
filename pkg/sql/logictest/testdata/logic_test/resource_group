@@ -7,10 +7,10 @@
 # Disabled by default: every statement returns FeatureNotSupported.
 
 statement error pq: resource group SQL is disabled
-CREATE RESOURCE GROUP g WITH (cpu_weight = 100)
+CREATE RESOURCE GROUP g WITH cpu_weight = 100
 
 statement error pq: resource group SQL is disabled
-ALTER RESOURCE GROUP g WITH (cpu_weight = 100)
+ALTER RESOURCE GROUP g WITH cpu_weight = 100
 
 statement error pq: resource group SQL is disabled
 DROP RESOURCE GROUP g
@@ -30,18 +30,18 @@ statement error pq: cpu_weight is required and must be a positive integer
 CREATE RESOURCE GROUP missing_weight
 
 statement error pq: cpu_weight must be a positive integer
-CREATE RESOURCE GROUP zero_weight WITH (cpu_weight = 0)
+CREATE RESOURCE GROUP zero_weight WITH cpu_weight = 0
 
 statement error pq: cpu_weight must be a positive integer
-CREATE RESOURCE GROUP negative_weight WITH (cpu_weight = -1)
+CREATE RESOURCE GROUP negative_weight WITH cpu_weight = -1
 
 # Unknown options are rejected.
 statement error pq: unknown resource group option "bogus"
-CREATE RESOURCE GROUP unknown_opt WITH (cpu_weight = 1, bogus = 1)
+CREATE RESOURCE GROUP unknown_opt WITH cpu_weight = 1, bogus = 1
 
 # IDs < 16 are reserved; the sequence's first allocated id is 17.
 statement ok
-CREATE RESOURCE GROUP high WITH (cpu_weight = 100, max_cpu = true)
+CREATE RESOURCE GROUP high WITH cpu_weight = 100, max_cpu = true
 
 query ITIB colnames
 SHOW RESOURCE GROUP high
@@ -49,15 +49,22 @@ SHOW RESOURCE GROUP high
 id  name  cpu_weight  max_cpu
 17  high  100         true
 
+# The parens form is also accepted.
+statement ok
+CREATE RESOURCE GROUP parens WITH (cpu_weight = 50, max_cpu = false)
+
+statement ok
+DROP RESOURCE GROUP parens
+
 # Defaults: max_cpu omitted on CREATE -> false.
 statement ok
-CREATE RESOURCE GROUP medium WITH (cpu_weight = 50)
+CREATE RESOURCE GROUP medium WITH cpu_weight = 50
 
 query ITIB colnames
 SHOW RESOURCE GROUP medium
 ----
 id  name    cpu_weight  max_cpu
-18  medium  50          false
+19  medium  50          false
 
 # SHOW RESOURCE GROUPS lists all.
 query ITIB colnames,rowsort
@@ -65,14 +72,14 @@ SHOW RESOURCE GROUPS
 ----
 id  name    cpu_weight  max_cpu
 17  high    100         true
-18  medium  50          false
+19  medium  50          false
 
 # Duplicate name is rejected; IF NOT EXISTS swallows the conflict.
 statement error pq: resource group "high" already exists
-CREATE RESOURCE GROUP high WITH (cpu_weight = 999)
+CREATE RESOURCE GROUP high WITH cpu_weight = 999
 
 statement ok
-CREATE RESOURCE GROUP IF NOT EXISTS high WITH (cpu_weight = 999)
+CREATE RESOURCE GROUP IF NOT EXISTS high WITH cpu_weight = 999
 
 # The existing row was not modified.
 query I
@@ -82,7 +89,7 @@ SELECT cpu_weight FROM [SHOW RESOURCE GROUP high]
 
 # ALTER updates only specified options (partial update).
 statement ok
-ALTER RESOURCE GROUP high WITH (cpu_weight = 200)
+ALTER RESOURCE GROUP high WITH cpu_weight = 200
 
 query ITIB colnames
 SHOW RESOURCE GROUP high
@@ -91,7 +98,7 @@ id  name  cpu_weight  max_cpu
 17  high  200         true
 
 statement ok
-ALTER RESOURCE GROUP high WITH (max_cpu = false)
+ALTER RESOURCE GROUP high WITH max_cpu = false
 
 query ITIB colnames
 SHOW RESOURCE GROUP high
@@ -101,10 +108,10 @@ id  name  cpu_weight  max_cpu
 
 # ALTER on a missing group: error without IF EXISTS, no-op with.
 statement error pq: resource group "ghost" does not exist
-ALTER RESOURCE GROUP ghost WITH (cpu_weight = 1)
+ALTER RESOURCE GROUP ghost WITH cpu_weight = 1
 
 statement ok
-ALTER RESOURCE GROUP IF EXISTS ghost WITH (cpu_weight = 1)
+ALTER RESOURCE GROUP IF EXISTS ghost WITH cpu_weight = 1
 
 # DROP basic, error path, IF EXISTS path.
 statement ok
@@ -127,10 +134,10 @@ id  name  cpu_weight  max_cpu
 user testuser
 
 statement error pq: only users with the admin role may use resource group statements
-CREATE RESOURCE GROUP unauth WITH (cpu_weight = 1)
+CREATE RESOURCE GROUP unauth WITH cpu_weight = 1
 
 statement error pq: only users with the admin role may use resource group statements
-ALTER RESOURCE GROUP high WITH (cpu_weight = 1)
+ALTER RESOURCE GROUP high WITH cpu_weight = 1
 
 statement error pq: only users with the admin role may use resource group statements
 DROP RESOURCE GROUP high
