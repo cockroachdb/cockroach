@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -63,6 +64,20 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 			`DELETE FROM system.tenant_settings WHERE tenant_id = $1`, info.ID,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d settings", info.ID)
+		}
+
+		// Drop the tenant's host-side resource-group rows. The
+		// tenant-side reconciler that wrote them is gone with the
+		// tenant; without this delete the host's in-memory cache and
+		// the system.tenant_resource_groups table would carry phantom
+		// entries for a tenant that no longer exists.
+		if execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_3_AddTenantResourceGroupsTable) {
+			if _, err := txn.ExecEx(
+				ctx, "delete-tenant-resource-groups", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+				`DELETE FROM system.tenant_resource_groups WHERE tenant_id = $1`, info.ID,
+			); err != nil {
+				return errors.Wrapf(err, "deleting tenant %d resource groups", info.ID)
+			}
 		}
 
 		// Clear out all span config records left over by the tenant.

@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -584,6 +586,16 @@ func TestGCTenant(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte("foo"), val)
 
+		// Seed a row in system.tenant_resource_groups for the dropping
+		// tenant; gcTenant must clear it as part of the same txn as
+		// the other per-tenant deletes.
+		_, err = execCfg.InternalDB.Executor().Exec(
+			ctx, "seed-tenant-rg", nil, /* txn */
+			`INSERT INTO system.tenant_resource_groups (tenant_id, id, name, config) VALUES ($1, 17, 'gc-test', b'')`,
+			dropTenID,
+		)
+		require.NoError(t, err)
+
 		require.NoError(t, gcClosure(dropTenID, progress))
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
 		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -596,6 +608,16 @@ func TestGCTenant(t *testing.T) {
 		r, err = kvDB.Get(ctx, descKey)
 		require.NoError(t, err)
 		require.True(t, nil == r.Value)
+
+		// The seeded resource-group row must be gone.
+		row, err := execCfg.InternalDB.Executor().QueryRowEx(
+			ctx, "check-tenant-rg-cleanup", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT count(*) FROM system.tenant_resource_groups WHERE tenant_id = $1`,
+			dropTenID,
+		)
+		require.NoError(t, err)
+		require.Equal(t, 0, int(tree.MustBeDInt(row[0])))
 	})
 }
 
