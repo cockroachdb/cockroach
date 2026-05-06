@@ -92,6 +92,23 @@ Findings from `/review-crdb` on PR #169760 (commits through `8e47ca14e47`,
       changefeeds can flow through and the `topicGuard` field +
       `checkSingleTopic` method on noLingerSink can be deleted.
 
+## Test-feed limitation (webhook)
+
+- [ ] **`extractValueFromJSONMessage` only reads `payload[0]`.**
+      `pkg/ccl/changefeedccl/testfeed_test.go:2458`. When the webhook
+      test feed receives a multi-message envelope
+      `{"payload":[m1,m2,...],"length":N}`, it extracts only the first
+      message; subsequent messages are silently dropped. Existing
+      batchingSink tests don't trigger this because the default config
+      flushes per row. noLingerSink's `flushBatch` honors
+      `BatchBuffer.ShouldFlush` so the same default holds, but any
+      future test that explicitly exercises real batching against
+      webhook will need this fixed first. The fix: have `Next()` queue
+      all messages from each POST and return one per call. Risk: any
+      hidden test that relied on the bug would start surfacing rows
+      it previously missed; run the full webhook suite under stress
+      before landing.
+
 ## Performance / future polish (defer)
 
 - [ ] `log.V(2)` formats `%x` of every key — args evaluate even when

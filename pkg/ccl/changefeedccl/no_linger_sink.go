@@ -178,7 +178,33 @@ func (s *noLingerSink) flushBatch(ctx context.Context, batch *pendingBatch) erro
 			return err
 		}
 	}
+	// Honor the SinkClient's per-batch threshold (sinkBatchConfig.Messages
+	// / .Bytes, exposed via BatchBuffer.ShouldFlush): cut the worker's
+	// pendingBatch into one or more sub-flushes whenever the BatchBuffer
+	// signals it's full. With the default config (all zeros)
+	// ShouldFlush returns true after every Append, matching batchingSink's
+	// "one POST per row" default behavior.
+	//
+	// TODO: webhook test feed (extractValueFromJSONMessage in
+	// testfeed_test.go) only reads payload[0] from a multi-message
+	// envelope. As a result any worker batch larger than 1 message that
+	// gets flushed as a single POST is silently truncated by the test
+	// feed. Tests using webhook today should set
+	// webhook_sink_config.Flush.Messages = 1; fix the test feed before
+	// exercising real batching against webhook end-to-end.
 	bb := s.client.MakeBatchBuffer(topicStr)
+	flushCurrent := func() error {
+		payload, err := bb.Close()
+		if err != nil {
+			return err
+		}
+		if err := s.client.Flush(ctx, payload); err != nil {
+			return err
+		}
+		bb = s.client.MakeBatchBuffer(topicStr)
+		return nil
+	}
+	pendingInBuffer := false
 	for _, ev := range batch.events {
 		bb.Append(ctx, ev.key, ev.val, attributes{
 			tableName:       ev.topicDescriptor.GetTableName(),
@@ -186,12 +212,18 @@ func (s *noLingerSink) flushBatch(ctx context.Context, batch *pendingBatch) erro
 			mvcc:            ev.mvcc,
 			csvColumnHeader: ev.csvColumnHeader,
 		})
+		pendingInBuffer = true
+		if bb.ShouldFlush() {
+			if err := flushCurrent(); err != nil {
+				return err
+			}
+			pendingInBuffer = false
+		}
 	}
-	payload, err := bb.Close()
-	if err != nil {
-		return err
+	if pendingInBuffer {
+		return flushCurrent()
 	}
-	return s.client.Flush(ctx, payload)
+	return nil
 }
 
 // EmitRow implements the Sink interface.

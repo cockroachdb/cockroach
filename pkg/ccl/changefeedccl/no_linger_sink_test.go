@@ -221,7 +221,13 @@ func TestNoLingerSinkBasicHappyPath(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		// TODO: drop this WITH clause once the webhook test feed
+		// handles multi-message payloads. Messages=1 is the workaround
+		// (test feed only reads payload[0]); Frequency must accompany
+		// Messages to satisfy webhook config validation, even though
+		// noLingerSink doesn't use the linger timer.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH webhook_sink_config = '{"Flush":{"Messages":1,"Frequency":"100ms"}}'`)
 		defer closeFeed(t, foo)
 
 		assertPayloads(t, foo, []string{
