@@ -6,8 +6,6 @@
 package admission
 
 import (
-	"maps"
-
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -67,6 +65,10 @@ var defaultGroupConfig = ResourceGroupConfig{
 type ResourceGroupConfigHolder struct {
 	mu struct {
 		syncutil.RWMutex
+		// config is treated as immutable once stored. Set installs a
+		// fresh map (defensive copy of the caller's input); Snapshot
+		// returns this pointer directly without copying. Readers must
+		// not mutate the returned map.
 		config map[groupKey]ResourceGroupConfig
 	}
 }
@@ -118,13 +120,14 @@ func (h *ResourceGroupConfigHolder) GetOrDefault(k groupKey) ResourceGroupConfig
 	return defaultGroupConfig
 }
 
-// Snapshot returns a copy of the current config. The holder retains no
-// reference to the returned map; subsequent Set calls do not affect
-// previously-returned snapshots.
+// Snapshot returns the currently-installed config map. The returned
+// map is shared with the holder and with any concurrent Snapshot
+// callers; callers must treat it as read-only. A subsequent Set
+// installs a new map and does not modify the previously-returned
+// one, so existing snapshots remain valid (and stable) for the
+// lifetime of the caller's reference.
 func (h *ResourceGroupConfigHolder) Snapshot() map[groupKey]ResourceGroupConfig {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	snap := make(map[groupKey]ResourceGroupConfig, len(h.mu.config))
-	maps.Copy(snap, h.mu.config)
-	return snap
+	return h.mu.config
 }

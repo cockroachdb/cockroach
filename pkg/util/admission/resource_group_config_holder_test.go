@@ -104,35 +104,41 @@ func TestResourceGroupConfigHolderGet(t *testing.T) {
 		h.GetOrDefault(rgGroupKey(highResourceGroupID)))
 }
 
-// TestResourceGroupConfigHolderSnapshot verifies Snapshot returns an
-// independent map: mutating it does not affect subsequent snapshots, and
-// the returned map is not aliased to the holder's internal storage.
+// TestResourceGroupConfigHolderSnapshot verifies Snapshot's contract:
+// the returned map is the holder's installed map (no defensive copy),
+// and a subsequent Set installs a fresh map without mutating the
+// previously-returned snapshot.
 func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	h := newResourceGroupConfigHolder()
 	snap1 := h.Snapshot()
 
-	// Mutate snap1 and confirm the holder's state is unchanged.
-	snap1[rgGroupKey(999)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
-	delete(snap1, rgGroupKey(highResourceGroupID))
-	require.Equal(t, defaultRMResourceGroupConfig, h.Snapshot())
-
-	// Snapshot must return a fresh map each call, not an alias of the
-	// internal storage. Pointer-identity check guards against a regression
-	// that returns the internal map directly.
+	// Snapshot aliases the internal map (no copy on read). This is
+	// the contract: callers must treat the returned map as read-only.
 	h.mu.RLock()
 	internalPtr := reflect.ValueOf(h.mu.config).Pointer()
 	h.mu.RUnlock()
-	snap2 := h.Snapshot()
-	require.NotEqual(t, internalPtr, reflect.ValueOf(snap2).Pointer(),
-		"Snapshot must not alias the holder's internal map")
+	require.Equal(t, internalPtr, reflect.ValueOf(snap1).Pointer(),
+		"Snapshot should return the installed map directly")
+
+	// A subsequent Set installs a brand-new map. snap1 must remain
+	// stable (it points at the previously-installed map, which is
+	// immutable post-install) while h.Snapshot() returns the new one.
+	h.Set(map[groupKey]ResourceGroupConfig{
+		rgGroupKey(42): {Weight: 100, MaxCPU: true},
+	})
+	require.Equal(t, defaultRMResourceGroupConfig, snap1,
+		"prior snapshot must be unaffected by a subsequent Set")
+	require.Equal(t, map[groupKey]ResourceGroupConfig{
+		rgGroupKey(42): {Weight: 100, MaxCPU: true},
+	}, h.Snapshot())
 }
 
 // TestResourceGroupConfigHolderConcurrent exercises Set, GetOrDefault, and
 // Snapshot from multiple goroutines. The holder exists to be safely callable
 // from multiple goroutines (e.g. WorkQueue.Admit while a SQL operator
-// changes resource groups), so a regression that drops a defensive copy or
-// otherwise leaks the internal map should surface here under -race. Each
-// Snapshot caller mutates the returned map to catch any aliasing.
+// changes resource groups), so a regression that drops the input-side
+// defensive copy or otherwise leaks a writable reference to the internal
+// map should surface here under -race. Snapshot callers only read.
 func TestResourceGroupConfigHolderConcurrent(t *testing.T) {
 	const goroutines = 8
 	const iterations = 200
@@ -159,8 +165,10 @@ func TestResourceGroupConfigHolderConcurrent(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				snap := h.Snapshot()
-				snap[rgGroupKey(9999)] = ResourceGroupConfig{Weight: 99, MaxCPU: true}
-				_ = snap
+				// Read-only access only: snapshots alias the holder's
+				// internal map and concurrent readers must not mutate.
+				for range snap {
+				}
 			}
 		}()
 	}
