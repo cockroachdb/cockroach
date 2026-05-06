@@ -15,13 +15,18 @@ import (
 )
 
 // createTenantResourceGroupsTable creates the host-side
-// system.tenant_resource_groups table that holds the reconciled view of every
-// tenant's resource group configurations.
+// system.tenant_resource_groups table and the per-tenant singleton
+// reconciliation job that backfills it. The job creation is also done at
+// tenant bootstrap; running it again here is safe because
+// CreateIfNotExistAdoptableJobWithTxn no-ops when the job already exists.
 func createTenantResourceGroupsTable(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	return createSystemTable(
+	if err := createSystemTable(
 		ctx, d.DB, d.Settings, d.Codec,
 		systemschema.TenantResourceGroupsTable, tree.LocalityLevelTable,
-	)
+	); err != nil {
+		return err
+	}
+	return resourceGroupReconciliationJobMigration(ctx, cv, d)
 }

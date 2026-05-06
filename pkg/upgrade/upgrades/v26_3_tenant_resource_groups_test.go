@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -92,4 +93,14 @@ func TestTenantResourceGroupsTable(t *testing.T) {
 			`SELECT count(*) FROM system.tenant_resource_groups WHERE tenant_id = 1`).
 			Scan(&n))
 	require.Equal(t, 3, n)
+
+	// The migration must also have created the singleton reconciliation
+	// job at the static job ID, since this is a versioned upgrade and
+	// existing tenants would otherwise miss it.
+	var jobCount int
+	require.NoError(t,
+		sqlDB.QueryRow(
+			`SELECT count(*) FROM system.jobs WHERE id = $1`,
+			int64(jobs.ResourceGroupReconciliationJobID)).Scan(&jobCount))
+	require.Equal(t, 1, jobCount)
 }
