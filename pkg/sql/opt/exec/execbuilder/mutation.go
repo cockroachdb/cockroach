@@ -1473,3 +1473,23 @@ func (b *Builder) setMutationFlags(e memo.RelExpr) {
 		b.flags.Set(exec.PlanFlagContainsUpsert)
 	}
 }
+
+// setMutationFlagsFromTag sets mutation flags based on a statement tag string.
+// This is used for deferred-build routines where the RelExprs are not yet
+// available at plan time.
+func (b *Builder) setMutationFlagsFromTag(tag string) {
+	switch tag {
+	case "INSERT":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsInsert)
+	case "DELETE":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsDelete)
+	case "UPDATE":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsUpdate)
+	case "UPSERT":
+		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.flags.Set(exec.PlanFlagContainsUpsert)
+	}
+}
