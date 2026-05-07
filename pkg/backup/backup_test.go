@@ -2322,7 +2322,12 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 	// ts4: no farewell type exists
 	// ts5: farewell type exists as (third)
 	t.Run("revision-history", func(t *testing.T) {
-		_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		// Note (kev-cao): DRPC is currently flaky on this test, disabling while it
+		// is investigated.
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode,
+			0, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
+			})
 		defer cleanupFn()
 
 		var ts1, ts2, ts3, ts4, ts5 string

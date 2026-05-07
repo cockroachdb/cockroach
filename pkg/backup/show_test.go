@@ -44,9 +44,14 @@ func TestShowBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 11
-	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	// Note (kev-cao): DRPC is currently flaky on this test, disabling while it
+	// is investigated.
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{DefaultDRPCOption: base.TestDRPCDisabled},
+	}
+	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, args)
 	kvDB := tc.Server(0).ApplicationLayer().DB()
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 	sqlDB.ExecMultiple(t, strings.Split(`
