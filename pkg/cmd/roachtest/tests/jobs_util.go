@@ -212,6 +212,24 @@ func WaitForState(
 	}
 }
 
+func WaitForTerminal(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StateSucceeded,
+				jobs.StateFailed,
+				jobs.StateCanceled,
+				jobs.StatePaused,
+				jobs.StateRevertFailed:
+				return true, false
+			default:
+				return false, false
+			}
+		}, maxWait)
+}
+
 func WaitForRunning(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
