@@ -2208,6 +2208,7 @@ func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
 func TestFlowControlBasicV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2306,6 +2307,7 @@ ORDER BY streams DESC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2424,6 +2426,7 @@ ORDER BY streams DESC;
 func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2684,6 +2687,7 @@ ORDER BY streams DESC;
 func TestFlowControlCrashedNodeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -2792,6 +2796,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	const numServers int = 5
 
@@ -3344,6 +3349,7 @@ ORDER BY streams DESC;
 func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3438,6 +3444,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3570,6 +3577,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 func TestFlowControlTransferLeaseV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3662,6 +3670,7 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
@@ -3778,6 +3787,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
 		kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
