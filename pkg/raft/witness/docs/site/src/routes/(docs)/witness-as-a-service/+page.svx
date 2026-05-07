@@ -17,6 +17,7 @@ subtitle: Hosting witnesses outside the data plane
   const fortTrackerIsFortifiedByUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 162, 186);
   const fortTrackerPopulateUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 414, 452);
   const fortTrackerRequireQuorumUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 391, 399);
+  const execChangeReplicasTxnUrl = sourceUrl('pkg/kv/kvserver/replica_command.go', 2434);
 </script>
 
 We have traditionally thought of witnesses as a new type of replica. However,
@@ -158,9 +159,13 @@ expiration timestamp passes, and the leader takes the quorum-min of these
 expirations as its `LeadSupportUntil` (driven from
 <a href={tickHeartbeatUrl} target="_blank" rel="noopener">tickHeartbeat</a> via
 <a href={bcastFortifyUrl} target="_blank" rel="noopener">bcastFortify</a>).
-Witnesses are not part of the StoreLiveness fabric and cannot respond to
-fortification requests, since participating in StoreLiveness would tightly
-couple them to the cluster and defeat the witness-as-a-service model.
+In the simplest design, the witness does not participate in StoreLiveness and
+cannot respond to fortification requests directly. This keeps the integration
+point narrow and the witness service stateless with respect to clusters'
+liveness fabrics. As discussed in the empty-log variant below, integrating
+the witness into StoreLiveness is straightforward and useful when stronger
+availability is desired; we just don't need it for the baseline logless
+design.
 
 However, an engaged witness already provides a stronger guarantee than
 fortification, just on a different axis. While `Engaged=true`, the witness
@@ -213,24 +218,29 @@ failover (per the [main page](../)).
 ### Integration into CockroachDB
 
 The witness service can be wired up as a standalone process, bundled in the
-`cockroach` binary, which allows some re-use of relevant flags, esp. related
-to certificates.
+`cockroach` binary (e.g. as a `cockroach witness-server` subcommand), which
+allows some re-use of relevant flags, esp. related to certificates.
 
 CockroachDB is modified with configuration that allows communication with the
-chosen witness service. `execChangeReplicasTxn` is extended to support adding
-and removing witnesses; they will be stored in a new repeated field on the
-`roachpb.RangeDescriptor`. The raft message transport is extended such that
-messages directed at a witness are sent to the witness service.
+chosen witness service.
+<a href={execChangeReplicasTxnUrl} target="_blank" rel="noopener">`execChangeReplicasTxn`</a>
+is extended to support adding and removing witnesses; they will be stored in a
+new repeated field on the `roachpb.RangeDescriptor`. The raft message
+transport is extended such that messages directed at a witness are sent to
+the witness service.
 
-May methods across the code base that reason about quorum and health may need
+Many methods across the code base that reason about quorum and health may need
 to be updated to continue functioning correctly in the presence of witnesses.
 For example, without adjustments, health checks may consider a `2v+w` group
 unavailable when one voter is down.
 
-## Possible Variant: empty-log witnesses
+## Possible Variant: Empty-Log Witnesses
 
-Empty-log witnesses are contacted for each log entry, but they do not see or
-store the payloads.
+Empty-log witnesses combine per-entry `Engage`+`Release` round-trips (so the
+witness knows the exact `(term, index)` of each entry it has acked, without
+storing payloads) with witness participation in the StoreLiveness fabric (so
+the witness's vote-rejection promise persists across idle periods, without
+per-range raft heartbeats).
 
 They address a weakness of the logless design above, which is that the witness'
 voting behavior is curtailed indefinitely (until traditional quorum returns) if
@@ -249,9 +259,11 @@ A concrete example (pure logless design):
 - v1 goes down, but v3 comes back (v4 stays down, but it doesn't matter)
 
 In this state, v2 should be electable because it is up to date with the log of
-itself, v2, and the witness. Unfortunately, the witness doesn't know the highest
-entry it acked, so it won't vote, and the raft group will be unavailable until
-a traditional quorum is re-established.
+itself, v2, and the witness. Unfortunately, engagement is coarse: while engaged,
+the witness's `Hi` is inflated to `(engagementTerm, ∞)` (so it can't tell which
+exact index it acked), which means v2's last log entry — at `(engagementTerm,
+indexOfE)` — fails the up-to-date check. The witness won't vote, and the raft
+group will be unavailable until a traditional quorum is re-established.
 
 A natural attempt to solve this is to engage the witness for each acked entry
 individually - i.e. batch an Engage and Release into a single round-trip, so
@@ -263,13 +275,15 @@ correct to assume that the witness is "fortified with timestamp ∞", as this on
 holds while the witness is engaged, and it de facto isn't ever engaged in this
 model. We could go half-way and prevent the witness from voting for a set
 duration with each successful Engage+Release batch, but this only works while
-there is active traffic to the witness. In other words, this strategy simple
+there is active traffic to the witness. In other words, this strategy simply
 reconstructs the per-group Raft heartbeats that StoreLiveness worked so hard to
 eliminate.
 
-The actual solution is to integrate the witness into the StoreLiveness fabric,
-and to host an additional (passive) endpoint (backed by a constant amount of
-durable state):
+The natural endpoint of that line of thinking is StoreLiveness itself: a
+per-store amortized version of the same per-batch lease idea. Integrating the
+witness into the StoreLiveness fabric requires a single new (passive) endpoint
+on the witness, backed by a constant amount of durable state per
+`(clusterID, leaderStoreID)`:
 
 ```go
 type StoreLivenessWitnessServer interface {
@@ -277,19 +291,31 @@ type StoreLivenessWitnessServer interface {
 }
 ```
 
-The CockroachDB StoreLiveness fabric would need to be extended to request
-support from the witness Service as well, which requires a modest amount of
-special casing. Raft, on the other hand, could handle the witness symmetrically
-with its regular voters. The witness server would cast votes for candidates only
-when the current term's leader is no longer supported by the witness-local
-StoreLiveness fabric.
+The witness implements only the supporter side of StoreLiveness — it never
+requests support, since it has no leadership of its own to fortify. The single
+new RPC is the supporter-side analog of the existing streaming `MsgHeartbeat`
+in `pkg/kv/kvserver/storeliveness`. The witness persists `(epoch, expiration)`
+per `(clusterID, leaderStoreID)` and runs the same withdrawal loop as a regular
+SL supporter (periodic check; on lapse, increment the requester's epoch and
+zero the expiration).
 
-The resulting design would require a round-trip to the witness for each log
-entry (though would not require including the actual payload of the entry), but
-would avoid the aforementioned compromise on the availability story in the
+The CockroachDB StoreLiveness fabric is extended to request support from the
+witness service as well, which requires a modest amount of special casing.
+Raft, on the other hand, can handle the witness symmetrically with its regular
+voters: `IsFortifiedBy(witnessPeerID)` returns a real `(epoch, expiration)`
+pair, and `LeadSupportExpiration` math no longer needs the `+∞` shim from the
+logless variant. The witness server casts votes for candidates only when the
+current term's leader is no longer supported by the witness-local StoreLiveness
+state — i.e. vote-rejection no longer rides on the `Engaged` bit and the
+inflated `effectiveHi` check in `HandleMsgVote` can be retired in favor of
+"am I currently providing SL support to a leader's store?".
+
+The resulting design still requires a round-trip to the witness for each log
+entry while a traditional quorum is unavailable (though without the payload),
+but avoids the aforementioned compromise on the availability story in the
 failure-while-engaged scenario.
 
-## Possible future extension: Partial-Log Witnesses
+## Possible Future Extension: Partial-Log Witnesses
 
 Partial-Log witnesses are an additional interesting extension. In light of the
 previous section, one might wonder why one would even want witnesses to hold log
