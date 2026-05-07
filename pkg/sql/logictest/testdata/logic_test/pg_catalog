@@ -2854,21 +2854,21 @@ __OID__  pg_proc  __OID__       __OID__   -1      false     c
 
 ## pg_catalog.pg_proc
 
-query TOTOOTTO colnames,rowsort
+query TOTOOFFO colnames,rowsort
 SELECT proname, pronamespace, nspname, proowner, prolang, procost, prorows, provariadic
 FROM pg_catalog.pg_proc p
 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner    prolang  procost  prorows  provariadic
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
-substring  4294967089    pg_catalog  3233629770  12       NULL     NULL     0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
+substring  4294967089    pg_catalog  3233629770  12       1        0        0
 
 query TTBB colnames,rowsort
 SELECT proname, prokind, prosecdef, proleakproof
@@ -2891,14 +2891,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    proisstrict  proretset  provolatile  proparallel
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
-substring  true         false      i            NULL
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
+substring  true         false      i            u
 
 # Verify that proretset is true for set-returning functions.
 query OTBT

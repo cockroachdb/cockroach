@@ -507,8 +507,8 @@ query-sql
 SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
 FROM [SHOW GRANTS ON FUNCTION add]
 ----
-db1 public add(int8, int8) admin ALL true
-db1 public add(int8, int8) root ALL true
+db1 public add(x int8, y int8) admin ALL true
+db1 public add(x int8, y int8) root ALL true
 
 exec-sql
 SET ROLE = root
@@ -541,8 +541,8 @@ query-sql cluster=s5
 SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
 FROM [SHOW GRANTS ON FUNCTION add]
 ----
-db1 public add(int8, int8) admin ALL true
-db1 public add(int8, int8) root ALL true
+db1 public add(x int8, y int8) admin ALL true
+db1 public add(x int8, y int8) root ALL true
 
 # Backing up and restoring a database with a function resets privileges on
 # functions to the default privileges because we cannot be sure if the same
@@ -583,8 +583,8 @@ query-sql
 SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
 FROM [SHOW GRANTS ON FUNCTION add]
 ----
-db1 public add(int8, int8) admin ALL true
-db1 public add(int8, int8) root ALL true
+db1 public add(x int8, y int8) admin ALL true
+db1 public add(x int8, y int8) root ALL true
 
 exec-sql
 SET ROLE = root
@@ -614,6 +614,6 @@ query-sql cluster=s6
 SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
 FROM [SHOW GRANTS ON FUNCTION add]
 ----
-db1_new public add(int8, int8) admin ALL true
-db1_new public add(int8, int8) public EXECUTE false
-db1_new public add(int8, int8) root ALL true
+db1_new public add(x int8, y int8) admin ALL true
+db1_new public add(x int8, y int8) public EXECUTE false
+db1_new public add(x int8, y int8) root ALL true
