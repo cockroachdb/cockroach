@@ -6,6 +6,7 @@
 package execbuilder
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -703,6 +704,7 @@ func (b *Builder) buildExistsSubquery(
 			wrapRootExpr,
 			0,   /* resultBufferID */
 			nil, /* bodyBuilder */
+			"",  /* routineName */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -832,6 +834,7 @@ func (b *Builder) buildSubquery(
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
 			nil,  /* bodyBuilder */
+			"",   /* routineName */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -1036,6 +1039,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
 		udf.Def.BodyBuilder,
+		udf.Def.Name,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
@@ -1112,6 +1116,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
 			nil,   /* bodyBuilder */
+			"",    /* routineName */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1164,6 +1169,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
 	bodyBuilder memo.RoutineBodyBuilder,
+	routineName string,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1196,6 +1202,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	var o xform.Optimizer
 	var gistFactory explain.PlanGistFactory
 	var latencyRecorder = sqlstats.NewStatementLatencyRecorder()
+	var deferredPlanCaptured bool
 	originalMemo := b.mem
 	planGen := func(
 		ctx context.Context,
@@ -1232,6 +1239,40 @@ func (b *Builder) buildRoutinePlanGenerator(
 					}
 				}
 				return 0, false
+			}
+
+			// Capture the deferred body's optimizer plan and table
+			// references for EXPLAIN ANALYZE (DEBUG) bundles. Only done on
+			// the first invocation to avoid duplicates from set-returning
+			// or multi-row routines.
+			if !deferredPlanCaptured &&
+				b.evalCtx.DeferredRoutineOptPlans != nil && routineName != "" {
+				deferredPlanCaptured = true
+				flags := memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
+				var buf bytes.Buffer
+				for i, stmt := range stmts {
+					if i > 0 {
+						buf.WriteString("\n")
+					}
+					// Always format with redaction markers so the bundle
+					// code can apply redaction when needed.
+					f := memo.MakeExprFmtCtxBuffer(
+						ctx, &buf, flags,
+						true /* redactableValues */, originalMemo, b.catalog,
+					)
+					f.FormatExpr(stmt)
+				}
+				b.evalCtx.DeferredRoutineOptPlans = append(
+					b.evalCtx.DeferredRoutineOptPlans,
+					eval.DeferredRoutineOptPlan{Name: routineName, Plan: buf.String()},
+				)
+				// Capture table references from the deferred body's
+				// metadata so the bundle includes their stats and schema.
+				for _, tm := range originalMemo.Metadata().AllTables() {
+					b.evalCtx.DeferredRoutineTableRefs = append(
+						b.evalCtx.DeferredRoutineTableRefs, tm.Table,
+					)
+				}
 			}
 		}
 
