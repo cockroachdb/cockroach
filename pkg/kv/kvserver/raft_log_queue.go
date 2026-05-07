@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -119,7 +118,7 @@ var looselyCoupledTruncationEnabled = settings.RegisterBoolSetting(
 	"kv.raft_log.loosely_coupled_truncation.enabled",
 	"set to true to loosely couple the raft log truncation. Loosely coupled truncations are "+
 		"automatically enabled if engines are separated",
-	metamorphic.ConstantWithTestBool("kv.raft_log.loosely_coupled_truncation.enabled", false),
+	envutil.EnvOrDefaultBool("COCKROACH_LOOSELY_COUPLED_TRUNC", false),
 	settings.WithVisibility(settings.Reserved),
 )
 
