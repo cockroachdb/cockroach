@@ -134,6 +134,29 @@ func (b *Builder) buildExplainOpt(
 	}
 
 	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, redactValues, b.mem, b.catalog)
+
+	// Set up a callback to build deferred routine bodies during formatting.
+	// This ensures EXPLAIN output shows the full plan structure for deferred
+	// bodies, matching the actual execution behavior. Each body is built in
+	// a fresh optimizer so it gets its own memo (the outer memo is frozen
+	// after optimization).
+	var deferredBodyMemos []*memo.Memo
+	f.BuildDeferredBody = func(
+		def *memo.UDFDefinition,
+	) ([]memo.RelExpr, opt.ColList, *memo.Memo, error) {
+		var o xform.Optimizer
+		o.Init(b.ctx, b.evalCtx, b.catalog)
+		body, _, params, err := def.BodyBuilder.Build(
+			b.ctx, b.semaCtx, b.evalCtx, b.catalog, o.Factory(),
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		bodyMemo := o.Factory().Memo()
+		deferredBodyMemos = append(deferredBodyMemos, bodyMemo)
+		return body, params, bodyMemo, nil
+	}
+
 	f.FormatExpr(explain.Input)
 	planStr := f.Buffer.String()
 	if redactValues {
@@ -146,6 +169,16 @@ func (b *Builder) buildExplainOpt(
 	// tell the exec factory what information it needs to fetch.
 	var envOpts exec.ExplainEnvData
 	if explain.Options.Flags[tree.ExplainFlagEnv] {
+		// Add table references from deferred body memos to the outer memo's
+		// metadata so that EXPLAIN (OPT, ENV) includes their schemas and stats.
+		for _, bodyMemo := range deferredBodyMemos {
+			bodyMeta := bodyMemo.Metadata()
+			for i := 0; i < bodyMeta.NumTables(); i++ {
+				tabID := opt.TableID(i + 1)
+				tab := bodyMeta.Table(tabID)
+				b.mem.Metadata().AddTable(tab, &tree.TableName{})
+			}
+		}
 		var err error
 		envOpts, err = b.getEnvData()
 		if err != nil {
