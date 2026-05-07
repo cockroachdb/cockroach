@@ -6,12 +6,15 @@
 package optbuilder
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -19,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -955,6 +960,102 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 	)
 	outScope.expr = b.factory.ConstructCall(routine, &memo.CallPrivate{})
 	return outScope
+}
+
+// sqlRoutineBodyBuilder implements memo.RoutineBodyBuilder for SQL routines.
+// It captures all metadata needed to build the routine body at execution time
+// instead of plan time.
+type sqlRoutineBodyBuilder struct {
+	stmtASTs         []tree.Statement
+	paramTypes       []*types.T
+	paramNames       []string
+	rTyp             *types.T
+	isSetReturning   bool
+	insideDataSource bool
+	privilegeUser    string
+	routineType      tree.RoutineType
+	stmtTreeInitFn   func() statementTree
+}
+
+var _ memo.RoutineBodyBuilder = &sqlRoutineBodyBuilder{}
+
+// Build constructs the body RelExprs for a SQL routine in a fresh memo.
+// It is called at execution time, after plan-time metadata has been captured.
+func (rb *sqlRoutineBodyBuilder) Build(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	catalog cat.Catalog,
+	factoryI interface{},
+) (body []memo.RelExpr, bodyProps []*physical.Required, params opt.ColList, retErr error) {
+	factory := factoryI.(*norm.Factory)
+	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+
+	// Enact panic handling similar to Builder.Build().
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
+	// Initialize the statement tree from the captured init function.
+	if rb.stmtTreeInitFn != nil {
+		b.stmtTree = rb.stmtTreeInitFn()
+	}
+
+	// Configure the builder for routine body building.
+	b.insideUDF = true
+	b.insideSQLRoutine = true
+	b.trackSchemaDeps = false
+
+	// Builtin routines need access to internal tables.
+	if rb.routineType == tree.BuiltinRoutine {
+		defer b.DisableUnsafeInternalCheck()()
+	}
+
+	// Restore the effective privilege user for SECURITY DEFINER contexts.
+	if rb.privilegeUser != "" {
+		privUser := username.MakeSQLUsernameFromPreNormalizedString(rb.privilegeUser)
+		b.dataSourcePrivilegeUserOverride = privUser
+		b.executePrivilegeUserOverride = privUser
+	}
+
+	// Create body scope with parameter columns.
+	bodyScope := b.allocScope()
+	params = make(opt.ColList, len(rb.paramTypes))
+	for i := range rb.paramTypes {
+		name := ""
+		if i < len(rb.paramNames) {
+			name = rb.paramNames[i]
+		}
+		argColName := funcParamColName(tree.Name(name), i)
+		col := b.synthesizeColumn(
+			bodyScope, argColName, rb.paramTypes[i], nil /* expr */, nil, /* scalar */
+		)
+		col.setParamOrd(i)
+		params[i] = col.id
+	}
+
+	// Build each body statement from the captured ASTs.
+	body = make([]memo.RelExpr, len(rb.stmtASTs))
+	bodyProps = make([]*physical.Required, len(rb.stmtASTs))
+	for i, ast := range rb.stmtASTs {
+		stmtScope := b.buildStmtAtRootWithScope(ast, nil /* desiredTypes */, bodyScope)
+
+		// The last statement produces the output of the routine.
+		if i == len(rb.stmtASTs)-1 {
+			// Validate that the result columns are compatible with the return
+			// type. This mirrors the validateReturnType call in
+			// finalizeRoutineReturnType on the eager path. Note: AnyTuple
+			// always takes the eager path, so we don't need a
+			// ReturnsRecordType guard here.
+			if err := validateReturnType(ctx, semaCtx, rb.rTyp, stmtScope.cols); err != nil {
+				panic(err)
+			}
+			stmtScope = b.finishRoutineReturnStmt(
+				stmtScope, rb.isSetReturning, rb.insideDataSource, rb.rTyp,
+			)
+		}
+		body[i] = stmtScope.expr
+		bodyProps[i] = stmtScope.makePhysicalProps()
+	}
+	return body, bodyProps, params, nil
 }
 
 // buildDoBody builds the body of the anonymous routine for a DO statement.
