@@ -487,7 +487,7 @@ type DescIDGenerator interface {
 
 	// IncrementDescID increments the descriptor ID counter by at least inc.
 	// It returns the first ID in the incremented range:
-	// <val> .. <val> + inc  are all available to the caller.
+	// <val> .. <val> + inc - 1 are all available to the caller.
 	IncrementDescID(ctx context.Context, inc int64) (catid.DescID, error)
 }
 

@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -991,16 +992,17 @@ func allocateIDs(
 
 	// First, assign new IDs to objects.
 	// Do this in order to maintain sorting of keys on disk.
-	for _, oldID := range oldIDs {
+	idsToRewrite := util.Filter(oldIDs, func(id descpb.ID) bool {
+		return !descriptorRewrites[id].ToExisting
+	})
+	newID, err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(len(idsToRewrite)))
+	if err != nil {
+		return err
+	}
+	for _, oldID := range idsToRewrite {
 		rewrite := descriptorRewrites[oldID]
-		if rewrite.ToExisting {
-			continue
-		}
-		newID, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
-		if err != nil {
-			return err
-		}
 		rewrite.ID = newID
+		newID++
 	}
 
 	// Second, iterate through all rewrite objects and update parent IDs
