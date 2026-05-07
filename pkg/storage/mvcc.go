@@ -1982,6 +1982,75 @@ func MVCCBlindPut(
 	return mvccPutUsingIter(ctx, writer, nil, nil, key, timestamp, value, nil, opts)
 }
 
+// MVCCBlindPutInline writes an inline (unversioned) value directly, without
+// reading the existing value or checking for conflicts. This is a fast path for
+// non-transactional blind writes of inline values, such as raft log appends.
+func MVCCBlindPutInline(
+	writer Writer, key roachpb.Key, value roachpb.Value, ms *enginepb.MVCCStats,
+) error {
+	metaKey := MakeMVCCMetadataKey(key)
+	buf := newPutBuffer()
+	defer buf.release()
+	buf.newMeta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+	metaKeySize, metaValSize, err := buf.putInlineMeta(writer, metaKey, &buf.newMeta)
+	if err != nil {
+		return err
+	}
+	if ms != nil {
+		updateStatsForInline(ms, key, 0, 0, metaKeySize, metaValSize)
+	}
+	return nil
+}
+
+// MVCCBlindPutInlineProto is like MVCCBlindPutInline but accepts a protobuf
+// message which is serialized into a roachpb.Value.
+func MVCCBlindPutInlineProto(
+	writer Writer, key roachpb.Key, msg protoutil.Message, ms *enginepb.MVCCStats,
+) error {
+	var value roachpb.Value
+	if err := value.SetProto(msg); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+	return MVCCBlindPutInline(writer, key, value, ms)
+}
+
+// MVCCDeleteInline deletes an inline (unversioned) value. Unlike a blind put,
+// this reads the existing value to determine its size for MVCC stats
+// accounting. This is a fast path for non-transactional inline deletes, such
+// as raft log truncation.
+func MVCCDeleteInline(
+	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, key roachpb.Key,
+) error {
+	metaKey := MakeMVCCMetadataKey(key)
+	iter, err := rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{Prefix: true})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	// Read the existing inline metadata to determine its size for stats.
+	var origMetaKeySize, origMetaValSize int64
+	iter.SeekGE(metaKey)
+	if ok, err := iter.Valid(); err != nil {
+		return err
+	} else if ok && iter.UnsafeKey().Key.Equal(metaKey.Key) {
+		origMetaKeySize = int64(iter.UnsafeKey().EncodedSize())
+		origMetaValSize = int64(iter.ValueLen())
+	}
+
+	if err := rw.ClearUnversioned(metaKey.Key, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(origMetaValSize),
+	}); err != nil {
+		return err
+	}
+	if ms != nil {
+		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, 0, 0)
+	}
+	return nil
+}
+
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
 //
