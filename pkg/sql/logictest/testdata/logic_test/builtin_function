@@ -2877,6 +2877,70 @@ bool
 query error pq: more than one function named 'unnest'
 SELECT pg_get_function_result('unnest'::regproc);
 
+# pg_get_function_arguments / pg_get_function_identity_arguments must include
+# parameter names, modes, and DEFAULT clauses for user-defined routines so the
+# emitted CREATE FUNCTION text is restorable. NULL OIDs return NULL; unknown
+# OIDs likewise return NULL rather than erroring.
+
+query TT
+SELECT pg_get_function_arguments(NULL::oid),
+       pg_get_function_identity_arguments(NULL::oid)
+----
+NULL  NULL
+
+query TT
+SELECT pg_get_function_arguments(0::oid),
+       pg_get_function_identity_arguments(0::oid)
+----
+NULL  NULL
+
+statement ok
+CREATE FUNCTION pgfa_simple(n INT) RETURNS INT LANGUAGE SQL AS 'SELECT n + 1';
+
+statement ok
+CREATE FUNCTION pgfa_anon(INT) RETURNS INT LANGUAGE SQL AS 'SELECT $1 + 1';
+
+statement ok
+CREATE FUNCTION pgfa_default(n INT DEFAULT 5) RETURNS INT LANGUAGE SQL AS 'SELECT n';
+
+statement ok
+CREATE FUNCTION pgfa_two_default(a INT, b INT DEFAULT 10) RETURNS INT LANGUAGE SQL AS 'SELECT a + b';
+
+statement ok
+CREATE FUNCTION pgfa_out(a INT, OUT b INT, OUT c TEXT) LANGUAGE SQL AS $$SELECT 1, 'x'$$;
+
+statement ok
+CREATE FUNCTION pgfa_inout(INOUT a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+statement ok
+CREATE PROCEDURE pgfa_psimple(a INT) LANGUAGE SQL AS 'SELECT 1';
+
+statement ok
+CREATE PROCEDURE pgfa_pinout(INOUT a INT) LANGUAGE SQL AS 'SELECT a';
+
+query T rowsort
+SELECT proname || ' | ' || pg_get_function_arguments(oid) || ' | ' || pg_get_function_identity_arguments(oid)
+FROM pg_proc WHERE proname LIKE 'pgfa\_%'
+----
+pgfa_anon | int8 | int8
+pgfa_default | n int8 DEFAULT 5 | n int8
+pgfa_inout | INOUT a int8 | INOUT a int8
+pgfa_out | a int8, OUT b int8, OUT c text | a int8, OUT b int8, OUT c text
+pgfa_pinout | INOUT a int8 | INOUT a int8
+pgfa_psimple | IN a int8 | IN a int8
+pgfa_simple | n int8 | n int8
+pgfa_two_default | a int8, b int8 DEFAULT 10 | a int8, b int8
+
+statement ok
+DROP FUNCTION pgfa_simple;
+DROP FUNCTION pgfa_anon;
+DROP FUNCTION pgfa_default;
+DROP FUNCTION pgfa_two_default;
+DROP FUNCTION pgfa_out;
+DROP FUNCTION pgfa_inout;
+DROP PROCEDURE pgfa_psimple;
+DROP PROCEDURE pgfa_pinout;
+
 query T
 SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
 ----
