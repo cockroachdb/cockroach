@@ -65,7 +65,7 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 		params.ctx,
 		"drop-provisioned-roles-find",
 		params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{User: params.p.User()},
 		query,
 		queryArgs...,
 	)
@@ -286,7 +286,7 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 		params.ctx,
 		"check-user-schedules",
 		params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{User: params.p.User()},
 		"SELECT count(*) FROM system.scheduled_jobs WHERE owner=$1",
 		normalizedUsername,
 	)
@@ -302,7 +302,7 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 		params.ctx,
 		"check-user-system-privileges",
 		params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{User: params.p.User()},
 		"SELECT count(*) FROM system.privileges WHERE username=$1",
 		normalizedUsername.Normalized(),
 	)
