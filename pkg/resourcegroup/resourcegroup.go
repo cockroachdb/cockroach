@@ -65,14 +65,18 @@ func WaitForTenantResourceGroupsTable(
 // (which writes locally) and an application tenant (which calls
 // UpdateResourceGroups on the connector).
 //
-// Push is called once per rangefeed-frontier checkpoint and must
-// block until the batch has been durably recorded on the host.
-// Implementations are called from a single goroutine; they need not
+// Push and Replace are called from a single goroutine; they need not
 // be safe for concurrent calls.
 type Pusher interface {
+	// Push applies incremental upserts and deletes for the tenant.
 	Push(
 		ctx context.Context,
 		upserts []*rgpb.ResourceGroupUpsert,
 		deletes []*rgpb.ResourceGroupDelete,
 	) error
+
+	// Replace atomically deletes all rows for the tenant and upserts
+	// the provided set. Used on CompleteUpdate so the reconciler
+	// doesn't need to track what's currently on the host.
+	Replace(ctx context.Context, upserts []*rgpb.ResourceGroupUpsert) error
 }

@@ -32,6 +32,14 @@ message ResourceGroupDelete {
 message UpdateResourceGroupsRequest {
   repeated ResourceGroupUpsert upserts = 1 [(gogoproto.nullable) = false];
   repeated ResourceGroupDelete deletes = 2 [(gogoproto.nullable) = false];
+  // When replace is true, the handler atomically deletes all existing
+  // rows for the tenant before upserting. Used on CompleteUpdate so
+  // the reconciler doesn't need to know what's currently on the host.
+  //
+  // TODO(ssd): Consider whether we should instead read the host's
+  // current state (like span configurations does via
+  // GetSpanConfigRecords) and reconcile against it.
+  bool replace = 3;
 }
 
 // UpdateResourceGroupsResponse acknowledges a successful apply. The

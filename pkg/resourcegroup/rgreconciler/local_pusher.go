@@ -32,3 +32,8 @@ func (p *localPusher) Push(
 ) error {
 	return p.w.Apply(ctx, p.tenantID, upserts, deletes)
 }
+
+// Replace implements resourcegroup.Pusher.
+func (p *localPusher) Replace(ctx context.Context, upserts []*rgpb.ResourceGroupUpsert) error {
+	return p.w.Replace(ctx, p.tenantID, upserts)
+}

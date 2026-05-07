@@ -34,6 +34,15 @@ type Writer interface {
 		upserts []*rgpb.ResourceGroupUpsert,
 		deletes []*rgpb.ResourceGroupDelete,
 	) error
+
+	// Replace atomically deletes all rows for the given tenant and
+	// upserts the provided set. Used on CompleteUpdate so the
+	// reconciler doesn't need to track what's currently on the host.
+	Replace(
+		ctx context.Context,
+		tenantID roachpb.TenantID,
+		upserts []*rgpb.ResourceGroupUpsert,
+	) error
 }
 
 // NewWriter constructs a Writer that persists rows via the supplied
@@ -51,6 +60,9 @@ UPSERT INTO system.tenant_resource_groups (tenant_id, id, name, config) VALUES (
 
 const deleteStmt = `
 DELETE FROM system.tenant_resource_groups WHERE tenant_id = $1 AND id = $2`
+
+const deleteAllStmt = `
+DELETE FROM system.tenant_resource_groups WHERE tenant_id = $1`
 
 // Apply implements the Writer interface.
 func (w *writer) Apply(
@@ -84,6 +96,36 @@ func (w *writer) Apply(
 				deleteStmt, tid, d.Id,
 			); err != nil {
 				return errors.Wrapf(err, "delete resource group (tenant=%d id=%d)", tid, d.Id)
+			}
+		}
+		return nil
+	})
+}
+
+// Replace implements the Writer interface.
+func (w *writer) Replace(
+	ctx context.Context, tenantID roachpb.TenantID, upserts []*rgpb.ResourceGroupUpsert,
+) error {
+	tid := int64(tenantID.ToUint64())
+	return w.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if _, err := txn.ExecEx(
+			ctx, "rg-writer-delete-all", txn.KV(),
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			deleteAllStmt, tid,
+		); err != nil {
+			return errors.Wrapf(err, "delete all resource groups (tenant=%d)", tid)
+		}
+		for _, u := range upserts {
+			cfgBytes, err := protoutil.Marshal(&u.Config)
+			if err != nil {
+				return errors.Wrap(err, "marshal resource group config")
+			}
+			if _, err := txn.ExecEx(
+				ctx, "rg-writer-upsert", txn.KV(),
+				sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+				upsertStmt, tid, u.Id, u.Name, cfgBytes,
+			); err != nil {
+				return errors.Wrapf(err, "upsert resource group (tenant=%d id=%d)", tid, u.Id)
 			}
 		}
 		return nil

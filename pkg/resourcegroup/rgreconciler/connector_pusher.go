@@ -44,3 +44,16 @@ func (p *connectorPusher) Push(
 	_, err := p.connector.UpdateResourceGroups(ctx, req)
 	return err
 }
+
+// Replace implements resourcegroup.Pusher.
+func (p *connectorPusher) Replace(ctx context.Context, upserts []*rgpb.ResourceGroupUpsert) error {
+	req := &rgpb.UpdateResourceGroupsRequest{
+		Replace: true,
+		Upserts: make([]rgpb.ResourceGroupUpsert, len(upserts)),
+	}
+	for i, u := range upserts {
+		req.Upserts[i] = *u
+	}
+	_, err := p.connector.UpdateResourceGroups(ctx, req)
+	return err
+}

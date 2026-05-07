@@ -7,18 +7,25 @@
 // table over a rangefeed and forwards changes to the host through a
 // resourcegroup.Pusher.
 //
-// During the rangefeed's initial scan every row is delivered as a
-// put-style event; on the CompleteUpdate that closes the scan, the
-// reconciler diffs that snapshot against the last-pushed snapshot
-// and pushes the delta. This is what catches deletes that happened
-// during a rangefeed disconnect.
+// Reconcile runs an outer retry loop. Each iteration starts a
+// rangefeedcache.Watcher; its onUpdate callback ferries updates to
+// the main goroutine over a channel. The main goroutine performs the
+// Push/Replace and returns an error on failure, which tears down the
+// watcher and restarts with backoff — guaranteeing a fresh
+// CompleteUpdate on the next iteration.
 //
-// During steady state, each event is buffered by the watcher and
-// handed back as Update.Events on each frontier advance.
+// On CompleteUpdate, the reconciler calls Replace, which atomically
+// deletes all host-side rows for the tenant and re-inserts the
+// snapshot. This is self-healing: no in-memory state is carried
+// across restarts, and stale rows from dropped groups are cleaned up.
+//
+// On IncrementalUpdate, events are deduplicated per-id (keeping the
+// latest) and pushed as a batch.
 package rgreconciler
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -32,8 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,39 +92,60 @@ type event struct {
 // Timestamp implements rangefeedbuffer.Event.
 func (e *event) Timestamp() hlc.Timestamp { return e.ts }
 
-// Reconcile blocks until ctx is cancelled or the rangefeed
-// permanently fails.
+// Reconcile blocks until ctx is cancelled. It retries with backoff on
+// any error from the rangefeed or from pushing to the host; the
+// backoff resets if the inner loop ran for longer than 5 minutes.
 func (r *Reconciler) Reconcile(ctx context.Context) error {
 	tableID, err := startup.RunIdempotentWithRetryEx(ctx,
 		r.stopper.ShouldQuiesce(),
 		"resource group reconciler table id lookup",
 		func(ctx context.Context) (uint32, error) {
-			id, err := r.resolver.LookupSystemTableID(ctx, systemschema.ResourceGroupsTable.GetName())
+			id, err := r.resolver.LookupSystemTableID(
+				ctx, systemschema.ResourceGroupsTable.GetName(),
+			)
 			return uint32(id), err
 		})
 	if err != nil {
 		return err
 	}
 	tablePrefix := r.codec.IndexPrefix(tableID, 1)
-	tableSpan := roachpb.Span{Key: tablePrefix, EndKey: tablePrefix.PrefixEnd()}
+	tableSpan := roachpb.Span{
+		Key: tablePrefix, EndKey: tablePrefix.PrefixEnd(),
+	}
+
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Multiplier:     2,
+	}
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		started := crtime.NowMono()
+		err := r.reconcileOnce(ctx, tableSpan)
+		if err == nil || ctx.Err() != nil {
+			return ctx.Err()
+		}
+		log.Dev.Warningf(ctx,
+			"rgreconciler: restarting after error: %v", err)
+		if started.Elapsed() > 5*time.Minute {
+			retrier.Reset()
+		}
+	}
+	return ctx.Err()
+}
+
+// reconcileOnce starts a single watcher lifetime. It returns on any
+// Push/Replace error or when ctx is cancelled. The caller is
+// responsible for restarting.
+func (r *Reconciler) reconcileOnce(ctx context.Context, tableSpan roachpb.Span) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	dec := makeRowDecoder()
-	// sent is the set of upserts most recently durably pushed to the
-	// host, keyed by id. Used to compute deletes after a rangefeed
-	// restart, which would otherwise miss any rows deleted during the
-	// disconnect.
-	sent := map[int64]*rgpb.ResourceGroupUpsert{}
-	// pending holds the latest event per id from incremental updates
-	// that haven't yet been successfully pushed. Carrying state across
-	// onUpdate calls lets us retry on Push failure without losing
-	// events (the watcher's buffer is drained on each frontier
-	// advance), and dedups multiple events for the same id within or
-	// across batches so the writer sees at most one op per id per
-	// Push (which also fixes within-batch ordering, e.g. delete
-	// followed by upsert of the same id).
-	var pending map[int64]*event
+	updates := make(chan rangefeedcache.Update[*event], 1)
 
-	translateEvent := func(ctx context.Context, kv *kvpb.RangeFeedValue) (*event, bool) {
+	translateEvent := func(
+		ctx context.Context, kv *kvpb.RangeFeedValue,
+	) (*event, bool) {
 		id, upsert, tombstone, err := dec.decode(r.codec, roachpb.KeyValue{
 			Key: kv.Key, Value: kv.Value,
 		})
@@ -123,7 +153,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 			if buildutil.CrdbTestBuild {
 				panic(errors.Wrap(err, "rgreconciler: decode failure in test"))
 			}
-			log.Dev.Warningf(ctx, "rgreconciler: skipping undecodable event %v: %v", kv.Key, err)
+			log.Dev.Warningf(ctx,
+				"rgreconciler: skipping undecodable event %v: %v",
+				kv.Key, err)
 			return nil, false
 		}
 		return &event{
@@ -134,71 +166,13 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		}, true
 	}
 
-	onUpdate := func(ctx context.Context, update rangefeedcache.Update[*event]) {
-		if update.Type == rangefeedcache.CompleteUpdate {
-			snap := map[int64]*rgpb.ResourceGroupUpsert{}
-			for _, e := range update.Events {
-				if !e.tombstone {
-					snap[e.id] = e.upsert
-				}
-			}
-			var ups []*rgpb.ResourceGroupUpsert
-			for id, u := range snap {
-				if prev, ok := sent[id]; !ok || !equalUpsert(prev, u) {
-					ups = append(ups, u)
-				}
-			}
-			var dels []*rgpb.ResourceGroupDelete
-			for id := range sent {
-				if _, ok := snap[id]; !ok {
-					dels = append(dels, &rgpb.ResourceGroupDelete{Id: id})
-				}
-			}
-			// The snapshot supersedes anything still pending from
-			// before the disconnect.
-			pending = nil
-			if err := r.pusher.Push(ctx, ups, dels); err != nil {
-				log.Dev.Warningf(ctx, "rgreconciler: push after initial scan failed: %v", err)
-				return
-			}
-			sent = snap
-			return
+	onUpdate := func(
+		ctx context.Context, u rangefeedcache.Update[*event],
+	) {
+		select {
+		case updates <- u:
+		case <-ctx.Done():
 		}
-		// IncrementalUpdate: merge the buffered batch into pending,
-		// keeping the latest event per id, then push pending.
-		for _, e := range update.Events {
-			if pending == nil {
-				pending = map[int64]*event{}
-			}
-			pending[e.id] = e
-		}
-		if len(pending) == 0 {
-			return
-		}
-		var ups []*rgpb.ResourceGroupUpsert
-		var dels []*rgpb.ResourceGroupDelete
-		for _, e := range pending {
-			if e.tombstone {
-				dels = append(dels, &rgpb.ResourceGroupDelete{Id: e.id})
-			} else {
-				ups = append(ups, e.upsert)
-			}
-		}
-		if err := r.pusher.Push(ctx, ups, dels); err != nil {
-			// Retain pending: the next onUpdate will retry. Without
-			// this, events drained from the watcher's buffer would
-			// be lost on transient host errors.
-			log.Dev.Warningf(ctx, "rgreconciler: incremental push failed: %v", err)
-			return
-		}
-		for _, e := range pending {
-			if e.tombstone {
-				delete(sent, e.id)
-			} else {
-				sent[e.id] = e.upsert
-			}
-		}
-		pending = nil
 	}
 
 	c := rangefeedcache.NewWatcher(
@@ -212,21 +186,53 @@ func (r *Reconciler) Reconcile(ctx context.Context) error {
 		onUpdate,
 		nil, /* knobs */
 	)
-	// onError is nil: the watcher already logs and retries with backoff,
-	// its internal buffer resets on each Run, and our only piece of
-	// cross-restart state (sent) is supposed to survive — the next
-	// CompleteUpdate's diff against it is how we recover dropped
-	// deletes.
 	if err := rangefeedcache.Start(ctx, r.stopper, c, nil /* onError */); err != nil {
 		return err
 	}
-	<-ctx.Done()
-	return ctx.Err()
+
+	for {
+		select {
+		case u := <-updates:
+			if err := r.processUpdate(ctx, u); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
-func equalUpsert(a, b *rgpb.ResourceGroupUpsert) bool {
-	if a.Name != b.Name {
-		return false
+// processUpdate handles a single watcher update by pushing changes
+// to the host. Returns an error if the push fails.
+func (r *Reconciler) processUpdate(
+	ctx context.Context, update rangefeedcache.Update[*event],
+) error {
+	if update.Type == rangefeedcache.CompleteUpdate {
+		var ups []*rgpb.ResourceGroupUpsert
+		for _, e := range update.Events {
+			if !e.tombstone {
+				ups = append(ups, e.upsert)
+			}
+		}
+		return r.pusher.Replace(ctx, ups)
 	}
-	return a.Config.Equal(&b.Config)
+
+	// IncrementalUpdate: dedup by id, keeping the latest event.
+	latest := map[int64]*event{}
+	for _, e := range update.Events {
+		latest[e.id] = e
+	}
+	if len(latest) == 0 {
+		return nil
+	}
+	var ups []*rgpb.ResourceGroupUpsert
+	var dels []*rgpb.ResourceGroupDelete
+	for _, e := range latest {
+		if e.tombstone {
+			dels = append(dels, &rgpb.ResourceGroupDelete{Id: e.id})
+		} else {
+			ups = append(ups, e.upsert)
+		}
+	}
+	return r.pusher.Push(ctx, ups, dels)
 }

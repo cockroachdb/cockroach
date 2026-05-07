@@ -3104,12 +3104,18 @@ func (n *Node) UpdateResourceGroups(
 	for i := range req.Upserts {
 		upserts[i] = &req.Upserts[i]
 	}
-	deletes := make([]*rgpb.ResourceGroupDelete, len(req.Deletes))
-	for i := range req.Deletes {
-		deletes[i] = &req.Deletes[i]
-	}
-	if err := w.Apply(ctx, tenantID, upserts, deletes); err != nil {
-		return nil, err
+	if req.Replace {
+		if err := w.Replace(ctx, tenantID, upserts); err != nil {
+			return nil, err
+		}
+	} else {
+		deletes := make([]*rgpb.ResourceGroupDelete, len(req.Deletes))
+		for i := range req.Deletes {
+			deletes[i] = &req.Deletes[i]
+		}
+		if err := w.Apply(ctx, tenantID, upserts, deletes); err != nil {
+			return nil, err
+		}
 	}
 	return &rgpb.UpdateResourceGroupsResponse{}, nil
 }

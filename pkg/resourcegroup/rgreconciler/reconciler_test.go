@@ -24,9 +24,10 @@ import (
 )
 
 type recordingPusher struct {
-	mu      sync.Mutex
-	upserts []*rgpb.ResourceGroupUpsert
-	deletes []*rgpb.ResourceGroupDelete
+	mu       sync.Mutex
+	upserts  []*rgpb.ResourceGroupUpsert
+	deletes  []*rgpb.ResourceGroupDelete
+	replaces int
 }
 
 var _ resourcegroup.Pusher = (*recordingPusher)(nil)
@@ -38,6 +39,14 @@ func (p *recordingPusher) Push(
 	defer p.mu.Unlock()
 	p.upserts = append(p.upserts, ups...)
 	p.deletes = append(p.deletes, dels...)
+	return nil
+}
+
+func (p *recordingPusher) Replace(_ context.Context, ups []*rgpb.ResourceGroupUpsert) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.replaces++
+	p.upserts = append(p.upserts, ups...)
 	return nil
 }
 

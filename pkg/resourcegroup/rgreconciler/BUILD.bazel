@@ -36,8 +36,10 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/retry",
         "//pkg/util/startup",
         "//pkg/util/stop",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
