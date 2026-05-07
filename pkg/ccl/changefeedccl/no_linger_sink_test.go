@@ -58,7 +58,7 @@ func (r *recordingSinkClient) FlushResolvedPayload(
 }
 
 func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
-	err, hold := r.recordFlush(p)
+	hold, err := r.recordFlush(p)
 	if err != nil {
 		return err
 	}
@@ -71,22 +71,22 @@ func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
 // recordFlush is the locked half of Flush: records the attempt /
 // payload / error, returns the holdFlush channel (if any) for the
 // caller to block on outside the lock.
-func (r *recordingSinkClient) recordFlush(p SinkPayload) (error, chan struct{}) {
+func (r *recordingSinkClient) recordFlush(p SinkPayload) (chan struct{}, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.attempts++
 	if r.alwaysErr != nil {
-		return r.alwaysErr, nil
+		return nil, r.alwaysErr
 	}
 	if len(r.errs) > 0 {
 		err := r.errs[0]
 		r.errs = r.errs[1:]
 		if err != nil {
-			return err, nil
+			return nil, err
 		}
 	}
 	r.flushed = append(r.flushed, append([]byte(nil), p.([]byte)...))
-	return nil, r.holdFlush
+	return r.holdFlush, nil
 }
 
 func (r *recordingSinkClient) Close() error                          { return nil }
