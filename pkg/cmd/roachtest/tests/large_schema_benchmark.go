@@ -15,9 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/stretchr/testify/require"
 )
@@ -449,6 +453,7 @@ func runLargeSchemaIntrospectionBenchmark(
 		},
 	}
 	setupTPCC(ctx, t, t.L(), c, options)
+	defer takeAndTrackBackup(ctx, t, c, numTables)()
 
 	t.L().Printf("Schema creation complete, starting introspection benchmark")
 
@@ -483,6 +488,125 @@ func runLargeSchemaIntrospectionBenchmark(
 	}
 
 	t.L().Printf("Introspection benchmark complete")
+}
+
+// takeAndTrackBackup creates a backup fixture of a cluster tracks metrics
+// about the backup operation. Notably, this is treated as a besteffort
+// operation --- the backup failing should not fail the underlying roachtest.
+func takeAndTrackBackup(
+	ctx context.Context, t test.Test, c cluster.Cluster, numTables int,
+) (finish func()) {
+	conn := c.Conn(ctx, t.L(), 1)
+	fixtureReg := GetFixtureRegistry(ctx, t, c.Cloud())
+	fixture := LargeEmptySchemaFixture{NumTables: numTables}
+	handle, err := fixtureReg.Create(ctx, fixture.Kind(), t.L())
+	require.NoError(t, err)
+	collectionURI := fixtureReg.URI(handle.Metadata().DataPath)
+	t.L().Printf("creating fixture at '%s'", collectionURI.String())
+
+	var backupJobID jobspb.JobID
+	var planningFailed, executionFailed bool
+	var planningTime, executionTime time.Duration
+	start := timeutil.Now()
+	if err := conn.QueryRow(
+		`BACKUP INTO $1 WITH detached`,
+		collectionURI.String(),
+	).Scan(&backupJobID); err != nil {
+		planningFailed = true
+		executionFailed = true
+		t.L().Printf("failed to plan backup job: %v", err)
+	}
+	planningTime = timeutil.Since(start)
+
+	// Wait for the backup to complete in a separate goroutine, so that we can
+	// track the time it takes and whether it succeeds or fails.
+	grp := t.NewGroup(task.WithContext(ctx), task.Name("track-backup"))
+	grp.Go(func(ctx context.Context, l *logger.Logger) error {
+		defer func() {
+			uploadBackupSummaryStats(t, c, planningFailed, executionFailed, planningTime, executionTime)
+		}()
+		if planningFailed {
+			return nil
+		}
+		const waitTimeout = 30 * time.Minute
+		if err := WaitForTerminal(ctx, conn, backupJobID, waitTimeout); err != nil {
+			l.Printf("failed to wait for backup job completion: %v", err)
+			executionFailed = true
+			executionTime = waitTimeout
+			return nil
+		}
+		var startTime, endTime time.Time
+		var backupErr string
+		if err := conn.QueryRow(
+			`SELECT started, finished, status != $1, error FROM [SHOW JOB $2]`, "succeeded", backupJobID,
+		).Scan(&startTime, &endTime, &executionFailed, &backupErr); err != nil {
+			l.Printf("failed to query backup job details: %v", err)
+			return nil
+		}
+		if executionFailed {
+			l.Printf("backup job failed with error: %s", backupErr)
+		}
+		executionTime = endTime.Sub(startTime)
+		if !executionFailed {
+			if err := handle.SetReadyAt(ctx); err != nil {
+				l.Printf("failed to mark fixture as ready: %v", err)
+			}
+		}
+		return nil
+	})
+
+	return grp.Wait
+}
+
+// uploadBackupSummaryStats uploads summary statistics about the
+// backup operation.
+func uploadBackupSummaryStats(
+	t test.Test,
+	c cluster.Cluster,
+	planningFailed bool,
+	executionFailed bool,
+	planningTime time.Duration,
+	executionTime time.Duration,
+) {
+	stats := roachtestutil.AggregatedPerfMetrics{
+		{
+			Name: "backup_planning_failed",
+			Value: func() roachtestutil.MetricPoint {
+				if planningFailed {
+					return 1
+				}
+				return 0
+			}(),
+			Unit:           "count",
+			IsHigherBetter: false,
+		},
+		{
+			Name: "backup_execution_failed",
+			Value: func() roachtestutil.MetricPoint {
+				if executionFailed {
+					return 1
+				}
+				return 0
+			}(),
+			Unit:           "count",
+			IsHigherBetter: false,
+		},
+		{
+			Name:           "backup_planning_time",
+			Value:          roachtestutil.MetricPoint(planningTime / time.Millisecond),
+			Unit:           "ms",
+			IsHigherBetter: false,
+		},
+		{
+			Name:           "backup_execution_time",
+			Value:          roachtestutil.MetricPoint(executionTime / time.Second),
+			Unit:           "s",
+			IsHigherBetter: false,
+		},
+	}
+	if err := roachtestutil.WritePerfSummaryStats(t, c, stats); err != nil {
+		t.L().Printf("failed to upload performance artifacts: %v", err)
+	}
 }
 
 // LargeSchemaOrmQueries is extracted from the round trip analysis tests for
