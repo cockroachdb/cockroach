@@ -9,6 +9,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -48,6 +50,13 @@ type recordingSinkClient struct {
 	alwaysErr  error         // optional permanent failure
 	holdFlush  chan struct{} // optional gate; Flush blocks on receive
 	flushDelay time.Duration // optional artificial latency per Flush
+	// collectLatencies, when true, makes Flush parse the
+	// 16-hex-char emit-time prefix that emitKVTimed embeds in
+	// values and append per-event latencies (computed AFTER
+	// flushDelay has elapsed, so it reflects EmitRow-to-delivery
+	// time as observed by the sink layer).
+	collectLatencies bool
+	latencies        []time.Duration
 }
 
 func (r *recordingSinkClient) MakeBatchBuffer(string) BatchBuffer {
@@ -70,11 +79,35 @@ func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
 	}
 	r.mu.Lock()
 	delay := r.flushDelay
+	collect := r.collectLatencies
 	r.mu.Unlock()
 	if delay > 0 {
 		time.Sleep(delay)
 	}
+	if collect {
+		r.recordLatencies(p.([]byte))
+	}
 	return nil
+}
+
+// recordLatencies parses each "k=<16-hex-nanos><suffix>\n" line in
+// payload, extracts the emit-time, and appends time.Since(emitTime)
+// to r.latencies. Lines that don't match the format are skipped.
+func (r *recordingSinkClient) recordLatencies(payload []byte) {
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, line := range bytes.Split(payload, []byte{'\n'}) {
+		eq := bytes.IndexByte(line, '=')
+		if eq < 0 || len(line) < eq+1+16 {
+			continue
+		}
+		nanos, err := strconv.ParseUint(string(line[eq+1:eq+1+16]), 16, 64)
+		if err != nil {
+			continue
+		}
+		r.latencies = append(r.latencies, now.Sub(time.Unix(0, int64(nanos))))
+	}
 }
 
 // recordFlush is the locked half of Flush: records the attempt /
@@ -202,6 +235,30 @@ func emitKV(t *testing.T, sink Sink, topic, key, value string) {
 	require.NoError(t, sink.EmitRow(context.Background(), stubTopic{name: topic},
 		[]byte(key), []byte(value), nil, hlc.Timestamp{}, hlc.Timestamp{},
 		kvevent.Alloc{}, nil))
+}
+
+// emitKVTimed emits with a 16-hex-char nanosecond emit-time prefix
+// in the value, so recordingSinkClient (with collectLatencies=true)
+// can compute end-to-end delivery latency at Flush time. Use only
+// in workloads that don't assert on raw value bytes.
+func emitKVTimed(t *testing.T, sink Sink, topic, key, suffix string) {
+	t.Helper()
+	value := []byte(fmt.Sprintf("%016x%s", time.Now().UnixNano(), suffix))
+	require.NoError(t, sink.EmitRow(context.Background(), stubTopic{name: topic},
+		[]byte(key), value, nil, hlc.Timestamp{}, hlc.Timestamp{},
+		kvevent.Alloc{}, nil))
+}
+
+// percentile returns the p-th percentile (0.0-1.0) of latencies.
+// Returns 0 if latencies is empty.
+func percentile(latencies []time.Duration, p float64) time.Duration {
+	if len(latencies) == 0 {
+		return 0
+	}
+	sorted := append([]time.Duration(nil), latencies...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	idx := int(float64(len(sorted)-1) * p)
+	return sorted[idx]
 }
 
 // stubTopic is a minimal TopicDescriptor whose GetTableName returns
@@ -556,16 +613,20 @@ func TestNoLingerSinkBatchingEmerges(t *testing.T) {
 	type sinkBuilder func(*testing.T, *recordingSinkClient) Sink
 	runWorkload := func(t *testing.T, build sinkBuilder, label string,
 		emitGap, flushLatency time.Duration, totalEvents int) {
-		rec := &recordingSinkClient{flushDelay: flushLatency}
+		rec := &recordingSinkClient{
+			flushDelay:       flushLatency,
+			collectLatencies: true,
+		}
 		sink := build(t, rec)
 
 		start := time.Now()
 		for i := 0; i < totalEvents; i++ {
-			emitKV(t, sink, "foo", fmt.Sprintf("k%d", i), "v")
+			emitKVTimed(t, sink, "foo", fmt.Sprintf("k%d", i), "v")
 			if emitGap > 0 {
 				time.Sleep(emitGap)
 			}
 		}
+		// todo: flight recording, exec trace
 		emitElapsed := time.Since(start)
 		require.NoError(t, sink.Flush(context.Background()))
 		totalElapsed := time.Since(start)
@@ -580,8 +641,12 @@ func TestNoLingerSinkBatchingEmerges(t *testing.T) {
 		}
 		avgBatch := float64(events) / float64(batches)
 		throughput := float64(events) / totalElapsed.Seconds()
-		t.Logf("%-40s emit=%v drain=%v events=%d batches=%d avg_batch=%.1f throughput=%.0f ev/s",
-			label, emitElapsed, totalElapsed, events, batches, avgBatch, throughput)
+		p50 := percentile(rec.latencies, 0.50)
+		p99 := percentile(rec.latencies, 0.99)
+		t.Logf("%-40s emit=%v drain=%v events=%d batches=%d avg_batch=%.1f "+
+			"throughput=%.0f ev/s p50=%v p99=%v",
+			label, emitElapsed, totalElapsed, events, batches, avgBatch,
+			throughput, p50, p99)
 	}
 
 	noLinger := func(t *testing.T, rec *recordingSinkClient) Sink {
