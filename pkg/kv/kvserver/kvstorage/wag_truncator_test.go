@@ -275,6 +275,45 @@ func TestTruncateAppliedOnly(t *testing.T) {
 	}
 }
 
+// TestFirstRaftLogIndex exercises the search for the smallest raft log index
+// in [RaftLogPrefix, hi).
+func TestFirstRaftLogIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const rangeID = roachpb.RangeID(1)
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+
+	tests := []struct {
+		entries []kvpb.RaftIndex
+		hi      kvpb.RaftIndex
+		wantIdx kvpb.RaftIndex
+		wantOK  bool
+	}{
+		{entries: nil, hi: 100, wantOK: false},
+		{entries: []kvpb.RaftIndex{}, hi: 0, wantOK: false},
+		{entries: []kvpb.RaftIndex{}, hi: 100, wantOK: false},
+		{entries: []kvpb.RaftIndex{15}, hi: 0, wantOK: false},
+		{entries: []kvpb.RaftIndex{15}, hi: 15, wantOK: false},
+		{entries: []kvpb.RaftIndex{15}, hi: 16, wantIdx: 15, wantOK: true},
+		{entries: []kvpb.RaftIndex{15, 16}, hi: 16, wantIdx: 15, wantOK: true},
+		{entries: []kvpb.RaftIndex{15, 16}, hi: 100, wantIdx: 15, wantOK: true},
+	}
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			for _, idx := range tc.entries {
+				e.writeRaftLogEntry(t, rangeID, idx)
+			}
+			idx, ok, err := firstRaftLogIndex(ctx, e.LogEngine(), prefixBuf, tc.hi)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantOK, ok)
+			require.Equal(t, tc.wantIdx, idx)
+		})
+	}
+}
+
 // TestTruncateAndClearRaftState verifies that WAG truncation only clears raft
 // log entries and sideloaded files up to the destroyed/subsumed replica's last
 // index. Entries and files beyond that index may belong to a newer replica and
@@ -719,8 +758,6 @@ func BenchmarkWAGTruncation(b *testing.B) {
 			b.StopTimer()
 			st := cluster.MakeTestingClusterSettings()
 			wagTruncatorBatchSize.Override(ctx, &st.SV, batchSize)
-			// Disable WAG retention to allow full WAG truncation.
-			wagSuffixRetentionCount.Override(ctx, &st.SV, 0)
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			engines := MakeEngines(eng)

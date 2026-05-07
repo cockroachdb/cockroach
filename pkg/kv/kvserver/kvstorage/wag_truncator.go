@@ -271,25 +271,29 @@ func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
 	}
 }
 
-// clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
-// a destroyed or subsumed replica, and it also deletes the sideloaded files associated with the
-// deleted entries.
+// clearReplicaRaftLogAndSideloaded clears raft log entries at or below the
+// given index for a destroyed or subsumed replica, and it also deletes the
+// sideloaded files associated with the deleted entries.
 func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
 ) error {
-	if logstore.UseRaftLogSingleDelete(t.eng.Separated()) {
-		if err := clearRaftLogWithSingleDelete(
-			ctx, raft.RO, raft.WO, rangeID, lastIndex,
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	// We want to delete all raft log entries < hi. Since Raft log doesn't have
+	// holes, we can get the first index, calculate the log size, and call
+	// ClearRangeSizeKnown(). If no entries exist in [RaftLogPrefix, hi) (e.g.,
+	// this replica never received entries) this operation is a no-op.
+	hi := lastIndex + 1
+	lo, ok, err := firstRaftLogIndex(ctx, raft.RO, prefixBuf, hi)
+	if err != nil {
+		return errors.Wrapf(err, "finding first raft log index for r%d", rangeID)
+	}
+	if ok {
+		if err := logstore.ClearRangeSizeKnown(
+			raft.WO, prefixBuf, lo, hi, ClearRangeThresholdPointKeys(),
+			logstore.UseRaftLogSingleDelete(t.eng.Separated()),
 		); err != nil {
 			return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
 		}
-	} else if err := storage.ClearRangeWithHeuristic(
-		ctx, raft.RO, raft.WO,
-		keys.RaftLogPrefix(rangeID),           /* start */
-		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
-		ClearRangeThresholdPointKeys(),
-	); err != nil {
-		return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
 	}
 
 	// In general, we shouldn't delete sideloaded files before committing the
@@ -312,39 +316,38 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	return ss.Sync()
 }
 
-// clearRaftLogWithSingleDelete clears raft log entries using SingleDelete for
-// each point key. Unlike the regular truncation path, this always uses point
-// deletions and never falls back to a range tombstone for simplicity.
-// TODO(ibrahim): Let this function use the same pointDelThreshold heuristic
-// when clearning the raft log.
-func clearRaftLogWithSingleDelete(
-	ctx context.Context,
-	r storage.Reader,
-	w storage.Writer,
-	rangeID roachpb.RangeID,
-	lastIndex kvpb.RaftIndex,
-) error {
-	start := keys.RaftLogPrefix(rangeID)
-	end := keys.RaftLogKey(rangeID, lastIndex+1)
+// firstRaftLogIndex returns the smallest raft log index in [RaftLogPrefix, hi)
+// that exists.
+// Returns a boolean indicating whether the raft log index was found or not. If
+// yes, it returns the index.
+func firstRaftLogIndex(
+	ctx context.Context, r storage.Reader, prefixBuf keys.RangeIDPrefixBuf, hi kvpb.RaftIndex,
+) (kvpb.RaftIndex, bool, error) {
+	start := prefixBuf.RaftLogPrefix().Clone()
+	end := prefixBuf.RaftLogKey(hi).Clone()
 	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: start,
 		UpperBound: end,
 	})
 	if err != nil {
-		return err
+		return 0, false, err
 	}
 	defer iter.Close()
-
 	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
-	for ; ok; ok, err = iter.NextEngineKey() {
-		key, kerr := iter.UnsafeEngineKey()
-		if kerr != nil {
-			return kerr
-		}
-		if err := w.SingleClearEngineKey(key); err != nil {
-			return err
-		}
+	if err != nil {
+		return 0, false, err
 	}
-	return err
+	if !ok {
+		return 0, false, nil // no raft entry was found in the [0, hi) span.
+	}
+	key, err := iter.UnsafeEngineKey()
+	if err != nil {
+		return 0, false, err
+	}
+	lo, err := keys.DecodeRaftLogKeyFromSuffix(key.Key[len(start):])
+	if err != nil {
+		return 0, false, err
+	}
+	return lo, true, nil
 }
