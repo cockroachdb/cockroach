@@ -442,6 +442,7 @@ func (b *Builder) buildRoutine(
 	var bodyStmts []string
 	var bodyTags []string
 	var bodyASTs []tree.Statement
+	var bodyBuilder memo.RoutineBodyBuilder
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -455,10 +456,80 @@ func (b *Builder) buildRoutine(
 		for i := range stmts {
 			stmtASTs[i] = stmts[i].AST
 		}
-		body, bodyProps, bodyTags = b.buildSQLRoutineBodyStmts(
-			stmtASTs, bodyScope, f.ResolvedType(), f, inScope, isSetReturning,
-			oldInsideDataSource,
-		)
+
+		// Validate column definition list before the eager/deferred branch.
+		// Skip for AnyTuple since that always takes the eager path where
+		// validation runs inside finalizeRoutineReturnType.
+		if oldInsideDataSource && !f.ResolvedType().Identical(types.AnyTuple) {
+			b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), f.ResolvedType(), inScope)
+		}
+
+		// Force eager build when the UDF could be inlined. Inlining requires
+		// len(Body) == 1 and non-volatile, which means the body RelExpr must
+		// be available at plan time. UDFs used in expression indexes and
+		// partial index predicates depend on inlining for correctness.
+		//
+		// TODO(#169459): this is overly conservative — most inlineable UDFs
+		// in regular DML queries don't need eager build. Only force it in
+		// contexts that require plan-time inlining (expression indexes,
+		// partial index predicates, computed columns).
+		couldBeInlined := len(stmts) == 1 && !isSetReturning &&
+			o.Volatility != volatility.Volatile
+
+		// Force eager build when the descriptor's CanMutate status is
+		// unknown (pre-V26_3_FunctionDescCanMutate). Deferred body building
+		// relies on the persisted CanMutate field to propagate mutation
+		// flags without inspecting the body; without it, the executor may
+		// incorrectly use a LeafTxn for mutating routines.
+		canMutateUnknown := o.CanMutate == tree.RoutineCanMutateUnknown
+
+		if f.ResolvedType().Identical(types.AnyTuple) || couldBeInlined || b.insideFuncDef || canMutateUnknown {
+			// Eager path: build body RelExprs now.
+			body, bodyProps, bodyTags = b.buildSQLRoutineBodyStmts(
+				stmtASTs, bodyScope, f.ResolvedType(), f, inScope, isSetReturning,
+				oldInsideDataSource,
+			)
+		} else {
+			// Deferred path: store ASTs and tags only; body and bodyProps stay nil.
+			bodyTags = make([]string, len(stmtASTs))
+			for i, ast := range stmtASTs {
+				bodyTags[i] = ast.StatementTag()
+			}
+
+			// Capture resolved parameter types and names for the deferred builder.
+			var resolvedParamTypes []*types.T
+			var resolvedParamNames []tree.Name
+			if paramTypes, ok := o.Types.(tree.ParamTypes); ok {
+				resolvedParamTypes = make([]*types.T, len(paramTypes))
+				resolvedParamNames = make([]tree.Name, len(paramTypes))
+				for i := range paramTypes {
+					resolvedParamTypes[i] = maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
+					if resolvedParamTypes[i].Identical(types.AnyTuple) {
+						// RECORD-typed parameter: use the actual argument type.
+						resolvedParamTypes[i] = argTypes[i]
+					}
+					resolvedParamNames[i] = tree.Name(paramTypes[i].Name)
+				}
+			}
+
+			// Capture the effective privilege user for SECURITY DEFINER.
+			var privUser string
+			if !b.dataSourcePrivilegeUserOverride.Undefined() {
+				privUser = b.dataSourcePrivilegeUserOverride.Normalized()
+			}
+
+			bodyBuilder = &sqlRoutineBodyBuilder{
+				stmtASTs:         stmtASTs,
+				paramTypes:       resolvedParamTypes,
+				paramNames:       resolvedParamNames,
+				rTyp:             f.ResolvedType(),
+				isSetReturning:   isSetReturning,
+				insideDataSource: oldInsideDataSource,
+				privilegeUser:    privUser,
+				routineType:      o.Type,
+				stmtTreeInitFn:   b.stmtTree.GetInitFnForDeferredRoutine(),
+			}
+		}
 
 		// Collect the original (pre-VOID-append) ASTs for the UDFDefinition.
 		bodyASTs = stmtASTs
@@ -518,7 +589,11 @@ func (b *Builder) buildRoutine(
 
 	// Derive canMutate from the descriptor (via the Overload). When the
 	// descriptor's CanMutate is unknown (for descriptors predating the
-	// field), fall back to inspecting the eagerly-built body expressions.
+	// V26_3_FunctionDescCanMutate version gate), fall back to inspecting
+	// the eagerly-built body expressions. The fallback is safe because
+	// unknown-status descriptors always have eagerly-built body
+	// expressions available for inspection (we force eager building above
+	// when canMutateUnknown is true).
 	canMutate := o.CanMutate
 	if canMutate == tree.RoutineCanMutateUnknown {
 		for _, s := range body {
@@ -553,6 +628,7 @@ func (b *Builder) buildRoutine(
 				Params:             params,
 				ResultBufferID:     resultBufferID,
 				CanMutate:          canMutate,
+				BodyBuilder:        bodyBuilder,
 			},
 		},
 	)
