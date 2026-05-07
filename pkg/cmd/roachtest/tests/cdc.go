@@ -2772,6 +2772,16 @@ CONFIGURE ZONE USING
 				t.Fatal(err)
 			}
 
+			// PROTOTYPE: exercise the no-linger batching sink. Single-table
+			// + single-row updates fits within the prototype's single-topic
+			// guard, and kafka_sink_config below sets non-trivial batching
+			// thresholds so this run actually exercises real batches.
+			// Revert once we've validated the prototype.
+			_, err = ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.no_linger_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
 			if err != nil {
 				t.Fatal("failed to create table")
@@ -2798,7 +2808,7 @@ CONFIGURE ZONE USING
 				},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				steadyLatency: 5 * time.Minute,
+				steadyLatency: 2 * time.Minute,
 			})
 
 			conn1, err := ct.DB().Conn(ctx)
@@ -2816,7 +2826,10 @@ CONFIGURE ZONE USING
 				_ = conn2.Close()
 			}()
 
-			const testDuration = 30 * time.Minute
+			// PROTOTYPE: shortened from 30m to 5m for faster iteration
+			// while validating the no-linger batching sink. Revert with
+			// the SET CLUSTER SETTING change above.
+			const testDuration = 5 * time.Minute
 			// Repeatedly update a single row in a table in order to create a large
 			// number of events with the same key that will span multiple batches.
 			for start, i := timeutil.Now(), 0; i < 1000000 && timeutil.Since(start) < testDuration; i++ {
