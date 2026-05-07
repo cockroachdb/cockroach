@@ -4,6 +4,7 @@ go_library(
     name = "aws",
     srcs = [
         "aws.go",
+        "capacity_error.go",
         "config.go",
         "keys.go",
         "provider_options.go",
@@ -59,6 +60,7 @@ go_test(
         "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
