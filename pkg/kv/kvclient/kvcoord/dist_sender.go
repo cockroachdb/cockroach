@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -458,10 +457,13 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 // we deliberately randomize the leaseholder in a cached range descriptor after
 // seeing context errors (deadline exceeded, context canceled, etc.) to force
 // us to contact a healthy replica. A zero value disables this behavior.
-var randomizeLeaseholderOnContextErrorDuration = envutil.EnvOrDefaultDuration(
-	"COCKROACH_RANDOMIZE_LEASEHOLDER_ON_CONTEXT_ERROR_DURATION", 2*time.Second)
-
-const minRandomizeLeaseholderOnContextErrorDuration = 500 * time.Millisecond
+var randomizeLeaseholderOnContextErrorDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.randomize_leaseholder_on_context_error.duration",
+	"when non-zero, configures how long we wait before trying to contact a random replica when context errors occur",
+	2*time.Second,
+	settings.DurationWithMinimumOrZeroDisable(500*time.Millisecond),
+)
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
@@ -793,14 +795,14 @@ type DistSender struct {
 
 	routeToLeaseholderFirst bool
 
-	// randomizeLeaseholderOnCtxErrDuration, if set to a non-zero value,
-	// controls the time after which we randomize the leaseholder stored in the
+	// randomizeLeaseholderOnCtxErrorNanos, if set to a non-zero value, controls
+	// the time after which we randomize the leaseholder stored in the
 	// DistSender's RangeCache for a range in response to a context error. Doing
 	// so ensures the next request to the range tries a different replica, to
 	// prevent cases where a (what turns out to be) a bad leaseholder cache
 	// entry is never evicted, even when the lease has moved to a different
 	// node.
-	randomizeLeaseholderOnCtxErrDuration time.Duration
+	randomizeLeaseholderOnCtxErrorNanos atomic.Int64
 
 	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for
@@ -998,16 +1000,13 @@ func NewDistSender(ctx context.Context, cfg DistSenderConfig) *DistSender {
 		}
 	}
 
-	// Clamp the randomizedLeaseholderOnCtxErrDuration, if enabled, to a floor
-	// value of minRandomizeLeaseholderOnContextErrorDuration.
-	dur := randomizeLeaseholderOnContextErrorDuration
-	if dur > 0 && dur < minRandomizeLeaseholderOnContextErrorDuration {
-		log.Dev.Warningf(ctx,
-			"randomizeLeaseholderOnContextErrorDuration is %s, clamping to %s",
-			dur, minRandomizeLeaseholderOnContextErrorDuration)
-		dur = minRandomizeLeaseholderOnContextErrorDuration
-	}
-	ds.randomizeLeaseholderOnCtxErrDuration = dur
+	nanos := randomizeLeaseholderOnContextErrorDuration.Get(&ds.st.SV).Nanoseconds()
+	ds.randomizeLeaseholderOnCtxErrorNanos.Store(nanos)
+	randomizeLeaseholderOnContextErrorDuration.SetOnChange(&ds.st.SV, func(ctx context.Context) {
+		nanos := randomizeLeaseholderOnContextErrorDuration.Get(&ds.st.SV).Nanoseconds()
+		ds.randomizeLeaseholderOnCtxErrorNanos.Store(nanos)
+	})
+
 	return ds
 }
 
@@ -2455,9 +2454,7 @@ func (ds *DistSender) sendPartialBatch(
 	//
 	// See the documentation for the function
 	// (*EvictionToken).RandomizeLeaseholder() for an explanation.
-	if ctx.Err() != nil && routingTok.Valid() && ds.randomizeLeaseholderOnCtxErrEnabled() &&
-		routingTok.SinceLeaseholderContacted() >= ds.randomizeLeaseholderOnCtxErrDuration {
-
+	if ctx.Err() != nil && routingTok.Valid() && ds.shouldRandomizeLeaseHolder(routingTok.SinceLeaseholderContacted()) {
 		ds.metrics.LeaseholderRandomizedOnContextErrorCount.Inc(1)
 		log.VEventf(ctx, 1,
 			"cached descriptor %s that last contacted leaseholder %s ago saw context error, randomizing the leaseholder",
@@ -3383,11 +3380,12 @@ func (ds *DistSender) AllRangeSpans(
 	return ranges, replicas.Len(), nil
 }
 
-// randomizeLeaseholderOnCtxErrEnabled returns whether the DistSender is
-// configured to randomize the leaseholder for the next retry upon receiving a
-// context cancelled error.
-func (ds *DistSender) randomizeLeaseholderOnCtxErrEnabled() bool {
-	return ds.randomizeLeaseholderOnCtxErrDuration > 0 && !ds.dontRandomizeLeaseholderOnCtxError
+// shouldRandomizeLeaseHolder returns whether the DistSender should randomize
+// the leaseholder for the range under consideration, given its configuration
+// and when the last successful request evaluation occurred.
+func (ds *DistSender) shouldRandomizeLeaseHolder(lastContacted time.Duration) bool {
+	duration := time.Duration(ds.randomizeLeaseholderOnCtxErrorNanos.Load())
+	return !ds.dontRandomizeLeaseholderOnCtxError && duration > 0 && lastContacted >= duration
 }
 
 // skipStaleReplicas advances the transport until it's positioned on a replica
