@@ -7,6 +7,7 @@ package logstore
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,6 +43,10 @@ type syncWaiterCallback interface {
 type SyncWaiterLoop struct {
 	q       chan syncBatch
 	stopped chan struct{}
+	// inFlightEnqueues counts enqueue calls that have observed w.stopped open
+	// and may still send on w.q. waitLoop's quiesce path waits on this before
+	// draining so that no late send can land on w.q after the drain returns.
+	inFlightEnqueues sync.WaitGroup
 
 	logEveryEnqueueBlocked log.EveryN
 }
@@ -82,8 +87,22 @@ func (w *SyncWaiterLoop) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // waitLoop pulls off the SyncWaiterLoop's queue. For each syncWaiter, it waits
 // for the sync to complete and then calls the associated callback.
+//
+// On stopper quiesce, the loop drains any remaining queued syncWaiters and
+// closes them before returning. The drain is race-free against in-flight
+// enqueue calls: w.stopped is closed first so no new enqueue can begin, then
+// inFlightEnqueues is waited on so any enqueue already past its w.stopped
+// check has a chance to either land its item on w.q or bail out, and only
+// then is w.q drained. The drain skips SyncWait and the callback — raft is
+// also shutting down and has no consumer for the durability notification,
+// and Pebble's own Close path drains in-progress WAL syncs. We still need to
+// call Close so that any resources held by the syncWaiter (e.g. cached
+// pebble iterators on in-flight batches) are released before engine close
+// runs and trips Pebble's leaked-iterator check.
 func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
-	defer close(w.stopped)
+	var closeOnce sync.Once
+	closeStopped := func() { closeOnce.Do(func() { close(w.stopped) }) }
+	defer closeStopped()
 	for {
 		select {
 		case w := <-w.q:
@@ -93,7 +112,16 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 			w.cb.run()
 			w.wg.Close()
 		case <-stopper.ShouldQuiesce():
-			return
+			closeStopped()
+			w.inFlightEnqueues.Wait()
+			for {
+				select {
+				case w := <-w.q:
+					w.wg.Close()
+				default:
+					return
+				}
+			}
 		}
 	}
 }
@@ -110,6 +138,18 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 // If the SyncWaiterLoop has already been stopped, the callback will never be
 // called.
 func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb syncWaiterCallback) {
+	// Reserve a slot in inFlightEnqueues before checking w.stopped. waitLoop
+	// closes w.stopped and then waits on inFlightEnqueues to drain, so this
+	// ordering ensures: either (a) w.stopped is observed open here and we
+	// proceed to send (waitLoop's Wait will block until we finish), or (b)
+	// w.stopped is observed closed and we bail without touching w.q.
+	w.inFlightEnqueues.Add(1)
+	defer w.inFlightEnqueues.Done()
+	select {
+	case <-w.stopped:
+		return
+	default:
+	}
 	b := syncBatch{wg, cb}
 	select {
 	case w.q <- b:

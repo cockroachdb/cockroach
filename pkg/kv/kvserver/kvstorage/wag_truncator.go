@@ -277,11 +277,17 @@ func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
 func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
 ) error {
-	if err := storage.ClearRangeWithHeuristic(
-		ctx, raft.RO, raft.WO,
-		keys.RaftLogPrefix(rangeID),           /* start */
-		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
-		ClearRangeThresholdPointKeys(),
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	if logstore.UseRaftLogSingleDelete(t.eng.Separated()) {
+		if err := logstore.ClearRangeWithSingleDeletes(
+			ctx, raft.RO, raft.WO, prefixBuf,
+			0 /* lo */, lastIndex+1, /* hi */
+		); err != nil {
+			return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
+		}
+	} else if err := logstore.ClearRange(
+		ctx, raft.RO, raft.WO, prefixBuf,
+		0 /* lo */, lastIndex+1 /* hi */, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
 	}
