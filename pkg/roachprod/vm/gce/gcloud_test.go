@@ -66,6 +66,47 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 	}
 }
 
+func TestParseGCECapacityError(t *testing.T) {
+	const details = `ERROR: (gcloud.compute.instances.create) Could not fetch resource:
+---
+code: ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS
+errorDetails:
+- localizedMessage:
+    locale: en-US
+    message: A t2a-standard-8 VM instance is currently unavailable in the us-central1-a
+      zone. Consider trying your request in the us-central1-f zone(s), which currently
+      has capacity to accommodate your request.
+- errorInfo:
+    domain: compute.googleapis.com
+    metadatas:
+      vmType: t2a-standard-8
+      zone: us-central1-a
+      zonesAvailable: us-central1-f
+    reason: resource_availability
+message: The zone 'projects/cockroach-ephemeral/zones/us-central1-a' does not have
+  enough resources available to fulfill the request.`
+
+	capacityErr := parseGCECapacityError(details)
+	assert.NotNil(t, capacityErr)
+	assert.Equal(t, vm.CreateCapacityClassZone, capacityErr.CapacityClass)
+	assert.Equal(t, ProviderName, capacityErr.Provider)
+	assert.Equal(t, "t2a-standard-8", capacityErr.MachineType)
+	assert.Equal(t, []string{"us-central1-a"}, capacityErr.FailedZones)
+	assert.Equal(t, []string{"us-central1-f"}, capacityErr.SuggestedZones)
+}
+
+func TestAnnotateGCECapacityErrorAddsZone(t *testing.T) {
+	const details = `ERROR: (gcloud.compute.instance-groups.managed.wait-until) The zone does not have enough resources available to fulfill the request.`
+
+	err := maybeGCECapacityError(errors.New("wait-until failed"), []byte(details))
+	err = annotateGCECapacityError(err, "us-central1-a")
+
+	var capacityErr *vm.CreateCapacityError
+	assert.True(t, errors.As(err, &capacityErr))
+	assert.Equal(t, vm.CreateCapacityClassZone, capacityErr.CapacityClass)
+	assert.Equal(t, []string{"us-central1-a"}, capacityErr.FailedZones)
+}
+
 func Test_buildFilterPreemptionCliArgs(t *testing.T) {
 	type args struct {
 		vms         vm.List
