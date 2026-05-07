@@ -318,21 +318,37 @@ func (s *noLingerSink) checkSingleTopic(topic TopicDescriptor) error {
 		s.topicGuard.seen, name)
 }
 
-// Flush implements the Sink interface. M2 demo: no-op. Resolved
-// timestamps still propagate through the SinkClient.
+// Flush implements the Sink interface. Returns the latched terminal
+// error if any worker has hit one, otherwise blocks until every
+// event accepted by addRow before this call has been pulled by a
+// worker AND released via completeBatch. The drain wait happens
+// even on a healthy sink, so the changefeed processor can call
+// Flush at checkpoint boundaries (and EmitResolvedTimestamp can
+// call Flush before emitting the resolved payload) and rely on
+// "every prior EmitRow has been delivered" semantics.
 func (s *noLingerSink) Flush(_ context.Context) error {
-	return nil
+	if err := s.termErr(); err != nil {
+		return err
+	}
+	s.buffer.drain()
+	// A terminal error may have latched while we were draining --
+	// recheck so callers see it instead of a misleading nil.
+	return s.termErr()
 }
 
-// EmitResolvedTimestamp implements the Sink interface. Bypasses the
-// pendingBuffer and writes the resolved payload directly through the
-// SinkClient (matches batchingSink behavior modulo the Flush call,
-// which is a no-op here).
+// EmitResolvedTimestamp implements the Sink interface. First drains
+// pending row events via Flush, then writes the resolved payload
+// through the SinkClient. The Flush ensures every row event with
+// mvcc <= resolved has reached the sink before the resolved
+// message does.
 func (s *noLingerSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	data, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
+		return err
+	}
+	if err := s.Flush(ctx); err != nil {
 		return err
 	}
 	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each, s.retryOpts)

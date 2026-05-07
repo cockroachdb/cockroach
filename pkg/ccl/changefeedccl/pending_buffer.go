@@ -224,6 +224,23 @@ func (b *pendingBuffer) releaseInflight(keys [][]byte) {
 	b.mu.cond.Broadcast()
 }
 
+// drain blocks until both the FIFO and the inflight set are empty.
+// Used by Sink.Flush to wait for all events accepted by addRow to
+// have been pulled by a worker AND released via completeBatch. New
+// events arriving via addRow during the wait extend it -- the
+// changefeed processor serializes EmitRow vs Flush, so concurrent
+// addRow during drain is not expected from the production caller.
+//
+// drain returns when the buffer is empty even if it has been
+// closed; callers don't need to special-case closed.
+func (b *pendingBuffer) drain() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for len(b.mu.events) > 0 || len(b.mu.inflight) > 0 {
+		b.mu.cond.Wait()
+	}
+}
+
 // close marks the buffer closed and wakes all waiters. Subsequent
 // addRow calls return errPendingBufferClosed immediately. Pending
 // events still drain through getBatch until the FIFO is empty, after

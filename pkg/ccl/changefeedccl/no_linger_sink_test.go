@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -33,13 +34,17 @@ import (
 // non-empty, is consumed one entry per Flush call: a non-nil entry
 // makes that Flush fail without recording the payload. alwaysErr,
 // if non-nil, takes precedence over errs and makes every Flush fail
-// with the same error.
+// with the same error. holdFlush, if non-nil, blocks Flush after
+// recording state until the channel is closed -- used to pin a
+// worker inside Flush for tests that need to assert behavior while
+// a flush is in progress.
 type recordingSinkClient struct {
 	mu        syncutil.Mutex
-	flushed   [][]byte // successful payloads, in arrival order
-	attempts  int      // total Flush call count, regardless of outcome
-	errs      []error  // optional sequence of errors to return
-	alwaysErr error    // optional permanent failure
+	flushed   [][]byte      // successful payloads, in arrival order
+	attempts  int           // total Flush call count, regardless of outcome
+	errs      []error       // optional sequence of errors to return
+	alwaysErr error         // optional permanent failure
+	holdFlush chan struct{} // optional gate; Flush blocks on receive
 }
 
 func (r *recordingSinkClient) MakeBatchBuffer(string) BatchBuffer {
@@ -53,21 +58,35 @@ func (r *recordingSinkClient) FlushResolvedPayload(
 }
 
 func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
+	err, hold := r.recordFlush(p)
+	if err != nil {
+		return err
+	}
+	if hold != nil {
+		<-hold
+	}
+	return nil
+}
+
+// recordFlush is the locked half of Flush: records the attempt /
+// payload / error, returns the holdFlush channel (if any) for the
+// caller to block on outside the lock.
+func (r *recordingSinkClient) recordFlush(p SinkPayload) (error, chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.attempts++
 	if r.alwaysErr != nil {
-		return r.alwaysErr
+		return r.alwaysErr, nil
 	}
 	if len(r.errs) > 0 {
 		err := r.errs[0]
 		r.errs = r.errs[1:]
 		if err != nil {
-			return err
+			return err, nil
 		}
 	}
 	r.flushed = append(r.flushed, append([]byte(nil), p.([]byte)...))
-	return nil
+	return nil, r.holdFlush
 }
 
 func (r *recordingSinkClient) Close() error                          { return nil }
@@ -104,6 +123,25 @@ func makeRecordingSink(t *testing.T, rec *recordingSinkClient, retryOpts ...retr
 		func() *admission.Pacer { return nil },
 		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
 	)
+}
+
+// stubEncoder satisfies the Encoder interface with no-op stubs;
+// only EncodeResolvedTimestamp is meaningfully exercised by the
+// noLingerSink tests.
+type stubEncoder struct{}
+
+func (stubEncoder) EncodeKey(context.Context, cdcevent.Row) ([]byte, error) {
+	return nil, nil
+}
+func (stubEncoder) EncodeValue(
+	context.Context, eventContext, cdcevent.Row, cdcevent.Row,
+) ([]byte, error) {
+	return nil, nil
+}
+func (stubEncoder) EncodeResolvedTimestamp(
+	_ context.Context, _ string, _ hlc.Timestamp,
+) ([]byte, error) {
+	return []byte("resolved"), nil
 }
 
 // emitKV is shorthand for sink.EmitRow with a stubTopic.
@@ -256,6 +294,63 @@ func TestNoLingerSinkBasicHappyPath(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
 
+// TestNoLingerSinkResolvedWaitsForDrain pins the resolved-timestamp
+// contract deterministically: EmitResolvedTimestamp must not return
+// while any row event added before it is still in flight, otherwise
+// the sink could ship the resolved before the rows it covers.
+//
+// The setup pins a worker inside client.Flush via holdFlush, then
+// invokes EmitResolvedTimestamp in a goroutine. While the worker is
+// blocked, EmitResolvedTimestamp must also be blocked. After we
+// release the worker, EmitResolvedTimestamp must complete.
+//
+// EXPECTED TO FAIL until M3 commit 4 (real Flush drain in
+// EmitResolvedTimestamp) lands -- today EmitResolvedTimestamp goes
+// straight to client.FlushResolvedPayload regardless of pending
+// row work.
+func TestNoLingerSinkResolvedWaitsForDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	rec := &recordingSinkClient{holdFlush: make(chan struct{})}
+	sink := makeRecordingSink(t, rec)
+
+	emitKV(t, sink, "foo", "k1", "v1")
+
+	// Wait for the worker to be stuck inside client.Flush.
+	require.Eventually(t, func() bool {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		return rec.attempts >= 1
+	}, time.Second, 5*time.Millisecond, "worker never entered Flush")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sink.EmitResolvedTimestamp(ctx, stubEncoder{}, hlc.Timestamp{WallTime: 1})
+	}()
+
+	// EmitResolvedTimestamp must NOT return while the worker is still
+	// flushing the row.
+	select {
+	case err := <-done:
+		t.Fatalf("EmitResolvedTimestamp returned (err=%v) without draining the buffer", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Releasing the worker unblocks the drain; EmitResolvedTimestamp
+	// should complete promptly afterwards.
+	close(rec.holdFlush)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("EmitResolvedTimestamp did not complete after worker drained")
+	}
+
+	require.NoError(t, sink.Close())
+}
+
 // TestNoLingerSinkCloseDrains pins the contract that all events
 // successfully passed to EmitRow before Close are flushed before Close
 // returns. A regression that re-introduces eager ctx-cancel on Close
@@ -381,4 +476,70 @@ func TestNoLingerSinkPropagatesTerminalFlushError(t *testing.T) {
 				bytes.Contains([]byte(err.Error()), []byte("permanent failure")))
 	}, time.Second, 5*time.Millisecond,
 		"EmitRow never returned the terminal Flush error")
+}
+
+// TestNoLingerSinkFlushDrains pins that a direct Sink.Flush() call
+// (the path the changefeed processor uses at checkpoint boundaries)
+// drains in-flight workers before returning -- not just the
+// EmitResolvedTimestamp wrapper. EXPECTED TO FAIL until M3 commit 4
+// lands.
+func TestNoLingerSinkFlushDrains(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	rec := &recordingSinkClient{holdFlush: make(chan struct{})}
+	sink := makeRecordingSink(t, rec)
+
+	emitKV(t, sink, "foo", "k1", "v1")
+
+	// Wait for the worker to be stuck inside client.Flush.
+	require.Eventually(t, func() bool {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		return rec.attempts >= 1
+	}, time.Second, 5*time.Millisecond, "worker never entered Flush")
+
+	done := make(chan error, 1)
+	go func() { done <- sink.Flush(ctx) }()
+
+	select {
+	case err := <-done:
+		t.Fatalf("Flush returned (err=%v) without draining the buffer", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(rec.holdFlush)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("Flush did not complete after worker drained")
+	}
+
+	require.NoError(t, sink.Close())
+}
+
+// TestNoLingerSinkFlushReturnsTermErr pins that when a worker
+// latches a terminal error, a subsequent Sink.Flush() returns it
+// rather than reporting success. EXPECTED TO FAIL until M3 commit 4
+// lands -- today Flush is a no-op and always returns nil.
+func TestNoLingerSinkFlushReturnsTermErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	rec := &recordingSinkClient{alwaysErr: errors.New("permanent failure")}
+	sink := makeRecordingSink(t, rec) // MaxRetries: 0 -> single attempt
+	defer func() { _ = sink.Close() }()
+
+	emitKV(t, sink, "foo", "k1", "v1")
+
+	// Eventually the worker sets termErr; after that Flush must
+	// surface it.
+	require.Eventually(t, func() bool {
+		err := sink.Flush(ctx)
+		return err != nil && bytes.Contains([]byte(err.Error()), []byte("permanent failure"))
+	}, time.Second, 5*time.Millisecond,
+		"Flush never returned the terminal error")
 }

@@ -109,6 +109,22 @@ Findings from `/review-crdb` on PR #169760 (commits through `8e47ca14e47`,
       it previously missed; run the full webhook suite under stress
       before landing.
 
+## Defensive Flush tests (defer)
+
+Behaviors plausible enough to want pinned eventually, but skipped now
+because the M3 milestone covers the load-bearing contracts already
+(drain on Flush, drain on EmitResolvedTimestamp, termErr surfaced on
+Flush):
+
+- [ ] **Concurrent Flush + EmitRow.** Multiple goroutines calling
+      Flush while EmitRow is in flight should not deadlock. The
+      changefeed processor today serializes EmitRow vs Flush, so
+      this is mostly a defensive guard.
+- [ ] **Flush after Close.** Should return errPendingBufferClosed
+      (or whatever the closed sentinel becomes) cleanly, not hang.
+- [ ] **Multiple sequential Flush calls.** The second call should
+      observe an empty buffer + idle workers and return immediately.
+
 ## Performance / future polish (defer)
 
 - [ ] `log.V(2)` formats `%x` of every key — args evaluate even when
