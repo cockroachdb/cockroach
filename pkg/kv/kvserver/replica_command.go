@@ -591,7 +591,10 @@ func (r *Replica) adminUnsplitWithDescriptor(
 ) (kvpb.AdminUnsplitResponse, error) {
 	var reply kvpb.AdminUnsplitResponse
 	if !bytes.Equal(desc.StartKey.AsRawKey(), args.Header().Key) {
-		return reply, errors.Errorf("key %s is not the start of a range", args.Header().Key)
+		return reply, errors.Mark(
+			errors.Newf("key %s is not the start of a range", args.Header().Key),
+			kvpb.ErrKeyNotStartOfRange,
+		)
 	}
 
 	// If the range's sticky bit is already hlc.Timestamp{}, we treat the unsplit

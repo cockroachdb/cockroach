@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -28,6 +29,24 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
+
+// ErrKeyNotStartOfRange is returned by AdminUnsplit when the target key is not
+// the start key of any range, typically because the range was merged
+// concurrently.
+//
+// NB: don't change the string here; this will cause cross-version issues since
+// this singleton is used as a marker.
+var ErrKeyNotStartOfRange = errors.New("key is not the start of a range")
+
+// IsKeyNotStartOfRange returns true if the error indicates that an AdminUnsplit
+// request targeted a key that is not the start of a range. It falls back to
+// string matching for compatibility with older nodes that produce the untyped
+// error.
+func IsKeyNotStartOfRange(err error) bool {
+	// TODO(msbutler): remove string matching fallback in 27.1.
+	return errors.Is(err, ErrKeyNotStartOfRange) ||
+		strings.Contains(err.Error(), "is not the start of a range")
+}
 
 // Printer is an interface that lets us use what's common between the
 // errors.Printer interface and redact.SafePrinter so we can write functions
