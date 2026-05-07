@@ -7,10 +7,16 @@ subtitle: Hosting witnesses outside the data plane
 
 <script>
   import WitnessAsAServiceDiagram from '$lib/components/diagrams/WitnessAsAServiceDiagram.svelte';
-  import { fileUrl, htmlPreviewUrl, witnessPkg } from '$lib/source/source-link';
+  import { fileUrl, htmlPreviewUrl, sourceUrl, witnessPkg } from '$lib/source/source-link';
   const witnessGoUrl = fileUrl(witnessPkg + '/witness.go');
   const testdataUrl = fileUrl(witnessPkg + '/testdata');
   const scenario3xUrl = htmlPreviewUrl(witnessPkg + '/generated/scenario/commit_using_witness_3x.html');
+  const progressTrackerUrl = sourceUrl('pkg/raft/tracker/progresstracker.go', 31);
+  const tickHeartbeatUrl = sourceUrl('pkg/raft/raft.go', 1209, 1210);
+  const bcastFortifyUrl = sourceUrl('pkg/raft/raft.go', 901, 904);
+  const fortTrackerIsFortifiedByUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 162, 186);
+  const fortTrackerPopulateUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 414, 452);
+  const fortTrackerRequireQuorumUrl = sourceUrl('pkg/raft/tracker/fortificationtracker.go', 391, 399);
 </script>
 
 We have traditionally thought of witnesses as a new type of replica. However,
@@ -37,6 +43,7 @@ consists of only a few dozen bytes of durable state per cluster, and needs to be
 contacted only ~once per range per outage. This access pattern is correlated -
 when an az fails, many clusters and ranges will want to use a witness
 simultaneously - but the server can batch these requests efficiently.
+
 
 ## Logless Witnesses
 
@@ -127,11 +134,186 @@ problem, but note that in the common case of 3x replication, a leader failure
 while the witness is active means there aren't any traditional voters left, so
 the distinction is moot.
 
-## Partial-Log Witnesses
+### Integration into `pkg/raft`
 
-Partial-Log witnesses are an interesting extension. The idea is that we use
-an interface that acks on a per-entry basis, but only for log entries that the
-leader needed help achieving quorum for.
+Witnesses are configured using the regular configuration change mechanisms and
+are assigned PeerIDs just like regular voters, albeit under a new `Witness`
+`ReplicaType` (not yet present in `pkg/raft/raftpb/raft.proto` on master; will
+be added alongside the integration work).
+This type is never used as the type of a RawNode instance, but candidates and
+leaders special case it suitably. Areas that will need change are:
+- `raft` type (on leaders) will need tracking of availability of traditional quorum and track witness engagement statuses.
+- `bcastAppend` and `maybeSendAppend` need to avoid sending to witnesses.
+- <a href={progressTrackerUrl} target="_blank" rel="noopener">Progress tracking</a>
+  potentially needs special-casing for witnesses; need to decide how (if at all)
+  witnesses are exposed to CRDB through progress status, which is consulted in
+  many health checks.
+- Fortification code needs to handle witnesses (see section below).
+
+#### Fortification
+
+Raft leaders fortify their leadership through the StoreLiveness fabric: each
+follower's store promises not to vote for a higher-term leader until a local
+expiration timestamp passes, and the leader takes the quorum-min of these
+expirations as its `LeadSupportUntil` (driven from
+<a href={tickHeartbeatUrl} target="_blank" rel="noopener">tickHeartbeat</a> via
+<a href={bcastFortifyUrl} target="_blank" rel="noopener">bcastFortify</a>).
+Witnesses are not part of the StoreLiveness fabric and cannot respond to
+fortification requests, since participating in StoreLiveness would tightly
+couple them to the cluster and defeat the witness-as-a-service model.
+
+However, an engaged witness already provides a stronger guarantee than
+fortification, just on a different axis. While `Engaged=true`, the witness
+inflates `effectiveHi` to `(engagementTerm, ∞)` in `HandleMsgVote`, so any
+candidate other than the engagement leader must produce a log entry at a
+strictly higher term to win the witness's vote. In normal flow this is
+impossible (peers replicate from the same leader and share its term), so the
+witness will only ever vote for the engagement leader until released. Unlike
+fortification, this promise is unilateral on the witness side, has no time
+bound, and cannot expire — engagement only ends via `Release` from the leader,
+or by a higher-term candidate that has already proven its log up-to-dateness
+(which itself implies the old leader is out).
+
+The implication: while engaged, the leader can model the witness as if it were
+fortified at `hlc.MaxTimestamp`. Plugged into the existing
+`LeadSupportExpiration` math, the `+∞` value falls out of the majority-th-largest
+selection and the result remains a finite timestamp bounded by the real voter
+expirations. For example, in a `2v+w` configuration with both voters healthy,
+the lease is `min(v1, v2)`. With one voter down (`[v1, 0, ∞]` sorted desc), the
+lease becomes `v1`. With both voters silent (`[0, 0, ∞]`), the lease drops to
+zero and the leader steps down. `leaderMaxSupported` is never poisoned with
+`∞`, so `CanDefortify` continues to work.
+
+Concrete touch points in `pkg/raft`:
+
+- <a href={fortTrackerIsFortifiedByUrl} target="_blank" rel="noopener">`tracker.FortificationTracker.IsFortifiedBy`</a>
+  short-circuits for an engaged witness, returning `(true, true)` without
+  consulting StoreLiveness.
+- <a href={fortTrackerPopulateUrl} target="_blank" rel="noopener">`PopulateMajorityConfigSupport`</a>
+  substitutes `hlc.MaxTimestamp` for the witness slot when engaged, and zero
+  (i.e. no contribution) otherwise.
+- Engagement acks feed the tracker through a separate path from
+  `RecordFortification`, since there is no StoreLiveness epoch to record.
+- <a href={fortTrackerRequireQuorumUrl} target="_blank" rel="noopener">`RequireQuorumSupportOnCampaign`</a>
+  and `QuorumSupported` count the witness as a supporter for pre-campaign
+  checks. Without this, a `2v+w` group with one voter down could never
+  campaign, since the witness will never appear as an SL supporter.
+- `maybeSendFortify` / `bcastFortify` route witness traffic through `Engage`
+  instead of `MsgFortifyLeader`, and only when a traditional quorum is
+  unavailable (matching the engagement protocol).
+- `bcastDeFortify` / `sendDeFortify` route witness traffic through `Release`
+  instead of `MsgDeFortifyLeader`.
+
+Engagement state survives leader changes cleanly: a successor at a higher term
+re-engages with a strictly larger `Hi`, which the witness's monotonicity check
+accepts. A leader stepping down voluntarily does not need to release the
+witness for correctness, though doing so improves availability on leader
+failover (per the [main page](../)).
+
+### Integration into CockroachDB
+
+The witness service can be wired up as a standalone process, bundled in the
+`cockroach` binary, which allows some re-use of relevant flags, esp. related
+to certificates.
+
+CockroachDB is modified with configuration that allows communication with the
+chosen witness service. `execChangeReplicasTxn` is extended to support adding
+and removing witnesses; they will be stored in a new repeated field on the
+`roachpb.RangeDescriptor`. The raft message transport is extended such that
+messages directed at a witness are sent to the witness service.
+
+May methods across the code base that reason about quorum and health may need
+to be updated to continue functioning correctly in the presence of witnesses.
+For example, without adjustments, health checks may consider a `2v+w` group
+unavailable when one voter is down.
+
+## Possible Variant: empty-log witnesses
+
+Empty-log witnesses are contacted for each log entry, but they do not see or
+store the payloads.
+
+They address a weakness of the logless design above, which is that the witness'
+voting behavior is curtailed indefinitely (until traditional quorum returns) if
+the leader goes down while the witness is engaged. In 2v+w, this may be
+considered a black swan event - after all, an outage while using the witness
+essentially corresponds to both voters being offline, so there's little
+additional damage by preventing the witness from voting - but in a 5x
+configuration, it is a little less contrived.
+
+A concrete example (pure logless design):
+
+- Initial state: voters v1-v4, witness w, all available, v1 is leader.
+- v3 and v4 go down (traditional quorum lost)
+- v1 commits entry e using v1, v2, and w.
+- nothing happens for a long time.
+- v1 goes down, but v3 comes back (v4 stays down, but it doesn't matter)
+
+In this state, v2 should be electable because it is up to date with the log of
+itself, v2, and the witness. Unfortunately, the witness doesn't know the highest
+entry it acked, so it won't vote, and the raft group will be unavailable until
+a traditional quorum is re-established.
+
+A natural attempt to solve this is to engage the witness for each acked entry
+individually - i.e. batch an Engage and Release into a single round-trip, so
+that the witness is never engaged outside of an atomic section, and always
+has perfect visibility into the tail of its (virtual) log.
+Step 4 ("nothing happens") illustrates the problem with this approach: how does
+v1 maintain its leadership fortification in that state? It is now no longer
+correct to assume that the witness is "fortified with timestamp ∞", as this only
+holds while the witness is engaged, and it de facto isn't ever engaged in this
+model. We could go half-way and prevent the witness from voting for a set
+duration with each successful Engage+Release batch, but this only works while
+there is active traffic to the witness. In other words, this strategy simple
+reconstructs the per-group Raft heartbeats that StoreLiveness worked so hard to
+eliminate.
+
+The actual solution is to integrate the witness into the StoreLiveness fabric,
+and to host an additional (passive) endpoint (backed by a constant amount of
+durable state):
+
+```go
+type StoreLivenessWitnessServer interface {
+  HandleMsgHeartbeat(clusterID ClusterID, from StoreID, epoch Epoch, expiration hlc.Timestamp) (Epoch, hlc.Timestamp, Error)
+}
+```
+
+The CockroachDB StoreLiveness fabric would need to be extended to request
+support from the witness Service as well, which requires a modest amount of
+special casing. Raft, on the other hand, could handle the witness symmetrically
+with its regular voters. The witness server would cast votes for candidates only
+when the current term's leader is no longer supported by the witness-local
+StoreLiveness fabric.
+
+The resulting design would require a round-trip to the witness for each log
+entry (though would not require including the actual payload of the entry), but
+would avoid the aforementioned compromise on the availability story in the
+failure-while-engaged scenario.
+
+## Possible future extension: Partial-Log Witnesses
+
+Partial-Log witnesses are an additional interesting extension. In light of the
+previous section, one might wonder why one would even want witnesses to hold log
+entries. The reason is that this allows them to "catch up" candidates that are
+not up to date with its log, which can further improve availability.
+
+A concrete example:
+
+- initially, 2v+w, all available, v1 is leader.
+- v2 goes down (traditional quorum lost)
+- v1 commits an entry using itself and w.
+- v1 goes down, then v2 comes back.
+- v2 is not up to date with the witness, so it can't be elected.
+
+With a partial-log witness, instead:
+
+- v2 asks w to vote (or pre-vote), and is told to download log entries first.
+- v2 does this, and campaigns again.
+- w grants the vote, and v2 becomes leader (and can commit entries using the witness).
+
+The design is a straightforward extension of what was discussed previously.
+The witness acks on a per-entry basis, but only for log entries that the
+leader needed help achieving quorum for, and it allows the last contiguous
+segment to be retrieved:
 
 ```go
 type PartialLogWitnessServer interface {
@@ -172,4 +354,10 @@ exist in which the witness is the only "traditionally" electable candidate.
 However, since the witness now retains the log as of the last entry that did
 reach a traditional quorum, any candidate that formed part of this last quorum
 can become electable by using the StreamLog call to catch their log up to the
-witness'.
+witness'. In effect, we've reclaimed the benefit of allowing the witness to
+campaign without actually allowing it to campaign (which would be problematic),
+and so the availability of the raft group depends cleanly on the number of voters.
+
+This makes it a lot cleaner to think about more exotic combinations such as
+3v+2w, which would have about the same cost as 3v, but (assuming the voters and
+witnesses are all in distinct regions) would tolerate a double region outage.
