@@ -775,11 +775,19 @@ func (p *Provider) Create(
 }
 
 func DefaultZones(geoDistributed bool) []string {
-	zone := defaultZones[rand.Intn(len(defaultZones))]
+	zones := DefaultRetryZoneCandidates()
+	zone := zones[rand.Intn(len(zones))]
 	if geoDistributed {
 		return append([]string{zone}, defaultGeoExtraZones...)
 	}
 	return []string{zone}
+}
+
+// DefaultRetryZoneCandidates returns the default non-geo AWS zone pool.
+// DefaultZones chooses from this pool for ordinary creates, and roachtest uses
+// it to choose a different zone after provider capacity failures.
+func DefaultRetryZoneCandidates() []string {
+	return append([]string(nil), defaultZones...)
 }
 
 func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) (vm.List, error) {
@@ -1443,13 +1451,13 @@ func (p *Provider) runInstance(
 	}
 
 	if providerOpts.UseSpot {
-		return runSpotInstance(l, p, args, az.Region.Name, providerOpts)
 		//todo(babusrithar): Add fallback to on-demand instances if spot instances are not available.
+		return runSpotInstance(l, p, args, az.Name, az.Region.Name, machineType, providerOpts)
 	}
 	runInstancesOutput := RunInstancesOutput{}
 	err = p.runJSONCommand(l, args, &runInstancesOutput)
 	if err != nil {
-		return nil, err
+		return nil, annotateAWSCapacityError(err, az.Name, machineType)
 	}
 
 	if len(runInstancesOutput.Instances) == 0 {
@@ -1466,7 +1474,13 @@ func (p *Provider) runInstance(
 // It returns an error if the spot request is not fulfilled within 2 minutes.
 // It uses describe-spot-instance-requests command to get the status of the spot request.
 func runSpotInstance(
-	l *logger.Logger, p *Provider, args []string, regionName string, providerOpts *ProviderOpts,
+	l *logger.Logger,
+	p *Provider,
+	args []string,
+	zoneName string,
+	regionName string,
+	machineType string,
+	providerOpts *ProviderOpts,
 ) (*vm.VM, error) {
 	waitForSpotDuration := 2 * time.Minute
 
@@ -1477,7 +1491,7 @@ func runSpotInstance(
 	runInstancesOutput := RunInstancesOutput{}
 	err := p.runJSONCommand(l, spotArgs, &runInstancesOutput)
 	if err != nil {
-		return nil, err
+		return nil, annotateAWSCapacityError(err, zoneName, machineType)
 	}
 	// If the spot request is accepted, the run-instances command will return an instance-id.
 	if len(runInstancesOutput.Instances) == 0 {
@@ -1500,7 +1514,9 @@ func runSpotInstance(
 		if err != nil {
 			return nil, err
 		}
-		spotRequestFulfilled, err := processSpotInstanceRequestStatus(l, describeSpotInstanceRequestsOutput, spotInstanceRequestId, instanceId)
+		spotRequestFulfilled, err := processSpotInstanceRequestStatus(
+			l, describeSpotInstanceRequestsOutput, spotInstanceRequestId, instanceId, zoneName, machineType,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1515,7 +1531,9 @@ func runSpotInstance(
 			if err != nil {
 				return nil, err
 			}
-			return nil, errors.New("waitForSpotDuration over")
+			return nil, newAWSSpotCapacityTimeoutError(
+				zoneName, machineType, spotInstanceRequestId, waitForSpotDuration,
+			)
 		}
 		l.Printf("Sleeping for 10 seconds before checking the status of the spot instance request again")
 		time.Sleep(10 * time.Second)
@@ -1562,15 +1580,24 @@ func processSpotInstanceRequestStatus(
 	describeSpotInstanceRequestsOutput DescribeSpotInstanceRequestsOutput,
 	spotInstanceRequestId string,
 	instanceId string,
+	zoneName string,
+	machineType string,
 ) (fullFilled bool, err error) {
 	if len(describeSpotInstanceRequestsOutput.SpotInstanceRequests) == 0 {
 		return false, errors.Errorf("No Spot Instance Request found for instance-id: %s", instanceId)
 	}
 	requestState := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].State
 	requestStatusCode := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].Status.Code
+	requestStatusMessage := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].Status.Message
 	if requestState == "closed" || requestState == "cancelled" || requestState == "failed" {
-		return false, errors.Errorf("Spot request %s for instance %s not active with state: %s",
-			spotInstanceRequestId, instanceId, requestState)
+		if err := newAWSSpotTerminalCapacityError(
+			zoneName, machineType, spotInstanceRequestId, instanceId,
+			requestState, requestStatusCode, requestStatusMessage,
+		); err != nil {
+			return false, err
+		}
+		return false, errors.Errorf("Spot request %s for instance %s not active with state: %s and status: %s",
+			spotInstanceRequestId, instanceId, requestState, requestStatusCode)
 	}
 	if requestStatusCode == "fulfilled" {
 		l.Printf("Spot request %s for instance %s fulfilled.", spotInstanceRequestId, instanceId)

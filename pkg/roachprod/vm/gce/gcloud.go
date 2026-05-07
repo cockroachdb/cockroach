@@ -159,8 +159,9 @@ func runJSONCommand(args []string, parsed interface{}) error {
 		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
 		// new zones.
 		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
+			err = errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
 				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
+			return maybeGCECapacityError(err, stderr)
 		}
 	}
 
@@ -1054,11 +1055,7 @@ type ProjectsVal struct {
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
 func DefaultZones(arch string, geoDistributed bool) []string {
-	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
-	if vm.ParseArch(arch) == vm.ArchARM64 {
-		// T2A instances are only available in us-central1 in NA.
-		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
-	}
+	zones := DefaultRetryZoneCandidates(arch)
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
 
 	if geoDistributed {
@@ -1076,6 +1073,18 @@ func DefaultZones(arch string, geoDistributed bool) []string {
 	}
 
 	return []string{zones[0]}
+}
+
+// DefaultRetryZoneCandidates returns the default non-geo GCE zone pool.
+// DefaultZones chooses from this pool for ordinary creates, and roachtest uses
+// it to choose a different zone after provider capacity failures.
+func DefaultRetryZoneCandidates(arch string) []string {
+	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+	if vm.ParseArch(arch) == vm.ArchARM64 {
+		// T2A instances are only available in us-central1 in NA.
+		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	}
+	return zones
 }
 
 // Set is part of the pflag.Value interface.
@@ -1790,6 +1799,7 @@ func waitForGroupStability(l *logger.Logger, project, groupName string, zones []
 			cmd := exec.Command("gcloud", groupStableArgs...)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
+				err = annotateGCECapacityError(maybeGCECapacityError(err, output), zone)
 				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupStableArgs, output)
 			}
 			return nil
@@ -1909,6 +1919,7 @@ func (p *Provider) Create(
 					cmd := exec.Command("gcloud", argsWithHost...)
 					output, err := cmd.CombinedOutput()
 					if err != nil {
+						err = maybeGCECapacityError(err, output)
 						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithHost, output)
 					}
 					return nil
@@ -2099,6 +2110,7 @@ func (p *Provider) Grow(
 				cmd := exec.Command("gcloud", argsWithName...)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
+					err = maybeGCECapacityError(err, output)
 					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithName, output)
 				}
 				return nil
