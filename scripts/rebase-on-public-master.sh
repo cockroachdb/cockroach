@@ -46,19 +46,19 @@ echo "Fetching $UPSTREAM_BRANCH from $UPSTREAM_URL..."
 git fetch "$UPSTREAM_URL" "$UPSTREAM_BRANCH"
 
 echo "Rebasing $BRANCH onto upstream $UPSTREAM_BRANCH..."
-if ! git rebase FETCH_HEAD; then
+if ! git rebase --rebase-merges FETCH_HEAD; then
   echo
   echo "Rebase encountered conflicts. Resolve them, then run:"
   echo "  git rebase --continue"
   echo
   echo "Once the rebase is complete, push with:"
-  echo "  git push --force-with-lease origin $BRANCH"
+  echo "  git push --force-with-lease --no-verify origin $BRANCH"
   exit 1
 fi
 
 if [ "$PUSH" = true ]; then
   echo "Pushing $BRANCH to origin..."
-  git push --force-with-lease origin "$BRANCH"
+  git push --force-with-lease --no-verify origin "$BRANCH"
 fi
 
 echo "Done."
