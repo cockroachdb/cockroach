@@ -18986,7 +18986,23 @@ interval_value:
 
 // Note: newlines between non-terminals matter to the doc generator.
 
-collation_name:        unrestricted_name
+collation_name:
+  unrestricted_name
+| unrestricted_name '.' unrestricted_name
+  {
+    // PostgreSQL keeps every collation in the pg_catalog namespace, so accept
+    // the qualified form when the schema is exactly pg_catalog. The lexer
+    // case-folds unquoted identifiers, so a plain == comparison handles both
+    // case-insensitive unquoted forms (Pg_Catalog, PG_CATALOG) and the
+    // case-sensitive quoted form ("pg_catalog"); a quoted identifier with
+    // non-lowercase characters (e.g. "Pg_Catalog") is treated as a different
+    // schema and rejected, matching PostgreSQL.
+    if $1 != "pg_catalog" {
+      sqllex.Error(fmt.Sprintf("collation %q does not exist", $1+"."+$3))
+      return 1
+    }
+    $$ = $3
+  }
 
 partition_name:        unrestricted_name
 

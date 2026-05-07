@@ -2179,6 +2179,7 @@ typename ::=
 
 collation_name ::=
 	unrestricted_name
+	| unrestricted_name '.' unrestricted_name
 
 opt_asymmetric ::=
 	'ASYMMETRIC'
