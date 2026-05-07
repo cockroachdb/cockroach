@@ -636,6 +636,84 @@ func Compact(
 	return nil
 }
 
+// raftLogBounds converts [lo, hi) to their roachpb keys. The sentinels lo == 0
+// and hi == math.MaxUint64 expand to RaftLogPrefix and RaftLogPrefix.PrefixEnd
+// respectively.
+func raftLogBounds(
+	prefixBuf keys.RangeIDPrefixBuf, lo, hi kvpb.RaftIndex,
+) (start, end roachpb.Key) {
+	if lo == 0 {
+		start = prefixBuf.RaftLogPrefix().Clone()
+	} else {
+		start = prefixBuf.RaftLogKey(lo).Clone()
+	}
+	if hi == math.MaxUint64 {
+		end = prefixBuf.RaftLogPrefix().PrefixEnd()
+	} else {
+		end = prefixBuf.RaftLogKey(hi).Clone()
+	}
+	return start, end
+}
+
+// ClearRange clears raft log entries in the range [lo, hi). It calls
+// storage.ClearRangeWithHeuristic() which scans up to pointKeyThreshold keys to
+// choose between point deletes and a single Pebble range tombstone.
+// No-op if lo >= hi.
+func ClearRange(
+	ctx context.Context,
+	r storage.Reader,
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	start, end := raftLogBounds(prefixBuf, lo, hi)
+	return storage.ClearRangeWithHeuristic(ctx, r, w, start, end, pointKeyThreshold)
+}
+
+// ClearRangeSizeKnown clears raft log entries in range [lo, hi) when the caller
+// already knows how many entries the range contains. The choice between point
+// deletes and a Pebble range tombstone is made arithmetically:
+// (hi - lo vs pointKeyThreshold) without scanning.
+// No-op if lo >= hi.
+//
+// If maybeUseSingleDel is true, it uses SingleDelete instead of regular Delete
+// if the size is <= pointKeyThreshold.
+func ClearRangeSizeKnown(
+	w storage.Writer,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo, hi kvpb.RaftIndex,
+	pointKeyThreshold int,
+	maybeUseSingleDel bool,
+) error {
+	if lo >= hi {
+		return nil
+	}
+	if hi-lo >= kvpb.RaftIndex(pointKeyThreshold) {
+		start, end := raftLogBounds(prefixBuf, lo, hi)
+		return w.ClearRawRange(start, end, true /* pointKeys */, false /* rangeKeys */)
+	}
+	// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
+	// allocating when constructing Raft log keys (16 bytes).
+	prefix := prefixBuf.RaftLogPrefix()
+	for idx := lo; idx < hi; idx++ {
+		key := keys.RaftLogKeyFromPrefix(prefix, idx)
+		var err error
+		if maybeUseSingleDel {
+			err = w.SingleClearUnversioned(key)
+		} else {
+			err = w.ClearUnversioned(key, storage.ClearOptions{})
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ComputeSize computes the size (in bytes) of the raft log from the storage
 // engine. This will iterate over the raft log and sideloaded files, so
 // depending on the size of these it can be mildly to extremely expensive and
