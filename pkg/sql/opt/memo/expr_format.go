@@ -177,6 +177,12 @@ type ExprFmtCtx struct {
 	// tailCalls allows for quick lookup of all the routines in tail-call position
 	// when the last body statement of a routine is formatted.
 	tailCalls map[opt.ScalarExpr]struct{}
+
+	// BuildDeferredBody, when set, is called during formatting to build
+	// deferred UDF bodies and show their plan structure inline. The callback
+	// returns body RelExprs, params, and the memo they belong to (needed so
+	// column metadata resolves correctly for the body's column IDs).
+	BuildDeferredBody func(def *UDFDefinition) (body []RelExpr, params opt.ColList, bodyMemo *Memo, err error)
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -1073,47 +1079,75 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
+	formatUDFBody := func(def *UDFDefinition, body []RelExpr, tp treeprinter.Node) {
+		n := tp.Child("body")
+		for i := range body {
+			stmtNode := n
+			if i == 0 {
+				if def.FirstStmtOutput.CursorDeclaration != nil {
+					stmtNode = n.Child("open-cursor")
+				} else if def.FirstStmtOutput.TargetBufferID != 0 {
+					stmtNode = n.Child("add-to-srf-result")
+				}
+			}
+			prevTailCalls := f.tailCalls
+
+			// Routine calls in the last body statement may be tail calls if
+			// ResultBufferID is unset. If it is set, the result of the last
+			// body statement is not directly used as the result of the UDF
+			// call, so it cannot contain tail calls.
+			if i == len(body)-1 && def.ResultBufferID == 0 {
+				f.tailCalls = make(map[opt.ScalarExpr]struct{})
+				ExtractTailCalls(body[i], f.tailCalls)
+			}
+			f.formatExpr(body[i], stmtNode)
+			f.tailCalls = prevTailCalls
+		}
+	}
+
 	formatUDFDefinition := func(def *UDFDefinition, tp treeprinter.Node) {
 		if _, seen := f.seenUDFs[def]; !seen {
 			// Ensure that the definition of the UDF is not printed out again if
 			// it has already been seen.
 			f.seenUDFs[def] = struct{}{}
 			f.withinUDFs[def] = struct{}{}
-			if len(def.Params) > 0 {
-				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
-			}
 			if def.Body != nil {
-				n := tp.Child("body")
-				for i := range def.Body {
-					stmtNode := n
-					if i == 0 {
-						if def.FirstStmtOutput.CursorDeclaration != nil {
-							// The first statement is opening a cursor.
-							stmtNode = n.Child("open-cursor")
-						} else if def.FirstStmtOutput.TargetBufferID != 0 {
-							// The first statement is writing to a target buffer.
-							stmtNode = n.Child("add-to-srf-result")
-						}
+				// Eager path: body was built at plan time.
+				if len(def.Params) > 0 {
+					f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
+				}
+				formatUDFBody(def, def.Body, tp)
+			} else if f.BuildDeferredBody != nil && def.BodyBuilder != nil {
+				// Deferred + callback: build the body now for display.
+				body, params, bodyMemo, err := f.BuildDeferredBody(def)
+				if err != nil {
+					tp.Childf("error building deferred body: %v", err)
+				} else {
+					// Swap to body memo so column IDs resolve correctly.
+					prevMemo := f.Memo
+					f.Memo = bodyMemo
+					if len(params) > 0 {
+						f.formatColList(tp, "params:", params, opt.ColSet{} /* notNullCols */)
 					}
-					prevTailCalls := f.tailCalls
-
-					// Routine calls in the last body statement may be tail calls if
-					// ResultBufferID is unset. If it is set, the result of the last
-					// body statement is not directly used as the result of the UDF
-					// call, so it cannot contain tail calls.
-					if i == len(def.Body)-1 && def.ResultBufferID == 0 {
-						f.tailCalls = make(map[opt.ScalarExpr]struct{})
-						ExtractTailCalls(def.Body[i], f.tailCalls)
-					}
-					f.formatExpr(def.Body[i], stmtNode)
-					f.tailCalls = prevTailCalls
+					formatUDFBody(def, body, tp)
+					f.Memo = prevMemo
 				}
 			} else {
-				// Deferred-build routine: body is not yet built. Show ASTs.
+				// Deferred fallback: no callback, show AST text.
+				if len(def.Params) > 0 {
+					f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
+				}
 				n := tp.Child("body (deferred)")
+				fmtFlags := tree.FmtSimple
+				if f.RedactableValues {
+					fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+				}
+				fmtCtx := tree.NewFmtCtx(fmtFlags)
 				for i, ast := range def.BodyASTs {
 					if ast != nil {
-						n.Childf("stmt%d: %s", i+1, tree.AsString(ast))
+						fmtCtx.Reset()
+						fmtCtx.FormatNode(ast)
+						n.Childf("stmt%d: %s", i+1, fmtCtx.String())
 					}
 				}
 			}
