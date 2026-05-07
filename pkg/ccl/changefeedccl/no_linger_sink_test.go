@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,12 +41,13 @@ import (
 // worker inside Flush for tests that need to assert behavior while
 // a flush is in progress.
 type recordingSinkClient struct {
-	mu        syncutil.Mutex
-	flushed   [][]byte      // successful payloads, in arrival order
-	attempts  int           // total Flush call count, regardless of outcome
-	errs      []error       // optional sequence of errors to return
-	alwaysErr error         // optional permanent failure
-	holdFlush chan struct{} // optional gate; Flush blocks on receive
+	mu         syncutil.Mutex
+	flushed    [][]byte      // successful payloads, in arrival order
+	attempts   int           // total Flush call count, regardless of outcome
+	errs       []error       // optional sequence of errors to return
+	alwaysErr  error         // optional permanent failure
+	holdFlush  chan struct{} // optional gate; Flush blocks on receive
+	flushDelay time.Duration // optional artificial latency per Flush
 }
 
 func (r *recordingSinkClient) MakeBatchBuffer(string) BatchBuffer {
@@ -64,6 +67,12 @@ func (r *recordingSinkClient) Flush(_ context.Context, p SinkPayload) error {
 	}
 	if hold != nil {
 		<-hold
+	}
+	r.mu.Lock()
+	delay := r.flushDelay
+	r.mu.Unlock()
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return nil
 }
@@ -120,6 +129,49 @@ func makeRecordingSink(t *testing.T, rec *recordingSinkClient, retryOpts ...retr
 	changefeedbase.NoLingerSinkEnabled.Override(context.Background(), &settings.SV, true)
 	return makeBatchingOrNoLingerSink(
 		context.Background(), sinkTypeWebhook, rec, 0, opts, 1, nil,
+		func() *admission.Pacer { return nil },
+		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
+	)
+}
+
+// makeUncappedNoLingerSink constructs a noLingerSink directly with a
+// pendingBuffer configured for very large batches and a large buffer
+// limit, so the comparison vs batchingSink (whose recording-stub
+// BatchBuffer.ShouldFlush returns false, allowing arbitrarily large
+// batches) is a fair fight rather than artificially capped on the
+// noLinger side.
+func makeUncappedNoLingerSink(t *testing.T, rec *recordingSinkClient) Sink {
+	t.Helper()
+	s := &noLingerSink{
+		client:       rec,
+		concreteType: sinkTypeWebhook,
+		metrics:      nilMetricsRecorderBuilder(true),
+		buffer: newPendingBuffer(pendingBufferConfig{
+			maxMessages: 1 << 20,
+			maxBytes:    1 << 30,
+			bufferLimit: 1 << 20,
+		}),
+		wg: ctxgroup.WithContext(context.Background()),
+	}
+	s.wg.GoCtx(func(ctx context.Context) error {
+		s.runWorker(ctx)
+		return nil
+	})
+	return s
+}
+
+// makeRecordingBatchingSink constructs the legacy batchingSink wired
+// to the given recording client, with the requested
+// minFlushFrequency (the linger timer that the noLingerSink design
+// removes).
+func makeRecordingBatchingSink(
+	t *testing.T, rec *recordingSinkClient, minFlushFreq time.Duration,
+) Sink {
+	t.Helper()
+	settings := cluster.MakeTestingClusterSettings()
+	// Setting is off by default -- dispatcher returns batchingSink.
+	return makeBatchingOrNoLingerSink(
+		context.Background(), sinkTypeWebhook, rec, minFlushFreq, retry.Options{}, 1, nil,
 		func() *admission.Pacer { return nil },
 		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
 	)
@@ -476,6 +528,92 @@ func TestNoLingerSinkPropagatesTerminalFlushError(t *testing.T) {
 				bytes.Contains([]byte(err.Error()), []byte("permanent failure")))
 	}, time.Second, 5*time.Millisecond,
 		"EmitRow never returned the terminal Flush error")
+}
+
+// TestNoLingerSinkBatchingEmerges demonstrates the latency /
+// throughput decoupling that motivates the noLingerSink design:
+// the same sink configuration handles both low-rate and high-rate
+// workloads well, with no min_flush_frequency knob to tune.
+//
+// At low rate: events drain as soon as the worker is free; the batch
+// is small and end-to-end is bounded by the SinkClient's Flush
+// latency, not by any timer.
+//
+// At high rate: events accumulate while the worker is busy in
+// Flush; the next getBatch returns a large batch naturally,
+// pushing throughput up without raising per-event latency by a
+// timer interval.
+//
+// Skipped under -short; run with `./dev test pkg/ccl/changefeedccl
+// -f TestNoLingerSinkBatchingEmerges -v` to see the numbers.
+func TestNoLingerSinkBatchingEmerges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderShort(t, "perf demo; run with -v")
+
+	// Run a single workload (offered rate + flush latency + event count)
+	// against a sink and report the resulting batch shape and throughput.
+	type sinkBuilder func(*testing.T, *recordingSinkClient) Sink
+	runWorkload := func(t *testing.T, build sinkBuilder, label string,
+		emitGap, flushLatency time.Duration, totalEvents int) {
+		rec := &recordingSinkClient{flushDelay: flushLatency}
+		sink := build(t, rec)
+
+		start := time.Now()
+		for i := 0; i < totalEvents; i++ {
+			emitKV(t, sink, "foo", fmt.Sprintf("k%d", i), "v")
+			if emitGap > 0 {
+				time.Sleep(emitGap)
+			}
+		}
+		emitElapsed := time.Since(start)
+		require.NoError(t, sink.Flush(context.Background()))
+		totalElapsed := time.Since(start)
+		require.NoError(t, sink.Close())
+
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		batches := len(rec.flushed)
+		events := 0
+		for _, p := range rec.flushed {
+			events += bytes.Count(p, []byte{'\n'})
+		}
+		avgBatch := float64(events) / float64(batches)
+		throughput := float64(events) / totalElapsed.Seconds()
+		t.Logf("%-40s emit=%v drain=%v events=%d batches=%d avg_batch=%.1f throughput=%.0f ev/s",
+			label, emitElapsed, totalElapsed, events, batches, avgBatch, throughput)
+	}
+
+	noLinger := func(t *testing.T, rec *recordingSinkClient) Sink {
+		return makeUncappedNoLingerSink(t, rec)
+	}
+	batching := func(freq time.Duration) sinkBuilder {
+		return func(t *testing.T, rec *recordingSinkClient) Sink {
+			return makeRecordingBatchingSink(t, rec, freq)
+		}
+	}
+
+	// Two workloads: low rate (one event per 10ms, 200 total) vs high
+	// rate (saturating, 5000 total). The flush stub takes 1ms.
+	const flushLatency = time.Millisecond
+
+	t.Run("low_rate", func(t *testing.T) {
+		runWorkload(t, noLinger, "noLingerSink            ",
+			10*time.Millisecond, flushLatency, 200)
+		runWorkload(t, batching(time.Millisecond), "batchingSink min_freq=1ms  ",
+			10*time.Millisecond, flushLatency, 200)
+		runWorkload(t, batching(100*time.Millisecond), "batchingSink min_freq=100ms",
+			10*time.Millisecond, flushLatency, 200)
+	})
+
+	t.Run("high_rate", func(t *testing.T) {
+		runWorkload(t, noLinger, "noLingerSink            ",
+			0, flushLatency, 5000)
+		runWorkload(t, batching(time.Millisecond), "batchingSink min_freq=1ms  ",
+			0, flushLatency, 5000)
+		runWorkload(t, batching(100*time.Millisecond), "batchingSink min_freq=100ms",
+			0, flushLatency, 5000)
+	})
 }
 
 // TestNoLingerSinkFlushDrains pins that a direct Sink.Flush() call
