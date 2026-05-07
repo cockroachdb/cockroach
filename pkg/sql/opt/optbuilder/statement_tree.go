@@ -61,6 +61,17 @@ import (
 // the initialized statement tree. Note that some care must be taken to ensure
 // that the statementTreeNode references remain valid and up-to-date (see the
 // stmts comment below).
+//
+// +--------------------+
+// | Deferred Routines  |
+// +--------------------+
+// Deferred routines are similar to AFTER triggers: their body statements are
+// not built into RelExprs at plan time but deferred to execution time (see
+// RoutineBodyBuilder). Like AFTER triggers, their mutation checks must also
+// be deferred. We use the same mechanism: GetInitFnForDeferredRoutine captures
+// references to the ancestor statementTreeNodes so that the deferred builder
+// can initialize a statement tree that includes all ancestor mutations at
+// build time.
 type statementTree struct {
 	// stmts is a stack of statement nodes, as described in the struct comment.
 	// It is a slice of pointers to ensure that slice appends don't invalidate
@@ -209,11 +220,27 @@ func (st *statementTree) CanMutateTable(
 	return true
 }
 
+// GetInitFnForDeferredRoutine returns a function that can be used to initialize
+// the statement tree for a deferred-build SQL routine. Unlike
+// GetInitFnForPostQuery, this method captures ALL stack levels including the
+// current one, because CTE mutations register at the current level and must be
+// visible to the deferred routine's conflict checks.
+func (st *statementTree) GetInitFnForDeferredRoutine() func() statementTree {
+	return st.getInitFn(st.stmts)
+}
+
 // GetInitFnForPostQuery returns a function that can be used to initialize the
-// statement tree for a post-query that is a child of the current statement.
-// This is necessary because the post-query is not built until after the main
-// statement has finished executing. The returned function may be nil if the
-// statement tree does not need to be initialized for the post-query.
+// statement tree for a post-query of the current statement. This is necessary
+// because the post-query is not built until after the main statement has
+// finished executing. The returned function may be nil if the statement tree
+// does not need to be initialized for the post-query.
+//
+// Unlike GetInitFnForDeferredRoutine, this excludes the current level because
+// post-queries are effectively siblings of the originating statement for
+// conflict-checking purposes — they execute after a sequence point step and
+// don't conflict with the originating statement's mutations. Routine body
+// statements, by contrast, are children that execute within the originating
+// statement and must conflict with its mutations.
 //
 // NOTE: cascades are checked up-front by Builder.checkMultipleMutationsCascade,
 // but the statement tree still must be propagated to them via this function in
@@ -222,26 +249,30 @@ func (st *statementTree) GetInitFnForPostQuery() func() statementTree {
 	if len(st.stmts) <= 1 {
 		return nil
 	}
-	// Save references to the ancestor statementTreeNodes. Modifications to them
-	// after this point should be reflected in the references, ensuring that all
-	// ancestor mutations are visible by the time the post-query plan is built.
-	//
-	// This is necessary because the full set of mutations in the current
-	// statement may not be known at the time the statement tree is saved. For
-	// example, a CTE in which the first branch triggers a post-query, and the
-	// second is a mutation.
-	ancestorStatements := make([]*statementTreeNode, len(st.stmts)-1)
-	copy(ancestorStatements, st.stmts[:len(st.stmts)-1])
+	return st.getInitFn(st.stmts[:len(st.stmts)-1])
+}
+
+// getInitFn returns a function that initializes a new statementTree by
+// flattening the given stack levels into a single ancestor node. The
+// returned function may be nil if levels is empty.
+//
+// References to the statementTreeNodes are captured by pointer, so mutations
+// registered after this call (e.g. by sibling CTEs) are visible when the
+// returned function is invoked.
+//
+// Child mutations are omitted because they can only conflict with ancestor
+// nodes, and those conflicts have already been checked.
+func (st *statementTree) getInitFn(levels []*statementTreeNode) func() statementTree {
+	if len(levels) == 0 {
+		return nil
+	}
+	saved := make([]*statementTreeNode, len(levels))
+	copy(saved, levels)
 	return func() statementTree {
-		// Combine the non-child mutated tables for all ancestor nodes into a single
-		// ancestor node. This provides all the information needed to check for
-		// conflicts in a trigger run as a post-query. We can omit the child
-		// mutation tables because they can only conflict with the ancestor nodes,
-		// and that case has already been checked.
 		var node statementTreeNode
-		for i := range ancestorStatements {
-			node.simpleInsertTables.UnionWith(ancestorStatements[i].simpleInsertTables)
-			node.generalMutationTables.UnionWith(ancestorStatements[i].generalMutationTables)
+		for i := range saved {
+			node.simpleInsertTables.UnionWith(saved[i].simpleInsertTables)
+			node.generalMutationTables.UnionWith(saved[i].generalMutationTables)
 		}
 		return statementTree{stmts: []*statementTreeNode{&node}}
 	}
