@@ -248,21 +248,27 @@ func ClusterVersionFromKV(
 ) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var encodedVal string
-	// Query the raw encoded value from system.settings
-	rows, err := roachtestutil.QueryWithRetry(
-		ctx, l, db, roachtestutil.ClusterSettingRetryOpts,
-		`SELECT value FROM system.settings WHERE name = 'version'`,
-	)
+
+	// TODO(169924): Remove the retry-on-empty when the underlying transient issue is resolved. See GitHub issue #169924 for more details.
+	err := roachtestutil.ClusterSettingRetryOpts.Do(ctx, func(ctx context.Context) error {
+		rows, err := db.QueryContext(ctx,
+			`SELECT value FROM system.settings WHERE name = 'version'`)
+		if err != nil {
+			l.Printf("querying system.settings for version failed (retrying): %v", err)
+			return err
+		}
+		defer rows.Close()
+
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return errors.Wrap(err, "iterating system.settings rows")
+			}
+			l.Printf("WARNING: no version row found in system.settings (retrying)")
+			return errors.New("no version found in system.settings")
+		}
+		return rows.Scan(&encodedVal)
+	})
 	if err != nil {
-		return zero, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return zero, fmt.Errorf("no version found in system.settings")
-	}
-
-	if err := rows.Scan(&encodedVal); err != nil {
 		return zero, err
 	}
 
