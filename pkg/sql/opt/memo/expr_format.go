@@ -1085,8 +1085,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			stmtNode := n
 			if i == 0 {
 				if def.FirstStmtOutput.CursorDeclaration != nil {
+					// The first statement is opening a cursor.
 					stmtNode = n.Child("open-cursor")
 				} else if def.FirstStmtOutput.TargetBufferID != 0 {
+					// The first statement is writing to a target buffer.
 					stmtNode = n.Child("add-to-srf-result")
 				}
 			}
