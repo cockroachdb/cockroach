@@ -136,18 +136,18 @@ root
  └── cascade
       └── delete child
            ├── columns: <none>
-           ├── fetch columns: c:12 child.p:13
+           ├── fetch columns: c:11 child.p:12
            └── semi-join (hash)
-                ├── columns: c:12!null child.p:13!null
+                ├── columns: c:11!null child.p:12!null
                 ├── scan child
-                │    ├── columns: c:12!null child.p:13!null
+                │    ├── columns: c:11!null child.p:12!null
                 │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
-                │    ├── columns: p:16!null
+                │    ├── columns: p:15!null
                 │    └── mapping:
-                │         └──  parent.p:4 => p:16
+                │         └──  parent.p:4 => p:15
                 └── filters
-                     └── child.p:13 = p:16
+                     └── child.p:12 = p:15
 
 # Delete with immutable UDF; fast path.
 build-post-queries

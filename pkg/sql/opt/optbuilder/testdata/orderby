@@ -1528,19 +1528,19 @@ build
 SELECT id FROM t_sub1 ORDER BY volatile_fn(id) NULLS LAST
 ----
 sort
- ├── columns: id:1  [hidden: nulls_ordering_column8:9!null column10:10]
- ├── ordering: +9,+10
+ ├── columns: id:1  [hidden: nulls_ordering_column7:8!null column9:9]
+ ├── ordering: +8,+9
  └── project
-      ├── columns: nulls_ordering_column8:9!null column10:10 id:1
+      ├── columns: nulls_ordering_column7:8!null column9:9 id:1
       ├── project
-      │    ├── columns: column8:8 id:1
+      │    ├── columns: column7:7 id:1
       │    ├── scan t_sub1
       │    │    └── columns: id:1 val:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
       │    └── projections
-      │         └── volatile_fn(id:1) [as=column8:8]
+      │         └── volatile_fn(id:1) [as=column7:7]
       └── projections
-           ├── column8:8 IS NULL [as=nulls_ordering_column8:9]
-           └── column8:8 [as=column10:10]
+           ├── column7:7 IS NULL [as=nulls_ordering_column7:8]
+           └── column7:7 [as=column9:9]
 
 # When ORDER BY expression matches a SELECT list expression, reuse the
 # existing projection column (SQL99 rule 3) instead of building a duplicate.
