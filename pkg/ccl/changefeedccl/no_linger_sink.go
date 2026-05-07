@@ -54,6 +54,15 @@ func makeBatchingOrNoLingerSink(
 		metrics, settings)
 }
 
+// TODO: pacer integration. The constructor accepts a pacerFactory
+// (matching makeBatchingSink's signature) but never invokes it.
+// Calling pacer.Pace(ctx) at the top of addRow would let the
+// noLingerSink cooperate with the node's CPU admission controller
+// the way batchingSink does. Not load-bearing for the latency /
+// throughput hypothesis we're validating with this prototype, but
+// production hygiene before merging. See
+// docs/tech-notes/changefeed-no-linger-batching-todos.md.
+
 // noLingerSink is the pull-based replacement for batchingSink. EmitRow
 // pushes into a pendingBuffer; a fixed pool of workers pull batches and
 // flush them through the SinkClient. Resolved timestamps go straight to
@@ -106,7 +115,7 @@ func makeNoLingerSink(
 	retryOpts retry.Options,
 	numWorkers int,
 	topicNamer *TopicNamer,
-	_ func() *admission.Pacer, // pacerFactory, TODO M3 commit 5
+	_ func() *admission.Pacer, // pacerFactory, see pacer TODO below
 	_ timeutil.TimeSource, // timeSource, unused
 	metrics metricsRecorder,
 	_ *cluster.Settings, // settings, unused
@@ -291,7 +300,9 @@ func (s *noLingerSink) EmitRow(
 	if err := s.buffer.addRow(ctx, ev); err != nil {
 		return err
 	}
-	log.Changefeed.Infof(ctx, "noLingerSink addRow key=%x val_size=%d", key, len(value))
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "noLingerSink addRow key=%x val_size=%d", key, len(value))
+	}
 	return nil
 }
 

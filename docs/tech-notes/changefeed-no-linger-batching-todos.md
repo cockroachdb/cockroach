@@ -125,6 +125,23 @@ Flush):
 - [ ] **Multiple sequential Flush calls.** The second call should
       observe an empty buffer + idle workers and return immediately.
 
+## Production hygiene (before merging)
+
+- [ ] **Pacer integration.** noLingerSink accepts a `pacerFactory`
+      argument (matching `makeBatchingSink`'s signature) but never
+      invokes it. Calling `pacer.Pace(ctx)` at the top of `addRow`
+      would let the changefeed cooperate with the node's CPU
+      admission controller the way batchingSink does. Not on the
+      critical path for the latency / throughput hypothesis the
+      prototype is validating, but required for production fairness
+      against other workloads on the same node.
+- [ ] **Tune defaults.** `noLingerBufferLimit = 256`,
+      `pendingBufferConfig.maxMessages = 100`, `maxBytes = 1MiB`
+      were picked to match batchingSink's `flushQueueDepth` and
+      reasonable per-batch caps. Revisit once benchmarks land --
+      a higher `bufferLimit` may pay off under high throughput
+      (more memory, but less producer-side blocking).
+
 ## Performance / future polish (defer)
 
 - [ ] `log.V(2)` formats `%x` of every key — args evaluate even when
