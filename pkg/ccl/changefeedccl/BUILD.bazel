@@ -348,6 +348,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/cidr",
         "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",

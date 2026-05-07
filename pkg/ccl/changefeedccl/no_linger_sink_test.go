@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ import (
 // if non-nil, takes precedence over errs and makes every Flush fail
 // with the same error.
 type recordingSinkClient struct {
-	mu        sync.Mutex
+	mu        syncutil.Mutex
 	flushed   [][]byte // successful payloads, in arrival order
 	attempts  int      // total Flush call count, regardless of outcome
 	errs      []error  // optional sequence of errors to return

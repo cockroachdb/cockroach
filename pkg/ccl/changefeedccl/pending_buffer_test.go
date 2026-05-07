@@ -399,6 +399,7 @@ func TestPendingBuffer_PreCancelledCtx(t *testing.T) {
 //
 // Real cluster validation lives in the noLingerSink demo (later).
 func TestPendingBuffer_Demo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 165385, "logs-only demo; run with -v to see lifecycle")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
