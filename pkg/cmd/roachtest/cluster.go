@@ -981,6 +981,126 @@ func createFlagsOverride(opts *vm.CreateOpts) {
 	}
 }
 
+// createRetryPlanner owns safe mutations between roachprod create attempts.
+// The outer create loop still retries all create failures; this planner only
+// adds targeted attempt changes when a structured error makes that safe. Today
+// it handles zonal capacity errors by changing create zones. Future policies
+// can add other mutations here, such as falling back from spot to on-demand.
+type createRetryPlanner struct {
+	clusterSpec     spec.ClusterSpec
+	params          spec.RoachprodClusterConfig
+	arch            vm.CPUArch
+	explicitZones   bool
+	retryCandidates []string
+	attemptedZones  map[string]struct{}
+	overrideZones   []string
+}
+
+func newCreateRetryPlanner(
+	clusterSpec spec.ClusterSpec, params spec.RoachprodClusterConfig, arch vm.CPUArch,
+) *createRetryPlanner {
+	explicitZones := clusterSpec.UsesExplicitZones(params)
+	var retryCandidates []string
+	if !clusterSpec.Geo && !explicitZones {
+		retryCandidates = spec.DefaultRetryZoneCandidates(params.Cloud, arch)
+	}
+	return &createRetryPlanner{
+		clusterSpec:     clusterSpec,
+		params:          params,
+		arch:            arch,
+		explicitZones:   explicitZones,
+		retryCandidates: retryCandidates,
+		attemptedZones:  make(map[string]struct{}),
+	}
+}
+
+func (p *createRetryPlanner) zonesForAttempt() []string {
+	var zones []string
+	if len(p.overrideZones) > 0 {
+		zones = append([]string(nil), p.overrideZones...)
+		p.overrideZones = nil
+	} else {
+		zones = p.clusterSpec.RoachprodCreateZones(p.params, p.arch)
+	}
+	for _, zone := range zones {
+		if zone != "" {
+			p.attemptedZones[zone] = struct{}{}
+		}
+	}
+	return zones
+}
+
+func (p *createRetryPlanner) recordFailure(err error, l *logger.Logger, hasMoreAttempts bool) {
+	var capacityErr *vm.CreateCapacityError
+	if !errors.As(err, &capacityErr) {
+		return
+	}
+	if capacityErr.Provider != "" && capacityErr.Provider != p.params.Cloud.String() {
+		return
+	}
+	if capacityErr.CapacityClass != vm.CreateCapacityClassZone {
+		return
+	}
+	if !hasMoreAttempts {
+		return
+	}
+	if p.explicitZones {
+		l.Printf("provider reported capacity error, but zones are explicit; keeping requested zones")
+		return
+	}
+	if p.clusterSpec.Geo {
+		l.Printf("provider reported capacity error, but geo-distributed zone retry overrides are not supported")
+		return
+	}
+
+	retryZones, source := p.selectNextZones(capacityErr)
+	if len(retryZones) == 0 {
+		return
+	}
+	p.overrideZones = retryZones
+	machineType := ""
+	if capacityErr.MachineType != "" {
+		machineType = fmt.Sprintf(" for machine type %s", capacityErr.MachineType)
+	}
+	failedZones := strings.Join(capacityErr.FailedZones, ",")
+	if failedZones == "" {
+		failedZones = "unknown"
+	}
+	l.Printf("provider reported capacity error%s in zone(s) [%s]; retrying next cluster creation in zone(s) [%s] from %s",
+		machineType,
+		failedZones,
+		strings.Join(retryZones, ","),
+		source,
+	)
+}
+
+func (p *createRetryPlanner) selectNextZones(
+	capacityErr *vm.CreateCapacityError,
+) ([]string, string) {
+	for _, zone := range capacityErr.SuggestedZones {
+		if zone == "" {
+			continue
+		}
+		if _, ok := p.attemptedZones[zone]; ok {
+			continue
+		}
+		return []string{zone}, "provider hint"
+	}
+
+	for _, zone := range capacityErr.FailedZones {
+		if zone != "" {
+			p.attemptedZones[zone] = struct{}{}
+		}
+	}
+	for _, zone := range p.retryCandidates {
+		if _, ok := p.attemptedZones[zone]; ok {
+			continue
+		}
+		return []string{zone}, "untried default zones"
+	}
+	return nil, ""
+}
+
 // clusterMock creates a cluster to be used for (self) testing.
 func (f *clusterFactory) clusterMock(cfg clusterConfig) *roachprodCluster {
 	return &roachprodCluster{
@@ -1075,6 +1195,7 @@ func (f *clusterFactory) newRoachprodCluster(
 		// name. To keep things simple, disable retries in that case.
 		maxAttempts = 1
 	}
+	retryPlanner := newCreateRetryPlanner(cfg.spec, params, selectedArch)
 	// loop assumes maxAttempts is atleast (1).
 	for i := 1; ; i++ {
 		// NB: this intentionally avoids re-using the name across iterations in
@@ -1083,9 +1204,13 @@ func (f *clusterFactory) newRoachprodCluster(
 		// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
 		genName := f.genName(cfg)
 
-		// Set the zones used for the cluster. We call this in the loop as the default GCE zone
-		// is randomized to avoid zone exhaustion errors.
-		providerOpts, workloadProviderOpts = cfg.spec.SetRoachprodOptsZones(providerOpts, workloadProviderOpts, params, string(selectedArch))
+		// Set the zones used for this cluster create attempt. The planner keeps
+		// normal default-zone selection and capacity-error retry overrides in one
+		// place.
+		createZones := retryPlanner.zonesForAttempt()
+		providerOpts, workloadProviderOpts = cfg.spec.SetRoachprodOptsZones(
+			providerOpts, workloadProviderOpts, params.Cloud, createZones,
+		)
 		if clusterCloud != spec.Local {
 			providerOptsContainer.SetProviderOpts(clusterCloud.String(), providerOpts)
 			workloadProviderOptsContainer.SetProviderOpts(clusterCloud.String(), workloadProviderOpts)
@@ -1149,6 +1274,7 @@ func (f *clusterFactory) newRoachprodCluster(
 		}
 
 		clusterL.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
+		retryPlanner.recordFailure(err, clusterL, i < maxAttempts)
 		c.Destroy(ctx, closeLogger, clusterL)
 		if i >= maxAttempts {
 			return nil, nil, err
