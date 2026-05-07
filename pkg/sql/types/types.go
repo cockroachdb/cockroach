@@ -2057,7 +2057,13 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int, useFQName boo
 	case PGLSNFamily:
 		return "pg_lsn"
 	case PGVectorFamily:
-		return "vector"
+		// pgvector stores the dimension directly in the typmod (no -4 header
+		// offset like varchar). A typmod of -1 means the dimension was not
+		// specified.
+		if !haveTypmod || typmod <= 0 {
+			return "vector"
+		}
+		return fmt.Sprintf("vector(%d)", typmod)
 	case RefCursorFamily:
 		return "refcursor"
 	case StringFamily, CollatedStringFamily:
