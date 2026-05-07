@@ -591,37 +591,17 @@ func Compact(
 	// Truncate the Raft log from the entry after the previous truncation index to
 	// the new truncation index. This is performed atomically with updating the
 	// RaftTruncatedState so that the state of the log is consistent.
-	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := next.Index - prev.Index
-	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
-		if err := writer.ClearRawRange(start, end, true, false); err != nil {
-			return errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v after index %d",
-				next, prev.Index)
-		}
-	} else {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
-		// allocating when constructing Raft log keys (16 bytes).
-		useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
-		prefix := prefixBuf.RaftLogPrefix()
-		for idx := prev.Index + 1; idx <= next.Index; idx++ {
-			key := keys.RaftLogKeyFromPrefix(prefix, idx)
-			var err error
-			if useSingleDelete {
-				err = writer.SingleClearUnversioned(key)
-			} else {
-				err = writer.ClearUnversioned(key, storage.ClearOptions{})
-			}
-			if err != nil {
-				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					next, idx)
-			}
-		}
+	if err := ClearRangeSizeKnown(
+		writer, loader.RangeIDPrefixBuf,
+		prev.Index+1, next.Index+1, int(raftLogTruncationClearRangeThreshold),
+		UseRaftLogSingleDelete(enginesSeparated),
+	); err != nil {
+		return errors.Wrapf(err,
+			"unable to clear truncated Raft entries for %+v after index %d",
+			next, prev.Index)
 	}
 
-	key := prefixBuf.RaftTruncatedStateKey()
+	key := loader.RangeIDPrefixBuf.RaftTruncatedStateKey()
 	var value roachpb.Value
 	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
 		return err
