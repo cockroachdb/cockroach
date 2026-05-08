@@ -271,23 +271,24 @@ func (t *WAGTruncator) maybeAdvanceAllowedIndex() {
 	}
 }
 
-// clearReplicaRaftLogAndSideloaded clears raft log entries at or below the given index for
-// a destroyed or subsumed replica, and it also deletes the sideloaded files associated with the
-// deleted entries.
+// clearReplicaRaftLogAndSideloaded clears raft log entries at or below the
+// given index for a destroyed or subsumed replica, and it also deletes the
+// sideloaded files associated with the deleted entries.
 func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
-	ctx context.Context, raft Raft, rangeID roachpb.RangeID, lastIndex kvpb.RaftIndex,
+	ctx context.Context, raft Raft, rangeID roachpb.RangeID, hi kvpb.RaftIndex,
 ) error {
-	if logstore.UseRaftLogSingleDelete(t.eng.Separated()) {
-		if err := clearRaftLogWithSingleDelete(
-			ctx, raft.RO, raft.WO, rangeID, lastIndex,
-		); err != nil {
-			return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
-		}
-	} else if err := storage.ClearRangeWithHeuristic(
-		ctx, raft.RO, raft.WO,
-		keys.RaftLogPrefix(rangeID),           /* start */
-		keys.RaftLogKey(rangeID, lastIndex+1), /* end */
-		ClearRangeThresholdPointKeys(),
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	// We want to delete all raft log entries <= hi. Since Raft log
+	// doesn't have holes, we can get the first index, calculate the log size,
+	// and call ClearRangeSizeKnown(). If no entries exist in [RaftLogPrefix, hi]
+	// (e.g., this replica never received entries) this operation is a no-op.
+	// NB: lo == hi if nothing is found.
+	if lo, err := emptyLogPrefix(ctx, raft.RO, prefixBuf, hi); err != nil {
+		return errors.Wrapf(err, "finding first raft log index for r%d", rangeID)
+	} else if err := logstore.ClearRangeSizeKnown(
+		raft.WO, prefixBuf,
+		lo, hi, // if not found, lo == hi which is a no-op
+		ClearRangeThresholdPointKeys(), logstore.UseRaftLogSingleDelete(t.eng.Separated()),
 	); err != nil {
 		return errors.Wrapf(err, "clearing raft log entries for r%d", rangeID)
 	}
@@ -304,7 +305,7 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	//  DiskSideloadStorage every time we want to clear some sideloaded files.
 	ss := logstore.NewDiskSideloadStorage(t.st, rangeID, t.eng.StateEngine().GetAuxiliaryDir(),
 		rate.NewLimiter(rate.Inf, math.MaxInt64), t.eng.StateEngine().Env())
-	if err := ss.TruncateTo(ctx, lastIndex); err != nil {
+	if err := ss.TruncateTo(ctx, hi); err != nil {
 		return err
 	}
 	// We must sync the sideloaded storage after truncation to avoid leaking the
@@ -312,39 +313,37 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	return ss.Sync()
 }
 
-// clearRaftLogWithSingleDelete clears raft log entries using SingleDelete for
-// each point key. Unlike the regular truncation path, this always uses point
-// deletions and never falls back to a range tombstone for simplicity.
-// TODO(ibrahim): Let this function use the same pointDelThreshold heuristic
-// when clearning the raft log.
-func clearRaftLogWithSingleDelete(
-	ctx context.Context,
-	r storage.Reader,
-	w storage.Writer,
-	rangeID roachpb.RangeID,
-	lastIndex kvpb.RaftIndex,
-) error {
-	start := keys.RaftLogPrefix(rangeID)
-	end := keys.RaftLogKey(rangeID, lastIndex+1)
+// emptyLogPrefix returns the index preceding the first existing raft log entry
+// at <= lastIndex. Returns lastIndex if the entire prefix is empty.
+func emptyLogPrefix(
+	ctx context.Context, r storage.Reader, prefixBuf keys.RangeIDPrefixBuf, lastIndex kvpb.RaftIndex,
+) (kvpb.RaftIndex, error) {
+	start := prefixBuf.RaftLogPrefix().Clone()
+	end := prefixBuf.RaftLogKey(lastIndex).Next()
 	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: start,
 		UpperBound: end,
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer iter.Close()
-
 	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
-	for ; ok; ok, err = iter.NextEngineKey() {
-		key, kerr := iter.UnsafeEngineKey()
-		if kerr != nil {
-			return kerr
-		}
-		if err := w.SingleClearEngineKey(key); err != nil {
-			return err
-		}
+	if err != nil || !ok {
+		return lastIndex, err // error or not found
 	}
-	return err
+	key, err := iter.UnsafeEngineKey()
+	if err != nil {
+		return 0, err
+	}
+	firstIndex, err := keys.DecodeRaftLogKeyFromSuffix(key.Key[len(start):])
+	if err != nil {
+		return 0, err
+	}
+	// NB: index 0 must never have an entry.
+	if firstIndex == 0 || firstIndex > lastIndex {
+		return 0, errors.AssertionFailedf("unexpected firstIndex: %d compared to lastIndex: %d", firstIndex, lastIndex)
+	}
+	return firstIndex - 1, nil
 }

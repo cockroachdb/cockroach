@@ -275,6 +275,44 @@ func TestTruncateAppliedOnly(t *testing.T) {
 	}
 }
 
+// TestEmptyLogPrefix exercises the search for the smallest raft log index
+// in [RaftLogPrefix, hi].
+func TestEmptyLogPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const rangeID = roachpb.RangeID(1)
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+
+	tests := []struct {
+		entries []kvpb.RaftIndex
+		last    kvpb.RaftIndex
+		wantIdx kvpb.RaftIndex
+	}{
+		{entries: nil, last: 100, wantIdx: 100},
+		{entries: []kvpb.RaftIndex{}, last: 0, wantIdx: 0},
+		{entries: []kvpb.RaftIndex{}, last: 100, wantIdx: 100},
+		{entries: []kvpb.RaftIndex{15}, last: 0, wantIdx: 0},
+		{entries: []kvpb.RaftIndex{15}, last: 14, wantIdx: 14},
+		{entries: []kvpb.RaftIndex{15}, last: 15, wantIdx: 14},
+		{entries: []kvpb.RaftIndex{15}, last: 16, wantIdx: 14},
+		{entries: []kvpb.RaftIndex{15, 16}, last: 15, wantIdx: 14},
+		{entries: []kvpb.RaftIndex{15, 16}, last: 100, wantIdx: 14},
+	}
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			e := makeTestEngines()
+			defer e.Close()
+			for _, idx := range tc.entries {
+				e.writeRaftLogEntry(t, rangeID, idx)
+			}
+			idx, err := emptyLogPrefix(ctx, e.LogEngine(), prefixBuf, tc.last)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantIdx, idx)
+		})
+	}
+}
+
 // TestTruncateAndClearRaftState verifies that WAG truncation only clears raft
 // log entries and sideloaded files up to the destroyed/subsumed replica's last
 // index. Entries and files beyond that index may belong to a newer replica and
