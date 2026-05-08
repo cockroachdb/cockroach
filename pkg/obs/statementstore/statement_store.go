@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -148,6 +149,14 @@ const maxPendingSize = 5000
 // the insert.
 func (ss *StatementStore) PutStatement(ctx context.Context, info StatementInfo) {
 	if !StatementStoreEnabled.Get(&ss.settings.SV) {
+		return
+	}
+	// Stay dormant until the V26_3_AlterStatementsTablePK migration has run on
+	// the whole cluster. Writing during the ALTER PRIMARY KEY window can race
+	// with the schema change and produce transient INSERT errors that the
+	// writer handles by evicting from cache (and logging at ERROR level), but
+	// the data is non-essential, so it is cleaner to simply not write.
+	if !ss.settings.Version.IsActive(ctx, clusterversion.V26_3_AlterStatementsTablePK) {
 		return
 	}
 	if !ss.addToCacheIfAbsent(ctx, info.FingerprintID) {
