@@ -1,31 +1,22 @@
 ** Test certificates directory **
 
-Contains the following files:
+Test certificates are now generated programmatically at runtime by
+`pkg/security/securitytest/certgen.go`. This eliminates the need for static
+certificate files that expire periodically and require manual regeneration.
 
-* ca.crt: CA certificate
-* ca.key: CA private key
-* node.crt: node client/server certificate
-* node.key: node client/server private key
-* client.root.crt: admin client certificate
-* client.root.key: admin client private key
-* client.testuser.crt: testing user certificate
-* client.testuser.key: testing user private key
-* client.testuser2.crt: testing user 2 certificate
-* client.testuser2.key: testing user 2 private key
-* client.testuser3.crt: testing user 3 certificate
-* client.testuser3.key: testing user 3 private key
-* ca-client-tenant.crt: tenant CA certificate
-* ca-client-tenant.key: tenant CA private key
-* client-tenant.<ID>.crt: tenant client certificate
-* client-tenant.<ID>.key: tenant client private key
-* tenant-signing.<ID>.crt: tenant signing certificate
-* tenant-signing.<ID>.key: tenant signing private key
+The following certificates are generated on first access:
 
-The per-tenant files include IDs: 10, 11, and 20.
+* ca.crt/key: CA certificate
+* ca-client-tenant.crt/key: tenant CA certificate
+* node.crt/key: node client/server certificate
+* client.root.crt/key: admin client certificate
+* client.testuser.crt/key: testing user certificate
+* client.testuser2.crt/key: testing user 2 certificate
+* client.testuser3.crt/key: testing user 3 certificate
+* client.testuser_cn_only.crt/key: client cert with CommonName only (no SAN)
+* client.testuser_san_only.crt/key: client cert with DNS SAN only (no CN)
+* client.testuser_cn_and_san.crt/key: client cert with both CN and DNS SAN
+* client-tenant.<ID>.crt/key: tenant client certificates (see EmbeddedTenantIDs in testcerts.go)
+* tenant-signing.<ID>.crt/key: tenant signing certificates (see EmbeddedTenantIDs in testcerts.go)
 
-For a human-readable version of the certificate, run:
-```bash
-openssl x509 -in node.crt -text
-```
-
-To regenerate, run `regenerate.sh` from the repo root.
+See `certgen.go` for implementation details.
