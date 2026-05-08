@@ -1119,7 +1119,6 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 2129466854  public      t6         t6_expr_expr1_idx  NULL
 2129466848  public      t6         t6_expr_key        NULL
 2129466850  public      t6         t6_expr_idx1       NULL
-784389845   public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -1128,7 +1127,6 @@ WHERE schemaname = 'public'
 ORDER BY tablename, indexname
 ----
 crdb_oid    tablename  indexname          indexdef
-784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON public.mv1 USING btree (rowid ASC)
 3687884464  t1         index_key          CREATE UNIQUE INDEX index_key ON public.t1 USING btree (b ASC, c ASC)
 3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON public.t1 USING btree (a ASC)
 3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON public.t1 USING btree (p ASC)
@@ -1768,8 +1766,6 @@ t5_rowid_not_null        109           n        NOT_NULL
 t6_pkey                  109           p        PRIMARY_KEY_(rowid_ASC)
 t6_expr_key              109           u        UNIQUE_(lower(c)_ASC)
 t6_rowid_not_null        109           n        NOT_NULL
-mv1_pkey                 109           p        PRIMARY_KEY_(rowid_ASC)
-mv1_rowid_not_null       109           n        NOT_NULL
 
 query TTBBBOOOB colnames,rowsort
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid, conenforced
@@ -1808,8 +1804,6 @@ t5_rowid_not_null        n        false          false        true          117 
 t6_pkey                  p        false          false        true          120       0         2129466852  true
 t6_expr_key              u        false          false        true          120       0         2129466848  true
 t6_rowid_not_null        n        false          false        true          120       0         0           true
-mv1_pkey                 p        false          false        true          121       0         784389845   true
-mv1_rowid_not_null       n        false          false        true          121       0         0           true
 
 query T
 SELECT conname
@@ -1842,7 +1836,6 @@ uwi_b_partial  0          NULL         NULL         NULL
 t5_pkey        0          NULL         NULL         NULL
 t6_pkey        0          NULL         NULL         NULL
 t6_expr_key    0          NULL         NULL         NULL
-mv1_pkey       0          NULL         NULL         NULL
 
 query TOTTT colnames,rowsort
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -1894,8 +1887,6 @@ t5_rowid_not_null        true        0            false         {4}
 t6_pkey                  true        0            true          {6}
 t6_expr_key              true        0            true          {7}
 t6_rowid_not_null        true        0            false         {6}
-mv1_pkey                 true        0            true          {2}
-mv1_rowid_not_null       true        0            false         {2}
 
 query TTTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
@@ -1908,7 +1899,6 @@ conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin      
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)         (b > 11)         CHECK ((b > 11))
 check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::text)  (c != ''::text)  CHECK ((c != ''::text))
 index_key      NULL     NULL       NULL       NULL       NULL       NULL             NULL             UNIQUE (b ASC, c ASC)
-mv1_pkey       NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (rowid ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (value ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (value ASC)
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL             NULL             UNIQUE (a ASC)
@@ -4116,20 +4106,20 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public' ORDER BY def.oid DESC
 ----
-4171354239  t2             unique_rowid()
-3633243986  testtable      unique_rowid()
-3086013501  t5             unique_rowid()
-2306804703  t1             a * b
-2306804698  t1             a * b
-2306804694  t1             12
-2000672759  mv1            unique_rowid()
-1740936492  t4             unique_rowid()
-1221463949  t3             'FOO'::text
-1221463946  t3             unique_rowid()
-655595756   t6             m = 'foo'::public.mytype
-655595747   t6             lower(c)
-655595746   t6             unique_rowid()
-655595745   t6             a + b
+4171354239  t2         unique_rowid()
+3633243986  testtable  unique_rowid()
+3086013501  t5         unique_rowid()
+2306804703  t1         a * b
+2306804698  t1         a * b
+2306804694  t1         12
+2000672759  mv1        unique_rowid()
+1740936492  t4         unique_rowid()
+1221463949  t3         'FOO'::text
+1221463946  t3         unique_rowid()
+655595756   t6         m = 'foo'::public.mytype
+655595747   t6         lower(c)
+655595746   t6         unique_rowid()
+655595745   t6         a + b
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.

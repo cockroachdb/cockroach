@@ -1195,6 +1195,13 @@ func populateTableConstraints(
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
+	// Materialized views in CRDB carry a synthetic primary key on the hidden
+	// rowid column, but PostgreSQL matviews do not expose any constraints in
+	// pg_catalog.pg_constraint. Skip them entirely so consumers (e.g. pg_dump)
+	// don't try to recreate constraints that have no user-visible meaning.
+	if table.MaterializedView() {
+		return nil
+	}
 	namespaceOid := schemaOid(sc.GetID())
 	tblOid := tableOid(table.GetID())
 	for _, c := range table.AllConstraints() {
@@ -2496,6 +2503,35 @@ func makeZeroedOidVector(size int) (tree.Datum, error) {
 }
 
 // addRowForPgIndex generates a row for pg_index for a given table and index.
+// isHiddenSyntheticPK reports whether the index is a CockroachDB-synthetic
+// primary key that has no PostgreSQL counterpart and should be hidden from
+// pg_catalog index views.
+//
+// PostgreSQL materialized views never have an implicit primary key, so
+// CockroachDB's synthetic rowid PK on a matview is always hidden. For ordinary
+// tables, the synthetic rowid PK that CockroachDB attaches when the user did
+// not declare one is hidden by default; the
+// show_primary_key_constraint_on_not_visible_columns session setting can
+// re-enable it for callers that want to inspect CockroachDB's storage layout.
+// User-defined indexes are unaffected.
+func isHiddenSyntheticPK(p *planner, table catalog.TableDescriptor, index catalog.Index) bool {
+	if !index.Primary() {
+		return false
+	}
+	if table.MaterializedView() {
+		return true
+	}
+	if p.SessionData().ShowPrimaryKeyConstraintOnNotVisibleColumns {
+		return false
+	}
+	for _, col := range table.IndexKeyColumns(index) {
+		if !col.IsHidden() {
+			return false
+		}
+	}
+	return true
+}
+
 func addRowForPgIndex(
 	ctx context.Context,
 	p *planner,
@@ -2504,6 +2540,9 @@ func addRowForPgIndex(
 	index catalog.Index,
 	addRow func(...tree.Datum) error,
 ) error {
+	if isHiddenSyntheticPK(p, table, index) {
+		return nil
+	}
 	tableOid := tableOid(table.GetID())
 	isMutation, isWriteOnly :=
 		table.GetIndexMutationCapabilities(index.GetID())
@@ -2681,6 +2720,9 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 				scNameName := tree.NewDName(sc.GetName())
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+					if isHiddenSyntheticPK(p, table, index) {
+						return nil
+					}
 					def, err := indexDefFromDescriptor(ctx, p, sc, table, index)
 					if err != nil {
 						return err
