@@ -82,7 +82,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
+				newState, err = logAppend(ctx, sl.RaftLogPrefix(), eng, rw, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -165,7 +165,7 @@ func (h *logstoreTruncHelper) populate() {
 	b := h.eng.NewBatch()
 	defer b.Close()
 	_, err := logAppend(
-		h.ctx, h.prefixBuf.RaftLogPrefix(), b, RaftState{}, entries, false, /* enginesSeparated */
+		h.ctx, h.prefixBuf.RaftLogPrefix(), h.eng, b, RaftState{}, entries, false, /* enginesSeparated */
 	)
 	require.NoError(h.t, err)
 	require.NoError(h.t, b.Commit(true /* sync */))
