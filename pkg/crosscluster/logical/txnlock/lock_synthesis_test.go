@@ -113,10 +113,10 @@ func requireSortOrder(
 		// Compare PK value (first datum).
 		wantPK := want.Row[0]
 		gotPK := got.Row[0]
-		if want.IsDelete {
+		if want.IsDeleteRow() {
 			wantPK = want.PrevRow[0]
 		}
-		if got.IsDelete {
+		if got.IsDeleteRow() {
 			gotPK = got.PrevRow[0]
 		}
 		require.Equal(t, wantPK, gotPK,
@@ -908,7 +908,7 @@ func TestDeriveLocks(t *testing.T) {
 			// Deleting such a row would appear as though the fk was updated
 			// rather than deleted if we only checked the row values, instead
 			// of the actual decoded row IsDelete. This would cause this test
-			// to errornously detect a cycle.
+			// to erroneously detect a cycle.
 			name: "fk_delete_child_then_parent_pk_fk",
 			txn1: txnCase{
 				events: []streampb.StreamEvent_KV{
@@ -1075,6 +1075,29 @@ func TestDeriveLocks(t *testing.T) {
 				readLockCount: 1,
 				order:         []int{1, 0},
 			},
+		},
+		{
+			// Test that tombstone events are properly ordered with their deletes,
+			// and that FK locks are unnecessarily emitted.
+			name: "tombstone_event",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					childEB.DeleteEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// PK(id=1) + outbound FK(parent_id=10, read) + outbound FK(parent_ref=50, read).
+				writeLockCount: 1,
+				readLockCount:  2,
+				order:          []int{0},
+			},
+			txn2: txnCase{
+				events: []streampb.StreamEvent_KV{
+					childEB.TombstoneEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// PK only, tombstone events shouldn't emit FK locks.
+				writeLockCount: 1,
+				order:          []int{0},
+			},
+			writeOverlapCount: 1,
 		},
 		{
 			// Updating a parent's non-constraint column and inserting a

@@ -308,38 +308,56 @@ func (t *tableConstraints) DependsOn(
 func (t *tableConstraints) fkDependsOn(
 	ctx context.Context, otherTC *tableConstraints, a, b ldrdecoder.DecodedRow,
 ) (bool, error) {
-	// a is the child, b is the parent. a depends on b if b is inserting a
-	// parent value that a's new row needs to reference.
-	for _, outbound := range t.OutboundForeignKeyConstraints {
-		inbound, ok := otherTC.InboundForeignKeyConstraints[outbound.mixin]
+	// Check if row a is dependent on row b based on parent and child dependencies.
+	// Note that row a can have both child and parent dependencies on row b, i.e.
+	// we break the check into two parts.
+
+	// Check if a and b have any fk dependencies where a is the child
+	// table and b is the parent table.
+	parent, child := b, a
+	for _, parentConstraint := range otherTC.InboundForeignKeyConstraints {
+		childConstraint, ok := t.OutboundForeignKeyConstraints[parentConstraint.mixin]
 		if !ok {
 			continue
 		}
-		eq, err := columnSetEqual(ctx, t.evalCtx, &outbound, &inbound, a.Row, b.Row)
+		applyOrder, err := deriveFKApplyOrder(ctx, t.evalCtx, parent, child, parentConstraint, childConstraint)
 		if err != nil {
 			return false, err
 		}
-		if eq {
+		switch applyOrder {
+		case noApplyOrder:
+		case parentFirst:
+			// parent (row b) first means that a is dependent on b.
 			return true, nil
+		case childFirst:
+			// child (row a) first means that b is dependent on a, but we don't
+			// return early here because we want to detect cycles. To show a cycle,
+			// we need to prove that (a → b) and (b → a). We will (or already did)
+			// call `fkDependsOn(b, a)` which will check for (b → a), so we only
+			// need to worry about (a → b), i.e. if we return false early here
+			// we might end up proving (b → a) twice and miss the cycle.
 		}
 	}
 
-	// a is the parent, b is the child. a depends on b if b is removing a
-	// child reference that currently prevents a's parent row from being
-	// deleted.
-	for _, inbound := range t.InboundForeignKeyConstraints {
-		outbound, ok := otherTC.OutboundForeignKeyConstraints[inbound.mixin]
+	// Check if a and b have any fk dependencies where a is the parent
+	// table and b is the child table.
+	parent, child = a, b
+	for _, parentConstraint := range t.InboundForeignKeyConstraints {
+		childConstraint, ok := otherTC.OutboundForeignKeyConstraints[parentConstraint.mixin]
 		if !ok {
 			continue
 		}
-		eq, err := columnSetEqual(ctx, t.evalCtx, &inbound, &outbound, a.PrevRow, b.PrevRow)
+		applyOrder, err := deriveFKApplyOrder(ctx, t.evalCtx, parent, child, parentConstraint, childConstraint)
 		if err != nil {
 			return false, err
 		}
-		if eq {
+		switch applyOrder {
+		case noApplyOrder:
+		case parentFirst:
+			// Don't return to detect cycles, same logic as above.
+		case childFirst:
 			return true, nil
 		}
 	}
-
 	return false, nil
 }

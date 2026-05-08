@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "column_set.go",
         "doc.go",
+        "foreign_key_ordering.go",
         "lock_synthesis.go",
         "schema.go",
         "sort.go",
@@ -58,6 +59,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
