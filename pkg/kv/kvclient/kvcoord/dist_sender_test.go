@@ -1922,6 +1922,9 @@ func TestEventuallyRecoverFromLeaseholderContextError(t *testing.T) {
 	}
 	ds := NewDistSender(ctx, cfg)
 
+	// Turn on leaseholder randomization by setting a non-zero duration.
+	randomizeLeaseholderOnContextErrorDuration.Override(ctx, &ds.st.SV, 2*time.Second)
+
 	// Set the clock for the range cache to be manual.
 	manualClock := hlc.NewHybridManualClock()
 	ds.rangeCache.TestingSetManualClock(manualClock)

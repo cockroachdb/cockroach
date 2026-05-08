@@ -436,7 +436,7 @@ var randomizeLeaseholderOnContextErrorDuration = settings.RegisterDurationSettin
 	settings.ApplicationLevel,
 	"kv.dist_sender.randomize_leaseholder_on_context_error.duration",
 	"when non-zero, configures how long we wait before trying to contact a random replica when context errors occur",
-	2*time.Second,
+	0,
 	settings.DurationWithMinimumOrZeroDisable(500*time.Millisecond),
 )
 
