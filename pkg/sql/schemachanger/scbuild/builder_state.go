@@ -1886,6 +1886,28 @@ func (b *builderState) BuildReferenceProvider(stmt tree.Statement) scbuildstmt.R
 	return provider
 }
 
+// BuildReferenceProviderErr implements the scbuildstmt.FunctionHelpers interface.
+func (b *builderState) BuildReferenceProviderErr(
+	stmt tree.Statement,
+) (scbuildstmt.ReferenceProvider, error) {
+	return b.referenceProviderFactory.NewReferenceProvider(b.ctx, stmt)
+}
+
+// MustReadDescriptor implements the scbuildstmt.BuilderState interface.
+func (b *builderState) MustReadDescriptor(id descpb.ID) catalog.Descriptor {
+	return b.readDescriptor(id)
+}
+
+// AddSyntheticDescriptor implements the scbuildstmt.BuilderState interface.
+func (b *builderState) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	b.cr.AddSyntheticDescriptor(b.ctx, desc)
+}
+
+// ResetSyntheticDescriptors implements the scbuildstmt.BuilderState interface.
+func (b *builderState) ResetSyntheticDescriptors() {
+	b.cr.ResetSyntheticDescriptors(b.ctx)
+}
+
 func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
 	db *scpb.Database,
 	sc *scpb.Schema,

@@ -122,6 +122,16 @@ type BuilderState interface {
 	// the builder knows to avoid loading existing descriptor for decomposition.
 	GenerateUniqueDescID() catid.DescID
 
+	// MustReadDescriptor looks up a descriptor by ID, panicking if not found.
+	MustReadDescriptor(id descpb.ID) catalog.Descriptor
+
+	// AddSyntheticDescriptor injects a synthetic descriptor that overrides
+	// the real descriptor with the same ID for subsequent catalog reads.
+	AddSyntheticDescriptor(desc catalog.Descriptor)
+
+	// ResetSyntheticDescriptors removes all injected synthetic descriptors.
+	ResetSyntheticDescriptors()
+
 	// BuildUserPrivilegesFromDefaultPrivileges generates owner and user
 	// privileges elements from default privileges of the given database
 	// and schemas for the given descriptor and object type.
@@ -363,6 +373,11 @@ type TableHelpers interface {
 
 type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
+
+	// BuildReferenceProviderErr is like BuildReferenceProvider but returns an
+	// error instead of panicking when the statement fails type-checking.
+	BuildReferenceProviderErr(stmt tree.Statement) (ReferenceProvider, error)
+
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
 		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
 	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string

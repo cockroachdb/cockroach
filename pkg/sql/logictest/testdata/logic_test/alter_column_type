@@ -968,20 +968,228 @@ DROP TABLE t_with_default;
 
 subtest dep_function
 
+# Compatible type change (INT4 → INT8) should succeed with dependent function.
 statement ok
-CREATE TABLE T_FOR_FUNCTION (C1 INT, C2 INT);
+CREATE TABLE t_for_function (c1 INT4, c2 INT4);
 
 statement ok
-CREATE OR REPLACE FUNCTION F1() RETURNS INT AS 'SELECT C2 FROM T_FOR_FUNCTION' LANGUAGE SQL;
-
-statement error pq: cannot alter type of column "c2" because function "f1" depends on it\nHINT: consider dropping "f1" first.
-ALTER TABLE T_FOR_FUNCTION ALTER COLUMN C2 SET DATA TYPE TEXT;
+CREATE OR REPLACE FUNCTION f1() RETURNS INT AS 'SELECT c2 FROM t_for_function' LANGUAGE SQL;
 
 statement ok
-DROP FUNCTION F1;
+ALTER TABLE t_for_function ALTER COLUMN c2 SET DATA TYPE INT8;
+
+# Verify the function still works after the type change.
+statement ok
+INSERT INTO t_for_function VALUES (1, 42);
+
+query I
+SELECT f1();
+----
+42
+
+# Incompatible type change (INT → TEXT) should fail because the function body
+# would become invalid: the return type is INT but the column would be TEXT.
+statement error pq: cannot alter type of column "c2" because function "f1" would become invalid
+ALTER TABLE t_for_function ALTER COLUMN c2 SET DATA TYPE TEXT;
 
 statement ok
-DROP TABLE T_FOR_FUNCTION;
+DROP FUNCTION f1;
+
+statement ok
+DROP TABLE t_for_function;
+
+# Compatible type change (VARCHAR(30) → VARCHAR(60)) with dependent function.
+statement ok
+CREATE TABLE t_for_function_vc (c1 INT, c2 VARCHAR(30));
+
+statement ok
+CREATE FUNCTION f_vc() RETURNS VARCHAR AS 'SELECT c2 FROM t_for_function_vc' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_for_function_vc ALTER COLUMN c2 SET DATA TYPE VARCHAR(60);
+
+statement ok
+INSERT INTO t_for_function_vc VALUES (1, 'hello');
+
+query T
+SELECT f_vc();
+----
+hello
+
+statement ok
+DROP FUNCTION f_vc;
+
+statement ok
+DROP TABLE t_for_function_vc;
+
+# Multiple functions depending on the same column.
+statement ok
+CREATE TABLE t_multi_fn (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_multi_1() RETURNS INT AS 'SELECT c1 FROM t_multi_fn' LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_multi_2() RETURNS INT AS 'SELECT c1 + 1 FROM t_multi_fn' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_multi_fn ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_multi_fn VALUES (10);
+
+query I
+SELECT f_multi_1();
+----
+10
+
+query I
+SELECT f_multi_2();
+----
+11
+
+statement ok
+DROP FUNCTION f_multi_1;
+
+statement ok
+DROP FUNCTION f_multi_2;
+
+statement ok
+DROP TABLE t_multi_fn;
+
+# PL/pgSQL function depending on column.
+statement ok
+CREATE TABLE t_plpgsql (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TABLE t_plpgsql ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_plpgsql VALUES (99);
+
+query I
+SELECT f_plpgsql();
+----
+99
+
+statement ok
+DROP FUNCTION f_plpgsql;
+
+statement ok
+DROP TABLE t_plpgsql;
+
+# Stored procedure depending on column.
+statement ok
+CREATE TABLE t_proc (c1 INT4, c2 INT);
+
+statement ok
+CREATE PROCEDURE p1(OUT result INT) AS 'SELECT c1 FROM t_proc LIMIT 1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_proc ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_proc VALUES (55, 1);
+
+query I
+CALL p1(NULL);
+----
+55
+
+statement ok
+DROP PROCEDURE p1;
+
+statement ok
+DROP TABLE t_proc;
+
+# Function depending on a single column of a multi-column table.
+statement ok
+CREATE TABLE t_ref1 (a INT4, b TEXT);
+
+statement ok
+CREATE FUNCTION f_ref() RETURNS INT AS 'SELECT a FROM t_ref1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_ref1 ALTER COLUMN a SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_ref1 VALUES (7, 'test');
+
+query I
+SELECT f_ref();
+----
+7
+
+statement ok
+DROP FUNCTION f_ref;
+
+statement ok
+DROP TABLE t_ref1;
+
+# Function referencing multiple columns where only one is altered.
+statement ok
+CREATE TABLE t_multi_col (a INT4, b INT4);
+
+statement ok
+CREATE FUNCTION f_multi_col() RETURNS INT AS 'SELECT a + b FROM t_multi_col' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_multi_col ALTER COLUMN a SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_multi_col VALUES (3, 4);
+
+query I
+SELECT f_multi_col();
+----
+7
+
+statement ok
+DROP FUNCTION f_multi_col;
+
+statement ok
+DROP TABLE t_multi_col;
+
+# Incompatible type change (INT → TEXT) should fail for procedures too, and the
+# error message should say "procedure" not "function".
+statement ok
+CREATE TABLE t_proc_err (c1 INT);
+
+statement ok
+CREATE PROCEDURE p_err(OUT result INT) AS 'SELECT c1 FROM t_proc_err LIMIT 1' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_err" would become invalid
+ALTER TABLE t_proc_err ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP PROCEDURE p_err;
+
+statement ok
+DROP TABLE t_proc_err;
+
+# General column conversion (triggered by USING clause) should reject dependent
+# functions because the column is replaced with a new column ID.
+statement ok
+CREATE TABLE t_gen_fn (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_gen() RETURNS INT AS 'SELECT c1 FROM t_gen_fn' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_gen" depends on it
+ALTER TABLE t_gen_fn ALTER COLUMN c1 SET DATA TYPE INT8 USING c1::INT8;
+
+statement ok
+DROP FUNCTION f_gen;
+
+statement ok
+DROP TABLE t_gen_fn;
 
 subtest ttl
 

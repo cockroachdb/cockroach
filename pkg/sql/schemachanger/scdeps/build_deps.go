@@ -305,6 +305,16 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
+// AddSyntheticDescriptor implements the scbuild.CatalogReader interface.
+func (d *buildDeps) AddSyntheticDescriptor(_ context.Context, desc catalog.Descriptor) {
+	d.descsCollection.AddSyntheticDescriptor(desc)
+}
+
+// ResetSyntheticDescriptors implements the scbuild.CatalogReader interface.
+func (d *buildDeps) ResetSyntheticDescriptors(_ context.Context) {
+	d.descsCollection.ResetSyntheticDescriptors()
+}
+
 // GetAllSchemasInDatabase implements the scbuild.CatalogReader interface.
 func (d *buildDeps) GetAllSchemasInDatabase(
 	ctx context.Context, database catalog.DatabaseDescriptor,
