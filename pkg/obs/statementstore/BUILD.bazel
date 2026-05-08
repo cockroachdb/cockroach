@@ -2,16 +2,27 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "statementstore",
-    srcs = ["statement_store.go"],
+    srcs = [
+        "statement_store.go",
+        "testutils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/statementstore",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/keys",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/isql",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/types",
         "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/log",

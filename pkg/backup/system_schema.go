@@ -567,6 +567,30 @@ SELECT row_id, fingerprint, hint, created_at, '%s' FROM %s`,
 	return nil
 }
 
+// statementsRestoreFunc handles restore of system.statements across the
+// V26_3_AlterStatementsTablePK boundary. The pre-V26_3 schema had an extra
+// `id` column (the prior primary key); a backup taken on such a cluster
+// produces a temp table whose column count exceeds that of the post-migration
+// target, which would cause the default `INSERT ... SELECT *` copy to fail.
+//
+// The table existed in v26.2 but no writer populated it until v26.3, so any
+// pre-V26_3 backup is guaranteed to be empty and we can skip the copy entirely.
+func statementsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	hasLegacyID, err := tableHasColumnName(ctx, txn, tempTableName, "id")
+	if err != nil {
+		return err
+	}
+	if hasLegacyID {
+		return nil
+	}
+	return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+}
+
 func tableHasColumnName(
 	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
@@ -951,6 +975,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.StatementsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            statementsRestoreFunc,
 	},
 }
 

@@ -1390,8 +1390,7 @@ CREATE TABLE system.advisory_locks (
 	// StatementsTableSchema defines the schema for the system.statements table
 	// which stores information about executed statements.
 	//
-	// * id: a unique ID used as the primary key.
-	// * fingerprint_id: the fingerprint ID of the statement (as bytes).
+	// * fingerprint_id: the fingerprint ID of the statement (as bytes); primary key.
 	// * fingerprint: the statement fingerprint text.
 	// * summary: a summary of the statement.
 	// * db: the database where the statement was executed.
@@ -1400,7 +1399,6 @@ CREATE TABLE system.advisory_locks (
 	// * last_upserted: the timestamp when the record was last updated.
 	StatementsTableSchema = `
 CREATE TABLE system.statements (
-    id             INT8 NOT NULL DEFAULT unique_rowid(),
     fingerprint_id BYTES NOT NULL,
     fingerprint    STRING NOT NULL,
     summary        STRING NOT NULL,
@@ -1408,10 +1406,9 @@ CREATE TABLE system.statements (
     metadata       JSONB NOT NULL,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_upserted  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT "primary" PRIMARY KEY (id ASC),
-    UNIQUE INDEX statements_fingerprint_id_key (fingerprint_id ASC) STORING (fingerprint, summary, db),
+    CONSTRAINT "primary" PRIMARY KEY (fingerprint_id ASC),
     INDEX statements_fingerprint_idx (fingerprint ASC),
-    FAMILY "primary" (id, fingerprint_id, fingerprint, summary, db, metadata, created_at, last_upserted)
+    FAMILY "primary" (fingerprint_id, fingerprint, summary, db, metadata, created_at, last_upserted)
 );`
 )
 
@@ -1457,7 +1454,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AddAdvisoryLocksTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_3_AlterStatementsTablePK.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -5521,51 +5518,38 @@ var (
 			catconstants.StatementsTableName,
 			descpb.InvalidID, // dynamically assigned
 			[]descpb.ColumnDescriptor{
-				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-				{Name: "fingerprint_id", ID: 2, Type: types.Bytes},
-				{Name: "fingerprint", ID: 3, Type: types.String},
-				{Name: "summary", ID: 4, Type: types.String},
-				{Name: "db", ID: 5, Type: types.String},
-				{Name: "metadata", ID: 6, Type: types.Jsonb},
-				{Name: "created_at", ID: 7, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
-				{Name: "last_upserted", ID: 8, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "fingerprint_id", ID: 1, Type: types.Bytes},
+				{Name: "fingerprint", ID: 2, Type: types.String},
+				{Name: "summary", ID: 3, Type: types.String},
+				{Name: "db", ID: 4, Type: types.String},
+				{Name: "metadata", ID: 5, Type: types.Jsonb},
+				{Name: "created_at", ID: 6, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "last_upserted", ID: 7, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"id", "fingerprint_id", "fingerprint", "summary", "db", "metadata", "created_at", "last_upserted"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+					ColumnNames: []string{"fingerprint_id", "fingerprint", "summary", "db", "metadata", "created_at", "last_upserted"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 				},
 			},
 			descpb.IndexDescriptor{
 				Name:                "primary",
 				ID:                  1,
 				Unique:              true,
-				KeyColumnNames:      []string{"id"},
+				KeyColumnNames:      []string{"fingerprint_id"},
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{1},
 			},
 			descpb.IndexDescriptor{
-				Name:                "statements_fingerprint_id_key",
-				ID:                  2,
-				Unique:              true,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
-				KeyColumnNames:      []string{"fingerprint_id"},
-				KeyColumnDirections: singleASC,
-				KeyColumnIDs:        []descpb.ColumnID{2},
-				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				StoreColumnNames:    []string{"fingerprint", "summary", "db"},
-				StoreColumnIDs:      []descpb.ColumnID{3, 4, 5},
-			},
-			descpb.IndexDescriptor{
 				Name:                "statements_fingerprint_idx",
-				ID:                  3,
+				ID:                  2,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				KeyColumnNames:      []string{"fingerprint"},
 				KeyColumnDirections: singleASC,
-				KeyColumnIDs:        []descpb.ColumnID{3},
+				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),

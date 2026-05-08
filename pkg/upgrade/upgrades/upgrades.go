@@ -202,6 +202,14 @@ var upgrades = []upgradebase.Upgrade{
 		createAdvisoryLocksTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"change system.statements primary key to fingerprint_id and drop id column",
+		clusterversion.V26_3_AlterStatementsTablePK.Version(),
+		upgrade.NoPrecondition,
+		alterStatementsTablePK,
+		upgrade.RestoreActionImplemented("statementsRestoreFunc skips restore of pre-V26_3 backups, which are guaranteed empty"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
