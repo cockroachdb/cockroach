@@ -637,7 +637,6 @@ t6_expr_expr1_idx  public   false        0          1546506610  2631952481  0
 t6_expr_key        public   false        0          1546506610  2631952481  0
 t6_expr_idx1       public   false        0          1546506610  2631952481  0
 mv1                public   true         0          1546506610  0           0
-mv1_pkey           public   false        0          1546506610  2631952481  0
 
 query TIRIOBBT colnames,rowsort
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -670,7 +669,6 @@ t6_expr_expr1_idx  NULL      NULL       0              0              false     
 t6_expr_key        NULL      NULL       0              0              false        false        p
 t6_expr_idx1       NULL      NULL       0              0              false        false        p
 mv1                NULL      NULL       0              0              true         false        p
-mv1_pkey           NULL      NULL       0              0              false        false        p
 
 query TBTIIBB colnames,rowsort
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
@@ -703,7 +701,6 @@ t6_expr_expr1_idx  false      i        2         0          false       false
 t6_expr_key        false      i        1         0          false       false
 t6_expr_idx1       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
-mv1_pkey           false      i        1         0          false       false
 
 query TBBBITTT colnames,rowsort
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relreplident
@@ -736,7 +733,6 @@ t6_expr_expr1_idx  false        false           false           0             NU
 t6_expr_key        false        false           false           0             NULL    NULL                  n
 t6_expr_idx1       false        false           false           0             NULL    NULL                  n
 mv1                false        false           false           0             NULL    NULL                  d
-mv1_pkey           false        false           false           0             NULL    NULL                  n
 
 ## pg_catalog.pg_attribute
 
@@ -811,7 +807,6 @@ t6_expr_key        crdb_internal_idx_expr_1      25        NULL           -1    
 t6_expr_idx1       crdb_internal_idx_expr_2      16        NULL           1       1       0         -1
 mv1                ?column?                      20        NULL           8       1       0         -1
 mv1                rowid                         20        NULL           8       2       0         -1
-mv1_pkey           rowid                         20        NULL           8       1       0         -1
 
 query TTIBTTBBTT colnames,rowsort
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -884,7 +879,6 @@ t6_expr_key        crdb_internal_idx_expr_1      -1         NULL      NULL      
 t6_expr_idx1       crdb_internal_idx_expr_2      -1         NULL      NULL        NULL      false       true       ·            v
 mv1                ?column?                      -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                         -1         NULL      NULL        NULL      true        true       ·            ·
-mv1_pkey           rowid                         -1         NULL      NULL        NULL      true        true       ·            ·
 
 query TTBBITTT colnames,rowsort
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -957,7 +951,6 @@ t6_expr_key        crdb_internal_idx_expr_1      false         true        0    
 t6_expr_idx1       crdb_internal_idx_expr_2      false         true        0            NULL    NULL        NULL
 mv1                ?column?                      false         true        0            NULL    NULL        NULL
 mv1                rowid                         false         true        0            NULL    NULL        NULL
-mv1_pkey           rowid                         false         true        0            NULL    NULL        NULL
 
 # Regression test for #163948: dropped columns should have atttypid=0, so they
 # are filtered out by joins with pg_type (matching PostgreSQL behavior).
@@ -1010,7 +1003,6 @@ WHERE n.nspname = 'public'
 ORDER BY relname
 ----
 mv_test         m  d
-mv_test_pkey    i  n
 seq_test        S  n
 tbl_test        r  d
 tbl_test_pkey   i  n
@@ -1119,7 +1111,6 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 2129466854  public      t6         t6_expr_expr1_idx  NULL
 2129466848  public      t6         t6_expr_key        NULL
 2129466850  public      t6         t6_expr_idx1       NULL
-784389845   public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -1128,7 +1119,6 @@ WHERE schemaname = 'public'
 ORDER BY tablename, indexname
 ----
 crdb_oid    tablename  indexname          indexdef
-784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON public.mv1 USING btree (rowid ASC)
 3687884464  t1         index_key          CREATE UNIQUE INDEX index_key ON public.t1 USING btree (b ASC, c ASC)
 3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON public.t1 USING btree (a ASC)
 3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON public.t1 USING btree (p ASC)
@@ -1774,8 +1764,6 @@ t5_rowid_not_null        109           n        NOT_NULL
 t6_pkey                  109           p        PRIMARY_KEY_(rowid_ASC)
 t6_expr_key              109           u        UNIQUE_(lower(c)_ASC)
 t6_rowid_not_null        109           n        NOT_NULL
-mv1_pkey                 109           p        PRIMARY_KEY_(rowid_ASC)
-mv1_rowid_not_null       109           n        NOT_NULL
 
 query TTBBBOOOB colnames,rowsort
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid, conenforced
@@ -1814,8 +1802,6 @@ t5_rowid_not_null        n        false          false        true          117 
 t6_pkey                  p        false          false        true          120       0         2129466852  true
 t6_expr_key              u        false          false        true          120       0         2129466848  true
 t6_rowid_not_null        n        false          false        true          120       0         0           true
-mv1_pkey                 p        false          false        true          121       0         784389845   true
-mv1_rowid_not_null       n        false          false        true          121       0         0           true
 
 query T
 SELECT conname
@@ -1848,7 +1834,6 @@ uwi_b_partial  0          NULL         NULL         NULL
 t5_pkey        0          NULL         NULL         NULL
 t6_pkey        0          NULL         NULL         NULL
 t6_expr_key    0          NULL         NULL         NULL
-mv1_pkey       0          NULL         NULL         NULL
 
 query TOTTT colnames,rowsort
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
@@ -1900,8 +1885,6 @@ t5_rowid_not_null        true        0            false         {4}
 t6_pkey                  true        0            true          {6}
 t6_expr_key              true        0            true          {7}
 t6_rowid_not_null        true        0            false         {6}
-mv1_pkey                 true        0            true          {2}
-mv1_rowid_not_null       true        0            false         {2}
 
 query TTTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
@@ -1914,7 +1897,6 @@ conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin      
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)         (b > 11)         CHECK ((b > 11))
 check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::text)  (c != ''::text)  CHECK ((c != ''::text))
 index_key      NULL     NULL       NULL       NULL       NULL       NULL             NULL             UNIQUE (b ASC, c ASC)
-mv1_pkey       NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (rowid ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (value ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL             NULL             PRIMARY KEY (value ASC)
 t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL             NULL             UNIQUE (a ASC)
@@ -4122,20 +4104,20 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public' ORDER BY def.oid DESC
 ----
-4171354239  t2             unique_rowid()
-3633243986  testtable      unique_rowid()
-3086013501  t5             unique_rowid()
-2306804703  t1             a * b
-2306804698  t1             a * b
-2306804694  t1             12
-2000672759  mv1            unique_rowid()
-1740936492  t4             unique_rowid()
-1221463949  t3             'FOO'::text
-1221463946  t3             unique_rowid()
-655595756   t6             m = 'foo'::public.mytype
-655595747   t6             lower(c)
-655595746   t6             unique_rowid()
-655595745   t6             a + b
+4171354239  t2         unique_rowid()
+3633243986  testtable  unique_rowid()
+3086013501  t5         unique_rowid()
+2306804703  t1         a * b
+2306804698  t1         a * b
+2306804694  t1         12
+2000672759  mv1        unique_rowid()
+1740936492  t4         unique_rowid()
+1221463949  t3         'FOO'::text
+1221463946  t3         unique_rowid()
+655595756   t6         m = 'foo'::public.mytype
+655595747   t6         lower(c)
+655595746   t6         unique_rowid()
+655595745   t6         a + b
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
