@@ -653,6 +653,9 @@ func (s *TestState) GetAllSchemasInDatabase(
 
 // MustReadDescriptor implements the scbuild.CatalogReader interface.
 func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor {
+	if synth, ok := s.syntheticDescs[id]; ok {
+		return synth
+	}
 	desc, err := s.mustReadImmutableDescriptor(id)
 	if err != nil {
 		panic(err)
@@ -664,6 +667,19 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 		panic(err)
 	}
 	return desc
+}
+
+// AddSyntheticDescriptor implements the scbuild.CatalogReader interface.
+func (s *TestState) AddSyntheticDescriptor(_ context.Context, desc catalog.Descriptor) {
+	if s.syntheticDescs == nil {
+		s.syntheticDescs = make(map[descpb.ID]catalog.Descriptor)
+	}
+	s.syntheticDescs[desc.GetID()] = desc
+}
+
+// ResetSyntheticDescriptors implements the scbuild.CatalogReader interface.
+func (s *TestState) ResetSyntheticDescriptors(_ context.Context) {
+	s.syntheticDescs = nil
 }
 
 // mustReadImmutableDescriptor looks up a descriptor and returns a immutable

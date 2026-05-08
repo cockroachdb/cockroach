@@ -8,8 +8,11 @@ package scbuildstmt
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,6 +50,9 @@ func alterTableAlterColumnType(
 	newColType.TypeT = b.ResolveTypeRef(t.ToType)
 
 	// Check for elements depending on the column we are altering.
+	// Dependent functions are collected rather than rejected; they will be
+	// re-validated against the new column type below.
+	var dependentFunctions []*scpb.FunctionBody
 	walkColumnDependencies(b, col, "alter type of", "column", func(e scpb.Element, op, objType string) {
 		switch e := e.(type) {
 		case *scpb.Column:
@@ -64,8 +70,7 @@ func alterTableAlterColumnType(
 			}
 			panic(sqlerrors.NewDependentBlocksOpError(op, objType, t.Column.String(), "view", nsDep.Name))
 		case *scpb.FunctionBody:
-			fnName := b.QueryByID(e.FunctionID).FilterFunctionName().MustGetOneElement()
-			panic(sqlerrors.NewDependentBlocksOpError(op, objType, t.Column.String(), "function", fnName.Name))
+			dependentFunctions = append(dependentFunctions, e)
 		case *scpb.TriggerDeps:
 			tableElts := b.QueryByID(e.TableID)
 			tableName := tableElts.FilterNamespace().MustGetOneElement()
@@ -90,6 +95,17 @@ func alterTableAlterColumnType(
 			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, t.Column.String()))
 		}
 	}, false /* allowPartialIdxPredicateRef */)
+
+	// Re-validate dependent functions against the new column type. This injects
+	// a synthetic table descriptor with the new type and re-runs the optbuilder
+	// on each function body. If any function body fails type-checking, the ALTER
+	// is rejected with a descriptive error.
+	var validatedFunctions []validatedFunction
+	if len(dependentFunctions) > 0 {
+		validatedFunctions = revalidateDependentRoutines(
+			b, tbl.TableID, colID, newColType.Type, t.Column, dependentFunctions,
+		)
+	}
 
 	var err error
 	newColType.Type, err = schemachange.ValidateAlterColumnTypeChecks(
@@ -120,6 +136,10 @@ func alterTableAlterColumnType(
 	default:
 		panic(errors.AssertionFailedf("alter type conversion %v not handled", kind))
 	}
+
+	// Update FunctionBody elements for dependent functions whose column
+	// references may have changed due to the type alteration.
+	updateDependentFunctionBodies(b, validatedFunctions)
 }
 
 // ValidateColExprForNewType will ensure that the existing expressions for
@@ -294,7 +314,7 @@ func handleGeneralColumnConversion(
 	// additional validation checks required that are incompatible with this
 	// process.
 	walkColumnDependencies(b, col, "alter type of", "column", func(e scpb.Element, op, objType string) {
-		switch e.(type) {
+		switch e := e.(type) {
 		case *scpb.SequenceOwner:
 			panic(sqlerrors.NewAlterColumnTypeColOwnsSequenceNotSupportedErr())
 		case *scpb.CheckConstraint, *scpb.CheckConstraintUnvalidated,
@@ -303,6 +323,16 @@ func handleGeneralColumnConversion(
 			panic(sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr())
 		case *scpb.SecondaryIndex:
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
+		case *scpb.FunctionBody:
+			fnName := b.QueryByID(e.FunctionID).FilterFunctionName().MustGetOneElement()
+			kind := "function"
+			if fd, ok := b.MustReadDescriptor(e.FunctionID).(catalog.FunctionDescriptor); ok &&
+				fd.IsProcedure() {
+				kind = "procedure"
+			}
+			panic(sqlerrors.NewDependentBlocksOpError(
+				op, objType, t.Column.String(), kind, fnName.Name,
+			))
 		}
 	}, false /* allowPartialIdxPredicateRef */)
 
@@ -593,4 +623,161 @@ func getColumnCommentForColumnReplacement(
 		newColumnComment = protoutil.Clone(oldColumnComment).(*scpb.ColumnComment)
 	}
 	return
+}
+
+type validatedFunction struct {
+	fnBody      *scpb.FunctionBody
+	refProvider ReferenceProvider
+}
+
+// revalidateDependentRoutines checks that all dependent function bodies remain
+// valid after the column type change. It injects a synthetic table descriptor
+// with the new column type, re-parses each function body into a CREATE ROUTINE
+// AST, and runs BuildReferenceProvider (which invokes optbuilder) to type-check
+// the body against the modified catalog. Returns the validated functions with
+// their new reference providers for subsequent element updates.
+func revalidateDependentRoutines(
+	b BuildCtx,
+	tableID catid.DescID,
+	colID catid.ColumnID,
+	newType *types.T,
+	colName tree.Name,
+	dependentFunctions []*scpb.FunctionBody,
+) []validatedFunction {
+	// Build a synthetic table descriptor with the target column's type changed.
+	desc := b.MustReadDescriptor(tableID)
+	tblDesc, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"expected table descriptor for ID %d, got %T", tableID, desc,
+		))
+	}
+	mut := tblDesc.NewBuilder().(tabledesc.TableDescriptorBuilder).
+		BuildExistingMutableTable()
+	for i := range mut.Columns {
+		if mut.Columns[i].ID == colID {
+			mut.Columns[i].Type = newType
+			break
+		}
+	}
+	b.AddSyntheticDescriptor(mut.ImmutableCopy())
+	// ResetSyntheticDescriptors clears all synthetics, not just the one we added.
+	// This is safe because no other code injects synthetic descriptors during the
+	// build phase.
+	defer b.ResetSyntheticDescriptors()
+
+	// Clear the SemaCtx properties so that the function body type-checking
+	// doesn't inherit ALTER TABLE restrictions (e.g. subquery rejection).
+	semaCtx := b.SemaCtx()
+	defer semaCtx.Properties.Restore(semaCtx.Properties)
+	semaCtx.Properties.Require("", 0)
+
+	validated := make([]validatedFunction, 0, len(dependentFunctions))
+	for _, fnBody := range dependentFunctions {
+		fnDesc := b.MustReadDescriptor(fnBody.FunctionID)
+		fd, ok := fnDesc.(catalog.FunctionDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf(
+				"expected function descriptor for ID %d, got %T",
+				fnBody.FunctionID, fnDesc,
+			))
+		}
+
+		createRoutine, err := fd.ToCreateExpr()
+		if err != nil {
+			panic(errors.Wrapf(err, "converting function %d to CREATE expression",
+				fnBody.FunctionID))
+		}
+
+		// ToCreateExpr unconditionally emits volatility, leakproof, and null
+		// input behavior options for all routine types. The optbuilder rejects
+		// these for procedures (they are only valid for functions in CREATE
+		// PROCEDURE syntax). Strip them here to avoid spurious validation
+		// failures.
+		if createRoutine.IsProcedure {
+			filtered := createRoutine.Options[:0]
+			for _, opt := range createRoutine.Options {
+				switch opt.(type) {
+				case tree.RoutineVolatility, tree.RoutineLeakproof,
+					tree.RoutineNullInputBehavior:
+				default:
+					filtered = append(filtered, opt)
+				}
+			}
+			createRoutine.Options = filtered
+		}
+
+		refProvider, err := b.BuildReferenceProviderErr(createRoutine)
+		if err != nil {
+			fnName := b.QueryByID(fnBody.FunctionID).
+				FilterFunctionName().MustGetOneElement()
+			kind := "function"
+			if fd.IsProcedure() {
+				kind = "procedure"
+			}
+			panic(errors.WithDetail(
+				pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot alter type of column %q because %s %q would become invalid",
+					colName, kind, fnName.Name,
+				),
+				err.Error(),
+			))
+		}
+
+		validated = append(validated, validatedFunction{
+			fnBody:      fnBody,
+			refProvider: refProvider,
+		})
+	}
+	return validated
+}
+
+// updateDependentFunctionBodies replaces FunctionBody elements for functions
+// that were re-validated after a column type change. The body text is unchanged
+// since CockroachDB re-parses and re-optimizes routine bodies on each
+// invocation; only the tracked dependency references need updating.
+func updateDependentFunctionBodies(b BuildCtx, validated []validatedFunction) {
+	for _, vf := range validated {
+		newFnBody := &scpb.FunctionBody{
+			FunctionID: vf.fnBody.FunctionID,
+			Body:       vf.fnBody.Body,
+			Lang:       vf.fnBody.Lang,
+		}
+		if err := vf.refProvider.ForEachTableReference(
+			func(
+				tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs,
+			) error {
+				newFnBody.UsesTables = append(
+					newFnBody.UsesTables,
+					scpb.FunctionBody_TableReference{
+						TableID:   tblID,
+						ColumnIDs: colIDs,
+						IndexID:   idxID,
+					},
+				)
+				return nil
+			},
+		); err != nil {
+			panic(err)
+		}
+		if err := vf.refProvider.ForEachViewReference(
+			func(viewID descpb.ID, colIDs descpb.ColumnIDs) error {
+				newFnBody.UsesViews = append(
+					newFnBody.UsesViews,
+					scpb.FunctionBody_ViewReference{
+						ViewID:    viewID,
+						ColumnIDs: colIDs,
+					},
+				)
+				return nil
+			},
+		); err != nil {
+			panic(err)
+		}
+		newFnBody.UsesFunctionIDs = vf.refProvider.ReferencedRoutines().Ordered()
+		newFnBody.UsesSequenceIDs = vf.refProvider.ReferencedSequences().Ordered()
+		newFnBody.UsesTypeIDs = vf.refProvider.ReferencedTypes().Ordered()
+		b.Replace(newFnBody)
+	}
 }

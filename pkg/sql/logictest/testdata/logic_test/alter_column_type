@@ -968,20 +968,694 @@ DROP TABLE t_with_default;
 
 subtest dep_function
 
+# Compatible type change (INT4 → INT8) should succeed with dependent function.
 statement ok
-CREATE TABLE T_FOR_FUNCTION (C1 INT, C2 INT);
+CREATE TABLE t_for_function (c1 INT4, c2 INT4);
 
 statement ok
-CREATE OR REPLACE FUNCTION F1() RETURNS INT AS 'SELECT C2 FROM T_FOR_FUNCTION' LANGUAGE SQL;
-
-statement error pq: cannot alter type of column "c2" because function "f1" depends on it\nHINT: consider dropping "f1" first.
-ALTER TABLE T_FOR_FUNCTION ALTER COLUMN C2 SET DATA TYPE TEXT;
+CREATE OR REPLACE FUNCTION f1() RETURNS INT AS 'SELECT c2 FROM t_for_function' LANGUAGE SQL;
 
 statement ok
-DROP FUNCTION F1;
+ALTER TABLE t_for_function ALTER COLUMN c2 SET DATA TYPE INT8;
+
+# Verify the function still works after the type change.
+statement ok
+INSERT INTO t_for_function VALUES (1, 42);
+
+query I
+SELECT f1();
+----
+42
+
+# Incompatible type change (INT → TEXT) should fail because the function body
+# would become invalid: the return type is INT but the column would be TEXT.
+statement error pq: cannot alter type of column "c2" because function "f1" would become invalid
+ALTER TABLE t_for_function ALTER COLUMN c2 SET DATA TYPE TEXT;
 
 statement ok
-DROP TABLE T_FOR_FUNCTION;
+DROP FUNCTION f1;
+
+statement ok
+DROP TABLE t_for_function;
+
+# Compatible type change (VARCHAR(30) → VARCHAR(60)) with dependent function.
+statement ok
+CREATE TABLE t_for_function_vc (c1 INT, c2 VARCHAR(30));
+
+statement ok
+CREATE FUNCTION f_vc() RETURNS VARCHAR AS 'SELECT c2 FROM t_for_function_vc' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_for_function_vc ALTER COLUMN c2 SET DATA TYPE VARCHAR(60);
+
+statement ok
+INSERT INTO t_for_function_vc VALUES (1, 'hello');
+
+query T
+SELECT f_vc();
+----
+hello
+
+statement ok
+DROP FUNCTION f_vc;
+
+statement ok
+DROP TABLE t_for_function_vc;
+
+# Multiple functions depending on the same column.
+statement ok
+CREATE TABLE t_multi_fn (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_multi_1() RETURNS INT AS 'SELECT c1 FROM t_multi_fn' LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_multi_2() RETURNS INT AS 'SELECT c1 + 1 FROM t_multi_fn' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_multi_fn ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_multi_fn VALUES (10);
+
+query I
+SELECT f_multi_1();
+----
+10
+
+query I
+SELECT f_multi_2();
+----
+11
+
+statement ok
+DROP FUNCTION f_multi_1;
+
+statement ok
+DROP FUNCTION f_multi_2;
+
+statement ok
+DROP TABLE t_multi_fn;
+
+# PL/pgSQL function depending on column.
+statement ok
+CREATE TABLE t_plpgsql (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TABLE t_plpgsql ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_plpgsql VALUES (99);
+
+query I
+SELECT f_plpgsql();
+----
+99
+
+statement ok
+DROP FUNCTION f_plpgsql;
+
+statement ok
+DROP TABLE t_plpgsql;
+
+# Stored procedure depending on column.
+statement ok
+CREATE TABLE t_proc (c1 INT4, c2 INT);
+
+statement ok
+CREATE PROCEDURE p1(OUT result INT) AS 'SELECT c1 FROM t_proc LIMIT 1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_proc ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_proc VALUES (55, 1);
+
+query I
+CALL p1(NULL);
+----
+55
+
+statement ok
+DROP PROCEDURE p1;
+
+statement ok
+DROP TABLE t_proc;
+
+# Function depending on a single column of a multi-column table.
+statement ok
+CREATE TABLE t_ref1 (a INT4, b TEXT);
+
+statement ok
+CREATE FUNCTION f_ref() RETURNS INT AS 'SELECT a FROM t_ref1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_ref1 ALTER COLUMN a SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_ref1 VALUES (7, 'test');
+
+query I
+SELECT f_ref();
+----
+7
+
+statement ok
+DROP FUNCTION f_ref;
+
+statement ok
+DROP TABLE t_ref1;
+
+# Function referencing multiple columns where only one is altered.
+statement ok
+CREATE TABLE t_multi_col (a INT4, b INT4);
+
+statement ok
+CREATE FUNCTION f_multi_col() RETURNS INT AS 'SELECT a + b FROM t_multi_col' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_multi_col ALTER COLUMN a SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_multi_col VALUES (3, 4);
+
+query I
+SELECT f_multi_col();
+----
+7
+
+statement ok
+DROP FUNCTION f_multi_col;
+
+statement ok
+DROP TABLE t_multi_col;
+
+# Incompatible type change (INT → TEXT) should fail for procedures too, and the
+# error message should say "procedure" not "function".
+statement ok
+CREATE TABLE t_proc_err (c1 INT);
+
+statement ok
+CREATE PROCEDURE p_err(OUT result INT) AS 'SELECT c1 FROM t_proc_err LIMIT 1' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_err" would become invalid
+ALTER TABLE t_proc_err ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP PROCEDURE p_err;
+
+statement ok
+DROP TABLE t_proc_err;
+
+# General column conversion (triggered by USING clause) should reject dependent
+# functions because the column is replaced with a new column ID.
+statement ok
+CREATE TABLE t_gen_fn (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_gen() RETURNS INT AS 'SELECT c1 FROM t_gen_fn' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_gen" depends on it
+ALTER TABLE t_gen_fn ALTER COLUMN c1 SET DATA TYPE INT8 USING c1::INT8;
+
+statement ok
+DROP FUNCTION f_gen;
+
+statement ok
+DROP TABLE t_gen_fn;
+
+# General column conversion (USING clause) should reject dependent PL/pgSQL
+# functions too.
+statement ok
+CREATE TABLE t_gen_plpgsql (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_gen_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_gen_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_gen_plpgsql" depends on it
+ALTER TABLE t_gen_plpgsql ALTER COLUMN c1 SET DATA TYPE INT8 USING c1::INT8;
+
+statement ok
+DROP FUNCTION f_gen_plpgsql;
+
+statement ok
+DROP TABLE t_gen_plpgsql;
+
+# General column conversion (USING clause) should reject dependent procedures.
+statement ok
+CREATE TABLE t_gen_proc (c1 INT4);
+
+statement ok
+CREATE PROCEDURE p_gen(OUT result INT) AS 'SELECT c1 FROM t_gen_proc LIMIT 1' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_gen" depends on it
+ALTER TABLE t_gen_proc ALTER COLUMN c1 SET DATA TYPE INT8 USING c1::INT8;
+
+statement ok
+DROP PROCEDURE p_gen;
+
+statement ok
+DROP TABLE t_gen_proc;
+
+subtest dep_function_narrowing
+
+# Narrowing integer types (INT8 → INT4). The function returns INT8, and after
+# narrowing the column to INT4, the function body still type-checks because INT4
+# is implicitly assignable to INT8.
+statement ok
+CREATE TABLE t_narrow_int (c1 INT8);
+
+statement ok
+CREATE FUNCTION f_narrow_int() RETURNS INT8 AS 'SELECT c1 FROM t_narrow_int' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_narrow_int ALTER COLUMN c1 SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_narrow_int VALUES (42);
+
+query I
+SELECT f_narrow_int();
+----
+42
+
+statement ok
+DROP FUNCTION f_narrow_int;
+
+statement ok
+DROP TABLE t_narrow_int;
+
+# Narrowing INT8 → INT2 with SQL function.
+statement ok
+CREATE TABLE t_narrow_int2 (c1 INT8);
+
+statement ok
+CREATE FUNCTION f_narrow_int2() RETURNS INT8 AS 'SELECT c1 FROM t_narrow_int2' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_narrow_int2 ALTER COLUMN c1 SET DATA TYPE INT2;
+
+statement ok
+INSERT INTO t_narrow_int2 VALUES (7);
+
+query I
+SELECT f_narrow_int2();
+----
+7
+
+statement ok
+DROP FUNCTION f_narrow_int2;
+
+statement ok
+DROP TABLE t_narrow_int2;
+
+# Narrowing INT8 → INT4 with PL/pgSQL function.
+statement ok
+CREATE TABLE t_narrow_plpgsql (c1 INT8);
+
+statement ok
+CREATE FUNCTION f_narrow_plpgsql() RETURNS INT8 AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_narrow_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TABLE t_narrow_plpgsql ALTER COLUMN c1 SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_narrow_plpgsql VALUES (123);
+
+query I
+SELECT f_narrow_plpgsql();
+----
+123
+
+statement ok
+DROP FUNCTION f_narrow_plpgsql;
+
+statement ok
+DROP TABLE t_narrow_plpgsql;
+
+# Narrowing INT8 → INT4 with SQL stored procedure.
+statement ok
+CREATE TABLE t_narrow_proc (c1 INT8);
+
+statement ok
+CREATE PROCEDURE p_narrow(OUT result INT8) AS 'SELECT c1 FROM t_narrow_proc LIMIT 1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_narrow_proc ALTER COLUMN c1 SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_narrow_proc VALUES (88);
+
+query I
+CALL p_narrow(NULL);
+----
+88
+
+statement ok
+DROP PROCEDURE p_narrow;
+
+statement ok
+DROP TABLE t_narrow_proc;
+
+# Narrowing FLOAT8 → FLOAT4 with SQL function.
+statement ok
+CREATE TABLE t_narrow_float (c1 FLOAT8);
+
+statement ok
+CREATE FUNCTION f_narrow_float() RETURNS FLOAT8 AS 'SELECT c1 FROM t_narrow_float' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_narrow_float ALTER COLUMN c1 SET DATA TYPE FLOAT4;
+
+statement ok
+INSERT INTO t_narrow_float VALUES (3.14);
+
+query R
+SELECT f_narrow_float();
+----
+3.14
+
+statement ok
+DROP FUNCTION f_narrow_float;
+
+statement ok
+DROP TABLE t_narrow_float;
+
+# Narrowing VARCHAR(100) → VARCHAR(50) with SQL function.
+statement ok
+CREATE TABLE t_narrow_vc (c1 VARCHAR(100));
+
+statement ok
+CREATE FUNCTION f_narrow_vc() RETURNS VARCHAR AS 'SELECT c1 FROM t_narrow_vc' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_narrow_vc ALTER COLUMN c1 SET DATA TYPE VARCHAR(50);
+
+statement ok
+INSERT INTO t_narrow_vc VALUES ('hello world');
+
+query T
+SELECT f_narrow_vc();
+----
+hello world
+
+statement ok
+DROP FUNCTION f_narrow_vc;
+
+statement ok
+DROP TABLE t_narrow_vc;
+
+subtest dep_function_incompatible
+
+# Incompatible type change (INT → TEXT) with PL/pgSQL function. PL/pgSQL
+# performs implicit return casts, so the body revalidation passes. However,
+# INT → TEXT is a general conversion that rejects dependent routines.
+statement ok
+CREATE TABLE t_incompat_plpgsql (c1 INT);
+
+statement ok
+CREATE FUNCTION f_incompat_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_incompat_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_incompat_plpgsql" depends on it
+ALTER TABLE t_incompat_plpgsql ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP FUNCTION f_incompat_plpgsql;
+
+statement ok
+DROP TABLE t_incompat_plpgsql;
+
+# Incompatible type change (INT → TEXT) with PL/pgSQL procedure.
+statement ok
+CREATE TABLE t_incompat_plpgsql_proc (c1 INT);
+
+statement ok
+CREATE PROCEDURE p_incompat_plpgsql(OUT result INT) AS $$
+  BEGIN
+    SELECT c1 INTO result FROM t_incompat_plpgsql_proc LIMIT 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_incompat_plpgsql" depends on it
+ALTER TABLE t_incompat_plpgsql_proc ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP PROCEDURE p_incompat_plpgsql;
+
+statement ok
+DROP TABLE t_incompat_plpgsql_proc;
+
+# Incompatible type change (INT → BOOL) with SQL function. The function
+# returns INT, but the column would become BOOL (which is not assignable to INT).
+statement ok
+CREATE TABLE t_incompat_bool (c1 INT);
+
+statement ok
+CREATE FUNCTION f_incompat_bool() RETURNS INT AS 'SELECT c1 FROM t_incompat_bool' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_incompat_bool" would become invalid
+ALTER TABLE t_incompat_bool ALTER COLUMN c1 SET DATA TYPE BOOL;
+
+statement ok
+DROP FUNCTION f_incompat_bool;
+
+statement ok
+DROP TABLE t_incompat_bool;
+
+subtest dep_function_expression
+
+# Function uses column in arithmetic expression; changing column to TEXT makes
+# the expression invalid.
+statement ok
+CREATE TABLE t_expr_arith (c1 INT);
+
+statement ok
+CREATE FUNCTION f_expr_arith() RETURNS INT AS 'SELECT c1 + 1 FROM t_expr_arith' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_expr_arith" would become invalid
+ALTER TABLE t_expr_arith ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP FUNCTION f_expr_arith;
+
+statement ok
+DROP TABLE t_expr_arith;
+
+# PL/pgSQL function uses column in arithmetic expression; changing column to
+# TEXT makes the expression invalid.
+statement ok
+CREATE TABLE t_expr_arith_plpgsql (c1 INT);
+
+statement ok
+CREATE FUNCTION f_expr_arith_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 * 2 FROM t_expr_arith_plpgsql LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_expr_arith_plpgsql" would become invalid
+ALTER TABLE t_expr_arith_plpgsql ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP FUNCTION f_expr_arith_plpgsql;
+
+statement ok
+DROP TABLE t_expr_arith_plpgsql;
+
+subtest dep_function_mixed
+
+# Both a SQL function and a PL/pgSQL function depend on the same column.
+# Widening should succeed for both.
+statement ok
+CREATE TABLE t_mixed (c1 INT4);
+
+statement ok
+CREATE FUNCTION f_mixed_sql() RETURNS INT AS 'SELECT c1 FROM t_mixed' LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_mixed_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_mixed LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TABLE t_mixed ALTER COLUMN c1 SET DATA TYPE INT8;
+
+statement ok
+INSERT INTO t_mixed VALUES (77);
+
+query I
+SELECT f_mixed_sql();
+----
+77
+
+query I
+SELECT f_mixed_plpgsql();
+----
+77
+
+statement ok
+DROP FUNCTION f_mixed_sql;
+
+statement ok
+DROP FUNCTION f_mixed_plpgsql;
+
+statement ok
+DROP TABLE t_mixed;
+
+# Both a SQL function and a PL/pgSQL function depend on the same column.
+# Incompatible change should fail.
+statement ok
+CREATE TABLE t_mixed_err (c1 INT);
+
+statement ok
+CREATE FUNCTION f_mixed_err_sql() RETURNS INT AS 'SELECT c1 FROM t_mixed_err' LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_mixed_err_plpgsql() RETURNS INT AS $$
+  BEGIN
+    RETURN (SELECT c1 FROM t_mixed_err LIMIT 1);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because function "f_mixed_err_sql" would become invalid
+ALTER TABLE t_mixed_err ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP FUNCTION f_mixed_err_sql;
+
+statement ok
+DROP FUNCTION f_mixed_err_plpgsql;
+
+statement ok
+DROP TABLE t_mixed_err;
+
+# A SQL function and a SQL stored procedure depend on the same column.
+# Narrowing should succeed for both.
+statement ok
+CREATE TABLE t_mixed_fn_proc (c1 INT8);
+
+statement ok
+CREATE FUNCTION f_mixed_fn() RETURNS INT8 AS 'SELECT c1 FROM t_mixed_fn_proc' LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE p_mixed_proc(OUT result INT8) AS 'SELECT c1 FROM t_mixed_fn_proc LIMIT 1' LANGUAGE SQL;
+
+statement ok
+ALTER TABLE t_mixed_fn_proc ALTER COLUMN c1 SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_mixed_fn_proc VALUES (33);
+
+query I
+SELECT f_mixed_fn();
+----
+33
+
+query I
+CALL p_mixed_proc(NULL);
+----
+33
+
+statement ok
+DROP FUNCTION f_mixed_fn;
+
+statement ok
+DROP PROCEDURE p_mixed_proc;
+
+statement ok
+DROP TABLE t_mixed_fn_proc;
+
+# PL/pgSQL stored procedure with compatible narrowing.
+statement ok
+CREATE TABLE t_proc_plpgsql (c1 INT8);
+
+statement ok
+CREATE PROCEDURE p_plpgsql_narrow(OUT result INT8) AS $$
+  BEGIN
+    SELECT c1 INTO result FROM t_proc_plpgsql LIMIT 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+ALTER TABLE t_proc_plpgsql ALTER COLUMN c1 SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_proc_plpgsql VALUES (44);
+
+query I
+CALL p_plpgsql_narrow(NULL);
+----
+44
+
+statement ok
+DROP PROCEDURE p_plpgsql_narrow;
+
+statement ok
+DROP TABLE t_proc_plpgsql;
+
+# PL/pgSQL stored procedure with incompatible type change. Like PL/pgSQL
+# functions, the body revalidation passes due to implicit casts, but the
+# general conversion rejects dependent routines.
+statement ok
+CREATE TABLE t_proc_plpgsql_err (c1 INT);
+
+statement ok
+CREATE PROCEDURE p_plpgsql_err(OUT result INT) AS $$
+  BEGIN
+    SELECT c1 INTO result FROM t_proc_plpgsql_err LIMIT 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_plpgsql_err" depends on it
+ALTER TABLE t_proc_plpgsql_err ALTER COLUMN c1 SET DATA TYPE TEXT;
+
+statement ok
+DROP PROCEDURE p_plpgsql_err;
+
+statement ok
+DROP TABLE t_proc_plpgsql_err;
+
+# General conversion (USING clause) should reject dependent PL/pgSQL
+# stored procedures.
+statement ok
+CREATE TABLE t_gen_plpgsql_proc (c1 INT4);
+
+statement ok
+CREATE PROCEDURE p_gen_plpgsql(OUT result INT) AS $$
+  BEGIN
+    SELECT c1 INTO result FROM t_gen_plpgsql_proc LIMIT 1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pq: cannot alter type of column "c1" because procedure "p_gen_plpgsql" depends on it
+ALTER TABLE t_gen_plpgsql_proc ALTER COLUMN c1 SET DATA TYPE INT8 USING c1::INT8;
+
+statement ok
+DROP PROCEDURE p_gen_plpgsql;
+
+statement ok
+DROP TABLE t_gen_plpgsql_proc;
 
 subtest ttl
 
