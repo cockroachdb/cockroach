@@ -12,6 +12,7 @@ import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
   SqlExecutionRequest,
+  sqlApiErrorMessage,
   sqlResultsAreEmpty,
 } from "./sqlApi";
 
@@ -78,6 +79,9 @@ export function getSchedules(req: {
     execute: true,
   };
   return executeInternalSql<ScheduleColumns>(request).then(result => {
+    if (result.error) {
+      throw new Error(sqlApiErrorMessage(result.error.message));
+    }
     const txnResults = result.execution.txn_results;
     if (sqlResultsAreEmpty(result)) {
       // No data.
@@ -122,6 +126,9 @@ export function getSchedule(id: Long): Promise<Schedule> {
     execute: true,
   };
   return executeInternalSql<ScheduleColumns>(request).then(result => {
+    if (result.error) {
+      throw new Error(sqlApiErrorMessage(result.error.message));
+    }
     const txnResults = result.execution.txn_results;
     if (txnResults.length === 0 || !txnResults[0].rows) {
       // No data.
