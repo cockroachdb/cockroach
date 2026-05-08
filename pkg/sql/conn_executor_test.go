@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -2553,26 +2552,42 @@ func TestPrepareAfterSavepointRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+
+	// Simulate a KV read through the user's transaction during Prepare.
+	// In production, this happens when the query cache triggers an IsStale
+	// check that calls CheckDependencies → ResolveDataSourceByID →
+	// descriptor validation → DereferenceDescriptors, which reads
+	// referenced descriptors (FK targets, parent DB/schema) through the
+	// user's KV txn. This path is hard to trigger deterministically, so
+	// we use the BeforePrepare hook instead.
+	var doKVRead atomic.Bool
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
+					if doKVRead.Load() {
+						_, err := txn.Get(ctx, roachpb.Key("nonexistent-key"))
+						return err
+					}
+					return nil
+				},
+			},
+		},
 	})
 	defer s.Stopper().Stop(ctx)
-
-	_, err := sqlDB.Exec("CREATE TABLE t_repro169720 (id INT PRIMARY KEY)")
-	require.NoError(t, err)
-
-	// Disable table leases so that descriptor lookups during Prepare go through
-	// the user's KV transaction rather than the lease manager's internal
-	// transactions. This reliably triggers the readSeq-in-ignored-range
-	// assertion that otherwise requires specific caching conditions to
-	// reproduce. Must be called after server start and table creation.
-	defer lease.TestingDisableTableLeases()()
 
 	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
 	require.NoError(t, err)
 	defer func() { _ = p.Close() }()
 
 	until := pgtest.ParseMessages("ReadyForQuery")
+
+	// Create the table within the pgtest connection so it is visible
+	// regardless of cross-connection lease propagation timing.
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_repro169720 (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
 
 	// BEGIN — start an explicit transaction.
 	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
@@ -2597,9 +2612,14 @@ func TestPrepareAfterSavepointRollback(t *testing.T) {
 	_, err = p.Until(false /* keepErrMsg */, until...)
 	require.NoError(t, err)
 
-	// Extended protocol Parse — triggers execPrepare, which does NOT call
-	// Step(). Any KV read here uses the stale readSeq that sits inside the
-	// ignored range, triggering the assertion.
+	// Arm the KV-read injection before sending Parse.
+	doKVRead.Store(true)
+
+	// Extended protocol Parse — triggers execPrepare, which now calls
+	// stepReadSequence to advance the read sequence past the ignored range.
+	// The BeforePrepare knob fires after stepReadSequence and performs a KV
+	// read through the user's txn. Without the fix, this read uses a stale
+	// readSeq that sits inside the ignored range, triggering the assertion.
 	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT * FROM t_repro169720"}`))
 	require.NoError(t, p.SendOneLine(`Sync`))
 
@@ -2611,6 +2631,8 @@ func TestPrepareAfterSavepointRollback(t *testing.T) {
 		pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
 	require.NoError(t, err,
 		"Parse after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	doKVRead.Store(false)
 
 	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
 	_, err = p.Until(false /* keepErrMsg */, until...)
