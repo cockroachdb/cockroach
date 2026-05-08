@@ -688,7 +688,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, err = t.acquireMinVersion(1, tableDesc.GetID(), tableDesc.GetVersion()+123)
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
@@ -797,7 +797,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 	// Ensure that dropped descriptors cannot be acquired.
 	_, err = acquire(ctx, s, tableDesc.GetID())
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 
@@ -819,7 +819,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(ctx, s, tableDesc.GetID())
-	if !testutils.IsError(err, "descriptor is being dropped") {
+	if !errors.Is(err, catalog.ErrDescriptorDropped) {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
 	// Validate we can read the descriptor before the drop.
