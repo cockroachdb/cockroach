@@ -1101,9 +1101,8 @@ type FunctionDescriptor interface {
 func FilterDroppedDescriptor(desc Descriptor) error {
 	if !desc.Dropped() {
 		return nil
-
 	}
-	return NewInactiveDescriptorError(ErrDescriptorDropped)
+	return NewInactiveDescriptorError(NewDescriptorDroppedError(desc))
 }
 
 // FilterOfflineDescriptor returns an error if the descriptor state is OFFLINE.
