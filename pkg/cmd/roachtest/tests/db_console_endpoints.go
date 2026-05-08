@@ -121,7 +121,11 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 	mvt.InMixedVersion(
 		"test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand,
 			h *mixedversion.Helper) error {
-			if err := initializeSchemaAndIDs(ctx, c, l, h.VersionedCockroachPath(t)); err != nil {
+			// Use the current binary for workload init rather than the
+			// versioned binary. Older binaries can't handle result column
+			// changes (e.g., the inspect_job_id column added to IMPORT
+			// results) when running against a newer cluster.
+			if err := initializeSchemaAndIDs(ctx, c, l, test.DefaultCockroachPath); err != nil {
 				t.Fatal(err)
 			}
 			return testEndpoints(ctx, c, l, getEndpoints(t), true)
