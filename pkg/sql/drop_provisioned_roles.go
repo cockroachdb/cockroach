@@ -11,8 +11,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -42,6 +45,15 @@ func (p *planner) DropProvisionedRoles(
 	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE); err != nil {
 		return nil, err
 	}
+	// Validate that the LIMIT expression is a constant integer to
+	// prevent subqueries or other expressions from being smuggled
+	// into the internal query.
+	if n.Limit != nil && n.Limit.Count != nil {
+		if _, ok := n.Limit.Count.(*tree.NumVal); !ok {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"LIMIT must be a constant integer expression")
+		}
+	}
 	return &DropProvisionedRolesNode{
 		options: n.Options,
 		limit:   n.Limit,
@@ -58,13 +70,16 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 	}
 
 	// Build the query to find matching provisioned users.
-	query, queryArgs := n.buildFilterQuery()
+	query, queryArgs, err := n.buildFilterQuery()
+	if err != nil {
+		return err
+	}
 
 	rows, err := params.p.InternalSQLTxn().QueryBufferedEx(
 		params.ctx,
 		"drop-provisioned-roles-find",
 		params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.InternalExecutorOverride{User: params.p.User()},
 		query,
 		queryArgs...,
 	)
@@ -173,43 +188,48 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 
 // buildFilterQuery constructs the SQL query to find provisioned users
 // matching the filter options.
-func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}) {
+func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}, error) {
 	var whereExprs []string
 	var args []interface{}
 	argIdx := 1
 
 	// Always filter for users that have a PROVISIONSRC role option
 	// (i.e. are provisioned).
-	provisionFilter := fmt.Sprintf(`EXISTS (
-	SELECT 1 FROM system.role_options AS src
-	WHERE src.username = u.username
-		AND src.option = 'PROVISIONSRC'`)
+	provisionFilter := "EXISTS (SELECT 1 FROM system.role_options AS src" +
+		" WHERE src.username = u.username AND src.option = 'PROVISIONSRC'"
 
 	if n.options != nil && n.options.Source != nil {
-		sourceStr := tree.AsStringWithFlags(
-			n.options.Source, tree.FmtBareStrings,
-		)
-		provisionFilter += fmt.Sprintf(
-			"\n\t\tAND src.value = %s", lexbase.EscapeSQLString(sourceStr),
-		)
+		provisionFilter += fmt.Sprintf(" AND src.value = $%d", argIdx)
+		args = append(args, tree.AsStringWithFlags(n.options.Source, tree.FmtBareStrings))
+		argIdx++
 	}
-	provisionFilter += "\n)"
+	provisionFilter += ")"
 	whereExprs = append(whereExprs, provisionFilter)
 
 	if n.options != nil && n.options.LastLoginBefore != nil {
-		tsExpr := tree.AsStringWithFlags(
-			n.options.LastLoginBefore, tree.FmtParsable,
-		)
 		whereExprs = append(whereExprs, fmt.Sprintf(
-			"u.estimated_last_login_time < (%s)::TIMESTAMPTZ", tsExpr,
+			"(u.estimated_last_login_time IS NULL OR u.estimated_last_login_time < ($%d)::TIMESTAMPTZ)", argIdx,
 		))
+		args = append(args, tree.AsStringWithFlags(n.options.LastLoginBefore, tree.FmtBareStrings))
+		argIdx++
 	}
 
-	whereClause := "\nWHERE " + strings.Join(whereExprs, "\n\tAND ")
+	whereClause := " WHERE " + strings.Join(whereExprs, " AND ")
 
 	var limitClause string
 	if n.limit != nil && n.limit.Count != nil {
-		limitClause = fmt.Sprintf("\nLIMIT %s", tree.AsString(n.limit.Count))
+		// The planner already validated that Count is a *tree.NumVal.
+		// Extract it as int64 so the internal executor receives the
+		// correct type for the LIMIT placeholder.
+		numVal := n.limit.Count.(*tree.NumVal)
+		limitInt, numErr := numVal.AsInt64()
+		if numErr != nil {
+			return "", nil, pgerror.Wrapf(numErr, pgcode.InvalidParameterValue,
+				"LIMIT must be a non-negative integer")
+		}
+		limitClause = fmt.Sprintf(" LIMIT $%d", argIdx)
+		args = append(args, limitInt)
+		argIdx++
 	}
 
 	query := fmt.Sprintf(
@@ -217,17 +237,18 @@ func (n *DropProvisionedRolesNode) buildFilterQuery() (string, []interface{}) {
 		whereClause, limitClause,
 	)
 
-	_ = argIdx // args currently embedded via string escaping
-	return query, args
+	_ = argIdx
+	return query, args, nil
 }
 
 // userHasDependencies checks whether the given user owns any objects,
-// has grants, default privileges, scheduled jobs, or system
-// privileges that would prevent dropping.
+// has grants, default privileges, row-level security policies,
+// scheduled jobs, or system privileges that would prevent dropping.
 func (n *DropProvisionedRolesNode) userHasDependencies(
 	params runParams, normalizedUsername username.SQLUsername, allDescs nstree.Catalog,
 ) (bool, error) {
-	// Check ownership across all descriptors.
+	// Check ownership, grants, default privileges, and RLS policies
+	// across all descriptors.
 	for _, desc := range allDescs.OrderedDescriptors() {
 		if !descriptorIsVisible(desc, true /* allowAdding */, false /* includeDropped */) {
 			continue
@@ -240,9 +261,53 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 				return true, nil
 			}
 		}
+
+		// Check default privileges on databases and schemas.
+		var defaultPrivs catalog.DefaultPrivilegeDescriptor
+		if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
+			defaultPrivs = dbDesc.GetDefaultPrivilegeDescriptor()
+		} else if schemaDesc, ok := desc.(catalog.SchemaDescriptor); ok {
+			defaultPrivs = schemaDesc.GetDefaultPrivilegeDescriptor()
+		}
+		if defaultPrivs != nil {
+			hasDep := false
+			_ = defaultPrivs.ForEachDefaultPrivilegeForRole(
+				func(dpForRole catpb.DefaultPrivilegesForRole) error {
+					if dpForRole.IsExplicitRole() &&
+						dpForRole.GetExplicitRole().UserProto.Decode() == normalizedUsername {
+						hasDep = true
+					}
+					for _, privs := range dpForRole.DefaultPrivilegesPerObject {
+						for _, u := range privs.Users {
+							if u.User() == normalizedUsername {
+								hasDep = true
+							}
+						}
+					}
+					return nil
+				},
+			)
+			if hasDep {
+				return true, nil
+			}
+		}
+
+		// Check row-level security policies on tables.
+		if tblDesc, ok := desc.(catalog.TableDescriptor); ok {
+			for _, p := range tblDesc.GetPolicies() {
+				for _, rn := range p.RoleNames {
+					if username.MakeSQLUsernameFromPreNormalizedString(rn) == normalizedUsername {
+						return true, nil
+					}
+				}
+			}
+		}
 	}
 
-	// Check scheduled jobs.
+	// Check scheduled jobs. Use NodeUserSessionDataOverride because
+	// CREATEROLE users cannot read system.scheduled_jobs directly.
+	// This is safe since the query is hardcoded with only a
+	// parameterized username — no user-controlled SQL expressions.
 	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		"check-user-schedules",
@@ -258,7 +323,8 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 		return true, nil
 	}
 
-	// Check system privileges.
+	// Check system privileges. Same as above — use node privileges
+	// for the hardcoded parameterized query.
 	row, err = params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		"check-user-system-privileges",
@@ -281,9 +347,9 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 // its web sessions.
 func (n *DropProvisionedRolesNode) deleteRole(
 	params runParams, normalizedUsername username.SQLUsername, opName redact.RedactableString,
-) (dbRoleSettingsDeleted int, err error) {
+) (int, error) {
 	// DELETE from system.users.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
+	if _, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, opName, params.p.txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.users WHERE username=$1`,
@@ -293,7 +359,7 @@ func (n *DropProvisionedRolesNode) deleteRole(
 	}
 
 	// DELETE from system.role_members.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
+	if _, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, "drop-role-membership", params.p.txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
@@ -303,7 +369,7 @@ func (n *DropProvisionedRolesNode) deleteRole(
 	}
 
 	// DELETE from system.role_options.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
+	if _, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, opName, params.p.txn,
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
@@ -330,7 +396,7 @@ func (n *DropProvisionedRolesNode) deleteRole(
 	}
 
 	// Revoke web sessions.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
+	if _, err := params.p.InternalSQLTxn().ExecEx(
 		params.ctx, opName, params.p.txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL`,
