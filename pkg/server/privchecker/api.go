@@ -44,6 +44,7 @@ type CheckerForRPCHandlers interface {
 	RequireViewClusterMetadataPermission(ctx context.Context) error
 	RequireRepairClusterPermission(ctx context.Context) error
 	RequireViewDebugPermission(ctx context.Context) error
+	RequireViewEventLogPermission(ctx context.Context) error
 }
 
 // SQLPrivilegeChecker is the part of the privilege checker that can
