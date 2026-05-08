@@ -317,6 +317,13 @@ func doesNotHaveIndex(
 	return idx == nil, nil
 }
 
+// doesNotHaveColumn returns true if storedTable does not have a column named colName.
+func doesNotHaveColumn(
+	storedTable, expectedTable catalog.TableDescriptor, colName string,
+) (bool, error) {
+	return catalog.FindColumnByName(storedTable, colName) == nil, nil
+}
+
 // indexExists returns true if storedTable contains an index with the given
 // indexName. Unlike hasIndex, it does not check that the index descriptor in
 // storedTable and expectedTable match.
