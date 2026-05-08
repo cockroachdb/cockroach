@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -2540,4 +2541,78 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Greater(t, finalUserMetrics, initialUserMetrics)
 	})
+}
+
+// TestPrepareAfterSavepointRollback reproduces #169720: after ROLLBACK TO
+// SAVEPOINT, the transaction's read sequence number can remain in the ignored
+// range because execPrepare (pgwire Parse) does not call Step() to advance it.
+// Any KV read during the Prepare then hits the assertion in
+// checkReadSeqNotIgnoredLocked.
+func TestPrepareAfterSavepointRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE t_repro169720 (id INT PRIMARY KEY)")
+	require.NoError(t, err)
+
+	// Disable table leases so that descriptor lookups during Prepare go through
+	// the user's KV transaction rather than the lease manager's internal
+	// transactions. This reliably triggers the readSeq-in-ignored-range
+	// assertion that otherwise requires specific caching conditions to
+	// reproduce. Must be called after server start and table creation.
+	defer lease.TestingDisableTableLeases()()
+
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+
+	until := pgtest.ParseMessages("ReadyForQuery")
+
+	// BEGIN — start an explicit transaction.
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// SAVEPOINT — record the current write sequence (0).
+	require.NoError(t, p.SendOneLine(`Query {"String": "SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// INSERT — advances writeSeq; Step() is called by execStmtInOpenState so
+	// the reads during this statement succeed.
+	require.NoError(t, p.SendOneLine(`Query {"String": "INSERT INTO t_repro169720 VALUES (1)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// ROLLBACK TO SAVEPOINT — marks the INSERT's sequence numbers as ignored.
+	// Because stepping mode is enabled, readSeq is NOT advanced past the
+	// ignored range.
+	require.NoError(t, p.SendOneLine(`Query {"String": "ROLLBACK TO SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Extended protocol Parse — triggers execPrepare, which does NOT call
+	// Step(). Any KV read here uses the stale readSeq that sits inside the
+	// ignored range, triggering the assertion.
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT * FROM t_repro169720"}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	// Wait for ParseComplete then ReadyForQuery. If the bug is present, the
+	// server returns an ErrorResponse instead of ParseComplete, causing Until
+	// to return an error.
+	_, err = p.Until(
+		true, /* keepErrMsg */
+		pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
+	require.NoError(t, err,
+		"Parse after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
 }
