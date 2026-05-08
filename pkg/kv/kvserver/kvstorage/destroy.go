@@ -265,10 +265,14 @@ func RewriteRaftState(
 	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
 	}
-	// Clear the raft log. Note that there are no Pebble range keys in this span.
-	raftLog := sl.RaftLogPrefix() // NB: use only until next StateLoader call
-	if err := raftWO.ClearRawRange(
-		raftLog, raftLog.PrefixEnd(), true /* pointKeys */, false, /* rangeKeys */
+	// Clear the raft log via the logstore. Note that there are no Pebble range
+	// keys in this span. We use ClearRangeSizeKnown with pointKeyThreshold=0 to
+	// force a single range tombstone over the whole log span, without scanning.
+	// TODO(ibrahim): We can actually know the log bounds using truncIndex and lastIndex.
+	if err := logstore.ClearRangeSizeKnown(
+		raftWO, sl.RangeIDPrefixBuf,
+		0 /* lo */, math.MaxUint64 /* hi */, 0, /* pointKeyThreshold */
+		false, /* maybeUseSingleDel */
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
 	}
