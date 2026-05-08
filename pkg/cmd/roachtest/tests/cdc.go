@@ -2754,6 +2754,94 @@ CONFIGURE ZONE USING
 			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
+	// PROTOTYPE: kafka-chaos-single-row is registered twice so that the
+	// no-linger batching sink can be compared side-by-side against the
+	// existing batching sink. The test body is identical except for the
+	// changefeed.no_linger_sink.enabled cluster setting; both variants
+	// run at 5m (shortened from the original 30m) so iteration is fast
+	// during the prototype evaluation. Revert this whole block (back to
+	// a single registration with testDuration=30m) once the no-linger
+	// sink either lands or is abandoned.
+	runKafkaChaosSingleRow := func(ctx context.Context, t test.Test, c cluster.Cluster, noLinger bool) {
+		ct := newCDCTester(ctx, t, c)
+		defer ct.Close()
+
+		// Since this test fails with the v1 kafka sink, hardcode the v2 sink.
+		_, err := ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true;`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if noLinger {
+			// Single-table + single-row updates fits within the
+			// prototype's single-topic guard, and kafka_sink_config
+			// below sets non-trivial batching thresholds so this run
+			// actually exercises real batches.
+			_, err = ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.no_linger_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+		if err != nil {
+			t.Fatal("failed to create table")
+		}
+		_, err = ct.DB().ExecContext(ctx, `INSERT INTO t VALUES (1, -1);`)
+		if err != nil {
+			t.Fatal("failed to insert row into table")
+		}
+
+		feed := ct.newChangefeed(feedArgs{
+			sinkType: kafkaSink,
+			targets:  []string{"t"},
+			kafkaArgs: kafkaFeedArgs{
+				kafkaChaos:    true,
+				validateOrder: true,
+			},
+			opts: map[string]string{
+				"updated":                       "",
+				"initial_scan":                  "'no'",
+				"min_checkpoint_frequency":      "'3s'",
+				"protect_data_from_gc_on_pause": "",
+				"on_error":                      "pause",
+				"kafka_sink_config":             `'{"Flush": {"MaxMessages": 100, "Frequency": "1s","Messages": 100 }, "Version": "2.7.2", "RequiredAcks": "ALL","Compression": "GZIP"}'`,
+			},
+		})
+		ct.runFeedLatencyVerifier(feed, latencyTargets{
+			steadyLatency: 2 * time.Minute,
+		})
+
+		conn1, err := ct.DB().Conn(ctx)
+		if err != nil {
+			t.Fatalf("failed to create a conn: %s", err)
+		}
+		defer func() {
+			_ = conn1.Close()
+		}()
+		conn2, err := ct.DB().Conn(ctx)
+		if err != nil {
+			t.Fatalf("failed to create a conn: %s", err)
+		}
+		defer func() {
+			_ = conn2.Close()
+		}()
+
+		const testDuration = 5 * time.Minute
+		// Repeatedly update a single row in a table in order to create a large
+		// number of events with the same key that will span multiple batches.
+		for start, i := timeutil.Now(), 0; i < 1000000 && timeutil.Since(start) < testDuration; i++ {
+			stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
+			if i%2 == 0 {
+				_, err = conn1.ExecContext(ctx, stmt)
+			} else {
+				_, err = conn2.ExecContext(ctx, stmt)
+			}
+			if err != nil {
+				t.Fatalf("failed to execute stmt %q: %s", stmt, err)
+			}
+		}
+	}
 	r.Add(registry.TestSpec{
 		Name:    "cdc/kafka-chaos-single-row",
 		Owner:   `cdc`,
@@ -2763,86 +2851,19 @@ CONFIGURE ZONE USING
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c)
-			defer ct.Close()
-
-			// Since this test fails with the v1 kafka sink, hardcode the v2 sink.
-			_, err := ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true;`)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// PROTOTYPE: exercise the no-linger batching sink. Single-table
-			// + single-row updates fits within the prototype's single-topic
-			// guard, and kafka_sink_config below sets non-trivial batching
-			// thresholds so this run actually exercises real batches.
-			// Revert once we've validated the prototype.
-			_, err = ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.no_linger_sink.enabled = true;`)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
-			if err != nil {
-				t.Fatal("failed to create table")
-			}
-			_, err = ct.DB().ExecContext(ctx, `INSERT INTO t VALUES (1, -1);`)
-			if err != nil {
-				t.Fatal("failed to insert row into table")
-			}
-
-			feed := ct.newChangefeed(feedArgs{
-				sinkType: kafkaSink,
-				targets:  []string{"t"},
-				kafkaArgs: kafkaFeedArgs{
-					kafkaChaos:    true,
-					validateOrder: true,
-				},
-				opts: map[string]string{
-					"updated":                       "",
-					"initial_scan":                  "'no'",
-					"min_checkpoint_frequency":      "'3s'",
-					"protect_data_from_gc_on_pause": "",
-					"on_error":                      "pause",
-					"kafka_sink_config":             `'{"Flush": {"MaxMessages": 100, "Frequency": "1s","Messages": 100 }, "Version": "2.7.2", "RequiredAcks": "ALL","Compression": "GZIP"}'`,
-				},
-			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				steadyLatency: 2 * time.Minute,
-			})
-
-			conn1, err := ct.DB().Conn(ctx)
-			if err != nil {
-				t.Fatalf("failed to create a conn: %s", err)
-			}
-			defer func() {
-				_ = conn1.Close()
-			}()
-			conn2, err := ct.DB().Conn(ctx)
-			if err != nil {
-				t.Fatalf("failed to create a conn: %s", err)
-			}
-			defer func() {
-				_ = conn2.Close()
-			}()
-
-			// PROTOTYPE: shortened from 30m to 5m for faster iteration
-			// while validating the no-linger batching sink. Revert with
-			// the SET CLUSTER SETTING change above.
-			const testDuration = 5 * time.Minute
-			// Repeatedly update a single row in a table in order to create a large
-			// number of events with the same key that will span multiple batches.
-			for start, i := timeutil.Now(), 0; i < 1000000 && timeutil.Since(start) < testDuration; i++ {
-				stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
-				if i%2 == 0 {
-					_, err = conn1.ExecContext(ctx, stmt)
-				} else {
-					_, err = conn2.ExecContext(ctx, stmt)
-				}
-				if err != nil {
-					t.Fatalf("failed to execute stmt %q: %s", stmt, err)
-				}
-			}
+			runKafkaChaosSingleRow(ctx, t, c, false /* noLinger */)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:    "cdc/kafka-chaos-single-row/no-linger",
+		Owner:   `cdc`,
+		Cluster: r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		Leases:  registry.MetamorphicLeases,
+		// Disabled on IBM due to lack of Kafka support on s390x.
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runKafkaChaosSingleRow(ctx, t, c, true /* noLinger */)
 		},
 	})
 	r.Add(registry.TestSpec{
