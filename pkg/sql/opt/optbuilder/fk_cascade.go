@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -285,6 +286,18 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		var mb mutationBuilder
 		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
+		locking := noRowLocking
+		if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			locking = lockingSpec{
+				&lockingItem{
+					item: &tree.LockingItem{
+						Strength:   tree.ForUpdate,
+						WaitPolicy: tree.LockWaitBlock,
+					},
+				},
+			}
+		}
+
 		// Build the input to the delete mutation, which is simply a Scan with a
 		// Select on top.
 		mb.fetchScope = b.buildScan(
@@ -295,7 +308,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 				includeInverted:  false,
 			}),
 			nil, /* indexFlags */
-			noRowLocking,
+			locking,
 			b.allocScope(),
 			true, /* disableNotVisibleIndex */
 		)
@@ -509,6 +522,18 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	bindingProps *props.Relational,
 	oldValues opt.ColList,
 ) (outScope *scope) {
+	locking := noRowLocking
+	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&lockingItem{
+				item: &tree.LockingItem{
+					Strength:   tree.ForUpdate,
+					WaitPolicy: tree.LockWaitBlock,
+				},
+			},
+		}
+	}
+
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
@@ -517,7 +542,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
-		noRowLocking,
+		locking,
 		b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	)
@@ -746,6 +771,18 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	oldValues opt.ColList,
 	newValues opt.ColList,
 ) (outScope *scope) {
+	locking := noRowLocking
+	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&lockingItem{
+				item: &tree.LockingItem{
+					Strength:   tree.ForUpdate,
+					WaitPolicy: tree.LockWaitBlock,
+				},
+			},
+		}
+	}
+
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
@@ -754,7 +791,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
-		noRowLocking,
+		locking,
 		b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	)
