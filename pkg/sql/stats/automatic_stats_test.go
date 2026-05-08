@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1274,6 +1275,120 @@ func TestEstimateStaleness(t *testing.T) {
 	if err = checkEstimatedStaleness(1.5); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestEstimateStalenessConcurrency verifies that concurrent calls to
+// EstimateStaleness and writes to settingOverrides do not race.
+func TestEstimateStalenessConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	codec, st := s.Codec(), s.ClusterSettings()
+
+	evalCtx := eval.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		INSERT INTO t.a VALUES (1);`)
+
+	internalDB := s.InternalDB().(descs.DB)
+	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
+	cache := NewTableStatisticsCache(
+		ctx,
+		s.ClusterSettings(),
+		s.InternalDB().(descs.DB),
+		s.AppStopper(),
+		nil, /* parentMon */
+	)
+	require.NoError(t, cache.Start(
+		ctx, codec,
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.SystemTableIDResolver().(catalog.SystemTableIDResolver),
+	))
+
+	curTime := timeutil.Now().Round(time.Hour)
+	knobs := &TableStatsTestingKnobs{
+		StubTimeNow: func() time.Time { return curTime },
+	}
+	refresher := MakeRefresher(
+		s.AmbientCtx(), st, internalDB, cache,
+		time.Microsecond /* asOfTime */, knobs, false, /* readOnlyTenant */
+	)
+
+	// Create enough stats history for EstimateStaleness to succeed.
+	err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for i := 0; i < 5; i++ {
+			columnIDs := tree.NewDArray(types.Int)
+			if err := columnIDs.Append(tree.NewDInt(tree.DInt(1))); err != nil {
+				return err
+			}
+			offset := 5 + i*10
+			createdAt, err := tree.MakeDTimestamp(
+				curTime.Add(time.Duration(-offset)*time.Hour), time.Hour,
+			)
+			if err != nil {
+				return err
+			}
+			_, err = internalDB.Executor().Exec(
+				ctx, "insert-statistic", txn,
+				`INSERT INTO system.table_statistics (
+					"tableID", "name", "columnIDs", "createdAt",
+					"rowCount", "distinctCount", "nullCount", "avgSize"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				table.GetID(), jobspb.AutoStatsName, columnIDs, createdAt,
+				100000 /* rowCount */, 1 /* distinctCount */, 0 /* nullCount */, 4, /* avgSize */
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Wait for EstimateStaleness to succeed, confirming the cache is populated.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := refresher.EstimateStaleness(ctx, table)
+		return err
+	})
+
+	// Race EstimateStaleness reads against settingOverrides writes.
+	var wg sync.WaitGroup
+	const iters = 1000
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iters; i++ {
+			_, _ = refresher.EstimateStaleness(ctx, table)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		fractionStaleRows := 0.5
+		settings := catpb.AutoStatsSettings{FractionStaleRows: &fractionStaleRows}
+		for i := 0; i < iters; i++ {
+			if i%2 == 0 {
+				refresher.settingOverridesMu.Lock()
+				refresher.settingOverrides[table.GetID()] = settings
+				refresher.settingOverridesMu.Unlock()
+			} else {
+				refresher.settingOverridesMu.Lock()
+				delete(refresher.settingOverrides, table.GetID())
+				refresher.settingOverridesMu.Unlock()
+			}
+		}
+	}()
+	wg.Wait()
 }
 
 func TestAddMisestimate(t *testing.T) {
