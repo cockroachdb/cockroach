@@ -11,6 +11,12 @@ CREATE TABLE t(pk INT PRIMARY KEY) WITH (schema_locked = false);
 INSERT INTO t VALUES (1);
 ----
 
+# Explicitly place the lease on n1 (node_idx=0). The lease can land on any node
+# after table creation depending on Raft leadership of the parent range.
+exec
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM [SHOW RANGES FROM TABLE t];
+----
+
 # The tests assume that the leaseholder is node_idx=0 (n1), assert that here.
 query ignore-events
 SELECT DISTINCT(lease_holder) FROM [SHOW RANGES FROM TABLE t WITH DETAILS];
