@@ -77,8 +77,8 @@ func NewDescriptorDroppedError(desc Descriptor) error {
 	case Function:
 		code = pgcode.UndefinedFunction
 	}
-	return pgerror.Wrapf(ErrDescriptorDropped, code,
-		"%s %q is being dropped", desc.DescriptorType(), desc.GetName())
+	err := pgerror.Newf(code, "%s %q is being dropped", desc.DescriptorType(), desc.GetName())
+	return errors.Mark(err, ErrDescriptorDropped)
 }
 
 func (i *inactiveDescriptorError) Error() string { return i.cause.Error() }
