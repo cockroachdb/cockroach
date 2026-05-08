@@ -882,11 +882,6 @@ func ResolveUniqueWithoutIndexConstraint(
 // The passed validationBehavior is used to determine whether or not preexisting
 // entries in the table need to be validated against the foreign key being added.
 // This only applies for existing tables, not new tables.
-//
-// authAccessor is used to check the REFERENCES privilege on the referenced
-// (parent) table when the GrantReferencesToUsersWithCreate version is active.
-// It may be nil, in which case no REFERENCES check is performed (e.g. during
-// import or bootstrap).
 func ResolveFK(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -899,7 +894,6 @@ func ResolveFK(
 	ts TableState,
 	validationBehavior tree.ValidationBehavior,
 	evalCtx *eval.Context,
-	authAccessor AuthorizationAccessor,
 ) error {
 	var originColSet catalog.TableColSet
 	originCols := make([]catalog.Column, len(d.FromCols))
@@ -945,20 +939,6 @@ func ResolveFK(
 			persistenceType,
 			persistenceType,
 		)
-	}
-
-	// After the GrantReferencesToUsersWithCreate migration, FK creation requires
-	// the REFERENCES privilege on the referenced (parent) table, matching
-	// PostgreSQL. The origin (child) table still requires CREATE, which is
-	// already checked by the caller (ALTER TABLE or CREATE TABLE). Before the
-	// version is active, no additional check is needed here.
-	if authAccessor != nil &&
-		evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_3_GrantReferencesToUsersWithCreate) {
-		if err := authAccessor.CheckPrivilege(ctx, target, privilege.REFERENCES); err != nil {
-			return pgerror.Wrapf(err, pgcode.InsufficientPrivilege,
-				"must have REFERENCES privilege on table %s",
-				tree.Name(target.GetName()))
-		}
 	}
 
 	if target.ID == tbl.ID {
@@ -1382,10 +1362,6 @@ func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDes
 // also responsible for processing serial types using
 // processSerialLikeInColumnDef() on every column definition, and creating
 // the necessary sequences in KV before calling NewTableDesc().
-//
-// authAccessor is used to check the REFERENCES privilege on tables referenced
-// by foreign keys. It may be nil when no FK privilege checks are needed (e.g.
-// during import or bootstrap).
 func NewTableDesc(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1404,7 +1380,6 @@ func NewTableDesc(
 	sessionData *sessiondata.SessionData,
 	persistence tree.Persistence,
 	colToSequenceRefs map[tree.Name]*tabledesc.Mutable,
-	authAccessor AuthorizationAccessor,
 	inOpts ...NewTableDescOption,
 ) (*tabledesc.Mutable, error) {
 
@@ -2349,7 +2324,7 @@ func NewTableDesc(
 		case *tree.ForeignKeyConstraintTableDef:
 			if err := ResolveFK(
 				ctx, txn, fkResolver, db, sc, &desc, d, affected, NewTable,
-				tree.ValidationDefault, evalCtx, authAccessor,
+				tree.ValidationDefault, evalCtx,
 			); err != nil {
 				return nil, err
 			}
@@ -2531,6 +2506,22 @@ func newTableDesc(
 	// in descriptors from FK depended-on tables using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
 	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
+		// Check REFERENCES privilege on all FK parent tables before creating the
+		// table descriptor.
+		for _, def := range n.Defs {
+			if d, ok := def.(*tree.ForeignKeyConstraintTableDef); ok {
+				_, parentDesc, resolveErr := resolver.ResolveMutableExistingTableObject(
+					params.ctx, params.p, &d.Table, true /* required */, tree.ResolveRequireTableDesc,
+				)
+				if resolveErr != nil {
+					err = resolveErr
+					return
+				}
+				if err = params.p.checkFKReferencesPrivilege(params.ctx, parentDesc); err != nil {
+					return
+				}
+			}
+		}
 		ret, err = NewTableDesc(
 			params.ctx,
 			params.p.txn,
@@ -2549,7 +2540,6 @@ func newTableDesc(
 			params.SessionData(),
 			n.Persistence,
 			colNameToOwnedSeq,
-			params.p, /* authAccessor */
 		)
 	})
 	if err != nil {

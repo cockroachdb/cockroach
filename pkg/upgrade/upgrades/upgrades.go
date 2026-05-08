@@ -208,7 +208,7 @@ var upgrades = []upgradebase.Upgrade{
 		clusterversion.V26_3_GrantReferencesToUsersWithCreate.Version(),
 		upgrade.NoPrecondition,
 		grantReferencesToUsersWithCreate,
-		upgrade.RestoreActionNotRequired("privileges are restored from descriptors"),
+		upgrade.RestoreActionNotRequired("REFERENCES privilege is not granted to users when restoring from pre 26.3 backups"),
 	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.

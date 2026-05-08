@@ -438,6 +438,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// TODO(vivek): check if the cache can be used.
 				var err error
 				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
+					// Check REFERENCES privilege on the FK parent table.
+					_, parentDesc, resolveErr := resolver.ResolveMutableExistingTableObject(
+						params.ctx, params.p, &d.Table, true /* required */, tree.ResolveRequireTableDesc,
+					)
+					if resolveErr != nil {
+						err = resolveErr
+						return
+					}
+					if err = params.p.checkFKReferencesPrivilege(params.ctx, parentDesc); err != nil {
+						return
+					}
 					// Check whether the table is empty, and pass the result to ResolveFK(). If
 					// the table is empty, then resolveFK will automatically add the necessary
 					// index for a fk constraint if the index does not exist.
@@ -465,7 +476,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 						tableState,
 						t.ValidationBehavior,
 						params.p.EvalContext(),
-						params.p,
 					)
 				})
 				if err != nil {

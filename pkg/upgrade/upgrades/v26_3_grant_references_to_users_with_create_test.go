@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -45,32 +46,61 @@ func TestGrantReferencesToUsersWithCreate(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
 	// Create test tables and grant CREATE to a user with different grant options.
-	sqlDB.Exec(t, `CREATE USER test_ref_user`)
-	sqlDB.Exec(t, `CREATE TABLE test_ref_table (id INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `GRANT CREATE ON TABLE test_ref_table TO test_ref_user WITH GRANT OPTION`)
-	sqlDB.Exec(t, `CREATE TABLE test_ref_table2 (id INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `GRANT CREATE ON TABLE test_ref_table2 TO test_ref_user`)
+	sqlDB.Exec(t, `CREATE USER test_upgrade_user`)
+	sqlDB.Exec(t, `CREATE USER test_unaffected_user`)
+	sqlDB.Exec(t, `CREATE TABLE tbl1 (id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `GRANT CREATE ON TABLE tbl1 TO test_upgrade_user WITH GRANT OPTION`)
+	sqlDB.Exec(t, `GRANT SELECT ON TABLE tbl1 TO test_unaffected_user`)
+	sqlDB.Exec(t, `CREATE TABLE tbl2 (id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `GRANT CREATE ON TABLE tbl2 TO test_upgrade_user`)
+	sqlDB.Exec(t, `GRANT ALL ON TABLE tbl2 TO test_unaffected_user`)
 
 	// Get table IDs for post-upgrade verification.
 	var tableID1, tableID2 int
-	sqlDB.QueryRow(t,
-		`SELECT 'test_ref_table'::regclass::oid::int`,
-	).Scan(&tableID1)
-	sqlDB.QueryRow(t,
-		`SELECT 'test_ref_table2'::regclass::oid::int`,
-	).Scan(&tableID2)
+	sqlDB.QueryRow(t, `SELECT 'tbl1'::regclass::oid::int`).Scan(&tableID1)
+	sqlDB.QueryRow(t, `SELECT 'tbl2'::regclass::oid::int`).Scan(&tableID2)
 
-	// Verify the user has CREATE but not REFERENCES before the upgrade.
-	var hasCreate, hasReferences bool
-	sqlDB.QueryRow(t, `
-		SELECT
-			bool_or(privilege_type = 'CREATE'),
-			bool_or(privilege_type = 'REFERENCES')
-		FROM [SHOW GRANTS ON TABLE test_ref_table]
-		WHERE grantee = 'test_ref_user'
-	`).Scan(&hasCreate, &hasReferences)
-	require.True(t, hasCreate, "expected test_ref_user to have CREATE before upgrade")
-	require.False(t, hasReferences, "expected test_ref_user to NOT have REFERENCES before upgrade")
+	descDB := ts.InternalDB().(descs.DB)
+	testUpgradeUser := username.MakeSQLUsernameFromPreNormalizedString("test_upgrade_user")
+	testUnaffectedUser := username.MakeSQLUsernameFromPreNormalizedString("test_unaffected_user")
+
+	// Verify test_upgrade_user has CREATE but not REFERENCES before the upgrade.
+	// Also snapshot test_unaffected_user's privilege bits to verify they are
+	// unchanged after migration (SELECT-only on table1, ALL on table2).
+	type privSnapshot struct {
+		privileges      uint64
+		withGrantOption uint64
+	}
+	unaffectedBefore := make(map[int]privSnapshot)
+	err := descDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		getTable := func(id int) catalog.TableDescriptor {
+			tbl, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).
+				WithoutNonPublic().Get().Table(ctx, descpb.ID(id))
+			require.NoError(t, err)
+			return tbl
+		}
+		for _, id := range []int{tableID1, tableID2} {
+			userPrivs, found := getTable(id).GetPrivileges().FindUser(testUpgradeUser)
+			require.True(t, found, "expected test_upgrade_user in privileges on table %d", id)
+			require.True(t, privilege.CREATE.IsSetIn(userPrivs.Privileges),
+				"expected CREATE before upgrade on table %d", id)
+			require.False(t, privilege.REFERENCES.IsSetIn(userPrivs.Privileges),
+				"expected no REFERENCES before upgrade on table %d", id)
+
+			uPrivs, found := getTable(id).GetPrivileges().FindUser(testUnaffectedUser)
+			require.True(t, found, "expected test_unaffected_user in privileges on table %d", id)
+			unaffectedBefore[id] = privSnapshot{
+				privileges:      uPrivs.Privileges,
+				withGrantOption: uPrivs.WithGrantOption,
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// GRANT REFERENCES should be blocked before the version is active.
+	_, err = sqlDB.DB.ExecContext(ctx, `GRANT REFERENCES ON TABLE tbl1 TO test_upgrade_user`)
+	require.ErrorContains(t, err, "REFERENCES privilege is not available until upgrade to 26.3 is finalized")
 
 	// Run the upgrade.
 	upgrades.Upgrade(
@@ -78,41 +108,41 @@ func TestGrantReferencesToUsersWithCreate(t *testing.T) {
 		clusterversion.V26_3_GrantReferencesToUsersWithCreate, nil, false,
 	)
 
-	descDB := ts.InternalDB().(descs.DB)
-	testRefUser := username.MakeSQLUsernameFromPreNormalizedString("test_ref_user")
-
-	// Verify the user now has REFERENCES on test_ref_table with grant option,
-	// mirroring CREATE's grant option.
-	err := descDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		tbl, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).
-			WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID1))
-		if err != nil {
-			return err
-		}
-		userPrivs, found := tbl.GetPrivileges().FindUser(testRefUser)
-		require.True(t, found, "expected test_ref_user in privileges")
-		require.True(t, privilege.REFERENCES.IsSetIn(userPrivs.Privileges),
-			"expected REFERENCES after upgrade")
-		require.True(t, privilege.REFERENCES.IsSetIn(userPrivs.WithGrantOption),
-			"expected REFERENCES WITH GRANT OPTION (mirroring CREATE)")
-		return nil
-	})
-	require.NoError(t, err)
-
-	// Verify the user has REFERENCES on test_ref_table2 without grant option,
-	// mirroring CREATE's lack of grant option.
+	// Verify privileges after the upgrade.
 	err = descDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		tbl, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).
-			WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID2))
-		if err != nil {
-			return err
+		getTable := func(id int) catalog.TableDescriptor {
+			tbl, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).
+				WithoutNonPublic().Get().Table(ctx, descpb.ID(id))
+			require.NoError(t, err)
+			return tbl
 		}
-		userPrivs, found := tbl.GetPrivileges().FindUser(testRefUser)
-		require.True(t, found, "expected test_ref_user in privileges")
-		require.True(t, privilege.REFERENCES.IsSetIn(userPrivs.Privileges),
-			"expected REFERENCES after upgrade")
-		require.False(t, privilege.REFERENCES.IsSetIn(userPrivs.WithGrantOption),
-			"expected REFERENCES WITHOUT grant option (mirroring CREATE)")
+
+		// test_upgrade_user gets REFERENCES mirroring CREATE's grant option.
+		privs1, found := getTable(tableID1).GetPrivileges().FindUser(testUpgradeUser)
+		require.True(t, found)
+		require.True(t, privilege.REFERENCES.IsSetIn(privs1.Privileges),
+			"expected REFERENCES after upgrade on table1")
+		require.True(t, privilege.REFERENCES.IsSetIn(privs1.WithGrantOption),
+			"REFERENCES should mirror CREATE's WITH GRANT OPTION")
+
+		privs2, found := getTable(tableID2).GetPrivileges().FindUser(testUpgradeUser)
+		require.True(t, found)
+		require.True(t, privilege.REFERENCES.IsSetIn(privs2.Privileges),
+			"expected REFERENCES after upgrade on table2")
+		require.False(t, privilege.REFERENCES.IsSetIn(privs2.WithGrantOption),
+			"REFERENCES should mirror CREATE's lack of grant option")
+
+		// test_unaffected_user's privileges unchanged.
+		for _, id := range []int{tableID1, tableID2} {
+			uPrivs, found := getTable(id).GetPrivileges().FindUser(testUnaffectedUser)
+			require.True(t, found,
+				"expected test_unaffected_user in privileges on table %d", id)
+			before := unaffectedBefore[id]
+			require.Equal(t, before.privileges, uPrivs.Privileges,
+				"test_unaffected_user privilege bits should not change on table %d", id)
+			require.Equal(t, before.withGrantOption, uPrivs.WithGrantOption,
+				"test_unaffected_user grant option bits should not change on table %d", id)
+		}
 		return nil
 	})
 	require.NoError(t, err)
