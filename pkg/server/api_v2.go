@@ -203,7 +203,7 @@ func registerRoutes(
 		{"health/restart_safety/", systemRoutes.restartSafetyCheck, false, authserver.RegularRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
-		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
+		{"events/", a.listEvents, true, authserver.RegularRole, false},
 		{"databases/", a.listDatabases, true, authserver.RegularRole, false},
 		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, authserver.RegularRole, false},
 		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, authserver.RegularRole, false},

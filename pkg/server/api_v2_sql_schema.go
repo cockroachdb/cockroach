@@ -141,6 +141,14 @@ func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	username := authserver.UserFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
+
+	// Check VIEWEVENTLOG or VIEWCLUSTERMETADATA privilege, matching the
+	// v1 Events() RPC handler.
+	if err := a.admin.privilegeChecker.RequireViewEventLogPermission(ctx); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
 	queryValues := r.URL.Query()
 
 	req := &serverpb.EventsRequest{}

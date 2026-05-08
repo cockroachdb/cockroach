@@ -59,6 +59,8 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	sqlDB.Exec(t, "GRANT SYSTEM VIEWDEBUG TO withviewdebug")
 	sqlDB.Exec(t, "CREATE USER withviewjob")
 	sqlDB.Exec(t, "GRANT SYSTEM VIEWJOB TO withviewjob")
+	sqlDB.Exec(t, "CREATE USER withvieweventlog")
+	sqlDB.Exec(t, "GRANT SYSTEM VIEWEVENTLOG TO withvieweventlog")
 
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := ts.DB()
@@ -101,8 +103,9 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	withviewclustermetadata := username.MakeSQLUsernameFromPreNormalizedString("withviewclustermetadata")
 	withViewDebug := username.MakeSQLUsernameFromPreNormalizedString("withviewdebug")
 	withViewJob := username.MakeSQLUsernameFromPreNormalizedString("withviewjob")
+	withViewEventLog := username.MakeSQLUsernameFromPreNormalizedString("withvieweventlog")
 
-	// Test HasGlobalPrivilege for VIEWJOB.
+	// Test HasGlobalPrivilege for VIEWJOB and VIEWEVENTLOG.
 	globalPrivTests := []struct {
 		name      string
 		privilege privilege.Kind
@@ -111,6 +114,8 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	}{
 		{"viewjob-granted", privilege.VIEWJOB, withViewJob, true},
 		{"viewjob-not-granted", privilege.VIEWJOB, withoutPrivs, false},
+		{"vieweventlog-granted", privilege.VIEWEVENTLOG, withViewEventLog, true},
+		{"vieweventlog-not-granted", privilege.VIEWEVENTLOG, withoutPrivs, false},
 	}
 	for _, tt := range globalPrivTests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,6 +166,13 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			underTest.RequireViewDebugPermission,
 			map[username.SQLUsername]bool{
 				withAdmin: false, withoutPrivs: true, withViewDebug: false,
+			},
+		},
+		{
+			"requireViewEventLogPermission",
+			underTest.RequireViewEventLogPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withoutPrivs: true, withViewEventLog: false, withviewclustermetadata: false,
 			},
 		},
 	}
