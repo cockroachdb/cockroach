@@ -263,7 +263,7 @@ func TestExplainGist(t *testing.T) {
 				// We might be still in the process of cancelling the previous DROP
 				// operation or hit the statement timeout - ignore this particular
 				// error.
-				if !testutils.IsError(err, "descriptor is being dropped") &&
+				if !testutils.IsError(err, "is being dropped") &&
 					!sqltestutils.IsClientSideQueryCanceledErr(err) {
 					t.Fatal(err)
 				}
