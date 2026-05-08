@@ -171,19 +171,32 @@ func destroyReplicaImpl(
 		); err != nil {
 			return err
 		}
+		// TODO(ibrahim): We could know `hi` if DestroyReplicaInfo passes down the
+		// log's last index.
+		if err := logstore.ClearRange(
+			ctx, rw.Raft.RO, rw.Raft.WO, buf.RaftLogPrefix(),
+			info.RaftAppliedIndex+1 /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+	} else {
 		if err := storage.ClearRangeWithHeuristic(
 			ctx, rw.Raft.RO, rw.Raft.WO,
-			buf.RaftLogKey(info.RaftAppliedIndex+1), sl.RaftReplicaIDKey(),
+			buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
 			ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
-	} else if err := storage.ClearRangeWithHeuristic(
-		ctx, rw.Raft.RO, rw.Raft.WO,
-		buf.RangeTombstoneKey().Next(), sl.RaftReplicaIDKey(),
-		ClearRangeThresholdPointKeys(),
-	); err != nil {
-		return err
+		// Note: We could just clear the while raft log in the
+		// ClearRangeWithHeuristic() above. However, we want to funnel all raft log
+		// deletions through the logstore package to make it easier to reason about
+		// them.
+		if err := logstore.ClearRange(
+			ctx, rw.Raft.RO, rw.Raft.WO, buf.RaftLogPrefix(),
+			0 /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
 	}
 	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
 		return err
