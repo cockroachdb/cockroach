@@ -8,9 +8,9 @@ Building merge order index...
 MMA Backport Candidates: master -> release-26.2
 ================================================================
 
-Total MMA-related PRs on master since branch split: 60
+Total MMA-related PRs on master since branch split: 76
 Already backported: 10
-Ignored (skipped):  50
+Ignored (skipped):  66
 NOT YET backported: 0
 
 ----------------------------------------------------------------
@@ -116,6 +116,38 @@ PRs ignored (add/remove in IGNORED_PRS dict)
        reason: kvserver: add rate limiting for low-priority bulk read operations like TTL
   #169195  0f45d1da541  admission: add composite groupKey type
        reason: admission: add composite groupKey type
+  #165719  b7ceb33b651  mmaprototype: dynamically verbose logs for overloaded stores
+       reason: already backported via #169344 (release-26.2: mmaprototype: dynamically verbose logs for overloaded stores)
+  #169320  5da89382df2  admission: add rmStrategy for RM-mode burst refill
+       reason: admission: add rmStrategy for RM-mode burst refill
+  #169428  a7275e2a6f3  admission: preserve non-tenant groupWeights across SetTenantWeights swap
+       reason: admission: preserve non-tenant groupWeights across SetTenantWeights swap
+  #169446  9b6a9abf017  kvserver/allocator/mmaprototype: lock advisor methods
+       reason: already backported via #169590 (release-26.2: kvserver/allocator/mmaprototype: lock advisor methods)
+  #169584  92e3c33d1e1  sql: lower the priority of AUTO CREATE STATS job to BulkLowPri
+       reason: sql: lower the priority of AUTO CREATE STATS job to BulkLowPri
+  #169658  48bef1064d2  build/teamcity: upload phases.json artifacts for perturbation tests
+       reason: build/teamcity: upload phases.json artifacts for perturbation tests
+  #169659  8b8348c6f59  roachtest/perturbation: enforce 0.8x throughput floor
+       reason: roachtest/perturbation: enforce 0.8x throughput floor
+  #169336  3b12b3a7745  kvserver: plumb ScanStats to obtain pebble iterator statistics during request evaluation
+       reason: kvserver: plumb ScanStats to obtain pebble iterator statistics during request evaluation
+  #169230  ab29a85d378  mmaprototype: add structured snapshot of cluster state
+       reason: already backported via #169711 (release-26.2: mmaprototype: add structured snapshot of cluster state)
+  #169233  f7c159f74b7  cli: collect mma allocator state in debug zip
+       reason: already backported via #169734 (release-26.2: cli: collect mma allocator state in debug zip)
+  #169669  516a17d899f  allocatorimpl: retire kv.allocator.load_based_lease_rebalancing.enabled
+       reason: allocatorimpl: retire kv.allocator.load_based_lease_rebalancing.enabled (master+ only)
+  #169413  9a4e0558458  mmaprototype: count overloaded-but-blocked stores in MMA metrics
+       reason: already backported via #169742 (release-26.2: mmaprototype: count overloaded-but-blocked stores in MMA metrics)
+  #169741  7c25eaa9935  mmaprototype: add captured_at to cluster state snapshot
+       reason: already backported via #169761 (release-26.2: mmaprototype: add captured_at to cluster state snapshot)
+  #169747  cbc8baea715  mmaprototype: materialize per-range constraint analysis in snapshot
+       reason: already backported via #169876 (release-26.2: mmaprototype: materialize per-range constraint analysis in snapshot)
+  #169430  a7b7f3efaa1  kvserver: enable multi-metric allocator by default in v26.3
+       reason: kvserver: enable multi-metric allocator by default in v26.3 (master+ only)
+  #169708  3dc59b8f9bb  admission: retire tenant-weight cluster settings
+       reason: admission: retire tenant-weight cluster settings
 
 ----------------------------------------------------------------
 PRs already backported (for reference)

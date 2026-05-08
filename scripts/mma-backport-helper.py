@@ -154,6 +154,27 @@ IGNORED_PRS: dict[int, str] = {
     167655: "storeliveness: skip flaky multi-store tests under duress",
     # Roachtest-only scoring change, no production impact.
     167696: "roachtest/perturbation: simplify scoring to impact ratios",
+    # Admission/AC SQL CPU token workstream (separate from MMA), batch 2.
+    169320: "admission: add rmStrategy for RM-mode burst refill",
+    169428: "admission: preserve non-tenant groupWeights across SetTenantWeights swap",
+    169708: "admission: retire tenant-weight cluster settings",
+    # Unrelated to MMA, batch 2.
+    169584: "sql: lower the priority of AUTO CREATE STATS job to BulkLowPri",
+    169336: "kvserver: plumb ScanStats to obtain pebble iterator statistics during request evaluation",
+    169658: "build/teamcity: upload phases.json artifacts for perturbation tests",
+    169659: "roachtest/perturbation: enforce 0.8x throughput floor",
+    # Master-and-onward only — explicit v26.3 default change, not for 26.2.
+    169430: "kvserver: enable multi-metric allocator by default in v26.3 (master+ only)",
+    # Master-and-onward only per intent.
+    169669: "allocatorimpl: retire kv.allocator.load_based_lease_rebalancing.enabled (master+ only)",
+    # Already backported via separate release PRs but invisible to script (cherry-picks lack original PR ref).
+    165719: "already backported via #169344 (release-26.2: mmaprototype: dynamically verbose logs for overloaded stores)",
+    169446: "already backported via #169590 (release-26.2: kvserver/allocator/mmaprototype: lock advisor methods)",
+    169230: "already backported via #169711 (release-26.2: mmaprototype: add structured snapshot of cluster state)",
+    169233: "already backported via #169734 (release-26.2: cli: collect mma allocator state in debug zip)",
+    169413: "already backported via #169742 (release-26.2: mmaprototype: count overloaded-but-blocked stores in MMA metrics)",
+    169741: "already backported via #169761 (release-26.2: mmaprototype: add captured_at to cluster state snapshot)",
+    169747: "already backported via #169876 (release-26.2: mmaprototype: materialize per-range constraint analysis in snapshot)",
 }
 
 # Regexes to extract PR numbers from merge commit subjects.
