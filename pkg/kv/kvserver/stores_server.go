@@ -133,8 +133,9 @@ func syncAppliedState(r *Replica) error {
 	}
 	if err := wag.Write(b, s.wagSeq.Next(), wagpb.Node{
 		Events: []wagpb.Event{{
-			Addr: wagpb.MakeAddr(r.ID(), r.shMu.state.RaftAppliedIndex),
-			Type: wagpb.EventApply,
+			Addr:     wagpb.MakeAddr(r.ID(), r.shMu.state.RaftAppliedIndex),
+			Type:     wagpb.EventApply,
+			StartKey: r.shMu.state.Desc.StartKey,
 		}},
 	}); err != nil {
 		return errors.Wrapf(err, "writing WAG node")

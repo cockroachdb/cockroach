@@ -367,6 +367,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				in := splitPreApplyInput{
 					lhsID:               lhsRangeState.replica.FullReplicaID,
+					lhsStartKey:         split.LeftDesc.StartKey,
 					raftIndex:           ps.raftIndex,
 					rhsDestroyed:        rhsDestroyed,
 					rhsDesc:             split.RightDesc,
@@ -469,8 +470,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						State: kvstorage.WrapState(b.State()),
 						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
 					}, b.WagWriter(), mergePreApplyInput{
-						lhsID:     lhsRS.replica.FullReplicaID,
-						raftIndex: pm.raftIndex,
+						lhsID:       lhsRS.replica.FullReplicaID,
+						lhsStartKey: merge.LeftDesc.StartKey,
+						raftIndex:   pm.raftIndex,
 						rhsDestroyInfo: kvstorage.DestroyReplicaInfo{
 							FullReplicaID: rhsRS.replica.FullReplicaID,
 							// TODO(pav-kv): support the applied index properly.

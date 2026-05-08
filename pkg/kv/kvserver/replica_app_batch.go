@@ -367,6 +367,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 
 		if err := mergePreApply(ctx, b.ReadWriter(), b.batch.WagWriter(), mergePreApplyInput{
 			lhsID:          b.r.ID(),
+			lhsStartKey:    b.state.Desc.StartKey,
 			raftIndex:      cmd.Index(),
 			rhsDestroyInfo: rhsRepl.destroyInfoRaftMuLocked(),
 		}); err != nil {
