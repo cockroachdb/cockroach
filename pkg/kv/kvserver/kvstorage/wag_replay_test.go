@@ -290,7 +290,7 @@ func TestReplayWAG(t *testing.T) {
 		t.Helper()
 		b := bf.NewWriteBatch()
 		defer b.Close()
-		b.WagWriter().AddEvent(addr, typ)
+		b.WagWriter().AddEvent(addr, typ, nil /* startKey */)
 		require.NoError(t, b.State().PutUnversioned(roachpb.Key(key), []byte(val)))
 		require.NoError(t, b.Commit(false /* sync */))
 	}

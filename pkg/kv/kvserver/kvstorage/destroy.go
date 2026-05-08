@@ -100,7 +100,7 @@ func DestroyReplica(
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
 ) error {
-	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventDestroy)
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventDestroy, info.Keys.Key)
 	return destroyReplicaImpl(ctx, rw, info, next)
 }
 
@@ -218,7 +218,7 @@ func destroyReplicaImpl(
 func SubsumeReplica(
 	ctx context.Context, rw ReadWriter, w *wag.Writer, info DestroyReplicaInfo,
 ) error {
-	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventSubsume)
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventSubsume, info.Keys.Key)
 	info.Keys = roachpb.RSpan{} // forget about the user keys
 	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }
