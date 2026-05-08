@@ -2877,6 +2877,59 @@ SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a "Nice Enum 📙", b S
 SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a "Nice Enum 📙", b STRING, c foo) -- literals removed
 SELECT * FROM ROWS FROM (_('')) AS _ (_ _, _ STRING, _ _) -- identifiers removed
 
+# Regression test for #168372: a column name in an AS column-def list must be
+# quoted when it is the unreserved keyword INDEX, because the lexer's INDEX
+# disambiguation heuristic reclassifies a bare INDEX followed by an identifier
+# and '(' (e.g. a parameterized type like VARBIT(61)) into
+# INDEX_BEFORE_NAME_THEN_PAREN, which the 'name' grammar production rejects.
+#
+# The input uses BIT VARYING(61) (a two-word type) so the initial parse
+# succeeds: the lexer only sees INDEX followed by BIT followed by VARYING (not
+# '('). The formatter normalizes the type to VARBIT(61), which would trigger
+# the reclassification on re-parse if INDEX were left bare.
+
+parse
+SELECT * FROM json_to_record('') AS t (index BIT VARYING(61))
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)) -- identifiers removed
+
+parse
+SELECT * FROM json_to_record('') AS t (index BIT VARYING(61)[])
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)[]) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)[]) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)[]) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)[]) -- identifiers removed
+
+parse
+SELECT * FROM json_to_record('') AS t (a INT, index BIT VARYING(61), b INT)
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t (a INT8, "index" VARBIT(61), b INT8) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a INT8, "index" VARBIT(61), b INT8) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a INT8, "index" VARBIT(61), b INT8) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ INT8, _ VARBIT(61), _ INT8) -- identifiers removed
+
+# Already-quoted INDEX as a column name continues to round-trip.
+parse
+SELECT * FROM json_to_record('') AS t ("index" BIT VARYING(61))
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)) -- identifiers removed
+
+# Reduced reproducer of the original RandomSyntaxSelect failure (#168372).
+parse
+SELECT * FROM [FUNCTION 198]() AS TEMP (INDEX BIT VARYING(61) ARRAY[233])
+----
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS temp ("index" VARBIT(61)[]) -- normalized!
+SELECT (*) FROM ROWS FROM (([FUNCTION 198]())) AS temp ("index" VARBIT(61)[]) -- fully parenthesized
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS temp ("index" VARBIT(61)[]) -- literals removed
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS _ (_ VARBIT(61)[]) -- identifiers removed
+
 parse
 SELECT 123 AS OF FROM t
 ----
