@@ -883,7 +883,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		// Start schema change that eventually runs a partial backfill.
 		if _, err := sqlDB.Exec(
 			"CREATE UNIQUE INDEX bar ON t.test (v)",
-		); err != nil && !testutils.IsError(err, "descriptor is being dropped") {
+		); err != nil && !testutils.IsError(err, "is being dropped") {
 			t.Error(err)
 		}
 		wg.Done()
