@@ -562,7 +562,7 @@ func validateAutoProvisioning(
 	ctx context.Context, t test.Test, c cluster.Cluster, username string,
 ) {
 	conn := createPgxConnWithExternalURL(ctx, t, c)
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	var provisionSrc *string
 	err := conn.QueryRow(ctx,
@@ -585,7 +585,7 @@ func validateLastLoginTime(
 	ctx context.Context, t test.Test, c cluster.Cluster, username string, authTime time.Time,
 ) {
 	conn := createPgxConnWithExternalURL(ctx, t, c)
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	const (
 		pollInterval = 500 * time.Millisecond

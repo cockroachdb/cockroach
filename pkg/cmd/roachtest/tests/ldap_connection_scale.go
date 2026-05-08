@@ -349,7 +349,7 @@ func validateAutoProvisioningScale(
 	ctx context.Context, t test.Test, c cluster.Cluster, userUidList []string,
 ) {
 	conn := createPgxConnWithExternalURL(ctx, t, c)
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	// Check the first, middle, and last users as a representative sample.
 	sampleIndices := []int{0, len(userUidList) / 2, len(userUidList) - 1}
