@@ -29,8 +29,29 @@ type LockSet struct {
 	SortedRows []ldrdecoder.DecodedRow
 }
 
+type TestingKnobs struct {
+	AssertDependencyGeneratesLockInvariant bool
+}
+
+// Option configures a LockSynthesizer.
+type Option interface {
+	apply(*LockSynthesizer)
+}
+
+type optionFunc func(*LockSynthesizer)
+
+func (f optionFunc) apply(ls *LockSynthesizer) { f(ls) }
+
+// WithTestingKnobs attaches TestingKnobs to the LockSynthesizer.
+func WithTestingKnobs(knobs TestingKnobs) Option {
+	return optionFunc(func(ls *LockSynthesizer) {
+		ls.knobs = knobs
+	})
+}
+
 type LockSynthesizer struct {
 	tableConstraints map[descpb.ID]*tableConstraints
+	knobs            TestingKnobs
 }
 
 func NewLockSynthesizer(
@@ -39,9 +60,13 @@ func NewLockSynthesizer(
 	lm *lease.Manager,
 	clock *hlc.Clock,
 	tableMappings []ldrdecoder.TableMapping,
+	opts ...Option,
 ) (*LockSynthesizer, error) {
 	ls := &LockSynthesizer{
 		tableConstraints: make(map[descpb.ID]*tableConstraints, len(tableMappings)),
+	}
+	for _, opt := range opts {
+		opt.apply(ls)
 	}
 
 	timestamp := lease.TimestampToReadTimestamp(clock.Now())
@@ -104,6 +129,12 @@ func (ls *LockSynthesizer) DeriveLocks(
 		}
 	}
 
+	if ls.knobs.AssertDependencyGeneratesLockInvariant {
+		if err := ls.assertDependencyGeneratesLock(ctx, rows, rowLocks); err != nil {
+			return LockSet{}, err
+		}
+	}
+
 	sorted, err := ls.sort(ctx, rows, rowLocks, locks)
 	if err != nil {
 		return LockSet{}, err
@@ -159,4 +190,50 @@ func (ls *LockSynthesizer) dependsOn(
 	}
 
 	return tcA.fkDependsOn(ctx, tcB, a, b)
+}
+
+// assertDependencyGeneratesLock is an expensive test only check that
+// asserts the following:
+//
+// If two rows have a lock conflict, they may have a dependency but are
+// not guaranteed to. However, if two rows _don't_ have a lock conflict,
+// they must not have a dependency.
+func (ls *LockSynthesizer) assertDependencyGeneratesLock(
+	ctx context.Context, rows []ldrdecoder.DecodedRow, rowLocks [][]Lock,
+) error {
+	// Iterate every pair of rows and see if we generate a dependency.
+	// N.B. we normally only check for dependencies if we had a lock
+	// conflict.
+	for i := range rows {
+		// Find all the locks generated for row_i.
+		iLocks := make(map[LockHash]bool, len(rowLocks[i]))
+		for _, l := range rowLocks[i] {
+			iLocks[l.Hash] = true
+		}
+		for j := range rows {
+			if i == j {
+				continue
+			}
+			dep, err := ls.dependsOn(ctx, rows[i], rows[j])
+			if err != nil {
+				return err
+			}
+			// if row i is dependent on row j, then the two must share at least one
+			// lock hash.
+			if dep {
+				matchingLock := false
+				for _, l := range rowLocks[j] {
+					if iLocks[l.Hash] {
+						matchingLock = true
+						break
+					}
+				}
+				if !matchingLock {
+					return errors.AssertionFailedf(
+						"row %d depends on row %d but we did not generate a lock", i, j)
+				}
+			}
+		}
+	}
+	return nil
 }

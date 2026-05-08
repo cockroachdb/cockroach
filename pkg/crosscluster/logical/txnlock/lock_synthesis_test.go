@@ -349,6 +349,9 @@ func TestDeriveLocks(t *testing.T) {
 			{DestID: compositeFKParentDesc.GetID()},
 			{DestID: compositeChildDesc.GetID()},
 		},
+		WithTestingKnobs(TestingKnobs{
+			AssertDependencyGeneratesLockInvariant: true,
+		}),
 	)
 	require.NoError(t, err)
 
@@ -1024,6 +1027,27 @@ func TestDeriveLocks(t *testing.T) {
 				// child: FK(parent_id=5)
 				readLockCount: 1,
 				order:         []int{1, 0},
+			},
+		},
+		{
+			// Updating a parent's non-constraint column and inserting a
+			// child that references the parent's UC in the same txn. The
+			// parent update touches no FK/UC columns, so it emits only a
+			// PK lock and does not conflict with the child's FK read
+			// locks on the unchanged referenced values.
+			name: "fk_update_parent_unreferenced_col_insert_child_same_txn",
+			txn1: txnCase{
+				events: []streampb.StreamEvent_KV{
+					parentEB.UpdateEvent(txnTime,
+						fkParentRow(10, 50, 1),
+						fkParentRow(10, 50, 0)),
+					childEB.InsertEvent(txnTime, fkChildRow(1, 10, 50, 0)),
+				},
+				// parent update: PK only.
+				// child insert: PK + FK(read,parent_id=10) + FK(read,parent_ref=50).
+				writeLockCount: 2,
+				readLockCount:  2,
+				order:          []int{0, 1},
 			},
 		},
 		{
