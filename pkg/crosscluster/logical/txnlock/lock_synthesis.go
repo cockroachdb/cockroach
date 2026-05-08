@@ -29,8 +29,30 @@ type LockSet struct {
 	SortedRows ldrdecoder.TxnEnvelope
 }
 
+type TestingKnobs struct {
+	// Testing hook called on every DeriveLocks call.
+	LockValidation func(ctx context.Context, ls *LockSynthesizer, rows []ldrdecoder.DecodedRow, rowLocks [][]Lock) error
+}
+
+// Option configures a LockSynthesizer.
+type Option interface {
+	apply(*LockSynthesizer)
+}
+
+type optionFunc func(*LockSynthesizer)
+
+func (f optionFunc) apply(ls *LockSynthesizer) { f(ls) }
+
+// WithTestingKnobs attaches TestingKnobs to the LockSynthesizer.
+func WithTestingKnobs(knobs TestingKnobs) Option {
+	return optionFunc(func(ls *LockSynthesizer) {
+		ls.knobs = knobs
+	})
+}
+
 type LockSynthesizer struct {
 	tableConstraints map[descpb.ID]*tableConstraints
+	knobs            TestingKnobs
 }
 
 func NewLockSynthesizer(
@@ -39,9 +61,13 @@ func NewLockSynthesizer(
 	lm *lease.Manager,
 	clock *hlc.Clock,
 	tableMappings []ldrdecoder.TableMapping,
+	opts ...Option,
 ) (*LockSynthesizer, error) {
 	ls := &LockSynthesizer{
 		tableConstraints: make(map[descpb.ID]*tableConstraints, len(tableMappings)),
+	}
+	for _, opt := range opts {
+		opt.apply(ls)
 	}
 
 	timestamp := lease.TimestampToReadTimestamp(clock.Now())
@@ -107,6 +133,12 @@ func (ls *LockSynthesizer) DeriveLocks(
 			}
 			lr.rows = append(lr.rows, int32(i))
 			locks[lock.Hash] = lr
+		}
+	}
+
+	if ls.knobs.LockValidation != nil {
+		if err := ls.knobs.LockValidation(ctx, ls, rows, rowLocks); err != nil {
+			return LockSet{}, err
 		}
 	}
 
