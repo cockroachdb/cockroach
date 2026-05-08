@@ -286,6 +286,18 @@ func (p *planner) CheckPrivilegeForUser(
 					return nil
 				}
 			}
+			// VIEWEVENTLOG grants implicit SELECT on system.eventlog.
+			if tableID == keys.EventLogTableID {
+				hasViewEventLog, err := p.HasPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWEVENTLOG, user,
+				)
+				if err != nil {
+					return err
+				}
+				if hasViewEventLog {
+					return nil
+				}
+			}
 		}
 	}
 	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
