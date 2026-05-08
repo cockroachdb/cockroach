@@ -25,6 +25,8 @@ import (
 type mergePreApplyInput struct {
 	// lhsID identifies the LHS replica applying the merge.
 	lhsID roachpb.FullReplicaID
+	// lhsStartKey is the LHS range's start key, recorded in the WAG event.
+	lhsStartKey roachpb.RKey
 	// raftIndex is the raft log index of the merge command.
 	raftIndex kvpb.RaftIndex
 	// rhsDestroyInfo describes the RHS replica being subsumed.
@@ -42,7 +44,7 @@ func mergePreApply(
 		return err
 	}
 	// Stage a WAG EventMerge for the LHS.
-	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventMerge)
+	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventMerge, in.lhsStartKey)
 	return nil
 }
 

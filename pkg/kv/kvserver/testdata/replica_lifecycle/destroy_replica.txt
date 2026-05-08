@@ -23,7 +23,7 @@ state engine:
 log engine:
 Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
 Delete (Sized at 32): 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): 
-Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r1/1:10,EventDestroy)
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): (r1/1:10,EventDestroy,"a")
 > Delete (Sized at 28): 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 
 > Delete (Sized at 43): 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): 
 > Delete (Sized at 34): 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): 
@@ -80,7 +80,7 @@ Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:11 (0x01698a757266
 Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:12 (0x01698a757266746c000000000000000c00): 
 Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:13 (0x01698a757266746c000000000000000d00): 
 Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 
-Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): (r2/1:10,EventDestroy)
+Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): (r2/1:10,EventDestroy,"c")
 > Delete (Sized at 28): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
 > Delete (Sized at 43): 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): 
 > Delete (Sized at 34): 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): 

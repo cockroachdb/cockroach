@@ -42,5 +42,9 @@ func (e Event) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (e Event) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(%s,%s)", e.Addr, e.Type)
+	if len(e.StartKey) > 0 {
+		w.Printf("(%s,%s,%s)", e.Addr, e.Type, e.StartKey)
+	} else {
+		w.Printf("(%s,%s)", e.Addr, e.Type)
+	}
 }
