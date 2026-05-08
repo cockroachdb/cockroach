@@ -28,6 +28,8 @@ import (
 type splitPreApplyInput struct {
 	// lhsID identifies the LHS replica applying the split.
 	lhsID roachpb.FullReplicaID
+	// lhsStartKey is the LHS range's start key, recorded in the WAG event.
+	lhsStartKey roachpb.RKey
 	// raftIndex is the raft log index of the split command.
 	raftIndex kvpb.RaftIndex
 	// rhsID identifies the RHS replica from the split trigger. When rhsDestroyed
@@ -87,10 +89,11 @@ func validateAndPrepareSplit(
 	}
 
 	res := splitPreApplyInput{
-		lhsID:     roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
-		raftIndex: raftIndex,
-		rhsID:     roachpb.FullReplicaID{RangeID: split.RightDesc.RangeID, ReplicaID: splitRightReplDesc.ReplicaID},
-		rhsSpan:   split.RightDesc.RSpan(),
+		lhsID:       roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+		lhsStartKey: split.LeftDesc.StartKey,
+		raftIndex:   raftIndex,
+		rhsID:       roachpb.FullReplicaID{RangeID: split.RightDesc.RangeID, ReplicaID: splitRightReplDesc.ReplicaID},
+		rhsSpan:     split.RightDesc.RSpan(),
 	}
 
 	// Try to obtain the RHS replica. In the common case, it exists and its
@@ -221,10 +224,10 @@ func splitPreApply(
 	// CreateUninitializedReplica WAG node here. That node is written by
 	// getOrCreateReplica (called upstream via maybeAcquireSplitMergeLock) and
 	// will always precede this split node in the WAG sequence.
-	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventSplit)
+	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventSplit, in.lhsStartKey)
 	if !in.rhsDestroyed {
 		wagWriter.AddEvent(
-			wagpb.MakeAddr(in.rhsID, kvstorage.RaftInitialLogIndex), wagpb.EventInit,
+			wagpb.MakeAddr(in.rhsID, kvstorage.RaftInitialLogIndex), wagpb.EventInit, in.rhsSpan.Key,
 		)
 	} else {
 		// The RHS replica has already been removed from the store. To apply the

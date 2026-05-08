@@ -140,7 +140,7 @@ func CreateUninitializedReplica(
 	// Before this point, raft and state machine state of this replica are
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
-	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate)
+	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate, nil /* startKey */)
 	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
