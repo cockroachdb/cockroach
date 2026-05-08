@@ -129,6 +129,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTenantNode{}):                                "drop tenant",
 	reflect.TypeOf(&dropTypeNode{}):                                  "drop type",
 	reflect.TypeOf(&DropRoleNode{}):                                  "drop user/role",
+	reflect.TypeOf(&DropProvisionedRolesNode{}):                      "drop provisioned roles",
 	reflect.TypeOf(&dropViewNode{}):                                  "drop view",
 	reflect.TypeOf(&errorIfRowsNode{}):                               "error if rows",
 	reflect.TypeOf(&explainPlanNode{}):                               "explain plan",
