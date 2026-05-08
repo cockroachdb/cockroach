@@ -57,9 +57,29 @@ func (a *addingDescriptorError) Error() string { return a.cause.Error() }
 func (a *addingDescriptorError) Unwrap() error { return a.cause }
 
 // ErrDescriptorDropped is returned when the descriptor is being dropped.
-// TODO (lucy): Make the error message specific to each descriptor type (e.g.,
-// "table is being dropped") and add the pgcodes (UndefinedTable, etc.).
+//
+// Use NewDescriptorDroppedError to create type-specific errors.
 var ErrDescriptorDropped = errors.New("descriptor is being dropped")
+
+// NewDescriptorDroppedError returns a type-specific error indicating that the
+// descriptor is being dropped.
+func NewDescriptorDroppedError(desc Descriptor) error {
+	code := pgcode.Uncategorized
+	switch desc.DescriptorType() {
+	case Table:
+		code = pgcode.UndefinedTable
+	case Database:
+		code = pgcode.UndefinedDatabase
+	case Schema:
+		code = pgcode.UndefinedSchema
+	case Type:
+		code = pgcode.UndefinedObject
+	case Function:
+		code = pgcode.UndefinedFunction
+	}
+	return pgerror.Wrapf(ErrDescriptorDropped, code,
+		"%s %q is being dropped", desc.DescriptorType(), desc.GetName())
+}
 
 func (i *inactiveDescriptorError) Error() string { return i.cause.Error() }
 
