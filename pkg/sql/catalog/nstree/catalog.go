@@ -300,7 +300,7 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 		return catalog.NewReferencedDescriptorNotFoundError("schema", ne.GetID())
 	}
 	if desc.Dropped() {
-		return catalog.ErrDescriptorDropped
+		return catalog.NewDescriptorDroppedError(desc)
 	}
 	if ne.GetParentID() == desc.GetParentID() &&
 		ne.GetParentSchemaID() == desc.GetParentSchemaID() &&
