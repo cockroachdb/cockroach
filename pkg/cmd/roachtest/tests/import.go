@@ -1236,7 +1236,7 @@ func registerImportTPCC(r registry.Registry) {
 		})
 	}
 	const geoWarehouses = 4000
-	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
+	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-c"
 	testName := fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses)
 	r.Add(registry.TestSpec{
 		Name:              testName,
