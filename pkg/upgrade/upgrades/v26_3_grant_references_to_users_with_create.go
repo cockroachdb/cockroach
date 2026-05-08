@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // grantReferencesToUsersWithCreate grants the REFERENCES privilege to all
@@ -52,7 +53,7 @@ func grantReferencesToUsersWithCreate(
 			tbl := desc.(catalog.TableDescriptor)
 			privs := tbl.GetPrivileges()
 
-			// Quick check: does any user need REFERENCES granted?
+			// Check if any user needs REFERENCES granted.
 			needsUpdate := false
 			for _, u := range privs.Users {
 				if privilege.CREATE.IsSetIn(u.Privileges) && !privilege.REFERENCES.IsSetIn(u.Privileges) {
@@ -67,7 +68,13 @@ func grantReferencesToUsersWithCreate(
 			return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 				mutableTbl, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, tbl.GetID())
 				if err != nil {
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						return nil
+					}
 					return err
+				}
+				if mutableTbl.Dropped() {
+					return nil
 				}
 				for _, u := range mutableTbl.GetPrivileges().Users {
 					if privilege.CREATE.IsSetIn(u.Privileges) && !privilege.REFERENCES.IsSetIn(u.Privileges) {

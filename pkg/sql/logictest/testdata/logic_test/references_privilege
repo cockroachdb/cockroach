@@ -6,9 +6,15 @@ CREATE TABLE ref_test (id INT PRIMARY KEY)
 statement ok
 CREATE USER ref_user
 
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON ref_test TO ref_user
 
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error REFERENCES privilege is not available until upgrade to 26.3 is finalized
+GRANT REFERENCES ON ref_test TO ref_user
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query TTTTTB colnames,rowsort
 SHOW GRANTS ON ref_test
 ----
@@ -16,6 +22,14 @@ database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       ref_test    admin     ALL             true
 test           public       ref_test    ref_user  REFERENCES      false
 test           public       ref_test    root      ALL             true
+
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON ref_test
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       ref_test    admin    ALL             true
+test           public       ref_test    root     ALL             true
 
 statement ok
 REVOKE REFERENCES ON ref_test FROM ref_user
@@ -89,6 +103,7 @@ ALTER TABLE child ADD FOREIGN KEY (parent_id) REFERENCES parent(id)
 
 user root
 
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON parent TO fk_user
 
@@ -189,6 +204,7 @@ ALTER TABLE self_ref ADD CONSTRAINT fk_self FOREIGN KEY (parent_id) REFERENCES s
 
 user root
 
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON self_ref TO self_ref_user
 
@@ -319,7 +335,7 @@ SET ROLE fk_user
 
 # Creating a table with an FK reference should fail without REFERENCES on parent.
 skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
-statement error must have REFERENCES privilege on table parent
+statement error user fk_user does not have REFERENCES privilege on relation parent
 CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
 
 onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
@@ -329,6 +345,7 @@ CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))
 user root
 
 # Grant REFERENCES on parent.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 GRANT REFERENCES ON parent TO fk_user
 

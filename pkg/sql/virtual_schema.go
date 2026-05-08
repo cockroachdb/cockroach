@@ -220,7 +220,6 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		&sessiondata.SessionData{},  /* sessionData */
 		tree.PersistencePermanent,
 		nil, /* colToSequenceRefs */
-		nil, /* authAccessor */
 	)
 	if err != nil {
 		err = errors.Wrapf(err, "initVirtualDesc problem with schema: \n%s", t.schema)
