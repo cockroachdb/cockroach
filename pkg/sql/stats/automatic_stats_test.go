@@ -1231,7 +1231,9 @@ func TestEstimateStaleness(t *testing.T) {
 
 	fractionStaleRows := 0.4
 	explicitSettings := catpb.AutoStatsSettings{FractionStaleRows: &fractionStaleRows}
+	refresher.settingOverridesMu.Lock()
 	refresher.settingOverrides[table.GetID()] = explicitSettings
+	refresher.settingOverridesMu.Unlock()
 
 	// With fraction_stale_rows = 0.4 and the latest full stat being 5 hours old
 	// (half of avgRefreshTime of 10 hours), we expect 20% staleness.
@@ -1240,7 +1242,9 @@ func TestEstimateStaleness(t *testing.T) {
 	}
 
 	// Reset fraction_stale_rows to default (0.2)
+	refresher.settingOverridesMu.Lock()
 	delete(refresher.settingOverrides, table.GetID())
+	refresher.settingOverridesMu.Unlock()
 
 	// Delete old stats and create stats with 3-hour intervals, the most recent
 	// being 15 hours old.

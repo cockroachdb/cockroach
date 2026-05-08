@@ -343,6 +343,8 @@ type Refresher struct {
 	// this map.
 	misestimateSpans map[indexInfo]roachpb.Spans
 
+	// settingOverridesMu protects settingOverrides from concurrent access.
+	settingOverridesMu sync.RWMutex
 	// settingOverrides holds any autostats cluster setting overrides for each
 	// table.
 	settingOverrides map[descpb.ID]catpb.AutoStatsSettings
@@ -646,14 +648,18 @@ func (r *Refresher) Start(
 				// always added to or deleted from. We could just copy the entire hash
 				// map here, but maybe it is quicker and causes less memory pressure to
 				// just create a map with entries for the tables we're processing.
-				for tableID := range mutationCounts {
-					if settings, ok := r.settingOverrides[tableID]; ok {
-						if settingOverrides == nil {
-							settingOverrides = make(map[descpb.ID]catpb.AutoStatsSettings)
+				func() {
+					r.settingOverridesMu.RLock()
+					defer r.settingOverridesMu.RUnlock()
+					for tableID := range mutationCounts {
+						if settings, ok := r.settingOverrides[tableID]; ok {
+							if settingOverrides == nil {
+								settingOverrides = make(map[descpb.ID]catpb.AutoStatsSettings)
+							}
+							settingOverrides[tableID] = settings
 						}
-						settingOverrides[tableID] = settings
 					}
-				}
+				}()
 
 				r.startedTasksWG.Add(1)
 				if err := stopper.RunAsyncTask(
@@ -752,11 +758,19 @@ func (r *Refresher) Start(
 				// overrides when none exist (so that we don't have to pass two messages
 				// when nothing is overridden).
 				if mut.removeSettingOverrides {
-					delete(r.settingOverrides, mut.tableID)
+					func() {
+						r.settingOverridesMu.Lock()
+						defer r.settingOverridesMu.Unlock()
+						delete(r.settingOverrides, mut.tableID)
+					}()
 				}
 
 			case clusterSettingOverride := <-r.settings:
-				r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
+				func() {
+					r.settingOverridesMu.Lock()
+					defer r.settingOverridesMu.Unlock()
+					r.settingOverrides[clusterSettingOverride.tableID] = clusterSettingOverride.settings
+				}()
 
 			case <-r.drainAutoStats:
 				log.Dev.Infof(ctx, "draining auto stats refresher")
@@ -1068,9 +1082,13 @@ func (r *Refresher) EstimateStaleness(
 	}
 
 	var explicitSettings *catpb.AutoStatsSettings
-	if s, ok := r.settingOverrides[tableDesc.GetID()]; ok {
-		explicitSettings = &s
-	}
+	func() {
+		r.settingOverridesMu.RLock()
+		defer r.settingOverridesMu.RUnlock()
+		if s, ok := r.settingOverrides[tableDesc.GetID()]; ok {
+			explicitSettings = &s
+		}
+	}()
 	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
 
 	avgRefreshTime := avgFullRefreshTime(tableStats)
