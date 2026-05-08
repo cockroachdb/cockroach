@@ -327,15 +327,26 @@ func runOneRoundQueryComparison(
 
 		setup := sqlsmith.Setups[qct.setupName](rnd)
 
-		t.Status("executing setup")
-		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
-		for _, stmt := range setup {
-			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
-			} else {
-				logStmt(stmt)
+		// The seed setup is executed as a multi-statement batch, against
+		// which statement_timeout applies cumulatively and can be exceeded
+		// on slow hardware. For multi-region setups, bump the timeout 3x
+		// for the duration of setup, mirroring the bump inside
+		// setupMultiRegionDatabase. The IIFE scopes the deferred restore
+		// to the setup phase only.
+		func() {
+			if qct.isMultiRegion {
+				defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 			}
-		}
+			t.Status("executing setup")
+			t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+			for _, stmt := range setup {
+				if _, err := conn.Exec(stmt); err != nil {
+					t.Fatal(err)
+				} else {
+					logStmt(stmt)
+				}
+			}
+		}()
 
 		conn2 := conn
 		node2 := 1

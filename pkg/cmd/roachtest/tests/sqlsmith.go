@@ -356,6 +356,36 @@ func expectedToTimeout(t test.Test, stmt string) bool {
 	return false
 }
 
+// withIncreasedStmtTimeout multiplies the session's statement_timeout by
+// factor and returns a cleanup that restores the original value. It is a
+// no-op (returns a no-op cleanup) when no statement_timeout is set on the
+// session. Intended to be used with defer so the restore fires even if the
+// caller reaches t.Fatal:
+//
+//	defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+func withIncreasedStmtTimeout(
+	t test.Test, conn *gosql.DB, logStmt func(string), factor int,
+) func() {
+	t.Helper()
+	var stmtTimeout int
+	if err := conn.QueryRow("SHOW statement_timeout").Scan(&stmtTimeout); err != nil {
+		t.Fatal(err)
+	}
+	if stmtTimeout == 0 {
+		return func() {}
+	}
+	setTimeout := func(v int) {
+		stmt := fmt.Sprintf("SET statement_timeout = %d", v)
+		logStmt(stmt)
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.L().Printf("temporarily increasing the statement timeout")
+	setTimeout(factor * stmtTimeout)
+	return func() { setTimeout(stmtTimeout) }
+}
+
 // setupMultiRegionDatabase is used to set up a multi-region database.
 func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logStmt func(string)) {
 	t.Helper()
@@ -367,17 +397,9 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 		}
 	}
 
-	// If we have a stmt timeout set on the session, then increase it 3x given
-	// that schema changes below can take non-trivial amount of time.
-	row := conn.QueryRow("SHOW statement_timeout")
-	var stmtTimeout int
-	if err := row.Scan(&stmtTimeout); err != nil {
-		t.Fatal(err)
-	} else if stmtTimeout != 0 {
-		t.L().Printf("temporarily increasing the statement timeout")
-		execStmt(fmt.Sprintf("SET statement_timeout = %d", 3*stmtTimeout))
-		defer execStmt(fmt.Sprintf("SET statement_timeout = %d", stmtTimeout))
-	}
+	// Schema changes below can take a non-trivial amount of time, so bump the
+	// session statement_timeout 3x for the duration of this function.
+	defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 
 	regionsSet := make(map[string]struct{})
 	var region, zone string
