@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -79,7 +80,7 @@ func TestRaftStorageWrites(t *testing.T) {
 			batch := writeBatch(func(rw storage.ReadWriter) {
 				require.NoError(t, storeHardState(ctx, rw, sl, hs))
 				var err error
-				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, state, entries, false /* enginesSeparated */)
+				newState, err = logAppend(ctx, sl.RaftLogPrefix(), rw, nil /* la */, state, entries, false /* enginesSeparated */)
 				require.NoError(t, err)
 			})
 			state = newState
@@ -124,4 +125,38 @@ func TestRaftStorageWrites(t *testing.T) {
 		output = strings.ReplaceAll(output, "\n\n", "\n")
 		echotest.Require(t, output, filepath.Join("testdata", t.Name()))
 	})
+}
+
+// TestAssertNoLiveRaftLogEntriesInRange verifies the assertion fires iff an
+// unexpected live raft log entry exists at index >= first.
+func TestAssertNoLiveRaftLogEntriesInRange(t *testing.T) {
+	ctx := context.Background()
+	const rangeID = roachpb.RangeID(123)
+	prefix := keys.RaftLogPrefix(rangeID)
+	tests := []struct {
+		raftLog []kvpb.RaftIndex
+		first   kvpb.RaftIndex
+		wantErr bool
+	}{
+		{first: 90}, // empty log
+		{raftLog: []kvpb.RaftIndex{99, 100}, first: 50, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, first: 99, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, first: 100, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, first: 101},
+	}
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			eng := storage.NewDefaultInMemForTesting()
+			defer eng.Close()
+			for _, idx := range tc.raftLog {
+				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, idx), []byte("val")))
+			}
+			err := assertNoLiveRaftLogEntriesInRange(ctx, eng, prefix, tc.first)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

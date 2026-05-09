@@ -87,7 +87,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		m := raft.StorageAppend{Entries: ents}
 		cb := noopSyncCallback{}
 		var err error
-		rs, err = s.storeEntriesAndCommitBatch(ctx, rs, m, cb, stats, batch)
+		rs, err = s.storeEntriesAndCommitBatch(ctx, rs, m, cb, stats, batch, nil /* la */)
 		if err != nil {
 			b.Fatal(err)
 		}

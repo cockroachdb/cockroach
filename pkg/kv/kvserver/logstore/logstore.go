@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -224,7 +225,18 @@ func (s *LogStore) StoreEntries(
 	ctx context.Context, state RaftState, app raft.StorageAppend, cb SyncCallback, stats *AppendStats,
 ) (RaftState, error) {
 	batch := newStoreEntriesBatch(s.Engine)
-	return s.storeEntriesAndCommitBatch(ctx, state, app, cb, stats, batch)
+	var la storage.Reader // nil in non-race builds
+	if util.RaceEnabled {
+		// In race builds, give logAppend an independent engine reader for its
+		// assertions. We don't just reuse the batch above because reading through
+		// using an iterator would cache the iterator until the batch is closed.
+		// However, we rely on SyncWaiterLoop to close the batch in
+		// nonBlockingSyncs. This causes some tests to flake if the batch wasn't
+		// closed when the cluster is shutdown.
+		la = s.Engine.NewReader(storage.StandardDurability)
+		defer la.Close()
+	}
+	return s.storeEntriesAndCommitBatch(ctx, state, app, cb, stats, batch, la)
 }
 
 // storeEntriesAndCommitBatch is like StoreEntries, but it accepts a
@@ -236,6 +248,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	cb SyncCallback,
 	stats *AppendStats,
 	batch storage.Batch,
+	la storage.Reader, // nil in non-race builds
 ) (RaftState, error) {
 	// Before returning, Close the batch if we haven't handed ownership of it to a
 	// SyncWaiterLoop. If batch == nil, SyncWaiterLoop is responsible for closing
@@ -262,7 +275,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.EntryStats.Add(entryStats) // TODO(pav-kv): just return the stats.
 		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
-			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			ctx, s.StateLoader.RaftLogPrefix(), batch, la, state, thinEntries,
 			UseRaftLogSingleDelete(s.Separated),
 		); err != nil {
 			const expl = "during append"
@@ -446,6 +459,38 @@ func storeHardState(
 	return nil
 }
 
+// assertNoLiveRaftLogEntriesInRange returns an assertion error if any raft log
+// key at index >= first has a live value in the reader.
+func assertNoLiveRaftLogEntriesInRange(
+	ctx context.Context, reader storage.Reader, raftLogPrefix roachpb.Key, first kvpb.RaftIndex,
+) error {
+	lower := keys.RaftLogKeyFromPrefix(raftLogPrefix, first)
+	upper := raftLogPrefix.PrefixEnd()
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:   lower,
+		UpperBound:   upper,
+		ReadCategory: fs.ReplicationReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	iter.SeekGE(storage.MakeMVCCMetadataKey(lower))
+	ok, err := iter.Valid()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	suffix := iter.UnsafeKey().Key[len(raftLogPrefix):]
+	idx, err := keys.DecodeRaftLogKeyFromSuffix(suffix)
+	if err != nil {
+		return err
+	}
+	return errors.AssertionFailedf("unexpected raft log entry at index: %d when appending", idx)
+}
+
 // logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
@@ -458,12 +503,24 @@ func logAppend(
 	ctx context.Context,
 	raftLogPrefix roachpb.Key,
 	rw storage.ReadWriter,
+	la storage.Reader, // nil in non-race builds
 	prev RaftState,
 	entries []raftpb.Entry,
 	enginesSeparated bool,
 ) (RaftState, error) {
 	if len(entries) == 0 {
 		return prev, nil
+	}
+
+	// Unless we are explicitly overwriting raft log entries, we expect the log
+	// to be empty above the first index that we are writing.
+	firstIdx := kvpb.RaftIndex(entries[0].Index)
+	if la != nil && firstIdx > prev.LastIndex {
+		if err := assertNoLiveRaftLogEntriesInRange(
+			ctx, la, raftLogPrefix, firstIdx,
+		); err != nil {
+			return RaftState{}, err
+		}
 	}
 
 	// NB: the Value and MVCCStats lifetime is this function, so we coalesce their
