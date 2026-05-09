@@ -300,3 +300,38 @@ func TestClearRangeSizeKnown(t *testing.T) {
 		})
 	}
 }
+
+// TestAssertNoLiveRaftLogEntriesAfter verifies the assertion fires iff an
+// unexpected live raft log entry exists > index.
+func TestAssertNoLiveRaftLogEntriesAfter(t *testing.T) {
+	ctx := context.Background()
+	const rangeID = roachpb.RangeID(123)
+	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	tests := []struct {
+		raftLog []kvpb.RaftIndex
+		index   kvpb.RaftIndex
+		wantErr bool
+	}{
+		{index: 90}, // empty log
+		{raftLog: []kvpb.RaftIndex{99, 100}, index: 50, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, index: 98, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, index: 99, wantErr: true},
+		{raftLog: []kvpb.RaftIndex{99, 100}, index: 100},
+		{raftLog: []kvpb.RaftIndex{99, 100}, index: 101},
+	}
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			eng := storage.NewDefaultInMemForTesting()
+			defer eng.Close()
+			for _, idx := range tc.raftLog {
+				require.NoError(t, eng.PutUnversioned(keys.RaftLogKey(rangeID, idx), []byte("val")))
+			}
+			err := assertNoLiveRaftLogEntriesAfter(ctx, eng, prefixBuf, tc.index)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

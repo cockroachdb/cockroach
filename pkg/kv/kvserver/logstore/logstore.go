@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -445,6 +446,39 @@ func storeHardState(
 	return nil
 }
 
+// assertNoLiveRaftLogEntriesAfter returns an assertion error if any raft log
+// key > index has a live value in the reader.
+func assertNoLiveRaftLogEntriesAfter(
+	ctx context.Context, reader storage.Reader, prefixBuf keys.RangeIDPrefixBuf, index kvpb.RaftIndex,
+) error {
+	prefix := prefixBuf.RaftLogPrefix()
+	lower := keys.RaftLogKeyFromPrefix(prefix, index).Next()
+	upper := prefix.PrefixEnd()
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:   lower,
+		UpperBound:   upper,
+		ReadCategory: fs.ReplicationReadCategory,
+	})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	iter.SeekGE(storage.MakeMVCCMetadataKey(lower))
+	ok, err := iter.Valid()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	suffix := iter.UnsafeKey().Key[len(prefix):]
+	idx, err := keys.DecodeRaftLogKeyFromSuffix(suffix)
+	if err != nil {
+		return err
+	}
+	return errors.AssertionFailedf("unexpected raft log entry at index: %d when appending", idx)
+}
+
 // logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
@@ -487,6 +521,25 @@ func logAppend(
 	newLast := kvpb.RaftIndex(entries[len(entries)-1].Index)
 	useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
 	overlapping := newFirst <= prev.LastIndex
+
+	if util.RaceEnabled {
+		// In race builds, assert that there are no unexpected pre-existing
+		// raft log entries. This is important as we use single-delete for
+		// log truncation, and it relies on not having multiple PUTs for
+		// one key not interleaved by deletes.
+		la := eng.NewReader(storage.StandardDurability)
+		defer la.Close()
+		var checkIndex kvpb.RaftIndex
+		if overlapping {
+			checkIndex = newLast
+		} else {
+			checkIndex = prev.LastIndex
+		}
+		if err := assertNoLiveRaftLogEntriesAfter(ctx, la, prefixBuf, checkIndex); err != nil {
+			return RaftState{}, err
+		}
+	}
+
 	// If the new entries overlap the existing log, we clear
 	// [newFirst, newLast]. If we are using single delete, we perform
 	// the truncation here because single delete relies on not having double
