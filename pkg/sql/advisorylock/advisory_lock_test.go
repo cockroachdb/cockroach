@@ -753,3 +753,69 @@ func TestAdvisoryLockSQLCrossIsolationWait(t *testing.T) {
 		})
 	}
 }
+
+// TestAdvisoryLockSQLLockTimeout verifies that the blocking advisory-lock
+// builtins respect the lock_timeout session variable, matching PostgreSQL.
+// It also confirms the non-blocking try_ variant is unaffected by
+// lock_timeout, so the timeout plumbing does not poison the WaitPolicy path.
+func TestAdvisoryLockSQLLockTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	const key = 940001
+
+	// holder takes the advisory lock and parks until released. waiter then
+	// attempts the same key with a short lock_timeout and must receive the
+	// PG-style "canceling statement due to lock timeout" error. Both conns
+	// must share a database since advisory locks are scoped per-database.
+	holder, err := db.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, holder.Close()) }()
+	waiter, err := db.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, waiter.Close()) }()
+
+	for _, c := range []*gosql.Conn{holder, waiter} {
+		_, err := c.ExecContext(ctx, `SET database = defaultdb`)
+		require.NoError(t, err)
+	}
+
+	_, err = holder.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+	defer func() { _, _ = holder.ExecContext(context.Background(), `ROLLBACK`) }()
+	_, err = holder.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, key)
+	require.NoError(t, err)
+
+	// Blocking acquire under lock_timeout: must error promptly.
+	_, err = waiter.ExecContext(ctx, `SET lock_timeout = '50ms'`)
+	require.NoError(t, err)
+	_, err = waiter.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+	start := timeutil.Now()
+	_, err = waiter.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, key)
+	elapsed := timeutil.Since(start)
+	requirePGCode(t, err, pgcode.LockNotAvailable)
+	// Generous upper bound: the timeout is 50ms, so anything close to the test
+	// deadline (30s) means the timeout did not fire.
+	require.Less(t, elapsed, 10*time.Second,
+		"advisory lock acquire should have timed out near 50ms, got %s", elapsed)
+	_, err = waiter.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+
+	// The non-blocking try_ variant must remain unaffected: it returns false
+	// immediately rather than waiting (or surfacing a timeout error).
+	_, err = waiter.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+	var got bool
+	err = waiter.QueryRowContext(ctx, `SELECT pg_try_advisory_xact_lock($1)`, key).Scan(&got)
+	require.NoError(t, err)
+	require.False(t, got, "pg_try_advisory_xact_lock should return false while another txn holds the key")
+	_, err = waiter.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+}
