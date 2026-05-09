@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -487,6 +488,21 @@ func logAppend(
 	newLast := kvpb.RaftIndex(entries[len(entries)-1].Index)
 	useSingleDelete := UseRaftLogSingleDelete(enginesSeparated)
 	overlapping := newFirst <= prev.LastIndex
+
+	if util.RaceEnabled {
+		// In race builds, assert that there are no unexpected pre-existing
+		// raft log entries. This is important as we use single-delete for
+		// log truncation, and it relies on not having multiple PUTs for
+		// one key not interleaved by deletes.
+		r := eng.NewReader(storage.StandardDurability)
+		defer r.Close()
+		if hi, err := EmptyLogRange(ctx, r, prefixBuf, prev.LastIndex /* lo */, math.MaxUint64 /* hi */); err != nil {
+			return RaftState{}, err
+		} else if uint64(hi) != math.MaxUint64 {
+			return RaftState{}, errors.AssertionFailedf("unexpected raft log entry at index: %d when appending", hi+1)
+		}
+	}
+
 	// In the common case, the new entries don't overlap the existing log and are
 	// appended to its end. If there is an overlap, the [newFirst, prev.LastIndex]
 	// span is overwritten by the [newFirst, newLast] suffix.
@@ -685,6 +701,48 @@ func raftLogBounds(
 		end = keys.RaftLogKeyFromPrefix(raftLogPrefix, hi+1).Clone()
 	}
 	return start, end
+}
+
+// EmptyLogRange returns the index preceding the first existing raft log entry
+// between (lo, hi]. Returns hi if the entire span is empty.
+func EmptyLogRange(
+	ctx context.Context,
+	r storage.Reader,
+	prefixBuf keys.RangeIDPrefixBuf,
+	lo kvpb.RaftIndex,
+	hi kvpb.RaftIndex,
+) (kvpb.RaftIndex, error) {
+	if lo >= hi {
+		return hi, nil // no-op
+	}
+	pref := prefixBuf.RaftLogPrefix()
+	end := keys.RaftLogKeyFromPrefix(pref, hi).Next().Clone()
+	start := keys.RaftLogKeyFromPrefix(pref, lo).Next()
+	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsOnly,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer iter.Close()
+	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
+	if err != nil || !ok {
+		return hi, err // error or not found
+	}
+	key, err := iter.UnsafeEngineKey()
+	if err != nil {
+		return 0, err
+	}
+	firstIndex, err := keys.DecodeRaftLogKeyFromSuffix(key.Key[len(pref):])
+	if err != nil {
+		return 0, err
+	}
+	if firstIndex <= lo || firstIndex > hi {
+		return 0, errors.AssertionFailedf("firstIndex %d not in (%d,%d]", firstIndex, lo, hi)
+	}
+	return firstIndex - 1, nil
 }
 
 // ComputeSize computes the size (in bytes) of the raft log from the storage
