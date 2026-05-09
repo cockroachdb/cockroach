@@ -1352,7 +1352,11 @@ func (p *planner) advisoryXactLockImpl(
 		mode = advisorylock.LockModeShare
 	}
 	lockKey := mk(db.GetID())
-	err = mgr.AcquireInTxn(ctx, p.txn, lockKey, mode, wait /* wait */)
+	// When wait is true, honor the session's lock_timeout (if set). The non-
+	// waiting (try_*) variants ignore lockTimeout entirely on the KV side
+	// because WaitPolicy_Error short-circuits before any waiting happens.
+	lockTimeout := p.SessionData().LockTimeout
+	err = mgr.AcquireInTxn(ctx, p.txn, lockKey, mode, wait /* wait */, lockTimeout /* lockTimeout */)
 	if err != nil {
 		if !wait && errors.Is(err, advisorylock.LockIsNotAvailableErr) {
 			return false, nil
