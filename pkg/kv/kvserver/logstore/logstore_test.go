@@ -306,3 +306,43 @@ func TestClearRangeSizeKnown(t *testing.T) {
 		})
 	}
 }
+
+// TestEmptyLogRange exercises the search for the smallest raft log index
+// in (lo, hi].
+func TestEmptyLogRange(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		first, last kvpb.RaftIndex // pre-populated raft entry bounds (inclusive)
+		lo, hi      kvpb.RaftIndex // EmptyLogRange args
+		wantIdx     kvpb.RaftIndex
+	}{
+		{wantIdx: 0},
+		{lo: 100, wantIdx: 0},
+		{hi: 100, wantIdx: 100},
+		{first: 15, last: 15, wantIdx: 0},
+		{first: 15, last: 15, hi: 14, wantIdx: 14},
+		{first: 15, last: 15, lo: 10, hi: 14, wantIdx: 14},
+		{first: 15, last: 15, lo: 100, hi: 14, wantIdx: 14}, // lo >= hi is a no-op
+		{first: 15, last: 15, hi: 15, wantIdx: 14},
+		{first: 15, last: 15, lo: 14, hi: 15, wantIdx: 14},
+		{first: 15, last: 15, lo: 15, hi: 15, wantIdx: 15}, // lo >= hi is a no-op
+		{first: 15, last: 15, hi: 16, wantIdx: 14},
+		{first: 15, last: 15, lo: 14, hi: 16, wantIdx: 14},
+		{first: 15, last: 16, hi: 15, wantIdx: 14},
+		{first: 15, last: 16, lo: 14, hi: 15, wantIdx: 14},
+		{first: 15, last: 16, hi: 100, wantIdx: 14},
+		{first: 15, last: 16, lo: 14, hi: 100, wantIdx: 14},
+	}
+	for _, tc := range tests {
+		t.Run("", func(t *testing.T) {
+			h := newClearRangeHelper(t)
+			defer h.close()
+			if tc.first > 0 {
+				h.populate(ctx, uint64(tc.first), uint64(tc.last))
+			}
+			idx, err := EmptyLogRange(ctx, h.eng, h.prefixBuf, tc.lo, tc.hi)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantIdx, idx)
+		})
+	}
+}
