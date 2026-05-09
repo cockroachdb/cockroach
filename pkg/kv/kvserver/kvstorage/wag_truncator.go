@@ -283,7 +283,7 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	// and call ClearRangeSizeKnown(). If no entries exist in [RaftLogPrefix, hi]
 	// (e.g., this replica never received entries) this operation is a no-op.
 	// NB: lo == hi if nothing is found.
-	if lo, err := emptyLogPrefix(ctx, raft.RO, prefixBuf, hi); err != nil {
+	if lo, err := logstore.EmptyLogRange(ctx, raft.RO, prefixBuf, 0 /*lo */, hi); err != nil {
 		return errors.Wrapf(err, "finding first raft log index for r%d", rangeID)
 	} else if err := logstore.ClearRangeSizeKnown(
 		raft.WO, prefixBuf,
@@ -311,39 +311,4 @@ func (t *WAGTruncator) clearReplicaRaftLogAndSideloaded(
 	// We must sync the sideloaded storage after truncation to avoid leaking the
 	// files in case of a node crash.
 	return ss.Sync()
-}
-
-// emptyLogPrefix returns the index preceding the first existing raft log entry
-// at <= lastIndex. Returns lastIndex if the entire prefix is empty.
-func emptyLogPrefix(
-	ctx context.Context, r storage.Reader, prefixBuf keys.RangeIDPrefixBuf, lastIndex kvpb.RaftIndex,
-) (kvpb.RaftIndex, error) {
-	start := prefixBuf.RaftLogPrefix().Clone()
-	end := prefixBuf.RaftLogKey(lastIndex).Next()
-	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsOnly,
-		LowerBound: start,
-		UpperBound: end,
-	})
-	if err != nil {
-		return 0, err
-	}
-	defer iter.Close()
-	ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: start})
-	if err != nil || !ok {
-		return lastIndex, err // error or not found
-	}
-	key, err := iter.UnsafeEngineKey()
-	if err != nil {
-		return 0, err
-	}
-	firstIndex, err := keys.DecodeRaftLogKeyFromSuffix(key.Key[len(start):])
-	if err != nil {
-		return 0, err
-	}
-	// NB: index 0 must never have an entry.
-	if firstIndex == 0 || firstIndex > lastIndex {
-		return 0, errors.AssertionFailedf("unexpected firstIndex: %d compared to lastIndex: %d", firstIndex, lastIndex)
-	}
-	return firstIndex - 1, nil
 }
