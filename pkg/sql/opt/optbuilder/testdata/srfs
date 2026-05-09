@@ -15,21 +15,7 @@ project-set
 build
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-inner-join-apply
- ├── columns: generate_series:1 generate_series:2
- ├── project-set
- │    ├── columns: generate_series:1
- │    ├── values
- │    │    └── ()
- │    └── zip
- │         └── generate_series(1, 2)
- ├── project-set
- │    ├── columns: generate_series:2
- │    ├── values
- │    │    └── ()
- │    └── zip
- │         └── generate_series(1, 2)
- └── filters (true)
+error (42712): source name "generate_series" specified more than once (missing AS clause)
 
 build
 SELECT * FROM pg_catalog.generate_series(1, 3)
@@ -93,7 +79,7 @@ build
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
 ----
 project
- ├── columns: a:1 b:5 a:9 b:10
+ ├── columns: a:1 b:5 generate_series:9 generate_series:10
  └── inner-join-apply
       ├── columns: a:1 t.rowid:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 b:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8 generate_series:9 generate_series:10
       ├── inner-join-apply
@@ -388,7 +374,7 @@ build
 SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
 ----
 limit
- ├── columns: a:1 b:2 word:3 catcode:4 catdesc:5
+ ├── columns: generate_series:1 unnest:2 word:3 catcode:4 catdesc:5
  ├── inner-join-apply
  │    ├── columns: generate_series:1 unnest:2 word:3 catcode:4 catdesc:5
  │    ├── limit hint: 1.00
@@ -673,7 +659,7 @@ JOIN ROWS FROM (upper('def'), generate_series(1, 3)) b ON true
 JOIN generate_series(1, 4) c ON true
 ----
 inner-join-apply
- ├── columns: a:1 upper:2 generate_series:3 c:4
+ ├── columns: a:1 upper:2 generate_series:3 generate_series:4
  ├── inner-join-apply
  │    ├── columns: upper:1 upper:2 generate_series:3
  │    ├── project-set
@@ -1179,3 +1165,46 @@ project-set
  │    └── ()
  └── zip
       └── unnest(ARRAY[(),(),()])
+
+# Regression test for #150532. Columns produced by set-returning functions
+# should have a prefix "table name" that matches the name of the function.
+
+build
+SELECT generate_series.generate_series from generate_series(1, 10)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 10)
+
+build
+SELECT generate_series.* from generate_series(1, 10)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 10)
+
+build
+SELECT jsonb_each_text.key, jsonb_each_text.value from jsonb_each_text('{"a": "b"}')
+----
+project-set
+ ├── columns: key:1 value:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── jsonb_each_text('{"a": "b"}')
+
+build
+SELECT jsonb_each_text.* from jsonb_each_text('{"a": "b"}')
+----
+project-set
+ ├── columns: key:1 value:2
+ ├── values
+ │    └── ()
+ └── zip
+      └── jsonb_each_text('{"a": "b"}')

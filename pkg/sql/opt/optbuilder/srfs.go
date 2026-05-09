@@ -186,21 +186,24 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
+	f *tree.FuncExpr, name string, fn opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
 	rTyp := f.ResolvedType()
 	b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), rTyp, inScope)
+	funcName := tree.MakeUnqualifiedTableName(tree.Name(name))
 
 	// Add scope columns.
 	if outCol != nil {
 		// Single-column return type.
 		b.populateSynthesizedColumn(outCol, fn)
+		outCol.table = funcName
 	} else {
 		// Multi-column return type. Note that we already reconciled the function's
 		// return type with the column definition list (if it exists).
 		for i := range rTyp.TupleContents() {
 			colName := scopeColName(tree.Name(rTyp.TupleLabels()[i]))
-			b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], nil, fn)
+			col := b.synthesizeColumn(outScope, colName, rTyp.TupleContents()[i], nil, fn)
+			col.table = funcName
 		}
 	}
 	return fn
