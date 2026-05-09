@@ -378,6 +378,21 @@ $left
 =>
 $left
 
+# EliminateLeftJoin replaces a LeftJoin with a Project when the right 
+# input never returns any rows. The Project passes through columns from the left 
+# input and produces NULL values for each column in the right input.
+[EliminateLeftJoin, Normalize]
+(LeftJoin
+    $left:*
+    $right:* & (HasZeroRows $right)
+)
+=>
+(Project
+    $left                           # Input is the left input of the LeftJoin
+    (MakeNullProjections $right)     # NULL projections for each right input column
+    (PassthroughCols $left)          # Pass through all left input columns
+)
+
 # SimplifyZeroCardinalityAntiJoin converts an AntiJoin operator to an empty
 # Values when it's known that the right input never returns zero rows, and
 # there is no join condition.
