@@ -273,7 +273,9 @@ t7  CREATE TABLE public.t7 (
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
     ) WITH (schema_locked = true);
 
-# Dropping a column referenced in the predicate drops the index.
+# Dropping a column referenced in the predicate drops the index. The
+# declarative schema changer handles this directly; the legacy schema
+# changer still requires explicitly dropping the index first (see #97813).
 
 statement ok
 CREATE TABLE t8 (
@@ -285,8 +287,15 @@ CREATE TABLE t8 (
     FAMILY (a, b, c)
 )
 
-# TODO(mgartner): Lift this restriction. See #96924.
+onlyif config local-legacy-schema-changer
 statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
+ALTER TABLE t8 DROP COLUMN c
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX t8_a_idx1
+
+statement ok
 ALTER TABLE t8 DROP COLUMN c
 
 onlyif config schema-locked-disabled
@@ -296,12 +305,10 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
       a INT8 NULL,
       b INT8 NULL,
-      c STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
       INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
-      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
-      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+      FAMILY fam_0_a_b_c_rowid (a, b, rowid)
     );
 
 skipif config schema-locked-disabled
@@ -311,12 +318,10 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
       a INT8 NULL,
       b INT8 NULL,
-      c STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
       INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
-      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
-      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+      FAMILY fam_0_a_b_c_rowid (a, b, rowid)
     ) WITH (schema_locked = true);
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
@@ -2369,24 +2374,34 @@ CREATE TABLE t96924 (
 statement ok
 ALTER TABLE t96924 DROP COLUMN a
 
+# Under the declarative schema changer, dropping a column referenced in a
+# partial index predicate drops the dependent index in the same statement.
+# The legacy schema changer still requires the user to drop the index first.
+
+onlyif config local-legacy-schema-changer
 statement error pq: cannot drop column "b" because it is referenced by partial index "t96924_b_key"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN b
 
+onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX t96924_b_key CASCADE
 
 statement ok
 ALTER TABLE t96924 DROP COLUMN b
 
+onlyif config local-legacy-schema-changer
 statement error pq: cannot drop column "c" because it is referenced by partial index "t96924_c_key"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN c
 
+onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX t96924_c_key CASCADE
 
 statement ok
 ALTER TABLE t96924 DROP COLUMN c
 
+# Partial unique-without-index predicates still block the column drop in
+# both schema changers (this restriction will be lifted separately).
 statement error pq: cannot drop column "d" because it is referenced by partial unique constraint "unique_d"\nHINT: drop the unique constraint first, then drop the column
 ALTER TABLE t96924 DROP COLUMN d
 
@@ -2396,9 +2411,11 @@ ALTER TABLE t96924 DROP CONSTRAINT unique_d
 statement ok
 ALTER TABLE t96924 DROP COLUMN d
 
+onlyif config local-legacy-schema-changer
 statement error pq: cannot drop column "e" because it is referenced by partial index "t96924_e_f_idx"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN e
 
+onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX t96924_e_f_idx CASCADE
 
@@ -2410,19 +2427,22 @@ ALTER TABLE t96924 DROP COLUMN e
 statement ok
 ALTER TABLE t96924 DROP COLUMN f
 
-# Column `h` is used in the predicate of another index that does not key on `h`,
-# we will prevent dropping column `h` as well.
+# Column `h` is referenced only in the predicate of another index that does
+# not key on `h`. The declarative schema changer drops both atomically; the
+# legacy schema changer requires dropping the index first.
+onlyif config local-legacy-schema-changer
 statement error pq: cannot drop column "h" because it is referenced by partial index "t96924_g_idx"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN h
 
+onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX t96924_g_idx
 
 statement ok
 ALTER TABLE t96924 DROP COLUMN h
 
-# Similarly, column `i` cannot be dropped since it's used in the predicate of
-# of a UWI constraint.
+# Column `i` is used in the predicate of a UWI constraint, which still
+# blocks the drop in both schema changers.
 statement error pq: cannot drop column "i" because it is referenced by partial unique constraint "unique_g"\nHINT: drop the unique constraint first, then drop the column
 ALTER TABLE t96924 DROP COLUMN i
 

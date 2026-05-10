@@ -309,7 +309,7 @@ func dropColumn(
 		default:
 			b.Drop(e)
 		}
-	}, false /* allowPartialIdxPredicateRef */)
+	}, disallowUWIPredicateRefs)
 	// TODO(ajwerner): Track the undropped backrefs to populate a detail
 	// message like postgres does. For example:
 	//  SET serial_normalization = sql_sequence;
@@ -333,13 +333,35 @@ func dropColumn(
 	assertAllColumnElementsAreDropped(colElts)
 }
 
+// predicateRefPolicy controls how walkColumnDependencies handles columns
+// that are referenced in a partial-index predicate or partial
+// unique-without-index predicate.
+type predicateRefPolicy int
+
+const (
+	// disallowAllPredicateRefs panics if the column is referenced in either
+	// a partial-index predicate or a partial UWI predicate. Used by code
+	// paths (ALTER PRIMARY KEY, ALTER COLUMN TYPE) where the dependency
+	// rules don't yet sequence the partial-index drop safely.
+	disallowAllPredicateRefs predicateRefPolicy = iota
+	// disallowUWIPredicateRefs panics only for partial UWI references.
+	// Partial-index references are allowed because the declarative schema
+	// changer's dep rule sequences the partial index into DELETE_ONLY
+	// before the column reaches WRITE_ONLY, allowing the index entries to
+	// be removed via blind DELs without evaluating the predicate.
+	disallowUWIPredicateRefs
+	// allowAllPredicateRefs skips the check entirely. Used by ALTER
+	// COLUMN ... RENAME, which doesn't change column existence.
+	allowAllPredicateRefs
+)
+
 func walkColumnDependencies(
 	b BuildCtx,
 	col *scpb.Column,
 	op string,
 	objType string,
 	fn func(e scpb.Element, op string, objType string),
-	allowPartialIdxPredicateRef bool,
+	predicateRefs predicateRefPolicy,
 ) {
 	var sequenceDeps catalog.DescriptorIDSet
 	var indexDeps catid.IndexSet
@@ -347,11 +369,13 @@ func walkColumnDependencies(
 	var constraintDeps catid.ConstraintSet
 	tblElts := b.QueryByID(col.TableID).Filter(orFilter(publicTargetFilter, transientTargetFilter))
 
-	// Panic if `col` is referenced in a predicate of an index or
-	// unique without index constraint.
-	// TODO (xiang): Remove this restriction when #97813 is fixed.
-	if !allowPartialIdxPredicateRef {
+	switch predicateRefs {
+	case disallowAllPredicateRefs:
 		panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
+	case disallowUWIPredicateRefs:
+		panicIfColReferencedInUWIPredicate(b, col, tblElts, op, objType)
+	case allowAllPredicateRefs:
+		// No-op.
 	}
 
 	tblElts.
@@ -517,6 +541,47 @@ func panicIfColReferencedInPredicate(
 		indexNameElem := mustRetrieveIndexNameElem(b, col.TableID, violatingIndex)
 		panic(sqlerrors.ColumnReferencedByPartialIndex(op, objType, colNameElem.Name, indexNameElem.Name))
 	}
+	if violatingUWI != 0 {
+		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
+		uwiNameElem := mustRetrieveConstraintWithoutIndexNameElem(b, col.TableID, violatingUWI)
+		panic(sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+			op, objType, colNameElem.Name, uwiNameElem.Name))
+	}
+}
+
+// panicIfColReferencedInUWIPredicate disallows dropping a column that is
+// referenced in the predicate of a partial unique-without-index constraint.
+// Unlike partial indexes, UWI predicate evaluation during the column-drop
+// transition is not yet sequenced safely by the declarative schema changer's
+// dependency rules.
+func panicIfColReferencedInUWIPredicate(
+	b BuildCtx, col *scpb.Column, tblElts ElementResultSet, op, objType string,
+) {
+	contains := func(container []catid.ColumnID, target catid.ColumnID) bool {
+		for _, elem := range container {
+			if elem == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	var violatingUWI catid.ConstraintID
+	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if violatingUWI != 0 {
+			return
+		}
+		switch elt := e.(type) {
+		case *scpb.UniqueWithoutIndexConstraint:
+			if elt.Predicate != nil && contains(elt.Predicate.ReferencedColumnIDs, col.ColumnID) {
+				violatingUWI = elt.ConstraintID
+			}
+		case *scpb.UniqueWithoutIndexConstraintUnvalidated:
+			if elt.Predicate != nil && contains(elt.Predicate.ReferencedColumnIDs, col.ColumnID) {
+				violatingUWI = elt.ConstraintID
+			}
+		}
+	})
 	if violatingUWI != 0 {
 		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
 		uwiNameElem := mustRetrieveConstraintWithoutIndexNameElem(b, col.TableID, violatingUWI)

@@ -1376,7 +1376,7 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 				canBeDropped = false
 			}
 		}
-	}, false /* allowPartialIdxPredicateRef */)
+	}, disallowAllPredicateRefs)
 	return canBeDropped
 }
 
