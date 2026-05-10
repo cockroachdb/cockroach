@@ -160,11 +160,13 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupNamePrefix string,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	skipRevisionHistory bool,
 ) (*backupCollection, error) {
 	builder := d.NewCollectionBuilder(
 		l, tasker, rng, backupNamePrefix,
 		fullBackupSpec, incBackupSpec,
 		internalSystemJobs, isMultitenant,
+		skipRevisionHistory,
 	)
 
 	// Create full backup.
@@ -799,22 +801,23 @@ func renameSSTToDeleted(
 //
 // Usage:
 //
-//	builder := driver.NewCollectionBuilder(l, tasker, rng, namePrefix, fullSpec, incSpec, internalSystemJobs, isMultitenant)
+//	builder := driver.NewCollectionBuilder(l, tasker, rng, namePrefix, fullSpec, incSpec, internalSystemJobs, isMultitenant, skipRevisionHistory)
 //	jobID, err := builder.TakeFull(ctx)
 //	incJobID, err := builder.TakeInc(ctx)
 //	collection, err := builder.Finalize(ctx)
 type CollectionBuilder struct {
 	// Immutable configuration set at construction.
-	driver             *BackupRestoreTestDriver
-	l                  *logger.Logger
-	tasker             task.Tasker
-	rng                *rand.Rand
-	namePrefix         string
-	fullBackupSpec     backupSpec
-	incBackupSpec      backupSpec
-	internalSystemJobs bool
-	isMultitenant      bool
-	cfg                collCfg
+	driver              *BackupRestoreTestDriver
+	l                   *logger.Logger
+	tasker              task.Tasker
+	rng                 *rand.Rand
+	namePrefix          string
+	fullBackupSpec      backupSpec
+	incBackupSpec       backupSpec
+	internalSystemJobs  bool
+	isMultitenant       bool
+	skipRevisionHistory bool
+	cfg                 collCfg
 
 	// Mutable state tracking backup progress.
 
@@ -850,18 +853,20 @@ func (d *BackupRestoreTestDriver) NewCollectionBuilder(
 	incBackupSpec backupSpec,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	skipRevisionHistory bool,
 	cfgs ...CollectionConfig,
 ) *CollectionBuilder {
 	cb := &CollectionBuilder{
-		driver:             d,
-		l:                  l,
-		tasker:             tasker,
-		rng:                rng,
-		namePrefix:         namePrefix,
-		fullBackupSpec:     fullBackupSpec,
-		incBackupSpec:      incBackupSpec,
-		internalSystemJobs: internalSystemJobs,
-		isMultitenant:      isMultitenant,
+		driver:              d,
+		l:                   l,
+		tasker:              tasker,
+		rng:                 rng,
+		namePrefix:          namePrefix,
+		fullBackupSpec:      fullBackupSpec,
+		incBackupSpec:       incBackupSpec,
+		internalSystemJobs:  internalSystemJobs,
+		isMultitenant:       isMultitenant,
+		skipRevisionHistory: skipRevisionHistory,
 	}
 	cb.initCollCfg(cfgs...)
 	return cb
@@ -1333,7 +1338,7 @@ func (cb *CollectionBuilder) initCollCfg(cfgs ...CollectionConfig) {
 	}
 
 	if cb.cfg.options == nil {
-		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
+		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore, cb.skipRevisionHistory)
 	}
 }
 
@@ -1694,8 +1699,13 @@ func (rs revisionStream) String() string {
 // newBackupOptions returns a list of backup options to be used when
 // creating a new backup. Each backup option has a 50% chance of being
 // included.
-func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption {
-	possibleOpts := []backupOption{revisionHistory{}}
+func newBackupOptions(
+	rng *rand.Rand, onlineRestoreExpected, skipRevisionHistory bool,
+) []backupOption {
+	var possibleOpts []backupOption
+	if !skipRevisionHistory {
+		possibleOpts = append(possibleOpts, revisionHistory{})
+	}
 	if !onlineRestoreExpected {
 		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
 	}

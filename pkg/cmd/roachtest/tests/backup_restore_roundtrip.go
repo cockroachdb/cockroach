@@ -203,7 +203,7 @@ func backupRestoreRoundTrip(
 			t.L().Printf("starting backup %d", i+1)
 			collection, err := d.createBackupCollection(
 				ctx, t.L(), t, testRNG, bspec, bspec, "round-trip-test-backup",
-				true /* internalSystemsJobs */, false, /* isMultitenant */
+				true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
 			)
 			if err != nil {
 				return err
@@ -319,7 +319,7 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 		Execute: labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()},
 	}
 	builder := d.NewCollectionBuilder(
-		t.L(), t, testRNG, "backup-restore-chaos", bspec, bspec, true /* internalSystemsJobs */, false, /* isMultitenant */
+		t.L(), t, testRNG, "backup-restore-chaos", bspec, bspec, true /* internalSystemsJobs */, false /* isMultitenant */, false, /* skipRevisionHistory */
 		WithClusterScope(),
 	)
 	jobID, err := builder.TakeFull(ctx)
