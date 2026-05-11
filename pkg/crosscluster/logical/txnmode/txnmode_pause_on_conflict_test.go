@@ -95,6 +95,85 @@ func TestTxnModePauseOnConflict(t *testing.T) {
 	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
 }
 
+// TestTxnModePauseOnApplyCycle verifies that a transactional LDR job pauses
+// when a replicated transaction's writes form a dependency cycle that the
+// lock synthesizer cannot order.
+func TestTxnModePauseOnApplyCycle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	for _, db := range []*sqlutils.SQLRunner{sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, val STRING NOT NULL)")
+		db.Exec(t, "CREATE UNIQUE INDEX ON tab(val)")
+	}
+
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	sourceDB.Exec(t, "INSERT INTO tab VALUES (1, 'squee'), (2, 'uni')")
+	ldrtestutils.WaitUntilReplicatedTime(t, s.Clock().Now(), destDB, jobID)
+
+	// Swap the val between pk=1 and pk=2 in a single source transaction.
+	sourceDB.Exec(t, `
+		BEGIN;
+		UPDATE tab SET val = 'tmp'   WHERE pk = 1;
+		UPDATE tab SET val = 'squee' WHERE pk = 2;
+		UPDATE tab SET val = 'uni'   WHERE pk = 1;
+		COMMIT;
+	`)
+
+	jobutils.WaitForJobToPause(t, destDB, jobID)
+
+	var runningStatus string
+	destDB.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&runningStatus)
+	require.Contains(t, runningStatus, "replication error")
+	require.Contains(t, runningStatus, "cycle detected in apply order")
+
+	// The swap must not have been applied on the destination.
+	destDB.CheckQueryResults(t, "SELECT pk, val FROM tab ORDER BY pk", [][]string{
+		{"1", "squee"},
+		{"2", "uni"},
+	})
+
+	// The replicated time should be the swap txn's MVCC timestamp minus one
+	// logical tick.
+	var conflictMVCCDec apd.Decimal
+	sourceDB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&conflictMVCCDec)
+	conflictMVCC, err := hlc.DecimalToHLC(&conflictMVCCDec)
+	require.NoError(t, err)
+	progress := jobutils.GetJobProgress(t, destDB, jobID)
+	replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
+	require.Equal(t, conflictMVCC.Prev(), replicatedTime)
+}
+
 // TestTxnModePauseOnEarliestConflict verifies that when multiple replicated
 // transactions conflict at different timestamps, the job converges on the
 // first conflict (by timestamp) and drains every prior transaction before

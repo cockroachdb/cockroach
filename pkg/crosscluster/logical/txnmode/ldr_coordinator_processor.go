@@ -351,6 +351,12 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 					ctx, batch.transactions[i].WriteSet,
 				)
 				if err != nil {
+					if errors.Is(err, txnlock.ErrApplyCycle) {
+						return &txnapply.ReplicationError{
+							Err:       err,
+							Timestamp: batch.transactions[i].TxnID.Timestamp,
+						}
+					}
 					return errors.Wrap(err, "deriving locks")
 				}
 				batch.transactions[i].WriteSet = lockSet.SortedRows
