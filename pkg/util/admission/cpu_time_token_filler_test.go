@@ -199,8 +199,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		model:    model,
 		metrics:  metrics,
 		queues:   queues,
-		strategy: &serverlessStrategy{queues: queues},
 	}
+	allocator.setMode(serverlessMode)
 	printBurstMgrs = func() string {
 		var b strings.Builder
 		fmt.Fprintf(&b, "burstM\n")
@@ -241,13 +241,9 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		case "setClusterSettings":
 			ctx := context.Background()
 			var override float64
-			if d.MaybeScanArgs(t, "app", &override) {
+			if d.MaybeScanArgs(t, "target", &override) {
 				fmt.Fprintf(&buf, "SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = %v\n", override)
-				KVCPUTimeAppUtilGoal.Override(ctx, &allocator.settings.SV, override)
-			}
-			if d.MaybeScanArgs(t, "system", &override) {
-				fmt.Fprintf(&buf, "SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = %v\n", override)
-				KVCPUTimeSystemUtilGoal.Override(ctx, &allocator.settings.SV, override)
+				KVCPUTimeUtilTarget.Override(ctx, &allocator.settings.SV, override)
 			}
 			if d.MaybeScanArgs(t, "burst", &override) {
 				fmt.Fprintf(&buf, "SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = %v\n", override)
@@ -504,37 +500,38 @@ func (p *testCPUMetricsProvider) append(dur time.Duration, count int) {
 	}
 }
 
-// TestServerlessStrategyComputeTargets verifies that computeTargets
-// reads the per-tier cluster settings (app and system utilization
-// goals) and adds the burst delta setting to each to produce the
-// canBurst targets.
-func TestServerlessStrategyComputeTargets(t *testing.T) {
+// TestComputeTargets verifies that computeTargets builds per-tier
+// targets from noBurst fractions + burstDelta and caches
+// canBurstTarget.
+func TestComputeTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	st := cluster.MakeClusterSettings()
-	ctx := context.Background()
-	KVCPUTimeAppUtilGoal.Override(ctx, &st.SV, 0.75)
-	KVCPUTimeSystemUtilGoal.Override(ctx, &st.SV, 0.5)
-	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.25)
+	a := cpuTimeTokenAllocator{}
 
-	s := &serverlessStrategy{}
-	targets := s.computeTargets(&st.SV)
+	// Two different per-tier noBurst fractions (serverless-like).
+	noBurstFracs := [numResourceTiers]float64{0.5, 0.75}
+	targets := a.computeTargets(noBurstFracs, 0.25)
 
-	// noBurst targets come directly from the cluster settings.
-	require.Equal(t, 0.75, targets[appTenant][noBurst])
-	require.Equal(t, 0.5, targets[systemTenant][noBurst])
-	// canBurst targets are noBurst + burstDelta.
-	require.Equal(t, 1.0, targets[appTenant][canBurst])
-	require.Equal(t, 0.75, targets[systemTenant][canBurst])
-	// canBurstTarget is cached for refillBurst's rate100 recovery.
-	require.Equal(t, 0.75, s.canBurstTarget)
+	require.Equal(t, 0.5, targets[0][noBurst])
+	require.Equal(t, 0.75, targets[0][canBurst])
+	require.Equal(t, 0.75, targets[1][noBurst])
+	require.Equal(t, 1.0, targets[1][canBurst])
+	require.Equal(t, 0.75, a.canBurstTarget)
+
+	// Uniform noBurst fractions (RM-like).
+	noBurstFracs = [numResourceTiers]float64{0.75, 0.75}
+	targets = a.computeTargets(noBurstFracs, 0.25)
+
+	require.Equal(t, 0.75, targets[0][noBurst])
+	require.Equal(t, 1.0, targets[0][canBurst])
+	require.Equal(t, targets[0], targets[1])
+	require.Equal(t, 1.0, a.canBurstTarget)
 }
 
-// TestServerlessStrategyRefillBurst verifies that refillBurst
-// recovers rate100/cap100 from tier-0 canBurst tokens and
-// canBurstTarget, then forwards the same values to both queues.
-func TestServerlessStrategyRefillBurst(t *testing.T) {
+// TestRefillBurst verifies the cold-start guard, rate100/cap100
+// recovery from canBurstTarget, and forwarding to all queues.
+func TestRefillBurst(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -546,22 +543,21 @@ func TestServerlessStrategyRefillBurst(t *testing.T) {
 		testTier0: burstMgrs[testTier0],
 		testTier1: burstMgrs[testTier1],
 	}
-	s := &serverlessStrategy{queues: queues, canBurstTarget: 1.0}
+	a := cpuTimeTokenAllocator{queues: queues}
 
 	var tokens tokenCounts
 	tokens[testTier0][canBurst] = 500
-
-	var refillRates rates
-	refillRates[testTier0][canBurst] = 5000
+	var rr rates
+	rr[testTier0][canBurst] = 5000
 
 	// Cold-start guard: canBurstTarget=0 skips everything.
-	s.canBurstTarget = 0
-	s.refillBurst(tokens, refillRates)
+	a.canBurstTarget = 0
+	a.refillBurst(tokens, rr)
 	require.Zero(t, burstMgrs[testTier0].calls)
 
 	// canBurstTarget=1.0: rate100=500, cap100=5000, forwarded to both.
-	s.canBurstTarget = 1.0
-	s.refillBurst(tokens, refillRates)
+	a.canBurstTarget = 1.0
+	a.refillBurst(tokens, rr)
 	require.Equal(t, 1, burstMgrs[testTier0].calls)
 	require.Equal(t, 500.0, burstMgrs[testTier0].lastRate100)
 	require.Equal(t, 5000.0, burstMgrs[testTier0].lastCap100)
@@ -570,43 +566,63 @@ func TestServerlessStrategyRefillBurst(t *testing.T) {
 	require.Equal(t, 5000.0, burstMgrs[testTier1].lastCap100)
 
 	// canBurstTarget=0.5: doubles both.
-	s.canBurstTarget = 0.5
-	s.refillBurst(tokens, refillRates)
+	a.canBurstTarget = 0.5
+	a.refillBurst(tokens, rr)
 	require.Equal(t, 2, burstMgrs[testTier0].calls)
 	require.Equal(t, 1000.0, burstMgrs[testTier0].lastRate100)
 	require.Equal(t, 10000.0, burstMgrs[testTier0].lastCap100)
+
+	// Delta path: negative tokens (rate100) when refill rates decrease.
+	tokens[testTier0][canBurst] = -500
+	rr[testTier0][canBurst] = 4000
+	a.canBurstTarget = 1.0
+	a.refillBurst(tokens, rr)
+	require.Equal(t, 3, burstMgrs[testTier0].calls)
+	require.Equal(t, -500.0, burstMgrs[testTier0].lastRate100)
+	require.Equal(t, 4000.0, burstMgrs[testTier0].lastCap100)
 }
 
-// TestNewStrategy verifies that newStrategy returns the correct
-// strategy for serverlessMode and resourceManagerMode and panics
-// for offMode (not a real strategy) and unknown modes.
-func TestNewStrategy(t *testing.T) {
+// TestSetMode verifies that setMode sets currentMode and panics for
+// invalid modes.
+func TestSetMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	queues := [numResourceTiers]workQueueIForAllocator{
-		testTier0: &testBurstManager{},
-		testTier1: &testBurstManager{},
-	}
-	allocator := cpuTimeTokenAllocator{queues: queues}
+	a := cpuTimeTokenAllocator{}
 
-	s := allocator.newStrategy(serverlessMode)
-	require.Equal(t, serverlessMode, s.mode())
+	a.setMode(serverlessMode)
+	require.Equal(t, serverlessMode, a.currentMode)
 
-	rm := allocator.newStrategy(resourceManagerMode)
-	require.Equal(t, resourceManagerMode, rm.mode())
+	a.setMode(resourceManagerMode)
+	require.Equal(t, resourceManagerMode, a.currentMode)
 
-	require.Panics(t, func() {
-		allocator.newStrategy(offMode)
-	})
-	require.Panics(t, func() {
-		allocator.newStrategy(cpuTimeTokenMode(99))
-	})
+	require.Panics(t, func() { a.setMode(offMode) })
+	require.Panics(t, func() { a.setMode(cpuTimeTokenMode(99)) })
+}
+
+// TestReadTargetSettings verifies that readTargetSettings reads
+// KVCPUTimeUtilTarget and mirrors it to both tiers.
+func TestReadTargetSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeClusterSettings()
+	ctx := context.Background()
+	KVCPUTimeUtilTarget.Override(ctx, &st.SV, 0.6)
+	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.1)
+
+	a := cpuTimeTokenAllocator{settings: st}
+	a.setMode(serverlessMode)
+
+	fracs, delta := a.readTargetSettings()
+	require.Equal(t, 0.6, fracs[0])
+	require.Equal(t, 0.6, fracs[1])
+	require.Equal(t, 0.1, delta)
 }
 
 // TestResetIntervalReturnsMode verifies that resetInterval returns
-// the current strategy's mode and skips strategy swap when the
-// cluster setting is offMode.
+// the current mode and skips mode change when the cluster setting
+// is offMode.
 func TestResetIntervalReturnsMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -619,7 +635,7 @@ func TestResetIntervalReturnsMode(t *testing.T) {
 		testTier1: burstMgrs[testTier1],
 	}
 	// Use default settings where cpuTimeTokenACMode is offMode.
-	// resetInterval should not attempt to swap strategy.
+	// resetInterval should not attempt to change mode.
 	st := cluster.MakeClusterSettings()
 	require.Equal(t, offMode, cpuTimeTokenACMode.Get(&st.SV))
 	allocator := cpuTimeTokenAllocator{
@@ -628,8 +644,8 @@ func TestResetIntervalReturnsMode(t *testing.T) {
 		model:    &testModel{buf: &strings.Builder{}, rates: rates{}},
 		metrics:  metrics,
 		queues:   queues,
-		strategy: &serverlessStrategy{queues: queues},
 	}
+	allocator.setMode(serverlessMode)
 
 	ctx := context.Background()
 	mode := allocator.resetInterval(ctx)
@@ -637,8 +653,7 @@ func TestResetIntervalReturnsMode(t *testing.T) {
 }
 
 // TestConfigureQueue verifies that configureQueue calls
-// setUseResourceGroup with the correct value based on the
-// current strategy's mode.
+// setUseResourceGroup with the correct value based on currentMode.
 func TestConfigureQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -648,88 +663,15 @@ func TestConfigureQueue(t *testing.T) {
 		testTier0: mgr,
 		testTier1: &testBurstManager{},
 	}
-	allocator := cpuTimeTokenAllocator{
-		queues:   queues,
-		strategy: &serverlessStrategy{queues: queues},
-	}
+	allocator := cpuTimeTokenAllocator{queues: queues}
 
 	// Serverless mode -> useResourceGroup=false.
+	allocator.setMode(serverlessMode)
 	allocator.configureQueue()
 	require.False(t, mgr.useResourceGroup)
 
 	// RM mode -> useResourceGroup=true.
-	allocator.strategy = &rmStrategy{queue: mgr}
+	allocator.setMode(resourceManagerMode)
 	allocator.configureQueue()
 	require.True(t, mgr.useResourceGroup)
-}
-
-// TestRMStrategyComputeTargets verifies that computeTargets reads the
-// RM cluster settings, populates tier-0, mirrors to tier-1, and caches
-// canBurstTarget for refillBurst.
-func TestRMStrategyComputeTargets(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	st := cluster.MakeClusterSettings()
-	ctx := context.Background()
-	KVCPUTimeUtilTarget.Override(ctx, &st.SV, 0.75)
-	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.25)
-
-	s := &rmStrategy{}
-	targets := s.computeTargets(&st.SV)
-
-	require.Equal(t, 0.75, targets[0][noBurst])
-	require.Equal(t, 1.0, targets[0][canBurst])
-	// Tier-1 mirrors tier-0.
-	require.Equal(t, targets[0], targets[1])
-	// canBurstTarget is cached for refillBurst's rate100 recovery.
-	require.Equal(t, 1.0, s.canBurstTarget)
-}
-
-// TestRMStrategyRefillBurst verifies the cold-start guard, the
-// rate100/cap100 recovery from canBurstTarget, and that only the
-// strategy's bound queue receives the call.
-func TestRMStrategyRefillBurst(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	mgr := &testBurstManager{}
-	other := &testBurstManager{}
-	s := &rmStrategy{queue: mgr}
-
-	// Cold-start guard: canBurstTarget=0 -> no call.
-	s.refillBurst(tokenCounts{}, rates{})
-	require.Zero(t, mgr.calls)
-
-	// canBurstTarget=1.0 recovers tokens/rates as-is.
-	s.canBurstTarget = 1.0
-	var tokens tokenCounts
-	tokens[0][canBurst] = 1000
-	var rr rates
-	rr[0][canBurst] = 4000
-	s.refillBurst(tokens, rr)
-	require.Equal(t, 1, mgr.calls)
-	require.Equal(t, 1000.0, mgr.lastRate100)
-	require.Equal(t, 4000.0, mgr.lastCap100)
-
-	// canBurstTarget=0.5 doubles both.
-	s.canBurstTarget = 0.5
-	s.refillBurst(tokens, rr)
-	require.Equal(t, 2, mgr.calls)
-	require.Equal(t, 2000.0, mgr.lastRate100)
-	require.Equal(t, 8000.0, mgr.lastCap100)
-
-	// Delta path: tokens (rate100) may be negative when refill rates
-	// decrease between intervals. cap100 stays non-negative because
-	// refillRates is the current rate, which is bounded >= 0 by the model.
-	tokens[0][canBurst] = -500
-	rr[0][canBurst] = 4000
-	s.canBurstTarget = 1.0
-	s.refillBurst(tokens, rr)
-	require.Equal(t, 3, mgr.calls)
-	require.Equal(t, -500.0, mgr.lastRate100)
-	require.Equal(t, 4000.0, mgr.lastCap100)
-
-	// Only the bound queue receives the call.
-	require.Zero(t, other.calls)
 }

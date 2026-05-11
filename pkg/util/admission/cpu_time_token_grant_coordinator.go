@@ -296,12 +296,12 @@ func makeCPUTimeTokenGrantCoordinator(
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
-	allocator.strategy = allocator.newStrategy(initialMode)
-	// Sync the queue's useResourceGroup with the initial strategy.
-	// Without this, a node that starts in resourceManagerMode would never
-	// have configureQueue called: resetInterval only invokes it on a
-	// strategy swap (modeChanged), and the first resetInterval sees
-	// newMode == a.strategy.mode() so modeChanged is false.
+	allocator.setMode(initialMode)
+	// Sync the queue's useResourceGroup with the initial mode. Without
+	// this, a node that starts in resourceManagerMode would never have
+	// configureQueue called: resetInterval only invokes it on a mode
+	// change, and the first resetInterval sees newMode == currentMode
+	// so modeChanged is false.
 	allocator.configureQueue()
 
 	coordinator := &cpuTimeTokenGrantCoordinator{

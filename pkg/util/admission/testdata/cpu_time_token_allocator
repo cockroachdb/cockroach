@@ -7,22 +7,22 @@
 # tier1  3000     2000
 #
 # The target CPU utilizations are passed as an argument to fit, and they
-# are a function of cluster settings, plus some simple logic in resetInterval.
-# Here, the default values for the target CPU utilizations are shown.
+# are a function of cluster settings. Both tiers get the same target
+# (default 0.80 noBurst, 0.85 canBurst).
 resetInterval
 ----
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 # set-tokens v=0 simulates tokens being taken due to admitted work.
 set-tokens v=0
@@ -61,8 +61,8 @@ cpuTTG can_burst no_burst
 tier0  1000      800
 tier1  600       400
 burstM
-tier0  200
-tier1  200
+tier0  235
+tier1  235
 
 allocate remaining=4
 ----
@@ -70,8 +70,8 @@ cpuTTG can_burst no_burst
 tier0  2000      1600
 tier1  1200      800
 burstM
-tier0  400
-tier1  400
+tier0  470
+tier1  470
 
 allocate remaining=3
 ----
@@ -79,8 +79,8 @@ cpuTTG can_burst no_burst
 tier0  3000      2400
 tier1  1800      1200
 burstM
-tier0  600
-tier1  600
+tier0  705
+tier1  705
 
 allocate remaining=2
 ----
@@ -88,8 +88,8 @@ cpuTTG can_burst no_burst
 tier0  4000      3200
 tier1  2400      1600
 burstM
-tier0  800
-tier1  800
+tier0  940
+tier1  940
 
 allocate remaining=1
 ----
@@ -97,23 +97,23 @@ cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1175
+tier1  1175
 
 resetInterval
 ----
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1175
+tier1  1175
 
 # resetInterval has been called, so a new interval has started.
 # So in theory more tokens can be added. But in this case the
@@ -126,8 +126,8 @@ cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 set-tokens v=0
 ----
@@ -163,23 +163,23 @@ cpuTTG can_burst no_burst
 tier0  4000      3200
 tier1  2400      1600
 burstM
-tier0  800
-tier1  800
+tier0  941
+tier1  941
 
 resetInterval
 ----
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  4000      3200
 tier1  2400      1600
 burstM
-tier0  800
-tier1  800
+tier0  941
+tier1  941
 
 set-tokens v=0
 ----
@@ -199,23 +199,23 @@ cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 resetInterval
 ----
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 set-tokens v=0
 ----
@@ -234,8 +234,8 @@ cpuTTG can_burst no_burst
 tier0  2500      2000
 tier1  1500      1000
 burstM
-tier0  500
-tier1  500
+tier0  588
+tier1  588
 
 allocate remaining=1
 ----
@@ -243,8 +243,8 @@ cpuTTG can_burst no_burst
 tier0  5000      4000
 tier1  3000      2000
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 # These final cases test how cpuTimeTokenAllocator handles changes to
 # refillRates. See the comment above deltaRefillRates for a full explanation
@@ -257,15 +257,15 @@ resetInterval increase_rates_by=1
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5001      4001
 tier1  3001      2001
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 set-tokens v=0
 ----
@@ -284,8 +284,8 @@ cpuTTG can_burst no_burst
 tier0  5001      4001
 tier1  3001      2001
 burstM
-tier0  1000
-tier1  1000
+tier0  1176
+tier1  1176
 
 # Another test of a change to refillRates. If we decrease refillRates by two
 # (on all buckets), we expect two tokens to be removed from all buckets, as
@@ -295,15 +295,15 @@ resetInterval increase_rates_by=-2
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  4999      3999
 tier1  2999      1999
 burstM
-tier0  999
-tier1  999
+tier0  1176
+tier1  1176
 
 set-tokens v=0
 ----
@@ -322,8 +322,8 @@ cpuTTG can_burst no_burst
 tier0  4999      3999
 tier1  2999      1999
 burstM
-tier0  999
-tier1  999
+tier0  1176
+tier1  1176
 
 set-tokens v=0
 ----
@@ -335,14 +335,12 @@ tier0  0
 tier1  0
 
 # Test of computation of target CPU utilizations from overridden cluster
-# settings. The no_burst targets are configurable by cluster settings, which
-# are overridden in this test case. A can_burst target adds
-# admission.cpu_time_tokens.target_util.burst_delta, which is also overridden
-# here, to the corresponding no_burst target. See resetInterval for more.
-setClusterSettings app=0.5 system=0.75 burst=0.1
+# settings. The no_burst target is configurable by a cluster setting,
+# overridden here. The can_burst target adds burst_delta to the noBurst
+# target. Both tiers get the same target.
+setClusterSettings target=0.5 burst=0.1
 ----
 SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.5
-SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = 0.75
 SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.1
 cpuTTG can_burst no_burst
 tier0  0         0
@@ -356,8 +354,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 50%
 	tier1 can_burst -> 60%
-	tier0 no_burst -> 75%
-	tier0 can_burst -> 85%
+	tier0 no_burst -> 50%
+	tier0 can_burst -> 60%
 )
 cpuTTG can_burst no_burst
 tier0  0         0
@@ -375,9 +373,9 @@ tier1  0
 #   tier1 no_burst:  1999 - 4999 = -3000
 #
 # The burst buckets also have minimums. After setClusterSettings,
-# canBurstTarget = 0.75+0.1 = 0.85, so rate100 = 4999/0.85 = 5881.18.
-# Burst capacity = int64(5881.18 * 0.2) = 1176 for both tiers, and the
-# burst bucket minimum is -capacity/4 = -1176/4 = -294.
+# canBurstTarget = 0.5+0.1 = 0.6, so rate100 = 4999/0.6 = 8331.67.
+# Burst capacity = int64(8331.67 * 0.2) = 1666 for both tiers, and the
+# burst bucket minimum is -capacity/4 = -1666/4 = -416.
 
 # Test allocateTokens path. Drive buckets deeply negative, then allocate. The
 # added tokens (the full refill rates) are far too small to overcome the deficit,
@@ -397,8 +395,8 @@ cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -294
-tier1  -294
+tier0  -416
+tier1  -416
 
 # Test resetInterval path. Drive buckets deeply negative again. resetInterval
 # has delta=0 (rates unchanged), but the floor still clamps.
@@ -416,12 +414,12 @@ resetInterval
 fit(
 	tier1 no_burst -> 50%
 	tier1 can_burst -> 60%
-	tier0 no_burst -> 75%
-	tier0 can_burst -> 85%
+	tier0 no_burst -> 50%
+	tier0 can_burst -> 60%
 )
 cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -294
-tier1  -294
+tier0  -416
+tier1  -416

@@ -1424,7 +1424,7 @@ func (q *WorkQueue) AdmittedSQLWorkDone(gKey groupKey, remaining int64) {
 // refillGroupBurstBuckets refills every group's burst bucket in a single
 // q.mu critical section. rate100 and cap100 are the 100%-CPU per-tick
 // refill rate and bucket capacity; per-group amounts are scaled by
-// group.burstFrac. Called by both serverlessStrategy and rmStrategy on
+// group.burstFrac. Called by cpuTimeTokenAllocator.refillBurst on
 // every tick.
 //
 // The 100%-CPU framing decouples burst budget from the utilization target:
