@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
@@ -2540,4 +2541,80 @@ func TestInternalAppNamePrefix(t *testing.T) {
 		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
 		require.Greater(t, finalUserMetrics, initialUserMetrics)
 	})
+}
+
+// TestPrepareAfterSavepointRollback reproduces #169720: after ROLLBACK TO
+// SAVEPOINT, the transaction's read sequence number can remain in the ignored
+// range because execPrepare (pgwire Parse) does not call Step() to advance it.
+// Any KV read during the Prepare then hits the assertion in
+// checkReadSeqNotIgnoredLocked.
+//
+// The test disables descriptor leasing so that descriptor lookups fall
+// through to storage, issuing real KV reads through the user's transaction.
+// A second table (t_for_parse) is used as the Parse target — it has never
+// been accessed in this transaction, so the descriptor collection has no
+// cached entry and must resolve it from storage.
+func TestPrepareAfterSavepointRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Insecure: true,
+	})
+	defer s.Stopper().Stop(ctx)
+	defer lease.TestingDisableTableLeases()()
+
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+
+	until := pgtest.ParseMessages("ReadyForQuery")
+
+	// Two tables: t_for_insert is the INSERT target (cached in the txn's
+	// descriptor collection after the INSERT), t_for_parse is the Parse
+	// target (never accessed in this txn, forcing a storage lookup).
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_insert (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_for_parse (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// BEGIN → SAVEPOINT → INSERT → ROLLBACK TO SAVEPOINT.
+	// After the rollback the ignored seqnum range is [0, 1] and readSeq
+	// remains 0 (stepping mode does not auto-advance it).
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "INSERT INTO t_for_insert VALUES (1)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "ROLLBACK TO SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Parse "SELECT * FROM t_for_parse" — descriptor lookup for t_for_parse
+	// goes to storage (leases disabled, not in collection cache) and issues
+	// a KV read on the user's txn. Without the fix, readSeq=0 is inside the
+	// ignored range [0, 1], triggering the assertion.
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT * FROM t_for_parse"}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	_, err = p.Until(
+		true, /* keepErrMsg */
+		pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
+	require.NoError(t, err,
+		"Parse after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
 }
