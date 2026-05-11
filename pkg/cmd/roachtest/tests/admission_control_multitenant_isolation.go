@@ -420,8 +420,16 @@ func fetchAvgQuietLatency(
 	return avg.Float64, nil
 }
 
+// cpuRampUpSamples is the number of leading 1-minute datapoints dropped from
+// the CPU average to exclude workload ramp-up bias. The combined CPU
+// timeseries is sampled at one-minute intervals, so 2 corresponds to ~2
+// minutes of warm-up.
+const cpuRampUpSamples = 2
+
 // verifyCPUUtilization queries the combined CPU utilization metric over the
-// given time window and asserts that the average is between 70% and 90%.
+// given time window and asserts that the average is in the expected band.
+// adminNode must designate a single KV node: the response is summed across
+// sources, so multi-node lists would aggregate per-node fractions.
 func verifyCPUUtilization(
 	ctx context.Context,
 	c cluster.Cluster,
@@ -443,6 +451,11 @@ func verifyCPUUtilization(
 		})
 
 	datapoints := response.Results[0].Datapoints
+	// Drop ramp-up samples so the average reflects steady-state behavior
+	// rather than the cold-start window.
+	if len(datapoints) > cpuRampUpSamples {
+		datapoints = datapoints[cpuRampUpSamples:]
+	}
 	if len(datapoints) == 0 {
 		t.Fatal("not enough CPU utilization datapoints")
 	}
@@ -453,12 +466,20 @@ func verifyCPUUtilization(
 	}
 	avgCPU := sum / float64(len(datapoints))
 
-	t.L().Printf("average CPU utilization: %.2f%%", avgCPU*100)
-	if avgCPU < 0.70 || avgCPU > 0.90 {
-		t.Fatalf(
-			"average CPU utilization %.2f%% not in expected range [70%%, 90%%]",
-			avgCPU*100,
-		)
+	t.L().Printf("average CPU utilization: %.2f%% (%d samples after %d ramp-up)",
+		avgCPU*100, len(datapoints), cpuRampUpSamples)
+
+	// The lower bound guards test validity: if CPU stays below the target
+	// band, the workload isn't actually saturating the cluster and the
+	// isolation/fairness signal isn't being exercised. The upper bound
+	// guards AC behavior: CPU above the band means AC is failing to throttle
+	// to its target utilization (default 0.8). The two failures have
+	// different root causes so they get distinct messages.
+	switch {
+	case avgCPU < 0.70:
+		t.Fatalf("workload did not saturate cluster: average CPU %.2f%% < 70%%", avgCPU*100)
+	case avgCPU > 0.90:
+		t.Fatalf("AC may be under-throttling: average CPU %.2f%% > 90%%", avgCPU*100)
 	}
 }
 
