@@ -104,14 +104,27 @@ func copySnapshotDataToNode(
 	// Create a temporary disk from the snapshot. Retry transient GCE API
 	// errors (e.g. HTTP 502) which can occur when many nodes create disks
 	// in parallel against the same zone.
+	//
+	// We use a count-based retry (rather than a duration-based one) because a
+	// single `gcloud compute disks create` invocation can itself take several
+	// minutes to fail with a transient error; a short duration-based budget
+	// would be exhausted on the first attempt before any retry occurs (see
+	// #170038). Retries are bounded only by the test's context, not by an
+	// extra timeout layered on top.
 	l.Printf("n%d: creating temp disk %s from snapshot in zone %s",
 		nodeID, tempDiskName, zone)
 	createDiskCmd := fmt.Sprintf(
 		`gcloud compute disks create %s --source-snapshot=%s --zone=%s --type=pd-ssd --quiet`,
 		tempDiskName, snap.ID, zone,
 	)
+	const createDiskAttempts = 3
+	createDiskBackoff := retry.Options{
+		InitialBackoff: 30 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		Multiplier:     1,
+	}
 	var createDiskErr error
-	if err := retry.ForDuration(2*time.Minute, func() error {
+	if err := retry.WithMaxAttempts(ctx, createDiskBackoff, createDiskAttempts, func() error {
 		result, err := c.RunWithDetailsSingleNode(
 			ctx, l, option.WithNodes(node), createDiskCmd,
 		)
@@ -126,8 +139,9 @@ func copySnapshotDataToNode(
 		createDiskErr = err
 		return nil
 	}); err != nil {
-		// Transient errors exhausted the retry duration.
-		return fmt.Errorf("n%d: failed to create disk from snapshot: %w", nodeID, err)
+		// Transient errors exhausted the retry attempts.
+		return fmt.Errorf("n%d: failed to create disk from snapshot after %d attempts: %w",
+			nodeID, createDiskAttempts, err)
 	}
 	if createDiskErr != nil {
 		return fmt.Errorf("n%d: failed to create disk from snapshot: %w", nodeID, createDiskErr)
