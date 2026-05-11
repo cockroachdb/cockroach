@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -82,6 +83,17 @@ func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
 	}
 }
 
+// systemTenantGroupConfig is the config for the system tenant group.
+// Weight=MaxUint32 gives it effectively infinite priority in
+// fair-share ordering. MaxCPU=true means it always qualifies for
+// burst, regardless of bucket fullness. BurstFrac=1.0 allocates the
+// full 100%-CPU rate to its burst bucket.
+var systemTenantGroupConfig = ResourceGroupConfig{
+	Weight:    math.MaxUint32,
+	BurstFrac: 1.0,
+	MaxCPU:    true,
+}
+
 // defaultRMResourceGroupConfig seeds the holder until an explicit Set
 // replaces it. The two ids match priorityToResourceGroupKey (high/low).
 //
@@ -121,8 +133,11 @@ type ResourceGroupConfigHolder struct {
 }
 
 // newResourceGroupConfigHolder constructs a holder seeded with
-// defaultRMResourceGroupConfig, so a fresh Snapshot returns the high/low
-// hardcoded groups that WorkQueue applies on first RM-mode activation.
+// defaultRMResourceGroupConfig, so a fresh Snapshot returns the
+// high/low hardcoded groups that WorkQueue applies on first RM-mode
+// activation. The system tenant config (systemTenantGroupConfig) is
+// installed separately when the queue collapses to a single
+// WorkQueue.
 func newResourceGroupConfigHolder() *ResourceGroupConfigHolder {
 	h := &ResourceGroupConfigHolder{}
 	h.Set(defaultRMResourceGroupConfig)

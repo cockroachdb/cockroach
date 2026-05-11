@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -31,6 +32,25 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 		h := newResourceGroupConfigHolder()
 		require.Equal(t, defaultTenantGroupConfig,
 			h.Snapshot().GetOrDefault(tenantGroupKey(9999)))
+	})
+
+	t.Run("system_tenant_config_constant", func(t *testing.T) {
+		require.Equal(t, uint32(math.MaxUint32), systemTenantGroupConfig.Weight)
+		require.Equal(t, 1.0, systemTenantGroupConfig.BurstFrac)
+		require.True(t, systemTenantGroupConfig.MaxCPU)
+	})
+
+	t.Run("system_tenant_config_via_holder", func(t *testing.T) {
+		h := newResourceGroupConfigHolder()
+		seed := h.Snapshot()
+		seed[tenantGroupKey(1)] = systemTenantGroupConfig
+		h.Set(seed)
+		snap := h.Snapshot()
+		require.Equal(t, systemTenantGroupConfig,
+			snap.GetOrDefault(tenantGroupKey(1)))
+		// Other tenants still get the default.
+		require.Equal(t, defaultTenantGroupConfig,
+			snap.GetOrDefault(tenantGroupKey(9999)))
 	})
 
 	t.Run("default_configs_have_burst_frac", func(t *testing.T) {
