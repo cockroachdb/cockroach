@@ -88,6 +88,14 @@ func (ex *connExecutor) execPrepare(
 		statementHintsCache,
 		ex.sessionData().Database,
 	)
+	// Step the read sequence so that any KV reads during Prepare (e.g.
+	// descriptor resolution) use a sequence number past ignored ranges
+	// from a prior savepoint rollback.
+	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
+		if err := ex.stepReadSequence(ctx); err != nil {
+			return retErr(err)
+		}
+	}
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
