@@ -486,14 +486,80 @@ DROP PROCEDURE p_ddl_rollback;
 subtest end
 
 
-subtest explicit_txn_rollback_around_call
+subtest explicit_txn_rejects_ddl
 
-# DDL inside a procedure should participate in the caller's transaction.
-# If the caller rolls back, the DDL should be undone.
+# DDL inside a procedure is rejected at runtime when the procedure is called
+# from an explicit transaction. The MVP only allows the validated DDL types
+# within an implicit (single-CALL) transaction; in an explicit transaction the
+# caller could mix in arbitrary post-CALL statements that interact poorly with
+# the procedure's schema changes.
 statement ok
 CREATE PROCEDURE p_create_in_txn() LANGUAGE PLpgSQL AS $$
 BEGIN
-  CREATE TABLE t_txn_rollback (a INT);
+  CREATE TABLE t_txn_create (a INT);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_create_in_txn();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_txn_create" does not exist
+SELECT * FROM t_txn_create;
+
+# The same procedure called from an implicit transaction works.
+statement ok
+CALL p_create_in_txn();
+
+statement ok
+DROP TABLE t_txn_create;
+
+# DROP TABLE inside a procedure is rejected from an explicit transaction.
+statement ok
+CREATE TABLE t_txn_drop (a INT);
+
+statement ok
+CREATE PROCEDURE p_drop_in_txn() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP TABLE t_txn_drop;
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_drop_in_txn();
+
+statement ok
+ROLLBACK;
+
+# The table is still there; implicit-txn CALL succeeds and drops it.
+statement ok
+CALL p_drop_in_txn();
+
+statement error pgcode 42P01 relation "t_txn_drop" does not exist
+SELECT * FROM t_txn_drop;
+
+statement ok
+DROP PROCEDURE p_create_in_txn;
+
+statement ok
+DROP PROCEDURE p_drop_in_txn;
+
+# A DML-only procedure in an explicit transaction is unaffected.
+statement ok
+CREATE TABLE t_dml_only (a INT);
+
+statement ok
+CREATE PROCEDURE p_dml_only() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_dml_only VALUES (1);
 END
 $$;
 
@@ -501,16 +567,102 @@ statement ok
 BEGIN;
 
 statement ok
-CALL p_create_in_txn();
+CALL p_dml_only();
+
+statement ok
+COMMIT;
+
+query I
+SELECT a FROM t_dml_only;
+----
+1
+
+statement ok
+DROP PROCEDURE p_dml_only;
+
+statement ok
+DROP TABLE t_dml_only;
+
+# A procedure that runs DML before DDL in an explicit transaction commits
+# the DML statements that ran before the DDL is reached, then aborts the
+# transaction with the new error. (The DML rolls back when the user issues
+# ROLLBACK, since the failed CALL leaves the txn in the aborted state.)
+statement ok
+CREATE TABLE t_mixed (a INT);
+
+statement ok
+CREATE PROCEDURE p_dml_then_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  INSERT INTO t_mixed VALUES (1);
+  CREATE TABLE t_mixed_new (b INT);
+END
+$$;
+
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_dml_then_ddl();
 
 statement ok
 ROLLBACK;
 
-statement error pgcode 42P01 relation "t_txn_rollback" does not exist
-SELECT * FROM t_txn_rollback;
+query I
+SELECT count(*) FROM t_mixed;
+----
+0
+
+statement error pgcode 42P01 relation "t_mixed_new" does not exist
+SELECT * FROM t_mixed_new;
 
 statement ok
-DROP PROCEDURE p_create_in_txn;
+DROP PROCEDURE p_dml_then_ddl;
+
+statement ok
+DROP TABLE t_mixed;
+
+# Nested procedures: outer CALL in implicit transaction, inner procedure has
+# DDL — should work.
+statement ok
+CREATE PROCEDURE p_inner_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_nested (a INT);
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_calls_ddl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_ddl();
+END
+$$;
+
+statement ok
+CALL p_outer_calls_ddl();
+
+statement ok
+DROP TABLE t_nested;
+
+# Nested procedures: outer CALL in explicit transaction, inner procedure has
+# DDL — should be rejected. The explicit-transaction context propagates to
+# nested CALLs.
+statement ok
+BEGIN;
+
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
+CALL p_outer_calls_ddl();
+
+statement ok
+ROLLBACK;
+
+statement error pgcode 42P01 relation "t_nested" does not exist
+SELECT * FROM t_nested;
+
+statement ok
+DROP PROCEDURE p_outer_calls_ddl;
+
+statement ok
+DROP PROCEDURE p_inner_ddl;
 
 subtest end
 
@@ -822,7 +974,8 @@ DROP TABLE t_rc_test;
 statement ok
 DROP PROCEDURE p_rc_create;
 
-# DDL in procedure under READ COMMITTED explicit txn with COMMIT.
+# DDL in procedure under READ COMMITTED explicit txn is rejected like every
+# other explicit-txn case; the isolation level does not matter.
 statement ok
 CREATE PROCEDURE p_rc_explicit() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -833,25 +986,7 @@ $$;
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-statement ok
-CALL p_rc_explicit();
-
-statement ok
-COMMIT;
-
-query I
-SELECT count(*) FROM t_rc_explicit;
-----
-0
-
-statement ok
-DROP TABLE t_rc_explicit;
-
-# DDL + ROLLBACK under READ COMMITTED.
-statement ok
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
-
-statement ok
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
 CALL p_rc_explicit();
 
 statement ok
@@ -938,7 +1073,7 @@ DROP TABLE t_rr_test;
 statement ok
 DROP PROCEDURE p_rr_create;
 
-# DDL + ROLLBACK under REPEATABLE READ explicit txn.
+# DDL in procedure under REPEATABLE READ explicit txn is rejected.
 statement ok
 CREATE PROCEDURE p_rr_rollback() LANGUAGE PLpgSQL AS $$
 BEGIN
@@ -949,7 +1084,7 @@ $$;
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 
-statement ok
+statement error pgcode 0A000 DDL statements are not allowed in stored procedures called from an explicit transaction
 CALL p_rr_rollback();
 
 statement ok

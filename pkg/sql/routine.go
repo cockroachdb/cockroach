@@ -383,9 +383,20 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 			}
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
+			pc := plan.(*planComponents)
+			// Reject DDL inside a procedure called from an explicit
+			// transaction. Mixing schema changes with arbitrary post-CALL
+			// statements in the same user transaction is not yet supported.
+			if pc.flags.IsSet(planFlagIsDDL) && !g.p.EvalContext().TxnImplicit {
+				return errors.WithHint(
+					pgerror.New(pgcode.FeatureNotSupported,
+						"DDL statements are not allowed in stored procedures called from an explicit transaction"),
+					"call the procedure outside of a BEGIN ... COMMIT block",
+				)
+			}
 			if statsBuilder != nil {
 				defer func() {
-					flags := plan.(*planComponents).flags
+					flags := pc.flags
 					sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEnd)
 					if g.p.statsCollector == nil {
 						if buildutil.CrdbTestBuild {
@@ -412,7 +423,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 				}()
 			}
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartExec)
-			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram, statsBuilder)
+			queryStats, err := runPlanInsidePlan(ctx, params, pc, w, g, stmtForDistSQLDiagram, statsBuilder)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndExec)
 			if err != nil {
 				statsBuilder.StatementError(err)
