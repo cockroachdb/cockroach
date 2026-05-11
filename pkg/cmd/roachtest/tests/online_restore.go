@@ -979,160 +979,140 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	t.L().Printf("random seed: %d", seed)
 
 	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.CRDBNodes())
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	const jobStatusWait = time.Minute * 5
 
-	m.Go(func(ctx context.Context) error {
-		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, testRNG,
-			withOnlineRestore(true), withCompaction(true),
+	testUtils, err := setupBackupRestoreTestUtils(
+		ctx, t, c, testRNG,
+		withOnlineRestore(true), withCompaction(true),
+	)
+	require.NoError(t, err)
+	defer testUtils.CloseConnections()
+
+	dbs := []string{"bank", "tpcc", schemaChangeDB}
+	d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
+		ctx, t, c, testRNG, workloadSeed, testUtils, dbs, nil, /* excludedWorkloads */
+	)
+	require.NoError(t, err)
+
+	stopBackgroundCommands, err := runBackgroundWorkload()
+	require.NoError(t, err)
+	defer stopBackgroundCommands()
+
+	dbConn := c.Conn(ctx, t.L(), c.CRDBNodes().RandNode()[0])
+	defer dbConn.Close()
+
+	allNodes := labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()}
+	bspec := backupSpec{
+		Plan:    allNodes,
+		Execute: allNodes,
+	}
+
+	// Since we are intentionally failing the download job by deleting a file,
+	// we reduce the retry duration for the job to speed up the test.
+	_, err = dbConn.ExecContext(
+		ctx, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '5s'",
+	)
+	require.NoError(t, err, "failed to set download phase retry duration")
+
+	// We set this pausepoint so that the download job is paused before it
+	// begins downloading external files. This allows us to delete the backup
+	// SSTs before the download job attempts to read them.
+	// We also must set this BEFORE taking backups. In the event of a full
+	// cluster backup, the link phase of OR will reset the pausepoints back to
+	// the point of the backup, which means this pausepoint will be wiped if it
+	// is set after the backups.
+	_, err = dbConn.ExecContext(
+		ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'",
+	)
+	require.NoError(t, err, "failed to set pausepoint for online restore")
+
+	builder := d.NewCollectionBuilder(
+		t.L(), t,
+		testRNG,
+		"online-restore-recovery",
+		bspec, bspec,
+		true /* internalSystemsJobs */, false, /* isMultitenant */
+	)
+	t.L().Printf("building backup collection")
+	_, err = builder.TakeFullSync(ctx)
+	require.NoError(t, err)
+	for range 3 {
+		d.randomWait(t.L(), testRNG)
+		_, err = builder.TakeIncSync(ctx)
+		require.NoError(t, err)
+	}
+	if testRNG.Intn(2) == 0 {
+		_, err = builder.TakeCompactedSync(ctx, 1, 3)
+		require.NoError(t, err)
+	}
+	collection, err := builder.Finalize(ctx)
+	require.NoError(t, err)
+
+	// If we're running a cluster backup, we need to reset the cluster
+	// to restore it. We also intentionally stop background commands so
+	// the workloads don't report errors.
+	if _, ok := collection.btype.(*clusterBackup); ok {
+		t.L().Printf("resetting cluster before restoring full cluster backup")
+		stopBackgroundCommands()
+		t.Monitor().ExpectProcessDead(c.CRDBNodes())
+
+		// Between each reset grab a debug zip from the cluster.
+		zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+		if err := testUtils.cluster.FetchDebugZip(ctx, t.L(), zipPath); err != nil {
+			t.L().Printf("failed to fetch a debug zip: %v", err)
+		}
+		err := testUtils.resetCluster(
+			ctx, t.L(), clusterupgrade.CurrentVersion(),
+			nil /* expectDeathsFn */, []install.ClusterSettingOption{},
 		)
-		if err != nil {
-			return err
-		}
-		defer testUtils.CloseConnections()
+		require.NoError(t, err, "failed to reset cluster before restore")
+	}
 
-		dbs := []string{"bank", "tpcc", schemaChangeDB}
-		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, testRNG, workloadSeed, testUtils, dbs, nil, /* excludedWorkloads */
-		)
-		if err != nil {
-			return err
-		}
+	t.L().Printf("performing online restore of backup")
+	_, err = d.RestoreSync(
+		ctx, t.L(), testRNG, collection,
+		false /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
+	)
+	require.NoError(t, err, "failed to execute online restore link phase")
 
-		stopBackgroundCommands, err := runBackgroundWorkload()
-		if err != nil {
-			return err
-		}
-		defer stopBackgroundCommands()
+	downloadJobID, err := d.getORDownloadJobID(ctx, t.L(), testRNG)
+	require.NoError(t, err, "failed to get online restore download job ID")
 
-		dbConn := c.Conn(ctx, t.L(), c.CRDBNodes().RandNode()[0])
-		defer dbConn.Close()
+	// Delete the backup SSTs as soon as possible after the link phase
+	// completes to minimize the window in which regular LSM compaction
+	// could download and incorporate the external SSTs, which would cause
+	// the download job to see 0 external bytes and succeed immediately.
+	err = d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection)
+	require.NoError(t, err, "failed to delete SSTs from backup layers")
 
-		allNodes := labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()}
-		bspec := backupSpec{
-			Plan:    allNodes,
-			Execute: allNodes,
-		}
+	err = WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
+	require.NoError(t, err, "download job did not pause after deleting SSTs")
 
-		// Since we are intentionally failing the download job by deleting a file,
-		// we reduce the retry duration for the job to speed up the test.
-		if _, err := dbConn.ExecContext(
-			ctx, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '5s'",
-		); err != nil {
-			return errors.Wrap(err, "failed to set download phase retry duration")
-		}
+	// defaultdb is going to be set offline by the failed download job, so we
+	// need to switch to the system database first to avoid any errors.
+	_, err = dbConn.ExecContext(ctx, "USE system")
+	require.NoError(t, err)
 
-		// We set this pausepoint so that the download job is paused before it
-		// begins downloading external files. This allows us to delete the backup
-		// SSTs before the download job attempts to read them.
-		// We also must set this BEFORE taking backups. In the event of a full
-		// cluster backup, the link phase of OR will reset the pausepoints back to
-		// the point of the backup, which means this pausepoint will be wiped if it
-		// is set after the backups.
-		if _, err := dbConn.ExecContext(
-			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_do_download_files'",
-		); err != nil {
-			return errors.Wrap(err, "failed to set pausepoint for online restore")
-		}
+	_, err = dbConn.ExecContext(
+		ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
+	)
+	require.NoError(t, err, "failed to remove pausepoint for online restore")
 
-		t.L().Printf("starting backup")
-		collection, err := d.createBackupCollection(
-			ctx, t.L(), t, testRNG, bspec, bspec, "online-restore-recovery-backup",
-			true /* internalSystemsJobs */, false, /* isMultitenant */
-		)
-		if err != nil {
-			return err
-		}
+	_, err = dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID)
+	require.NoError(t, err, "failed to resume download job after deleting SSTs")
 
-		// If we're running a cluster backup, we need to reset the cluster
-		// to restore it. We also intentionally stop background commands so
-		// the workloads don't report errors.
-		if _, ok := collection.btype.(*clusterBackup); ok {
-			t.L().Printf("resetting cluster before restoring full cluster backup")
-			stopBackgroundCommands()
-			expectDeathsFn := func(n int) {
-				m.ExpectDeaths(int32(n))
-			}
+	err = WaitForResume(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
+	require.NoError(t, err, "download job did not resume after being resumed")
 
-			// Between each reset grab a debug zip from the cluster.
-			zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
-			if err := testUtils.cluster.FetchDebugZip(ctx, t.L(), zipPath); err != nil {
-				t.L().Printf("failed to fetch a debug zip: %v", err)
-			}
-			if err := testUtils.resetCluster(
-				ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn, []install.ClusterSettingOption{},
-			); err != nil {
-				return err
-			}
-		}
+	err = WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait)
+	require.NoError(t, err, "download job did not pause after resuming")
 
-		t.L().Printf("performing online restore of backup")
-		if _, err := d.RestoreSync(
-			ctx, t.L(), testRNG, collection,
-			false /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
-		); err != nil {
-			return err
-		}
-		downloadJobID, err := d.getORDownloadJobID(ctx, t.L(), testRNG)
-		if err != nil {
-			return err
-		}
+	_, err = dbConn.ExecContext(ctx, "CANCEL JOB $1", downloadJobID)
+	require.NoError(t, err, "failed to cancel download job after it paused")
 
-		// Delete the backup SSTs as soon as possible after the link phase
-		// completes to minimize the window in which regular LSM compaction
-		// could download and incorporate the external SSTs, which would cause
-		// the download job to see 0 external bytes and succeed immediately.
-		if err := d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection); err != nil {
-			return err
-		}
+	err = WaitForCanceled(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute)
+	require.NoError(t, err, "download job did not reach canceled state")
 
-		if err := WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
-			return errors.Wrapf(
-				err, "waiting for download job %v to reach paused state", downloadJobID,
-			)
-		}
-
-		// defaultdb is going to be set offline by the failed download job, so we
-		// need to switch to the system database first to avoid any errors.
-		if _, err := dbConn.ExecContext(ctx, "USE system"); err != nil {
-			return err
-		}
-
-		if _, err := dbConn.ExecContext(
-			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
-		); err != nil {
-			return errors.Wrap(err, "failed to remove pausepoint for online restore")
-		}
-		if _, err := dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID); err != nil {
-			return errors.Wrapf(
-				err, "failed to resume download job %v after deleting sst", downloadJobID,
-			)
-		}
-		if err := WaitForResume(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
-			return errors.Wrapf(
-				err, "waiting for download job %v to reach resumed state", downloadJobID,
-			)
-		}
-		if err := WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
-			return errors.Wrapf(
-				err, "waiting for download job %v to reach paused state", downloadJobID,
-			)
-		}
-		if _, err := dbConn.ExecContext(ctx, "CANCEL JOB $1", downloadJobID); err != nil {
-			return errors.Wrapf(
-				err, "failed to cancel download job %v after it paused", downloadJobID,
-			)
-		}
-		if err := WaitForCanceled(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute); err != nil {
-			return errors.Wrapf(
-				err, "waiting for download job %v to reach canceled state", downloadJobID,
-			)
-		}
-		return errors.Wrapf(
-			checkNoExternalBytesRemaining(ctx, dbConn),
-			"cluster did not cleanup all external files after download phase failure",
-		)
-	})
-	m.Wait()
+	err = checkNoExternalBytesRemaining(ctx, dbConn)
+	require.NoError(t, err, "external bytes still remain after download job failure")
 }
