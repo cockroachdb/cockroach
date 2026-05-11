@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -895,6 +897,28 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}))
 			}
 		}
+		// HACK(sep-raft-log): under the crdb_test build tag, allocate a
+		// dedicated log engine per store so every unit test exercises the
+		// separated-engines layout.
+		//
+		// We deliberately keep WALs enabled on both engines. The planned
+		// production layout disables the state engine's WAL and recovers from
+		// the WAG/log engine, but that machinery is not in place yet — without
+		// WAL the state engine loses all writes across a restart, so any test
+		// that calls TestCluster.Restart() (or otherwise reopens stores) would
+		// observe an empty state engine paired with a fully-populated log
+		// engine.
+		//
+		// The log engine is opened in a sibling subdirectory ("log-engine") of
+		// the spec path: for in-memory specs without a sticky VFS that means a
+		// fresh vfs.NewMem(); for sticky-VFS or on-disk specs the two engines
+		// share an FS but live in different paths.
+		const separatedEnginesHack = buildutil.CrdbTestBuild
+		var logStorageOpts []storage.ConfigOption
+		if separatedEnginesHack {
+			logStorageOpts = append(logStorageOpts, storageConfigOpts...)
+		}
+
 		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
@@ -906,7 +930,51 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		storeEnvs[i] = nil
 		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
 
-		engines = append(engines, kvstorage.MakeEngines(eng))
+		if !separatedEnginesHack {
+			engines = append(engines, kvstorage.MakeEngines(eng))
+			continue
+		}
+
+		// In-memory engines must skip disk-write stats (the collector fstats the
+		// host filesystem). Non-sticky in-mem specs already get a fresh
+		// vfs.NewMem() per InitEnvFromStoreSpec call, so leaving the path empty
+		// keeps the two engines on isolated FSs. Sticky in-mem and on-disk
+		// specs share an FS between the state and log engines, so the log
+		// engine needs a distinct sub-path to avoid colliding on Pebble's
+		// directory lock and SST files.
+		logSpec := spec
+		var logDiskWriteStats disk.WriteStatsManager
+		if logSpec.InMemory {
+			// Sticky in-mem specs share an FS between the state and log
+			// engines, so the log engine needs a distinct sub-path. Non-sticky
+			// in-mem specs already get a fresh vfs.NewMem() per
+			// InitEnvFromStoreSpec call, so leaving the path empty keeps the
+			// two engines on isolated FSs.
+			if logSpec.StickyVFSID != "" {
+				logSpec.Path = filepath.Join(spec.Path, "log-engine")
+			}
+		} else {
+			// On-disk specs share vfs.Default; the log engine lives in a
+			// subdirectory and uses the real disk-write stats manager.
+			logSpec.Path = filepath.Join(spec.Path, "log-engine")
+			logDiskWriteStats = cfg.DiskWriteStats
+		}
+		logEnv, err := fs.InitEnvFromStoreSpec(ctx, logSpec, fs.EnvConfig{
+			RW:      fs.ReadWrite,
+			Version: cfg.Settings.Version,
+		}, stickyRegistry, logDiskWriteStats)
+		if err != nil {
+			eng.Close()
+			return Engines{}, errors.Wrapf(err, "store %d: opening log engine env", i)
+		}
+		logEng, err := storage.Open(ctx, logEnv, cfg.Settings, logStorageOpts...)
+		if err != nil {
+			logEnv.Close()
+			eng.Close()
+			return Engines{}, errors.Wrapf(err, "store %d: opening log engine", i)
+		}
+		detail(redact.Sprintf("store %d: log engine %s", i, logEng.Properties()))
+		engines = append(engines, kvstorage.MakeSeparatedEnginesForTesting(eng, logEng))
 	}
 
 	if fileCache != nil {
