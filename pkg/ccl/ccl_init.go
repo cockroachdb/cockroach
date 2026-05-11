@@ -27,21 +27,3 @@ import (
 	// point).
 	_ "github.com/cockroachdb/cockroach/pkg/security/gssapiauth"
 )
-
-// TestingEnableEnterprise is a no-op. It was deprecated when the core license
-// was removed. We no longer distinguish between features enabled only for
-// enterprise. All features are enabled, and if a license policy is violated,
-// we throttle connections. Callers can safely remove any reference to this
-// function.
-//
-// Deprecated
-func TestingEnableEnterprise() func() {
-	return func() {}
-}
-
-// TestingDisableEnterprise is a no-op. See TestingEnableEnterprise.
-//
-// Deprecated
-func TestingDisableEnterprise() func() {
-	return func() {}
-}

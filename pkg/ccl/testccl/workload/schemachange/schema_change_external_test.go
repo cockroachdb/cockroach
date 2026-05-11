@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -33,7 +33,6 @@ import (
 
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ccl.TestingEnableEnterprise()()
 	defer schemachange.DisableMultiRegionOps()()
 	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
 	skip.UnderRace(t, "test connections can be too slow under expensive configs")
@@ -43,7 +42,6 @@ func TestWorkload(t *testing.T) {
 
 func TestWorkloadMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ccl.TestingEnableEnterprise()()
 	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
 	skip.UnderRace(t, "test connections can be too slow under expensive configs")
 

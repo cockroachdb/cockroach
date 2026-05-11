@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -98,7 +98,6 @@ func TestTenantCanUseEnterpriseFeaturesWithEnvVar(t *testing.T) {
 		Type: licensepb.License_Enterprise,
 	}).Encode()
 
-	defer ccl.TestingDisableEnterprise()()
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -125,8 +124,6 @@ func TestTenantCanUseEnterpriseFeaturesWithSetting(t *testing.T) {
 		Type:             licensepb.License_Enterprise,
 		OrganizationName: "mytest",
 	}).Encode()
-
-	defer ccl.TestingDisableEnterprise()()
 
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
