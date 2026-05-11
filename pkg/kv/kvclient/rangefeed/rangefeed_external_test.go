@@ -1320,7 +1320,7 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 			v, err := row.Value.GetInt()
 			require.NoError(t, err)
 			require.EqualValues(t, 3, v)
-		case <-time.After(3 * time.Second):
+		case <-time.After(testutils.SucceedsSoonDuration()):
 			t.Fatal("timed out waiting for event")
 		}
 	})
