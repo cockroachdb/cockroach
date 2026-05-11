@@ -1,5 +1,6 @@
 echo
 ----
+>> init:
 Put: 0,0 /Local/RangeID/5/r/RangeLease (0x01698d72726c6c2d00): <empty>
 Put: 0,0 /Local/RangeID/5/r/RangeGCThreshold (0x01698d726c67632d00): 0,0
 Put: 0,0 /Local/RangeID/5/r/RangeGCHint (0x01698d727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 

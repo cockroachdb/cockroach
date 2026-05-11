@@ -204,7 +204,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				output := tc.mutate(t, func(b *kvstorage.Batch[storage.Batch]) {
 					if initialized {
 						require.NoError(t, kvstorage.WriteInitialRangeState(
-							ctx, b.State(), b.Raft(),
+							ctx, b.State(), b.Raft(), b.WagWriter(),
 							rs.desc, repl.ReplicaID, rs.version,
 						))
 					} else {

@@ -7,18 +7,18 @@ package kvstorage
 
 import (
 	"context"
-	"path/filepath"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -31,28 +31,48 @@ func TestWriteInitialRangeState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-	b := eng.NewBatch() // TODO(pav-kv): make it write-only batch
-	defer b.Close()
+	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
 
-	require.NoError(t, WriteInitialRangeState(
-		context.Background(), b, b,
-		roachpb.RangeDescriptor{
-			RangeID:       5,
-			StartKey:      roachpb.RKey("a"),
-			EndKey:        roachpb.RKey("z"),
-			NextReplicaID: 4,
-		},
-		roachpb.ReplicaID(3),
-		// Use arbitrary version instead of things like clusterversion.Latest, so
-		// that the test doesn't sporadically fail when version bumps occur.
-		roachpb.Version{Major: 10, Minor: 2, Patch: 17},
-	))
+	desc := roachpb.RangeDescriptor{
+		RangeID:       5,
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("z"),
+		NextReplicaID: 4,
+	}
+	const replicaID = roachpb.ReplicaID(3)
+	// Use an arbitrary version instead of things like clusterversion.Latest, so
+	// that the test doesn't sporadically fail when version bumps occur.
+	replicaVersion := roachpb.Version{Major: 10, Minor: 2, Patch: 17}
 
-	str, err := print.DecodeWriteBatch(b.Repr())
-	require.NoError(t, err)
-	echotest.Require(t, str, filepath.Join("testdata", t.Name()+".txt"))
+	runWithEngines(t, func(t *testing.T, e Engines) {
+		ctx := context.Background()
+		var seq wag.Seq
+		factory := MakeBatchFactory(&e, &seq)
+		batch := factory.NewBatch()
+		defer batch.Close()
+
+		require.NoError(t, WriteInitialRangeState(
+			ctx, batch.State(), batch.Raft(), batch.WagWriter(),
+			desc, replicaID, replicaVersion,
+		))
+
+		var out string
+		if e.Separated() {
+			require.NoError(t, batch.TestingFlushWAG())
+			require.True(t, wag.AssertMutationBatch(
+				t, batch.Raft().Repr(), batch.State().Repr(),
+			))
+			out = ">> init/state:\n(matches WAG node)\n"
+			raftStr, err := print.DecodeWriteBatch(batch.Raft().Repr())
+			require.NoError(t, err)
+			out += fmt.Sprintf(">> init/raft:\n%s", raftStr)
+		} else {
+			str, err := print.DecodeWriteBatch(batch.State().Repr())
+			require.NoError(t, err)
+			out = fmt.Sprintf(">> init:\n%s", str)
+		}
+		echotestRequire(t, out)
+	})
 }
 
 func TestSynthesizeHardState(t *testing.T) {

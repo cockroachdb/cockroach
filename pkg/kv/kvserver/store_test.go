@@ -481,7 +481,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	}
 	const replicaID = 1
 	if err := kvstorage.WriteInitialRangeState(
-		ctx, s.StateEngine(), s.LogEngine(),
+		ctx, s.StateEngine(), s.LogEngine(), nil, /* wagWriter */
 		*desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
