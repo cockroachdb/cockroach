@@ -991,3 +991,456 @@ statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false;
 
 subtest end
+
+
+subtest schema_role_blocked_in_functions
+
+# CREATE/DROP SCHEMA and CREATE/DROP ROLE remain blocked in functions.
+statement error pgcode 0A000 unimplemented: CREATE SCHEMA usage inside a function definition
+CREATE FUNCTION f_create_schema() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP SCHEMA usage inside a function definition
+CREATE FUNCTION f_drop_schema() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION f_create_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_func;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP ROLE usage inside a function definition
+CREATE FUNCTION f_drop_role() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE r_func;
+END
+$$;
+
+# Volatility marker does not change the rule.
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION f_create_role_volatile() RETURNS VOID LANGUAGE PLpgSQL VOLATILE AS $$
+BEGIN
+  CREATE ROLE r_func;
+END
+$$;
+
+subtest end
+
+
+subtest schema_role_blocked_in_do_blocks
+
+statement error pgcode 0A000 unimplemented: CREATE SCHEMA usage inside a function definition
+DO $$
+BEGIN
+  CREATE SCHEMA s_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP SCHEMA usage inside a function definition
+DO $$
+BEGIN
+  DROP SCHEMA s_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+DO $$
+BEGIN
+  CREATE ROLE r_do;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: DROP ROLE usage inside a function definition
+DO $$
+BEGIN
+  DROP ROLE r_do;
+END
+$$;
+
+subtest end
+
+
+subtest create_and_drop_schema_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_proc_created;
+END
+$$;
+
+statement ok
+CALL p_create_schema();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_proc_created';
+----
+s_proc_created
+
+statement ok
+CREATE PROCEDURE p_drop_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_schema();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_proc_created';
+----
+
+statement ok
+DROP PROCEDURE p_create_schema;
+
+statement ok
+DROP PROCEDURE p_drop_schema;
+
+subtest end
+
+
+subtest create_and_drop_role_in_procedure
+
+statement ok
+CREATE PROCEDURE p_create_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_proc_created;
+END
+$$;
+
+statement ok
+CALL p_create_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_proc_created';
+----
+r_proc_created
+
+statement ok
+CREATE PROCEDURE p_drop_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE r_proc_created;
+END
+$$;
+
+statement ok
+CALL p_drop_role();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_proc_created';
+----
+
+statement ok
+DROP PROCEDURE p_create_role;
+
+statement ok
+DROP PROCEDURE p_drop_role;
+
+subtest end
+
+
+subtest if_not_exists_and_if_exists_schema_role
+
+statement ok
+CREATE PROCEDURE p_create_schema_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA IF NOT EXISTS s_idem;
+END
+$$;
+
+statement ok
+CALL p_create_schema_idem();
+
+# Second call must not error thanks to IF NOT EXISTS.
+statement ok
+CALL p_create_schema_idem();
+
+statement ok
+CREATE PROCEDURE p_drop_schema_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA IF EXISTS s_idem;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_idem();
+
+# Second call must not error thanks to IF EXISTS.
+statement ok
+CALL p_drop_schema_idem();
+
+statement ok
+CREATE PROCEDURE p_create_role_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE IF NOT EXISTS r_idem;
+END
+$$;
+
+statement ok
+CALL p_create_role_idem();
+
+statement ok
+CALL p_create_role_idem();
+
+statement ok
+CREATE PROCEDURE p_drop_role_idem() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP ROLE IF EXISTS r_idem;
+END
+$$;
+
+statement ok
+CALL p_drop_role_idem();
+
+statement ok
+CALL p_drop_role_idem();
+
+statement ok
+DROP PROCEDURE p_create_schema_idem;
+
+statement ok
+DROP PROCEDURE p_drop_schema_idem;
+
+statement ok
+DROP PROCEDURE p_create_role_idem;
+
+statement ok
+DROP PROCEDURE p_drop_role_idem;
+
+subtest end
+
+
+subtest multiple_schema_role_ops_in_procedure
+
+# Multiple operations of the same kind in one body.
+statement ok
+CREATE PROCEDURE p_multi_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_multi_1;
+  CREATE ROLE r_multi_2;
+END
+$$;
+
+statement ok
+CALL p_multi_role();
+
+query T rowsort
+SELECT rolname FROM pg_roles WHERE rolname IN ('r_multi_1', 'r_multi_2');
+----
+r_multi_1
+r_multi_2
+
+# CREATE SCHEMA followed by DROP SCHEMA on the same name in one body hits
+# the early-binding limitation: routine body statements resolve catalog
+# names at compile time, so the DROP SCHEMA cannot find the schema the
+# preceding CREATE SCHEMA would produce. See the ddl_then_dml_same_table
+# subtest for the analogous CREATE TABLE + INSERT case and the underlying
+# rationale.
+# TODO(#89109): late-binding support would let this work like PostgreSQL.
+statement error pgcode 3F000 unknown schema "s_transient"
+CREATE PROCEDURE p_create_drop_schema() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_transient;
+  DROP SCHEMA s_transient;
+END
+$$;
+
+statement ok
+DROP ROLE r_multi_1, r_multi_2;
+
+statement ok
+DROP PROCEDURE p_multi_role;
+
+subtest end
+
+
+subtest rollback_schema_role_in_procedure
+
+# RAISE EXCEPTION after creating a schema and a role rolls both back.
+statement ok
+CREATE PROCEDURE p_create_then_raise() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_rollback;
+  CREATE ROLE r_rollback;
+  RAISE EXCEPTION 'boom';
+END
+$$;
+
+statement error pgcode P0001 pq: boom
+CALL p_create_then_raise();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_rollback';
+----
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_rollback';
+----
+
+statement ok
+DROP PROCEDURE p_create_then_raise;
+
+# Exception block savepoint: a CREATE ROLE inside a sub-block that raises
+# is rolled back, while work outside the sub-block survives.
+statement ok
+CREATE PROCEDURE p_role_in_exc_block() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE ROLE r_outside_exc;
+  BEGIN
+    CREATE ROLE r_inside_exc;
+    SELECT 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught';
+  END;
+END
+$$;
+
+statement ok
+CALL p_role_in_exc_block();
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_outside_exc';
+----
+r_outside_exc
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_inside_exc';
+----
+
+statement ok
+DROP ROLE r_outside_exc;
+
+statement ok
+DROP PROCEDURE p_role_in_exc_block;
+
+subtest end
+
+
+subtest nested_procedure_schema_role
+
+# DDL in a nested procedure call should be visible to the caller.
+statement ok
+CREATE PROCEDURE p_inner_schema_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_nested;
+  CREATE ROLE r_nested;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_schema_role() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_schema_role();
+END
+$$;
+
+statement ok
+CALL p_outer_schema_role();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_nested';
+----
+s_nested
+
+query T
+SELECT rolname FROM pg_roles WHERE rolname = 'r_nested';
+----
+r_nested
+
+statement ok
+DROP SCHEMA s_nested;
+
+statement ok
+DROP ROLE r_nested;
+
+statement ok
+DROP PROCEDURE p_outer_schema_role;
+
+statement ok
+DROP PROCEDURE p_inner_schema_role;
+
+subtest end
+
+
+subtest drop_schema_cascade_restrict_in_procedure
+
+statement ok
+CREATE SCHEMA s_with_table;
+
+statement ok
+CREATE TABLE s_with_table.t (a INT);
+
+# DROP SCHEMA RESTRICT performs the non-empty check at procedure compile
+# time (early binding), so a procedure that targets a non-empty schema
+# fails to define rather than failing at CALL time. This is consistent
+# with the early-binding behavior covered by ddl_then_dml_same_table.
+statement error pgcode 2BP01 schema "s_with_table" is not empty
+CREATE PROCEDURE p_drop_schema_restrict() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_with_table RESTRICT;
+END
+$$;
+
+# CASCADE drops the schema and its child objects when CALLed.
+statement ok
+CREATE PROCEDURE p_drop_schema_cascade() LANGUAGE PLpgSQL AS $$
+BEGIN
+  DROP SCHEMA s_with_table CASCADE;
+END
+$$;
+
+statement ok
+CALL p_drop_schema_cascade();
+
+query T
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name = 's_with_table';
+----
+
+statement error pgcode 42P01 relation "s_with_table.t" does not exist
+SELECT * FROM s_with_table.t;
+
+statement ok
+DROP PROCEDURE p_drop_schema_cascade;
+
+subtest end
+
+
+subtest create_schema_authorization_in_procedure
+
+statement ok
+CREATE ROLE r_owner;
+
+statement ok
+CREATE PROCEDURE p_create_schema_auth() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE SCHEMA s_owned AUTHORIZATION r_owner;
+END
+$$;
+
+statement ok
+CALL p_create_schema_auth();
+
+query TT
+SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 's_owned';
+----
+s_owned  r_owner
+
+statement ok
+DROP SCHEMA s_owned;
+
+statement ok
+DROP ROLE r_owner;
+
+statement ok
+DROP PROCEDURE p_create_schema_auth;
+
+subtest end
