@@ -435,6 +435,16 @@ func (ex *connExecutor) execBind(
 
 	numQArgs := uint16(len(ps.InferredTypes))
 
+	// Step the read sequence so that any KV reads during Bind (e.g.
+	// ResolveTypeByOID for enum parameters, descriptor staleness checks)
+	// use a sequence number past ignored ranges from a prior savepoint
+	// rollback.
+	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
+		if err := ex.stepReadSequence(ctx); err != nil {
+			return retErr(err)
+		}
+	}
+
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
 	qargs := make(tree.QueryArguments, numQArgs)
