@@ -841,10 +841,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that group yet. When we create the groupInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all groups.
-		weights, maxCPU := q.getGroupWeightLocked(gKey)
-		group = newGroupInfo(gKey, weights,
-			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-			maxCPU, q.perGroupAggMetrics)
+		weight, burstFrac, maxCPU := q.getGroupConfigLocked(gKey)
+		group = newGroupInfo(gKey, weight, burstFrac,
+			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
+			q.mu.burstBucketCapacity, maxCPU, q.perGroupAggMetrics)
 		q.mu.groups[gKey] = group
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -988,10 +988,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// groupInfo struct is declared.
 		group, ok = q.mu.groups[gKey]
 		if !ok {
-			weights, maxCPU := q.getGroupWeightLocked(gKey)
-			group = newGroupInfo(gKey, weights,
-				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-				maxCPU, q.perGroupAggMetrics)
+			weight, burstFrac, maxCPU := q.getGroupConfigLocked(gKey)
+			group = newGroupInfo(gKey, weight, burstFrac,
+				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
+				q.mu.burstBucketCapacity, maxCPU, q.perGroupAggMetrics)
 			q.mu.groups[gKey] = group
 		}
 		q.adjustGroupUsedLocked(group, -info.RequestedCount)
@@ -1466,7 +1466,7 @@ func (q *WorkQueue) refillBurstBucketForGroup(gKey groupKey, toAdd int64, capaci
 // refillRMGroupBurstBuckets refills every rgKind group's burst bucket
 // in a single q.mu critical section. rate100 and cap100 are the 100%
 // CPU per-tick refill rate and bucket capacity; per-group amounts are
-// scaled by group.weight/100. Called by rmStrategy.refillBurst on every
+// scaled by group.burstFrac. Called by rmStrategy.refillBurst on every
 // tick.
 //
 // Iterating q.mu.groups directly (rather than snapshotting the holder)
@@ -1483,9 +1483,8 @@ func (q *WorkQueue) refillRMGroupBurstBuckets(rate100, cap100 float64) {
 		if k.kind != rgKind {
 			continue
 		}
-		burstFrac := float64(group.weight) / 100.0
-		toAdd := int64(rate100 * burstFrac)
-		capacity := int64(cap100 * burstFrac)
+		toAdd := int64(rate100 * group.burstFrac)
+		capacity := int64(cap100 * group.burstFrac)
 		q.refillBurstBucketLocked(group, toAdd, capacity)
 	}
 }
@@ -1577,12 +1576,14 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 // share equal weight.
 const defaultGroupWeight = 1
 
-// getGroupWeightLocked returns the heap weight and maxCPU flag for gKey from
-// the configHolder, which falls back to a kind-appropriate default for
+// getGroupConfigLocked returns the config for gKey from the
+// configHolder, which falls back to a kind-appropriate default for
 // unconfigured keys. q.mu must be held.
-func (q *WorkQueue) getGroupWeightLocked(gKey groupKey) (weight uint32, maxCPU bool) {
+func (q *WorkQueue) getGroupConfigLocked(
+	gKey groupKey,
+) (weight uint32, burstFrac float64, maxCPU bool) {
 	cfg := q.configHolder.Snapshot().GetOrDefault(gKey)
-	return cfg.Weight, cfg.MaxCPU
+	return cfg.Weight, cfg.BurstFrac, cfg.MaxCPU
 }
 
 // SetOverrideAllToBypassAdmission sets whether all work should bypass
@@ -1629,7 +1630,7 @@ func (q *WorkQueue) applyConfigLocked(config ResourceGroupConfigSet) {
 	for k, d := range config {
 		group, ok := q.mu.groups[k]
 		if !ok {
-			group = newGroupInfo(k, d.Weight, q.mode,
+			group = newGroupInfo(k, d.Weight, d.BurstFrac, q.mode,
 				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
 				q.mu.burstBucketCapacity, d.MaxCPU, q.perGroupAggMetrics)
 			q.mu.groups[k] = group
@@ -1645,6 +1646,7 @@ func (q *WorkQueue) applyConfigLocked(config ResourceGroupConfigSet) {
 			group.weight = d.Weight
 			needsHeapFix = true
 		}
+		group.burstFrac = d.BurstFrac
 		if group.cpuTimeBurstBucket.maxCPU != d.MaxCPU {
 			prevQual := group.cpuTimeBurstBucket.burstQualification()
 			group.cpuTimeBurstBucket.maxCPU = d.MaxCPU
@@ -1816,6 +1818,10 @@ type groupInfo struct {
 	// The weight assigned to the resource group. Must be > 0. For
 	// resource groups, this is WEIGHT_CPU.
 	weight uint32
+	// burstFrac is the fraction of the 100%-CPU rate allocated to this
+	// group's per-group burst bucket. Sourced from
+	// ResourceGroupConfig.BurstFrac at group creation or config update.
+	burstFrac float64
 	// used is computed over an interval and periodically reset. Ordering
 	// between groups, for fair sharing, utilizes this value.
 	//
@@ -1901,6 +1907,7 @@ var groupInfoPool = sync.Pool{
 func newGroupInfo(
 	gKey groupKey,
 	weight uint32,
+	burstFrac float64,
 	mode workQueueMode,
 	cpuTimeTokenEstimate int64,
 	burstBucketCapacity int64,
@@ -1911,6 +1918,7 @@ func newGroupInfo(
 	*ti = groupInfo{
 		groupKey:              gKey,
 		weight:                weight,
+		burstFrac:             burstFrac,
 		waitingWorkHeap:       ti.waitingWorkHeap,
 		openEpochsHeap:        ti.openEpochsHeap,
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
