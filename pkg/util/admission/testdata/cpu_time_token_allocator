@@ -22,7 +22,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # set-tokens v=0 simulates tokens being taken due to admitted work.
 set-tokens v=0
@@ -50,10 +50,11 @@ tier1  0
 # tier0  1000     800
 # tier1  600      400
 #
-# Burst bucket state is also printed. The burst bucket refill rate and
-# capacity should be 1/4th of the no_burst refill rate and capacity
-# (for the corresponding resource tier). See cpu_time_token_burst.go for
-# context on the idea of burst buckets in general.
+# Burst bucket state is also printed. Each group's burst bucket
+# gets BurstFrac (default 0.2) of the 100%-CPU rate, recovered
+# from tier-0 canBurst: rate100 = tokens[0][canBurst] / canBurstTarget.
+# Both tiers get the same rate100, so burst values are identical.
+# See cpu_time_token_burst.go for context on burst buckets.
 allocate remaining=5
 ----
 cpuTTG can_burst no_burst
@@ -61,7 +62,7 @@ tier0  1000      800
 tier1  600       400
 burstM
 tier0  200
-tier1  100
+tier1  200
 
 allocate remaining=4
 ----
@@ -70,7 +71,7 @@ tier0  2000      1600
 tier1  1200      800
 burstM
 tier0  400
-tier1  200
+tier1  400
 
 allocate remaining=3
 ----
@@ -79,7 +80,7 @@ tier0  3000      2400
 tier1  1800      1200
 burstM
 tier0  600
-tier1  300
+tier1  600
 
 allocate remaining=2
 ----
@@ -88,7 +89,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 allocate remaining=1
 ----
@@ -97,7 +98,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 resetInterval
 ----
@@ -112,7 +113,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # resetInterval has been called, so a new interval has started.
 # So in theory more tokens can be added. But in this case the
@@ -126,7 +127,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -163,7 +164,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 resetInterval
 ----
@@ -178,7 +179,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 set-tokens v=0
 ----
@@ -199,7 +200,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 resetInterval
 ----
@@ -214,7 +215,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -234,7 +235,7 @@ tier0  2500      2000
 tier1  1500      1000
 burstM
 tier0  500
-tier1  250
+tier1  500
 
 allocate remaining=1
 ----
@@ -243,7 +244,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # These final cases test how cpuTimeTokenAllocator handles changes to
 # refillRates. See the comment above deltaRefillRates for a full explanation
@@ -264,7 +265,7 @@ tier0  5001      4001
 tier1  3001      2001
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -284,7 +285,7 @@ tier0  5001      4001
 tier1  3001      2001
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # Another test of a change to refillRates. If we decrease refillRates by two
 # (on all buckets), we expect two tokens to be removed from all buckets, as
@@ -302,7 +303,7 @@ tier0  4999      3999
 tier1  2999      1999
 burstM
 tier0  999
-tier1  499
+tier1  999
 
 set-tokens v=0
 ----
@@ -322,7 +323,7 @@ tier0  4999      3999
 tier1  2999      1999
 burstM
 tier0  999
-tier1  499
+tier1  999
 
 set-tokens v=0
 ----
@@ -373,9 +374,10 @@ tier1  0
 #   tier1 can_burst: 2999 - 4999 = -2000
 #   tier1 no_burst:  1999 - 4999 = -3000
 #
-# The burst buckets also have minimums. The burst bucket capacity for each tier
-# is no_burstRate/4 (tier0: 3999/4 = 999, tier1: 1999/4 = 499), and the burst
-# bucket minimum is -capacity/4 (tier0: -999/4 = -249, tier1: -499/4 = -124).
+# The burst buckets also have minimums. After setClusterSettings,
+# canBurstTarget = 0.75+0.1 = 0.85, so rate100 = 4999/0.85 = 5881.18.
+# Burst capacity = int64(5881.18 * 0.2) = 1176 for both tiers, and the
+# burst bucket minimum is -capacity/4 = -1176/4 = -294.
 
 # Test allocateTokens path. Drive buckets deeply negative, then allocate. The
 # added tokens (the full refill rates) are far too small to overcome the deficit,
@@ -395,8 +397,8 @@ cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -249
-tier1  -124
+tier0  -294
+tier1  -294
 
 # Test resetInterval path. Drive buckets deeply negative again. resetInterval
 # has delta=0 (rates unchanged), but the floor still clamps.
@@ -421,5 +423,5 @@ cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -249
-tier1  -124
+tier0  -294
+tier1  -294

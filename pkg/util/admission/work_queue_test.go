@@ -535,7 +535,18 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				var toAdd, capacity int64
 				d.ScanArgs(t, "to-add", &toAdd)
 				d.ScanArgs(t, "capacity", &capacity)
-				q.refillBurstBuckets(toAdd, capacity)
+				// Apply (toAdd, capacity) uniformly to every group.
+				// Production uses refillGroupBurstBuckets which
+				// scales by burstFrac; here we bypass that to give
+				// the test direct control over per-group values.
+				// Also update burstBucketCapacity so lazy-created
+				// groups seed correctly.
+				q.mu.Lock()
+				q.mu.burstBucketCapacity = capacity
+				for _, group := range q.mu.groups {
+					q.refillBurstBucketLocked(group, toAdd, capacity)
+				}
+				q.mu.Unlock()
 				return ""
 
 			case "gc-groups-and-reset-used":

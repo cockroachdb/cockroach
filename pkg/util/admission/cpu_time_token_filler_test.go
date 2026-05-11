@@ -97,16 +97,20 @@ type testModel struct {
 }
 
 type testBurstManager struct {
+	burstFrac        float64
 	tokens           int64
+	calls            int
+	lastRate100      float64
+	lastCap100       float64
 	useResourceGroup bool
-	// rmCalls counts calls to refillRMGroupBurstBuckets; rmRate100 and
-	// rmCap100 record the args from the most recent call.
-	rmCalls   int
-	rmRate100 float64
-	rmCap100  float64
 }
 
-func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
+func (m *testBurstManager) refillGroupBurstBuckets(rate100, cap100 float64) {
+	m.calls++
+	m.lastRate100 = rate100
+	m.lastCap100 = cap100
+	toAdd := int64(rate100 * m.burstFrac)
+	capacity := int64(cap100 * m.burstFrac)
 	m.tokens += toAdd
 	if m.tokens > capacity {
 		m.tokens = capacity
@@ -114,12 +118,6 @@ func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
 	if m.tokens < -capacity/4 {
 		m.tokens = -capacity / 4
 	}
-}
-
-func (m *testBurstManager) refillRMGroupBurstBuckets(rate100, cap100 float64) {
-	m.rmCalls++
-	m.rmRate100 = rate100
-	m.rmCap100 = cap100
 }
 
 func (m *testBurstManager) setUseResourceGroup(enabled bool) {
@@ -188,8 +186,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	model.rates[testTier1][canBurst] = 3000
 	model.rates[testTier1][noBurst] = 2000
 	burstMgrs := [numResourceTiers]*testBurstManager{
-		testTier0: {},
-		testTier1: {},
+		testTier0: {burstFrac: defaultTenantGroupConfig.BurstFrac},
+		testTier1: {burstFrac: defaultTenantGroupConfig.BurstFrac},
 	}
 	queues := [numResourceTiers]workQueueIForAllocator{
 		testTier0: burstMgrs[testTier0],
@@ -529,45 +527,54 @@ func TestServerlessStrategyComputeTargets(t *testing.T) {
 	// canBurst targets are noBurst + burstDelta.
 	require.Equal(t, 1.0, targets[appTenant][canBurst])
 	require.Equal(t, 0.75, targets[systemTenant][canBurst])
+	// canBurstTarget is cached for refillBurst's rate100 recovery.
+	require.Equal(t, 0.75, s.canBurstTarget)
 }
 
 // TestServerlessStrategyRefillBurst verifies that refillBurst
-// distributes noBurst/4 of each tier's tokens and capacity to the
-// per-group burst buckets. The canBurst token counts should be
-// ignored since burst bucket refill is derived solely from the
-// noBurst allocation.
+// recovers rate100/cap100 from tier-0 canBurst tokens and
+// canBurstTarget, then forwards the same values to both queues.
 func TestServerlessStrategyRefillBurst(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	burstMgrs := [numResourceTiers]*testBurstManager{
-		testTier0: {},
-		testTier1: {},
+		testTier0: {burstFrac: 0.2},
+		testTier1: {burstFrac: 0.2},
 	}
 	queues := [numResourceTiers]workQueueIForAllocator{
 		testTier0: burstMgrs[testTier0],
 		testTier1: burstMgrs[testTier1],
 	}
-	s := &serverlessStrategy{queues: queues}
+	s := &serverlessStrategy{queues: queues, canBurstTarget: 1.0}
 
-	// Set up token counts and refill rates. refillBurst should pass
-	// tokens[tier][noBurst]/4 as toAdd and refillRates[tier][noBurst]/4
-	// as capacity to each tier's burst manager.
 	var tokens tokenCounts
-	tokens[testTier0][noBurst] = 400
-	tokens[testTier0][canBurst] = 500 // ignored by refillBurst
-	tokens[testTier1][noBurst] = 200
-	tokens[testTier1][canBurst] = 300 // ignored by refillBurst
+	tokens[testTier0][canBurst] = 500
 
 	var refillRates rates
-	refillRates[testTier0][noBurst] = 4000
-	refillRates[testTier1][noBurst] = 2000
+	refillRates[testTier0][canBurst] = 5000
 
+	// Cold-start guard: canBurstTarget=0 skips everything.
+	s.canBurstTarget = 0
 	s.refillBurst(tokens, refillRates)
+	require.Zero(t, burstMgrs[testTier0].calls)
 
-	// Each tier gets noBurst/4 tokens, capped at noBurst/4 capacity.
-	require.Equal(t, int64(100), burstMgrs[testTier0].tokens) // 400/4
-	require.Equal(t, int64(50), burstMgrs[testTier1].tokens)  // 200/4
+	// canBurstTarget=1.0: rate100=500, cap100=5000, forwarded to both.
+	s.canBurstTarget = 1.0
+	s.refillBurst(tokens, refillRates)
+	require.Equal(t, 1, burstMgrs[testTier0].calls)
+	require.Equal(t, 500.0, burstMgrs[testTier0].lastRate100)
+	require.Equal(t, 5000.0, burstMgrs[testTier0].lastCap100)
+	require.Equal(t, 1, burstMgrs[testTier1].calls)
+	require.Equal(t, 500.0, burstMgrs[testTier1].lastRate100)
+	require.Equal(t, 5000.0, burstMgrs[testTier1].lastCap100)
+
+	// canBurstTarget=0.5: doubles both.
+	s.canBurstTarget = 0.5
+	s.refillBurst(tokens, refillRates)
+	require.Equal(t, 2, burstMgrs[testTier0].calls)
+	require.Equal(t, 1000.0, burstMgrs[testTier0].lastRate100)
+	require.Equal(t, 10000.0, burstMgrs[testTier0].lastCap100)
 }
 
 // TestNewStrategy verifies that newStrategy returns the correct
@@ -692,7 +699,7 @@ func TestRMStrategyRefillBurst(t *testing.T) {
 
 	// Cold-start guard: canBurstTarget=0 -> no call.
 	s.refillBurst(tokenCounts{}, rates{})
-	require.Zero(t, mgr.rmCalls)
+	require.Zero(t, mgr.calls)
 
 	// canBurstTarget=1.0 recovers tokens/rates as-is.
 	s.canBurstTarget = 1.0
@@ -701,16 +708,16 @@ func TestRMStrategyRefillBurst(t *testing.T) {
 	var rr rates
 	rr[0][canBurst] = 4000
 	s.refillBurst(tokens, rr)
-	require.Equal(t, 1, mgr.rmCalls)
-	require.Equal(t, 1000.0, mgr.rmRate100)
-	require.Equal(t, 4000.0, mgr.rmCap100)
+	require.Equal(t, 1, mgr.calls)
+	require.Equal(t, 1000.0, mgr.lastRate100)
+	require.Equal(t, 4000.0, mgr.lastCap100)
 
 	// canBurstTarget=0.5 doubles both.
 	s.canBurstTarget = 0.5
 	s.refillBurst(tokens, rr)
-	require.Equal(t, 2, mgr.rmCalls)
-	require.Equal(t, 2000.0, mgr.rmRate100)
-	require.Equal(t, 8000.0, mgr.rmCap100)
+	require.Equal(t, 2, mgr.calls)
+	require.Equal(t, 2000.0, mgr.lastRate100)
+	require.Equal(t, 8000.0, mgr.lastCap100)
 
 	// Delta path: tokens (rate100) may be negative when refill rates
 	// decrease between intervals. cap100 stays non-negative because
@@ -719,10 +726,10 @@ func TestRMStrategyRefillBurst(t *testing.T) {
 	rr[0][canBurst] = 4000
 	s.canBurstTarget = 1.0
 	s.refillBurst(tokens, rr)
-	require.Equal(t, 3, mgr.rmCalls)
-	require.Equal(t, -500.0, mgr.rmRate100)
-	require.Equal(t, 4000.0, mgr.rmCap100)
+	require.Equal(t, 3, mgr.calls)
+	require.Equal(t, -500.0, mgr.lastRate100)
+	require.Equal(t, 4000.0, mgr.lastCap100)
 
 	// Only the bound queue receives the call.
-	require.Zero(t, other.rmCalls)
+	require.Zero(t, other.calls)
 }

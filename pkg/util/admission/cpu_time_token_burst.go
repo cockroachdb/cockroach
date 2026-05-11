@@ -94,7 +94,7 @@ func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
 	}
 	// Note that at CRDB startup time, the capacity that is passed into
 	// cpuTimeBurstBucket.init will be zero, until 1ms passes, and the
-	// first call to refillBurstBuckets is made by cpuTimeTokenAllocator.
+	// first call to refillGroupBurstBuckets is made by cpuTimeTokenAllocator.
 	// So it is important that this code does not assume that m.capacity
 	// is non-zero. (There is a test for this case in
 	// TestCPUTimeTokenBurst.)
