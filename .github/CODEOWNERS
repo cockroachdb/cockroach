@@ -489,6 +489,7 @@
 /pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/copy.go                         @cockroachdb/sql-foundations
 /pkg/cmd/roachtest/tests/copyfrom.go                     @cockroachdb/sql-foundations
+/pkg/cmd/roachtest/tests/import.go                       @cockroachdb/sql-foundations
 /pkg/cmd/roachtest/tests/inspect_throughput.go           @cockroachdb/sql-queries-prs
 /pkg/cmd/roachtest/tests/ttl_restart.go                  @cockroachdb/sql-queries-prs
 /pkg/cmd/roachtest/tests/multi_region_system_database.go @cockroachdb/sql-queries-prs
