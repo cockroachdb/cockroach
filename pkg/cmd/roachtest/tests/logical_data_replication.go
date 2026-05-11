@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -581,7 +580,7 @@ func verifyConflictCorrectness(
 	// with matching origin timestamps, so if there are 100 or more something
 	// else is wrong.
 	const diffLimit = 100
-	diffs, err := workloadrand.Diff(setup.left.db, "conflict.conflict", setup.right.db, "conflict.conflict", diffLimit)
+	diffs, err := replicationtestutils.Diff(ctx, setup.left.db, "conflict.public.conflict", setup.right.db, "conflict.public.conflict", diffLimit)
 	require.NoError(t, err)
 	require.NotEmpty(t, diffs, "fingerprints differ but no row diffs found")
 	require.Less(t, len(diffs), diffLimit, "too many diffs; likely a real divergence, not a timestamp tie")
