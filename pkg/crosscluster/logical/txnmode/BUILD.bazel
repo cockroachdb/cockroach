@@ -37,6 +37,7 @@ go_library(
 go_test(
     name = "txnmode_test",
     srcs = [
+        "alter_logical_replication_test.go",
         "main_test.go",
         "txnmode_pause_on_conflict_test.go",
         "txnmode_test.go",

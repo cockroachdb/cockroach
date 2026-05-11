@@ -1,0 +1,2 @@
+alter_logical_replication_stream_stmt ::=
+	'ALTER' 'LOGICAL' 'REPLICATION' 'STREAM' a_expr 'SKIP'

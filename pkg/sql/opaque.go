@@ -495,6 +495,7 @@ func init() {
 		&tree.CreateTenantFromReplication{},
 		&tree.CreateLogicalReplicationStream{},
 		&tree.CheckExternalConnection{},
+		&tree.AlterLogicalReplicationStream{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

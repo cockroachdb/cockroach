@@ -42,6 +42,7 @@ FILES = [
     "alter_index",
     "alter_index_visible_stmt",
     "alter_job_stmt",
+    "alter_logical_replication_stream_stmt",
     "alter_partition_stmt",
     "alter_primary_key",
     "alter_range_relocate_stmt",
