@@ -124,6 +124,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterIndexVisible(ctx, n)
 	case *tree.AlterJobOwner:
 		return p.alterJobOwner(ctx, n)
+	case *tree.AlterLogicalReplicationStream:
+		return p.planAlterLogicalReplicationStream(ctx, n)
 	case *tree.AlterPolicy:
 		return p.AlterPolicy(ctx, n)
 	case *tree.AlterSchema:
@@ -495,6 +497,7 @@ func init() {
 		&tree.CreateTenantFromReplication{},
 		&tree.CreateLogicalReplicationStream{},
 		&tree.CheckExternalConnection{},
+		&tree.AlterLogicalReplicationStream{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

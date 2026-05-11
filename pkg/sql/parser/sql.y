@@ -1326,6 +1326,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_virtual_cluster_stmt
 %type <tree.Statement> create_logical_replication_stream_stmt
+%type <tree.Statement> alter_logical_replication_stream_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
@@ -2026,6 +2027,7 @@ alter_ddl_stmt:
 | alter_domain_stmt             // EXTEND WITH HELP: ALTER DOMAIN
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
+| alter_logical_replication_stream_stmt
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
 | alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
@@ -5083,6 +5085,17 @@ create_logical_replication_stream_stmt:
     }
   }
 | CREATE LOGICAL REPLICATION STREAM error // SHOW HELP: CREATE LOGICAL REPLICATION STREAM
+
+alter_logical_replication_stream_stmt:
+  ALTER LOGICAL REPLICATION STREAM a_expr SKIP
+  {
+    $$.val = &tree.AlterLogicalReplicationStream{
+      JobID: $5.expr(),
+      Cmds: tree.AlterLogicalReplicationCmds{
+        &tree.SkipConflictCmd{},
+      },
+    }
+  }
 
 logical_replication_resources:
   TABLE db_object_name

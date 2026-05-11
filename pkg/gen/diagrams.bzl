@@ -38,6 +38,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:alter_index_partition_by.html",
     "//docs/generated/sql/bnf:alter_index_visible.html",
     "//docs/generated/sql/bnf:alter_job.html",
+    "//docs/generated/sql/bnf:alter_logical_replication_stream.html",
     "//docs/generated/sql/bnf:alter_partition.html",
     "//docs/generated/sql/bnf:alter_policy.html",
     "//docs/generated/sql/bnf:alter_primary_key.html",
