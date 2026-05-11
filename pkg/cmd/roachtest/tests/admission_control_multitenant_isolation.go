@@ -446,11 +446,20 @@ func verifyCPUUtilization(
 	}
 }
 
+// dashboardLinkRe extracts the test_run_id from a roachtest cluster name of
+// the form "<test_run_id>-NN-...".
+var dashboardLinkRe = regexp.MustCompile(`^(.+)-\d{2}-`)
+
 // logCPUTimeTokenDashboardLink logs a link to the CPU time token admission
-// control dashboard on the shared Grafana instance.
+// control dashboard on the shared Grafana instance. Best-effort: cluster
+// names that do not match the expected pattern (e.g. local runs where
+// c.Name() is "local") skip the link rather than failing the test.
 func logCPUTimeTokenDashboardLink(t test.Test, c cluster.Cluster) {
-	m := regexp.MustCompile(`^(.+)-\d{2}-`).FindStringSubmatch(c.Name())
-	require.NotNil(t, m, "could not extract test_run_id from cluster name %q", c.Name())
+	m := dashboardLinkRe.FindStringSubmatch(c.Name())
+	if m == nil {
+		t.L().Printf("skipping Grafana dashboard link: cluster name %q does not match expected pattern", c.Name())
+		return
+	}
 	t.L().Printf(
 		"Grafana dashboard: https://grafana.testeng.crdb.io/d/cpu-time-tokens/cpu-time-token-admission-control"+
 			"?orgId=1&var-DS_PROMETHEUS=v9Zz2K6nz&var-test_run_id=%s&var-node=All",
