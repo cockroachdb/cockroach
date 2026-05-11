@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSucceedsSoon(t *testing.T) {
@@ -26,5 +28,45 @@ func TestSucceedsSoon(t *testing.T) {
 			return nil
 		}
 		return errors.Errorf("%s elapsed, waiting until %s elapses", elapsed, duration)
+	})
+}
+
+func TestSoon(t *testing.T) {
+	t.Run("succeed-immediately", func(t *testing.T) {
+		Soon(t, func(t *RetryT) {
+			require.Equal(t, 1, 1)
+		})
+	})
+	t.Run("succeed-after-retries-require", func(t *testing.T) {
+		countdown := 3
+		Soon(t, func(t *RetryT) {
+			countdown--
+			require.Equal(t, 0, countdown, "not zero yet")
+		})
+	})
+	t.Run("succeed-after-retries-assert", func(t *testing.T) {
+		countdown := 3
+		Soon(t, func(t *RetryT) {
+			countdown--
+			assert.Equal(t, 0, countdown, "not zero yet")
+			require.GreaterOrEqual(t, countdown, 0)
+		})
+	})
+	t.Run("times-out", func(t *testing.T) {
+		require.Error(t, soonErr(func(t *RetryT) {
+			require.Equal(t, "never", "gonna match")
+		}, 10*time.Millisecond))
+	})
+	t.Run("honours-fail-now", func(t *testing.T) {
+		require.Error(t, soonErr(func(t *RetryT) {
+			t.FailNow()
+		}, 10*time.Millisecond))
+	})
+	t.Run("panics-escape", func(t *testing.T) {
+		require.Panics(t, func() {
+			Soon(t, func(*RetryT) {
+				panic("real bug")
+			})
+		})
 	})
 }

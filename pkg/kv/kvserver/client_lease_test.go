@@ -7,7 +7,6 @@ package kvserver_test
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"runtime"
 	"strconv"
@@ -98,13 +97,13 @@ func TestStoreRangeLease(t *testing.T) {
 	// lease and getting an expiration based lease.
 	for _, key := range splitKeys {
 		repl := store.LookupReplica(roachpb.RKey(key))
-		testutils.SucceedsSoon(t, func() error {
+		testutils.Soon(t, func(t *testutils.RetryT) {
 			status := repl.RaftStatus()
-			if status == nil || status.Lead == 0 {
-				return errors.Errorf("waiting for raft leadership on key %s (range %d): state=%v",
-					key, repl.RangeID, status.RaftState)
-			}
-			return nil
+			require.NotNil(t, status,
+				"waiting for raft status on key %s (range %d)", key, repl.RangeID)
+			require.NotZero(t, status.Lead,
+				"waiting for raft leadership on key %s (range %d): state=%v",
+				key, repl.RangeID, status.RaftState)
 		})
 	}
 
@@ -115,9 +114,9 @@ func TestStoreRangeLease(t *testing.T) {
 	for _, key := range splitKeys {
 		incArgs := incrementArgs(key, int64(5))
 
-		testutils.SucceedsSoon(t, func() error {
-			_, err := kv.SendWrapped(ctx, store.TestSender(), incArgs)
-			return err.GoError()
+		testutils.Soon(t, func(t *testutils.RetryT) {
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+			require.NoError(t, pErr.GoError())
 		})
 	}
 
@@ -255,14 +254,11 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		if tc.GetFirstStoreFromServer(t, initialServerId).Gossip().InfoOriginatedHere(nodeLivenessKey) {
-			return fmt.Errorf("%s still most recently gossiped by original leaseholder", nodeLivenessKey)
-		}
-		if !tc.GetFirstStoreFromServer(t, newServerIdx).Gossip().InfoOriginatedHere(nodeLivenessKey) {
-			return fmt.Errorf("%s not most recently gossiped by new leaseholder", nodeLivenessKey)
-		}
-		return nil
+	testutils.Soon(t, func(rt *testutils.RetryT) {
+		require.False(rt, tc.GetFirstStoreFromServer(t, initialServerId).Gossip().InfoOriginatedHere(nodeLivenessKey),
+			"%s still most recently gossiped by original leaseholder", nodeLivenessKey)
+		require.True(rt, tc.GetFirstStoreFromServer(t, newServerIdx).Gossip().InfoOriginatedHere(nodeLivenessKey),
+			"%s not most recently gossiped by new leaseholder", nodeLivenessKey)
 	})
 }
 
@@ -520,7 +516,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 	tc.StopServer(3)
 
 	// Wait for n1 to notice.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
 		// Manually report n4 as unreachable to speed up the test.
 		require.NoError(t, repl0.RaftReportUnreachable(4))
 		// Check the Raft progress.
@@ -529,10 +525,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 		p := s.Progress
 		require.Len(t, p, 4)
 		require.Contains(t, p, raftpb.PeerID(4))
-		if p[4].State != tracker.StateProbe {
-			return errors.Errorf("dead replica not state probe")
-		}
-		return nil
+		require.Equal(t, tracker.StateProbe, p[4].State, "dead replica not state probe")
 	})
 
 	// Run the range through the replicate queue on n1.
@@ -881,15 +874,10 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	// Manually move lease out of preference.
 	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
 		lh, err := tc.FindRangeLeaseHolder(desc, nil)
-		if err != nil {
-			return err
-		}
-		if !lh.Equal(tc.Target(1)) {
-			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(1), lh)
-		}
-		return nil
+		require.NoError(t, err)
+		require.Equal(t, tc.Target(1), lh, "Expected leaseholder to be %s but was %s", tc.Target(1), lh)
 	})
 
 	tc.GetFirstStoreFromServer(t, 1).TestingSetReplicateQueueActive(true)
@@ -898,15 +886,10 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceLeaseQueueProcess())
 
 	// The lease should be moved back by the rebalance queue to us-west.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
 		lh, err := tc.FindRangeLeaseHolder(desc, nil)
-		if err != nil {
-			return err
-		}
-		if !lh.Equal(tc.Target(0)) {
-			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(0), lh)
-		}
-		return nil
+		require.NoError(t, err)
+		require.Equal(t, tc.Target(0), lh, "Expected leaseholder to be %s but was %s", tc.Target(0), lh)
 	})
 }
 
@@ -969,53 +952,36 @@ func TestLeaseholderRelocate(t *testing.T) {
 	// Make sure the lease is on 3 and is fully upgraded.
 	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
 
-	var err error
 	var leaseHolder roachpb.ReplicationTarget
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
+		var err error
 		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-		if err != nil {
-			return err
-		}
+		require.NoError(t, err)
 
 		// Check that the lease moved to 3.
-		if !leaseHolder.Equal(tc.Target(2)) {
-			return errors.Errorf("Leaseholder didn't move.")
-		}
-
-		return nil
+		require.True(t, leaseHolder.Equal(tc.Target(2)), "Leaseholder didn't move.")
 	})
 
 	gossipLiveness(t, tc)
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
 		// Relocate range 3 -> 4.
-		err = tc.Servers[2].DB().
+		require.NoError(t, tc.Servers[2].DB().
 			AdminRelocateRange(
 				context.Background(), rhsDesc.StartKey.AsRawKey(),
-				tc.Targets(0, 1, 3), nil, false)
-		if err != nil {
-			return err
-		}
+				tc.Targets(0, 1, 3), nil, false))
+		var err error
 		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-		if err != nil {
-			return err
-		}
-		if leaseHolder.Equal(tc.Target(2)) {
-			return errors.Errorf("Leaseholder didn't move.")
-		}
-		return nil
+		require.NoError(t, err)
+		require.False(t, leaseHolder.Equal(tc.Target(2)), "Leaseholder didn't move.")
 	})
 
 	// Make sure lease moved to the preferred region.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
+		var err error
 		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-		if err != nil {
-			return err
-		}
-		if !leaseHolder.Equal(tc.Target(3)) {
-			return errors.Errorf("Leaseholder didn't move.")
-		}
-		return nil
+		require.NoError(t, err)
+		require.True(t, leaseHolder.Equal(tc.Target(3)), "Leaseholder didn't move.")
 	})
 
 	// Double check that lease moved directly. The tail of the lease history
@@ -1040,23 +1006,20 @@ func TestLeaseholderRelocate(t *testing.T) {
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
 	for i := range tc.Servers {
-		testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+		testutils.Soon(t, func(rt *testutils.RetryT) {
+			require.NoError(rt, tc.Servers[i].HeartbeatNodeLiveness())
+		})
 	}
 	// Make sure that all store pools have seen liveness heartbeats from everyone.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(rt *testutils.RetryT) {
 		for i := range tc.Servers {
 			for j := range tc.Servers {
 				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().
 					StorePool.IsLive(tc.Target(j).StoreID)
-				if err != nil {
-					return err
-				}
-				if !live {
-					return errors.Errorf("Server %d is suspect on server %d", j, i)
-				}
+				require.NoError(rt, err)
+				require.True(rt, live, "Server %d is suspect on server %d", j, i)
 			}
 		}
-		return nil
 	})
 }
 
@@ -1197,16 +1160,16 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			// allocator on server 0 may see everyone as temporarily dead due to the
 			// clock move above.
 			for _, i := range []int{0, 3, 4} {
-				testutils.SucceedsSoon(t, func() error {
+				testutils.Soon(t, func(rt *testutils.RetryT) {
 					err := tc.Servers[i].HeartbeatNodeLiveness()
 					if err != nil {
 						if errors.Is(err, liveness.ErrEpochIncremented) {
 							t.Logf("retrying heartbeat after err %s", err)
-							return err
+							require.NoError(rt, err)
+							return
 						}
 						t.Fatalf("unexpected error heartbeating liveness record for server %d: %s", i, err)
 					}
-					return nil
 				})
 				require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 			}
@@ -1228,21 +1191,14 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			return nil
 		}
 
-		testutils.SucceedsSoon(t, func() error {
+		testutils.Soon(t, func(rt *testutils.RetryT) {
 			store := tc.GetFirstStoreFromServer(t, 0)
 			sl, available, _ := store.GetStoreConfig().StorePool.TestingGetStoreList()
-			if available != 3 {
-				return errors.Errorf(
-					"expected all 3 remaining stores to be live, but only got %d, stores=%v",
-					available, sl)
-			}
-			if err := checkDead(store, 1); err != nil {
-				return err
-			}
-			if err := checkDead(store, 2); err != nil {
-				return err
-			}
-			return nil
+			require.Equal(rt, 3, available,
+				"expected all 3 remaining stores to be live, but only got %d, stores=%v",
+				available, sl)
+			require.NoError(rt, checkDead(store, 1))
+			require.NoError(rt, checkDead(store, 2))
 		})
 	}()
 
@@ -1253,18 +1209,13 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	_, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 	require.NoError(t, pErr.GoError())
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(t *testutils.RetryT) {
 		// Validate that the lease transferred to a preferred locality. n4 (us) and
 		// n5 (us) are the only valid stores to be leaseholders during the outage.
 		// n1 is the original leaseholder, expect it to not be the leaseholder now.
-		if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
-			return nil
-		}
-
-		return errors.Errorf(
+		require.False(t, repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()),
 			"expected no leaseholder in region=us, but found %v",
-			repl.CurrentLeaseStatus(ctx),
-		)
+			repl.CurrentLeaseStatus(ctx))
 	})
 }
 
@@ -1378,35 +1329,30 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 
 	// Make sure that all store pools have seen liveness heartbeats from everyone.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(rt *testutils.RetryT) {
 		for i := range tc.Servers {
 			for j := range tc.Servers {
 				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsLive(tc.Target(j).StoreID)
-				if err != nil {
-					return err
-				}
-				if !live {
-					return errors.Errorf("Expected server %d to be suspect on server %d", j, i)
-				}
+				require.NoError(rt, err)
+				require.True(rt, live, "Expected server %d to be suspect on server %d", j, i)
 			}
 		}
-		return nil
 	})
 
 	for _, key := range startKeys {
 		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
 		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
-		testutils.SucceedsSoon(t, func() error {
-			if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-				return errors.Errorf("Expected lease to transfer to server 1 for replica %s", repl)
-			}
-			return nil
+		testutils.Soon(t, func(t *testutils.RetryT) {
+			require.True(t, repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()),
+				"Expected lease to transfer to server 1 for replica %s", repl)
 		})
 	}
 
 	heartbeat := func(servers ...int) {
 		for _, i := range servers {
-			testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+			testutils.Soon(t, func(rt *testutils.RetryT) {
+				require.NoError(rt, tc.Servers[i].HeartbeatNodeLiveness())
+			})
 		}
 	}
 
@@ -1423,17 +1369,12 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		heartbeat(0, 2, 3)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(rt *testutils.RetryT) {
 		for _, i := range []int{2, 3} {
 			suspect, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().StorePool.IsUnknown(tc.Target(1).StoreID)
-			if err != nil {
-				return err
-			}
-			if !suspect {
-				return errors.Errorf("Expected server 1 to be in `storeStatusUnknown` on server %d", i)
-			}
+			require.NoError(rt, err)
+			require.True(rt, suspect, "Expected server 1 to be in `storeStatusUnknown` on server %d", i)
 		}
-		return nil
 	})
 
 	runThroughTheLeaseQueue := func(key roachpb.Key) {
@@ -1448,9 +1389,9 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	}
 
 	for _, key := range startKeys {
-		testutils.SucceedsSoon(t, func() error {
+		testutils.Soon(t, func(rt *testutils.RetryT) {
 			runThroughTheLeaseQueue(key)
-			return leaseOnNonSuspectStores(key)
+			require.NoError(rt, leaseOnNonSuspectStores(key))
 		})
 	}
 	require.NoError(t, tc.RestartServer(1))
@@ -1463,7 +1404,9 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	for _, key := range startKeys {
 		runThroughTheLeaseQueue(key)
 	}
-	testutils.SucceedsSoon(t, allLeasesOnNonSuspectStores)
+	testutils.Soon(t, func(rt *testutils.RetryT) {
+		require.NoError(rt, allLeasesOnNonSuspectStores())
+	})
 	// Wait out the suspect time.
 	suspectDuration := liveness.TimeAfterNodeSuspect.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
 	for i := 0; i < int(math.Ceil(suspectDuration.Seconds())); i++ {
@@ -1471,18 +1414,20 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		heartbeat(0, 1, 2, 3)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(rt *testutils.RetryT) {
 		// Server 1 should get some leases back as it's no longer suspect.
 		for _, key := range startKeys {
 			runThroughTheLeaseQueue(key)
 		}
+		hasLease := false
 		for _, key := range startKeys {
 			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
 			if repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-				return nil
+				hasLease = true
+				break
 			}
 		}
-		return errors.Errorf("Expected server 1 to have at lease 1 lease.")
+		require.True(rt, hasLease, "Expected server 1 to have at least 1 lease.")
 	})
 }
 
@@ -1512,16 +1457,13 @@ func TestAlterRangeRelocate(t *testing.T) {
 	// Move lease 1 -> 4.
 	_, err = db.Exec("ALTER RANGE $1 RELOCATE LEASE TO $2", rhsDesc.RangeID, 4)
 	require.NoError(t, err)
-	testutils.SucceedsSoon(t, func() error {
+	testutils.Soon(t, func(rt *testutils.RetryT) {
 		repl := tc.GetFirstStoreFromServer(t, 3).LookupReplica(rhsDesc.StartKey)
-		if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
-			return errors.Errorf("Expected lease to transfer to node 4")
-		}
+		require.True(rt, repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()),
+			"Expected lease to transfer to node 4")
 		// Do this to avoid snapshot problems below when we do another replica move.
-		if repl != tc.GetRaftLeader(t, rhsDesc.StartKey) {
-			return errors.Errorf("Expected node 4 to be the raft leader")
-		}
-		return nil
+		require.Same(rt, repl, tc.GetRaftLeader(t, rhsDesc.StartKey),
+			"Expected node 4 to be the raft leader")
 	})
 
 	// Move lease 3 -> 5.
@@ -1711,13 +1653,11 @@ func TestLeaseTransfersUseExpirationLeasesAndPromoteCorrectly(t *testing.T) {
 
 		// Transfer the lease from n1 to n2.
 		tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
-		testutils.SucceedsSoon(t, func() error {
+		testutils.Soon(t, func(t *testutils.RetryT) {
 			li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 			require.NoError(t, err)
-			if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
-				return errors.New("lease still owned by n1")
-			}
-			return nil
+			require.True(t, li.Current().OwnedBy(n2.GetFirstStoreID()),
+				"lease still owned by n1")
 		})
 
 		// Expect it to be upgraded to an epoch based lease or leader lease, based
@@ -1860,15 +1800,10 @@ func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *te
 				// lease with this error: unable to get liveness record. This can happen
 				// if we pause the node liveness heartbeat before the record is even
 				// created.
-				testutils.SucceedsSoon(t, func() error {
+				testutils.Soon(t, func(t *testutils.RetryT) {
 					l, ok := l0.GetLiveness(tc.Server(0).NodeID())
-					if !ok {
-						return errors.New("liveness not found")
-					}
-					if l.Epoch == 0 {
-						return errors.New("liveness epoch not set")
-					}
-					return nil
+					require.True(t, ok, "liveness not found")
+					require.NotZero(t, l.Epoch, "liveness epoch not set")
 				})
 
 				l0.PauseHeartbeatLoopForTest()
@@ -1898,12 +1833,10 @@ func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *te
 
 			// Wait for the expiration-based lease to have a later expiration than the
 			// expiration timestamp in n1's liveness record.
-			testutils.SucceedsSoon(t, func() error {
+			testutils.Soon(t, func(t *testutils.RetryT) {
 				expLease = repl.CurrentLeaseStatus(ctx)
-				if expLease.Expiration().Less(ts) {
-					return errors.Errorf("lease %v not extended beyond liveness %v", expLease, ts)
-				}
-				return nil
+				require.False(t, expLease.Expiration().Less(ts),
+					"lease %v not extended beyond liveness %v", expLease, ts)
 			})
 
 			// Enable the specified lease type. This will cause automatic lease
@@ -2010,12 +1943,10 @@ func TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart(t *testing.T) {
 
 			// Make sure that the lease is valid.
 			var curLease roachpb.Lease
-			testutils.SucceedsSoon(t, func() error {
+			testutils.Soon(t, func(rt *testutils.RetryT) {
 				repl = tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
-				if repl.CurrentLeaseStatus(ctx).State != kvserverpb.LeaseState_VALID {
-					return errors.Errorf("lease not valid")
-				}
-				return nil
+				require.Equal(rt, kvserverpb.LeaseState_VALID,
+					repl.CurrentLeaseStatus(ctx).State, "lease not valid")
 			})
 
 			// Make sure that the lease start time is larger than the prev lease end
