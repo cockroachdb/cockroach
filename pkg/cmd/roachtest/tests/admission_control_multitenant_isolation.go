@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"regexp"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -288,21 +290,7 @@ func runMultiTenantIsolation(
 	_, err = quietConn.ExecContext(ctx, "USE "+dbName)
 	require.NoError(t, err)
 
-	var baselineLatency float64
-	if s.kv != nil {
-		err = quietConn.QueryRowContext(ctx, `
-			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
-			FROM crdb_internal.statement_statistics
-			WHERE metadata @> '{"db":"kv"}' AND metadata @> $1`,
-			fmt.Sprintf(`{"querySummary": "%s"}`, s.kv.query),
-		).Scan(&baselineLatency)
-	} else {
-		err = quietConn.QueryRowContext(ctx, `
-			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
-			FROM crdb_internal.statement_statistics
-			WHERE metadata @> '{"db":"tpcc"}'`,
-		).Scan(&baselineLatency)
-	}
+	baselineLatency, err := fetchAvgQuietLatency(ctx, quietConn, s)
 	require.NoError(t, err)
 	t.L().Printf("phase 1 baseline latency: %f", baselineLatency)
 
@@ -377,31 +365,59 @@ func runMultiTenantIsolation(
 	verifyCPUUtilization(ctx, c, t, kvNode, workloadStart, workloadEnd)
 
 	// Collect phase 2 latency from statement statistics.
-	var quietLatency float64
-	if s.kv != nil {
-		err = quietConn.QueryRowContext(ctx, `
-			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
-			FROM crdb_internal.statement_statistics
-			WHERE metadata @> '{"db":"kv"}' AND metadata @> $1`,
-			fmt.Sprintf(`{"querySummary": "%s"}`, s.kv.query),
-		).Scan(&quietLatency)
-	} else {
-		err = quietConn.QueryRowContext(ctx, `
-			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
-			FROM crdb_internal.statement_statistics
-			WHERE metadata @> '{"db":"tpcc"}'`,
-		).Scan(&quietLatency)
-	}
+	quietLatency, err := fetchAvgQuietLatency(ctx, quietConn, s)
 	require.NoError(t, err)
 	quietLatencyDur := time.Duration(quietLatency * float64(time.Second))
 	baselineDur := time.Duration(baselineLatency * float64(time.Second))
 
-	t.L().Printf("phase 2 quiet latency: %s (baseline: %s, ratio: %.2f)",
-		quietLatencyDur, baselineDur, quietLatency/baselineLatency)
+	ratioStr := "n/a"
+	if baselineLatency > 0 {
+		ratioStr = fmt.Sprintf("%.2f", quietLatency/baselineLatency)
+	}
+	t.L().Printf("phase 2 quiet latency: %s (baseline: %s, ratio: %s)",
+		quietLatencyDur, baselineDur, ratioStr)
 
 	if quietLatencyDur > s.quietLatencyMax {
 		t.Fatalf("quiet tenant latency %s exceeds max %s", quietLatencyDur, s.quietLatencyMax)
 	}
+}
+
+// fetchAvgQuietLatency returns the avg run latency (in seconds) recorded for
+// the quiet tenant's workload-fingerprint statements in the current SQL stats
+// window. It returns an error if no matching statements are recorded so the
+// caller fails with a descriptive message rather than the cryptic
+// "converting NULL to float64" Scan error.
+func fetchAvgQuietLatency(
+	ctx context.Context, conn *gosql.DB, s multiTenantIsolationSpec,
+) (float64, error) {
+	var (
+		row    *gosql.Row
+		filter string
+	)
+	if s.kv != nil {
+		filter = fmt.Sprintf(`db=kv, querySummary=%q`, s.kv.query)
+		row = conn.QueryRowContext(ctx, `
+			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
+			FROM crdb_internal.statement_statistics
+			WHERE metadata @> '{"db":"kv"}' AND metadata @> $1`,
+			fmt.Sprintf(`{"querySummary": "%s"}`, s.kv.query),
+		)
+	} else {
+		filter = `db=tpcc`
+		row = conn.QueryRowContext(ctx, `
+			SELECT avg((statistics -> 'statistics' -> 'runLat' -> 'mean')::FLOAT)
+			FROM crdb_internal.statement_statistics
+			WHERE metadata @> '{"db":"tpcc"}'`,
+		)
+	}
+	var avg gosql.NullFloat64
+	if err := row.Scan(&avg); err != nil {
+		return 0, errors.Wrapf(err, "scanning avg quiet latency (%s)", filter)
+	}
+	if !avg.Valid {
+		return 0, errors.Newf("no statement statistics matched filter %s", filter)
+	}
+	return avg.Float64, nil
 }
 
 // verifyCPUUtilization queries the combined CPU utilization metric over the
