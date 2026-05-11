@@ -721,13 +721,150 @@ func TestParquetColumnOrderMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, consumer)
 
-	// Verify the mapping is correct:
-	// - "score" should map to visibleCols[3] (index 3 in table schema)
-	// - "name" should map to visibleCols[1] (index 1 in table schema)
-	// - "id" should map to visibleCols[0] (index 0 in table schema)
+	// Verify fieldNameToIdx maps to full-table visibleCols indices.
 	require.Equal(t, 3, consumer.fieldNameToIdx["score"], "score should map to visibleCols index 3")
 	require.Equal(t, 1, consumer.fieldNameToIdx["name"], "name should map to visibleCols index 1")
 	require.Equal(t, 0, consumer.fieldNameToIdx["id"], "id should map to visibleCols index 0")
+
+	// Verify colMapping uses target-column indices (position in targetCols),
+	// not full-table indices. Target order is [score, name, id].
+	require.Equal(t, 0, consumer.colMapping[0], "parquet col 0 (score) -> target index 0")
+	require.Equal(t, 1, consumer.colMapping[1], "parquet col 1 (name) -> target index 1")
+	require.Equal(t, 2, consumer.colMapping[2], "parquet col 2 (id) -> target index 2")
+}
+
+// TestParquetSubsetColumnMapping is a regression test for #169899. When IMPORT
+// INTO excludes columns, colMapping must use target-column indices (position in
+// the targetCols list) rather than full-table visibleCols indices. Using
+// full-table indices caused an out-of-bounds panic in FillDatums because
+// DatumRowConverter.Datums is sized to len(targetCols).
+func TestParquetSubsetColumnMapping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Table schema shared by all sub-tests: [id, name, age, score].
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		Name: "test_table",
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int, Nullable: true},
+			{Name: "name", ID: 2, Type: types.String, Nullable: true},
+			{Name: "age", ID: 3, Type: types.Int, Nullable: true},
+			{Name: "score", ID: 4, Type: types.Float, Nullable: true},
+		},
+		NextColumnID: 5,
+		Families: []descpb.ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ColumnNames: []string{"id", "name", "age", "score"},
+			ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+		}},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  1,
+			Unique:              true,
+			KeyColumnNames:      []string{"id"},
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+
+	// Parquet file always has all 4 columns.
+	pqSchema := arrow.NewSchema(
+		[]arrow.Field{
+			{Name: "id", Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+			{Name: "name", Type: arrow.BinaryTypes.String, Nullable: true},
+			{Name: "age", Type: arrow.PrimitiveTypes.Int32, Nullable: true},
+			{Name: "score", Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+		},
+		nil,
+	)
+
+	makeParquetFile := func(t *testing.T) *fileReader {
+		t.Helper()
+		var buf bytes.Buffer
+		writer, err := pqarrow.NewFileWriter(
+			pqSchema, &buf,
+			parquet.NewWriterProperties(
+				parquet.WithCompression(compress.Codecs.Uncompressed)),
+			pqarrow.DefaultWriterProps(),
+		)
+		require.NoError(t, err)
+
+		rb := array.NewRecordBuilder(memory.DefaultAllocator, pqSchema)
+		rb.Field(0).(*array.Int32Builder).Append(1)
+		rb.Field(1).(*array.StringBuilder).Append("Alice")
+		rb.Field(2).(*array.Int32Builder).Append(30)
+		rb.Field(3).(*array.Float64Builder).Append(95.5)
+		record := rb.NewRecord()
+		defer record.Release()
+
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		return &fileReader{
+			Reader:   reader,
+			ReaderAt: reader,
+			Seeker:   reader,
+			total:    int64(buf.Len()),
+		}
+	}
+
+	testCases := []struct {
+		name       string
+		targetCols tree.NameList
+		// Expected colMapping: parquet col index -> target col index (-1 = skipped).
+		wantColMapping []int
+	}{
+		{
+			name:           "middle column excluded",
+			targetCols:     tree.NameList{"id", "age", "score"},
+			wantColMapping: []int{0, -1, 1, 2},
+		},
+		{
+			name:           "first column excluded",
+			targetCols:     tree.NameList{"name", "age", "score"},
+			wantColMapping: []int{-1, 0, 1, 2},
+		},
+		{
+			name:           "last column excluded",
+			targetCols:     tree.NameList{"id", "name", "age"},
+			wantColMapping: []int{0, 1, 2, -1},
+		},
+		{
+			name:           "multiple columns excluded",
+			targetCols:     tree.NameList{"id", "score"},
+			wantColMapping: []int{0, -1, -1, 1},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			importCtx := &parallelImportContext{
+				targetCols: tc.targetCols,
+				tableDesc:  tableDesc,
+			}
+
+			fr := makeParquetFile(t)
+			producer, err := newParquetRowProducer(fr, importCtx)
+			require.NoError(t, err)
+
+			consumer, err := newParquetRowConsumer(
+				importCtx, producer, &importFileContext{}, false)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.wantColMapping, consumer.colMapping)
+
+			// Verify all mapped indices are within the target column bounds.
+			// This is the invariant FillDatums relies on: conv.Datums and
+			// conv.VisibleColTypes are sized to len(targetCols).
+			for _, idx := range consumer.colMapping {
+				if idx >= 0 {
+					require.Less(t, idx, len(tc.targetCols),
+						"colMapping index must be < len(targetCols)")
+				}
+			}
+		})
+	}
 }
 
 // TestParquetCaseConflictingColumns tests that we reject tables with columns
