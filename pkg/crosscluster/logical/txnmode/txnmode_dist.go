@@ -417,23 +417,24 @@ func (ch *checkpointHandler) handleMeta(
 		return nil
 	}
 
-	if replicatedTime.LessEq(ch.replicatedTime) {
+	reachedEndTime := !replicatedTime.Less(ch.endTime.Prev())
+	if replicatedTime.LessEq(ch.replicatedTime) && !reachedEndTime {
 		return nil
 	}
-
-	reachedEndTime := !replicatedTime.Less(ch.endTime.Prev())
 	updateFreq := ldrsettings.JobCheckpointFrequency.Get(ch.sv)
 	if !reachedEndTime && (updateFreq == 0 || timeutil.Since(ch.lastPersistenceTime) < updateFreq) {
 		return nil
 	}
 
-	if err := ch.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return ch.job.ProgressStorage().SetResolved(ctx, txn, replicatedTime)
-	}); err != nil {
-		return err
+	if !replicatedTime.LessEq(ch.replicatedTime) {
+		if err := ch.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return ch.job.ProgressStorage().SetResolved(ctx, txn, replicatedTime)
+		}); err != nil {
+			return err
+		}
+		ch.replicatedTime = replicatedTime
+		ch.lastPersistenceTime = timeutil.Now()
 	}
-	ch.replicatedTime = replicatedTime
-	ch.lastPersistenceTime = timeutil.Now()
 
 	select {
 	case ch.frontierUpdates <- replicatedTime:

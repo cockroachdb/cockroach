@@ -61,7 +61,9 @@ go_library(
 
 go_test(
     name = "txnmode_test",
+    size = "large",
     srcs = [
+        "alter_logical_replication_test.go",
         "main_test.go",
         "node_router_test.go",
         "txnmode_dist_test.go",

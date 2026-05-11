@@ -283,6 +283,12 @@ WHERE id = $1
 		var ts hlc.Timestamp
 		if hwm := progress.GetHighWater(); hwm != nil {
 			ts = *hwm
+		} else {
+			_, existing, _, err := j.ProgressStorage().Get(ctx, u.txn)
+			if err != nil {
+				return err
+			}
+			ts = existing
 		}
 
 		if err := j.ProgressStorage().Set(ctx, u.txn, float64(progress.GetFractionCompleted()), ts); err != nil {
