@@ -2638,3 +2638,89 @@ func TestPrepareAfterSavepointRollback(t *testing.T) {
 	_, err = p.Until(false /* keepErrMsg */, until...)
 	require.NoError(t, err)
 }
+
+// TestBindAfterSavepointRollback reproduces the same class of bug as
+// TestPrepareAfterSavepointRollback but through the Bind (pgwire Bind)
+// entry point instead of Parse. After ROLLBACK TO SAVEPOINT, execBind
+// can issue KV reads through the user's transaction (e.g. for staleness
+// checks or descriptor validation) without first stepping the read
+// sequence past the ignored range.
+func TestBindAfterSavepointRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Inject a KV read through the user's transaction during Bind.
+	// See TestPrepareAfterSavepointRollback for why a hook is needed
+	// rather than relying on the natural descriptor resolution path.
+	var doKVRead atomic.Bool
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeBind: func(ctx context.Context, stmt string, txn *kv.Txn) error {
+					if doKVRead.Load() {
+						_, err := txn.Get(ctx, roachpb.Key("nonexistent-key"))
+						return err
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	p, err := pgtest.NewPGTest(ctx, s.SQLAddr(), username.RootUser)
+	require.NoError(t, err)
+	defer func() { _ = p.Close() }()
+
+	until := pgtest.ParseMessages("ReadyForQuery")
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "CREATE TABLE t_bind169720 (id INT PRIMARY KEY)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	// Parse outside the transaction so the prepared statement exists.
+	require.NoError(t, p.SendOneLine(`Parse {"Query": "SELECT * FROM t_bind169720"}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+	_, err = p.Until(false /* keepErrMsg */, pgtest.ParseMessages("ParseComplete\nReadyForQuery")...)
+	require.NoError(t, err)
+
+	// BEGIN → SAVEPOINT → INSERT → ROLLBACK TO SAVEPOINT.
+	require.NoError(t, p.SendOneLine(`Query {"String": "BEGIN"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "INSERT INTO t_bind169720 VALUES (1)"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "ROLLBACK TO SAVEPOINT sp1"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+
+	doKVRead.Store(true)
+
+	// Bind the prepared statement. The BeforeBind hook fires and performs
+	// a KV read through the user's txn. Without the fix, readSeq is
+	// inside the ignored range, triggering checkReadSeqNotIgnoredLocked.
+	require.NoError(t, p.SendOneLine(`Bind`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	_, err = p.Until(
+		true, /* keepErrMsg */
+		pgtest.ParseMessages("BindComplete\nReadyForQuery")...)
+	require.NoError(t, err,
+		"Bind after ROLLBACK TO SAVEPOINT hit readSeq-in-ignored-range assertion; see #169720")
+
+	doKVRead.Store(false)
+
+	require.NoError(t, p.SendOneLine(`Query {"String": "COMMIT"}`))
+	_, err = p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+}

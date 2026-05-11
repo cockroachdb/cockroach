@@ -2043,6 +2043,10 @@ type ExecutorTestingKnobs struct {
 	// If a nil error is returned, planning continues as usual.
 	BeforePrepare func(ctx context.Context, stmt string, txn *kv.Txn) error
 
+	// BeforeBind can be used to trap execution of the pgwire Bind command.
+	// If a nil error is returned, bind processing continues as usual.
+	BeforeBind func(ctx context.Context, stmt string, txn *kv.Txn) error
+
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution.
 	BeforeExecute func(ctx context.Context, stmt string, descriptors *descs.Collection)

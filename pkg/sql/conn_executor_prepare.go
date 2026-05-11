@@ -554,6 +554,23 @@ func (ex *connExecutor) execBind(
 		return retErr(err)
 	}
 
+	// Step the read sequence so that any KV reads during Bind (e.g.
+	// descriptor validation for staleness checks) use a sequence number
+	// past ignored ranges from a prior savepoint rollback.
+	if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
+		if err := ex.stepReadSequence(ctx); err != nil {
+			return retErr(err)
+		}
+	}
+
+	if before := ex.server.cfg.TestingKnobs.BeforeBind; before != nil {
+		if _, isOpen := ex.machine.CurState().(stateOpen); isOpen {
+			if err := before(ctx, ps.SQL, ex.state.mu.txn); err != nil {
+				return retErr(err)
+			}
+		}
+	}
+
 	// Validate that the prepared statement's result type hasn't changed due to
 	// schema changes. This check needs to happen during Bind (not Execute) to
 	// match PostgreSQL's behavior of returning errors before sending BindComplete.
