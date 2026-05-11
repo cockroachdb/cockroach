@@ -216,6 +216,7 @@ go_test(
         "restore_test.go",
         "revision_reader_test.go",
         "revlog_job_test.go",
+        "revlog_marker_test.go",
         "schedule_exec_test.go",
         "schedule_pts_chaining_test.go",
         "show_test.go",
