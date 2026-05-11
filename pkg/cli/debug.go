@@ -1591,6 +1591,21 @@ func init() {
 	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
 	f.Lookup("dry-run").Hidden = true
 
+	f.StringVar(&debugZipUploadOpts.destination, "destination", destinationDatadog,
+		"upload destination: "+destinationDatadog+" or "+destinationCRLSupport)
+	f.StringVar(&debugZipUploadOpts.crlSupportAPIKey, "crl-support-api-key",
+		getEnvOrDefault(crlSupportAPIKeyEnvVar, ""),
+		"API key for CRL support uploads (used with --destination="+destinationCRLSupport+
+			"; defaults to $"+crlSupportAPIKeyEnvVar+")")
+	f.StringVar(&debugZipUploadOpts.crlSupportURL, "crl-support-url", "",
+		"base URL of the CRL support upload server (required with --destination="+destinationCRLSupport+")")
+	f.StringVar(&debugZipUploadOpts.crlSupportTicketID, "crl-support-ticket-id", "",
+		"optional support ticket ID to associate with this upload")
+	f.StringVar(&debugZipUploadOpts.resumeSession, "resume-session", "",
+		"resume an interrupted crl-support upload by session ID")
+	f.StringVar(&debugZipUploadOpts.proxy, "proxy", "",
+		"forward proxy URL for crl-support traffic (defaults to $"+httpsProxyEnvVar+")")
+
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
 	f.BoolVar(&decodeKeyOptions.userKey, "user-key", false, "key type")
