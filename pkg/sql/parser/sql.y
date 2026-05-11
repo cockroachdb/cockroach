@@ -1164,6 +1164,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_changefeed_stmt
 %type <tree.Statement> alter_backup_stmt
+%type <tree.Statement> alter_logical_replication_stream_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -2026,6 +2027,7 @@ alter_ddl_stmt:
 | alter_domain_stmt             // EXTEND WITH HELP: ALTER DOMAIN
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
+| alter_logical_replication_stream_stmt // EXTEND WITH HELP: ALTER LOGICAL REPLICATION STREAM
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
 | alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
@@ -5083,6 +5085,24 @@ create_logical_replication_stream_stmt:
     }
   }
 | CREATE LOGICAL REPLICATION STREAM error // SHOW HELP: CREATE LOGICAL REPLICATION STREAM
+
+// %Help: ALTER LOGICAL REPLICATION STREAM - alter a logical replication stream
+// %Category: Experimental
+// %Text:
+// ALTER LOGICAL REPLICATION STREAM <jobid> SKIP
+//
+// SKIP: Skip the current conflicting transaction by advancing the replicated time.
+alter_logical_replication_stream_stmt:
+  ALTER LOGICAL REPLICATION STREAM a_expr SKIP
+  {
+    $$.val = &tree.AlterLogicalReplicationStream{
+      JobID: $5.expr(),
+      Cmds: tree.AlterLogicalReplicationCmds{
+        &tree.SkipConflictCmd{},
+      },
+    }
+  }
+| ALTER LOGICAL REPLICATION STREAM error // SHOW HELP: ALTER LOGICAL REPLICATION STREAM
 
 logical_replication_resources:
   TABLE db_object_name
