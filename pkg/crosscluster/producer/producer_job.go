@@ -154,6 +154,7 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			return ctx.Err()
 		case <-p.timer.Ch():
 			p.timer.Reset(crosscluster.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
+
 			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID())
 			if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
 				err = knobs.AfterResumerJobLoad(err)
@@ -185,6 +186,28 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
 				return errors.New("destination cluster job finished unsuccessfully")
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
+				// If this producer is bound to a source tenant, fail it when that tenant goes offline.
+				details := p.job.Details().(jobspb.StreamReplicationDetails)
+				if details.TenantID.IsSet() {
+					var tenantInfo *mtinfopb.TenantInfo
+					err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+						var err error
+						tenantInfo, err = sql.GetTenantRecordByID(ctx, t, details.TenantID, execCfg.Settings)
+						return err
+					})
+					if err != nil {
+						log.Dev.Errorf(ctx,
+							"replication stream %d failed loading tenant info (retrying): %v",
+							p.job.ID(), err)
+					} else if tenantInfo.ServiceMode == mtinfopb.ServiceModeNone ||
+						tenantInfo.ServiceMode == mtinfopb.ServiceModeStopping {
+						return errors.Newf(
+							"source tenant %d is no longer online (service mode: %s)",
+							details.TenantID, tenantInfo.ServiceMode,
+						)
+					}
+				}
+
 				expiration := progress.Expiration
 				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
 				if expiration.Before(p.timeSource.Now()) {

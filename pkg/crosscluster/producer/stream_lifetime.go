@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -82,6 +83,28 @@ func StartReplicationProducerJob(
 
 	if tenantID.IsSystem() && !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
+	}
+
+	// Reject creation of a streaming producer against a source tenant that
+	// isn't online. The post-cutover retention producer (assumeSucceeded=true)
+	// is exempt because it intentionally runs on a tenant that may not yet be
+	// fully serving and exists only to hold a PTS.
+	if !assumeSucceeded && !tenantID.IsSystem() {
+		switch tenantRecord.ServiceMode {
+		case mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal:
+		default:
+			return streampb.ReplicationProducerSpec{}, errors.Newf(
+				"cannot replicate from tenant %q (%s): service mode is %s, must be %s or %s",
+				tenantRecord.Name, tenantID, tenantRecord.ServiceMode,
+				mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal,
+			)
+		}
+		if tenantRecord.DataState != mtinfopb.DataStateReady {
+			return streampb.ReplicationProducerSpec{}, errors.Newf(
+				"cannot replicate from tenant %q (%s) in data state %s",
+				tenantRecord.Name, tenantID, tenantRecord.DataState,
+			)
+		}
 	}
 
 	var replicationStartTime hlc.Timestamp

@@ -1711,3 +1711,93 @@ func TestAlterExternalConnection(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 }
+
+// TestPCROfflineSource verifies that PCR will not replicate from an
+// offline source tenant. The invariant has two flavors:
+//
+//   - Creation: starting a new replication stream against a source tenant whose
+//     service has not been started must fail. Regression test for #169481.
+//   - Steady state: an existing replication stream whose source tenant
+//     transitions to offline must be torn down. With multiple destinations
+//     replicating from the same source ("hub-and-spoke"), every outbound stream
+//     must be torn down — not just the one that triggered the transition.
+//     Regression test for #169480, where an untouched second spoke would
+//     silently lose data after a failover/failback cycle on the first spoke.
+func TestPCROfflineSource(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Two single-node servers shared across subtests. Each subtest uses unique
+	// tenant names so it does not interfere with the others.
+	srcServer, srcConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srcServer.Stopper().Stop(ctx)
+	destServer, destConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer destServer.Stopper().Stop(ctx)
+
+	srcSql := sqlutils.MakeSQLRunner(srcConn)
+	destSql := sqlutils.MakeSQLRunner(destConn)
+	srcServerURL := replicationtestutils.GetReplicationURI(t, srcServer, destServer, serverutils.User(username.RootUser))
+
+	replicationtestutils.ConfigureDefaultSettings(t, srcSql)
+	replicationtestutils.ConfigureDefaultSettings(t, destSql)
+
+	// startOnlineSource creates a source tenant on srcServer with its service
+	// running.
+	startOnlineSource := func(t *testing.T, name string) {
+		srcSql.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER %s", name))
+		srcSql.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s START SERVICE SHARED", name))
+	}
+
+	// startReplication starts replication from a source tenant on srcServer
+	// into a destination tenant on destServer and waits for the destination to
+	// catch up. Returns the consumer ingestion job ID.
+	startReplication := func(t *testing.T, srcName, dstName string) jobspb.JobID {
+		destSql.Exec(t,
+			fmt.Sprintf("CREATE VIRTUAL CLUSTER %s FROM REPLICATION OF %s ON $1", dstName, srcName),
+			srcServerURL.String())
+		_, consumerJobID := replicationtestutils.GetStreamJobIds(t, ctx, destSql, roachpb.TenantName(dstName))
+		var ts string
+		srcSql.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts)
+		replicationtestutils.WaitUntilReplicatedTime(t,
+			replicationtestutils.DecimalTimeToHLC(t, ts), destSql, jobspb.JobID(consumerJobID))
+		return jobspb.JobID(consumerJobID)
+	}
+
+	t.Run("create against offline source is rejected", func(t *testing.T) {
+		// Source tenant exists but its service was never started.
+		srcSql.Exec(t, "CREATE VIRTUAL CLUSTER offlinesrc")
+		destSql.ExpectErr(t,
+			`cannot replicate from tenant "offlinesrc".*service mode is none`,
+			"CREATE VIRTUAL CLUSTER offlinedst FROM REPLICATION OF offlinesrc ON $1",
+			srcServerURL.String())
+	})
+
+	t.Run("running stream is torn down when source goes offline", func(t *testing.T) {
+		startOnlineSource(t, "src")
+		consumer := startReplication(t, "src", "dst")
+
+		srcSql.Exec(t, "ALTER VIRTUAL CLUSTER src STOP SERVICE")
+		jobutils.WaitForJobToPause(t, destSql, consumer)
+	})
+
+	t.Run("hub-and-spoke: every spoke is torn down when shared source goes offline", func(t *testing.T) {
+		startOnlineSource(t, "hub")
+		spokeA := startReplication(t, "hub", "spokea")
+		spokeB := startReplication(t, "hub", "spokeb")
+
+		srcSql.Exec(t, "ALTER VIRTUAL CLUSTER hub STOP SERVICE")
+		jobutils.WaitForJobToPause(t, destSql, spokeA)
+		jobutils.WaitForJobToPause(t, destSql, spokeB)
+	})
+}
