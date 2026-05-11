@@ -82,9 +82,8 @@ type testTokenAllocator struct {
 
 func (m *testTokenAllocator) init() {}
 
-func (a *testTokenAllocator) resetInterval(context.Context) cpuTimeTokenMode {
+func (a *testTokenAllocator) resetInterval(context.Context) {
 	fmt.Fprintf(a.buf, "resetInterval()\n")
-	return serverlessMode
 }
 
 func (a *testTokenAllocator) allocateTokens(remainingTicks int64) {
@@ -97,12 +96,11 @@ type testModel struct {
 }
 
 type testBurstManager struct {
-	burstFrac        float64
-	tokens           int64
-	calls            int
-	lastRate100      float64
-	lastCap100       float64
-	useResourceGroup bool
+	burstFrac   float64
+	tokens      int64
+	calls       int
+	lastRate100 float64
+	lastCap100  float64
 }
 
 func (m *testBurstManager) refillGroupBurstBuckets(rate100, cap100 float64) {
@@ -120,10 +118,6 @@ func (m *testBurstManager) refillGroupBurstBuckets(rate100, cap100 float64) {
 	}
 }
 
-func (m *testBurstManager) setUseResourceGroup(enabled bool) {
-	m.useResourceGroup = enabled
-}
-
 func (m *testModel) init() {}
 
 func (m *testModel) fit(_ context.Context, targets targetUtilizations) rates {
@@ -135,10 +129,9 @@ func (m *testModel) fit(_ context.Context, targets targetUtilizations) rates {
 		return int(math.Round(scaled))
 	}
 	fmt.Fprint(m.buf, "fit(\n")
-	for tier := int(numResourceTiers - 1); tier >= 0; tier-- {
-		for qual := int(numBurstQualifications - 1); qual >= 0; qual-- {
-			fmt.Fprintf(m.buf, "\ttier%d %s -> %v%%\n", tier, burstQualification(qual).String(), round(targets[tier][qual]))
-		}
+	for qual := int(numBurstQualifications - 1); qual >= 0; qual-- {
+		fmt.Fprintf(m.buf, "\t%s -> %v%%\n",
+			burstQualification(qual).String(), round(targets[qual]))
 	}
 	fmt.Fprint(m.buf, ")\n")
 	return m.rates
@@ -150,62 +143,37 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 
 	metrics := makeCPUTimeTokenMetrics()
 	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
-	tier0Granter := &cpuTimeTokenChildGranter{
-		tier:   testTier0,
-		parent: granter,
+	req := &testRequester{
+		granter: granter,
 	}
-	tier1Granter := &cpuTimeTokenChildGranter{
-		tier:   testTier1,
-		parent: granter,
-	}
-	var requesters [numResourceTiers]*testRequester
-	requesters[testTier0] = &testRequester{
-		additionalID: "tier0",
-		granter:      tier0Granter,
-	}
-	requesters[testTier1] = &testRequester{
-		additionalID: "tier1",
-		granter:      tier1Granter,
-	}
-	granter.requester[testTier0] = requesters[testTier0]
-	granter.requester[testTier1] = requesters[testTier1]
+	granter.requester = req
 
 	var buf strings.Builder
-	var printBurstMgrs func() string
+	var printBurstMgr func() string
 	flushAndReset := func() string {
 		fmt.Fprint(&buf, granter.String())
-		fmt.Fprint(&buf, printBurstMgrs())
+		fmt.Fprint(&buf, printBurstMgr())
 		str := buf.String()
 		buf.Reset()
 		return str
 	}
 
 	model := &testModel{buf: &buf}
-	model.rates[testTier0][canBurst] = 5000
-	model.rates[testTier0][noBurst] = 4000
-	model.rates[testTier1][canBurst] = 3000
-	model.rates[testTier1][noBurst] = 2000
-	burstMgrs := [numResourceTiers]*testBurstManager{
-		testTier0: {burstFrac: defaultTenantGroupConfig.BurstFrac},
-		testTier1: {burstFrac: defaultTenantGroupConfig.BurstFrac},
-	}
-	queues := [numResourceTiers]workQueueIForAllocator{
-		testTier0: burstMgrs[testTier0],
-		testTier1: burstMgrs[testTier1],
+	model.rates[canBurst] = 5000
+	model.rates[noBurst] = 4000
+	burstMgr := &testBurstManager{
+		burstFrac: defaultTenantGroupConfig.BurstFrac,
 	}
 	allocator := cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
 		model:    model,
 		metrics:  metrics,
-		queues:   queues,
+		queue:    burstMgr,
 	}
-	allocator.setMode(serverlessMode)
-	printBurstMgrs = func() string {
+	printBurstMgr = func() string {
 		var b strings.Builder
-		fmt.Fprintf(&b, "burstM\n")
-		fmt.Fprintf(&b, "tier0  %d\n", burstMgrs[testTier0].tokens)
-		fmt.Fprintf(&b, "tier1  %d\n", burstMgrs[testTier1].tokens)
+		fmt.Fprintf(&b, "burstM  %d\n", burstMgr.tokens)
 		return b.String()
 	}
 
@@ -216,10 +184,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 			var increaseRatesBy int64
 			d.MaybeScanArgs(t, "increase_rates_by", &increaseRatesBy)
 			if increaseRatesBy != 0 {
-				model.rates[testTier0][canBurst] += increaseRatesBy
-				model.rates[testTier0][noBurst] += increaseRatesBy
-				model.rates[testTier1][canBurst] += increaseRatesBy
-				model.rates[testTier1][noBurst] += increaseRatesBy
+				model.rates[canBurst] += increaseRatesBy
+				model.rates[noBurst] += increaseRatesBy
 			}
 			allocator.resetInterval(ctx)
 			return flushAndReset()
@@ -231,12 +197,9 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		case "set-tokens":
 			var v int64
 			d.ScanArgs(t, "v", &v)
-			granter.mu.buckets[testTier0][canBurst].tokens = v
-			granter.mu.buckets[testTier0][noBurst].tokens = v
-			granter.mu.buckets[testTier1][canBurst].tokens = v
-			granter.mu.buckets[testTier1][noBurst].tokens = v
-			burstMgrs[testTier0].tokens = v
-			burstMgrs[testTier1].tokens = v
+			granter.mu.buckets[canBurst].tokens = v
+			granter.mu.buckets[noBurst].tokens = v
+			burstMgr.tokens = v
 			return flushAndReset()
 		case "setClusterSettings":
 			ctx := context.Background()
@@ -280,10 +243,8 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur, 1) // appended value ignored by init
 
 	var targets targetUtilizations
-	targets[testTier1][noBurst] = 0.8
-	targets[testTier1][canBurst] = 0.85
-	targets[testTier0][noBurst] = 0.9
-	targets[testTier0][canBurst] = 0.95
+	targets[noBurst] = 0.8
+	targets[canBurst] = 0.85
 
 	// The first call to fit inits the model, by setting tokenToCPUTimeMultiplier
 	// to one, since in prod on the first call to fit, there will be no CPU
@@ -296,13 +257,9 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// test). The unit of refillRates is nanoseconds.
 	//
 	// 80% util -> 10 vCPUs * .8 * 1s = 8s
-	require.Equal(t, int64(8000000000), refillRates[testTier1][noBurst])
+	require.Equal(t, int64(8000000000), refillRates[noBurst])
 	// 85% util -> 10 vCPUs * .85 * 1s = 8.5s
-	require.Equal(t, int64(8500000000), refillRates[testTier1][canBurst])
-	// 90% util -> 10 vCPUs * .9 * 1s = 9s
-	require.Equal(t, int64(9000000000), refillRates[testTier0][noBurst])
-	// 95% util -> 10 vCPUs * .95 * 1s = 9.5s
-	require.Equal(t, int64(9500000000), refillRates[testTier0][canBurst])
+	require.Equal(t, int64(8500000000), refillRates[canBurst])
 
 	// Below tests are of the computation of tokenToCPUTimeMultiplier only. The
 	// computation of tokenToCPUTimeMultiplier involves state stored on the model,
@@ -378,15 +335,15 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 
 	// Below tests are of the low CPU logic. See the comments in fit for a full
 	// explanation of the logic & especially the rationale for the logic. TLDR:
-	// if CPU is less than 25%, and if tokenToCPUTimeMultiplier is less 3.6,
+	// if CPU is less than 25%, and if tokenToCPUTimeMultiplier is less 3.2,
 	// tokenToCPUTimeMultiplier is left alone. If tokenToCPUTimeMultiplier is
-	// greater than 3.6, tokenToCPUTimeMultiplier is divided by 1.5 until it is
-	// <= 3.6.
+	// greater than 3.2, tokenToCPUTimeMultiplier is divided by 1.5 until it is
+	// <= 3.2.
 	//
 	// vCPU count is 10. dur /.5 = 1s. 1s / 10s = 0.1 < 0.25. So low CPU mode
 	// should be activated.
 	//
-	// Leave existing tokenToCPUTimeMultiplier multiplier as is, since 2 <= 3.6.
+	// Leave existing tokenToCPUTimeMultiplier multiplier as is, since 2 <= 3.2.
 	tokenCPUTime.append(dur.Nanoseconds()/5, 100)
 	actualCPUTime.append(dur/5, 100)
 	for i := 0; i < 100; i++ {
@@ -435,13 +392,9 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// equal to 3.2 instead of one.
 	//
 	// 80% -> 10 vCPUs * .8 * 1s = 8s -> 8s / 3.2 = 2.5s
-	require.Equal(t, int64(2500000000), refillRates[testTier1][noBurst])
+	require.Equal(t, int64(2500000000), refillRates[noBurst])
 	// 85% -> 10 vCPUs * .85 * 1s = 8.5s -> 8.5s / 3.2 = 2.65625s
-	require.Equal(t, int64(2656250000), refillRates[testTier1][canBurst])
-	// 90% -> 10 vCPUs * .9 * 1s = 9s -> 9s / 3.2 = 2.8125s
-	require.Equal(t, int64(2812500000), refillRates[testTier0][noBurst])
-	// 95% -> 10 vCPUs * .95 * 1s = 9.5s -> 9.5s / 3.2 = 2.96875s
-	require.Equal(t, int64(2968750000), refillRates[testTier0][canBurst])
+	require.Equal(t, int64(2656250000), refillRates[canBurst])
 
 	// We do not expect the syscall that fetches CPU usage to ever fail.
 	// Verify that log.Fatalf is called when GetCPUUsage returns an error.
@@ -500,108 +453,57 @@ func (p *testCPUMetricsProvider) append(dur time.Duration, count int) {
 	}
 }
 
-// TestComputeTargets verifies that computeTargets builds per-tier
-// targets from noBurst fractions + burstDelta and caches
-// canBurstTarget.
+// TestComputeTargets verifies that computeTargets builds targets from
+// noBurst fraction + burstDelta and caches canBurstTarget.
 func TestComputeTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	a := cpuTimeTokenAllocator{}
 
-	// Two different per-tier noBurst fractions (serverless-like).
-	noBurstFracs := [numResourceTiers]float64{0.5, 0.75}
-	targets := a.computeTargets(noBurstFracs, 0.25)
+	targets := a.computeTargets(0.75, 0.25)
 
-	require.Equal(t, 0.5, targets[0][noBurst])
-	require.Equal(t, 0.75, targets[0][canBurst])
-	require.Equal(t, 0.75, targets[1][noBurst])
-	require.Equal(t, 1.0, targets[1][canBurst])
-	require.Equal(t, 0.75, a.canBurstTarget)
-
-	// Uniform noBurst fractions (RM-like).
-	noBurstFracs = [numResourceTiers]float64{0.75, 0.75}
-	targets = a.computeTargets(noBurstFracs, 0.25)
-
-	require.Equal(t, 0.75, targets[0][noBurst])
-	require.Equal(t, 1.0, targets[0][canBurst])
-	require.Equal(t, targets[0], targets[1])
+	require.Equal(t, 0.75, targets[noBurst])
+	require.Equal(t, 1.0, targets[canBurst])
 	require.Equal(t, 1.0, a.canBurstTarget)
+
+	targets = a.computeTargets(0.5, 0.25)
+
+	require.Equal(t, 0.5, targets[noBurst])
+	require.Equal(t, 0.75, targets[canBurst])
+	require.Equal(t, 0.75, a.canBurstTarget)
 }
 
 // TestRefillBurst verifies the cold-start guard, rate100/cap100
-// recovery from canBurstTarget, and forwarding to all queues.
+// and forwarding to the queue.
 func TestRefillBurst(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	burstMgrs := [numResourceTiers]*testBurstManager{
-		testTier0: {burstFrac: 0.2},
-		testTier1: {burstFrac: 0.2},
-	}
-	queues := [numResourceTiers]workQueueIForAllocator{
-		testTier0: burstMgrs[testTier0],
-		testTier1: burstMgrs[testTier1],
-	}
-	a := cpuTimeTokenAllocator{queues: queues}
+	burstMgr := &testBurstManager{burstFrac: 0.2}
+	a := cpuTimeTokenAllocator{queue: burstMgr}
 
-	var tokens tokenCounts
-	tokens[testTier0][canBurst] = 500
-	var rr rates
-	rr[testTier0][canBurst] = 5000
+	// rate100=500, cap100=5000 forwarded directly.
+	a.refillBurst(500.0, 5000.0)
+	require.Equal(t, 1, burstMgr.calls)
+	require.Equal(t, 500.0, burstMgr.lastRate100)
+	require.Equal(t, 5000.0, burstMgr.lastCap100)
 
-	// Cold-start guard: canBurstTarget=0 skips everything.
-	a.canBurstTarget = 0
-	a.refillBurst(tokens, rr)
-	require.Zero(t, burstMgrs[testTier0].calls)
+	// Different values.
+	a.refillBurst(1000.0, 10000.0)
+	require.Equal(t, 2, burstMgr.calls)
+	require.Equal(t, 1000.0, burstMgr.lastRate100)
+	require.Equal(t, 10000.0, burstMgr.lastCap100)
 
-	// canBurstTarget=1.0: rate100=500, cap100=5000, forwarded to both.
-	a.canBurstTarget = 1.0
-	a.refillBurst(tokens, rr)
-	require.Equal(t, 1, burstMgrs[testTier0].calls)
-	require.Equal(t, 500.0, burstMgrs[testTier0].lastRate100)
-	require.Equal(t, 5000.0, burstMgrs[testTier0].lastCap100)
-	require.Equal(t, 1, burstMgrs[testTier1].calls)
-	require.Equal(t, 500.0, burstMgrs[testTier1].lastRate100)
-	require.Equal(t, 5000.0, burstMgrs[testTier1].lastCap100)
-
-	// canBurstTarget=0.5: doubles both.
-	a.canBurstTarget = 0.5
-	a.refillBurst(tokens, rr)
-	require.Equal(t, 2, burstMgrs[testTier0].calls)
-	require.Equal(t, 1000.0, burstMgrs[testTier0].lastRate100)
-	require.Equal(t, 10000.0, burstMgrs[testTier0].lastCap100)
-
-	// Delta path: negative tokens (rate100) when refill rates decrease.
-	tokens[testTier0][canBurst] = -500
-	rr[testTier0][canBurst] = 4000
-	a.canBurstTarget = 1.0
-	a.refillBurst(tokens, rr)
-	require.Equal(t, 3, burstMgrs[testTier0].calls)
-	require.Equal(t, -500.0, burstMgrs[testTier0].lastRate100)
-	require.Equal(t, 4000.0, burstMgrs[testTier0].lastCap100)
-}
-
-// TestSetMode verifies that setMode sets currentMode and panics for
-// invalid modes.
-func TestSetMode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	a := cpuTimeTokenAllocator{}
-
-	a.setMode(serverlessMode)
-	require.Equal(t, serverlessMode, a.currentMode)
-
-	a.setMode(resourceManagerMode)
-	require.Equal(t, resourceManagerMode, a.currentMode)
-
-	require.Panics(t, func() { a.setMode(offMode) })
-	require.Panics(t, func() { a.setMode(cpuTimeTokenMode(99)) })
+	// Delta path: negative rate100 when refill rates decrease.
+	a.refillBurst(-500.0, 4000.0)
+	require.Equal(t, 3, burstMgr.calls)
+	require.Equal(t, -500.0, burstMgr.lastRate100)
+	require.Equal(t, 4000.0, burstMgr.lastCap100)
 }
 
 // TestReadTargetSettings verifies that readTargetSettings reads
-// KVCPUTimeUtilTarget and mirrors it to both tiers.
+// KVCPUTimeUtilTarget correctly.
 func TestReadTargetSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -612,66 +514,7 @@ func TestReadTargetSettings(t *testing.T) {
 	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.1)
 
 	a := cpuTimeTokenAllocator{settings: st}
-	a.setMode(serverlessMode)
-
-	fracs, delta := a.readTargetSettings()
-	require.Equal(t, 0.6, fracs[0])
-	require.Equal(t, 0.6, fracs[1])
+	frac, delta := a.readTargetSettings()
+	require.Equal(t, 0.6, frac)
 	require.Equal(t, 0.1, delta)
-}
-
-// TestResetIntervalReturnsMode verifies that resetInterval returns
-// the current mode and skips mode change when the cluster setting
-// is offMode.
-func TestResetIntervalReturnsMode(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	metrics := makeCPUTimeTokenMetrics()
-	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
-	burstMgrs := [numResourceTiers]*testBurstManager{{}, {}}
-	queues := [numResourceTiers]workQueueIForAllocator{
-		testTier0: burstMgrs[testTier0],
-		testTier1: burstMgrs[testTier1],
-	}
-	// Use default settings where cpuTimeTokenACMode is offMode.
-	// resetInterval should not attempt to change mode.
-	st := cluster.MakeClusterSettings()
-	require.Equal(t, offMode, cpuTimeTokenACMode.Get(&st.SV))
-	allocator := cpuTimeTokenAllocator{
-		granter:  granter,
-		settings: st,
-		model:    &testModel{buf: &strings.Builder{}, rates: rates{}},
-		metrics:  metrics,
-		queues:   queues,
-	}
-	allocator.setMode(serverlessMode)
-
-	ctx := context.Background()
-	mode := allocator.resetInterval(ctx)
-	require.Equal(t, serverlessMode, mode)
-}
-
-// TestConfigureQueue verifies that configureQueue calls
-// setUseResourceGroup with the correct value based on currentMode.
-func TestConfigureQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	mgr := &testBurstManager{}
-	queues := [numResourceTiers]workQueueIForAllocator{
-		testTier0: mgr,
-		testTier1: &testBurstManager{},
-	}
-	allocator := cpuTimeTokenAllocator{queues: queues}
-
-	// Serverless mode -> useResourceGroup=false.
-	allocator.setMode(serverlessMode)
-	allocator.configureQueue()
-	require.False(t, mgr.useResourceGroup)
-
-	// RM mode -> useResourceGroup=true.
-	allocator.setMode(resourceManagerMode)
-	allocator.configureQueue()
-	require.True(t, mgr.useResourceGroup)
 }

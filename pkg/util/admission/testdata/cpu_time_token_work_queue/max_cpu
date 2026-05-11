@@ -2,20 +2,16 @@
 # This test exercises the maxCPU burst qualification flag and its
 # interaction with the group heap. When maxCPU is true, a group
 # always qualifies for burst, regardless of bucket fullness. This
-# is used in resource manager mode for MAX_CPU resource groups.
+# is used for MAX_CPU resource groups.
 #
-# SetMaxCPUGroups only governs resource group containers (rgKind),
-# so the test runs in RM mode (set-priority-based-groups=true) and
-# routes work via priority: NormalPri (0) -> rg 1, BulkNormalPri
-# (-30) -> rg 2.
+# set-max-cpu-groups creates/updates rg-keyed containers via
+# applyConfigLocked. All admits route to tenant-keyed containers.
+# set-priority-based-groups is a no-op.
 #
 # The test uses a mock granter (testGranter) whose tryGet return value
 # is controlled via set-try-get-return-value. refill-burst-buckets
 # only refills the per-group burst buckets in the WorkQueue (for
 # burst qualification), not the granter-level token buckets.
-#
-# TODO(wenyihu6): refillBurstBuckets currently applies the same
-# uniform rate to all tenants. Add per-group scaling of refill rates.
 ###
 init
 ----
@@ -26,8 +22,8 @@ set-priority-based-groups v=true
 set-try-get-return-value v=true
 ----
 
-# Create both groups via priority-based routing (rg 1 and rg 2),
-# then flip rg 1 to maxCPU=true.
+# Create tenant-keyed group via admit, then flip rg 1 to maxCPU=true
+# (which creates a separate rg-keyed container).
 admit id=1 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input can_burst, returning true
@@ -41,8 +37,8 @@ id 2: admit succeeded
 set-max-cpu-groups group=1 v=true
 ----
 
-# Confirm the flip: rg 1 is now can_burst (via maxCPU), rg 2
-# remains no_burst. Both buckets are at -1 tokens (no refill yet).
+# Confirm: rg 1 is now can_burst (via maxCPU). Tenant 10 and rg 2
+# remain no_burst.
 print
 ----
 closed epoch: 0 groupHeap len: 0
@@ -63,9 +59,7 @@ closed epoch: 0 groupHeap len: 0
  group-id: 2 used: 1, w: 20, fifo: -128
 burst-buckets: rg1=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst rg2=fullness=24.0% tokens=24 capacity=100 qual=no_burst
 
-# Queue work for both groups. rg 1's work should be granted first
-# since it has can_burst via maxCPU, even though both have identical
-# bucket fullness.
+# Queue work. All work routes to tenant 10's group (tenant-keyed).
 set-try-get-return-value v=false
 ----
 
@@ -82,7 +76,7 @@ tryGet: input can_burst, returning false
 gc-groups-and-reset-used
 ----
 
-# rg 1 (can_burst via maxCPU) is granted before rg 2 (no_burst).
+# Work is granted from tenant 10's group.
 granted chain-id=1
 ----
 continueGrantChain 1
@@ -104,17 +98,13 @@ granted: returned 1
 set-try-get-return-value v=true
 ----
 
-# Admit heavy work to drive rg 1's bucket deeply negative.
-# Bucket was at 24 tokens; admitting 100000 drives it to 24-100000.
+# Admit heavy work to drive tenant 10's bucket deeply negative.
 admit id=5 tenant=10 priority=0 requested-count=100000
 ----
 tryGet: input can_burst, returning true
 id 5: admit succeeded
 
-# Refill with capacity=100. Floor is -capacity/4 = -25.
-# rg 1 tokens: max(-99976+25, -25) = -25. Still can_burst because
-# maxCPU=true bypasses the fullness check.
-# rg 2 tokens: min(23+25, 100) = 48. Still no_burst (48 < 90).
+# Refill with capacity=100.
 refill-burst-buckets to-add=25 capacity=100
 ----
 

@@ -40,8 +40,8 @@ func TestObsoleteCode(t *testing.T) {
 }
 
 // TestCPUTimeTokenACEnableAndDisable verifies that GetKVWorkQueue
-// routes work to the correct queue based on cpuTimeTokenACMode,
-// activeMode, the legacy bool, and the kill switch.
+// returns the correct queue based on cpuTimeTokenACMode, the legacy
+// bool, and the kill switch.
 func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -54,12 +54,6 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 	defer coords.Close()
 	cpuCoords := coords.RegularCPU
-	// The filler goroutine is disabled, so activeMode must be set
-	// manually to simulate what the filler would do on each
-	// resetInterval.
-	setActiveMode := func(mode cpuTimeTokenMode) {
-		cpuCoords.cpuTimeCoord.filler.activeMode.Store(int64(mode))
-	}
 
 	ctx := context.Background()
 	defer func(prevMode cpuTimeTokenMode, prevEnabled bool) {
@@ -70,88 +64,59 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	// Both settings off: slot-based AC.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
-	setActiveMode(offMode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false), cpuCoords.GetKVWorkQueue(true))
 
-	// Mode set to serverless: CPU time token AC with separate queues
-	// per tenant.
+	// Mode set to serverless: single CTT queue for all work.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
-	setActiveMode(serverlessMode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false), cpuCoords.GetKVWorkQueue(true))
 
-	// Mode set to resource_manager: CPU time token AC with a single
-	// queue for all work.
+	// Mode set to resource_manager: same single queue.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
-	setActiveMode(resourceManagerMode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false), cpuCoords.GetKVWorkQueue(true))
 
-	// Legacy bool fallback: mode is off but enabled=true enables CTT
-	// AC. activeMode stays serverless (the default when mode is off).
+	// Legacy bool fallback: mode is off but enabled=true enables CTT.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, true)
-	setActiveMode(serverlessMode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
-
-	// Defensive case: setting says serverless but activeMode is offMode.
-	// This shouldn't occur in production (the constructor and filler
-	// never store offMode), but GetKVWorkQueue handles it by falling
-	// back to slots.
-	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
-	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
-	setActiveMode(offMode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false), cpuCoords.GetKVWorkQueue(true))
 
 	// Kill switch overrides all modes.
 	defer func(prev bool) {
 		cpuTimeTokenACKillSwitch = prev
 	}(cpuTimeTokenACKillSwitch)
 
-	// Kill switch overrides serverlessMode.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, serverlessMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, false)
-	setActiveMode(serverlessMode)
 	cpuTimeTokenACKillSwitch = true
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
-
-	// Kill switch overrides resourceManagerMode.
-	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
-	setActiveMode(resourceManagerMode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true).mode)
 
 	// Kill switch overrides legacy bool fallback.
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, offMode)
 	cpuTimeTokenACEnabled.Override(ctx, &settings.SV, true)
-	setActiveMode(serverlessMode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true).mode)
 
 	// Disabling kill switch restores CPU time token AC.
 	cpuTimeTokenACKillSwitch = false
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false), cpuCoords.GetKVWorkQueue(true))
 }
 
 // TestSetResourceGroupConfigViaCoord exercises the public coord
 // entry point end-to-end: it must update the shared holder AND
-// signal the RM-mode WorkQueue to push the new config onto its
-// cached per-group state. A bug that wires the refresh to the wrong
-// queue, drops the holder write, or skips the refresh would not be
-// caught by tests that go directly through holder/refresh.
+// signal the WorkQueue to push the new config onto its cached
+// per-group state.
 func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -164,12 +129,7 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 	defer coords.Close()
 	cpuCoords := coords.RegularCPU
-	rmQueue := cpuCoords.cpuTimeCoord.queues[rmQueueTier].(*WorkQueue)
-
-	// Force RM mode so the apply path runs synchronously when refresh
-	// is invoked. Without this, refresh is a no-op and the test would
-	// only assert the holder write.
-	rmQueue.setUseResourceGroup(true)
+	rmQueue := cpuCoords.cpuTimeCoord.queue.(*WorkQueue)
 
 	// Public API call. This is the only thing under test.
 	cpuCoords.SetResourceGroupConfig(ResourceGroupConfigSet{
@@ -186,7 +146,7 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	require.Equal(t, float64(0.3), snap[rgGroupKey(lowResourceGroupID)].BurstFrac)
 	require.False(t, snap[rgGroupKey(lowResourceGroupID)].MaxCPU)
 
-	// RM-mode WorkQueue's cached per-group state reflects the new
+	// WorkQueue's cached per-group state reflects the new
 	// config (refresh propagated through to applyConfigLocked).
 	high := getGroupLocked(rmQueue, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high, "rg high container should be pre-created by apply")

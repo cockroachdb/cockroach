@@ -94,8 +94,14 @@ var systemTenantGroupConfig = ResourceGroupConfig{
 	MaxCPU:    true,
 }
 
+// Resource group IDs used for RM-style resource groups.
+const (
+	highResourceGroupID uint64 = 1
+	lowResourceGroupID  uint64 = 2
+)
+
 // defaultRMResourceGroupConfig seeds the holder until an explicit Set
-// replaces it. The two ids match priorityToResourceGroupKey (high/low).
+// replaces it.
 //
 // TODO(wenyihu6): revisit weights once we have signal from real workloads.
 var defaultRMResourceGroupConfig = ResourceGroupConfigSet{

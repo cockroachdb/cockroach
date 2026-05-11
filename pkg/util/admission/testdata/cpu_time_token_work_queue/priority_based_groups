@@ -1,13 +1,10 @@
 ###
-# This test exercises priority-based resource groups. When
-# set-priority-based-groups is enabled, work is routed to resource
-# groups based on WorkInfo.Priority rather than WorkInfo.TenantID:
-#   - priority >= 0 (NormalPri) -> group 1 (high)
-#   - priority < 0              -> group 2 (low)
+# This test exercises tenant-keyed routing: all work is routed to
+# groups keyed by TenantID. Work from the same tenant (regardless of
+# priority) shares the same group.
 #
-# This means work from different tenants but the same priority band
-# shares the same group, and work from the same tenant but different
-# priority bands goes to different groups.
+# set-priority-based-groups is a no-op (groups are always
+# tenant-keyed now).
 #
 # Note: admit id= is a test-local handle for tracking admit results,
 # unrelated to tenant or group IDs.
@@ -21,8 +18,8 @@ set-try-get-return-value v=true
 set-priority-based-groups v=true
 ----
 
-# Admit high-priority work (priority=0, NormalPri). Should route to
-# group 1 regardless of tenant ID.
+# Admit high-priority work (priority=0, NormalPri). Routes to
+# tenant-keyed groups.
 admit id=1 tenant=10 priority=0 requested-count=1
 ----
 tryGet: input can_burst, returning true
@@ -33,16 +30,15 @@ admit id=2 tenant=20 priority=0 requested-count=1
 tryGet: input can_burst, returning true
 id 2: admit succeeded
 
-# Both high-pri admits (different tenants) should land in group 1.
+# Different tenants get separate groups (tenant 10 and tenant 20).
 print
 ----
 closed epoch: 0 groupHeap len: 0
  group-id: 1 used: 2, w: 80, fifo: -128
- group-id: 2 used: 0, w: 20, fifo: -128
-burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=0 capacity=0 qual=no_burst
+burst-buckets: rg1=fullness=0.0% tokens=-2 capacity=0 maxCPU=true qual=can_burst
 
-# Admit low-priority work (priority=-30, BulkNormalPri). Should route
-# to group 2 regardless of tenant ID.
+# Admit low-priority work (priority=-30, BulkNormalPri). Same tenant
+# means same group.
 admit id=3 tenant=10 priority=-30 requested-count=1
 ----
 tryGet: input no_burst, returning true
@@ -53,7 +49,7 @@ admit id=4 tenant=20 priority=-30 requested-count=1
 tryGet: input no_burst, returning true
 id 4: admit succeeded
 
-# Print: should show two groups (1 and 2), not four tenant-based groups.
+# Two tenant-keyed groups (10 and 20).
 print
 ----
 closed epoch: 0 groupHeap len: 0
@@ -74,8 +70,8 @@ work-done id=3 cpu-time=200
 ----
 tookWithoutPermission 199
 
-# Group 1 (high) should have used adjusted for id=1's cpu-time.
-# Group 2 (low) should have used adjusted for id=3's cpu-time.
+# Tenant 10 should have used adjusted for id=1 and id=3 cpu-time
+# (both were tenant 10).
 print
 ----
 closed epoch: 0 groupHeap len: 0
@@ -84,8 +80,9 @@ closed epoch: 0 groupHeap len: 0
 burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-201 capacity=0 qual=no_burst
 
 ###
-# Verify burst qualification works correctly with priority-based groups.
-# Set group 1 (high) to maxCPU and queue work.
+# Set rg group 1 to maxCPU. This creates an rg-keyed container,
+# which is separate from the tenant-keyed containers created by
+# Admit. The maxCPU flag does not affect tenant-keyed containers.
 ###
 
 set-max-cpu-groups group=1 v=true
@@ -118,8 +115,8 @@ burst-buckets: rg1=fullness=0.0% tokens=-101 capacity=0 maxCPU=true qual=can_bur
 gc-groups-and-reset-used
 ----
 
-# Group 1 (high, can_burst via maxCPU) should be granted before
-# group 2 (low, no_burst).
+# Tenant 10 work is granted (both high-pri and low-pri queued
+# in the same group).
 granted chain-id=1
 ----
 continueGrantChain 1
@@ -133,7 +130,8 @@ id 6: admit succeeded
 granted: returned 1
 
 ###
-# Disable priority-based groups. Work should now route by tenant ID.
+# set-priority-based-groups v=false is a no-op. Work always routes
+# by tenant ID.
 ###
 
 set-try-get-return-value v=true
@@ -147,7 +145,7 @@ admit id=7 tenant=50 priority=0 requested-count=1
 tryGet: input no_burst, returning true
 id 7: admit succeeded
 
-# Should show group 50 (tenant-based), not group 1.
+# New tenant 50 gets its own group.
 print
 ----
 closed epoch: 0 groupHeap len: 0

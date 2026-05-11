@@ -615,8 +615,7 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	// Create a tenant-keyed container with id=1.
-	q.setUseResourceGroup(false)
+	// Create a tenant-keyed container with id=1 via Admit.
 	tenantHandle := newSQLCPUAdmissionHandle(
 		WorkInfo{
 			TenantID: roachpb.MustMakeTenantID(1),
@@ -624,14 +623,11 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 		}, true, &sqlCPUProviderImpl{}, q)
 	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
 
-	// Create an rg-keyed container with id=1 (highResourceGroupID).
-	q.setUseResourceGroup(true)
-	rgHandle := newSQLCPUAdmissionHandle(
-		WorkInfo{
-			TenantID: roachpb.MustMakeTenantID(99),
-			Priority: admissionpb.NormalPri,
-		}, true, &sqlCPUProviderImpl{}, q)
-	require.NoError(t, rgHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	// Create an rg-keyed container with id=1 via refreshResourceGroupConfig.
+	q.configHolder.Set(ResourceGroupConfigSet{
+		rgGroupKey(1): {Weight: 1, MaxCPU: false},
+	})
+	q.refreshResourceGroupConfig()
 
 	// Both containers should now coexist with the same numeric ID.
 	q.mu.Lock()
@@ -662,7 +658,6 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 		"rg container should pick up the maxCPU flag")
 
 	tenantHandle.Close()
-	rgHandle.Close()
 }
 
 // admitOnce drives a single slow-path Admit on a new SQLCPUHandle
@@ -690,13 +685,11 @@ func requireGroupUsed(t *testing.T, q *WorkQueue, key groupKey) uint64 {
 	return g.used
 }
 
-// TestSQLCPUHandleCloseAfterModeFlip verifies that a mode flip
-// between Admit and Close still routes the drained reservation to
-// the original (Admit-time) container. The reservationSourceGroup
-// field captures the key at Admit time precisely so this scenario
-// stays correct: re-deriving from the WorkQueue's current
-// useResourceGroup would route to a freshly-created container that
-// never received the tokens.
+// TestSQLCPUHandleCloseAfterModeFlip verifies that Close routes the
+// drained reservation to the original (Admit-time) container rather
+// than a freshly-created one. The reservationSourceGroup field
+// captures the key at Admit time precisely so this scenario stays
+// correct.
 func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -704,21 +697,19 @@ func TestSQLCPUHandleCloseAfterModeFlip(t *testing.T) {
 	ctx := context.Background()
 	q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
-	// Start in serverless mode: Admit creates a tenant-keyed container.
-	q.setUseResourceGroup(false)
 
 	h := admitOnce(t, ctx, q, 7, admissionpb.NormalPri)
 	tenantKey := tenantGroupKey(7)
 	require.Equal(t, tenantKey, h.mu.reservationSourceGroup)
 	usedBefore := requireGroupUsed(t, q, tenantKey)
 
-	// Flip mode mid-handle. A subsequent Admit on this WorkQueue would
-	// route to rgGroupKey(highResourceGroupID), but Close should still
-	// target the tenant-keyed container that holds the prior tokens.
-	// Note: setUseResourceGroup(true) pre-creates the rg-keyed
-	// containers via applyConfigLocked, so the rg container exists
-	// before Close runs.
-	q.setUseResourceGroup(true)
+	// Inject an rg-keyed container to verify Close doesn't target it.
+	// Close should still target the tenant-keyed container that holds
+	// the prior tokens.
+	q.configHolder.Set(ResourceGroupConfigSet{
+		rgGroupKey(highResourceGroupID): {Weight: 1},
+	})
+	q.refreshResourceGroupConfig()
 	rgUsedBefore := requireGroupUsed(t, q, rgGroupKey(highResourceGroupID))
 
 	_ = tg.buf.stringAndReset()

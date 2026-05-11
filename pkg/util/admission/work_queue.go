@@ -327,19 +327,6 @@ type WorkQueue struct {
 		// Periodically GC'd by gcGroupsResetUsedAndUpdateEstimators.
 		groups map[groupKey]*groupInfo
 
-		// useResourceGroup, when true, derives the resource group ID from
-		// WorkInfo.Priority instead of WorkInfo.TenantID. Used in Resource
-		// Manager mode to split work into foreground (priority >= NormalPri)
-		// and background (priority < NormalPri) groups.
-		//
-		// This is a bool rather than a live read of the cluster setting so
-		// that mode transitions can update this and all components have a
-		// consistent view.
-		//
-		// TODO(wenyihu): support mode transitions and consider
-		// replacing this with an enum for serverless vs RM mode.
-		useResourceGroup bool
-
 		// The highest epoch that is closed.
 		closedEpochThreshold int64
 		// Following values are copied from the cluster settings.
@@ -726,19 +713,9 @@ type AdmitResponse struct {
 	requestedCount int64
 }
 
-// Resource group IDs used in Resource Manager mode when
-// useResourceGroup is true. Work is split into two groups based on
-// WorkInfo.Priority.
-const (
-	// highResourceGroupID is used for work with priority >= NormalPri.
-	highResourceGroupID uint64 = 1
-	// lowResourceGroupID is used for work with priority < NormalPri.
-	lowResourceGroupID uint64 = 2
-)
-
 // priorityToResourceGroupKey maps a WorkPriority to the rg-keyed
-// groupKey for one of the two hardcoded resource groups. Used in
-// Resource Manager mode.
+// groupKey for one of the two hardcoded resource groups. Used when
+// resource group routing is enabled via SetResourceGroupConfig.
 func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	if pri >= admissionpb.NormalPri {
 		return rgGroupKey(highResourceGroupID)
@@ -746,30 +723,14 @@ func priorityToResourceGroupKey(pri admissionpb.WorkPriority) groupKey {
 	return rgGroupKey(lowResourceGroupID)
 }
 
-// setUseResourceGroup enables or disables priority-based resource
-// group derivation. When enabled, the resource group ID is derived
-// from WorkInfo.Priority instead of WorkInfo.TenantID.
-//
-// When enabled is true, the current holder snapshot is also applied
-// to q.mu.groups via applyConfigLocked.
-func (q *WorkQueue) setUseResourceGroup(enabled bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.mu.useResourceGroup = enabled
-	if enabled {
-		q.applyConfigLocked(q.configHolder.Snapshot())
-	}
-}
-
-// groupKeyForWorkLocked returns the composite groupKey for the given
-// WorkInfo. In RM mode (useResourceGroup), the key is derived from
-// WorkInfo.Priority with kind=rgKind; otherwise it is the TenantID
-// with kind=tenantKind.
+// groupKeyForWorkLocked returns the groupKey for the given WorkInfo.
+// In resource manager mode, work is keyed by priority (foreground vs
+// background). Otherwise, work is keyed by tenant ID.
 //
 // REQUIRES: q.mu is held.
 func (q *WorkQueue) groupKeyForWorkLocked(info WorkInfo) groupKey {
 	q.mu.AssertHeld()
-	if q.mu.useResourceGroup {
+	if cpuTimeTokenACMode.Get(&q.settings.SV) == resourceManagerMode {
 		return priorityToResourceGroupKey(info.Priority)
 	}
 	return tenantGroupKey(info.TenantID.ToUint64())
@@ -939,9 +900,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 						info.ReplicatedWorkInfo.Ingested,
 					)
 				}
-				// Replicated work is a Serverless-mode-only path
-				// (StoreWorkQueue runs in usesTokens mode and never sets
-				// useResourceGroup), so gKey is always tenant-keyed.
+				// Replicated work uses usesTokens mode (StoreWorkQueue),
+				// so gKey is always tenant-keyed.
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
 					roachpb.MustMakeTenantID(gKey.id),
 					info.Priority,
@@ -1570,15 +1530,11 @@ func (q *WorkQueue) SetOverrideAllToBypassAdmission(override bool) {
 
 // refreshResourceGroupConfig pushes the current holder snapshot onto
 // q.mu.groups via applyConfigLocked. Call this after configHolder.Set
-// to make a config change visible to in-flight admits. No-op when the
-// queue is not in RM mode; setUseResourceGroup(true) replays the
-// holder snapshot on the next mode entry.
+// to make a config change visible to in-flight admits.
 func (q *WorkQueue) refreshResourceGroupConfig() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.useResourceGroup {
-		q.applyConfigLocked(q.configHolder.Snapshot())
-	}
+	q.applyConfigLocked(q.configHolder.Snapshot())
 }
 
 // applyConfigLocked upserts each entry in the holder snapshot into

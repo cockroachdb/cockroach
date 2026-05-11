@@ -12,27 +12,19 @@
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1176
-tier1  1176
+tokens 5000      4000
+burstM  1176
 
 # set-tokens v=0 simulates tokens being taken due to admitted work.
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # Over an interval (between calls to resetInterval), the refill rate should
 # be added to each bucket. Again, here are the refill rates:
@@ -58,62 +50,42 @@ tier1  0
 allocate remaining=5
 ----
 cpuTTG can_burst no_burst
-tier0  1000      800
-tier1  600       400
-burstM
-tier0  235
-tier1  235
+tokens 1000      800
+burstM  235
 
 allocate remaining=4
 ----
 cpuTTG can_burst no_burst
-tier0  2000      1600
-tier1  1200      800
-burstM
-tier0  470
-tier1  470
+tokens 2000      1600
+burstM  470
 
 allocate remaining=3
 ----
 cpuTTG can_burst no_burst
-tier0  3000      2400
-tier1  1800      1200
-burstM
-tier0  705
-tier1  705
+tokens 3000      2400
+burstM  705
 
 allocate remaining=2
 ----
 cpuTTG can_burst no_burst
-tier0  4000      3200
-tier1  2400      1600
-burstM
-tier0  940
-tier1  940
+tokens 4000      3200
+burstM  940
 
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1175
-tier1  1175
+tokens 5000      4000
+burstM  1175
 
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1175
-tier1  1175
+tokens 5000      4000
+burstM  1175
 
 # resetInterval has been called, so a new interval has started.
 # So in theory more tokens can be added. But in this case the
@@ -123,20 +95,14 @@ tier1  1175
 allocate remaining=5
 ----
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1176
-tier1  1176
+tokens 5000      4000
+burstM  1176
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # In the interval, one call to allocateTokens was made already.
 # So we do not expect the full rates to end up in the buckets.
@@ -160,35 +126,24 @@ tier1  0
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  4000      3200
-tier1  2400      1600
-burstM
-tier0  941
-tier1  941
+tokens 4000      3200
+burstM  941
 
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  4000      3200
-tier1  2400      1600
-burstM
-tier0  941
-tier1  941
+tokens 4000      3200
+burstM  941
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # In this interval, no call to allocateTokens so far, so we do
 # expect the full rates to end up in the bucket, again in a single
@@ -196,55 +151,38 @@ tier1  0
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1176
-tier1  1176
+tokens 5000      4000
+burstM  1176
 
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1176
-tier1  1176
+tokens 5000      4000
+burstM  1176
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # In this interval, two ticks, so half of the tokens should be added
 # on the first call to allocate, and the other half on the second call.
 allocate remaining=2
 ----
 cpuTTG can_burst no_burst
-tier0  2500      2000
-tier1  1500      1000
-burstM
-tier0  588
-tier1  588
+tokens 2500      2000
+burstM  588
 
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  5000      4000
-tier1  3000      2000
-burstM
-tier0  1176
-tier1  1176
+tokens 5000      4000
+burstM  1176
 
 # These final cases test how cpuTimeTokenAllocator handles changes to
 # refillRates. See the comment above deltaRefillRates for a full explanation
@@ -255,37 +193,26 @@ tier1  1176
 resetInterval increase_rates_by=1
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  5001      4001
-tier1  3001      2001
-burstM
-tier0  1176
-tier1  1176
+tokens 5001      4001
+burstM  1176
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # The updated refillRate is added to the buckets (in one tick for simplicity,
 # since remaining=1).
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  5001      4001
-tier1  3001      2001
-burstM
-tier0  1176
-tier1  1176
+tokens 5001      4001
+burstM  1176
 
 # Another test of a change to refillRates. If we decrease refillRates by two
 # (on all buckets), we expect two tokens to be removed from all buckets, as
@@ -293,46 +220,32 @@ tier1  1176
 resetInterval increase_rates_by=-2
 ----
 fit(
-	tier1 no_burst -> 80%
-	tier1 can_burst -> 85%
-	tier0 no_burst -> 80%
-	tier0 can_burst -> 85%
+	no_burst -> 80%
+	can_burst -> 85%
 )
 cpuTTG can_burst no_burst
-tier0  4999      3999
-tier1  2999      1999
-burstM
-tier0  1176
-tier1  1176
+tokens 4999      3999
+burstM  1176
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # The updated refillRate is added to the buckets (in one tick for simplicity,
 # since remaining=1).
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  4999      3999
-tier1  2999      1999
-burstM
-tier0  1176
-tier1  1176
+tokens 4999      3999
+burstM  1176
 
 set-tokens v=0
 ----
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # Test of computation of target CPU utilizations from overridden cluster
 # settings. The no_burst target is configurable by a cluster setting,
@@ -343,26 +256,18 @@ setClusterSettings target=0.5 burst=0.1
 SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.5
 SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.1
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 50%
-	tier1 can_burst -> 60%
-	tier0 no_burst -> 50%
-	tier0 can_burst -> 60%
+	no_burst -> 50%
+	can_burst -> 60%
 )
 cpuTTG can_burst no_burst
-tier0  0         0
-tier1  0         0
-burstM
-tier0  0
-tier1  0
+tokens 0         0
+burstM  0
 
 # Test that both allocateTokens and resetInterval clamp bucket token counts to
 # their per-bucket minimums. The granter minimums are computed from the current
@@ -383,43 +288,29 @@ tier1  0
 set-tokens v=-10000000
 ----
 cpuTTG can_burst no_burst
-tier0  -10000000 -10000000
-tier1  -10000000 -10000000
-burstM
-tier0  -10000000
-tier1  -10000000
+tokens -10000000 -10000000
+burstM  -10000000
 
 allocate remaining=1
 ----
 cpuTTG can_burst no_burst
-tier0  0         -1000
-tier1  -2000     -3000
-burstM
-tier0  -416
-tier1  -416
+tokens 0         -1000
+burstM  -416
 
 # Test resetInterval path. Drive buckets deeply negative again. resetInterval
 # has delta=0 (rates unchanged), but the floor still clamps.
 set-tokens v=-10000000
 ----
 cpuTTG can_burst no_burst
-tier0  -10000000 -10000000
-tier1  -10000000 -10000000
-burstM
-tier0  -10000000
-tier1  -10000000
+tokens -10000000 -10000000
+burstM  -10000000
 
 resetInterval
 ----
 fit(
-	tier1 no_burst -> 50%
-	tier1 can_burst -> 60%
-	tier0 no_burst -> 50%
-	tier0 can_burst -> 60%
+	no_burst -> 50%
+	can_burst -> 60%
 )
 cpuTTG can_burst no_burst
-tier0  0         -1000
-tier1  -2000     -3000
-burstM
-tier0  -416
-tier1  -416
+tokens 0         -1000
+burstM  -416
