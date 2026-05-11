@@ -913,11 +913,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// the spec path: for in-memory specs without a sticky VFS that means a
 		// fresh vfs.NewMem(); for sticky-VFS or on-disk specs the two engines
 		// share an FS but live in different paths.
-		const separatedEnginesHack = buildutil.CrdbTestBuild
-		var logStorageOpts []storage.ConfigOption
-		if separatedEnginesHack {
-			logStorageOpts = append(logStorageOpts, storageConfigOpts...)
-		}
+		separatedEnginesHack := buildutil.CrdbTestBuild
 
 		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {
@@ -929,6 +925,40 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// or leave ownership with the caller of Open.
 		storeEnvs[i] = nil
 		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
+
+		// Detect the legacy single-engine layout: the store was originally
+		// bootstrapped without separated engines (so all StoreIdent / cluster
+		// version / raft state lives in `eng`), but the hack would otherwise
+		// open a fresh, empty log engine alongside it. inspectEngines reads
+		// StoreIdent from the log engine (server/init.go), so a fresh log
+		// engine paired with a populated state engine is misclassified as an
+		// uninitialized store: the init server takes the join path and
+		// assertEnginesEmpty trips on the state-engine data. If the state
+		// engine already contains a StoreIdent we know this is not a fresh
+		// cluster, so disable the hack for this store and use the single-
+		// engine layout.
+		//
+		// TODO(sep-raft-log): remove this fallback once a real legacy-store
+		// migration exists that copies the relevant state into the log engine
+		// on first open. Until then, this fallback masks any future test that
+		// expects separated engines on a restarted store created by an older
+		// binary.
+		if separatedEnginesHack {
+			stateIdent, err := kvstorage.ReadStoreIdent(ctx, eng)
+			switch {
+			case err == nil:
+				log.Dev.Infof(ctx,
+					"store %d (s%d): legacy single-engine layout detected; "+
+						"skipping separated-engines hack on this store",
+					i, stateIdent.StoreID)
+				separatedEnginesHack = false
+			case errors.HasType(err, (*kvstorage.NotBootstrappedError)(nil)):
+				// Fresh store; proceed with the separated-engines layout.
+			default:
+				eng.Close()
+				return Engines{}, errors.Wrapf(err, "store %d: reading state-engine StoreIdent", i)
+			}
+		}
 
 		if !separatedEnginesHack {
 			engines = append(engines, kvstorage.MakeEngines(eng))
@@ -967,7 +997,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			eng.Close()
 			return Engines{}, errors.Wrapf(err, "store %d: opening log engine env", i)
 		}
-		logEng, err := storage.Open(ctx, logEnv, cfg.Settings, logStorageOpts...)
+		logEng, err := storage.Open(ctx, logEnv, cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			logEnv.Close()
 			eng.Close()
