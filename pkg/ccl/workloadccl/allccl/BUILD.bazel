@@ -20,6 +20,7 @@ go_library(
         "//pkg/workload/kv",
         "//pkg/workload/ledger",
         "//pkg/workload/movr",
+        "//pkg/workload/pgbench",
         "//pkg/workload/querybench",
         "//pkg/workload/querylog",
         "//pkg/workload/queue",

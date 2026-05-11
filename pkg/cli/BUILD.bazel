@@ -271,6 +271,7 @@ go_library(
         "//pkg/workload/insights",
         "//pkg/workload/kv",
         "//pkg/workload/movr",
+        "//pkg/workload/pgbench",
         "//pkg/workload/querybench",
         "//pkg/workload/sqlstats",
         "//pkg/workload/tpcc",
