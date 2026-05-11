@@ -9,6 +9,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime/trace"
 	"sort"
 	"strconv"
 	"testing"
@@ -173,7 +176,7 @@ func makeRecordingSink(t *testing.T, rec *recordingSinkClient, retryOpts ...retr
 // BatchBuffer.ShouldFlush returns false, allowing arbitrarily large
 // batches) is a fair fight rather than artificially capped on the
 // noLinger side.
-func makeUncappedNoLingerSink(t *testing.T, rec *recordingSinkClient) Sink {
+func makeUncappedNoLingerSink(t *testing.T, rec *recordingSinkClient, numWorkers int) Sink {
 	t.Helper()
 	s := &noLingerSink{
 		client:       rec,
@@ -186,10 +189,12 @@ func makeUncappedNoLingerSink(t *testing.T, rec *recordingSinkClient) Sink {
 		}),
 		wg: ctxgroup.WithContext(context.Background()),
 	}
-	s.wg.GoCtx(func(ctx context.Context) error {
-		s.runWorker(ctx)
-		return nil
-	})
+	for i := 0; i < numWorkers; i++ {
+		s.wg.GoCtx(func(ctx context.Context) error {
+			s.runWorker(ctx)
+			return nil
+		})
+	}
 	return s
 }
 
@@ -198,13 +203,13 @@ func makeUncappedNoLingerSink(t *testing.T, rec *recordingSinkClient) Sink {
 // minFlushFrequency (the linger timer that the noLingerSink design
 // removes).
 func makeRecordingBatchingSink(
-	t *testing.T, rec *recordingSinkClient, minFlushFreq time.Duration,
+	t *testing.T, rec *recordingSinkClient, minFlushFreq time.Duration, numWorkers int,
 ) Sink {
 	t.Helper()
 	settings := cluster.MakeTestingClusterSettings()
 	// Setting is off by default -- dispatcher returns batchingSink.
 	return makeBatchingOrNoLingerSink(
-		context.Background(), sinkTypeWebhook, rec, minFlushFreq, retry.Options{}, 1, nil,
+		context.Background(), sinkTypeWebhook, rec, minFlushFreq, retry.Options{}, numWorkers, nil,
 		func() *admission.Pacer { return nil },
 		timeutil.DefaultTimeSource{}, nilMetricsRecorderBuilder(true), settings,
 	)
@@ -608,11 +613,16 @@ func TestNoLingerSinkBatchingEmerges(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderShort(t, "perf demo; run with -v")
 
-	// Run a single workload (offered rate + flush latency + event count)
-	// against a sink and report the resulting batch shape and throughput.
+	// Run a single workload against a sink and report the resulting
+	// batch shape, throughput, and per-event latency. burstSize controls
+	// the emit pattern: events are emitted as fast as possible in groups
+	// of burstSize, with a sleep of emitGap between groups. burstSize=1
+	// + emitGap>0 yields a steady low rate (one event per emitGap);
+	// burstSize=N + emitGap=0 yields a saturating workload;
+	// burstSize=N + emitGap>0 yields a bursty workload.
 	type sinkBuilder func(*testing.T, *recordingSinkClient) Sink
 	runWorkload := func(t *testing.T, build sinkBuilder, label string,
-		emitGap, flushLatency time.Duration, totalEvents int) {
+		burstSize int, emitGap, flushLatency time.Duration, totalEvents int) {
 		rec := &recordingSinkClient{
 			flushDelay:       flushLatency,
 			collectLatencies: true,
@@ -622,11 +632,10 @@ func TestNoLingerSinkBatchingEmerges(t *testing.T) {
 		start := time.Now()
 		for i := 0; i < totalEvents; i++ {
 			emitKVTimed(t, sink, "foo", fmt.Sprintf("k%d", i), "v")
-			if emitGap > 0 {
+			if (i+1)%burstSize == 0 && emitGap > 0 {
 				time.Sleep(emitGap)
 			}
 		}
-		// todo: flight recording, exec trace
 		emitElapsed := time.Since(start)
 		require.NoError(t, sink.Flush(context.Background()))
 		totalElapsed := time.Since(start)
@@ -649,35 +658,82 @@ func TestNoLingerSinkBatchingEmerges(t *testing.T) {
 			throughput, p50, p99)
 	}
 
-	noLinger := func(t *testing.T, rec *recordingSinkClient) Sink {
-		return makeUncappedNoLingerSink(t, rec)
-	}
-	batching := func(freq time.Duration) sinkBuilder {
+	noLinger := func(numWorkers int) sinkBuilder {
 		return func(t *testing.T, rec *recordingSinkClient) Sink {
-			return makeRecordingBatchingSink(t, rec, freq)
+			return makeUncappedNoLingerSink(t, rec, numWorkers)
+		}
+	}
+	batching := func(freq time.Duration, numWorkers int) sinkBuilder {
+		return func(t *testing.T, rec *recordingSinkClient) Sink {
+			return makeRecordingBatchingSink(t, rec, freq, numWorkers)
 		}
 	}
 
-	// Two workloads: low rate (one event per 10ms, 200 total) vs high
-	// rate (saturating, 5000 total). The flush stub takes 1ms.
+	// 8 workers approximates a real production sink (parallelism is
+	// usually 8-16 for kafka/webhook v2). The flush stub takes 1ms.
+	const numWorkers = 8
 	const flushLatency = time.Millisecond
 
-	t.Run("low_rate", func(t *testing.T) {
-		runWorkload(t, noLinger, "noLingerSink            ",
-			10*time.Millisecond, flushLatency, 200)
-		runWorkload(t, batching(time.Millisecond), "batchingSink min_freq=1ms  ",
-			10*time.Millisecond, flushLatency, 200)
-		runWorkload(t, batching(100*time.Millisecond), "batchingSink min_freq=100ms",
-			10*time.Millisecond, flushLatency, 200)
+	startTrace := func(t *testing.T, name string) {
+		t.Helper()
+		f, err := os.Create(filepath.Join(os.TempDir(), name+".trace"))
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = f.Close() })
+		require.NoError(t, trace.Start(f))
+		t.Cleanup(trace.Stop)
+		t.Logf("trace: %s", f.Name())
+	}
+
+	t.Run("low_rate_no_linger", func(t *testing.T) {
+		startTrace(t, "low_rate_no_linger")
+		runWorkload(t, noLinger(numWorkers), "noLingerSink            ",
+			1, 10*time.Millisecond, flushLatency, 1000)
+	})
+	t.Run("low_rate_min_freq=1ms", func(t *testing.T) {
+		startTrace(t, "low_rate_min_freq_1ms")
+		runWorkload(t, batching(time.Millisecond, numWorkers), "batchingSink min_freq=1ms  ",
+			1, 10*time.Millisecond, flushLatency, 1000)
+	})
+	t.Run("low_rate_min_freq=100ms", func(t *testing.T) {
+		startTrace(t, "low_rate_min_freq_100ms")
+		runWorkload(t, batching(100*time.Millisecond, numWorkers), "batchingSink min_freq=100ms",
+			1, 10*time.Millisecond, flushLatency, 1000)
 	})
 
-	t.Run("high_rate", func(t *testing.T) {
-		runWorkload(t, noLinger, "noLingerSink            ",
-			0, flushLatency, 5000)
-		runWorkload(t, batching(time.Millisecond), "batchingSink min_freq=1ms  ",
-			0, flushLatency, 5000)
-		runWorkload(t, batching(100*time.Millisecond), "batchingSink min_freq=100ms",
-			0, flushLatency, 5000)
+	t.Run("high_rate_no_linger", func(t *testing.T) {
+		startTrace(t, "high_rate_no_linger")
+		runWorkload(t, noLinger(numWorkers), "noLingerSink            ",
+			1, 0, flushLatency, 100000)
+	})
+	t.Run("high_rate_min_freq=1ms", func(t *testing.T) {
+		startTrace(t, "high_rate_min_freq_1ms")
+		runWorkload(t, batching(time.Millisecond, numWorkers), "batchingSink min_freq=1ms  ",
+			1, 0, flushLatency, 100000)
+	})
+	t.Run("high_rate_min_freq=100ms", func(t *testing.T) {
+		startTrace(t, "high_rate_min_freq_100ms")
+		runWorkload(t, batching(100*time.Millisecond, numWorkers), "batchingSink min_freq=100ms",
+			1, 0, flushLatency, 100000)
+	})
+
+	// Bursty: 1000 events as fast as possible, then 50ms idle, repeated
+	// 100 times (total 100k events, ~5s wall). Models a workload where
+	// rangefeed deliveries arrive in bursts (e.g. a leaseholder change
+	// or a backfill catch-up) interleaved with quiet periods.
+	t.Run("bursty_no_linger", func(t *testing.T) {
+		startTrace(t, "bursty_no_linger")
+		runWorkload(t, noLinger(numWorkers), "noLingerSink            ",
+			1000, 50*time.Millisecond, flushLatency, 100000)
+	})
+	t.Run("bursty_min_freq=1ms", func(t *testing.T) {
+		startTrace(t, "bursty_min_freq_1ms")
+		runWorkload(t, batching(time.Millisecond, numWorkers), "batchingSink min_freq=1ms  ",
+			1000, 50*time.Millisecond, flushLatency, 100000)
+	})
+	t.Run("bursty_min_freq=100ms", func(t *testing.T) {
+		startTrace(t, "bursty_min_freq_100ms")
+		runWorkload(t, batching(100*time.Millisecond, numWorkers), "batchingSink min_freq=100ms",
+			1000, 50*time.Millisecond, flushLatency, 100000)
 	})
 }
 
