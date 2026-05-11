@@ -905,9 +905,17 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (isql.Rows, error) {
-	return ie.execInternal(
+	r, err := ie.execInternal(
 		ctx, opName, newSyncIEResultChannel(), defaultIEExecutionMode, txn, session, ieStmt{stmt: stmt}, qargs...,
 	)
+	// Avoid returning a typed nil *rowsIterator wrapped in a non-nil
+	// isql.Rows interface. Callers check "if it != nil" before calling
+	// methods, but a non-nil interface holding a nil pointer passes that
+	// check and panics on method dispatch (e.g. Close, HasResults).
+	if r == nil {
+		return nil, err
+	}
+	return r, err
 }
 
 // applyInternalExecutorSessionExceptions overrides values from
