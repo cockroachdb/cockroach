@@ -298,22 +298,22 @@ func printWorkQueue(q *WorkQueue) string {
 	defer q.mu.Unlock()
 	buf.WriteString(fmt.Sprintf("len(group-heap)=%d", len(q.mu.groupHeap)))
 	if len(q.mu.groupHeap) > 0 {
-		buf.WriteString(fmt.Sprintf(" top-group=t%d", q.mu.groupHeap[0].groupKey.id))
+		buf.WriteString(fmt.Sprintf(" top-group=%s", q.mu.groupHeap[0].groupKey))
 	}
 	var keys []groupKey
 	for k := range q.mu.groups {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].kind != keys[j].kind {
-			return keys[i].kind < keys[j].kind
+		if keys[i].tenantID != keys[j].tenantID {
+			return keys[i].tenantID < keys[j].tenantID
 		}
-		return keys[i].id < keys[j].id
+		return keys[i].groupID < keys[j].groupID
 	})
 	for _, k := range keys {
 		group := q.mu.groups[k]
-		buf.WriteString(fmt.Sprintf("\n group=t%d weight=%d fifo-threshold=%s used=%s",
-			group.groupKey.id,
+		buf.WriteString(fmt.Sprintf("\n group=%s weight=%d fifo-threshold=%s used=%s",
+			group.groupKey,
 			group.weight,
 			admissionpb.WorkPriority(group.fifoPriorityThreshold),
 			printTrimmedBytes(int64(group.used)),

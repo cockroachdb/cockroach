@@ -22,8 +22,8 @@ admit tenant=t1 pri=normal-pri create-time=1us size=1B range=r1 log-position=4/2
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
-[regular work queue]: len(group-heap)=1 top-group=t1
- group=t1 weight=1 fifo-threshold=low-pri used=0B
+[regular work queue]: len(group-heap)=1 top-group=t1g0
+ group=t1g0 weight=4294967295 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=5µs size=1B range=r1 log-position=4/20]
   [1: pri=normal-pri create-time=5.001µs size=1B range=r1 log-position=4/21]
 [elastic work queue]: len(group-heap)=0
@@ -44,8 +44,8 @@ admitted [tenant=t1 pri=normal-pri create-time=5µs size=1B range=r1 log-positio
 print
 ----
 physical-stats: work-count=2 written-bytes=2B ingested-bytes=0B
-[regular work queue]: len(group-heap)=1 top-group=t1
- group=t1 weight=1 fifo-threshold=low-pri used=1B
+[regular work queue]: len(group-heap)=1 top-group=t1g0
+ group=t1g0 weight=4294967295 fifo-threshold=low-pri used=1B
   [0: pri=normal-pri create-time=5.001µs size=1B range=r1 log-position=4/21]
 [elastic work queue]: len(group-heap)=0
 
