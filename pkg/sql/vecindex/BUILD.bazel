@@ -69,6 +69,7 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
@@ -93,6 +94,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/vector",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

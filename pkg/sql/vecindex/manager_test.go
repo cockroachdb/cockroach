@@ -8,6 +8,7 @@ package vecindex_test
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -239,5 +241,83 @@ func TestVectorManager(t *testing.T) {
 			require.Equal(t, errs[0], errs[i])
 		}
 		vectorMgr.SetTestingKnobs(nil)
+	})
+
+	t.Run("test panic during pull recovers cleanly", func(t *testing.T) {
+		// Block the panicking goroutine until the other 10 callers are parked on
+		// e.waitCond, so the panic propagates exactly when 10 waiters depend on
+		// the cleanup defer in Manager.Get.
+		pullDelayer := sync.WaitGroup{}
+		pullDelayer.Add(10)
+		testingKnobs := vecindex.VecIndexTestingKnobs{
+			DuringVecIndexPull: func() {
+				pullDelayer.Wait()
+				panic(errors.AssertionFailedf("injected vecindex panic"))
+			},
+			BeforeVecIndexWait: func() {
+				pullDelayer.Done()
+			},
+		}
+		vectorMgr.SetTestingKnobs(&testingKnobs)
+
+		// Table 150 is created in setup but not pulled by any earlier subtest,
+		// so DuringVecIndexPull will fire (cached entries skip the inner
+		// closure).
+		const tableID catid.DescID = 150
+
+		// Fire 11 concurrent Get calls. The first to acquire m.mu installs the
+		// indexEntry and runs the inner closure, which panics. The other 10
+		// observe e.mustWait=true and block on e.waitCond. The cleanup defer
+		// in Manager.Get must unblock all 10 and delete the cache entry so a
+		// subsequent Get retries instead of hanging.
+		results := make([]error, 11)
+		wg := sync.WaitGroup{}
+		for i := range 11 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						if err, ok := r.(error); ok {
+							results[idx] = err
+						} else {
+							results[idx] = errors.Newf("non-error panic: %v", r)
+						}
+					}
+				}()
+				_, err := vectorMgr.Get(ctx, tableID, 2)
+				if err != nil {
+					results[idx] = err
+				}
+			}(i)
+		}
+		wg.Wait()
+
+		// The panicker propagates the raw injected panic; the 10 waiters get the
+		// wrapped sentinel, which contains the original cause as well. Check the
+		// sentinel substring first so a wrapped error isn't miscounted as the
+		// raw panic.
+		var injectedCount, wrappedCount int
+		for _, e := range results {
+			require.Error(t, e)
+			require.Contains(t, e.Error(), "injected vecindex panic",
+				"all errors should carry the original panic cause")
+			if strings.Contains(e.Error(), "vector index construction panicked") {
+				wrappedCount++
+			} else {
+				injectedCount++
+			}
+		}
+		require.Equal(t, 1, injectedCount,
+			"exactly one goroutine should propagate the original panic unwrapped")
+		require.Equal(t, 10, wrappedCount,
+			"waiters should receive the wrapped sentinel error")
+
+		// After cleanup, the cache entry must be gone so a second Get retries.
+		// Clear the panicking knob first so the retry can succeed.
+		vectorMgr.SetTestingKnobs(nil)
+		idx, err := vectorMgr.Get(ctx, tableID, 2)
+		require.NoError(t, err)
+		require.NotNil(t, idx)
 	})
 }
