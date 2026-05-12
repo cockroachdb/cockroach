@@ -3902,6 +3902,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "rebalanceRHSAway", func(t *testing.T, rebalanceRHSAway bool) {
 		// We will be testing the SSTs written on store3's engine.
 		var receivingEng, sendingEng storage.Engine
+		var enginesSeparated bool
 		// All of these variables will be populated later, after starting the
 		// cluster.
 		var keyStart, keyA, keyB, keyC, keyD, keyEnd roachpb.Key
@@ -3936,7 +3937,15 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// NOTE: There are no range-local keys or lock table keys, in [d,
 			// /Max) in the store we're sending a snapshot to, so we aren't
 			// expecting SSTs to clear those keys.
-			require.Len(t, sstNames, 9)
+			//
+			// NB: In separated mode, rewriteRaftState writes go to the log-engine
+			// batch instead of an SST in the scratch, so the count drops by 1
+			// (9 → 8) and the subsumed-replica clear SSTs shift left by one.
+			wantSSTs, clearStart := 9, 6
+			if enginesSeparated {
+				wantSSTs, clearStart = 8, 5
+			}
+			require.Len(t, sstNames, wantSSTs)
 
 			// Only try to predict SSTs for:
 			// - The user keys in the snapshot
@@ -3952,7 +3961,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// The SST with the user keys in the snapshot.
 			sstNamesSubset = append(sstNamesSubset, sstNames[4])
 			// Remaining ones from the predict list above.
-			sstNamesSubset = append(sstNamesSubset, sstNames[6:]...)
+			sstNamesSubset = append(sstNamesSubset, sstNames[clearStart:]...)
 
 			// Construct the expected SSTs and ensure that they are byte-by-byte
 			// equal. This verification ensures that the SSTs have the same
@@ -4028,10 +4037,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
 
 			// Construct SSTs for the range-id local keys of the subsumed
-			// replicas. with RangeIDs 3 and 4. Note that this also targets the
+			// replicas with RangeIDs 3 and 4. Note that this also targets the
 			// unreplicated rangeID-based keys because we're effectively
 			// replicaGC'ing these replicas (while absorbing their user keys
-			// into the LHS).
+			// into the LHS). In separated mode the raft-engine clears (raft
+			// log, HardState, TruncatedState) go to the log-engine batch
+			// instead; only RaftReplicaID stays in the SST since it lives on
+			// the state engine.
 			for _, k := range []roachpb.Key{keyB, keyC} {
 				rangeID := rangeIds[string(k)]
 				sstFile := &storage.MemObject{}
@@ -4053,17 +4065,22 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					context.Background(), &sst,
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 				))
-				// Ditto for the unreplicated RangeID keys. Note that it is also split
-				// into two range clears, to work around the RaftReplicaID key.
-				require.NoError(t, sst.ClearRawRange(
-					keys.RaftHardStateKey(rangeID), sl.RaftReplicaIDKey(), true, false,
-				))
+				if !enginesSeparated {
+					// Note that the unreplicated RangeID-key clear is split
+					// into two range clears, to work around the RaftReplicaID
+					// key.
+					require.NoError(t, sst.ClearRawRange(
+						keys.RaftHardStateKey(rangeID), sl.RaftReplicaIDKey(), true, false,
+					))
+				}
 				require.NoError(t, sl.ClearRaftReplicaID(&sst))
-				require.NoError(t, sst.ClearRawRange(
-					sl.RaftTruncatedStateKey(),
-					keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
-					true, false,
-				))
+				if !enginesSeparated {
+					require.NoError(t, sst.ClearRawRange(
+						sl.RaftTruncatedStateKey(),
+						keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
+						true, false,
+					))
+				}
 
 				require.NoError(t, sst.Finish())
 				expectedSSTs = append(expectedSSTs, sstFile.Data())
@@ -4132,6 +4149,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		store1, store3 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
 		sendingEng = store1.StateEngine()
 		receivingEng = store3.StateEngine()
+		store3Engines := store3.Engines()
+		enginesSeparated = store3Engines.Separated()
 		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 		// This test works across 5 ranges in total. We start with a scratch
@@ -4229,6 +4248,18 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
 		}
 
+		// In separated mode, capture the soon-to-be-subsumed replicas' applied
+		// indices on store3 so we can later assert that subsumeReplica's
+		// "clear unapplied raft log suffix" worked.
+		subsumedAppliedIdx := map[roachpb.RangeID]kvpb.RaftIndex{}
+		if enginesSeparated {
+			for _, k := range []roachpb.Key{keyB, keyC} {
+				repl := store3.LookupReplica(roachpb.RKey(k))
+				require.NotNilf(t, repl, "store3 should still hold r%d before traffic restore", rangeIds[string(k)])
+				subsumedAppliedIdx[repl.RangeID] = repl.State(ctx).ReplicaState.RaftAppliedIndex
+			}
+		}
+
 		// Restore Raft traffic to the LHS on store3.
 		log.KvDistribution.Infof(ctx, "restored traffic to store 3")
 		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store3.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
@@ -4300,6 +4331,29 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 			return nil
 		})
+
+		// In separated mode, also verify that subsumeReplica cleared the
+		// subsumed replicas' raft state on the log engine. This complements
+		// the per-subsumed-replica byte-by-byte SST check above, which under
+		// separated mode only covers the state-engine portion of the clear.
+		if enginesSeparated {
+			for _, k := range []roachpb.Key{keyB, keyC} {
+				rangeID := rangeIds[string(k)]
+				sl := kvstorage.MakeStateLoader(rangeID)
+				hs, err := sl.LoadHardState(ctx, store3.LogEngine())
+				require.NoError(t, err)
+				require.Equal(t, raftpb.HardState{}, hs)
+				ts, err := sl.LoadRaftTruncatedState(ctx, store3.LogEngine())
+				require.NoError(t, err)
+				require.Equal(t, kvserverpb.RaftTruncatedState{}, ts)
+				// The unapplied-suffix clear leaves no raft log entries with
+				// index > the applied index captured before subsume.
+				appliedIdx := subsumedAppliedIdx[rangeID]
+				lastEntryID, err := sl.LoadLastEntryID(ctx, store3.LogEngine(), kvserverpb.RaftTruncatedState{})
+				require.NoError(t, err)
+				require.Equal(t, lastEntryID.Index, appliedIdx)
+			}
+		}
 	})
 }
 
