@@ -11,66 +11,23 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// groupKind distinguishes the semantic origin of a groupInfo's
-// container in q.mu.groups. The same numeric ID can represent
-// either a tenant (in serverless mode) or a resource group (in RM
-// mode), and tenant IDs and RM resource group IDs are drawn from
-// the same uint64 space (e.g., system tenant ID = 1 collides with
-// highResourceGroupID = 1). Pairing the ID with a kind in the map
-// key prevents these two semantic meanings from ever sharing a
-// container.
-//
-// The zero value is intentionally invalid so that an unset groupKey
-// is detectably so (rather than silently identifying as "tenant 0"
-// the way iota-from-0 would).
-type groupKind uint8
-
-const (
-	// invalidKind is the zero value sentinel; a groupKey with this
-	// kind has not been initialized via tenantGroupKey/rgGroupKey.
-	invalidKind groupKind = iota
-	// tenantKind identifies a container created for a tenant ID
-	// (serverless mode routing via TenantID).
-	tenantKind
-	// rgKind identifies a container created for a resource group
-	// ID (RM mode routing via priorityToResourceGroupKey).
-	rgKind
-)
-
-// String implements fmt.Stringer.
-func (k groupKind) String() string {
-	switch k {
-	case tenantKind:
-		return "tenant"
-	case rgKind:
-		return "rg"
-	case invalidKind:
-		return "invalid"
-	default:
-		return "groupKind(" + strconv.FormatUint(uint64(k), 10) + ")"
-	}
-}
-
-// groupKey is the composite map key for q.mu.groups. It pairs the
-// uint64 group ID with its semantic kind so that, e.g., tenant 1
-// and rg 1 occupy distinct map entries.
+// groupKey is the composite map key for q.mu.groups. It identifies a
+// group by (tenantID, groupID). For tenant groups (serverless mode),
+// tenantID is set and groupID is 0. For resource groups (RM mode),
+// groupID is set and tenantID is 0. Future user-defined groups may
+// have both non-zero. The string representation is "tNgN", e.g.
+// "t1g0" for the system tenant, "t0g1" for the high-priority RM
+// group.
 type groupKey struct {
-	id   uint64
-	kind groupKind
+	tenantID uint64
+	groupID  uint64
 }
 
 // SafeFormat implements redact.SafeFormatter. Formats as e.g.
-// "t1" / "rg2"; useful in SafeFormat output so callers don't have
-// to switch on kind themselves.
+// "t1g0" (tenant 1, no resource group) or "t0g1" (no tenant,
+// resource group 1).
 func (k groupKey) SafeFormat(s redact.SafePrinter, _ rune) {
-	switch k.kind {
-	case tenantKind:
-		s.Printf("t%d", k.id)
-	case rgKind:
-		s.Printf("rg%d", k.id)
-	default:
-		s.Printf("invalid(%d)", k.id)
-	}
+	s.Printf("t%dg%d", k.tenantID, k.groupID)
 }
 
 // String implements fmt.Stringer via SafeFormat.
@@ -80,10 +37,22 @@ func (k groupKey) String() string {
 
 // tenantGroupKey returns the groupKey for a tenant container.
 func tenantGroupKey(id uint64) groupKey {
-	return groupKey{id: id, kind: tenantKind}
+	return groupKey{tenantID: id}
 }
 
 // rgGroupKey returns the groupKey for a resource group container.
 func rgGroupKey(id uint64) groupKey {
-	return groupKey{id: id, kind: rgKind}
+	return groupKey{groupID: id}
+}
+
+// metricLabels returns the (kind, id) label pair for per-group
+// metrics, preserving the existing metric label scheme.
+//
+// TODO(ssd): We will fix up metrics for the unification in a
+// future commit.
+func (k groupKey) metricLabels() (kindStr, idStr string) {
+	if k.groupID == 0 {
+		return "tenant", strconv.FormatUint(k.tenantID, 10)
+	}
+	return "rg", strconv.FormatUint(k.groupID, 10)
 }
