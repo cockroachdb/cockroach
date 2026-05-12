@@ -5,14 +5,18 @@ go_library(
     srcs = [
         "graph.go",
         "schema_discover.go",
+        "schema_gen.go",
         "subdag.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/fktxn",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/workload",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -20,9 +24,11 @@ go_library(
 go_test(
     name = "fktxn_test",
     srcs = [
+        "dump_schema_test.go",
         "graph_test.go",
         "main_test.go",
         "schema_discover_test.go",
+        "schema_gen_test.go",
         "subdag_test.go",
         "test_schemas_test.go",
     ],
