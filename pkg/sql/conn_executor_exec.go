@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -2648,6 +2649,17 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 
 	if err := ex.extraTxnState.descCollection.EmitDescriptorUpdatesKey(ctx, ex.state.mu.txn); err != nil {
 		return err
+	}
+
+	// For explicit transactions, attribute the commit's deferred KV work
+	// to the transaction fingerprint, otherwise it will be attributed to
+	// the last statement's fingerprint which is misleading.
+	if !ex.implicitTxn() {
+		txnFingerprintID := uint64(ex.extraTxnState.transactionStatementsHash.Sum())
+		appNameID := ash.GetOrStoreAppNameID(ex.sessionData().ApplicationName)
+		ex.state.mu.txn.SetWorkloadInfo(
+			txnFingerprintID, appNameID, workloadid.WorkloadTypeTransaction,
+		)
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {

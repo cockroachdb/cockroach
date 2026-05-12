@@ -189,6 +189,12 @@ func TestEncodeWorkloadID(t *testing.T) {
 			expected: "UNKNOWN",
 		},
 		{
+			name:     "transaction fingerprint uses hex",
+			id:       42,
+			typ:      workloadid.WorkloadTypeTransaction,
+			expected: encodeStmtFingerprintIDToString(42),
+		},
+		{
 			name:     "zero ID with unknown type",
 			id:       0,
 			typ:      workloadid.WorkloadTypeUnknown,
