@@ -158,8 +158,14 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 
 func getEnginesKeySet(t *testing.T, e kvstorage.Engines) map[string]struct{} {
 	t.Helper()
-	require.False(t, e.Separated(), "not supported in this test")
-	return getEngineKeySet(t, e.Engine())
+	if !e.Separated() {
+		return getEngineKeySet(t, e.Engine())
+	}
+	out := getEngineKeySet(t, e.StateEngine())
+	for k := range getEngineKeySet(t, e.LogEngine()) {
+		out[k] = struct{}{}
+	}
+	return out
 }
 
 func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
@@ -221,35 +227,65 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 		adminMergeArgs(lhsDesc.StartKey.AsRawKey()))
 	require.NoError(t, pErr.GoError())
 
-	// Collect all the keys again.
-	postKeys := getEnginesKeySet(t, store.Engines())
+	tombstoneKey := string(keys.RangeTombstoneKey(rhsDesc.RangeID))
+	localRangeKeyPrefix := string(keys.MakeRangeIDPrefix(rhsDesc.RangeID))
 
-	// Compute the new keys.
-	for k := range preKeys {
-		delete(postKeys, k)
+	// leftoverSubsumedKeys recomputes the diff against the pre-split state and
+	// returns the subsumed range's local range-ID keys that were not cleaned
+	// up by now.
+	leftoverSubsumedKeys := func() map[string]struct{} {
+		postKeys := getEnginesKeySet(t, store.Engines())
+		for k := range preKeys {
+			delete(postKeys, k)
+		}
+		delete(postKeys, tombstoneKey) // tombstoneKey is expected to exist
+		for k := range postKeys {
+			if !strings.HasPrefix(k, localRangeKeyPrefix) {
+				delete(postKeys, k)
+			}
+		}
+		return postKeys
 	}
 
-	tombstoneKey := string(keys.RangeTombstoneKey(rhsDesc.RangeID))
+	// The tombstone key must exist on disk after the merge.
+	postKeys := getEnginesKeySet(t, store.Engines())
 	if _, ok := postKeys[tombstoneKey]; !ok {
 		t.Errorf("tombstone key (%s) missing after merge", roachpb.Key(tombstoneKey))
 	}
-	delete(postKeys, tombstoneKey)
 
-	// Keep only the subsumed range's local range-ID keys.
-	localRangeKeyPrefix := string(keys.MakeRangeIDPrefix(rhsDesc.RangeID))
-	for k := range postKeys {
-		if !strings.HasPrefix(k, localRangeKeyPrefix) {
-			delete(postKeys, k)
+	// Under separate engines, SubsumeReplica intentionally leaves the subsumed
+	// range's applied raft log entries on the log engine. They are dropped
+	// asynchronously by the WAG truncator when it's safe to do so.
+	//
+	// In single-engine, all raft entries are dropped syncronously.
+	assertNoLeftoverKeys := func() error {
+		leftover := leftoverSubsumedKeys()
+		if len(leftover) == 0 {
+			return nil
 		}
-	}
-
-	if numKeys := len(postKeys); numKeys > 0 {
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%d keys were not cleaned up:\n", numKeys)
-		for k := range postKeys {
+		for k := range leftover {
 			fmt.Fprintf(&buf, "%s (%q)\n", roachpb.Key(k), k)
 		}
-		t.Fatal(buf.String())
+		return errors.Newf("%d keys not yet cleaned up:\n%s", len(leftover), buf.String())
+	}
+	if store.EnginesSeparated() {
+		// Turn off the WAGTruncator retention policy so that the WAG node gets
+		// truncated and the raft log entries <= appliedIndex are dropped.
+		_, err := tc.ServerConn(0).ExecContext(ctx,
+			"SET CLUSTER SETTING kv.wag.retention.nodes = 0")
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			// Force a state-engine flush so the WAG truncator's
+			// DurabilityAdvancedCallback fires and the truncator wakes up.
+			if err := store.StateEngine().Flush(); err != nil {
+				return err
+			}
+			return assertNoLeftoverKeys()
+		})
+	} else {
+		require.NoError(t, assertNoLeftoverKeys())
 	}
 }
 
