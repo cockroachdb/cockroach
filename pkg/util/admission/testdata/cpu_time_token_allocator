@@ -22,7 +22,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # set-tokens v=0 simulates tokens being taken due to admitted work.
 set-tokens v=0
@@ -61,7 +61,7 @@ tier0  1000      800
 tier1  600       400
 burstM
 tier0  200
-tier1  100
+tier1  200
 
 allocate remaining=4
 ----
@@ -70,7 +70,7 @@ tier0  2000      1600
 tier1  1200      800
 burstM
 tier0  400
-tier1  200
+tier1  400
 
 allocate remaining=3
 ----
@@ -79,7 +79,7 @@ tier0  3000      2400
 tier1  1800      1200
 burstM
 tier0  600
-tier1  300
+tier1  600
 
 allocate remaining=2
 ----
@@ -88,7 +88,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 allocate remaining=1
 ----
@@ -97,7 +97,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 resetInterval
 ----
@@ -112,7 +112,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # resetInterval has been called, so a new interval has started.
 # So in theory more tokens can be added. But in this case the
@@ -126,7 +126,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -163,7 +163,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 resetInterval
 ----
@@ -178,7 +178,7 @@ tier0  4000      3200
 tier1  2400      1600
 burstM
 tier0  800
-tier1  400
+tier1  800
 
 set-tokens v=0
 ----
@@ -199,7 +199,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 resetInterval
 ----
@@ -214,7 +214,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -234,7 +234,7 @@ tier0  2500      2000
 tier1  1500      1000
 burstM
 tier0  500
-tier1  250
+tier1  500
 
 allocate remaining=1
 ----
@@ -243,7 +243,7 @@ tier0  5000      4000
 tier1  3000      2000
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # These final cases test how cpuTimeTokenAllocator handles changes to
 # refillRates. See the comment above deltaRefillRates for a full explanation
@@ -264,7 +264,7 @@ tier0  5001      4001
 tier1  3001      2001
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 set-tokens v=0
 ----
@@ -284,7 +284,7 @@ tier0  5001      4001
 tier1  3001      2001
 burstM
 tier0  1000
-tier1  500
+tier1  1000
 
 # Another test of a change to refillRates. If we decrease refillRates by two
 # (on all buckets), we expect two tokens to be removed from all buckets, as
@@ -302,7 +302,7 @@ tier0  4999      3999
 tier1  2999      1999
 burstM
 tier0  999
-tier1  499
+tier1  999
 
 set-tokens v=0
 ----
@@ -322,7 +322,7 @@ tier0  4999      3999
 tier1  2999      1999
 burstM
 tier0  999
-tier1  499
+tier1  999
 
 set-tokens v=0
 ----
@@ -395,8 +395,8 @@ cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -249
-tier1  -124
+tier0  -294
+tier1  -294
 
 # Test resetInterval path. Drive buckets deeply negative again. resetInterval
 # has delta=0 (rates unchanged), but the floor still clamps.
@@ -421,5 +421,5 @@ cpuTTG can_burst no_burst
 tier0  0         -1000
 tier1  -2000     -3000
 burstM
-tier0  -249
-tier1  -124
+tier0  -294
+tier1  -294

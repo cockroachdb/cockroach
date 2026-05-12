@@ -52,7 +52,7 @@ func TestResourceGroupConfigHolder(t *testing.T) {
 		lowCfg := snap.Groups.GetOrDefault(rgGroupKey(lowResourceGroupID))
 		require.Equal(t, float64(0.2), lowCfg.BurstFrac)
 		tenantCfg := snap.Groups.GetOrDefault(tenantGroupKey(9999))
-		require.Equal(t, float64(0.25), tenantCfg.BurstFrac)
+		require.Equal(t, float64(0.20), tenantCfg.BurstFrac)
 	})
 }
 

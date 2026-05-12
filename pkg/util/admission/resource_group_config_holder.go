@@ -109,7 +109,7 @@ var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCP
 // gets defaultGroupWeight, since per-tenant weights are no longer
 // configurable. MaxCPU=false because tenants don't carry burst flags.
 var defaultTenantGroupConfig = ResourceGroupConfig{
-	Weight: defaultGroupWeight, BurstFrac: 0.25, MaxCPU: false,
+	Weight: defaultGroupWeight, BurstFrac: 0.20, MaxCPU: false,
 }
 
 // systemTenantGroupConfig is the built-in config for the system tenant
