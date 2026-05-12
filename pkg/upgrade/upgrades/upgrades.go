@@ -202,6 +202,14 @@ var upgrades = []upgradebase.Upgrade{
 		createAdvisoryLocksTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"reduce replication factor of system.statement_statistics and system.transaction_statistics",
+		clusterversion.V26_3_ReduceSQLStatsReplicationFactor.Version(),
+		upgrade.NoPrecondition,
+		sqlStatsReplicationFactorChange,
+		upgrade.RestoreActionNotRequired("zone configurations are not restored"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

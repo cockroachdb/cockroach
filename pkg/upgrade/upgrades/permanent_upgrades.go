@@ -88,6 +88,7 @@ func bootstrapCluster(
 		{"maybe initialize replication standby read-only catalog", maybeSetupPCRStandbyReader, true},
 		{"create sql activity flush job", createSqlActivityFlushJob, true},
 		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
+		{"reduce sql stats replication factor", sqlStatsReplicationFactorChange, true},
 		{"create hot range logger job", createHotRangesLoggerJob, true},
 	} {
 
