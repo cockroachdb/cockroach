@@ -1756,7 +1756,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	}
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
-	clusterMeans := cs.meansMemo.getMeans(nil)
+	clusterMeans, ok := cs.meansMemo.getMeans(nil)
+	if !ok {
+		// No stores are known to the allocator yet (e.g. the local store
+		// descriptor has not been gossiped at startup). Nothing to do.
+		return
+	}
 	// Sort by store ID for deterministic log output in tests.
 	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
 	for storeID := range cs.stores {
@@ -2655,7 +2660,10 @@ func (cs *clusterState) computeLoadSummary(
 // TODO(wenyihu6): check to make sure obs here is correct
 func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 	var buf redact.StringBuilder
-	clusterMeans := cs.meansMemo.getMeans(nil)
+	clusterMeans, ok := cs.meansMemo.getMeans(nil)
+	if !ok {
+		return "no stores known to allocator"
+	}
 	buf.Printf("cluster means: (stores-load %v) (stores-capacity %v)\n",
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
 	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",

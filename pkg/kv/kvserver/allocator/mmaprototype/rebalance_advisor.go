@@ -87,7 +87,12 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	cands = append(cands, existing)
-	means := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	means, ok := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	if !ok {
+		// Should not happen: cands always contains at least `existing`. Fall
+		// back to a no-op advisor rather than crash if the invariant breaks.
+		return NoopMMARebalanceAdvisor()
+	}
 	return &MMARebalanceAdvisor{
 		existingStoreID: existing,
 		means:           means,

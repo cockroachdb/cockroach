@@ -959,7 +959,12 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	// these stores before computing the means, we can use it verbatim, otherwise
 	// we will recompute the means again below.
 	cs.scratchDisj[0] = conj
-	means := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+	means, ok := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+	if !ok {
+		// No store satisfies the constraint expression.
+		passObs.replicaShed(ctx, noCandidate)
+		return candidateSet{}, sheddingSLS
+	}
 
 	// Pre-means filtering: copy to scratch, then filter in place.
 	// Filter out stores that have a non-OK replica disposition.
@@ -979,7 +984,8 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		return candidateSet{}, sheddingSLS
 	} else {
 		// Some stores were filtered; recompute means over filtered set.
-		cs.scratchMeans = computeMeansForStoreSet(
+		// filteredStores is non-empty (checked above), so ok is guaranteed true.
+		cs.scratchMeans, _ = computeMeansForStoreSet(
 			cs, filteredStores, cs.meansMemo.scratchNodes, cs.meansMemo.scratchStores)
 		effectiveMeans = &cs.scratchMeans
 		ml.logf(ctx, 3,
