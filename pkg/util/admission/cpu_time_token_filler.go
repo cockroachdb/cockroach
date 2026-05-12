@@ -147,9 +147,8 @@ type cpuTimeTokenFiller struct {
 	//
 	// On a mode transition, resetInterval coordinates several state
 	// changes so they take effect together at the interval boundary:
-	//  1. strategy (cpuTimeTokenAllocator.strategy) - swapped to the new
-	//     modeStrategy, which controls target computation and burst
-	//     bucket refill routing.
+	//  1. lastMode (cpuTimeTokenAllocator.lastMode) - updated to the
+	//     new cpuTimeTokenMode.
 	//  2. refill rates and granter buckets - the delta between old and
 	//     new rates is applied to the granter, so token levels converge
 	//     to the new mode within one interval.
@@ -247,9 +246,6 @@ var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 // responsibility of cpuTimeTokenAllocator is to gradually allocate tokens
 // every interval, while respecting the bucket capacities. The computation
 // of the rate of tokens to add every interval is left to cpuTimeModel.
-//
-// Mode-specific behavior (target computation and burst bucket refill)
-// is delegated to a modeStrategy, which is swapped on mode transitions.
 type cpuTimeTokenAllocator struct {
 	granter *cpuTimeTokenGranter
 	// queues holds references to WorkQueues for each resource tier. Used to
@@ -260,11 +256,13 @@ type cpuTimeTokenAllocator struct {
 	configHolder *ResourceGroupConfigHolder
 	model        cpuTimeModel
 	metrics      *cpuTimeTokenMetrics
-	// strategy is only accessed by the filler goroutine (via
-	// allocateTokens and resetInterval), so no synchronization is
-	// needed. Contrast with filler.activeMode, which is atomic because
-	// GetKVWorkQueue reads it from arbitrary goroutines.
-	strategy modeStrategy
+	// lastMode tracks the most recent non-off mode so that
+	// resetInterval can detect mode transitions. Only accessed by the
+	// filler goroutine (via allocateTokens and resetInterval), so no
+	// synchronization is needed. Contrast with filler.activeMode,
+	// which is atomic because GetKVWorkQueue reads it from arbitrary
+	// goroutines.
+	lastMode cpuTimeTokenMode
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -273,17 +271,6 @@ type cpuTimeTokenAllocator struct {
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
 	allocated tokenCounts
-}
-
-// modeStrategy encapsulates the mode-specific behavior of the
-// cpuTimeTokenAllocator. serverlessStrategy implements it for
-// Serverless mode; rmStrategy implements it for resource manager mode.
-type modeStrategy interface {
-	mode() cpuTimeTokenMode
-	// groupBurstRates returns per-tier (rate, cap) pairs from which
-	// per-group burst amounts are derived. The allocator iterates
-	// queues and calls refillGroupBurstBuckets with these values.
-	groupBurstRates(allocations tokenCounts, refillRates rates) [numResourceTiers][2]float64
 }
 
 // computeTargets derives target utilizations from a ConfigSnapshot.
@@ -301,69 +288,27 @@ func computeTargets(snap ConfigSnapshot) targetUtilizations {
 	return targets
 }
 
-// serverlessStrategy implements modeStrategy for Serverless mode,
-// which uses 2 WorkQueues (systemTenant, appTenant) with per-tier
-// utilization targets. Each tier's burst bucket gets
-// noBurst * defaultTenantGroupConfig.BurstFrac (0.25) of that tier's
-// allocation and rate.
-type serverlessStrategy struct {
-}
-
-func (s *serverlessStrategy) mode() cpuTimeTokenMode {
-	return serverlessMode
-}
-
-func (s *serverlessStrategy) groupBurstRates(
+// groupBurstRates returns per-tier (rate, cap) pairs from which
+// per-group burst amounts are derived. The allocator iterates queues
+// and calls refillGroupBurstBuckets with these values.
+//
+// The 100%-CPU rate is recovered by dividing the canBurst allocation
+// (or refill rate) by canBurstTarget, which is valid because
+// cpuTimeTokenLinearModel is linear in target.
+func (a *cpuTimeTokenAllocator) groupBurstRates(
 	allocations tokenCounts, refillRates rates,
 ) [numResourceTiers][2]float64 {
 	var out [numResourceTiers][2]float64
-	for tier := range out {
-		out[tier] = [2]float64{
-			float64(allocations[tier][noBurst]),
-			float64(refillRates[tier][noBurst]),
-		}
-	}
-	return out
-}
-
-// rmStrategy implements modeStrategy for Resource Manager mode, which uses a
-// single WorkQueue with N resource groups and a single utilization target.
-type rmStrategy struct {
-	// canBurstTarget is the canBurst utilization target (e.g. 0.80 when
-	// KVCPUTimeUtilTarget=0.75 + KVCPUTimeUtilBurstDelta=0.05). Set by
-	// computeTargets each interval; used by groupBurstRates to recover the
-	// 100% CPU rate by dividing the cycle's canBurst allocation by
-	// canBurstTarget.
-	canBurstTarget float64
-}
-
-var _ modeStrategy = &rmStrategy{}
-
-func (s *rmStrategy) mode() cpuTimeTokenMode {
-	return resourceManagerMode
-}
-
-func (s *rmStrategy) groupBurstRates(
-	allocations tokenCounts, refillRates rates,
-) [numResourceTiers][2]float64 {
-	var out [numResourceTiers][2]float64
-	// Cold-start guard: skip if computeTargets has not run yet (canBurstTarget
-	// is the zero value). Setting validators rule out negative values, so
-	// == 0 catches the only reachable bad state.
-	if s.canBurstTarget == 0 {
+	snap := a.configHolder.Snapshot()
+	canBurstTarget := snap.MaxFraction()[0]
+	if canBurstTarget == 0 {
 		return out
 	}
-	// Recover the 100% CPU rate by dividing out canBurstTarget; valid
-	// because cpuTimeTokenLinearModel is linear in target.
-	//
-	// TODO(wenyihu6): instead of computing by division, plumb rate100 from the
-	// model so this division (and canBurstTarget storage) can go away.
-	rate100 := float64(allocations[0][canBurst]) / s.canBurstTarget
-	cap100 := float64(refillRates[0][canBurst]) / s.canBurstTarget
-	// Mirror to both tiers. RM mode only routes KV work to tier-0,
-	// but tier-1 must stay in sync (see computeTargets).
-	out[0] = [2]float64{rate100, cap100}
-	out[1] = [2]float64{rate100, cap100}
+	rate100 := float64(allocations[0][canBurst]) / canBurstTarget
+	cap100 := float64(refillRates[0][canBurst]) / canBurstTarget
+	for tier := range out {
+		out[tier] = [2]float64{rate100, cap100}
+	}
 	return out
 }
 
@@ -511,7 +456,7 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// for more). With cluster settings at their default values, this implies
 	// that an application tenant can burst if they are using roughly less
 	// than 20% of the CPU on a CRDB node (0.8 * 0.25 = 0.2).
-	burstRates := a.strategy.groupBurstRates(allocations, a.refillRates)
+	burstRates := a.groupBurstRates(allocations, a.refillRates)
 	for tier, q := range a.queues {
 		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
 	}
@@ -519,16 +464,16 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 
 // resetInterval recomputes refill rates and applies the delta to the
 // granter and burst buckets. If the mode cluster setting has changed,
-// the strategy is swapped before computing targets.
+// lastMode is updated before computing targets.
 func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
-	// a.strategy is only accessed by the filler goroutine, so we can
+	// lastMode is only accessed by the filler goroutine, so we can
 	// update it immediately. offMode is skipped because it is not a
-	// real strategy - the constructor defaults offMode to
-	// serverlessMode, and GetKVWorkQueue handles the off case before
-	// reaching activeMode routing.
+	// real mode - the constructor defaults offMode to serverlessMode,
+	// and GetKVWorkQueue handles the off case before reaching
+	// activeMode routing.
 	newMode := cpuTimeTokenACMode.Get(&a.settings.SV)
-	if newMode != offMode && newMode != a.strategy.mode() {
-		a.strategy = a.newStrategy(newMode)
+	if newMode != offMode && newMode != a.lastMode {
+		a.lastMode = newMode
 	}
 
 	snap := a.configHolder.Snapshot()
@@ -562,7 +507,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 	// Apply the delta to the per-group burst buckets also.
-	burstRates := a.strategy.groupBurstRates(deltaRefillRates, a.refillRates)
+	burstRates := a.groupBurstRates(deltaRefillRates, a.refillRates)
 	for tier, q := range a.queues {
 		q.refillGroupBurstBuckets(burstRates[tier][0], burstRates[tier][1])
 	}
@@ -574,28 +519,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		}
 	}
 
-	return a.strategy.mode()
-}
-
-// newStrategy constructs the modeStrategy for the given mode. offMode is not a
-// valid argument - callers must guard against it (resetInterval skips the swap,
-// the constructor maps off to serverless). Queue side effects are not applied
-// here; resetInterval applies them after the refill is complete.
-//
-// No bucket reset is needed on a mode switch. The granter's tier-1 buckets stay
-// alive across transitions, and resetInterval's delta mechanism converges all
-// bucket counts to the new mode's rates within one interval (1s).
-func (a *cpuTimeTokenAllocator) newStrategy(mode cpuTimeTokenMode) modeStrategy {
-	switch mode {
-	case offMode:
-		panic(errors.AssertionFailedf("offMode is not a valid strategy; callers must guard against it"))
-	case serverlessMode:
-		return &serverlessStrategy{}
-	case resourceManagerMode:
-		return &rmStrategy{}
-	default:
-		panic(errors.AssertionFailedf("unknown cpuTimeTokenMode: %d", mode))
-	}
+	return a.lastMode
 }
 
 // refillGranter increments per-bucket refill metrics, then delegates
