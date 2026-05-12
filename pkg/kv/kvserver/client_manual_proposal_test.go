@@ -67,15 +67,19 @@ func TestCreateManyUnappliedProbes(t *testing.T) {
 	//   (./cockroach start-single-node --logtostderr=INFO --insecure | grep -F r10/)
 	//
 	// Then wait and watch the `raft.commandsapplied` metric to see r10 apply the entries.
-	p := filepath.Join(t.TempDir(), "cockroach-data")
+	stateEnginePath := filepath.Join(t.TempDir(), "cockroach-data")
+	// logEnginePath is the on-disk path of the store's log engine. In
+	// single-engine mode it equals p; in separated mode it points at the
+	// log-engine directory.
+	var logEnginePath string
 	const entsPerBatch = 10
 	const batches = 3
 	rangeID := roachpb.RangeID(10) // system.settings
 
-	if _, err := os.Stat(p); err != nil {
+	if _, err := os.Stat(stateEnginePath); err != nil {
 		args := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{StoreSpecs: []base.StoreSpec{
-				{Path: p},
+				{Path: stateEnginePath},
 			}},
 			ReplicationMode: base.ReplicationManual,
 		}
@@ -89,34 +93,43 @@ ORDER BY
 	range_id ASC
 LIMIT
 	1;`).Scan(&rangeID))
+		logEnginePath = tc.GetFirstStoreFromServer(t, 0).LogEngine().Env().Dir
 		tc.Stopper().Stop(ctx)
 
 		defer func() {
 			if t.Failed() {
 				return
 			}
-			tc := testcluster.StartTestCluster(t, 1, args)
-			defer tc.Stopper().Stop(ctx)
-			require.NoError(t, tc.ServerConn(0).QueryRow(`SELECT count(1) FROM system.settings`).Err())
+			restartTC := testcluster.StartTestCluster(t, 1, args)
+			defer restartTC.Stopper().Stop(ctx)
+			require.NoError(t, restartTC.ServerConn(0).QueryRow(`SELECT count(1) FROM system.settings`).Err())
 			t.Log("read system.settings")
 		}()
-
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	eng, err := storage.Open(ctx, fs.MustInitPhysicalTestingEnv(p), st)
+	stateEng, err := storage.Open(ctx, fs.MustInitPhysicalTestingEnv(stateEnginePath), st)
 	require.NoError(t, err)
-	defer eng.Close()
+	defer stateEng.Close()
+
+	// If engines are separated, open the logEng. If engines are not separated,
+	// logEng is the same as stateEng.
+	logEng := stateEng
+	if logEnginePath != "" && logEnginePath != stateEnginePath {
+		logEng, err = storage.Open(ctx, fs.MustInitPhysicalTestingEnv(logEnginePath), st)
+		require.NoError(t, err)
+		defer logEng.Close()
+	}
 
 	// Determine LastIndex, LastTerm, and next MaxLeaseIndex by scanning
 	// existing log.
-	it, err := raftlog.NewIterator(ctx, rangeID, eng, raftlog.IterOptions{})
+	it, err := raftlog.NewIterator(ctx, rangeID, logEng, raftlog.IterOptions{})
 	require.NoError(t, err)
 	defer it.Close()
 	rsl := logstore.NewStateLoader(rangeID)
-	ts, err := rsl.LoadRaftTruncatedState(ctx, eng)
+	ts, err := rsl.LoadRaftTruncatedState(ctx, logEng)
 	require.NoError(t, err)
-	lastEntryID, err := rsl.LoadLastEntryID(ctx, eng, ts)
+	lastEntryID, err := rsl.LoadLastEntryID(ctx, logEng, ts)
 	require.NoError(t, err)
 	t.Logf("loaded LastEntryID: %+v", lastEntryID)
 	lastIndex := lastEntryID.Index
@@ -127,7 +140,7 @@ LIMIT
 	var lai kvpb.LeaseAppliedIndex
 	var lastTerm uint64
 	require.NoError(t, raftlog.Visit(
-		ctx, eng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
+		ctx, logEng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
 			ent, err := raftlog.NewEntry(it.Entry())
 			require.NoError(t, err)
 			if lai < ent.Cmd.MaxLeaseIndex {
@@ -138,12 +151,12 @@ LIMIT
 		}))
 
 	sl := kvstorage.MakeStateLoader(rangeID)
-	lease, err := sl.LoadLease(ctx, eng)
+	lease, err := sl.LoadLease(ctx, stateEng)
 	require.NoError(t, err)
 
 	for batchIdx := 0; batchIdx < batches; batchIdx++ {
 		t.Logf("batch %d", batchIdx+1)
-		b := storage.NewOpLoggerBatch(eng.NewBatch())
+		b := storage.NewOpLoggerBatch(stateEng.NewBatch())
 		defer b.Batch.Close()
 
 		var ents []raftpb.Entry
@@ -218,7 +231,7 @@ LIMIT
 		swl.Start(ctx, stopper)
 		ls := logstore.LogStore{
 			RangeID:     rangeID,
-			Engine:      eng,
+			Engine:      logEng,
 			Sideload:    nil,
 			StateLoader: rsl,
 			SyncWaiter:  swl,
