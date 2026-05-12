@@ -740,6 +740,7 @@ func init() {
 	clientCmds = append(clientCmds, nodeLocalCmds...)
 	clientCmds = append(clientCmds, userFileCmds...)
 	clientCmds = append(clientCmds, stmtDiagCmds...)
+	clientCmds = append(clientCmds, licenseAuditCmd)
 	clientCmds = append(clientCmds, debugResetQuorumCmd)
 	clientCmds = append(clientCmds, recoverCommands...)
 	for _, cmd := range clientCmds {

@@ -1357,6 +1357,7 @@ Available Commands:
 
   nodelocal         upload and delete nodelocal files
   userfile          upload, list and delete user scoped files
+  license           license management commands
   demo              open a demo sql shell
   convert-url       convert a SQL connection string for use with various client drivers
   gen               generate auxiliary files
