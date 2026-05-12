@@ -298,7 +298,7 @@ func makeCPUTimeTokenGrantCoordinator(
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
-	allocator.strategy = allocator.newStrategy(initialMode)
+	allocator.lastMode = initialMode
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler:       filler,
