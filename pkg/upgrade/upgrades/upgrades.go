@@ -210,6 +210,13 @@ var upgrades = []upgradebase.Upgrade{
 		alterStatementsTablePK,
 		upgrade.RestoreActionImplemented("statementsRestoreFunc skips restore of pre-V26_3 backups, which are guaranteed empty"),
 	),
+	upgrade.NewTenantUpgrade(
+		"add 'locality_addresses' column to system.sql_instances table to store locality-aware advertised addresses",
+		clusterversion.V26_3_SQLInstancesAddLocalityAddresses.Version(),
+		upgrade.NoPrecondition,
+		SQLInstancesAddLocalityAddressesColumn,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this column"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
