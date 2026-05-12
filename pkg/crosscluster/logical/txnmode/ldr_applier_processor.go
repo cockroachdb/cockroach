@@ -185,11 +185,6 @@ func (p *ldrApplierProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 			}
 			meta := p.encodeFrontierMeta(frontier)
 			return nil, meta
-
-		// DELETE THIS??
-		case <-p.grpCtx.Done():
-			p.MoveToDraining(nil)
-			break
 		}
 	}
 	return nil, p.DrainHelper()
