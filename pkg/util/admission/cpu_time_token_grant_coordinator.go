@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,13 +145,15 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	mode := cpuTimeTokenMode(coord.cpuTimeCoord.filler.activeMode.Load())
+	mode := cpuTimeTokenACMode.Get(&coord.st.SV)
 	switch mode {
 	case offMode:
-		// activeMode should never be offMode in normal operation: the
-		// constructor maps off to serverless, and resetInterval never
-		// returns offMode. This case is a defensive fallback.
-		return coord.slotsCoord.GetWorkQueue(KVWork)
+		// offMode with cpuTimeTokenACIsEnabled==true means the legacy
+		// bool is on. Route to serverless queues.
+		if isSystemTenant {
+			return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+		}
+		return coord.cpuTimeCoord.getWorkQueue(appTenant)
 	case serverlessMode:
 		if isSystemTenant {
 			return coord.cpuTimeCoord.getWorkQueue(systemTenant)
@@ -172,10 +173,16 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 // where the setting can flip between the caller's check and the internal
 // re-check, returning a slot-based queue to a caller that expects a CTT queue.
 func (coord *CPUGrantCoordinators) GetCTTWorkQueue(isSystemTenant bool) *WorkQueue {
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+	mode := cpuTimeTokenACMode.Get(&coord.st.SV)
+	switch mode {
+	case resourceManagerMode:
+		return coord.cpuTimeCoord.getWorkQueue(0)
+	default:
+		if isSystemTenant {
+			return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+		}
+		return coord.cpuTimeCoord.getWorkQueue(appTenant)
 	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
 }
 
 // GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
@@ -235,14 +242,6 @@ func makeCPUTimeTokenGrantCoordinator(
 	// Always create 2 tiers. In RM mode, tier-1 sits idle (no work
 	// routed, zero refill rates). This enables dynamic mode switching
 	// at runtime without rebuilding queues.
-	// Default to serverless when mode is off (legacy bool path or CTT
-	// not yet enabled). The strategy only matters when the filler runs,
-	// and the filler only starts when CTT is enabled. Using serverless
-	// as the default preserves the legacy 2-queue behavior.
-	initialMode := cpuTimeTokenACMode.Get(&settings.SV)
-	if initialMode == offMode {
-		initialMode = serverlessMode
-	}
 	metrics := makeCPUTimeTokenMetrics()
 	registry.AddMetricStruct(metrics)
 	timeSource := timeutil.DefaultTimeSource{}
@@ -298,8 +297,6 @@ func makeCPUTimeTokenGrantCoordinator(
 		// returns a *WorkQueue.
 		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
-	allocator.lastMode = initialMode
-
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler:       filler,
 		configHolder: configHolder,
@@ -307,10 +304,6 @@ func makeCPUTimeTokenGrantCoordinator(
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		coordinator.queues[tier] = requesters[tier]
 	}
-
-	// Initialize the filler's activeMode so GetKVWorkQueue returns the
-	// correct queue before the filler goroutine starts.
-	filler.activeMode.Store(int64(initialMode))
 
 	// The filler ticking appears to have a slight negative impact on perf.
 	// For now, we accept this, since CPU time token AC will be off by
@@ -339,16 +332,6 @@ func makeCPUTimeTokenGrantCoordinator(
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *WorkQueue {
-	// TODO(wenyihu6): activeMode is read here and again in the caller
-	// (GetKVWorkQueue / GetCTTWorkQueue). If a mode transition lands
-	// between the two reads, the assertion can fire.
-	if buildutil.CrdbTestBuild {
-		mode := cpuTimeTokenMode(coord.filler.activeMode.Load())
-		if mode == resourceManagerMode && tier != 0 {
-			panic(fmt.Sprintf(
-				"queue[%d] accessed in resource manager mode", tier))
-		}
-	}
 	q, ok := coord.queues[tier].(*WorkQueue)
 	if !ok {
 		panic(errors.AssertionFailedf("queues[%d] is not a *WorkQueue", tier))

@@ -8,7 +8,6 @@ package admission
 import (
 	"context"
 	"math"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -141,18 +140,12 @@ type cpuTimeTokenFiller struct {
 	closeCh    chan struct{}
 	// Used only in unit tests.
 	tickCh *chan struct{}
-	// activeMode is the cpuTimeTokenMode after the most recent
-	// resetInterval. Written by the filler goroutine, read by
-	// GetKVWorkQueue via cpuTimeTokenGrantCoordinator.
-	//
-	// TODO(ssd): Will be removed in a future commit. See lastMode.
-	activeMode atomic.Int64
 }
 
 func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 	// The token buckets should start full. The first call to resetInterval will
 	// fill the buckets.
-	f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
+	f.allocator.resetInterval(ctx)
 
 	ticker := f.timeSource.NewTicker(timePerTick)
 	intervalStart := f.timeSource.Now()
@@ -194,7 +187,7 @@ func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 						f.allocator.allocateTokens(1)
 					}
 					intervalStart = t
-					f.activeMode.Store(int64(f.allocator.resetInterval(ctx)))
+					f.allocator.resetInterval(ctx)
 					remainingTicks = int64(time.Second / timePerTick)
 				} else {
 					remainingSinceIntervalStart := time.Second - elapsedSinceIntervalStart
@@ -227,7 +220,7 @@ func (f *cpuTimeTokenFiller) close() {
 // cpuTimeTokenAllocatorI abstracts cpuTimeTokenAllocator for testing.
 type cpuTimeTokenAllocatorI interface {
 	allocateTokens(expectedRemainingTicksInInterval int64)
-	resetInterval(context.Context) cpuTimeTokenMode
+	resetInterval(context.Context)
 }
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
@@ -247,17 +240,6 @@ type cpuTimeTokenAllocator struct {
 	configHolder *ResourceGroupConfigHolder
 	model        cpuTimeModel
 	metrics      *cpuTimeTokenMetrics
-	// lastMode tracks the most recent non-off mode so that
-	// resetInterval can detect mode transitions. Only accessed by the
-	// filler goroutine (via allocateTokens and resetInterval), so no
-	// synchronization is needed. Contrast with filler.activeMode,
-	// which is atomic because GetKVWorkQueue reads it from arbitrary
-	// goroutines.
-	//
-	// TODO(ssd): Will be removed in a future commit. GetKVWorkQueue
-	// and groupKeyForWorkLocked can read the mode setting directly;
-	// activeMode and lastMode are unnecessary indirection.
-	lastMode cpuTimeTokenMode
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -464,22 +446,14 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 }
 
 // resetInterval recomputes refill rates and applies the delta to the
-// granter and burst buckets. The snapshot's Mode is folded into
-// lastMode so the filler's activeMode tracks the same value the
-// targets were derived under. offMode is skipped: it is not a real
-// mode for routing purposes — the constructor defaults offMode to
-// serverlessMode, and GetKVWorkQueue handles the off case before
-// reaching activeMode routing.
-func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenMode {
+// granter and burst buckets.
+func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// Refresh the cached snapshot for this interval. Everything that
 	// runs until the next resetInterval — model.fit, the refillRates
 	// it produces, and the per-tick groupBurstRates calls in
 	// allocateTokens — reads from this snap so the interval is
 	// coherent with one view of the holder.
 	a.snap = a.configHolder.Snapshot()
-	if a.snap.Mode != offMode {
-		a.lastMode = a.snap.Mode
-	}
 	targets := computeTargets(a.snap)
 	newRefillRates := a.model.fit(ctx, targets)
 
@@ -521,8 +495,6 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 			a.allocated[wc][kind] = 0
 		}
 	}
-
-	return a.lastMode
 }
 
 // refillGranter increments per-bucket refill metrics, then delegates
