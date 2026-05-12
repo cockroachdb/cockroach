@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "graph.go",
         "schema_discover.go",
+        "subdag.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/fktxn",
     visibility = ["//visibility:public"],
@@ -22,6 +23,7 @@ go_test(
         "graph_test.go",
         "main_test.go",
         "schema_discover_test.go",
+        "subdag_test.go",
         "test_schemas_test.go",
     ],
     data = glob(["testdata/**"]),
