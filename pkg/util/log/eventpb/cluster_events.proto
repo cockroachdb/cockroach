@@ -150,6 +150,26 @@ message LowDiskSpace {
   uint64 total_bytes = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// GCPressureDetected is recorded when the Go garbage collector is consuming
+// a high fraction of available CPU capacity, indicating that the heap is
+// approaching the GOMEMLIMIT soft memory limit. Sustained GC pressure
+// degrades performance and may indicate that the node needs more memory.
+message GCPressureDetected {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The node ID where the event was originated.
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The GC CPU usage as a fraction of total available CPU capacity (0.0 to 1.0).
+  double gc_cpu_fraction = 3 [(gogoproto.customname) = "GCCPUFraction", (gogoproto.jsontag) = ",includeempty"];
+
+  // The current Go heap allocation in bytes.
+  uint64 go_alloc_bytes = 4 [(gogoproto.jsontag) = ",includeempty"];
+
+  // The configured GOMEMLIMIT soft memory limit in bytes (0 if unset).
+  uint64 go_limit_bytes = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
 // CertsReload is recorded when the TLS certificates are
 // reloaded/rotated from disk.
 message CertsReload {

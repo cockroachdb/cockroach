@@ -243,6 +243,29 @@ events.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `g_c_pressure_detected`
+
+An event of type `g_c_pressure_detected` is recorded when the Go garbage collector is consuming
+a high fraction of available CPU capacity, indicating that the heap is
+approaching the GOMEMLIMIT soft memory limit. Sustained GC pressure
+degrades performance and may indicate that the node needs more memory.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `GCCPUFraction` | The GC CPU usage as a fraction of total available CPU capacity (0.0 to 1.0). | no |
+| `GoAllocBytes` | The current Go heap allocation in bytes. | no |
+| `GoLimitBytes` | The configured GOMEMLIMIT soft memory limit in bytes (0 if unset). | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `low_disk_space`
 
 An event of type `low_disk_space` is emitted when a store is reaching capacity, as we reach
