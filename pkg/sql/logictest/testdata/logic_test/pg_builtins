@@ -1259,7 +1259,7 @@ NULL
 query T
 SELECT to_regtype('test_type')
 ----
-public.test_type
+test_type
 
 # Test that pg_get_indexdef works for expression indexes.
 statement ok

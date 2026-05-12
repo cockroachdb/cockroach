@@ -5587,6 +5587,11 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte(',')
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
+	} else if ctx.HasFlags(FmtPgwireText) {
+		// Pgwire text output: emit the name verbatim, matching Postgres's
+		// reg*out behavior (the name is already in qualified-identifier form
+		// when produced by resolveOID / castStringToRegClassTableName).
+		ctx.WriteString(d.name)
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput

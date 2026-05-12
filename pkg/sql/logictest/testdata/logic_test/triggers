@@ -5072,8 +5072,8 @@ SELECT
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'other_schema.test_table'::regclass;
 ----
-tgname                table_name  trigger_func_name
-other_schema_trigger  test_table  trigger_func1
+tgname                table_name               trigger_func_name
+other_schema_trigger  other_schema.test_table  trigger_func1
 
 # Test that pg_class.relhastriggers reflects the presence of triggers.
 query TB colnames,rowsort
