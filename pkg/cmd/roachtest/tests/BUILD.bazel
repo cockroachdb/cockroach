@@ -122,6 +122,7 @@ go_library(
         "liquibase.go",
         "liquibase_blocklist.go",
         "logical_data_replication.go",
+        "logical_data_replication_fktxn.go",
         "loss_of_quorum_recovery.go",
         "many_splits.go",
         "mismatched_locality.go",

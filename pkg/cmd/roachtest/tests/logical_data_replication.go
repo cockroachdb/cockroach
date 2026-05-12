@@ -307,6 +307,24 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			run:                 TestLDRUniqueConstraintUpdate,
 			monitor:             true,
 		},
+		{
+			name: "ldr/fktxn",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(4),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(4),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig:                  ldrConfig{mode: ModeTransactional},
+			requiresDeprecatedWorkload: true,
+			// transactional mode landed in 26.3; predecessors don't recognize it.
+			mixedVersionMinimum: clusterversion.Latest,
+			run:                 TestLDRFKTxn,
+		},
 	}
 
 	for _, sp := range specs {
@@ -1018,6 +1036,8 @@ func (m mode) String() string {
 		return "immediate"
 	case ModeValidated:
 		return "validated"
+	case ModeTransactional:
+		return "transactional"
 	default:
 		return "default"
 	}
@@ -1027,6 +1047,7 @@ const (
 	Default = iota
 	ModeImmediate
 	ModeValidated
+	ModeTransactional
 )
 
 type multiClusterSpec struct {
