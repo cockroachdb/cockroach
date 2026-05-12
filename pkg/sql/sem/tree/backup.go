@@ -226,7 +226,7 @@ func (o *KVOptions) formatEach(ctx *FmtCtx, formatValue func(*KVOption, *FmtCtx)
 		}
 		// KVOption Key values never contain PII and should be distinguished
 		// for feature tracking purposes.
-		ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+		ctx.WithFlags(ctx.flags&^(FmtAnonymize|FmtMarkRedactionNode), func() {
 			ctx.FormatNode(&n.Key)
 		})
 		if n.Value != nil {
