@@ -1014,7 +1014,9 @@ SELECT count(DISTINCT x) FROM svals
 ----
 1
 
-# Check that the KV trace is empty.
+# Check that the KV trace is empty. The two "rows affected: 1" rows are from
+# the user-issued nextval and from the internal pg_catalog lookup that the
+# 'sv'::regclass cast runs to compute the search-path-aware regclass name.
 statement ok
 BEGIN;
   SELECT nextval('sv'); -- acquire the lease, so that doesn't go to the KV trace
@@ -1024,6 +1026,7 @@ BEGIN;
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
+rows affected: 1
 rows affected: 1
 
 statement ok
