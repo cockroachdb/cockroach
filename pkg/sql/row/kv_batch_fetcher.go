@@ -57,6 +57,21 @@ var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestRange(
 	100,                                 /* max */
 ))
 
+// TestingRaiseDefaultKVBatchSize raises defaultKVBatchSize to minSize if it is
+// currently lower; otherwise it leaves the value untouched. The returned
+// function restores the previous value. This is useful for tests that should
+// not run with extremely small metamorphic batch sizes.
+func TestingRaiseDefaultKVBatchSize(minSize int) func() {
+	if defaultKVBatchSize >= rowinfra.KeyLimit(minSize) {
+		return func() {}
+	}
+	prev := defaultKVBatchSize
+	defaultKVBatchSize = rowinfra.KeyLimit(minSize)
+	return func() {
+		defaultKVBatchSize = prev
+	}
+}
+
 // elasticCPUDurationPerLowPriReadResponse controls how many CPU tokens are allotted
 // each time we seek admission for response handling during internally submitted
 // low priority reads (like row-level TTL selects).
