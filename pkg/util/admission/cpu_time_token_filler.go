@@ -145,16 +145,7 @@ type cpuTimeTokenFiller struct {
 	// resetInterval. Written by the filler goroutine, read by
 	// GetKVWorkQueue via cpuTimeTokenGrantCoordinator.
 	//
-	// On a mode transition, resetInterval coordinates several state
-	// changes so they take effect together at the interval boundary:
-	//  1. lastMode (cpuTimeTokenAllocator.lastMode) - updated to the
-	//     new cpuTimeTokenMode.
-	//  2. refill rates and granter buckets - the delta between old and
-	//     new rates is applied to the granter, so token levels converge
-	//     to the new mode within one interval.
-	//  3. activeMode (this field) - stored last, after refill is
-	//     complete, so that GetKVWorkQueue routes to the correct queue
-	//     only after the queues are ready.
+	// TODO(ssd): Will be removed in a future commit. See lastMode.
 	activeMode atomic.Int64
 }
 
@@ -262,6 +253,10 @@ type cpuTimeTokenAllocator struct {
 	// synchronization is needed. Contrast with filler.activeMode,
 	// which is atomic because GetKVWorkQueue reads it from arbitrary
 	// goroutines.
+	//
+	// TODO(ssd): Will be removed in a future commit. GetKVWorkQueue
+	// and groupKeyForWorkLocked can read the mode setting directly;
+	// activeMode and lastMode are unnecessary indirection.
 	lastMode cpuTimeTokenMode
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
