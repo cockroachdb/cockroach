@@ -350,6 +350,30 @@ func TestSampleEnvironment(t *testing.T) {
 	require.GreaterOrEqual(t, s.HostCPUCombinedPercentNorm.Value(), s.CPUCombinedPercentNorm.Value())
 }
 
+func TestGCCPURatio(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	s := NewRuntimeStatSampler(ctx, clock.WallClock())
+
+	cgoStats := GetCGoMemStats(ctx)
+
+	// First sample establishes baseline; ratio should be zero.
+	s.SampleEnvironment(ctx, cgoStats)
+	require.Equal(t, float64(0), s.GcCPUPercent.Value())
+
+	// Force GC work between samples so the ratio is measurably non-zero.
+	runtime.GC()
+	time.Sleep(50 * time.Millisecond)
+	s.SampleEnvironment(ctx, cgoStats)
+
+	gcCPUPercent := s.GcCPUPercent.Value()
+	require.Greater(t, gcCPUPercent, float64(0))
+	require.LessOrEqual(t, gcCPUPercent, float64(1.0))
+}
+
 func TestNetworkStatsLinux(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

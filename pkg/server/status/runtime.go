@@ -181,6 +181,13 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaGCCPUPercent = metric.Metadata{
+		Name:        "sys.gc.cpu.percent",
+		Help:        "Current GC CPU usage as a fraction of total available CPU capacity",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
+		Visibility:  metric.Metadata_SUPPORT,
+	}
 	metaNonGCPauseNS = metric.Metadata{
 		Name:        "sys.go.pause.other.ns",
 		Help:        "Estimated non-GC-related total pause time",
@@ -816,6 +823,7 @@ type RuntimeStatSampler struct {
 		cgoCall     int64
 		gcCount     int64
 		gcPauseTime uint64
+		gcTotalCPU  float64
 		disk        DiskStats
 		net         netCounters
 		runnableSum float64
@@ -855,6 +863,7 @@ type RuntimeStatSampler struct {
 	GcAssistNS               *metric.Counter
 	GcAssistEnabled          *metric.Gauge
 	GcTotalNS                *metric.Counter
+	GcCPUPercent             *metric.GaugeFloat64
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Counter
 	CPUUserPercent         *metric.GaugeFloat64
@@ -964,6 +973,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcAssistNS:               metric.NewCounter(metaGCAssistNS),
 		GcAssistEnabled:          metric.NewGauge(metaGCAssistEnabled),
 		GcTotalNS:                metric.NewCounter(metaGCTotalNS),
+		GcCPUPercent:             metric.NewGaugeFloat64(metaGCCPUPercent),
 		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
 		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
 
@@ -1193,6 +1203,14 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	if dur > 0 {
 		gcPauseRatio = float64(gcPauseTotalNs-rsr.last.gcPauseTime) / dur
 	}
+	gcTotalCPUSeconds := rsr.goRuntimeSampler.float64(runtimeMetricGCTotal)
+	var gcCPURatio float64
+	if rsr.last.now != 0 && dur > 0 && cpuCapacity > 0 {
+		// TODO: initalize right after `dur` and use with other metrics too
+		perNs := 1.0 / dur
+		deltaGCNs := max(gcTotalCPUSeconds-rsr.last.gcTotalCPU, 0) * 1e9
+		gcCPURatio = min(deltaGCNs*perNs/cpuCapacity, 1.0)
+	}
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
 	gcAssistSeconds := rsr.goRuntimeSampler.float64(runtimeMetricGCAssist)
 	gcAssistNS := int64(gcAssistSeconds * 1e9)
@@ -1212,6 +1230,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.last.hostSoftIrqtime = hostSoftIrqtime
 	rsr.last.hostNiceTime = hostNiceTime
 	rsr.last.gcPauseTime = gcPauseTotalNs
+	rsr.last.gcTotalCPU = gcTotalCPUSeconds
 	rsr.last.runnableSum = runnableSum
 
 	// Log summary of statistics to console.
@@ -1283,7 +1302,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	} else {
 		rsr.GcAssistEnabled.Update(0)
 	}
-	rsr.GcTotalNS.Update(int64(rsr.goRuntimeSampler.float64(runtimeMetricGCTotal) * 1e9))
+	rsr.GcTotalNS.Update(int64(gcTotalCPUSeconds * 1e9))
+	rsr.GcCPUPercent.Update(gcCPURatio)
 	rsr.NonGcPauseNS.Update(nonGcPauseTotalNs)
 	rsr.NonGcStopNS.Update(nonGcStopTotalNs)
 

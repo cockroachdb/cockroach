@@ -11441,6 +11441,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
       owner: cockroachdb/obs-prs
+    - name: sys.gc.cpu.percent
+      exported_name: sys_gc_cpu_percent
+      description: Current GC CPU usage as a fraction of total available CPU capacity
+      y_axis_label: CPU Time
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
+      visibility: SUPPORT
+      owner: cockroachdb/obs-prs
     - name: sys.gc.pause.ns
       exported_name: sys_gc_pause_ns
       description: Total GC pause
