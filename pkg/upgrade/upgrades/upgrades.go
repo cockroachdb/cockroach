@@ -202,6 +202,16 @@ var upgrades = []upgradebase.Upgrade{
 		createAdvisoryLocksTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"backfill system.statements from system.statement_statistics",
+		clusterversion.V26_3_BackfillSystemStatementsTable.Version(),
+		upgrade.NoPrecondition,
+		backfillSystemStatementsTable,
+		upgrade.RestoreActionNotRequired(
+			"system.statements is backfilled from statement_statistics which is not restored",
+		),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

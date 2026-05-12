@@ -281,6 +281,10 @@ const (
 	// storing advisory lock state.
 	V26_3_AddAdvisoryLocksTable
 
+	// V26_3_BackfillSystemStatementsTable backfills system.statements with
+	// fingerprints from system.statement_statistics.
+	V26_3_BackfillSystemStatementsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -367,6 +371,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
 
 	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
+
+	V26_3_BackfillSystemStatementsTable: {Major: 26, Minor: 2, Internal: 8},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
