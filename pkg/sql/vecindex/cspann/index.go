@@ -110,6 +110,11 @@ type IndexOptions struct {
 	// MaxDeleteAttempts controls the number of times Delete or SearchForDelete
 	// will retry after failed attempts to find a requested deletion vector.
 	MaxDeleteAttempts int
+	// PanicDuringCspannSearch, if non-nil, is invoked at the top of
+	// Index.Search. Used by tests in the parent vecindex package to inject
+	// panics that exercise the colexecerror allow-list for this subpackage.
+	// Always nil in production.
+	PanicDuringCspannSearch func()
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -490,6 +495,10 @@ func (vi *Index) Search(
 	searchSet *SearchSet,
 	options SearchOptions,
 ) error {
+	if vi.options.PanicDuringCspannSearch != nil {
+		vi.options.PanicDuringCspannSearch()
+	}
+
 	vi.setupContext(idxCtx, treeKey, LeafLevel, options)
 	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 	return vi.searchHelper(ctx, idxCtx, searchSet)
