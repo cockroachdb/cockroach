@@ -32,6 +32,7 @@ type MutationSearcher struct {
 	partitionKey tree.Datum
 	encoded      tree.Datum
 	evalCtx      *eval.Context
+	testingKnobs *VecIndexTestingKnobs
 }
 
 // Init wraps the given KV transaction in a C-SPANN transaction and initializes
@@ -61,6 +62,14 @@ func (s *MutationSearcher) KVStats() vecstore.KVStats {
 	return s.txn.KVStats()
 }
 
+// SetTestingKnobs configures testing knobs on the mutation searcher. Invoked
+// by executor processors after Init to propagate knobs from the Manager. The
+// pointer is nil in production, and a nil pointer is a no-op for subsequent
+// knob lookups.
+func (s *MutationSearcher) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
+	s.testingKnobs = knobs
+}
+
 // SearchForInsert triggers a search for the partition in which to insert the
 // input vector. The partition's key is returned by PartitionKey() and the
 // input vector's quantized and encoded form is returned by EncodedVector().
@@ -70,6 +79,10 @@ func (s *MutationSearcher) KVStats() vecstore.KVStats {
 func (s *MutationSearcher) SearchForInsert(
 	ctx context.Context, prefix roachpb.Key, vec vector.T,
 ) error {
+	if s.testingKnobs != nil && s.testingKnobs.PanicDuringMutationSearch != nil {
+		s.testingKnobs.PanicDuringMutationSearch()
+	}
+
 	res, err := s.idx.SearchForInsert(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec)
 	if err != nil {
 		return err
@@ -101,6 +114,10 @@ func (s *MutationSearcher) SearchForInsert(
 func (s *MutationSearcher) SearchForDelete(
 	ctx context.Context, prefix roachpb.Key, vec vector.T, key cspann.KeyBytes,
 ) error {
+	if s.testingKnobs != nil && s.testingKnobs.PanicDuringMutationSearch != nil {
+		s.testingKnobs.PanicDuringMutationSearch()
+	}
+
 	res, err := s.idx.SearchForDelete(ctx, &s.idxCtx, cspann.TreeKey(prefix), vec, key)
 	if err != nil {
 		return err
