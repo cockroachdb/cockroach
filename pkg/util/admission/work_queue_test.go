@@ -556,19 +556,24 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				var v bool
 				d.ScanArgs(t, "group", &group)
 				d.ScanArgs(t, "v", &v)
-				// Mutate the holder's current config in place: take the
-				// snapshot (seed + prior Sets), flip the requested
-				// group, write back. Force an apply so maxCPU flips
-				// land on existing groups immediately.
-				cfg := q.configHolder.Snapshot()
+				// Read the snapshot, copy non-builtin keys into a fresh
+				// map, flip the requested group, and Set. Built-in keys
+				// are omitted because Set re-seeds them automatically.
+				snap := q.configHolder.Snapshot()
+				fresh := make(ResourceGroupConfigSet, len(snap))
+				for gk, gc := range snap {
+					if _, builtin := builtinGroupConfigs[gk]; !builtin {
+						fresh[gk] = gc
+					}
+				}
 				k := rgGroupKey(uint64(group))
-				cur := cfg[k]
+				cur := fresh[k]
 				cur.MaxCPU = v
 				if cur.Weight == 0 {
 					cur.Weight = 1
 				}
-				cfg[k] = cur
-				q.configHolder.Set(cfg)
+				fresh[k] = cur
+				q.configHolder.Set(fresh)
 				q.mu.Lock()
 				q.applyConfigLocked(q.configHolder.Snapshot())
 				q.mu.Unlock()

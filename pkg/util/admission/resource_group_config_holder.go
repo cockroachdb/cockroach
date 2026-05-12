@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -110,6 +111,21 @@ var defaultTenantGroupConfig = ResourceGroupConfig{
 	Weight: defaultGroupWeight, BurstFrac: 0.25, MaxCPU: false,
 }
 
+// systemTenantGroupConfig is the built-in config for the system tenant
+// (ID 1). It has maximum weight to ensure system work is never starved,
+// BurstFrac=1.0 so the full burst budget is available, and MaxCPU=true
+// to bypass the burst-fullness gate.
+var systemTenantGroupConfig = ResourceGroupConfig{
+	Weight: math.MaxUint32, BurstFrac: 1.0, MaxCPU: true,
+}
+
+// builtinGroupConfigs are configs that are always present in the
+// holder. Set seeds from this list first; callers cannot overwrite
+// built-in keys.
+var builtinGroupConfigs = ResourceGroupConfigSet{
+	tenantGroupKey(1): systemTenantGroupConfig,
+}
+
 // ResourceGroupConfigHolder owns the source-of-truth config set for RM mode.
 // It is pure storage behind an RWMutex; reads (every Admit) vastly outnumber
 // writes (config changes only).
@@ -130,12 +146,20 @@ func newResourceGroupConfigHolder() *ResourceGroupConfigHolder {
 }
 
 // Set replaces the stored config wholesale. Keys absent from config are
-// dropped.
+// dropped. Built-in configs (builtinGroupConfigs) are always present;
+// callers cannot overwrite them.
 //
 // NB: caller may mutate config after Set returns; the input is copied.
 func (h *ResourceGroupConfigHolder) Set(config ResourceGroupConfigSet) {
-	cp := make(ResourceGroupConfigSet, len(config))
+	cp := make(ResourceGroupConfigSet, len(builtinGroupConfigs)+len(config))
+	for k, v := range builtinGroupConfigs {
+		cp[k] = v
+	}
 	for k, v := range config {
+		if _, ok := builtinGroupConfigs[k]; ok {
+			panic(errors.AssertionFailedf(
+				"ResourceGroupConfigHolder.Set: key %s is a built-in and cannot be overwritten", k))
+		}
 		cp[k] = v
 	}
 	h.mu.Lock()

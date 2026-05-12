@@ -105,7 +105,7 @@ id 9: admit succeeded
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 53
- group-id: 1 used: 1, w: 1, fifo: -128
+ group-id: 1 used: 1, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
  group-id: 71 used: 2, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
@@ -121,7 +121,7 @@ returnGrant 1
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 53
- group-id: 1 used: 10, w: 1, fifo: -128
+ group-id: 1 used: 10, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
  group-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
@@ -132,7 +132,7 @@ admit id=7 tenant=53 priority=0 create-time-millis=5 bypass=false
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 53
- group-id: 1 used: 10, w: 1, fifo: -128
+ group-id: 1 used: 10, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
@@ -147,7 +147,7 @@ granted: returned 1
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 53
- group-id: 1 used: 10, w: 1, fifo: -128
+ group-id: 1 used: 10, w: 4294967295, fifo: -128
  group-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
@@ -160,14 +160,14 @@ returnGrant 1
 print
 ----
 closed epoch: 0 groupHeap len: 2 top group: 71
- group-id: 1 used: 10, w: 1, fifo: -128
+ group-id: 1 used: 10, w: 4294967295, fifo: -128
  group-id: 53 used: 20, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 gc-groups-and-reset-used
 ----
 closed epoch: 0 groupHeap len: 2 top group: 71
- group-id: 1 used: 0, w: 1, fifo: -128
+ group-id: 1 used: 0, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
@@ -181,7 +181,7 @@ granted: returned 1
 print
 ----
 closed epoch: 0 groupHeap len: 1 top group: 53
- group-id: 1 used: 0, w: 1, fifo: -128
+ group-id: 1 used: 0, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 1, w: 1, fifo: -128
 
@@ -193,7 +193,7 @@ returnGrant 1
 print
 ----
 closed epoch: 0 groupHeap len: 1 top group: 53
- group-id: 1 used: 0, w: 1, fifo: -128
+ group-id: 1 used: 0, w: 4294967295, fifo: -128
  group-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100]
  group-id: 71 used: 0, w: 1, fifo: -128
 
@@ -207,7 +207,7 @@ granted: returned 1
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 0, w: 1, fifo: -128
+ group-id: 1 used: 0, w: 4294967295, fifo: -128
  group-id: 53 used: 1, w: 1, fifo: -128
  group-id: 71 used: 0, w: 1, fifo: -128
 
@@ -219,7 +219,7 @@ granted: returned 0
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 0, w: 1, fifo: -128
+ group-id: 1 used: 0, w: 4294967295, fifo: -128
  group-id: 53 used: 1, w: 1, fifo: -128
  group-id: 71 used: 0, w: 1, fifo: -128
 
