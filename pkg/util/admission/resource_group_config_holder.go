@@ -131,25 +131,39 @@ var builtinGroupConfigs = ResourceGroupConfigSet{
 type ConfigSnapshot struct {
 	// Groups is the per-group config set (built-ins + caller-provided).
 	Groups ResourceGroupConfigSet
-	// NoBurstFrac is the non-burstable CPU utilization target
-	// (e.g. 0.8 for 80% of CPU capacity).
-	NoBurstFrac float64
-	// BurstDelta is the delta added to NoBurstFrac to produce the
-	// burstable utilization ceiling.
+	// AppNoBurstFrac is the non-burstable CPU utilization target for
+	// the app tenant tier (e.g. 0.8 for 80% of CPU capacity).
+	AppNoBurstFrac float64
+	// SystemNoBurstFrac is the non-burstable CPU utilization target
+	// for the system tenant tier.
+	//
+	// TODO(ssd): SystemNoBurstFrac will be removed when settings are
+	// consolidated; both tiers will use AppNoBurstFrac.
+	SystemNoBurstFrac float64
+	// BurstDelta is the delta added to the non-burstable fraction to
+	// produce the burstable utilization ceiling.
 	BurstDelta float64
 }
 
 // MaxNonBurstableFraction returns the non-burstable CPU utilization
-// target, replicated across all resource tiers.
+// target per tier.
+//
+// TODO(ssd): Returns per-tier values for now; will collapse to a
+// scalar when tiers are removed.
 func (s ConfigSnapshot) MaxNonBurstableFraction() [numResourceTiers]float64 {
-	return [numResourceTiers]float64{s.NoBurstFrac, s.NoBurstFrac}
+	return [numResourceTiers]float64{s.SystemNoBurstFrac, s.AppNoBurstFrac}
 }
 
 // MaxFraction returns the burstable CPU utilization ceiling
-// (NoBurstFrac + BurstDelta), replicated across all resource tiers.
+// (noBurstFrac + BurstDelta) per tier.
+//
+// TODO(ssd): Returns per-tier values for now; will collapse to a
+// scalar when tiers are removed.
 func (s ConfigSnapshot) MaxFraction() [numResourceTiers]float64 {
-	f := s.NoBurstFrac + s.BurstDelta
-	return [numResourceTiers]float64{f, f}
+	return [numResourceTiers]float64{
+		s.SystemNoBurstFrac + s.BurstDelta,
+		s.AppNoBurstFrac + s.BurstDelta,
+	}
 }
 
 // ResourceGroupConfigHolder owns the source-of-truth config set for RM mode.
@@ -207,18 +221,31 @@ func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	h.mu.RLock()
 	groups := h.mu.config
 	h.mu.RUnlock()
-	var noBurstFrac, burstDelta float64
-	if h.sv != nil {
-		noBurstFrac = KVCPUTimeAppUtilGoal.Get(h.sv)
-		burstDelta = KVCPUTimeUtilBurstDelta.Get(h.sv)
-	} else {
-		// Test path: use sensible defaults.
-		noBurstFrac = 0.8
-		burstDelta = 0.05
+	if h.sv == nil {
+		return ConfigSnapshot{
+			Groups:            groups,
+			AppNoBurstFrac:    0.8,
+			SystemNoBurstFrac: 0.95,
+			BurstDelta:        0.05,
+		}
 	}
-	return ConfigSnapshot{
-		Groups:      groups,
-		NoBurstFrac: noBurstFrac,
-		BurstDelta:  burstDelta,
+	snap := ConfigSnapshot{
+		Groups:     groups,
+		BurstDelta: KVCPUTimeUtilBurstDelta.Get(h.sv),
 	}
+	// TODO(ssd): The mode switch will be removed when settings are
+	// consolidated into a single target_util setting.
+	mode := cpuTimeTokenACMode.Get(h.sv)
+	switch mode {
+	case resourceManagerMode:
+		target := KVCPUTimeUtilTarget.Get(h.sv)
+		snap.AppNoBurstFrac = target
+		snap.SystemNoBurstFrac = target
+	default:
+		// offMode and serverlessMode both use the per-tier settings.
+		// The old constructor mapped offMode → serverlessMode.
+		snap.AppNoBurstFrac = KVCPUTimeAppUtilGoal.Get(h.sv)
+		snap.SystemNoBurstFrac = KVCPUTimeSystemUtilGoal.Get(h.sv)
+	}
+	return snap
 }

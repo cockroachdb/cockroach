@@ -181,23 +181,31 @@ func TestSetPanicsOnBuiltinOverwrite(t *testing.T) {
 func TestConfigSnapshotDefaults(t *testing.T) {
 	h := newResourceGroupConfigHolder(nil)
 	snap := h.Snapshot()
-	require.Equal(t, 0.8, snap.NoBurstFrac)
+	require.Equal(t, 0.8, snap.AppNoBurstFrac)
+	require.Equal(t, 0.95, snap.SystemNoBurstFrac)
 	require.Equal(t, 0.05, snap.BurstDelta)
 }
 
 // TestConfigSnapshotMaxNonBurstableFraction verifies
-// MaxNonBurstableFraction returns the non-burstable target replicated
-// across all resource tiers.
+// MaxNonBurstableFraction returns per-tier non-burstable targets.
 func TestConfigSnapshotMaxNonBurstableFraction(t *testing.T) {
-	snap := ConfigSnapshot{NoBurstFrac: 0.75, BurstDelta: 0.10}
-	expected := [numResourceTiers]float64{0.75, 0.75}
+	snap := ConfigSnapshot{
+		AppNoBurstFrac:    0.75,
+		SystemNoBurstFrac: 0.90,
+		BurstDelta:        0.10,
+	}
+	expected := [numResourceTiers]float64{0.90, 0.75}
 	require.Equal(t, expected, snap.MaxNonBurstableFraction())
 }
 
-// TestConfigSnapshotMaxFraction verifies MaxFraction returns
-// NoBurstFrac + BurstDelta replicated across all resource tiers.
+// TestConfigSnapshotMaxFraction verifies MaxFraction returns per-tier
+// burstable targets (noBurstFrac + BurstDelta).
 func TestConfigSnapshotMaxFraction(t *testing.T) {
-	snap := ConfigSnapshot{NoBurstFrac: 0.75, BurstDelta: 0.10}
-	expected := [numResourceTiers]float64{0.85, 0.85}
+	snap := ConfigSnapshot{
+		AppNoBurstFrac:    0.75,
+		SystemNoBurstFrac: 0.90,
+		BurstDelta:        0.10,
+	}
+	expected := [numResourceTiers]float64{1.0, 0.85}
 	require.Equal(t, expected, snap.MaxFraction())
 }

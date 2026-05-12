@@ -269,9 +269,8 @@ type cpuTimeTokenAllocator struct {
 }
 
 // computeTargets derives target utilizations from a ConfigSnapshot.
-// It is mode-independent: the snapshot's NoBurstFrac and BurstDelta
-// set the non-burstable and burstable ceilings, mirrored across all
-// tiers.
+// The snapshot provides per-tier non-burstable and burstable ceilings
+// via MaxNonBurstableFraction and MaxFraction.
 func computeTargets(snap ConfigSnapshot) targetUtilizations {
 	var targets targetUtilizations
 	nonBurst := snap.MaxNonBurstableFraction()

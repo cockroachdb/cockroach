@@ -495,21 +495,24 @@ func (p *testCPUMetricsProvider) append(dur time.Duration, count int) {
 	}
 }
 
-// TestComputeTargets verifies that computeTargets derives target
-// utilizations from a ConfigSnapshot, mirroring NoBurstFrac and
-// NoBurstFrac+BurstDelta across all tiers.
+// TestComputeTargets verifies that computeTargets derives per-tier
+// target utilizations from a ConfigSnapshot.
 func TestComputeTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	snap := ConfigSnapshot{NoBurstFrac: 0.75, BurstDelta: 0.25}
+	snap := ConfigSnapshot{
+		AppNoBurstFrac:    0.75,
+		SystemNoBurstFrac: 0.90,
+		BurstDelta:        0.25,
+	}
 	targets := computeTargets(snap)
 
-	// noBurst targets = NoBurstFrac, replicated across tiers.
-	require.Equal(t, 0.75, targets[0][noBurst])
+	// Tier 0 (system) uses SystemNoBurstFrac.
+	require.Equal(t, 0.90, targets[0][noBurst])
+	require.Equal(t, 1.15, targets[0][canBurst])
+	// Tier 1 (app) uses AppNoBurstFrac.
 	require.Equal(t, 0.75, targets[1][noBurst])
-	// canBurst targets = NoBurstFrac + BurstDelta.
-	require.Equal(t, 1.0, targets[0][canBurst])
 	require.Equal(t, 1.0, targets[1][canBurst])
 }
 
@@ -573,7 +576,7 @@ func TestGroupBurstRates(t *testing.T) {
 	// canBurstTarget=0.5 doubles both.
 	KVCPUTimeAppUtilGoal.Override(ctx, &st.SV, 0.5)
 	KVCPUTimeUtilBurstDelta.Override(ctx, &st.SV, 0.01)
-	// NoBurstFrac=0.5, BurstDelta=0.01 -> canBurstTarget=0.51
+	// AppNoBurstFrac=0.5, BurstDelta=0.01 -> canBurstTarget=0.51
 	out = allocator.groupBurstRates(tokens, rr)
 	require.InDelta(t, 1000.0/0.51, out[0][0], 0.01)
 	require.InDelta(t, 4000.0/0.51, out[0][1], 0.01)
