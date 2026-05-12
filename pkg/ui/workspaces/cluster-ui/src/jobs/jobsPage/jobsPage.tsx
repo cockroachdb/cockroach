@@ -52,6 +52,9 @@ export interface JobsPageStateProps {
   type: number;
   jobsResponse: RequestState<JobsResponse>;
   columns: string[];
+  // When true, suppresses the page header for use inside a parent layout
+  // that already provides its own heading (e.g. the console nav shell).
+  isEmbedded?: boolean;
 }
 
 export interface JobsPageDispatchProps {
@@ -83,6 +86,10 @@ const reqFromProps = (
 };
 
 export class JobsPage extends React.Component<JobsPageProps, PageState> {
+  static defaultProps: Partial<JobsPageProps> = {
+    isEmbedded: false,
+  };
+
   refreshDataInterval: NodeJS.Timeout;
 
   constructor(props: JobsPageProps) {
@@ -290,7 +297,9 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     return (
       <div>
         <Helmet title="Jobs" />
-        <h3 className={commonStyles("base-heading")}>Jobs</h3>
+        {!this.props.isEmbedded && (
+          <h3 className={commonStyles("base-heading")}>Jobs</h3>
+        )}
         <div>
           <PageConfig>
             <PageConfigItem>
