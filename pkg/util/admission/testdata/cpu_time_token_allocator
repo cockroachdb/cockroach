@@ -14,8 +14,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
@@ -104,8 +104,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
@@ -170,8 +170,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  4000      3200
@@ -206,8 +206,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5000      4000
@@ -256,8 +256,8 @@ resetInterval increase_rates_by=1
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  5001      4001
@@ -294,8 +294,8 @@ resetInterval increase_rates_by=-2
 fit(
 	tier1 no_burst -> 80%
 	tier1 can_burst -> 85%
-	tier0 no_burst -> 95%
-	tier0 can_burst -> 100%
+	tier0 no_burst -> 80%
+	tier0 can_burst -> 85%
 )
 cpuTTG can_burst no_burst
 tier0  4999      3999
@@ -355,8 +355,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 50%
 	tier1 can_burst -> 60%
-	tier0 no_burst -> 75%
-	tier0 can_burst -> 85%
+	tier0 no_burst -> 50%
+	tier0 can_burst -> 60%
 )
 cpuTTG can_burst no_burst
 tier0  0         0
@@ -414,8 +414,8 @@ resetInterval
 fit(
 	tier1 no_burst -> 50%
 	tier1 can_burst -> 60%
-	tier0 no_burst -> 75%
-	tier0 can_burst -> 85%
+	tier0 no_burst -> 50%
+	tier0 can_burst -> 60%
 )
 cpuTTG can_burst no_burst
 tier0  0         -1000

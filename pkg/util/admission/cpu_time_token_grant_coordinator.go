@@ -258,10 +258,12 @@ func makeCPUTimeTokenGrantCoordinator(
 		timeSource: timeSource,
 		closeCh:    make(chan struct{}),
 	}
+	configHolder := newResourceGroupConfigHolder(&settings.SV)
 	allocator := &cpuTimeTokenAllocator{
-		granter:  granter,
-		settings: settings,
-		metrics:  metrics,
+		granter:      granter,
+		settings:     settings,
+		configHolder: configHolder,
+		metrics:      metrics,
 	}
 	model := &cpuTimeTokenLinearModel{
 		granter:            granter,
@@ -274,11 +276,11 @@ func makeCPUTimeTokenGrantCoordinator(
 
 	var requesters [numResourceTiers]requester
 	wqMetrics := makeWorkQueueMetrics("cpu", registry)
-	// One holder shared across both per-tier WorkQueues. RM mode only
-	// uses tier 0; tier 1 sees every Set (the holder is shared) but
-	// never applies, since SetResourceGroupConfig forwards refresh
-	// signals only to tier 0 (rmQueueTier) below.
-	configHolder := newResourceGroupConfigHolder()
+	// The holder is shared across the allocator and both per-tier
+	// WorkQueues. RM mode only uses tier 0; tier 1 sees every Set
+	// (the holder is shared) but never applies, since
+	// SetResourceGroupConfig forwards refresh signals only to tier 0
+	// (rmQueueTier) below.
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		opts := makeWorkQueueOptions(KVWork)
 		opts.mode = usesCPUTimeTokens

@@ -9,6 +9,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -126,10 +127,41 @@ var builtinGroupConfigs = ResourceGroupConfigSet{
 	tenantGroupKey(1): systemTenantGroupConfig,
 }
 
+// ConfigSnapshot is the immutable snapshot returned by
+// ResourceGroupConfigHolder.Snapshot. It bundles the per-group config
+// set with the utilization targets derived from cluster settings.
+type ConfigSnapshot struct {
+	// Groups is the per-group config set (built-ins + caller-provided).
+	Groups ResourceGroupConfigSet
+	// NoBurstFrac is the non-burstable CPU utilization target
+	// (e.g. 0.8 for 80% of CPU capacity).
+	NoBurstFrac float64
+	// BurstDelta is the delta added to NoBurstFrac to produce the
+	// burstable utilization ceiling.
+	BurstDelta float64
+}
+
+// MaxNonBurstableFraction returns the non-burstable CPU utilization
+// target, replicated across all resource tiers.
+func (s ConfigSnapshot) MaxNonBurstableFraction() [numResourceTiers]float64 {
+	return [numResourceTiers]float64{s.NoBurstFrac, s.NoBurstFrac}
+}
+
+// MaxFraction returns the burstable CPU utilization ceiling
+// (NoBurstFrac + BurstDelta), replicated across all resource tiers.
+func (s ConfigSnapshot) MaxFraction() [numResourceTiers]float64 {
+	f := s.NoBurstFrac + s.BurstDelta
+	return [numResourceTiers]float64{f, f}
+}
+
 // ResourceGroupConfigHolder owns the source-of-truth config set for RM mode.
 // It is pure storage behind an RWMutex; reads (every Admit) vastly outnumber
 // writes (config changes only).
 type ResourceGroupConfigHolder struct {
+	// sv provides access to cluster settings for the snapshot's
+	// utilization targets. Nil in test paths.
+	sv *settings.Values
+
 	mu struct {
 		syncutil.RWMutex
 		config ResourceGroupConfigSet
@@ -139,8 +171,10 @@ type ResourceGroupConfigHolder struct {
 // newResourceGroupConfigHolder constructs a holder seeded with
 // defaultRMResourceGroupConfig, so a fresh Snapshot returns the high/low
 // hardcoded groups that WorkQueue applies on first RM-mode activation.
-func newResourceGroupConfigHolder() *ResourceGroupConfigHolder {
-	h := &ResourceGroupConfigHolder{}
+// sv provides access to cluster settings for utilization targets; nil
+// is accepted for test paths (defaults are used).
+func newResourceGroupConfigHolder(sv *settings.Values) *ResourceGroupConfigHolder {
+	h := &ResourceGroupConfigHolder{sv: sv}
 	h.Set(defaultRMResourceGroupConfig)
 	return h
 }
@@ -167,11 +201,27 @@ func (h *ResourceGroupConfigHolder) Set(config ResourceGroupConfigSet) {
 	h.mu.config = cp
 }
 
-// Snapshot returns the installed config map directly (no copy). The map is
-// immutable post-install: a subsequent Set installs a fresh map rather than
-// mutating in place, so prior snapshots remain stable.
-func (h *ResourceGroupConfigHolder) Snapshot() ResourceGroupConfigSet {
+// Snapshot returns the installed config bundled with utilization
+// targets from cluster settings. The Groups map is returned directly
+// (no copy); it is immutable post-install because Set installs a
+// fresh map rather than mutating in place, so prior snapshots remain
+// stable.
+func (h *ResourceGroupConfigHolder) Snapshot() ConfigSnapshot {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.mu.config
+	groups := h.mu.config
+	h.mu.RUnlock()
+	var noBurstFrac, burstDelta float64
+	if h.sv != nil {
+		noBurstFrac = KVCPUTimeAppUtilGoal.Get(h.sv)
+		burstDelta = KVCPUTimeUtilBurstDelta.Get(h.sv)
+	} else {
+		// Test path: use sensible defaults.
+		noBurstFrac = 0.8
+		burstDelta = 0.05
+	}
+	return ConfigSnapshot{
+		Groups:      groups,
+		NoBurstFrac: noBurstFrac,
+		BurstDelta:  burstDelta,
+	}
 }
