@@ -23,7 +23,8 @@ import (
 )
 
 // InstanceInfo exposes information on a SQL instance such as ID, network
-// address, the associated sqlliveness.SessionID, and the instance's locality.
+// address, the associated sqlliveness.SessionID, the instance's locality,
+// and locality-aware advertise addresses.
 type InstanceInfo struct {
 	Region            []byte
 	InstanceID        base.SQLInstanceID

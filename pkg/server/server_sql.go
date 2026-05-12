@@ -326,6 +326,11 @@ type sqlServerArgs struct {
 	// Used by DistSQLPlanner to dial other SQL instances.
 	sqlInstanceDialer *nodedialer.Dialer
 
+	// gossipAddressResolver resolves node addresses via gossip. Used as a
+	// fallback by sqlInstanceDialer on mixed KV+SQL system tenant nodes
+	// before the locality_addresses migration completes.
+	gossipAddressResolver nodedialer.AddressResolver
+
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
 	// for debugging and DistSQL planning purposes.
@@ -525,7 +530,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Locality,
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
-				[]roachpb.LocalityAddress{},
+				r.cfg.LocalityAddresses,
 			); err != nil {
 				log.Dev.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
@@ -622,26 +627,27 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the sqlInstanceDialer unless we
-	// are serving the system tenant despite the fact that we've
-	// arranged for pod IDs and instance IDs to match since the
-	// secondary tenant gRPC servers currently live on a different
-	// port.
-	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsSQLInstanceDialer {
-		cfg.sqlInstanceDialer = cfg.kvNodeDialer
-	} else {
-		// In a multi-tenant environment, use the sqlInstanceReader to resolve
-		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
-			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
-			if err != nil {
-				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
-			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+	addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		// On mixed KV+SQL system tenant nodes, fall back to gossip-based address
+		// resolution until the locality_addresses migration has completed.
+		isMixedNodeOnSystemTenant := isMixedSQLAndKVNode && codec.ForSystemTenant()
+		if isMixedNodeOnSystemTenant &&
+			!cfg.Settings.Version.IsActive(
+				cfg.rpcContext.MasterCtx,
+				clusterversion.V26_3_SQLInstancesAddLocalityAddresses,
+			) {
+			return cfg.gossipAddressResolver(nodeID)
 		}
-		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		info, err := cfg.sqlInstanceReader.GetInstance(
+			cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID),
+		)
+		if err != nil {
+			return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
+		}
+		defaultAddress := &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}
+		return cfg.Locality.LookupAddress(info.LocalityAddresses, defaultAddress), info.Locality, nil
 	}
+	cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -1634,6 +1640,10 @@ func (s *SQLServer) preStart(
 		stopper.ShouldQuiesce(),
 		"sql create node instance row",
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
+			var localityAddresses []roachpb.LocalityAddress
+			if s.execCfg.Codec.ForSystemTenant() {
+				localityAddresses = s.distSQLServer.LocalityAddresses
+			}
 			if hasNodeID {
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
@@ -1644,7 +1654,7 @@ func (s *SQLServer) preStart(
 					s.distSQLServer.Locality,
 					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
-					s.distSQLServer.LocalityAddresses,
+					localityAddresses,
 				)
 			}
 			return s.sqlInstanceStorage.CreateInstance(
@@ -1654,7 +1664,7 @@ func (s *SQLServer) preStart(
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
 				s.execCfg.Settings.Version.LatestVersion(),
-				s.distSQLServer.LocalityAddresses,
+				localityAddresses,
 			)
 		})
 	if err != nil {

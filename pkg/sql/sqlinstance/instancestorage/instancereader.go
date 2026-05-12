@@ -67,14 +67,15 @@ func NewReader(
 func (r *Reader) Start(ctx context.Context, self sqlinstance.InstanceInfo) {
 	r.setCache(&singletonInstanceFeed{
 		instance: instancerow{
-			region:        self.Region,
-			instanceID:    self.InstanceID,
-			sqlAddr:       self.InstanceSQLAddr,
-			rpcAddr:       self.InstanceRPCAddr,
-			sessionID:     self.SessionID,
-			locality:      self.Locality,
-			binaryVersion: self.BinaryVersion,
-			timestamp:     hlc.Timestamp{}, // intentionally zero
+			region:            self.Region,
+			instanceID:        self.InstanceID,
+			sqlAddr:           self.InstanceSQLAddr,
+			rpcAddr:           self.InstanceRPCAddr,
+			sessionID:         self.SessionID,
+			locality:          self.Locality,
+			binaryVersion:     self.BinaryVersion,
+			localityAddresses: self.LocalityAddresses,
+			timestamp:         hlc.Timestamp{}, // intentionally zero
 		},
 	})
 	// Make sure that the reader shuts down gracefully.
