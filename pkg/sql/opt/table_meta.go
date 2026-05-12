@@ -482,19 +482,22 @@ func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarE
 }
 
 // PartialIndexPredicate returns the given index's predicate scalar expression,
-// if the index is a partial index. Returns ok=false if the index is not a
-// partial index. Panics if the index is a partial index according to the
-// catalog, but a predicate scalar expression does not exist in the table
-// metadata.
+// if the index is a partial index and a predicate is available in the table
+// metadata. Returns ok=false in two cases:
+//
+//  1. The index is not a partial index.
+//  2. The index is a partial index according to the catalog, but its
+//     predicate could not be added to the table metadata. This happens when
+//     the predicate references a column that is not in the table's ordinary
+//     scope at build time (e.g. the column is mid-drop and is in WRITE_ONLY
+//     or DELETE_ONLY). Callers must treat this case the same as case (1):
+//     skip the index for any predicate-based reasoning.
 func (tm *TableMeta) PartialIndexPredicate(ord cat.IndexOrdinal) (pred ScalarExpr, ok bool) {
 	if _, isPartialIndex := tm.Table.Index(ord).Predicate(); !isPartialIndex {
 		return nil, false
 	}
 	pred, ok = tm.partialIndexPredicates[ord]
-	if !ok {
-		panic(errors.AssertionFailedf("partial index predicate does not exist in table metadata"))
-	}
-	return pred, true
+	return pred, ok
 }
 
 // PartialIndexPredicatesUnsafe returns the partialIndexPredicates map.

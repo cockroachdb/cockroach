@@ -10,8 +10,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,13 +99,45 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 		}
 
 		// Build the partial index predicate as a memo.FiltersExpr and add it
-		// to the table metadata.
-		predExpr, err := b.buildPartialIndexPredicate(tabMeta, tableScope, expr, "index predicate")
+		// to the table metadata. If the predicate references a column that is
+		// no longer in the table's ordinary scope (e.g. the column is being
+		// dropped and is in a non-public state), skip the index. Callers of
+		// TableMeta.PartialIndexPredicate handle the resulting absence by
+		// foregoing predicate-based reasoning for that index, which is the
+		// correct fallback for an index in the process of being dropped.
+		predExpr, err := b.tryBuildPartialIndexPredicate(tabMeta, tableScope, expr)
 		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+				log.VEventf(b.ctx, 2,
+					"skipping partial index predicate for index %d on table %d: %v",
+					index.ID(), tabMeta.MetaID, err)
+				continue
+			}
 			panic(err)
 		}
 		tabMeta.AddPartialIndexPredicate(indexOrd, &predExpr)
 	}
+}
+
+// tryBuildPartialIndexPredicate is a recover-wrapping shim around
+// buildPartialIndexPredicate. buildPartialIndexPredicate may panic during name
+// resolution (resolveAndRequireType panics if a referenced column is missing
+// from the scope, e.g. the column is mid-drop). This helper converts an
+// UndefinedColumn panic into a returned error so the caller can decide
+// whether to skip the index. Other panic causes are re-raised.
+func (b *Builder) tryBuildPartialIndexPredicate(
+	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr,
+) (predExpr memo.FiltersExpr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if rErr, ok := r.(error); ok && pgerror.GetPGCode(rErr) == pgcode.UndefinedColumn {
+				err = rErr
+				return
+			}
+			panic(r)
+		}
+	}()
+	return b.buildPartialIndexPredicate(tabMeta, tableScope, expr, "index predicate")
 }
 
 // buildPartialIndexPredicate builds a memo.FiltersExpr from the given

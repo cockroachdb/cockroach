@@ -199,7 +199,13 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 		// If the index is a pseudo-partial index, it can always be an arbiter.
 		// Furthermore, it is the only arbiter needed because it guarantees
 		// uniqueness of its columns across all rows.
-		pred := h.partialIndexPredicate(idx)
+		pred, ok := h.partialIndexPredicate(idx)
+		if !ok {
+			// The index's predicate is not available (e.g. because the index
+			// is being dropped together with a column referenced in its
+			// predicate); it cannot be used as an arbiter.
+			continue
+		}
 		if pred.IsTrue() {
 			return makeSingleIndexArbiterSet(mb, idx)
 		}
@@ -699,18 +705,29 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 	return h.tableScopeLazy
 }
 
-// partialIndexPredicate returns the partial index predicate of the given index.
-// Rather than build the predicate scalar expression from the tree.Expr in the
-// catalog, it fetches the predicates from the table metadata. These predicates
-// are populated when the Scan expression is built for the tableScope. This
-// eliminates unnecessarily rebuilding partial index predicate expressions.
-func (h *arbiterPredicateHelper) partialIndexPredicate(idx cat.IndexOrdinal) memo.FiltersExpr {
+// partialIndexPredicate returns the partial index predicate of the given
+// index. Rather than build the predicate scalar expression from the tree.Expr
+// in the catalog, it fetches the predicates from the table metadata. These
+// predicates are populated when the Scan expression is built for the
+// tableScope. This eliminates unnecessarily rebuilding partial index predicate
+// expressions.
+//
+// Returns ok=false when the index has no predicate available in the table
+// metadata, which can happen if the predicate references a column that is not
+// in the table's ordinary scope (e.g. mid-drop). In that case the index cannot
+// be used as an arbiter.
+func (h *arbiterPredicateHelper) partialIndexPredicate(
+	idx cat.IndexOrdinal,
+) (_ memo.FiltersExpr, ok bool) {
 	// Call tableScope to ensure that buildScan has been called to populate
 	// tabMeta with partial index predicates.
 	h.tableScope()
 
-	pred, _ := h.tabMeta.PartialIndexPredicate(idx)
-	return *pred.(*memo.FiltersExpr)
+	pred, ok := h.tabMeta.PartialIndexPredicate(idx)
+	if !ok {
+		return nil, false
+	}
+	return *pred.(*memo.FiltersExpr), true
 }
 
 // partialUniqueConstraintPredicate returns the predicate of the given unique

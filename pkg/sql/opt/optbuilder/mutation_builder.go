@@ -1544,29 +1544,43 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 			expr := mb.parsePartialIndexPredicateExpr(i)
 
+			// Resolve the predicate against putScope and delScope. If the
+			// predicate references a column that is not in the mutation
+			// scope — typically because the column is being dropped together
+			// with this partial index — we cannot evaluate the predicate
+			// for this row. Project constant fallback values instead: PUT
+			// false (we shouldn't insert into a partial index that is being
+			// dropped) and DEL true (we should issue a delete to be safe;
+			// the kv layer will no-op if the entry doesn't exist).
+			putTexpr, delTexpr, ok := mb.resolvePartialIndexPredicate(expr, putScope, delScope)
+			if !ok {
+				if putScope != nil {
+					putTexpr = tree.DBoolFalse
+				}
+				if delScope != nil {
+					delTexpr = tree.DBoolTrue
+				}
+			}
+
 			// Build synthesized PUT columns.
 			if putScope != nil {
-				texpr := putScope.resolveAndRequireType(expr, types.Bool)
-
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.
 				colName := scopeColName("").WithMetadataName(fmt.Sprintf("partial_index_put%d", ord+1))
-				scopeCol := projectionScope.addColumn(colName, texpr)
+				scopeCol := projectionScope.addColumn(colName, putTexpr)
 
-				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
+				mb.b.buildScalar(putTexpr, putScope, projectionScope, scopeCol, nil)
 				mb.partialIndexPutColIDs[ord] = scopeCol.id
 			}
 
 			// Build synthesized DEL columns.
 			if delScope != nil {
-				texpr := delScope.resolveAndRequireType(expr, types.Bool)
-
 				// Use an anonymous name because the column cannot be referenced
 				// in other expressions.
 				colName := scopeColName("").WithMetadataName(fmt.Sprintf("partial_index_del%d", ord+1))
-				scopeCol := projectionScope.addColumn(colName, texpr)
+				scopeCol := projectionScope.addColumn(colName, delTexpr)
 
-				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
+				mb.b.buildScalar(delTexpr, delScope, projectionScope, scopeCol, nil)
 				mb.partialIndexDelColIDs[ord] = scopeCol.id
 			}
 
@@ -2070,6 +2084,43 @@ func (mb *mutationBuilder) parseColExpr(
 
 	cache[ord] = expr
 	return expr
+}
+
+// resolvePartialIndexPredicate type-checks the given partial-index predicate
+// expression against putScope and delScope (either may be nil). It returns the
+// resulting typed expressions plus ok=true on success.
+//
+// Resolution can fail with a panic when the predicate references a column that
+// is not visible in the mutation scope — most notably when the column is being
+// dropped together with this partial index, in which case the column is a
+// mutation column and reference attempts produce either an UndefinedColumn
+// error or a "column is being backfilled" InvalidColumnReference error. In
+// either of those cases this function recovers and returns ok=false so the
+// caller can skip the index. Other panic causes are re-raised unchanged.
+func (mb *mutationBuilder) resolvePartialIndexPredicate(
+	expr tree.Expr, putScope, delScope *scope,
+) (putTexpr, delTexpr tree.TypedExpr, ok bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if rErr, isErr := r.(error); isErr {
+			switch pgerror.GetPGCode(rErr) {
+			case pgcode.UndefinedColumn, pgcode.InvalidColumnReference:
+				ok = false
+				return
+			}
+		}
+		panic(r)
+	}()
+	if putScope != nil {
+		putTexpr = putScope.resolveAndRequireType(expr, types.Bool)
+	}
+	if delScope != nil {
+		delTexpr = delScope.resolveAndRequireType(expr, types.Bool)
+	}
+	return putTexpr, delTexpr, true
 }
 
 // parsePartialIndexPredicateExpr parses the partial index predicate for the
