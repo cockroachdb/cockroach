@@ -1464,6 +1464,12 @@ func setupTestImportCSVStmt(
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
+	// The test isn't validating these batch sizes, but extreme metamorphic
+	// values (e.g. 1) cause the package to time out. Raise them to a floor that
+	// still exercises batching code paths.
+	t.Cleanup(row.TestingSetDatumRowConverterBatchSize(10))
+	t.Cleanup(row.TestingRaiseDefaultKVBatchSize(10))
+
 	const nodes = 3
 
 	numFiles = nodes + 2
