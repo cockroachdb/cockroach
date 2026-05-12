@@ -172,31 +172,32 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	ctx := context.Background()
 	cpuTimeTokenACMode.Override(ctx, &settings.SV, resourceManagerMode)
 
-	// Public API call. This is the only thing under test.
+	// Public API call with user-defined keys. Built-in keys (high/low)
+	// cannot be overwritten, so we test with non-builtin IDs.
 	cpuCoords.SetResourceGroupConfig(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 70, BurstFrac: 0.7, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 30, BurstFrac: 0.3, MaxCPU: false},
+		rgGroupKey(42): {Weight: 70, BurstFrac: 0.7, MaxCPU: true},
+		rgGroupKey(43): {Weight: 30, BurstFrac: 0.3, MaxCPU: false},
 	})
 
 	// Holder reflects the new config.
 	groups := cpuCoords.cpuTimeCoord.configHolder.Snapshot().Groups
-	require.Equal(t, uint32(70), groups[rgGroupKey(highResourceGroupID)].Weight)
-	require.Equal(t, float64(0.7), groups[rgGroupKey(highResourceGroupID)].BurstFrac)
-	require.True(t, groups[rgGroupKey(highResourceGroupID)].MaxCPU)
-	require.Equal(t, uint32(30), groups[rgGroupKey(lowResourceGroupID)].Weight)
-	require.Equal(t, float64(0.3), groups[rgGroupKey(lowResourceGroupID)].BurstFrac)
-	require.False(t, groups[rgGroupKey(lowResourceGroupID)].MaxCPU)
+	require.Equal(t, uint32(70), groups[rgGroupKey(42)].Weight)
+	require.Equal(t, float64(0.7), groups[rgGroupKey(42)].BurstFrac)
+	require.True(t, groups[rgGroupKey(42)].MaxCPU)
+	require.Equal(t, uint32(30), groups[rgGroupKey(43)].Weight)
+	require.Equal(t, float64(0.3), groups[rgGroupKey(43)].BurstFrac)
+	require.False(t, groups[rgGroupKey(43)].MaxCPU)
 
 	// RM-mode WorkQueue's cached per-group state reflects the new
 	// config (refresh propagated through to applyConfigLocked).
-	high := getGroupLocked(rmQueue, rgGroupKey(highResourceGroupID))
-	require.NotNil(t, high, "rg high container should be pre-created by apply")
-	require.Equal(t, uint32(70), high.weight)
-	require.Equal(t, float64(0.7), high.burstFrac)
-	require.True(t, high.cpuTimeBurstBucket.maxCPU)
-	low := getGroupLocked(rmQueue, rgGroupKey(lowResourceGroupID))
-	require.NotNil(t, low, "rg low container should be pre-created by apply")
-	require.Equal(t, uint32(30), low.weight)
-	require.Equal(t, float64(0.3), low.burstFrac)
-	require.False(t, low.cpuTimeBurstBucket.maxCPU)
+	rg42 := getGroupLocked(rmQueue, rgGroupKey(42))
+	require.NotNil(t, rg42, "rg 42 container should be pre-created by apply")
+	require.Equal(t, uint32(70), rg42.weight)
+	require.Equal(t, float64(0.7), rg42.burstFrac)
+	require.True(t, rg42.cpuTimeBurstBucket.maxCPU)
+	rg43 := getGroupLocked(rmQueue, rgGroupKey(43))
+	require.NotNil(t, rg43, "rg 43 container should be pre-created by apply")
+	require.Equal(t, uint32(30), rg43.weight)
+	require.Equal(t, float64(0.3), rg43.burstFrac)
+	require.False(t, rg43.cpuTimeBurstBucket.maxCPU)
 }

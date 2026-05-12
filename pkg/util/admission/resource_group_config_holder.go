@@ -84,20 +84,11 @@ func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
 	}
 }
 
-// defaultRMResourceGroupConfig seeds the holder until an explicit Set
-// replaces it. The two ids match priorityToResourceGroupKey (high/low).
-//
-// TODO(wenyihu6): revisit weights once we have signal from real workloads.
-var defaultRMResourceGroupConfig = ResourceGroupConfigSet{
-	rgGroupKey(highResourceGroupID): {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
-	rgGroupKey(lowResourceGroupID):  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
-}
-
 // defaultRGGroupConfig is the safety fallback returned by GetOrDefault for
 // rgKind keys not in the installed configuration. In steady state this is
-// unreachable: the seed (defaultRMResourceGroupConfig) covers high/low. It
-// exists to keep Admit's lazy-create path total — if a caller installs a
-// config that omits a known rg ID, Admit gets a usable weight rather than a
+// unreachable: the built-in configs cover high/low. It exists to keep
+// Admit's lazy-create path total — if a caller installs a config that
+// omits a known rg ID, Admit gets a usable weight rather than a
 // zero-weight group. Weight=20 mirrors the low default; MaxCPU=false keeps
 // an unconfigured group from bypassing the burst-fullness gate.
 //
@@ -124,7 +115,9 @@ var systemTenantGroupConfig = ResourceGroupConfig{
 // holder. Set seeds from this list first; callers cannot overwrite
 // built-in keys.
 var builtinGroupConfigs = ResourceGroupConfigSet{
-	tenantGroupKey(1): systemTenantGroupConfig,
+	tenantGroupKey(1):               systemTenantGroupConfig,
+	rgGroupKey(highResourceGroupID): {Weight: 80, BurstFrac: 0.8, MaxCPU: true},
+	rgGroupKey(lowResourceGroupID):  {Weight: 20, BurstFrac: 0.2, MaxCPU: false},
 }
 
 // ConfigSnapshot is the immutable snapshot returned by
@@ -183,13 +176,12 @@ type ResourceGroupConfigHolder struct {
 }
 
 // newResourceGroupConfigHolder constructs a holder seeded with
-// defaultRMResourceGroupConfig, so a fresh Snapshot returns the high/low
-// hardcoded groups that WorkQueue applies on first RM-mode activation.
-// sv provides access to cluster settings for utilization targets; nil
-// is accepted for test paths (defaults are used).
+// builtinGroupConfigs. sv provides access to cluster settings for
+// utilization targets; nil is accepted for test paths (defaults are
+// used).
 func newResourceGroupConfigHolder(sv *settings.Values) *ResourceGroupConfigHolder {
 	h := &ResourceGroupConfigHolder{sv: sv}
-	h.Set(defaultRMResourceGroupConfig)
+	h.Set(nil)
 	return h
 }
 
