@@ -25,8 +25,8 @@ SHOW RESOURCE GROUPS
 statement ok
 SET CLUSTER SETTING sql.experimental_resource_groups.enabled = true
 
-# CREATE rejects missing or non-positive cpu_weight.
-statement error pq: cpu_weight is required and must be a positive integer
+# CREATE requires WITH clause (and thus at least one option).
+statement error at or near "EOF": syntax error
 CREATE RESOURCE GROUP missing_weight
 
 statement error pq: cpu_weight must be a positive integer

@@ -1319,7 +1319,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> drop_resource_group_stmt
 %type <tree.Statement> show_resource_group_stmt
 %type <tree.Statement> show_resource_groups_stmt
-%type <[]tree.KVOption> opt_with_resource_group_options resource_group_option_list
+%type <[]tree.KVOption> with_resource_group_options resource_group_option_list
 %type <tree.KVOption> resource_group_option
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
@@ -4277,12 +4277,8 @@ drop_external_connection_stmt:
 	}
 	| DROP EXTERNAL CONNECTION error // SHOW HELP: DROP EXTERNAL CONNECTION
 
-opt_with_resource_group_options:
-  /* EMPTY */
-  {
-    $$.val = ([]tree.KVOption)(nil)
-  }
-| WITH resource_group_option_list
+with_resource_group_options:
+  WITH resource_group_option_list
   {
     $$.val = $2.kvOptions()
   }
@@ -4310,20 +4306,20 @@ resource_group_option:
 // %Help: CREATE RESOURCE GROUP - create a resource group for the resource manager
 // %Category: Misc
 // %Text:
-// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> [WITH <option> = <value>, ...]
+// CREATE RESOURCE GROUP [IF NOT EXISTS] <name> WITH <option> = <value>, ...
 //
 // Options:
 //   cpu_weight = <int>   relative CPU share (must be > 0)
 //   max_cpu    = <bool>  whether the group may burst to the cluster's max CPU
 create_resource_group_stmt:
-  CREATE RESOURCE GROUP name opt_with_resource_group_options
+  CREATE RESOURCE GROUP name with_resource_group_options
   {
     $$.val = &tree.CreateResourceGroup{
       Name:    tree.Name($4),
       Options: $5.kvOptions(),
     }
   }
-| CREATE RESOURCE GROUP IF NOT EXISTS name opt_with_resource_group_options
+| CREATE RESOURCE GROUP IF NOT EXISTS name with_resource_group_options
   {
     $$.val = &tree.CreateResourceGroup{
       IfNotExists: true,
@@ -4340,14 +4336,14 @@ create_resource_group_stmt:
 //
 // Only the options named are updated; unspecified options are left unchanged.
 alter_resource_group_stmt:
-  ALTER RESOURCE GROUP name opt_with_resource_group_options
+  ALTER RESOURCE GROUP name with_resource_group_options
   {
     $$.val = &tree.AlterResourceGroup{
       Name:    tree.Name($4),
       Options: $5.kvOptions(),
     }
   }
-| ALTER RESOURCE GROUP IF EXISTS name opt_with_resource_group_options
+| ALTER RESOURCE GROUP IF EXISTS name with_resource_group_options
   {
     $$.val = &tree.AlterResourceGroup{
       IfExists: true,

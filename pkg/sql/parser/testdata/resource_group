@@ -1,10 +1,10 @@
-parse
+error
 CREATE RESOURCE GROUP my_group
 ----
+at or near "EOF": syntax error
+DETAIL: source SQL:
 CREATE RESOURCE GROUP my_group
-CREATE RESOURCE GROUP my_group -- fully parenthesized
-CREATE RESOURCE GROUP my_group -- literals removed
-CREATE RESOURCE GROUP _ -- identifiers removed
+                              ^
 
 parse
 CREATE RESOURCE GROUP my_group WITH cpu_weight = 100, max_cpu = false
