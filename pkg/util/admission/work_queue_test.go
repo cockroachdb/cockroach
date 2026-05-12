@@ -1305,7 +1305,7 @@ func withGroupLocked(q *WorkQueue, fn func()) {
 
 // TestApplyConfigLockedMaterializesGroups verifies that
 // applyConfigLocked materializes the holder's snapshot into
-// q.mu.groups: the seeded high/low rg containers must exist on the
+// q.mu.groups: the built-in high/low rg containers must exist on the
 // queue immediately after, with the configured weight/maxCPU. Without
 // this, lazy-create would still reach the right state on first admit,
 // but operator-facing observers (metrics, debug print) would not see
@@ -1317,12 +1317,6 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	// Custom config replaces the default seed.
-	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 40, MaxCPU: false},
-	})
-
 	// Pre-condition: no rg containers exist yet (we're in serverless mode).
 	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)))
 	require.Nil(t, getGroupLocked(q, rgGroupKey(lowResourceGroupID)))
@@ -1332,15 +1326,15 @@ func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.refreshResourceGroupConfig()
 
-	// Post-condition: both rg containers pre-created with the
-	// configured weight/maxCPU.
+	// Post-condition: both built-in rg containers pre-created with
+	// their configured weight/maxCPU.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high, "high rg container should be pre-created by apply")
-	require.Equal(t, uint32(60), high.weight)
+	require.Equal(t, uint32(80), high.weight)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
 	low := getGroupLocked(q, rgGroupKey(lowResourceGroupID))
 	require.NotNil(t, low, "low rg container should be pre-created by apply")
-	require.Equal(t, uint32(40), low.weight)
+	require.Equal(t, uint32(20), low.weight)
 	require.False(t, low.cpuTimeBurstBucket.maxCPU)
 }
 
@@ -1358,16 +1352,16 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 	// Stay in serverless mode (default).
 
 	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 60, MaxCPU: true},
+		rgGroupKey(42): {Weight: 60, MaxCPU: true},
 	})
 	q.refreshResourceGroupConfig()
 
 	// rg containers must NOT have been pre-created.
-	require.Nil(t, getGroupLocked(q, rgGroupKey(highResourceGroupID)),
+	require.Nil(t, getGroupLocked(q, rgGroupKey(42)),
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(rgGroupKey(highResourceGroupID))
+	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(rgGroupKey(42))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
 }
@@ -1385,18 +1379,14 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(highResourceGroupID): {Weight: 70, MaxCPU: true},
-		rgGroupKey(lowResourceGroupID):  {Weight: 30, MaxCPU: false},
-	})
 	ctx := context.Background()
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
 	q.refreshResourceGroupConfig()
 
-	// Sanity: the high rg container exists with the configured state.
+	// Sanity: the high rg container exists with the built-in config.
 	high := getGroupLocked(q, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high)
-	require.Equal(t, uint32(70), high.weight)
+	require.Equal(t, uint32(80), high.weight)
 	require.True(t, high.cpuTimeBurstBucket.maxCPU)
 	// Force GC eligibility: drive used to 0.
 	withGroupLocked(q, func() { high.used = 0 })
@@ -1414,7 +1404,7 @@ func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
 
 	high2 := getGroupLocked(q, rgGroupKey(highResourceGroupID))
 	require.NotNil(t, high2, "next admit should recreate the GC'd group")
-	require.Equal(t, uint32(70), high2.weight,
+	require.Equal(t, uint32(80), high2.weight,
 		"recreated group should pick up configured weight, not default")
 	require.True(t, high2.cpuTimeBurstBucket.maxCPU,
 		"recreated group should pick up configured maxCPU, not default")

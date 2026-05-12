@@ -46,10 +46,10 @@ set-max-cpu-groups group=1 v=true
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 0, w: 4294967295, fifo: -128
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: t1=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst rg1=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst rg2=fullness=0.0% tokens=-1 capacity=0 qual=no_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=0.0% tokens=-1 capacity=0 maxCPU=true qual=can_burst t0g2=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst
 
 # Refill 25 tokens with capacity=100. Both buckets: -1+25=24 tokens,
 # 24% full. rg 1 (maxCPU=true) is can_burst despite being well below
@@ -60,10 +60,10 @@ refill-burst-buckets to-add=25 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 0, w: 4294967295, fifo: -128
- group-id: 1 used: 1, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: t1=fullness=25.0% tokens=25 capacity=100 maxCPU=true qual=can_burst rg1=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst rg2=fullness=24.0% tokens=24 capacity=100 qual=no_burst
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=24.0% tokens=24 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=24.0% tokens=24 capacity=100 qual=no_burst t1g0=fullness=25.0% tokens=25 capacity=100 maxCPU=true qual=can_burst
 
 # Queue work for both groups. rg 1's work should be granted first
 # since it has can_burst via maxCPU, even though both have identical
@@ -123,6 +123,6 @@ refill-burst-buckets to-add=25 capacity=100
 print
 ----
 closed epoch: 0 groupHeap len: 0
- group-id: 1 used: 100001, w: 80, fifo: -128
- group-id: 2 used: 1, w: 20, fifo: -128
-burst-buckets: rg1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst rg2=fullness=48.0% tokens=48 capacity=100 qual=no_burst
+ group-id: t0g1 used: 100001, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+burst-buckets: t0g1=fullness=-25.0% tokens=-25 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=48.0% tokens=48 capacity=100 qual=no_burst

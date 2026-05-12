@@ -38,16 +38,22 @@ type ResourceGroupConfig struct {
 // Once installed in the holder, callers must treat the map as read-only.
 type ResourceGroupConfigSet map[groupKey]ResourceGroupConfig
 
-// SafeFormat renders one entry per line, sorted by id, e.g.:
+// SafeFormat renders one entry per line, sorted by tenantID then
+// groupID, e.g.:
 //
-//	rg1 weight=80 maxCPU=true
-//	rg2 weight=20 maxCPU=false
+//	t0g1 weight=80 burstFrac=0.80 maxCPU=true
+//	t0g2 weight=20 burstFrac=0.20 maxCPU=false
 func (s ResourceGroupConfigSet) SafeFormat(w redact.SafePrinter, _ rune) {
 	keys := make([]groupKey, 0, len(s))
 	for k := range s {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].id < keys[j].id })
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].tenantID != keys[j].tenantID {
+			return keys[i].tenantID < keys[j].tenantID
+		}
+		return keys[i].groupID < keys[j].groupID
+	})
 	for _, k := range keys {
 		cfg := s[k]
 		w.Printf("%s weight=%d burstFrac=%.2f maxCPU=%t\n",
@@ -60,45 +66,44 @@ func (s ResourceGroupConfigSet) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
-// GetOrDefault returns the config for k if installed, otherwise the
-// kind-appropriate fallback (rgKind: defaultRGGroupConfig; tenantKind:
-// defaultTenantGroupConfig). Used by WorkQueue's lazy group creation: an
-// Admit for a key without a corresponding groupInfo consults the set to
-// populate weight and maxCPU on the new groupInfo (burstFrac is computed
-// inline as Weight/100).
+// GetOrDefault returns the config for k if installed, otherwise a
+// fallback: resource groups (tenantID==0) get defaultRGGroupConfig;
+// tenant groups (groupID==0) get defaultTenantGroupConfig. Used by
+// WorkQueue's lazy group creation: an Admit for a key without a
+// corresponding groupInfo consults the set to populate weight and
+// maxCPU on the new groupInfo.
 //
-// TODO(wenyihu6): collapse to a single per-kind-agnostic fallback once we can
-// align the rg and tenant defaults. The kind switch here is a transitional
-// shape; ideally GetOrDefault returns one default that works for any key.
+// TODO(wenyihu6): collapse to a single fallback once we can align the
+// rg and tenant defaults.
 func (s ResourceGroupConfigSet) GetOrDefault(k groupKey) ResourceGroupConfig {
 	if cfg, ok := s[k]; ok {
 		return cfg
 	}
-	switch k.kind {
-	case rgKind:
-		return defaultRGGroupConfig
-	case tenantKind:
+	if k.groupID == 0 {
+		// Tenant group (tenantID is set, groupID is zero).
 		return defaultTenantGroupConfig
-	default:
-		panic(errors.AssertionFailedf("ResourceGroupConfigSet.GetOrDefault: invalid kind %s", k.kind))
 	}
+	// Resource group (groupID is set).
+	return defaultRGGroupConfig
 }
 
-// defaultRGGroupConfig is the safety fallback returned by GetOrDefault for
-// rgKind keys not in the installed configuration. In steady state this is
-// unreachable: the built-in configs cover high/low. It exists to keep
-// Admit's lazy-create path total — if a caller installs a config that
-// omits a known rg ID, Admit gets a usable weight rather than a
-// zero-weight group. Weight=20 mirrors the low default; MaxCPU=false keeps
-// an unconfigured group from bypassing the burst-fullness gate.
+// defaultRGGroupConfig is the safety fallback returned by GetOrDefault
+// for resource group keys (groupID != 0) not in the installed
+// configuration. In steady state this is unreachable: the built-in
+// configs cover high/low. It exists to keep Admit's lazy-create path
+// total — if a caller installs a config that omits a known group ID,
+// Admit gets a usable weight rather than a zero-weight group.
+// Weight=20 mirrors the low default; MaxCPU=false keeps an
+// unconfigured group from bypassing the burst-fullness gate.
 //
 // TODO(wenyihu6): once SQL DDL (CREATE/ALTER RESOURCE GROUP) is wired
-// through, decide whether unknown rgKind IDs should be a hard error.
+// through, decide whether unknown group IDs should be a hard error.
 var defaultRGGroupConfig = ResourceGroupConfig{Weight: 20, BurstFrac: 0.2, MaxCPU: false}
 
-// defaultTenantGroupConfig is the fallback for tenantKind keys: every tenant
-// gets defaultGroupWeight, since per-tenant weights are no longer
-// configurable. MaxCPU=false because tenants don't carry burst flags.
+// defaultTenantGroupConfig is the fallback for tenant group keys
+// (groupID == 0): every tenant gets defaultGroupWeight, since
+// per-tenant weights are no longer configurable. MaxCPU=false because
+// tenants don't carry burst flags.
 var defaultTenantGroupConfig = ResourceGroupConfig{
 	Weight: defaultGroupWeight, BurstFrac: 0.25, MaxCPU: false,
 }

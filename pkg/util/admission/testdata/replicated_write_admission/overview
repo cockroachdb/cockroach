@@ -17,8 +17,8 @@ admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 log-position
 print
 ----
 physical-stats: work-count=1 written-bytes=1B ingested-bytes=0B
-[regular work queue]: len(group-heap)=1 top-group=t1
- group=t1 weight=1 fifo-threshold=low-pri used=0B
+[regular work queue]: len(group-heap)=1 top-group=t1g0
+ group=t1g0 weight=4294967295 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
 [elastic work queue]: len(group-heap)=0
 
@@ -31,8 +31,8 @@ admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 log-position
 print
 ----
 physical-stats: work-count=2 written-bytes=1B ingested-bytes=1B
-[regular work queue]: len(group-heap)=1 top-group=t1
- group=t1 weight=1 fifo-threshold=low-pri used=0B
+[regular work queue]: len(group-heap)=1 top-group=t1g0
+ group=t1g0 weight=4294967295 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
   [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21 ingested ]
 [elastic work queue]: len(group-heap)=0
@@ -64,7 +64,7 @@ print
 ----
 physical-stats: work-count=2 written-bytes=1B ingested-bytes=1B
 [regular work queue]: len(group-heap)=0
- group=t1 weight=1 fifo-threshold=low-pri used=2B
+ group=t1g0 weight=4294967295 fifo-threshold=low-pri used=2B
 [elastic work queue]: len(group-heap)=0
 
 # vim:ft=sh
