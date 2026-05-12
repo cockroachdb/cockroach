@@ -130,6 +130,10 @@ type cacheEntry struct {
 	// forecast is true if stats could contain forecasts.
 	forecast bool
 
+	// minGoodnessOfFit is the minimum R² threshold used when generating
+	// forecasts for this cache entry.
+	minGoodnessOfFit float64
+
 	// userDefinedTypes holds the hydrated user-defined types used in
 	// histograms. A change to one of these types requires evicting the cacheEntry
 	// so that we can re-hydrate them.
@@ -466,7 +470,8 @@ func (sc *TableStatisticsCache) GetFreshTableStats(
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	stats, _, _, err = sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	minGOF := ForecastMinGoodnessOfFit(table, sc.settings)
+	stats, _, _, err = sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, minGOF, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	return stats, err
 }
 
@@ -497,7 +502,8 @@ func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
 		return nil, false, hlc.Timestamp{}, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
+	minGOF := ForecastMinGoodnessOfFit(table, sc.settings)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, minGOF, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
 }
 
 // GetTableStatsProtosFromDB looks up statistics for the requested table in
@@ -602,6 +608,18 @@ func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Set
 	return UseStatisticsForecasts.Get(&clusterSettings.SV)
 }
 
+// ForecastMinGoodnessOfFit returns the resolved minimum goodness-of-fit
+// threshold for the given table, falling back to the cluster setting if the
+// table does not have an override.
+func ForecastMinGoodnessOfFit(
+	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
+) float64 {
+	if minGOF, ok := table.ForecastStatsMinGoodnessOfFit(); ok {
+		return minGOF
+	}
+	return minGoodnessOfFit.Get(&clusterSettings.SV)
+}
+
 // getTableStatsFromCache is like GetFreshTableStats but assumes that the table ID
 // is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
 //
@@ -614,6 +632,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	ctx context.Context,
 	tableID descpb.ID,
 	forecast *bool,
+	minGoodnessOfFit float64,
 	udtCols []catalog.Column,
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
@@ -626,7 +645,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	asOfTs := statsAsOf.OrNow()
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
-		if e.isStale(forecast, udtCols) {
+		if e.isStale(forecast, minGoodnessOfFit, udtCols) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
@@ -647,13 +666,19 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 		}
 	}
 
-	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver, stable, canaryWindowSize, asOfTs)
+	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, minGoodnessOfFit, typeResolver, stable, canaryWindowSize, asOfTs)
 }
 
 // isStale checks whether we need to evict and re-load the cache entry.
-func (e *cacheEntry) isStale(forecast *bool, udtCols []catalog.Column) bool {
+func (e *cacheEntry) isStale(
+	forecast *bool, minGoodnessOfFit float64, udtCols []catalog.Column,
+) bool {
 	// Check whether forecast settings have changed.
 	if forecast != nil && e.forecast != *forecast {
+		return true
+	}
+	// Check whether the min goodness-of-fit threshold has changed.
+	if e.minGoodnessOfFit != minGoodnessOfFit {
 		return true
 	}
 	// Check whether user-defined types have changed (this is similar to
@@ -792,6 +817,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	ctx context.Context,
 	tableID descpb.ID,
 	forecast bool,
+	minGoodnessOfFit float64,
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
 	canaryWindowSize time.Duration,
@@ -820,6 +846,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 			ctx,
 			tableID,
 			forecast,
+			minGoodnessOfFit,
 			sc.settings,
 			typeResolver,
 		)
@@ -828,7 +855,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 
 	e.mustWait = false
 	e.latestFullStatsTimestamp, e.latestStableFullStatsTimestamp = latestFullStatsTimestamp, latestStableStatsTimestamp
-	e.forecast, e.userDefinedTypes, e.stats, e.stableStats, e.err = forecast, udts, stats, stableStats, err
+	e.forecast, e.minGoodnessOfFit, e.userDefinedTypes, e.stats, e.stableStats, e.err = forecast, minGoodnessOfFit, udts, stats, stableStats, err
 
 	// Wake up any other callers that are waiting on these stats.
 	e.waitCond.Broadcast()
@@ -893,6 +920,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 	e.refreshing = true
 
 	forecast := e.forecast
+	minGOF := e.minGoodnessOfFit
 	var stats []*TableStatistic
 	var stableStats []*TableStatistic
 	var latestStatsTimestamp hlc.Timestamp
@@ -911,6 +939,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 				ctx,
 				tableID,
 				forecast,
+				minGOF,
 				sc.settings,
 				nil, /* typeResolver */
 			)
@@ -1390,6 +1419,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context,
 	tableID descpb.ID,
 	forecast bool,
+	minGoodnessOfFit float64,
 	st *cluster.Settings,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (
@@ -1482,10 +1512,10 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	stableStatsList = append(mergedStable, stableStatsList...)
 
 	if forecast {
-		forecasts := ForecastTableStatistics(ctx, sc.settings, statsList)
+		forecasts := ForecastTableStatistics(ctx, sc.settings, statsList, minGoodnessOfFit)
 		statsList = append(statsList, forecasts...)
 
-		forecastsStable := ForecastTableStatistics(ctx, sc.settings, stableStatsList)
+		forecastsStable := ForecastTableStatistics(ctx, sc.settings, stableStatsList, minGoodnessOfFit)
 		stableStatsList = append(stableStatsList, forecastsStable...)
 		// Some forecasts could have a CreatedAt time before or after some collected
 		// stats, so make sure the list is sorted in descending CreatedAt order.

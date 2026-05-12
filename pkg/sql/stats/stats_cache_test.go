@@ -119,7 +119,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, _, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	statsList, _, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -803,7 +803,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, _, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+				stats, _, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -1348,7 +1348,7 @@ func runStatsCacheDataDriven(
 		}
 
 		tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-		stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, s.ClusterSettings(), nil)
+		stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, minGoodnessOfFit.Get(&s.ClusterSettings().SV), s.ClusterSettings(), nil)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err)
 		}

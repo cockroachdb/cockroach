@@ -2663,6 +2663,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if enabled, ok := desc.ForecastStatsEnabled(); ok {
 		appendStorageParam(`sql_stats_forecasts_enabled`, strconv.FormatBool(enabled))
 	}
+	if minGOF, ok := desc.ForecastStatsMinGoodnessOfFit(); ok {
+		appendStorageParam(`sql_stats_forecasts_min_goodness_of_fit`, fmt.Sprintf("%g", minGOF))
+	}
 	if count, ok := desc.HistogramSamplesCount(); ok {
 		appendStorageParam(`sql_stats_histogram_samples_count`, fmt.Sprintf("%d", count))
 	}
@@ -2783,6 +2786,14 @@ func (desc *wrapper) ForecastStatsEnabled() (enabled bool, ok bool) {
 		return false, false
 	}
 	return *desc.ForecastStats, true
+}
+
+// ForecastStatsMinGoodnessOfFit implements the TableDescriptor interface.
+func (desc *wrapper) ForecastStatsMinGoodnessOfFit() (minGoodnessOfFit float64, ok bool) {
+	if desc.TableDescriptor.ForecastStatsMinGoodnessOfFit == nil {
+		return 0, false
+	}
+	return *desc.TableDescriptor.ForecastStatsMinGoodnessOfFit, true
 }
 
 // HistogramSamplesCount implements the TableDescriptor interface.

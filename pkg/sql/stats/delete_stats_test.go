@@ -262,7 +262,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}
@@ -557,7 +557,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -565,7 +565,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, 0 /* minGoodnessOfFit */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}

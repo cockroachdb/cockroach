@@ -852,6 +852,11 @@ type TableDescriptor interface {
 	// enabled or disabled for this table. If ok is true, then the enabled value
 	// is valid, otherwise this has not been set at the table level.
 	ForecastStatsEnabled() (enabled bool, ok bool)
+	// ForecastStatsMinGoodnessOfFit indicates the minimum R² (goodness of fit)
+	// for statistics forecasting on this table. If ok is true, then the
+	// minGoodnessOfFit value is valid, otherwise this has not been set at the
+	// table level.
+	ForecastStatsMinGoodnessOfFit() (minGoodnessOfFit float64, ok bool)
 	// HistogramSamplesCount indicates the number of rows to sample when building
 	// a histogram for this table. If ok is true, then the histogramSamplesCount
 	// value is valid, otherwise this has not been set at the table level.

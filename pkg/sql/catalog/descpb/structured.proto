@@ -1414,7 +1414,14 @@ message TableDescriptor {
   // before new statistics are fully deployed to all queries throughout the
   // cluster.
   optional int64 stats_canary_window = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
-  // Next ID: 73
+
+  // ForecastStatsMinGoodnessOfFit is the minimum R² (goodness of fit)
+  // measurement that all predictive models in a forecast must have for the
+  // forecast to be used for this table. When set, it overrides the cluster
+  // setting sql.stats.forecasts.min_goodness_of_fit.
+  optional double forecast_stats_min_goodness_of_fit = 73
+    [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStatsMinGoodnessOfFit"];
+  // Next ID: 74
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
