@@ -1,0 +1,43 @@
+# Visualize the worker against a 4-table FK chain (a -> b -> c -> d).
+# Multi-table sub-DAGs show the topological-walk UPSERT and the
+# leaf-to-root DELETE.
+
+schema chain
+----
+loaded schema "chain": 4 table(s), 3 FK graph(s)
+
+run seed=3 chains=2 max-events=5 mix=70/30
+----
+chain 1:
+  pkIdx=0 pks: a=[-8281558051093610321] b=[-3049720348825839777]
+  txn 1: state=Unknown event=Delete
+  SELECT 1 FROM a WHERE id = $1 FOR UPDATE  args=[-8281558051093610321]
+    -> committed (state=None)
+  txn 2: state=None event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-8281558051093610321]
+  UPSERT INTO b (id, a_id) VALUES ($1, $2)  args=[-3049720348825839777, -8281558051093610321]
+    -> committed (state=Exists)
+  txn 3: state=Exists event=Delete
+  SELECT 1 FROM a WHERE id = $1 FOR UPDATE  args=[-8281558051093610321]
+  SELECT 1 FROM b WHERE id = $1 FOR UPDATE  args=[-3049720348825839777]
+  DELETE FROM b WHERE id = $1  args=[-3049720348825839777]
+  DELETE FROM a WHERE id = $1  args=[-8281558051093610321]
+    -> committed (state=None)
+  txn 4: state=None event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-8281558051093610321]
+  UPSERT INTO b (id, a_id) VALUES ($1, $2)  args=[-3049720348825839777, -8281558051093610321]
+    -> committed (state=Exists)
+  txn 5: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-8281558051093610321]
+  UPSERT INTO b (id, a_id) VALUES ($1, $2)  args=[-3049720348825839777, -481953193382193254]
+    -> fk_violation: upserting into b: pq: upsert on table "b" violates foreign key constraint "b_a_id_fkey"
+chain 2:
+  pkIdx=0 pks: a=[-8281558051093610321] b=[-3049720348825839777]
+  txn 1: state=Unknown event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-8281558051093610321]
+  UPSERT INTO b (id, a_id) VALUES ($1, $2)  args=[-3049720348825839777, -8281558051093610321]
+    -> committed (state=Exists)
+  txn 2: state=Exists event=Upsert
+  UPSERT INTO a (id) VALUES ($1)  args=[-8281558051093610321]
+  UPSERT INTO b (id, a_id) VALUES ($1, $2)  args=[-3049720348825839777, 5146173177555719724]
+    -> fk_violation: upserting into b: pq: upsert on table "b" violates foreign key constraint "b_a_id_fkey"
