@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fktxn",
+    srcs = [
+        "graph.go",
+        "schema_discover.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/fktxn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "fktxn_test",
+    srcs = [
+        "graph_test.go",
+        "main_test.go",
+        "schema_discover_test.go",
+        "test_schemas_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":fktxn"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
