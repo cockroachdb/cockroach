@@ -217,7 +217,11 @@ func (re *rebalanceEnv) rebalanceStores(
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	clusterMeans := re.meansMemo.getMeans(nil)
+	clusterMeans, ok := re.meansMemo.getMeans(nil)
+	if !ok {
+		passML.logf(ctx, 2, "no stores known to allocator; skipping rebalancing pass")
+		return nil
+	}
 	var sheddingStores []sheddingStore
 	passML.logf(ctx, 2,
 		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
@@ -897,7 +901,13 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 
 		// NB: candsPL is not empty - it includes at least the current leaseholder
 		// and one additional candidate.
-		means := computeMeansForStoreSet(re, candsPL, scratchNodes, scratchStores)
+		means, ok := computeMeansForStoreSet(re, candsPL, scratchNodes, scratchStores)
+		if !ok {
+			// Unreachable: candsPL is non-empty. Gate the assert so variadic
+			// arg boxing doesn't allocate on the success path (this site is in
+			// a hot inner loop).
+			assertTruef(ctx, false, "computeMeansForStoreSet returned !ok for non-empty candsPL=%v", candsPL)
+		}
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad, ml)
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for

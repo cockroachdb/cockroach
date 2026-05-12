@@ -1,0 +1,12 @@
+# Regression test for #170171 / #170136: a store-leaseholder message that
+# arrives while the MMA allocator has no stores registered must not panic
+# ("no stores for meansForStoreSet: []").
+#
+# This case is reachable in production at process startup, before any
+# gossip callback has called Allocator.SetStore. With the fix, getMeans
+# returns ok=false and processStoreLeaseholderMsgInternal returns early.
+
+# No set-store: MMA has zero stores registered.
+store-leaseholder-msg
+store-id=1
+----
