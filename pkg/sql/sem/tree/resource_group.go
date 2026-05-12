@@ -5,24 +5,6 @@
 
 package tree
 
-// formatResourceGroupOptions writes "key = value, key = value" with the
-// keys printed bare (no anonymization or redaction markers): they are
-// statically known SQL option names, never user data.
-func formatResourceGroupOptions(ctx *FmtCtx, opts KVOptions) {
-	for i := range opts {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.WithFlags(ctx.flags&^(FmtAnonymize|FmtMarkRedactionNode), func() {
-			ctx.FormatNode(&opts[i].Key)
-		})
-		if opts[i].Value != nil {
-			ctx.WriteString(" = ")
-			ctx.FormatNode(opts[i].Value)
-		}
-	}
-}
-
 // CreateResourceGroup represents a CREATE RESOURCE GROUP statement.
 type CreateResourceGroup struct {
 	IfNotExists bool
@@ -41,7 +23,7 @@ func (node *CreateResourceGroup) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	if len(node.Options) > 0 {
 		ctx.WriteString(" WITH ")
-		formatResourceGroupOptions(ctx, node.Options)
+		node.Options.Format(ctx)
 	}
 }
 
@@ -63,7 +45,7 @@ func (node *AlterResourceGroup) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	if len(node.Options) > 0 {
 		ctx.WriteString(" WITH ")
-		formatResourceGroupOptions(ctx, node.Options)
+		node.Options.Format(ctx)
 	}
 }
 
