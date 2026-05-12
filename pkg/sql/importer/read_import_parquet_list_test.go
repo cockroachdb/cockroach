@@ -7,6 +7,7 @@ package importer
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/apache/arrow/go/v11/arrow"
@@ -247,6 +248,20 @@ func TestParquetListColumnReader(t *testing.T) {
 				},
 				expected: []any{[]byte("hello"), []byte("world")},
 			},
+			{
+				name:      "FixedLenByteArray",
+				arrowType: &arrow.FixedSizeBinaryType{ByteWidth: 4},
+				appendValues: func(lb *array.ListBuilder) {
+					vb := lb.ValueBuilder().(*array.FixedSizeBinaryBuilder)
+					lb.Append(true)
+					vb.Append([]byte{1, 2, 3, 4})
+					vb.Append([]byte{5, 6, 7, 8})
+				},
+				expected: []any{
+					parquet.FixedLenByteArray([]byte{1, 2, 3, 4}),
+					parquet.FixedLenByteArray([]byte{5, 6, 7, 8}),
+				},
+			},
 		}
 
 		for _, tc := range tests {
@@ -277,42 +292,194 @@ func TestParquetListColumnReader(t *testing.T) {
 		}
 	})
 
+	// Int96 requires raw Parquet writing since Arrow doesn't produce Int96
+	// LIST columns natively.
+	t.Run("PhysicalTypes/Int96", func(t *testing.T) {
+		fieldID := int32(-1)
+		leaf, err := schema.NewPrimitiveNode(
+			"element", parquet.Repetitions.Optional,
+			parquet.Types.Int96, -1, fieldID)
+		require.NoError(t, err)
+
+		repeatedGroup, err := schema.NewGroupNode(
+			"list", parquet.Repetitions.Repeated,
+			[]schema.Node{leaf}, fieldID)
+		require.NoError(t, err)
+
+		listGroup, err := schema.NewGroupNodeLogical(
+			"col", parquet.Repetitions.Optional,
+			[]schema.Node{repeatedGroup},
+			schema.ListLogicalType{}, fieldID)
+		require.NoError(t, err)
+
+		root, err := schema.NewGroupNode(
+			"schema", parquet.Repetitions.Required,
+			[]schema.Node{listGroup}, fieldID)
+		require.NoError(t, err)
+
+		buf := new(bytes.Buffer)
+		writer := file.NewParquetWriter(buf, root)
+		rgWriter := writer.AppendRowGroup()
+		colWriter, err := rgWriter.NextColumn()
+		require.NoError(t, err)
+
+		int96Writer := colWriter.(*file.Int96ColumnChunkWriter)
+		val1 := parquet.Int96{1, 2, 3}
+		val2 := parquet.Int96{4, 5, 6}
+		_, err = int96Writer.WriteBatch(
+			[]parquet.Int96{val1, val2},
+			[]int16{3, 3}, // both elements present
+			[]int16{0, 1}, // rep=0: new row, rep=1: continuation
+		)
+		require.NoError(t, err)
+		require.NoError(t, rgWriter.Close())
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.NotNil(t, listInfo)
+		require.Equal(t, parquet.Types.Int96, listInfo.elementPhysicalType)
+
+		rowGroup := parquetReader.RowGroup(0)
+		colReader, err := rowGroup.Column(0)
+		require.NoError(t, err)
+
+		listReader, err := newParquetListColumnReader(colReader, listInfo)
+		require.NoError(t, err)
+		batch, err := listReader.ReadBatch(1)
+		require.NoError(t, err)
+
+		val, isNull, err := batch.GetValueAt(0)
+		require.NoError(t, err)
+		require.False(t, isNull)
+		elements := val.([]any)
+		require.Len(t, elements, 2)
+		require.Equal(t, val1, elements[0])
+		require.Equal(t, val2, elements[1])
+	})
+
+	// ManyRowsAcrossChunks exercises multi-chunk reading for different physical
+	// types. 500 rows * 3 elements = 1500 level entries, which exceeds the
+	// internal chunk size of 1024. ByteArray and FixedLenByteArray are
+	// particularly interesting because they copy buffer contents to avoid
+	// reuse corruption.
 	t.Run("ManyRowsAcrossChunks", func(t *testing.T) {
-		// 500 rows * 3 elements = 1500 level entries, which exceeds the
-		// internal chunk size of 1024 and exercises multi-chunk reading.
-		schema := arrow.NewSchema([]arrow.Field{
-			{Name: "nums", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
-		}, nil)
-		builder := array.NewRecordBuilder(pool, schema)
-		defer builder.Release()
+		t.Run("Int32", func(t *testing.T) {
+			arrowSchema := arrow.NewSchema([]arrow.Field{
+				{Name: "nums", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+			}, nil)
+			builder := array.NewRecordBuilder(pool, arrowSchema)
+			defer builder.Release()
 
-		lb := builder.Field(0).(*array.ListBuilder)
-		vb := lb.ValueBuilder().(*array.Int32Builder)
+			lb := builder.Field(0).(*array.ListBuilder)
+			vb := lb.ValueBuilder().(*array.Int32Builder)
 
-		numRows := int64(500)
-		for i := int64(0); i < numRows; i++ {
-			lb.Append(true)
-			// Each row has 3 elements: [i*10, i*10+1, i*10+2].
-			vb.Append(int32(i * 10))
-			vb.Append(int32(i*10 + 1))
-			vb.Append(int32(i*10 + 2))
-		}
+			numRows := int64(500)
+			for i := int64(0); i < numRows; i++ {
+				lb.Append(true)
+				vb.Append(int32(i * 10))
+				vb.Append(int32(i*10 + 1))
+				vb.Append(int32(i*10 + 2))
+			}
 
-		record := builder.NewRecord()
-		defer record.Release()
+			record := builder.NewRecord()
+			defer record.Release()
 
-		batch := readListBatch(t, schema, record, numRows)
+			batch := readListBatch(t, arrowSchema, record, numRows)
 
-		for i := int64(0); i < numRows; i++ {
-			val, isNull, err := batch.GetValueAt(int(i))
-			require.NoError(t, err)
-			require.False(t, isNull, "row %d should not be null", i)
-			elements := val.([]any)
-			require.Len(t, elements, 3, "row %d", i)
-			require.Equal(t, int32(i*10), elements[0], "row %d elem 0", i)
-			require.Equal(t, int32(i*10+1), elements[1], "row %d elem 1", i)
-			require.Equal(t, int32(i*10+2), elements[2], "row %d elem 2", i)
-		}
+			for i := int64(0); i < numRows; i++ {
+				val, isNull, err := batch.GetValueAt(int(i))
+				require.NoError(t, err)
+				require.False(t, isNull, "row %d should not be null", i)
+				elements := val.([]any)
+				require.Len(t, elements, 3, "row %d", i)
+				require.Equal(t, int32(i*10), elements[0], "row %d elem 0", i)
+				require.Equal(t, int32(i*10+1), elements[1], "row %d elem 1", i)
+				require.Equal(t, int32(i*10+2), elements[2], "row %d elem 2", i)
+			}
+		})
+
+		t.Run("ByteArray", func(t *testing.T) {
+			arrowSchema := arrow.NewSchema([]arrow.Field{
+				{Name: "strs", Type: arrow.ListOf(arrow.BinaryTypes.String), Nullable: true},
+			}, nil)
+			builder := array.NewRecordBuilder(pool, arrowSchema)
+			defer builder.Release()
+
+			lb := builder.Field(0).(*array.ListBuilder)
+			vb := lb.ValueBuilder().(*array.StringBuilder)
+
+			numRows := int64(500)
+			for i := int64(0); i < numRows; i++ {
+				lb.Append(true)
+				vb.Append(fmt.Sprintf("a_%d", i*10))
+				vb.Append(fmt.Sprintf("b_%d", i*10+1))
+				vb.Append(fmt.Sprintf("c_%d", i*10+2))
+			}
+
+			record := builder.NewRecord()
+			defer record.Release()
+
+			batch := readListBatch(t, arrowSchema, record, numRows)
+
+			for i := int64(0); i < numRows; i++ {
+				val, isNull, err := batch.GetValueAt(int(i))
+				require.NoError(t, err)
+				require.False(t, isNull, "row %d should not be null", i)
+				elements := val.([]any)
+				require.Len(t, elements, 3, "row %d", i)
+				require.Equal(t, []byte(fmt.Sprintf("a_%d", i*10)), elements[0], "row %d elem 0", i)
+				require.Equal(t, []byte(fmt.Sprintf("b_%d", i*10+1)), elements[1], "row %d elem 1", i)
+				require.Equal(t, []byte(fmt.Sprintf("c_%d", i*10+2)), elements[2], "row %d elem 2", i)
+			}
+		})
+
+		t.Run("FixedLenByteArray", func(t *testing.T) {
+			arrowSchema := arrow.NewSchema([]arrow.Field{
+				{Name: "fixed", Type: arrow.ListOf(&arrow.FixedSizeBinaryType{ByteWidth: 4}), Nullable: true},
+			}, nil)
+			builder := array.NewRecordBuilder(pool, arrowSchema)
+			defer builder.Release()
+
+			lb := builder.Field(0).(*array.ListBuilder)
+			vb := lb.ValueBuilder().(*array.FixedSizeBinaryBuilder)
+
+			numRows := int64(500)
+			for i := int64(0); i < numRows; i++ {
+				lb.Append(true)
+				for j := 0; j < 3; j++ {
+					v := int32(i*10 + int64(j))
+					vb.Append([]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})
+				}
+			}
+
+			record := builder.NewRecord()
+			defer record.Release()
+
+			batch := readListBatch(t, arrowSchema, record, numRows)
+
+			for i := int64(0); i < numRows; i++ {
+				val, isNull, err := batch.GetValueAt(int(i))
+				require.NoError(t, err)
+				require.False(t, isNull, "row %d should not be null", i)
+				elements := val.([]any)
+				require.Len(t, elements, 3, "row %d", i)
+				for j := 0; j < 3; j++ {
+					v := int32(i*10 + int64(j))
+					expected := parquet.FixedLenByteArray([]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)})
+					require.Equal(t, expected, elements[j], "row %d elem %d", i, j)
+				}
+			}
+		})
 	})
 
 	// Verifies that the final row is finalized when the total number of level
@@ -567,6 +734,331 @@ func TestParquetListColumnReader(t *testing.T) {
 		require.Len(t, elements, 1)
 		require.Equal(t, int32(42), elements[0])
 	})
+
+	t.Run("MultiRowGroup", func(t *testing.T) {
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "vals", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+		}, nil)
+
+		// Write 3 row groups with 4 rows each (12 rows total).
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+
+		rowsPerGroup := 4
+		numGroups := 3
+		for g := range numGroups {
+			recBuilder := array.NewRecordBuilder(pool, arrowSchema)
+			lb := recBuilder.Field(0).(*array.ListBuilder)
+			vb := lb.ValueBuilder().(*array.Int32Builder)
+			for r := range rowsPerGroup {
+				globalRow := g*rowsPerGroup + r
+				lb.Append(true)
+				vb.Append(int32(globalRow * 100))
+				vb.Append(int32(globalRow*100 + 1))
+			}
+			rec := recBuilder.NewRecord()
+			require.NoError(t, writer.Write(rec))
+			rec.Release()
+			recBuilder.Release()
+		}
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+		require.Equal(t, numGroups, parquetReader.NumRowGroups())
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.NotNil(t, listInfo)
+
+		for g := range numGroups {
+			rowGroup := parquetReader.RowGroup(g)
+			colReader, err := rowGroup.Column(0)
+			require.NoError(t, err)
+
+			listReader, err := newParquetListColumnReader(colReader, listInfo)
+			require.NoError(t, err)
+			batch, err := listReader.ReadBatch(int64(rowsPerGroup))
+			require.NoError(t, err)
+
+			for r := range rowsPerGroup {
+				globalRow := g*rowsPerGroup + r
+				val, isNull, err := batch.GetValueAt(r)
+				require.NoError(t, err, "row group %d row %d", g, r)
+				require.False(t, isNull, "row group %d row %d", g, r)
+				elements := val.([]any)
+				require.Len(t, elements, 2, "row group %d row %d", g, r)
+				require.Equal(t, int32(globalRow*100), elements[0],
+					"row group %d row %d elem 0", g, r)
+				require.Equal(t, int32(globalRow*100+1), elements[1],
+					"row group %d row %d elem 1", g, r)
+			}
+		}
+	})
+
+	t.Run("LargeRowAcrossRowGroups", func(t *testing.T) {
+		// Three row groups: the first and last have small rows, the middle
+		// has a single row with 2500 elements. This tests that a row whose
+		// element count far exceeds the row group's row budget stays intact
+		// in its own row group and reads back correctly alongside normal rows.
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "vals", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+		}, nil)
+
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+
+		// Row group 0: 3 small rows with 2 elements each.
+		b0 := array.NewRecordBuilder(pool, arrowSchema)
+		lb0 := b0.Field(0).(*array.ListBuilder)
+		vb0 := lb0.ValueBuilder().(*array.Int32Builder)
+		for r := range 3 {
+			lb0.Append(true)
+			vb0.Append(int32(r * 10))
+			vb0.Append(int32(r*10 + 1))
+		}
+		rec0 := b0.NewRecord()
+		require.NoError(t, writer.Write(rec0))
+		rec0.Release()
+		b0.Release()
+
+		// Row group 1: 1 large row with 2500 elements.
+		b1 := array.NewRecordBuilder(pool, arrowSchema)
+		lb1 := b1.Field(0).(*array.ListBuilder)
+		vb1 := lb1.ValueBuilder().(*array.Int32Builder)
+		numElements := 2500
+		lb1.Append(true)
+		for i := range numElements {
+			vb1.Append(int32(i))
+		}
+		rec1 := b1.NewRecord()
+		require.NoError(t, writer.Write(rec1))
+		rec1.Release()
+		b1.Release()
+
+		// Row group 2: 2 small rows.
+		b2 := array.NewRecordBuilder(pool, arrowSchema)
+		lb2 := b2.Field(0).(*array.ListBuilder)
+		vb2 := lb2.ValueBuilder().(*array.Int32Builder)
+		for r := range 2 {
+			lb2.Append(true)
+			vb2.Append(int32((r + 100) * 10))
+		}
+		rec2 := b2.NewRecord()
+		require.NoError(t, writer.Write(rec2))
+		rec2.Release()
+		b2.Release()
+
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+		require.Equal(t, 3, parquetReader.NumRowGroups())
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.NotNil(t, listInfo)
+
+		// Read row group 0: 3 small rows.
+		rg0 := parquetReader.RowGroup(0)
+		col0, err := rg0.Column(0)
+		require.NoError(t, err)
+		lr0, err := newParquetListColumnReader(col0, listInfo)
+		require.NoError(t, err)
+		batch0, err := lr0.ReadBatch(3)
+		require.NoError(t, err)
+		for r := range 3 {
+			val, isNull, err := batch0.GetValueAt(r)
+			require.NoError(t, err)
+			require.False(t, isNull, "rg0 row %d", r)
+			elements := val.([]any)
+			require.Len(t, elements, 2, "rg0 row %d", r)
+			require.Equal(t, int32(r*10), elements[0], "rg0 row %d", r)
+			require.Equal(t, int32(r*10+1), elements[1], "rg0 row %d", r)
+		}
+
+		// Read row group 1: 1 large row with 2500 elements.
+		rg1 := parquetReader.RowGroup(1)
+		col1, err := rg1.Column(0)
+		require.NoError(t, err)
+		lr1, err := newParquetListColumnReader(col1, listInfo)
+		require.NoError(t, err)
+		batch1, err := lr1.ReadBatch(1)
+		require.NoError(t, err)
+		val, isNull, err := batch1.GetValueAt(0)
+		require.NoError(t, err)
+		require.False(t, isNull)
+		elements := val.([]any)
+		require.Len(t, elements, numElements)
+		for i := range numElements {
+			require.Equal(t, int32(i), elements[i], "large row elem %d", i)
+		}
+
+		// Read row group 2: 2 small rows.
+		rg2 := parquetReader.RowGroup(2)
+		col2, err := rg2.Column(0)
+		require.NoError(t, err)
+		lr2, err := newParquetListColumnReader(col2, listInfo)
+		require.NoError(t, err)
+		batch2, err := lr2.ReadBatch(2)
+		require.NoError(t, err)
+		for r := range 2 {
+			val, isNull, err := batch2.GetValueAt(r)
+			require.NoError(t, err)
+			require.False(t, isNull, "rg2 row %d", r)
+			elements := val.([]any)
+			require.Len(t, elements, 1, "rg2 row %d", r)
+			require.Equal(t, int32((r+100)*10), elements[0], "rg2 row %d", r)
+		}
+	})
+
+	t.Run("SmallBatchMidRowResume", func(t *testing.T) {
+		// 6 rows with ~300 elements each (1800 total level entries).
+		// ReadBatch(2) three times exercises the partial-row save/resume path:
+		// chunk size is 1024, so a chunk boundary falls mid-row, and the
+		// next ReadBatch call must resume the partial row correctly.
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "big", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+		}, nil)
+		builder := array.NewRecordBuilder(pool, arrowSchema)
+		defer builder.Release()
+
+		lb := builder.Field(0).(*array.ListBuilder)
+		vb := lb.ValueBuilder().(*array.Int32Builder)
+
+		totalRows := 6
+		elementsPerRow := 300
+		for r := range totalRows {
+			lb.Append(true)
+			for e := range elementsPerRow {
+				vb.Append(int32(r*1000 + e))
+			}
+		}
+
+		record := builder.NewRecord()
+		defer record.Release()
+
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+		require.NotNil(t, listInfo)
+
+		rowGroup := parquetReader.RowGroup(0)
+		colReader, err := rowGroup.Column(0)
+		require.NoError(t, err)
+
+		listReader, err := newParquetListColumnReader(colReader, listInfo)
+		require.NoError(t, err)
+
+		batchSize := int64(2)
+		for batchIdx := range 3 {
+			batch, err := listReader.ReadBatch(batchSize)
+			require.NoError(t, err, "batch %d", batchIdx)
+			require.Equal(t, batchSize, batch.rowCount, "batch %d", batchIdx)
+
+			for rowInBatch := range int(batchSize) {
+				globalRow := batchIdx*int(batchSize) + rowInBatch
+				val, isNull, err := batch.GetValueAt(rowInBatch)
+				require.NoError(t, err, "row %d", globalRow)
+				require.False(t, isNull, "row %d should not be null", globalRow)
+				elements := val.([]any)
+				require.Len(t, elements, elementsPerRow, "row %d", globalRow)
+				for e := range elementsPerRow {
+					require.Equal(t, int32(globalRow*1000+e), elements[e],
+						"row %d elem %d", globalRow, e)
+				}
+			}
+		}
+	})
+
+	t.Run("ReadBatchExceedsAvailableRows", func(t *testing.T) {
+		arrowSchema := arrow.NewSchema([]arrow.Field{
+			{Name: "vals", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32), Nullable: true},
+		}, nil)
+		builder := array.NewRecordBuilder(pool, arrowSchema)
+		defer builder.Release()
+
+		lb := builder.Field(0).(*array.ListBuilder)
+		vb := lb.ValueBuilder().(*array.Int32Builder)
+
+		for r := range 3 {
+			lb.Append(true)
+			vb.Append(int32(r))
+		}
+
+		record := builder.NewRecord()
+		defer record.Release()
+
+		buf := new(bytes.Buffer)
+		writerProps := parquet.NewWriterProperties(
+			parquet.WithCompression(compress.Codecs.Uncompressed))
+		writer, err := pqarrow.NewFileWriter(
+			arrowSchema, buf, writerProps, pqarrow.DefaultWriterProps())
+		require.NoError(t, err)
+		require.NoError(t, writer.Write(record))
+		require.NoError(t, writer.Close())
+
+		reader := bytes.NewReader(buf.Bytes())
+		fr := &fileReader{
+			Reader: reader, ReaderAt: reader, Seeker: reader,
+			total: int64(buf.Len()),
+		}
+		parquetReader, err := file.NewParquetReader(fr)
+		require.NoError(t, err)
+
+		pqSchema := parquetReader.MetaData().Schema
+		listInfo, err := detectListColumn(pqSchema, 0)
+		require.NoError(t, err)
+
+		rowGroup := parquetReader.RowGroup(0)
+		colReader, err := rowGroup.Column(0)
+		require.NoError(t, err)
+
+		listReader, err := newParquetListColumnReader(colReader, listInfo)
+		require.NoError(t, err)
+
+		_, err = listReader.ReadBatch(5)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "expected 5 rows")
+		require.ErrorContains(t, err, "only 3 were available")
+	})
 }
 
 // makeListSchema builds a standard 3-level Parquet LIST schema:
@@ -804,5 +1296,69 @@ func TestDetectListColumn(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		require.Equal(t, "tags", info.columnName)
+	})
+
+	t.Run("MapColumnRejected", func(t *testing.T) {
+		// MAP columns have a similar repeated-group structure to LIST but
+		// with MAP logical type. detectListColumn should reject them with
+		// a MAP-specific error rather than a generic one.
+
+		makeMapSchema := func(
+			t *testing.T, useLogicalType bool,
+		) *schema.Schema {
+			t.Helper()
+			keyNode, err := schema.NewPrimitiveNode(
+				"key", parquet.Repetitions.Required,
+				parquet.Types.ByteArray, -1, fieldID)
+			require.NoError(t, err)
+
+			valueNode, err := schema.NewPrimitiveNode(
+				"value", parquet.Repetitions.Optional,
+				parquet.Types.Int32, -1, fieldID)
+			require.NoError(t, err)
+
+			keyValueGroup, err := schema.NewGroupNode(
+				"key_value", parquet.Repetitions.Repeated,
+				[]schema.Node{keyNode, valueNode}, fieldID)
+			require.NoError(t, err)
+
+			var mapGroup *schema.GroupNode
+			if useLogicalType {
+				mapGroup, err = schema.NewGroupNodeLogical(
+					"my_map", parquet.Repetitions.Optional,
+					[]schema.Node{keyValueGroup},
+					schema.MapLogicalType{}, fieldID)
+			} else {
+				mapGroup, err = schema.NewGroupNodeConverted(
+					"my_map", parquet.Repetitions.Optional,
+					[]schema.Node{keyValueGroup},
+					schema.ConvertedTypes.MapKeyValue, fieldID)
+			}
+			require.NoError(t, err)
+
+			root, err := schema.NewGroupNode(
+				"schema", parquet.Repetitions.Required,
+				[]schema.Node{mapGroup}, fieldID)
+			require.NoError(t, err)
+			return schema.NewSchema(root)
+		}
+
+		t.Run("LogicalType", func(t *testing.T) {
+			pqSchema := makeMapSchema(t, true /* useLogicalType */)
+			for _, colIdx := range []int{0, 1} {
+				_, err := detectListColumn(pqSchema, colIdx)
+				require.Errorf(t, err, "column %d should error", colIdx)
+				require.ErrorContainsf(t, err, "MAP", "column %d should mention MAP", colIdx)
+			}
+		})
+
+		t.Run("ConvertedType", func(t *testing.T) {
+			pqSchema := makeMapSchema(t, false /* useLogicalType */)
+			for _, colIdx := range []int{0, 1} {
+				_, err := detectListColumn(pqSchema, colIdx)
+				require.Errorf(t, err, "column %d should error", colIdx)
+				require.ErrorContainsf(t, err, "MAP", "column %d should mention MAP", colIdx)
+			}
+		})
 	})
 }

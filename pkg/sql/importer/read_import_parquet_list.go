@@ -104,14 +104,32 @@ func detectListColumn(parquetSchema *schema.Schema, colIdx int) (*parquetListCol
 	}
 
 	// Check that the grandparent has LIST logical type or LIST converted type.
+	// Also detect MAP columns so we can return a specific error message.
+	lt := grandparent.LogicalType()
+
 	isListGroup := false
-	if lt := grandparent.LogicalType(); lt != nil {
+	if lt != nil {
 		_, isListGroup = lt.(schema.ListLogicalType)
 	}
 	if !isListGroup {
 		isListGroup = grandparent.ConvertedType() == schema.ConvertedTypes.List
 	}
 	if !isListGroup {
+		isMapGroup := false
+		if lt != nil {
+			_, isMapGroup = lt.(schema.MapLogicalType)
+		}
+		if !isMapGroup {
+			ct := grandparent.ConvertedType()
+			isMapGroup = ct == schema.ConvertedTypes.Map || ct == schema.ConvertedTypes.MapKeyValue
+		}
+		if isMapGroup {
+			return nil, errors.UnimplementedErrorf(
+				errors.IssueLink{IssueURL: build.MakeIssueURL(162543),
+					Detail: "support parquet nested types for import"},
+				"column %q is a MAP type, which is not supported for import",
+				grandparent.Name())
+		}
 		return nil, errors.UnimplementedErrorf(
 			errors.IssueLink{IssueURL: build.MakeIssueURL(162543),
 				Detail: "support parquet nested types for import"},
