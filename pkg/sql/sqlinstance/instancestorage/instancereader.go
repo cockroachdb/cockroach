@@ -124,14 +124,15 @@ func (r *Reader) setCache(feed instanceCache) {
 
 func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
 	return sqlinstance.InstanceInfo{
-		InstanceID:      row.instanceID,
-		InstanceRPCAddr: row.rpcAddr,
-		InstanceSQLAddr: row.sqlAddr,
-		SessionID:       row.sessionID,
-		Locality:        row.locality,
-		BinaryVersion:   row.binaryVersion,
-		Region:          row.region,
-		IsDraining:      row.isDraining,
+		InstanceID:        row.instanceID,
+		InstanceRPCAddr:   row.rpcAddr,
+		InstanceSQLAddr:   row.sqlAddr,
+		SessionID:         row.sessionID,
+		Locality:          row.locality,
+		BinaryVersion:     row.binaryVersion,
+		Region:            row.region,
+		IsDraining:        row.isDraining,
+		LocalityAddresses: row.localityAddresses,
 	}
 }
 
@@ -237,12 +238,13 @@ func (r *Reader) GetInstance(
 		return instance, nil
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:      instanceRow.instanceID,
-		InstanceRPCAddr: instanceRow.rpcAddr,
-		InstanceSQLAddr: instanceRow.sqlAddr,
-		SessionID:       instanceRow.sessionID,
-		Locality:        instanceRow.locality,
-		BinaryVersion:   instanceRow.binaryVersion,
+		InstanceID:        instanceRow.instanceID,
+		InstanceRPCAddr:   instanceRow.rpcAddr,
+		InstanceSQLAddr:   instanceRow.sqlAddr,
+		SessionID:         instanceRow.sessionID,
+		Locality:          instanceRow.locality,
+		BinaryVersion:     instanceRow.binaryVersion,
+		LocalityAddresses: instanceRow.localityAddresses,
 	}
 	return instanceInfo, nil
 }

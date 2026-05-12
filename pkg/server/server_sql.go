@@ -525,6 +525,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.Locality,
 				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
+				[]roachpb.LocalityAddress{},
 			); err != nil {
 				log.Dev.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
@@ -812,17 +813,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext:   cfg.AmbientCtx,
-		Settings:         cfg.Settings,
-		RuntimeStats:     cfg.runtime,
-		LogicalClusterID: clusterIDForSQL,
-		ClusterName:      cfg.ClusterName,
-		NodeID:           cfg.nodeIDContainer,
-		Locality:         cfg.Locality,
-		Codec:            codec,
-		DB:               cfg.internalDB,
-		RPCContext:       cfg.rpcContext,
-		Stopper:          cfg.stopper,
+		AmbientContext:    cfg.AmbientCtx,
+		Settings:          cfg.Settings,
+		RuntimeStats:      cfg.runtime,
+		LogicalClusterID:  clusterIDForSQL,
+		ClusterName:       cfg.ClusterName,
+		NodeID:            cfg.nodeIDContainer,
+		Locality:          cfg.Locality,
+		LocalityAddresses: cfg.LocalityAddresses,
+		Codec:             codec,
+		DB:                cfg.internalDB,
+		RPCContext:        cfg.rpcContext,
+		Stopper:           cfg.stopper,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -1642,6 +1644,7 @@ func (s *SQLServer) preStart(
 					s.distSQLServer.Locality,
 					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
+					s.distSQLServer.LocalityAddresses,
 				)
 			}
 			return s.sqlInstanceStorage.CreateInstance(
@@ -1651,6 +1654,7 @@ func (s *SQLServer) preStart(
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
 				s.execCfg.Settings.Version.LatestVersion(),
+				s.distSQLServer.LocalityAddresses,
 			)
 		})
 	if err != nil {
