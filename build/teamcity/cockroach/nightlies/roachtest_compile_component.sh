@@ -116,6 +116,54 @@ esac
 
 echo "Building $os/$arch/$component..."
 
+# Skip everything if all artifacts already exist locally. Host-arch components
+# (roachtest, roachprod, libgeos) are requested by every roachtest_compile_bits.sh
+# invocation; without this check, the second invocation would download from the
+# cache the file the first invocation just built and uploaded.
+all_local=true
+for artifact in "${artifacts[@]}"; do
+  dst=${artifact#*:}
+  if [[ ! -e "$dst" ]]; then
+    all_local=false
+    break
+  fi
+done
+if $all_local; then
+  echo "All artifacts for $os/$arch/$component already exist locally; skipping."
+  exit 0
+fi
+
+cache_bucket="cockroach-nightly"
+cache_sha="${BUILD_VCS_NUMBER:-$(git rev-parse HEAD)}"
+
+# Try to download cached artifacts from GCS before building.
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  cache_base="gs://$cache_bucket/build-cache/$cache_sha/$os/$arch"
+  all_cached=true
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    if ! gsutil -q cp "$cache_base/$(basename "$dst")" "$dst" 2>/dev/null; then
+      all_cached=false
+      break
+    fi
+  done
+  if $all_cached; then
+    # gsutil cp does not preserve the executable bit; restore it. The +x on
+    # libgeos*.so is harmless.
+    for artifact in "${artifacts[@]}"; do
+      dst=${artifact#*:}
+      chmod a+wx "$dst"
+    done
+    echo "Cache hit for $os/$arch/$component (SHA $cache_sha)."
+    exit 0
+  fi
+  # Clean up any partially downloaded artifacts.
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    rm -f "$dst"
+  done
+fi
+
 bazel build --config $config -c opt "${bazel_args[@]}"
 BAZEL_BIN=$(bazel info bazel-bin --config $config -c opt)
 for artifact in "${artifacts[@]}"; do
@@ -125,3 +173,12 @@ for artifact in "${artifacts[@]}"; do
   # Make files writable to simplify cleanup and copying (e.g., scp retry).
   chmod a+w "$dst"
 done
+
+# Upload built artifacts to the cache.
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  cache_base="gs://$cache_bucket/build-cache/$cache_sha/$os/$arch"
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    gsutil -q cp "$dst" "$cache_base/$(basename "$dst")" 2>/dev/null || true
+  done
+fi

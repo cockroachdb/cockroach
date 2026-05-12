@@ -13,6 +13,10 @@ set -euo pipefail
 
 source $root/build/teamcity/util/roachtest_arch_util.sh
 
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  gcs_setup_credentials
+fi
+
 if [ "$#" -eq 0 ]; then
   echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
   echo ""
