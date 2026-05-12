@@ -602,11 +602,13 @@ func TestSQLCPUHandleSecondDeductionAfterTurn(t *testing.T) {
 }
 
 // TestSetResourceGroupConfigRGOnly verifies that SetResourceGroupConfig
-// inputs only affect rg-keyed containers. A numerically equal
-// tenant-keyed container must not inherit the maxCPU flag — that's the
-// cross-namespace collision the kind discriminator in q.mu.groups is
-// meant to prevent. applyConfigLocked enforces this by always keying
-// its writes via rgGroupKey.
+// inputs affect rg-keyed containers and that the kind discriminator in
+// q.mu.groups prevents a rg-keyed maxCPU flip from leaking to a
+// numerically equal tenant-keyed container.
+//
+// We use tenant 5 (not 1) because tenantGroupKey(1) is a built-in
+// config with maxCPU=true (systemTenantGroupConfig), which would
+// confound the cross-namespace isolation check.
 func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -615,40 +617,32 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
 	defer cleanup()
 
-	// Create a tenant-keyed container with id=1.
+	// Create a tenant-keyed container with id=5 (no built-in config).
 	cpuTimeTokenACMode.Override(ctx, &st.SV, serverlessMode)
 	tenantHandle := newSQLCPUAdmissionHandle(
 		WorkInfo{
-			TenantID: roachpb.MustMakeTenantID(1),
+			TenantID: roachpb.MustMakeTenantID(5),
 			Priority: admissionpb.NormalPri,
 		}, true, &sqlCPUProviderImpl{}, q)
 	require.NoError(t, tenantHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
 
-	// Create an rg-keyed container with id=1 (highResourceGroupID).
+	// Create an rg-keyed container with id=5.
 	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
-	rgHandle := newSQLCPUAdmissionHandle(
-		WorkInfo{
-			TenantID: roachpb.MustMakeTenantID(99),
-			Priority: admissionpb.NormalPri,
-		}, true, &sqlCPUProviderImpl{}, q)
-	require.NoError(t, rgHandle.reportAndAcquireConsumedCPU(ctx, 1*time.Millisecond, false))
+	// Install a config that seeds rgGroupKey(5).
+	q.configHolder.Set(ResourceGroupConfigSet{
+		rgGroupKey(5): {Weight: 1, MaxCPU: true},
+	})
+	q.refreshResourceGroupConfig()
 
 	// Both containers should now coexist with the same numeric ID.
 	q.mu.Lock()
-	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(1)]
-	rgContainer, rgOK := q.mu.groups[rgGroupKey(1)]
+	tenantContainer, tenantOK := q.mu.groups[tenantGroupKey(5)]
+	rgContainer, rgOK := q.mu.groups[rgGroupKey(5)]
 	q.mu.Unlock()
-	require.True(t, tenantOK, "tenant 1 container should exist")
-	require.True(t, rgOK, "rg 1 container should exist")
+	require.True(t, tenantOK, "tenant 5 container should exist")
+	require.True(t, rgOK, "rg 5 container should exist")
 	require.NotSame(t, tenantContainer, rgContainer,
-		"tenant 1 and rg 1 must be distinct *groupInfo entries")
-
-	// Set maxCPU on group 1 via the holder + apply path. It should
-	// affect the rg container only.
-	q.configHolder.Set(ResourceGroupConfigSet{
-		rgGroupKey(1): {Weight: 1, MaxCPU: true},
-	})
-	q.refreshResourceGroupConfig()
+		"tenant 5 and rg 5 must be distinct *groupInfo entries")
 
 	q.mu.Lock()
 	tenantMaxCPU := tenantContainer.cpuTimeBurstBucket.maxCPU
@@ -662,7 +656,6 @@ func TestSetResourceGroupConfigRGOnly(t *testing.T) {
 		"rg container should pick up the maxCPU flag")
 
 	tenantHandle.Close()
-	rgHandle.Close()
 }
 
 // admitOnce drives a single slow-path Admit on a new SQLCPUHandle

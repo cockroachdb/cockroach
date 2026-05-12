@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -18,7 +19,17 @@ import (
 func TestResourceGroupConfigHolder(t *testing.T) {
 	t.Run("constructor_seed", func(t *testing.T) {
 		h := newResourceGroupConfigHolder()
-		require.Equal(t, defaultRMResourceGroupConfig, h.Snapshot())
+		snap := h.Snapshot()
+		// Built-in system tenant config is always present.
+		require.Equal(t, systemTenantGroupConfig, snap[tenantGroupKey(1)])
+		// RM defaults are also present (from the seed).
+		require.Equal(t,
+			defaultRMResourceGroupConfig[rgGroupKey(highResourceGroupID)],
+			snap[rgGroupKey(highResourceGroupID)])
+		require.Equal(t,
+			defaultRMResourceGroupConfig[rgGroupKey(lowResourceGroupID)],
+			snap[rgGroupKey(lowResourceGroupID)])
+		require.Len(t, snap, 3) // 1 builtin + 2 RM defaults
 	})
 
 	t.Run("get_or_default_unknown_rg", func(t *testing.T) {
@@ -53,11 +64,13 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 		h.Set(ResourceGroupConfigSet{
 			rgGroupKey(42): {Weight: 100, MaxCPU: false},
 		})
-		// Set is wholesale: the seed (high/low) must be gone, and only the
-		// freshly-Set key must remain.
-		require.Equal(t, ResourceGroupConfigSet{
-			rgGroupKey(42): {Weight: 100, MaxCPU: false},
-		}, h.Snapshot())
+		snap := h.Snapshot()
+		// Set is wholesale: the RM seed (high/low) must be gone, the
+		// freshly-Set key must be present, and built-ins stay.
+		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
+			snap[rgGroupKey(42)])
+		require.Equal(t, systemTenantGroupConfig, snap[tenantGroupKey(1)])
+		require.Len(t, snap, 2) // 1 builtin + 1 caller key
 	})
 
 	t.Run("input_aliasing_safe", func(t *testing.T) {
@@ -71,9 +84,10 @@ func TestResourceGroupConfigHolderSet(t *testing.T) {
 		input[rgGroupKey(7)] = ResourceGroupConfig{Weight: 1, MaxCPU: true}
 		input[rgGroupKey(8)] = ResourceGroupConfig{Weight: 1, MaxCPU: false}
 
-		require.Equal(t, ResourceGroupConfigSet{
-			rgGroupKey(7): {Weight: 100, MaxCPU: false},
-		}, h.Snapshot())
+		snap := h.Snapshot()
+		require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: false},
+			snap[rgGroupKey(7)])
+		require.Len(t, snap, 2) // 1 builtin + 1 caller key
 
 		// And the holder's internal map is not aliased to the input.
 		// Same-package access lets us check the underlying pointer.
@@ -118,9 +132,45 @@ func TestResourceGroupConfigHolderSnapshot(t *testing.T) {
 	h.Set(ResourceGroupConfigSet{
 		rgGroupKey(42): {Weight: 100, MaxCPU: true},
 	})
-	require.Equal(t, defaultRMResourceGroupConfig, snap1,
+	// snap1 must still have the RM defaults + builtins.
+	require.Equal(t,
+		defaultRMResourceGroupConfig[rgGroupKey(highResourceGroupID)],
+		snap1[rgGroupKey(highResourceGroupID)],
 		"prior snapshot must be unaffected by a subsequent Set")
-	require.Equal(t, ResourceGroupConfigSet{
-		rgGroupKey(42): {Weight: 100, MaxCPU: true},
-	}, h.Snapshot())
+	// New snapshot has builtins + the freshly-set key.
+	snap2 := h.Snapshot()
+	require.Equal(t, ResourceGroupConfig{Weight: 100, MaxCPU: true},
+		snap2[rgGroupKey(42)])
+	require.Equal(t, systemTenantGroupConfig, snap2[tenantGroupKey(1)])
+	require.Len(t, snap2, 2)
+}
+
+// TestSystemTenantGroupConfig verifies the field values of the built-in
+// system tenant config.
+func TestSystemTenantGroupConfig(t *testing.T) {
+	require.Equal(t, uint32(math.MaxUint32), systemTenantGroupConfig.Weight)
+	require.Equal(t, 1.0, systemTenantGroupConfig.BurstFrac)
+	require.True(t, systemTenantGroupConfig.MaxCPU)
+}
+
+// TestBuiltinGroupConfigInSnapshot verifies that the system tenant
+// config appears in the holder's snapshot immediately after
+// construction, without any explicit Set call beyond the seed.
+func TestBuiltinGroupConfigInSnapshot(t *testing.T) {
+	h := newResourceGroupConfigHolder()
+	snap := h.Snapshot()
+	cfg, ok := snap[tenantGroupKey(1)]
+	require.True(t, ok, "system tenant (ID 1) must be present in snapshot")
+	require.Equal(t, systemTenantGroupConfig, cfg)
+}
+
+// TestSetPanicsOnBuiltinOverwrite verifies that Set panics if the
+// caller tries to overwrite a built-in key.
+func TestSetPanicsOnBuiltinOverwrite(t *testing.T) {
+	h := newResourceGroupConfigHolder()
+	require.Panics(t, func() {
+		h.Set(ResourceGroupConfigSet{
+			tenantGroupKey(1): {Weight: 1, BurstFrac: 0.5, MaxCPU: false},
+		})
+	})
 }
