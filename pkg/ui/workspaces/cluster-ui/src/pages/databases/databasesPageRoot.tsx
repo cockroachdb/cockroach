@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { Row } from "antd";
+import classnames from "classnames/bind";
 import React, { useContext, useMemo } from "react";
 import { Redirect } from "react-router";
 import { Link } from "react-router-dom";
@@ -42,8 +43,11 @@ import {
   TableMetadataJobControl,
 } from "./components";
 import { DatabaseColName } from "./constants";
+import styles from "./databasesPageRoot.module.scss";
 import { DatabaseRow } from "./databaseTypes";
 import { rawDatabaseMetadataToDatabaseRows } from "./utils";
+
+const cx = classnames.bind(styles);
 
 const AUTO_STATS_ENABLED_CS = "sql.stats.automatic_collection.enabled";
 
@@ -142,7 +146,14 @@ const createDatabaseMetadataRequestFromParams = (
   };
 };
 
-export const DatabasesPageV2 = () => {
+export interface DatabasesPageV2Props {
+  // When true, suppresses the page header for use inside a parent layout
+  // that already provides its own heading (e.g. the console nav shell).
+  isEmbedded?: boolean;
+}
+
+export const DatabasesPageV2 = (props: DatabasesPageV2Props) => {
+  const { isEmbedded = false } = props;
   const clusterDetails = useContext(ClusterDetailsContext);
   const isTenant = clusterDetails.isTenant;
   const isCloud = useContext(CockroachCloudContext);
@@ -223,18 +234,7 @@ export const DatabasesPageV2 = () => {
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Databases"
-        actions={
-          !settingsLoading && (
-            <BooleanSetting
-              text={"Auto stats collection"}
-              enabled={settingValues[AUTO_STATS_ENABLED_CS]?.value === "true"}
-              tooltipText={AUTO_STATS_COLLECTION_HELP}
-            />
-          )
-        }
-      />
+      {!isEmbedded && <PageHeader title="Databases" />}
       <PageConfig>
         <PageConfigItem>
           <Search placeholder="Search databases" onSubmit={setSearch} />
@@ -249,8 +249,17 @@ export const DatabasesPageV2 = () => {
             )}
           </PageConfigItem>
         )}
+        {!settingsLoading && (
+          <PageConfigItem>
+            <BooleanSetting
+              text={"Auto stats collection"}
+              enabled={settingValues[AUTO_STATS_ENABLED_CS]?.value === "true"}
+              tooltipText={AUTO_STATS_COLLECTION_HELP}
+            />
+          </PageConfigItem>
+        )}
       </PageConfig>
-      <PageSection>
+      <PageSection className={cx("content-section")}>
         <Row align={"middle"} justify={"space-between"}>
           <PageCount
             page={params.pagination.page}
