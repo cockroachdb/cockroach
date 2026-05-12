@@ -423,7 +423,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 					tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
 					tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
 				}
-				opts.configHolder = newResourceGroupConfigHolder()
+				opts.configHolder = newResourceGroupConfigHolder(nil)
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
@@ -559,9 +559,9 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				// Read the snapshot, copy non-builtin keys into a fresh
 				// map, flip the requested group, and Set. Built-in keys
 				// are omitted because Set re-seeds them automatically.
-				snap := q.configHolder.Snapshot()
-				fresh := make(ResourceGroupConfigSet, len(snap))
-				for gk, gc := range snap {
+				groups := q.configHolder.Snapshot().Groups
+				fresh := make(ResourceGroupConfigSet, len(groups))
+				for gk, gc := range groups {
 					if _, builtin := builtinGroupConfigs[gk]; !builtin {
 						fresh[gk] = gc
 					}
@@ -575,7 +575,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				fresh[k] = cur
 				q.configHolder.Set(fresh)
 				q.mu.Lock()
-				q.applyConfigLocked(q.configHolder.Snapshot())
+				q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 				q.mu.Unlock()
 				return ""
 
@@ -585,7 +585,7 @@ func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
 				if v {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, resourceManagerMode)
 					q.mu.Lock()
-					q.applyConfigLocked(q.configHolder.Snapshot())
+					q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 					q.mu.Unlock()
 				} else {
 					cpuTimeTokenACMode.Override(context.Background(), &st.SV, serverlessMode)
@@ -791,7 +791,7 @@ func makeCPUTimeTokenWorkQueue(
 	opts.timeSource = timeutil.NewManualTime(initialTime)
 	opts.disableEpochClosingGoroutine = true
 	opts.disableGCGroupsAndResetUsed = true
-	opts.configHolder = newResourceGroupConfigHolder()
+	opts.configHolder = newResourceGroupConfigHolder(nil)
 
 	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 		KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -1366,7 +1366,7 @@ func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
 		"refresh in serverless mode must not pre-create rg containers")
 
 	// But the holder DID record the change (it's caller-side state).
-	cfg := q.configHolder.Snapshot().GetOrDefault(rgGroupKey(highResourceGroupID))
+	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(rgGroupKey(highResourceGroupID))
 	require.Equal(t, uint32(60), cfg.Weight)
 	require.True(t, cfg.MaxCPU)
 }

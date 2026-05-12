@@ -255,10 +255,11 @@ type cpuTimeTokenAllocator struct {
 	// queues holds references to WorkQueues for each resource tier. Used to
 	// refill per-group burst buckets that determine queue priority ordering.
 	// See cpu_time_token_burst.go for more.
-	queues   [numResourceTiers]workQueueIForAllocator
-	settings *cluster.Settings
-	model    cpuTimeModel
-	metrics  *cpuTimeTokenMetrics
+	queues       [numResourceTiers]workQueueIForAllocator
+	settings     *cluster.Settings
+	configHolder *ResourceGroupConfigHolder
+	model        cpuTimeModel
+	metrics      *cpuTimeTokenMetrics
 	// strategy is only accessed by the filler goroutine (via
 	// allocateTokens and resetInterval), so no synchronization is
 	// needed. Contrast with filler.activeMode, which is atomic because
@@ -276,16 +277,27 @@ type cpuTimeTokenAllocator struct {
 
 // modeStrategy encapsulates the mode-specific behavior of the
 // cpuTimeTokenAllocator. serverlessStrategy implements it for
-// Serverless mode; rmStrategy will be added for resource manager mode.
+// Serverless mode; rmStrategy implements it for resource manager mode.
 type modeStrategy interface {
 	mode() cpuTimeTokenMode
-	// computeTargets reads mode-specific cluster settings and returns
-	// the target utilizations for model fitting.
-	computeTargets(sv *settings.Values) targetUtilizations
 	// groupBurstRates returns per-tier (rate, cap) pairs from which
 	// per-group burst amounts are derived. The allocator iterates
 	// queues and calls refillGroupBurstBuckets with these values.
 	groupBurstRates(allocations tokenCounts, refillRates rates) [numResourceTiers][2]float64
+}
+
+// computeTargets derives target utilizations from a ConfigSnapshot.
+// The snapshot provides per-tier non-burstable and burstable ceilings
+// via MaxNonBurstableFraction and MaxFraction.
+func computeTargets(snap ConfigSnapshot) targetUtilizations {
+	var targets targetUtilizations
+	nonBurst := snap.MaxNonBurstableFraction()
+	burst := snap.MaxFraction()
+	for tier := range targets {
+		targets[tier][noBurst] = nonBurst[tier]
+		targets[tier][canBurst] = burst[tier]
+	}
+	return targets
 }
 
 // serverlessStrategy implements modeStrategy for Serverless mode,
@@ -298,30 +310,6 @@ type serverlessStrategy struct {
 
 func (s *serverlessStrategy) mode() cpuTimeTokenMode {
 	return serverlessMode
-}
-
-func (s *serverlessStrategy) computeTargets(sv *settings.Values) targetUtilizations {
-	if numResourceTiers != 2 || numBurstQualifications != 2 {
-		panic(errors.AssertionFailedf(
-			"computeTargets requires numResourceTiers=2 and "+
-				"numBurstQualifications=2 but got %d, %d",
-			numResourceTiers, numBurstQualifications))
-	}
-	// Compute target utilizations from cluster settings. The noBurst targets are
-	// configurable by cluster settings. A canBurst target adds a delta to the
-	// corresponding noBurst target, and the delta is also configurable by a
-	// cluster setting. The code here is not general with respect to
-	// numResourceTiers & numBurstQualifications. This isn't necessary for the
-	// Serverless use case on which we will first introduce CPU time token AC.
-	burstDelta := KVCPUTimeUtilBurstDelta.Get(sv)
-	var targets targetUtilizations
-	appTarget := KVCPUTimeAppUtilGoal.Get(sv)
-	targets[appTenant][noBurst] = appTarget
-	targets[appTenant][canBurst] = appTarget + burstDelta
-	systemTarget := KVCPUTimeSystemUtilGoal.Get(sv)
-	targets[systemTenant][noBurst] = systemTarget
-	targets[systemTenant][canBurst] = systemTarget + burstDelta
-	return targets
 }
 
 func (s *serverlessStrategy) groupBurstRates(
@@ -352,28 +340,6 @@ var _ modeStrategy = &rmStrategy{}
 
 func (s *rmStrategy) mode() cpuTimeTokenMode {
 	return resourceManagerMode
-}
-
-func (s *rmStrategy) computeTargets(sv *settings.Values) targetUtilizations {
-	if numResourceTiers != 2 {
-		panic(errors.AssertionFailedf(
-			"rmStrategy.computeTargets requires numResourceTiers=2 but got %d",
-			numResourceTiers))
-	}
-	var targets targetUtilizations
-	noBurstTarget := KVCPUTimeUtilTarget.Get(sv)
-	burstDelta := KVCPUTimeUtilBurstDelta.Get(sv)
-	targets[0][noBurst] = noBurstTarget
-	targets[0][canBurst] = noBurstTarget + burstDelta
-	s.canBurstTarget = targets[0][canBurst]
-	// Mirror tier-0 to tier-1. RM mode does not route KV admission work to
-	// tier-1; SQL CPU work still uses tier-1 via GetCTTWorkQueue, and the
-	// granter deducts every consumed token from both tiers' buckets (see
-	// tookWithoutPermissionLocked). Equal refill rates keep tier-1 in sync
-	// with tier-0 and preserve the granter's invariant that the lower-ordinal
-	// tier holds >= tokens than the higher. Read more in cpuTimeTokenGranter.
-	targets[1] = targets[0]
-	return targets
 }
 
 func (s *rmStrategy) groupBurstRates(
@@ -564,7 +530,8 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) cpuTimeTokenM
 		a.strategy = a.newStrategy(newMode)
 	}
 
-	targets := a.strategy.computeTargets(&a.settings.SV)
+	snap := a.configHolder.Snapshot()
+	targets := computeTargets(snap)
 	newRefillRates := a.model.fit(ctx, targets)
 
 	// deltaRefillRates is the difference in tokens to add per interval (1s)

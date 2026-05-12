@@ -476,7 +476,7 @@ func initWorkQueue(
 	q.stopCh = stopCh
 	q.configHolder = opts.configHolder
 	if q.configHolder == nil {
-		q.configHolder = newResourceGroupConfigHolder()
+		q.configHolder = newResourceGroupConfigHolder(nil)
 	}
 	q.perGroupAggMetrics = opts.perGroupAggMetrics
 	q.timeSource = timeSource
@@ -1523,7 +1523,7 @@ const defaultGroupWeight = 1
 func (q *WorkQueue) getGroupConfigLocked(
 	gKey groupKey,
 ) (weight uint32, burstFrac float64, maxCPU bool) {
-	cfg := q.configHolder.Snapshot().GetOrDefault(gKey)
+	cfg := q.configHolder.Snapshot().Groups.GetOrDefault(gKey)
 	return cfg.Weight, cfg.BurstFrac, cfg.MaxCPU
 }
 
@@ -1543,7 +1543,7 @@ func (q *WorkQueue) refreshResourceGroupConfig() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if cpuTimeTokenACMode.Get(&q.settings.SV) == resourceManagerMode {
-		q.applyConfigLocked(q.configHolder.Snapshot())
+		q.applyConfigLocked(q.configHolder.Snapshot().Groups)
 	}
 }
 

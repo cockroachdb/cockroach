@@ -179,13 +179,13 @@ func TestSetResourceGroupConfigViaCoord(t *testing.T) {
 	})
 
 	// Holder reflects the new config.
-	snap := cpuCoords.cpuTimeCoord.configHolder.Snapshot()
-	require.Equal(t, uint32(70), snap[rgGroupKey(highResourceGroupID)].Weight)
-	require.Equal(t, float64(0.7), snap[rgGroupKey(highResourceGroupID)].BurstFrac)
-	require.True(t, snap[rgGroupKey(highResourceGroupID)].MaxCPU)
-	require.Equal(t, uint32(30), snap[rgGroupKey(lowResourceGroupID)].Weight)
-	require.Equal(t, float64(0.3), snap[rgGroupKey(lowResourceGroupID)].BurstFrac)
-	require.False(t, snap[rgGroupKey(lowResourceGroupID)].MaxCPU)
+	groups := cpuCoords.cpuTimeCoord.configHolder.Snapshot().Groups
+	require.Equal(t, uint32(70), groups[rgGroupKey(highResourceGroupID)].Weight)
+	require.Equal(t, float64(0.7), groups[rgGroupKey(highResourceGroupID)].BurstFrac)
+	require.True(t, groups[rgGroupKey(highResourceGroupID)].MaxCPU)
+	require.Equal(t, uint32(30), groups[rgGroupKey(lowResourceGroupID)].Weight)
+	require.Equal(t, float64(0.3), groups[rgGroupKey(lowResourceGroupID)].BurstFrac)
+	require.False(t, groups[rgGroupKey(lowResourceGroupID)].MaxCPU)
 
 	// RM-mode WorkQueue's cached per-group state reflects the new
 	// config (refresh propagated through to applyConfigLocked).
