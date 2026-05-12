@@ -71,6 +71,7 @@ func newVectorSearchProcessor(
 	rerankMultiplier := int(flowCtx.EvalCtx.SessionData().VectorSearchRerankMultiplier)
 	v.searcher.Init(flowCtx.EvalCtx,
 		idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec, searchBeamSize, maxResults, rerankMultiplier)
+	v.searcher.SetTestingKnobs(flowCtx.Cfg.VecIndexManager.(*vecindex.Manager).TestingKnobs())
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -276,6 +277,7 @@ func newVectorMutationSearchProcessor(
 		return nil, err
 	}
 	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec)
+	v.searcher.SetTestingKnobs(flowCtx.Cfg.VecIndexManager.(*vecindex.Manager).TestingKnobs())
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.

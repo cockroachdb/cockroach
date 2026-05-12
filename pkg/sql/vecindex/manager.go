@@ -83,6 +83,13 @@ func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
 	m.testingKnobs = knobs
 }
 
+// TestingKnobs returns the testing knobs configured on the manager, or nil if
+// none have been set. Exposed so that executor processors can propagate the
+// knobs to per-flow helpers such as Searcher.
+func (m *Manager) TestingKnobs() *VecIndexTestingKnobs {
+	return m.testingKnobs
+}
+
 // Metrics returns a metric.Struct which holds metrics for all vector indexes
 // maintained by the manager.
 func (m *Manager) Metrics() metric.Struct {
@@ -120,6 +127,19 @@ func (m *Manager) Get(
 	}
 	e = &indexEntry{mustWait: true, waitCond: sync.Cond{L: &m.mu}}
 	m.mu.indexes[idxKey] = e
+
+	// If the index construction below panics, mustWait will still be true
+	// because the normal completion path (which sets mustWait=false and calls
+	// Broadcast) is skipped. Clean up the cache entry so that waiters are
+	// unblocked and subsequent callers retry instead of hanging.
+	defer func() {
+		if e.mustWait {
+			e.mustWait = false
+			e.err = errors.AssertionFailedf("vector index construction panicked")
+			e.waitCond.Broadcast()
+			delete(m.mu.indexes, idxKey)
+		}
+	}()
 
 	idx, err := func() (*cspann.Index, error) {
 		// Unlock while we build the index structure so that concurrent requests can be
@@ -167,7 +187,7 @@ func (m *Manager) Get(
 
 	if err != nil {
 		// Don't keep the index entry around, so that we retry the query.
-		m.mu.indexes[idxKey] = nil
+		delete(m.mu.indexes, idxKey)
 	}
 	return idx, err
 }
