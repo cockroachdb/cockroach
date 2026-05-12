@@ -32,11 +32,11 @@ import (
 // batches.
 //
 // The merge feed only emits events with timestamp strictly less than endTime.
-// After exhausting all events below the cutoff, it flushes any buffered KVs
-// and emits a synthetic checkpoint at endTime.Prev(). It then blocks on ctx.Done
-// rather than returning, keeping the events channel open so downstream
-// consumers can advance their frontier on the synthetic checkpoint before
-// the parent context cancellation closes the pipeline.
+// After encountering the first event at or beyond endTime, it flushes any
+// buffered KVs and emits a synthetic checkpoint at endTime.Prev(). For all
+// remaining events, it continues normal heap processing but only ever emits
+// the synthetic checkpoint (deduplicated by maybeEmitCheckpoint) until every
+// subscription is exhausted and the loop exits naturally.
 type MergeFeed struct {
 	subs           []streamclient.Subscription
 	events         chan crosscluster.Event
@@ -115,7 +115,31 @@ func (m *MergeFeed) mergeLoop(ctx context.Context) error {
 		entry := h.pop()
 
 		if m.endTime.LessEq(entry.peekTS) {
-			return m.shutdown(ctx)
+			if err := m.flushScratch(ctx); err != nil {
+				return err
+			}
+			log.Dev.Infof(ctx, "encountered event at or beyond end time %s, emitting final checkpoint and draining remaining events", m.endTime)
+			if err := m.maybeEmitCheckpoint(ctx, m.endTime.Prev()); err != nil {
+				return err
+			}
+			if entry.isKV() {
+				closed, err := entry.advanceKV(ctx)
+				if err != nil {
+					return err
+				}
+				if !closed {
+					h.push(entry)
+				}
+			} else {
+				closed, err := entry.advanceFromChannel(ctx)
+				if err != nil {
+					return err
+				}
+				if !closed {
+					h.push(entry)
+				}
+			}
+			continue
 		}
 
 		if !entry.isKV() {
@@ -205,7 +229,7 @@ func (m *MergeFeed) initHeap(ctx context.Context) (*mergeHeap, error) {
 // maybeEmitCheckpoint emits a merged checkpoint if ts advances the global
 // frontier.
 func (m *MergeFeed) maybeEmitCheckpoint(ctx context.Context, ts hlc.Timestamp) error {
-	if !m.loop.resolvedTime.Less(ts) {
+	if ts.Less(m.loop.resolvedTime) {
 		return nil
 	}
 	m.loop.resolvedTime = ts
@@ -225,16 +249,4 @@ func (m *MergeFeed) maybeEmitCheckpoint(ctx context.Context, ts hlc.Timestamp) e
 	case m.events <- cpEvent:
 	}
 	return nil
-}
-
-func (m *MergeFeed) shutdown(ctx context.Context) error {
-	if err := m.flushScratch(ctx); err != nil {
-		return err
-	}
-	if err := m.maybeEmitCheckpoint(ctx, m.endTime.Prev()); err != nil {
-		return err
-	}
-	log.Dev.Infof(ctx, "merge feed waiting for context to finish")
-	<-ctx.Done()
-	return ctx.Err()
 }

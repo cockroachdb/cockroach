@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/container/heap",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/ring",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",

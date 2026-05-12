@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -380,11 +381,13 @@ func (a *Applier) writer(
 				applyResult: results[0],
 			}
 			if txn.applyResult.DlqReason != nil {
+				log.Dev.Infof(ctx, "transaction %s failed to apply: %v", transaction.TxnID.Timestamp, txn.applyResult.DlqReason)
 				return &ReplicationError{
 					Err:       txn.applyResult.DlqReason,
 					Timestamp: transaction.TxnID.Timestamp,
 				}
 			}
+			log.Dev.Infof(ctx, "transaction %s applied successfully", transaction.TxnID.Timestamp)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

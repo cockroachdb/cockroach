@@ -274,6 +274,7 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 			case crosscluster.KVEvent:
 				for txnKVs := range txnfeed.Transactions(ev.GetKVs()) {
 					decoded, err := p.txnDecoder.DecodeTxn(ctx, txnKVs)
+					log.Dev.Infof(ctx, "decoded row %s, ts %s, len %d", decoded.WriteSet[0].Row.String(), decoded.TxnID.Timestamp, len(decoded.WriteSet))
 					if err != nil {
 						return errors.Wrap(err, "decoding transaction")
 					}
@@ -289,6 +290,7 @@ func (p *ldrCoordinatorProcessor) runDecode(ctx context.Context) error {
 					return err
 				}
 				checkpoint := ev.GetCheckpoint().ResolvedSpans[0].Timestamp
+				log.Dev.Infof(ctx, "decoded checkpoint %s", checkpoint)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -362,6 +364,10 @@ func (p *ldrCoordinatorProcessor) runScheduleAndRoute(ctx context.Context) error
 				dependencies, eventHorizon := p.scheduler.Schedule(
 					schedulerTxn, nil,
 				)
+				// log the timestamp of every dependency for the txn
+				for _, dep := range dependencies {
+					log.Dev.Infof(ctx, "scheduled txn %s with dependency timestamp %s", batch.transactions[i].TxnID.Timestamp, dep.Timestamp)
+				}
 
 				scheduled := txnapply.ScheduledTransaction{
 					Transaction:  batch.transactions[i],
