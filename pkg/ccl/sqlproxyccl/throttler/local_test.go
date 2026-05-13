@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -71,7 +71,7 @@ func countGuesses(
 
 func TestThrottleLimitsCredentialGuesses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	throttle := newTestLocalService(WithBaseDelay(time.Second))
 	ip1Tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
@@ -96,7 +96,7 @@ func TestThrottleLimitsCredentialGuesses(t *testing.T) {
 
 func TestReportSuccessDisablesLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	ctx := context.Background()
 	throttle := newTestLocalService()
@@ -122,7 +122,7 @@ func TestReportSuccessDisablesLimiter(t *testing.T) {
 
 func TestRacingRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	ctx := context.Background()
 	throttle := newTestLocalService()

@@ -9,8 +9,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ import (
 
 func TestServerAssignment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()

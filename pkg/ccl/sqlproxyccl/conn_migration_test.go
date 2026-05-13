@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
@@ -26,7 +26,7 @@ import (
 
 func TestTransferContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	t.Run("new_context", func(t *testing.T) {
 		ctx, cancel := newTransferContext(context.Background())
@@ -56,7 +56,7 @@ func TestTransferContext(t *testing.T) {
 
 func TestForwarder_tryBeginTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	t.Run("not_initialized", func(t *testing.T) {
 		defer testutils.TestingHook(&isSafeTransferPointLocked,
@@ -122,7 +122,7 @@ func TestForwarder_tryBeginTransfer(t *testing.T) {
 
 func TestTransferConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	p1, p2 := net.Pipe()
 	defer p1.Close()
@@ -443,7 +443,7 @@ func TestTransferConnection(t *testing.T) {
 
 func TestIsSafeTransferPointLocked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	makeProc := func(typ byte, transferredAt int) *processor {
 		p := &processor{}
@@ -491,7 +491,7 @@ func TestIsSafeTransferPointLocked(t *testing.T) {
 
 func TestRunShowTransferState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	t.Run("successful", func(t *testing.T) {
 		buf := new(bytes.Buffer)
@@ -514,7 +514,7 @@ func TestRunShowTransferState(t *testing.T) {
 
 func TestWaitForShowTransferState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	t.Run("context_cancelled", func(t *testing.T) {
@@ -840,7 +840,7 @@ func TestWaitForShowTransferState(t *testing.T) {
 
 func TestRunAndWaitForDeserializeSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	t.Run("write_failed", func(t *testing.T) {
@@ -1017,7 +1017,7 @@ func TestRunAndWaitForDeserializeSession(t *testing.T) {
 
 func TestWaitForSmallRowDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	t.Run("context_cancelled", func(t *testing.T) {
@@ -1115,7 +1115,7 @@ func TestWaitForSmallRowDescription(t *testing.T) {
 
 func TestExpectDataRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	falseValidateFn := func(m *pgproto3.DataRow, s int) (bool, error) { return false, nil }
@@ -1192,7 +1192,7 @@ func TestExpectDataRow(t *testing.T) {
 
 func TestExpectCommandComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	t.Run("context_cancelled", func(t *testing.T) {
@@ -1254,7 +1254,7 @@ func TestExpectCommandComplete(t *testing.T) {
 
 func TestExpectReadyForQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 
 	t.Run("context_cancelled", func(t *testing.T) {

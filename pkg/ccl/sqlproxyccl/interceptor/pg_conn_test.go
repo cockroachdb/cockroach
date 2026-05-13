@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ import (
 // the internal interceptor in base_test.go.
 func TestPGConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	q, err := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestPGConn(t *testing.T) {
 
 func TestPGConn_ToFrontendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	q, err := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestPGConn_ToFrontendConn(t *testing.T) {
 
 func TestPGConn_ToBackendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	q, err := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 	require.NoError(t, err)

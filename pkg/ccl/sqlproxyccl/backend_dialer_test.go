@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -31,7 +31,7 @@ import (
 
 func TestBackendDialTLSInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -48,7 +48,7 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 
 func TestBackendDialBlackhole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -74,7 +74,7 @@ func TestBackendDialBlackhole(t *testing.T) {
 
 func TestBackendDialTLS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
@@ -173,7 +173,7 @@ func (n *closeCounter) CloseCount() int {
 
 func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	conn := &closeCounter{}
@@ -188,7 +188,7 @@ func TestCloseOnCancelCleanupBeforeCancel(t *testing.T) {
 
 func TestCloseOnCancelCancelBeforeCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	conn := &closeCounter{}

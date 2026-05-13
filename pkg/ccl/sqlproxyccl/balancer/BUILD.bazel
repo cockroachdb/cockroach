@@ -38,7 +38,7 @@ go_test(
     embed = [":balancer"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
-        "//pkg/ccl/testutilsccl",
+        "//pkg/testutils/skip",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",

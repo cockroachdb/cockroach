@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -33,7 +33,7 @@ import (
 
 func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	const token = "foobarbaz"
 	ctx := context.Background()
@@ -171,7 +171,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 
 func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	ctx := context.Background()
 	dummyHook := func(throttler.AttemptStatus) error {
@@ -327,7 +327,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 
 func TestConnector_dialTenantCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	bgCtx := context.Background()
 
@@ -655,7 +655,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -773,7 +773,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 
 func TestConnector_dialSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -906,7 +906,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 
 func TestRetriableConnectorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	err := errors.New("foobar")
 	require.False(t, isRetriableConnectorError(err))
@@ -917,7 +917,7 @@ func TestRetriableConnectorError(t *testing.T) {
 
 func TestTenantTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	makeChains := func(commonName string, org string) [][]*x509.Certificate {
 		cert := &x509.Certificate{}

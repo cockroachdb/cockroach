@@ -9,14 +9,14 @@ import (
 	"io"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestChunkReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	cr := newChunkReader([]byte("foo bar baz hello world"))
 

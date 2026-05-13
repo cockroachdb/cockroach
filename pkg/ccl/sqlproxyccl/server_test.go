@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,7 +24,7 @@ import (
 
 func TestHandleHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -46,7 +46,7 @@ func TestHandleHealth(t *testing.T) {
 
 func TestHandleVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -70,7 +70,7 @@ func TestHandleVars(t *testing.T) {
 
 func TestAwaitNoConnections(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -102,7 +102,7 @@ func TestAwaitNoConnections(t *testing.T) {
 
 func TestShouldLogError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

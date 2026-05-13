@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSelectTenantPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	t.Run("no pods", func(t *testing.T) {
 		require.Nil(t, selectTenantPod(nil, newTenantEntry()))

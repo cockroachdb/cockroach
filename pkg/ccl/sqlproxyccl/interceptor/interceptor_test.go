@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ import (
 // used as a proxy.
 func TestSimpleProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutilsccl.ServerlessOnly(t)
+	skip.ServerlessOnly(t)
 
 	t.Run("client to server", func(t *testing.T) {
 		// These represents connections for client<->proxy and proxy<->server.

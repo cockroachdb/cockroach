@@ -40,7 +40,7 @@ go_test(
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
-        "//pkg/ccl/testutilsccl",
+        "//pkg/testutils/skip",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
