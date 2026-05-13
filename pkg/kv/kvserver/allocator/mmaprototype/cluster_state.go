@@ -1285,12 +1285,12 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 // must call this method to keep the cache consistent. The call sites are:
 //   - processRangeMsg slow path (after replacing rs.replicas wholesale),
 //   - processStoreLeaseholderMsgInternal range-removal branch (rs being GC'd),
-//   - undoPendingChange.
+//   - undoPendingChange,
+//   - addPendingRangeChange (lease transfer / replica add / remove via
+//     applyReplicaChange; closing this gap fixed #170112).
 //
-// addPendingRangeChange also mutates rs.replicas (via applyReplicaChange) but
-// does NOT yet invalidate; that is the #170112 root cause and is closed by a
-// follow-up commit. pendingChangeEnacted is a no-op for replicas — invalidation
-// by the prior addPendingRangeChange will cover it once that gap is closed.
+// pendingChangeEnacted does not mutate replicas — invalidation by the prior
+// addPendingRangeChange covers it.
 func (rs *rangeState) clearAnalyzedConstraints() {
 	if rs.constraints == nil {
 		return
@@ -2115,6 +2115,14 @@ func (cs *clusterState) addPendingRangeChange(ctx context.Context, change Pendin
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
+	// applyReplicaChange mutated rs.replicas (and the IsLeaseholder flags
+	// within) without touching rs.constraints. The cached blob is now stale
+	// and must be invalidated per the contract on clearAnalyzedConstraints,
+	// otherwise a later rebalance pass can read the stale leaseholder /
+	// replica-set and crash on the assertions in
+	// rebalanceLeasesFromLocalStoreID and rebalanceReplicasFromShedingStore.
+	// See #170112.
+	cs.ranges[rangeID].clearAnalyzedConstraints()
 }
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being
