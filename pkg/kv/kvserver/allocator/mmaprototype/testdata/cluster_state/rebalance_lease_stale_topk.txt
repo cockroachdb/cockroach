@@ -1,0 +1,104 @@
+# Reproduces the second staleness class behind #170112: a stale entry in
+# ss.adjusted.topKRanges. topK is rebuilt only by
+# processStoreLeaseholderMsgInternal — see the topKRanges invariant on
+# storeState in cluster_state.go. Pending mutations to rs.replicas /
+# ss.adjusted.replicas (and their enactment) do NOT update topK, so between
+# consecutive leaseholder msgs from store L, topKRanges[L] entries can list
+# ranges where the local store is no longer leaseholder or replica.
+# Skip-on-pending in the rebalance loops only masks the in-progress window;
+# post-enact, readers fire assertions in rebalanceLeasesFromLocalStoreID
+# (the !IsLeaseholder and missing-replica checks) and in
+# rebalanceReplicasFromShedingStore (the replicaRole check). Those Fatalf /
+# panic sites were converted to panic(AssertionFailedf) in an earlier commit
+# so the datadriven harness can capture them; a follow-up commit converts
+# them to skip+log.
+#
+# This test walks an enacted lease transfer s8->s1 with no follow-up msg
+# from s8, then runs s8's rebalance pass. Expected: panic at the
+# !IsLeaseholder check since topK[s8] still lists r44 but rs.replicas now
+# marks s1 as leaseholder.
+
+set-store
+  store-id=1 node-id=1
+  store-id=8 node-id=8
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs=
+node-id=8 locality-tiers=node=8
+  store-id=8 attrs=
+
+store-load-msg
+  store-id=1 node-id=1 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=8 node-id=8 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+----
+
+# r44 has voters on s1 and s8, leaseholder=s8.
+store-leaseholder-msg
+store-id=8
+  range-id=44 load=[100,0,0] raft-cpu=10
+  config=num_replicas=2 constraints={} voter_constraints={}
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=8 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# topK[s8] now has r44 across all storeStates (added during the recompute at
+# the end of processStoreLeaseholderMsgInternal).
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+  top-k-ranges (local-store-id=8) dim=WriteBandwidth: r44
+store-id=8 node-id=8 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+  top-k-ranges (local-store-id=8) dim=CPURate: r44
+
+# External lease transfer s8->s1 registered with MMA.
+make-pending-changes range-id=44
+  transfer-lease: remove-store-id=8 add-store-id=1
+----
+pending(2)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+
+# rs.replicas now shows s1 as leaseholder.
+ranges
+----
+range-id=44 local-store=8 load=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=8 replica-id=2 type=VOTER_FULL
+
+# Enact the lease transfer (mirrors AdjustPendingChangeDisposition(success)
+# → pendingChangeEnacted). pending drained; rs.replicas keeps s1 leader.
+# Crucially we do NOT send a new StoreLeaseholderMsg from s8, so topK[s8]
+# still reflects the old world where s8 was leader of r44.
+enact-pending-changes change-ids=(1,2)
+----
+pending(2)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+
+# Advance the clock past lagForChangeReflectedInLoad so the next
+# store-load-msg drops the enacted entries from loadPendingChanges
+# (otherwise s8's maxFractionPendingDecrease keeps it in cannotShed).
+tick seconds=15
+----
+t=15s
+
+# Bump s8's reported load so it is CPU-overloaded.
+store-load-msg
+  store-id=8 node-id=8 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=15s
+----
+
+# topK[s8] still lists r44 but rs.replicas[s8].IsLeaseholder is now false.
+# The lease-shed loop iterates topK[s8], finds r44, hits s8 in rs.replicas
+# with IsLeaseholder=false, and panics. The datadriven harness recovers and
+# prints the panic.
+rebalance-stores store-id=8
+----
+panic: internal state inconsistency: r44 considered for lease shedding on s8 has no pending changes but s8 is not leaseholder: replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok s8:replica-id=2 type=VOTER_FULL lease disposition:ok]
