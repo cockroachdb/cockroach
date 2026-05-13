@@ -128,6 +128,12 @@ type regTypeInfo struct {
 	// the name returned to the caller can be schema-qualified per Postgres
 	// reg*out semantics.
 	namespaceCol string
+	// signatureCol, when non-empty, is an additional column whose equality
+	// the visibility subquery requires — used to match Postgres's
+	// signature-aware FunctionIsVisible (pg_proc.proargtypes), so two
+	// functions sharing a proname but with disjoint signatures do not
+	// shadow each other.
+	signatureCol string
 	// objName is a human-readable name describing the objects in the table.
 	objName string
 	// errType is the pg error code in case the object does not exist.
@@ -136,13 +142,13 @@ type regTypeInfo struct {
 
 // query builds the SELECT used to look up an OID for this regtype.
 //
-// When namespaceCol is empty, it returns two columns (oid, name).
-// Otherwise it returns four (oid, name, nspname, visible) where visible
-// reports whether the bare name resolves to this entity's schema via the
-// current search_path. The check compares schemas — not OIDs — so that
-// overloaded names (e.g., builtin functions with multiple signatures sharing
-// a proname) are correctly treated as visible. This matches Postgres's
-// reg*out behavior used by *IsVisible.
+// When namespaceCol is empty, the result has two columns (oid, name). When
+// namespaceCol is set, the result has four columns (oid, name, nspname,
+// visible). visible is true iff the entity's own schema is the first one in
+// the current search_path containing any same-named entity (and, when
+// signatureCol is set, of matching signature). This mirrors Postgres's
+// reg*out emission rule used by RelationIsVisible / TypeIsVisible /
+// FunctionIsVisible.
 func (info regTypeInfo) query(queryCol string) string {
 	if info.namespaceCol == "" {
 		return fmt.Sprintf(
@@ -150,29 +156,34 @@ func (info regTypeInfo) query(queryCol string) string {
 			info.tableName, info.nameCol, queryCol,
 		)
 	}
+	var sigPredicate string
+	if info.signatureCol != "" {
+		sigPredicate = fmt.Sprintf(`AND t2.%[1]s = t.%[1]s`, info.signatureCol)
+	}
 	return fmt.Sprintf(
 		`SELECT t.oid, t.%[2]s, n.nspname,
                 (SELECT n2.nspname
                  FROM pg_catalog.%[1]s t2
                  JOIN pg_catalog.pg_namespace n2 ON t2.%[3]s = n2.oid
                  WHERE t2.%[2]s = t.%[2]s
+                   %[5]s
                    AND n2.nspname = ANY current_schemas(true)
                  ORDER BY array_position(current_schemas(true), n2.nspname)
                  LIMIT 1) IS NOT DISTINCT FROM n.nspname AS visible
          FROM pg_catalog.%[1]s t
          JOIN pg_catalog.pg_namespace n ON t.%[3]s = n.oid
          WHERE t.%[4]s = $1`,
-		info.tableName, info.nameCol, info.namespaceCol, queryCol,
+		info.tableName, info.nameCol, info.namespaceCol, queryCol, sigPredicate,
 	)
 }
 
 // regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
 // table that contains the entities of the type of the key.
 var regTypeInfos = map[oid.Oid]regTypeInfo{
-	oid.T_regclass:     {"pg_class", "relname", "relnamespace", "relation", pgcode.UndefinedTable},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "", "namespace", pgcode.UndefinedObject},
-	oid.T_regproc:      {"pg_proc", "proname", "pronamespace", "function", pgcode.UndefinedFunction},
-	oid.T_regprocedure: {"pg_proc", "proname", "pronamespace", "function", pgcode.UndefinedFunction},
-	oid.T_regrole:      {"pg_authid", "rolname", "", "role", pgcode.UndefinedObject},
-	oid.T_regtype:      {"pg_type", "typname", "typnamespace", "type", pgcode.UndefinedObject},
+	oid.T_regclass:     {"pg_class", "relname", "relnamespace", "", "relation", pgcode.UndefinedTable},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "", "", "namespace", pgcode.UndefinedObject},
+	oid.T_regproc:      {"pg_proc", "proname", "pronamespace", "proargtypes", "function", pgcode.UndefinedFunction},
+	oid.T_regprocedure: {"pg_proc", "proname", "pronamespace", "proargtypes", "function", pgcode.UndefinedFunction},
+	oid.T_regrole:      {"pg_authid", "rolname", "", "", "role", pgcode.UndefinedObject},
+	oid.T_regtype:      {"pg_type", "typname", "typnamespace", "", "type", pgcode.UndefinedObject},
 }

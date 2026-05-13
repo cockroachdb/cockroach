@@ -940,3 +940,66 @@ DROP SCHEMA reg_qual_sc
 
 subtest end
 
+# pg_function_is_visible matches Postgres's signature-aware FunctionIsVisible:
+# two functions with the same name in different schemas do not shadow each
+# other when their signatures differ.
+subtest pg_function_is_visible_overload
+
+statement ok
+CREATE SCHEMA visfn;
+CREATE FUNCTION public.vfoo(int) RETURNS int LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION visfn.vfoo(text) RETURNS text LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION public.vbar(int) RETURNS int LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION visfn.vbar(int) RETURNS int LANGUAGE SQL AS 'SELECT $1'
+
+# Default search_path: visfn not on path → visfn.* are not visible.
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  true
+public.vfoo  true
+visfn.vbar   false
+visfn.vfoo   false
+
+# visfn ahead of public → public.* shadowed where signatures match.
+statement ok
+SET search_path = visfn, public
+
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  false
+public.vfoo  true
+visfn.vbar   true
+visfn.vfoo   true
+
+# public ahead of visfn → critical case: visfn.vfoo(text) is still visible
+# because public has no vfoo with a (text) signature; visfn.vbar(int) is
+# shadowed by public.vbar(int) (same signature).
+statement ok
+SET search_path = public, visfn
+
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  true
+public.vfoo  true
+visfn.vbar   false
+visfn.vfoo   true
+
+statement ok
+RESET search_path;
+DROP FUNCTION public.vfoo(int);
+DROP FUNCTION visfn.vfoo(text);
+DROP FUNCTION public.vbar(int);
+DROP FUNCTION visfn.vbar(int);
+DROP SCHEMA visfn
+
+subtest end
+
