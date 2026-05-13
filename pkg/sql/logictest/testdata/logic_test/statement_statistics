@@ -249,10 +249,15 @@ statement_id          txn_fingerprint_id    key
 # Test throttling of storing statistics per application
 
 # Creating some helper views.
+# In-memory stats are partitioned by aggregation window (see
+# sql.stats.aggregation.interval), so a fingerprint executed on either
+# side of an hour boundary appears as separate entries. Aggregate
+# per-window counts in these views so consumers see a stable total
+# regardless of when the test runs.
 statement ok
 CREATE VIEW txn_fingerprint_view
 AS SELECT
-  key, statement_ids, count
+  key, statement_ids, sum(count)::INT AS count
 FROM
   crdb_internal.node_transaction_statistics
 WHERE application_name = 'throttle_test'
@@ -264,12 +269,14 @@ WHERE application_name = 'throttle_test'
     WHERE
       key LIKE 'SELECT%'
   )
+GROUP BY key, statement_ids
 
 statement ok
 CREATE VIEW app_stmts_view
-AS SELECT statement_id, key, count
+AS SELECT statement_id, key, sum(count)::INT AS count
 FROM crdb_internal.node_statement_statistics
 WHERE application_name = 'throttle_test'
+GROUP BY statement_id, key, txn_fingerprint_id
 
 statement ok
 SET application_name = throttle_test
@@ -282,10 +289,12 @@ BEGIN; SELECT 1; SELECT 1, 2; SELECT 1, 2, 3; COMMIT
 statement ok
 RESET application_name
 
-# Check that we have 3 fingerprints.
+# Check that we have 3 fingerprints. sum(count) aggregates per-window
+# counts (see comment on the view definitions above).
 query TI retry
-SELECT key, count FROM crdb_internal.node_statement_statistics
-WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%' ORDER BY key
+SELECT key, sum(count)::INT FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%'
+GROUP BY key ORDER BY key
 ----
 SELECT _            1
 SELECT _, _         1
@@ -317,9 +326,15 @@ BEGIN; SELECT 1; SELECT 1, 3; SELECT 1, 2, 3; COMMIT
 statement ok
 RESET application_name
 
+# In-memory stats are partitioned by aggregation window (see
+# sql.stats.aggregation.interval), so a fingerprint executed on either
+# side of an hour boundary appears as separate entries. Aggregate the
+# per-window counts so the expected total is stable regardless of when
+# the test runs.
 query TI retry
-SELECT key, count FROM crdb_internal.node_statement_statistics
-WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%' ORDER BY key
+SELECT key, sum(count)::INT FROM crdb_internal.node_statement_statistics
+WHERE application_name = 'throttle_test' AND key LIKE 'SELECT%'
+GROUP BY key ORDER BY key
 ----
 SELECT _            2
 SELECT _, _         2
