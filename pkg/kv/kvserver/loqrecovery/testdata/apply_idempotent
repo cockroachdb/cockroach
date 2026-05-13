@@ -1,0 +1,77 @@
+# Test verifying that re-applying the same recovery plan to a store that has
+# already been recovered is a no-op.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 2
+  NewReplica:
+    NodeID: 2
+    StoreID: 2
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
+
+# First apply: both replicas get rewritten.
+apply-plan stores=(1,2)
+----
+updated=2 skipped=0 missing=0
+
+# Audit records for both rewrites are present.
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
+
+# Second apply is a no-op.
+apply-plan stores=(1,2)
+----
+updated=0 skipped=2 missing=0
+
+# Audit records are unchanged to ensure that the second apply did not write new
+# ones.
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16

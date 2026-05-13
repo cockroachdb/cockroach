@@ -370,6 +370,22 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 func MaybeApplyPendingRecoveryPlan(
 	ctx context.Context, planStore PlanStore, engines []kvstorage.Engines, clock timeutil.TimeSource,
 ) (PrepareStoreReport, error) {
+	return maybeApplyPendingRecoveryPlan(ctx, planStore, engines, clock,
+		func(_ roachpb.StoreID, e kvstorage.Engines) storage.Batch {
+			return e.TODOBothEngines().NewBatch()
+		})
+}
+
+// maybeApplyPendingRecoveryPlan is the testable form of
+// MaybeApplyPendingRecoveryPlan. It accepts a per-store batch builder so tests
+// can inject Commit failures into the auto-apply path.
+func maybeApplyPendingRecoveryPlan(
+	ctx context.Context,
+	planStore PlanStore,
+	engines []kvstorage.Engines,
+	clock timeutil.TimeSource,
+	makeBatch func(roachpb.StoreID, kvstorage.Engines) storage.Batch,
+) (PrepareStoreReport, error) {
 	if len(engines) < 1 {
 		return PrepareStoreReport{}, nil
 	}
@@ -387,7 +403,7 @@ func MaybeApplyPendingRecoveryPlan(
 			if err != nil {
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
-			b := e.TODOBothEngines().NewBatch()
+			b := makeBatch(ident.StoreID, e)
 			defer b.Close() //nolint:deferloop
 			batches[ident.StoreID] = b
 		}
