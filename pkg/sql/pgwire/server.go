@@ -293,6 +293,19 @@ var (
 			"indicates crdb-bcrypt is in use and the cluster has not " +
 			"adopted the stronger SCRAM-SHA-256 hashing method.",
 	}
+	MetaMinPasswordLength = metric.Metadata{
+		Name: "auth.min_password_length",
+		Help: "The configured minimum password length " +
+			"(server.user_login.min_password_length)",
+		Measurement: "Characters",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse: "Use this metric to confirm minimum password length " +
+			"policy is enforced. Alert if the value drops below your " +
+			"organization's required minimum to detect configuration " +
+			"drift.",
+	}
 )
 
 const (
@@ -456,6 +469,7 @@ type tenantSpecificMetrics struct {
 	AuthCertSANConnTotal        *metric.Counter
 	AuthCertSANConnSuccess      *metric.Counter
 	PasswordEncryptionIsSCRAM   *metric.FunctionalGauge
+	MinPasswordLength           *metric.FunctionalGauge
 }
 
 func newTenantSpecificMetrics(
@@ -500,6 +514,10 @@ func newTenantSpecificMetrics(
 					return 1
 				}
 				return 0
+			}),
+		MinPasswordLength: metric.NewFunctionalGauge(
+			MetaMinPasswordLength, func() int64 {
+				return security.MinPasswordLength.Get(sv)
 			}),
 	}
 }

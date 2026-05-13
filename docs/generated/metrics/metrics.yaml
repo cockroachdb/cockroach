@@ -1200,6 +1200,17 @@ layers:
       how_to_use: See Description.
       visibility: ESSENTIAL
       owner: cockroachdb/sql-foundations
+    - name: auth.min_password_length
+      exported_name: auth_min_password_length
+      description: The configured minimum password length (server.user_login.min_password_length)
+      y_axis_label: Characters
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Use this metric to confirm minimum password length policy is enforced. Alert if the value drops below your organization's required minimum to detect configuration drift.
+      visibility: ESSENTIAL
+      owner: cockroachdb/sql-foundations
     - name: auth.password.conn.latency
       exported_name: auth_password_conn_latency
       description: Latency to establish and authenticate a SQL connection using password
