@@ -1275,21 +1275,12 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 // clearAnalyzedConstraints clears the cached analyzed constraints for the
 // range state.
 //
-// Invalidation contract: rs.constraints is a per-rangeState cache of
-// constraint analysis derived from rs.replicas (specifically the
-// IsLeaseholder flags and the per-replica StoreIDs/types). It is consulted
-// in the rebalance loops both to choose candidate stores and to assert
-// internal invariants (see rebalanceLeasesFromLocalStoreID and
-// rebalanceReplicas). Any code path that mutates rs.replicas
-// must call this method to keep the cache consistent. The call sites are:
-//   - processRangeMsg slow path (after replacing rs.replicas wholesale),
-//   - processStoreLeaseholderMsgInternal range-removal branch (rs being GC'd),
-//   - undoPendingChange.
-//
-// addPendingRangeChange also mutates rs.replicas (via applyReplicaChange) but
-// does NOT yet invalidate; that is the #170112 root cause and is closed by a
-// follow-up commit. pendingChangeEnacted is a no-op for replicas — invalidation
-// by the prior addPendingRangeChange will cover it once that gap is closed.
+// Invalidation contract: rs.constraints is a per-rangeState cache derived
+// from rs.replicas (the IsLeaseholder flags and the per-replica
+// StoreIDs/types). It is consulted in the rebalance loops both to choose
+// candidate stores and to assert internal invariants (see
+// rebalanceLeasesFromLocalStoreID and rebalanceReplicas). Any code path that
+// mutates rs.replicas must call this method to keep the cache consistent.
 func (rs *rangeState) clearAnalyzedConstraints() {
 	if rs.constraints == nil {
 		return
@@ -2114,6 +2105,9 @@ func (cs *clusterState) addPendingRangeChange(ctx context.Context, change Pendin
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
+	// applyReplicaChange above mutated rs.replicas; invalidate per the
+	// contract on clearAnalyzedConstraints.
+	cs.ranges[rangeID].clearAnalyzedConstraints()
 }
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being
