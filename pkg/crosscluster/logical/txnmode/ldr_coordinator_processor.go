@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnpb"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnscheduler"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,7 +75,7 @@ type ldrCoordinatorProcessor struct {
 	txnDecoder      *ldrdecoder.TxnDecoder
 	lockSynthesizer *txnlock.LockSynthesizer
 	scheduler       *txnscheduler.Scheduler
-	rangeCache      *rangecache.RangeCache
+	router          *nodeRouter
 
 	applierIDs []ldrdecoder.ApplierID
 
@@ -131,7 +130,7 @@ func (p *ldrCoordinatorProcessor) Start(ctx context.Context) {
 }
 
 // setup initializes all components required for the processor
-// pipeline: decoder, lock synthesizer, scheduler, range cache, feed, and
+// pipeline: decoder, lock synthesizer, scheduler, node router, feed, and
 // applier mappings.
 func (p *ldrCoordinatorProcessor) setup(ctx context.Context) error {
 	// Build table mappings from spec.
@@ -167,8 +166,14 @@ func (p *ldrCoordinatorProcessor) setup(ctx context.Context) error {
 	schedulerLockCount := int32(txnSchedulerLockCount.Get(&p.FlowCtx.Cfg.Settings.SV))
 	p.scheduler = txnscheduler.NewScheduler(schedulerLockCount)
 
-	// Initialize range cache.
-	p.rangeCache = p.FlowCtx.Cfg.RangeCache
+	// Initialize node router for applier routing via range cache lookups.
+	p.router, err = newNodeRouter(
+		ctx, p.FlowCtx.Codec(), p.FlowCtx.Cfg.DB, p.spec.Schema,
+		p.FlowCtx.Cfg.RangeCache,
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating node router")
+	}
 
 	// Create feed from partition specs (following LogicalReplicationWriterSpec pattern).
 	p.feed, err = p.createTxnFeed(ctx)
@@ -391,34 +396,24 @@ func (p *ldrCoordinatorProcessor) hydrateApplierID(
 		return p.applierIDs[0]
 	}
 	if len(txn.WriteSet) > 0 {
-		row := txn.WriteSet[rand.Intn(len(txn.WriteSet))]
-		rKey, err := destKeyFromRow(p.FlowCtx.Codec(), row)
-		if err == nil {
-			ri, err := p.rangeCache.Lookup(ctx, rKey)
-			if err == nil {
-				// TODO(msbutler): use a sql instance resolver instead of
-				// casting the KV node ID directly to a sql instance ID.
-				candidateID := ldrdecoder.ApplierID(ri.Lease.Replica.NodeID)
-				for _, id := range p.applierIDs {
-					if id == candidateID {
-						return id
-					}
+		var nodeID roachpb.NodeID
+		besteffort.Warning(ctx, "node-router", func(ctx context.Context) error {
+			var err error
+			nodeID, err = p.router.RouteWriteSet(ctx, txn.WriteSet)
+			return err
+		})
+		if nodeID != 0 {
+			// TODO(msbutler): use a sql instance resolver instead of
+			// casting the KV node ID directly to a sql instance ID.
+			candidateID := ldrdecoder.ApplierID(nodeID)
+			for _, id := range p.applierIDs {
+				if id == candidateID {
+					return id
 				}
 			}
 		}
 	}
 	return p.applierIDs[rand.Intn(len(p.applierIDs))]
-}
-
-// destKeyFromRow extracts a destination key from a decoded row for range cache
-// lookups. It returns the table prefix for the row's destination table.
-//
-// TODO(msbutler): this implies a key will get routed to the range of the
-// tableID prefix, instead of to the random key. To address this, we need to fix
-// #169815.
-func destKeyFromRow(codec keys.SQLCodec, row ldrdecoder.DecodedRow) (roachpb.RKey, error) {
-	prefix := codec.TablePrefix(uint32(row.TableID))
-	return keys.Addr(prefix)
 }
 
 // encodeScheduledTxn serializes a ScheduledTransaction into a DistSQL row
