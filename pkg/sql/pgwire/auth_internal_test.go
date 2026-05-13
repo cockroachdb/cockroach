@@ -396,3 +396,29 @@ func TestPasswordEncryptionIsSCRAMGauge(t *testing.T) {
 	)
 	require.Equal(t, int64(1), metrics.PasswordEncryptionIsSCRAM.Value())
 }
+
+func TestMinPasswordLengthGauge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
+	metrics := newTenantSpecificMetrics(
+		sqlMetrics, metric.TestSampleInterval, &st.SV,
+	)
+
+	// Default min password length is 1.
+	require.Equal(t, int64(1), metrics.MinPasswordLength.Value())
+
+	// Increase to 12 and verify the gauge reflects the change.
+	security.MinPasswordLength.Override(
+		context.Background(), &st.SV, 12,
+	)
+	require.Equal(t, int64(12), metrics.MinPasswordLength.Value())
+
+	// Set back to 1.
+	security.MinPasswordLength.Override(
+		context.Background(), &st.SV, 1,
+	)
+	require.Equal(t, int64(1), metrics.MinPasswordLength.Value())
+}
