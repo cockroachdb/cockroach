@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/plangram"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -118,11 +119,18 @@ func TestCanProvide(t *testing.T) {
 	})
 }
 
-// addTestTable adds a table with the given name to metadata, returning its
-// TableID.
-func addTestTable(md *opt.Metadata, name string) opt.TableID {
+// addTestTable adds a table with the given name and optional secondary indexes
+// to metadata, returning its TableID. The primary index is named
+// "<name>_pkey".
+func addTestTable(md *opt.Metadata, name string, secondaryIndexNames ...string) opt.TableID {
 	tab := &testcat.Table{
 		TabName: tree.MakeTableNameWithSchema("t", "public", tree.Name(name)),
+		Indexes: []*testcat.Index{
+			{IdxName: name + "_pkey"},
+		},
+	}
+	for _, idxName := range secondaryIndexNames {
+		tab.Indexes = append(tab.Indexes, &testcat.Index{IdxName: idxName})
 	}
 	return md.AddTable(tab, &tab.TabName)
 }
@@ -132,8 +140,8 @@ func TestMatchFields(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var md opt.Metadata
-	abcID := addTestTable(&md, "abc")
-	xyzID := addTestTable(&md, "xyz")
+	abcID := addTestTable(&md, "abc", "abc_b_idx")
+	xyzID := addTestTable(&md, "xyz", "xyz_y_idx")
 
 	t.Run("scan table match", func(t *testing.T) {
 		pg := parsePG(t, `root: (Scan Table="abc");`)
@@ -218,5 +226,111 @@ func TestMatchFields(t *testing.T) {
 		pg := parsePG(t, `root: (Scan);`)
 		expr := &memo.ScanExpr{}
 		require.True(t, pg.Matches(expr, nil /* md */))
+	})
+
+	t.Run("scan index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan Index="abc_b_idx");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = 1
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("scan index mismatch", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan Index="abc_b_idx");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = cat.PrimaryIndex
+		require.False(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("scan primary index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan Index="abc_pkey");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = cat.PrimaryIndex
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("lookup join index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (LookupJoin Index="xyz_y_idx");`)
+		expr := &memo.LookupJoinExpr{}
+		expr.Table = xyzID
+		expr.Index = 1
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("index join primary index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (IndexJoin Index="abc_pkey");`)
+		expr := &memo.IndexJoinExpr{}
+		expr.Table = abcID
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("index join non-primary index mismatch", func(t *testing.T) {
+		pg := parsePG(t, `root: (IndexJoin Index="abc_b_idx");`)
+		expr := &memo.IndexJoinExpr{}
+		expr.Table = abcID
+		require.False(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("index field on unsupported op", func(t *testing.T) {
+		pg := parsePG(t, `root: (Select Index="abc_b_idx");`)
+		expr := &memo.SelectExpr{}
+		require.False(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("zigzag join left index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (ZigzagJoin LeftIndex="abc_b_idx");`)
+		expr := &memo.ZigzagJoinExpr{}
+		expr.LeftTable = abcID
+		expr.LeftIndex = 1
+		expr.RightTable = xyzID
+		expr.RightIndex = 1
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("zigzag join right index match", func(t *testing.T) {
+		pg := parsePG(t, `root: (ZigzagJoin RightIndex="xyz_y_idx");`)
+		expr := &memo.ZigzagJoinExpr{}
+		expr.LeftTable = abcID
+		expr.LeftIndex = 1
+		expr.RightTable = xyzID
+		expr.RightIndex = 1
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("zigzag join left index mismatch", func(t *testing.T) {
+		pg := parsePG(t, `root: (ZigzagJoin LeftIndex="xyz_y_idx");`)
+		expr := &memo.ZigzagJoinExpr{}
+		expr.LeftTable = abcID
+		expr.LeftIndex = 1
+		expr.RightTable = xyzID
+		expr.RightIndex = 1
+		require.False(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("left index on non-zigzag op", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan LeftIndex="abc_b_idx");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = 1
+		require.False(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("combined table and index fields", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan Table="abc" Index="abc_b_idx");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = 1
+		require.True(t, pg.Matches(expr, &md))
+	})
+
+	t.Run("combined table match index mismatch", func(t *testing.T) {
+		pg := parsePG(t, `root: (Scan Table="abc" Index="xyz_y_idx");`)
+		expr := &memo.ScanExpr{}
+		expr.Table = abcID
+		expr.Index = 1
+		require.False(t, pg.Matches(expr, &md))
 	})
 }

@@ -7,6 +7,7 @@ package plangram
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
@@ -80,6 +81,14 @@ func matchFields(fields []physical.PlanGramExprField, e opt.Expr, md *opt.Metada
 			if string(md.Table(tableID).Name()) != f.Val {
 				return false
 			}
+		case "Index":
+			tableID, indexOrd, ok := tableAndIndexFromExpr(e)
+			if !ok {
+				return false
+			}
+			if string(md.Table(tableID).Index(indexOrd).Name()) != f.Val {
+				return false
+			}
 		case "LeftTable":
 			zj, ok := e.(*memo.ZigzagJoinExpr)
 			if !ok {
@@ -94,6 +103,22 @@ func matchFields(fields []physical.PlanGramExprField, e opt.Expr, md *opt.Metada
 				return false
 			}
 			if string(md.Table(zj.RightTable).Name()) != f.Val {
+				return false
+			}
+		case "LeftIndex":
+			zj, ok := e.(*memo.ZigzagJoinExpr)
+			if !ok {
+				return false
+			}
+			if string(md.Table(zj.LeftTable).Index(zj.LeftIndex).Name()) != f.Val {
+				return false
+			}
+		case "RightIndex":
+			zj, ok := e.(*memo.ZigzagJoinExpr)
+			if !ok {
+				return false
+			}
+			if string(md.Table(zj.RightTable).Index(zj.RightIndex).Name()) != f.Val {
 				return false
 			}
 		default:
@@ -121,5 +146,27 @@ func tableIDFromExpr(e opt.Expr) (opt.TableID, bool) {
 		return t.Table, true
 	default:
 		return 0, false
+	}
+}
+
+// tableAndIndexFromExpr extracts the TableID and IndexOrdinal from
+// expressions that have both Table and Index fields. IndexJoinExpr always
+// uses the primary index.
+func tableAndIndexFromExpr(e opt.Expr) (opt.TableID, cat.IndexOrdinal, bool) {
+	switch t := e.(type) {
+	case *memo.ScanExpr:
+		return t.Table, t.Index, true
+	case *memo.IndexJoinExpr:
+		return t.Table, cat.PrimaryIndex, true
+	case *memo.LookupJoinExpr:
+		return t.Table, t.Index, true
+	case *memo.InvertedJoinExpr:
+		return t.Table, t.Index, true
+	case *memo.VectorSearchExpr:
+		return t.Table, t.Index, true
+	case *memo.VectorMutationSearchExpr:
+		return t.Table, t.Index, true
+	default:
+		return 0, 0, false
 	}
 }

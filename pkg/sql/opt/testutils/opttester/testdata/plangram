@@ -27,3 +27,59 @@ scan abc
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── key: (1)
  └── fd: (1)-->(2,3)
+
+exec-ddl
+CREATE TABLE def (d INT PRIMARY KEY, e INT, f INT, INDEX def_e_idx (e))
+----
+
+# Index field matching: covering scan on secondary index.
+opt plangram=(root: (Scan Index="def_e_idx");)
+SELECT d, e FROM def WHERE e = 1
+----
+scan def@def_e_idx
+ ├── columns: d:1(int!null) e:2(int!null)
+ ├── constraint: /2/1: [/1 - /1]
+ ├── key: (1)
+ └── fd: ()-->(2)
+
+# Index field matching: primary index name matches primary scan.
+opt plangram=(root: (Scan Index="def_pkey");)
+SELECT d FROM def
+----
+scan def
+ ├── columns: d:1(int!null)
+ └── key: (1)
+
+# Index field matching: wrong index name on covering scan.
+opt plangram=(root: (Scan Index="nonexistent");)
+SELECT d, e FROM def WHERE e = 1
+----
+scan def@def_e_idx
+ ├── columns: d:1(int!null) e:2(int!null)
+ ├── constraint: /2/1: [/1 - /1]
+ ├── key: (1)
+ └── fd: ()-->(2)
+
+# Combined Table and Index field matching.
+opt plangram=(root: (Scan Table="def" Index="def_e_idx");)
+SELECT d, e FROM def WHERE e = 1
+----
+scan def@def_e_idx
+ ├── columns: d:1(int!null) e:2(int!null)
+ ├── constraint: /2/1: [/1 - /1]
+ ├── key: (1)
+ └── fd: ()-->(2)
+
+# Index field matching in nested plan shape.
+opt plangram=(root: (IndexJoin (Scan Index="def_e_idx"));)
+SELECT * FROM def WHERE e = 1
+----
+index-join def
+ ├── columns: d:1(int!null) e:2(int!null) f:3(int)
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ └── scan def@def_e_idx
+      ├── columns: d:1(int!null) e:2(int!null)
+      ├── constraint: /2/1: [/1 - /1]
+      ├── key: (1)
+      └── fd: ()-->(2)
