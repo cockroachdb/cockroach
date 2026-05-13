@@ -42,7 +42,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 
 	assertPlanError := func(t *testing.T, plan loqrecoverypb.ReplicaUpdatePlan, errMsg string) {
 		require.NoError(t, ps.SavePlan(plan), "failed to stage plan")
-		err := MaybeApplyPendingRecoveryPlan(ctx, ps, engines, clock)
+		_, err := MaybeApplyPendingRecoveryPlan(ctx, ps, engines, clock)
 		require.NoError(t, err, "fatal error applying recovery plan")
 		report, ok, err := readNodeRecoveryStatusInfo(ctx, engines[0].LogEngine())
 		require.NoError(t, err, "failed to read application outcome")
