@@ -87,7 +87,15 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	cands = append(cands, existing)
-	means := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	means, ok := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
+	if !ok {
+		// Unreachable: cands always contains at least `existing`. Assert in
+		// test builds; in production, fall back to a no-op advisor rather than
+		// return a zero-valued means that would misclassify stores. Gating on
+		// !ok avoids variadic arg boxing on the success path.
+		assertTruef(context.Background(), false, "computeMeansForStoreSet returned !ok for non-empty cands=%v", cands)
+		return NoopMMARebalanceAdvisor()
+	}
 	return &MMARebalanceAdvisor{
 		existingStoreID: existing,
 		means:           means,

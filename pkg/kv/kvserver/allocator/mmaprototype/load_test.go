@@ -312,7 +312,11 @@ func TestMeansMemo(t *testing.T) {
 					cc := parseConstraints(t, parts)
 					disj = append(disj, interner.internConstraintsConj(cc))
 				}
-				mss = mm.getMeans(disj)
+				var ok bool
+				mss, ok = mm.getMeans(disj)
+				if !ok {
+					return "ok: false (no stores match)\n"
+				}
 				var b strings.Builder
 				fmt.Fprintf(&b, "stores: ")
 				printPostingList(&b, mss.stores)
@@ -358,4 +362,30 @@ func TestMeansMemo(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
+}
+
+// TestComputeMeansForStoreSetEmpty verifies that computeMeansForStoreSet
+// returns ok=false (rather than panicking) when given no stores. This is the
+// empty-set contract relied on by getMeans and by callers that may receive a
+// constraint conjunction matching no stores.
+func TestComputeMeansForStoreSetEmpty(t *testing.T) {
+	loadProvider := &testLoadInfoProvider{
+		t:      t,
+		sloads: map[roachpb.StoreID]storeLoadAndNodeID{},
+		nloads: map[roachpb.NodeID]*NodeLoad{},
+	}
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	scratchStores := map[roachpb.StoreID]struct{}{}
+
+	for _, name := range []string{"nil slice", "empty slice"} {
+		t.Run(name, func(t *testing.T) {
+			var stores []roachpb.StoreID
+			if name == "empty slice" {
+				stores = []roachpb.StoreID{}
+			}
+			means, ok := computeMeansForStoreSet(loadProvider, stores, scratchNodes, scratchStores)
+			require.False(t, ok)
+			require.Equal(t, meansLoad{}, means)
+		})
+	}
 }
