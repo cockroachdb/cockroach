@@ -373,8 +373,11 @@ type DomainCheckConstraint struct {
 	// ParsedExpr is the cached parsed expression tree from hydration.
 	// Typed as any to avoid an import cycle with tree. At runtime this
 	// holds a tree.Expr obtained via parserutils.ParseExpr. It may be nil
-	// if hydration has not occurred or if the expression failed to parse;
-	// callers must handle the nil case by re-parsing from Expr.
+	// if hydration has not occurred or if the expression failed to parse.
+	//
+	// This tree is shared across concurrent callers via the hydrated
+	// descriptor cache, so callers that run TypeCheck (which mutates AST
+	// nodes in-place) must re-parse from Expr instead of reusing this.
 	ParsedExpr any
 }
 
