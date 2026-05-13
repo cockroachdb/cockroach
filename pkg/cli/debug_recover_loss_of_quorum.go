@@ -324,6 +324,10 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	} else {
 		var stores []kvstorage.Engines
 		for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
+			// TODO(sep-raft-log): handle stores bootstrapped with separated
+			// engines. Today we open a single engine at storeSpec.Path and wrap
+			// it via kvstorage.MakeEngines, which works only for the legacy
+			// single-engine layout. We probably need a function like OpenEngines().
 			eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
 			if err != nil {
 				return errors.WithHint(errors.Wrapf(err,
@@ -815,6 +819,13 @@ func applyRecoveryToLocalStore(
 	batches := make(map[roachpb.StoreID]loqrecovery.StoreBatches)
 	stores := make([]kvstorage.Engines, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
+		// TODO(sep-raft-log): handle stores bootstrapped with separated
+		// engines. See the matching TODO in runDebugDeadReplicaCollect for
+		// details — same constraint applies here on the offline apply path:
+		// kvstorage.MakeEngines wraps a single engine, so a separated-engine
+		// store would have its log engine missed and ReadStoreIdent /
+		// LogEngine() would panic. Both call sites need the same layout-
+		// detection helper.
 		eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
