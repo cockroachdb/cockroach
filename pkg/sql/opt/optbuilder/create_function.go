@@ -377,6 +377,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	// Validate each statement and collect the dependencies.
 	var stmtScope *scope
+	var canMutate bool
 	switch language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -402,6 +403,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				stmtScope = b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 			})
 			checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
+			if !canMutate && stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
+				canMutate = true
+			}
 
 			// Format the statements with qualified datasource names.
 			formatFuncBodyStmt(fmtCtx, stmt.AST, language, i > 0 /* newLine */)
@@ -468,6 +472,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
+		if stmtScope.expr != nil && stmtScope.expr.Relational().CanMutate {
+			canMutate = true
+		}
 
 		// Format the statements with qualified datasource names.
 		formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
@@ -475,6 +482,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
+
+	cf.CanMutate = canMutate
 
 	if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
 		// Validate that the result type of the last statement matches the

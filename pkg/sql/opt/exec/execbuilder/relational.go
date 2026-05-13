@@ -3711,9 +3711,16 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	switch udf.Def.CanMutate {
+	case tree.RoutineMutates:
+		b.flags.Set(exec.PlanFlagContainsMutation)
+	case tree.RoutineCanMutateUnknown:
+		// The descriptor predates the can_mutate field. Fall back to
+		// inspecting the eagerly-built body expressions.
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
 		}
 	}
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.

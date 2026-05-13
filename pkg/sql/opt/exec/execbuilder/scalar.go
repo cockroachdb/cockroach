@@ -988,9 +988,16 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return nil, err
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	switch udf.Def.CanMutate {
+	case tree.RoutineMutates:
+		b.flags.Set(exec.PlanFlagContainsMutation)
+	case tree.RoutineCanMutateUnknown:
+		// The descriptor predates the can_mutate field. Fall back to
+		// inspecting the eagerly-built body expressions.
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
 		}
 	}
 

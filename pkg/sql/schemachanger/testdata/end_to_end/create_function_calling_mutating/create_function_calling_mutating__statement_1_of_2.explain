@@ -1,0 +1,80 @@
+/* setup */
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT b;
+  INSERT INTO t VALUES(a, b);
+  SELECT a;
+$$;
+
+/* test */
+EXPLAIN (DDL) CREATE FUNCTION f_caller(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT f_insert(a, b);
+$$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f_caller›(‹a› INT8, ‹b› INT8)
+	RETURNS INT8
+	LANGUAGE SQL
+	AS $$SELECT ‹public›.‹f_insert›(‹a›, ‹b›);$$;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 9 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Function:{DescID: 106 (f_caller+)}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 106 (f_caller+), ReferencedDescID: 101 (public)}
+ │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 106 (f_caller+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (f_caller+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "public"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "root"}
+ │         │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 106 (f_caller+)}
+ │         │    └── ABSENT → PUBLIC FunctionParams:{DescID: 106 (f_caller+)}
+ │         └── 12 Mutation operations
+ │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":106}}
+ │              ├── SetFunctionName {"FunctionID":106,"Name":"f_caller"}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":1048576,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── SetFunctionBody {"Body":{"Body":"SELECT f_insert(...","CanMutate":1,"FunctionID":106}}
+ │              ├── UpdateFunctionTypeReferences {"FunctionID":106}
+ │              ├── UpdateFunctionRelationReferences {"FunctionID":106}
+ │              ├── SetFunctionParams {"Params":{"FunctionID":106}}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":106,"SchemaID":101}}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":106}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 9 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Function:{DescID: 106 (f_caller+)}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 106 (f_caller+), ReferencedDescID: 101 (public)}
+      │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 106 (f_caller+)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 106 (f_caller+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (f_caller+), Name: "admin"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (f_caller+), Name: "public"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (f_caller+), Name: "root"}
+      │    │    ├── PUBLIC → ABSENT FunctionBody:{DescID: 106 (f_caller+)}
+      │    │    └── PUBLIC → ABSENT FunctionParams:{DescID: 106 (f_caller+)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 9 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Function:{DescID: 106 (f_caller+)}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 106 (f_caller+), ReferencedDescID: 101 (public)}
+           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 106 (f_caller+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (f_caller+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "public"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (f_caller+), Name: "root"}
+           │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 106 (f_caller+)}
+           │    └── ABSENT → PUBLIC FunctionParams:{DescID: 106 (f_caller+)}
+           └── 12 Mutation operations
+                ├── CreateFunctionDescriptor {"Function":{"FunctionID":106}}
+                ├── SetFunctionName {"FunctionID":106,"Name":"f_caller"}
+                ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":1048576,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── SetFunctionBody {"Body":{"Body":"SELECT f_insert(...","CanMutate":1,"FunctionID":106}}
+                ├── UpdateFunctionTypeReferences {"FunctionID":106}
+                ├── UpdateFunctionRelationReferences {"FunctionID":106}
+                ├── SetFunctionParams {"Params":{"FunctionID":106}}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":106,"SchemaID":101}}
+                └── MarkDescriptorAsPublic {"DescriptorID":106}

@@ -783,6 +783,16 @@ type UDFDefinition struct {
 	// When set, Body and BodyProps are nil at plan time; they will be
 	// populated by calling BodyBuilder.Build() at execution time.
 	BodyBuilder RoutineBodyBuilder
+
+	// CanMutate indicates whether the routine body can perform mutations.
+	// For descriptor-backed routines this is sourced from the persisted
+	// descriptor field via the Overload. When RoutineCanMutateUnknown
+	// (for descriptors predating the field), consumers fall back to
+	// inspecting Body RelExprs to determine mutation behavior. For
+	// anonymous routines (DO blocks, triggers) this is always
+	// RoutineMutates or RoutineDoesNotMutate, derived from the body
+	// expression at build time.
+	CanMutate tree.RoutineCanMutate
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
