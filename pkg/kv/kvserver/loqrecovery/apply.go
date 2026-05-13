@@ -369,11 +369,12 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 // Regardless of application success or failure, staged plan would be removed.
 func MaybeApplyPendingRecoveryPlan(
 	ctx context.Context, planStore PlanStore, engines []kvstorage.Engines, clock timeutil.TimeSource,
-) error {
+) (PrepareStoreReport, error) {
 	if len(engines) < 1 {
-		return nil
+		return PrepareStoreReport{}, nil
 	}
 
+	var report PrepareStoreReport
 	applyPlan := func(nodeID roachpb.NodeID, plan loqrecoverypb.ReplicaUpdatePlan) error {
 		if err := CheckEnginesVersion(ctx, engines, plan, false); err != nil {
 			return errors.Wrap(err, "failed to check cluster version against storage")
@@ -394,6 +395,7 @@ func MaybeApplyPendingRecoveryPlan(
 		if err != nil {
 			return err
 		}
+		report = prepRep
 		if len(prepRep.MissingStores) > 0 {
 			log.KvExec.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
@@ -412,10 +414,10 @@ func MaybeApplyPendingRecoveryPlan(
 	if err != nil {
 		// This is fatal error, we don't write application report since we didn't
 		// check the store yet.
-		return errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
+		return PrepareStoreReport{}, errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
 	}
 	if !exists {
-		return nil
+		return PrepareStoreReport{}, nil
 	}
 
 	// First read node parameters from the first store.
@@ -426,9 +428,9 @@ func MaybeApplyPendingRecoveryPlan(
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
 			log.KvExec.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
-			return nil
+			return PrepareStoreReport{}, nil
 		}
-		return err
+		return PrepareStoreReport{}, err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
@@ -448,7 +450,7 @@ func MaybeApplyPendingRecoveryPlan(
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
 		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
-	return nil
+	return report, nil
 }
 
 func CheckEnginesVersion(

@@ -73,7 +73,7 @@ Decommissioned nodes:
 
 apply-plan stores=(1,2) restart=true
 ----
-ok
+updated=3 skipped=0 missing=0
 
 dump-events stores=(1,2) remove=true status=true
 ----

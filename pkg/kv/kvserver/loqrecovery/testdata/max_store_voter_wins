@@ -52,7 +52,7 @@ Decommissioned nodes:
 
 apply-plan stores=(1,2)
 ----
-ok
+updated=1 skipped=0 missing=0
 
 dump-store stores=(1,2)
 ----
@@ -143,7 +143,7 @@ Decommissioned nodes:
 
 apply-plan stores=(1,2)
 ----
-ok
+updated=1 skipped=0 missing=0
 
 dump-store stores=(1,2)
 ----

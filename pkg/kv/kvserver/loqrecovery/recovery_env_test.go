@@ -761,6 +761,7 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	restart := dd.ScanArgOr(t, &d, "restart", false)
 
+	var updated, skipped, missing int
 	if !restart {
 		nodes := e.groupStoresByNodeStore(t, stores)
 		defer func() {
@@ -772,16 +773,19 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 		}()
 		updateTime := timeutil.Now()
 		for nodeID, stores := range nodes {
-			_, err := PrepareUpdateReplicas(ctx, e.plan, e.uuidGen, updateTime, nodeID,
+			rep, err := PrepareUpdateReplicas(ctx, e.plan, e.uuidGen, updateTime, nodeID,
 				stores)
 			if err != nil {
 				return "", err
 			}
+			updated += len(rep.UpdatedReplicas)
+			skipped += len(rep.SkippedReplicas)
+			missing += len(rep.MissingStores)
 			if _, err = CommitReplicaChanges(stores); err != nil {
 				return "", err
 			}
 		}
-		return "ok", nil
+		return fmt.Sprintf("updated=%d skipped=%d missing=%d", updated, skipped, missing), nil
 	}
 
 	nodes := e.groupStoresByNode(t, stores)
@@ -794,13 +798,16 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 			t.Fatal("failed to save plan to plan store", err)
 		}
 
-		err := MaybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock)
+		rep, err := MaybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock)
 		if err != nil {
 			return "", err
 		}
+		updated += len(rep.UpdatedReplicas)
+		skipped += len(rep.SkippedReplicas)
+		missing += len(rep.MissingStores)
 	}
 
-	return "ok", nil
+	return fmt.Sprintf("updated=%d skipped=%d missing=%d", updated, skipped, missing), nil
 }
 
 func (e *quorumRecoveryEnv) cleanupStores() {
