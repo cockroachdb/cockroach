@@ -60,9 +60,10 @@ func BuildChildPhysicalProps(
 ) *physical.Required {
 	var childProps physical.Required
 
-	// ScalarExprs don't support required physical properties; don't build
-	// physical properties for them.
+	// ScalarExprs don't support most required physical properties, but they do
+	// support PlanGram matching.
 	if opt.IsScalarOp(parent.Child(nth)) {
+		childProps.PlanGram = plangram.BuildChildRequired(parent, parentProps.PlanGram, nth, mem)
 		return mem.InternPhysicalProps(&childProps)
 	}
 
@@ -279,9 +280,12 @@ func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
 	return uniformPrediction * multiplier
 }
 
-// BuildChildPhysicalPropsScalar is like BuildChildPhysicalProps, but for
-// when the parent is a scalar expression.
-func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *physical.Required {
+// BuildChildPhysicalPropsScalar is like BuildChildPhysicalProps, but for when
+// the parent is a scalar expression. The pg parameter carries the PlanGram for
+// the nth child of the parent scalar.
+func BuildChildPhysicalPropsScalar(
+	mem *memo.Memo, parent opt.Expr, nth int, pg physical.PlanGram,
+) *physical.Required {
 	var childProps physical.Required
 	_, childIsRelExpr := parent.Child(nth).(memo.RelExpr)
 	switch parent.Op() {
@@ -301,9 +305,15 @@ func BuildChildPhysicalPropsScalar(mem *memo.Memo, parent opt.Expr, nth int) *ph
 		}
 	default:
 		if !childIsRelExpr {
-			return physical.MinRequired
+			if pg.Any() {
+				return physical.MinRequired
+			}
+			var scalarChildProps physical.Required
+			scalarChildProps.PlanGram = pg
+			return mem.InternPhysicalProps(&scalarChildProps)
 		}
 	}
+	childProps.PlanGram = pg
 	if childIsRelExpr && mem.RootProps() != nil {
 		// A relational expression whose parent is a scalar expression should
 		// require the distribution of the root, because the result ends up in the

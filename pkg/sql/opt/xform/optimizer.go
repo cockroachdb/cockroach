@@ -301,12 +301,16 @@ func (o *Optimizer) optimizeExpr(
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
 		if !t.ScalarProps().HasSubquery {
+			if !required.PlanGram.Any() &&
+				!scalarMatchesPlanGram(t, required.PlanGram, o.mem.Metadata()) {
+				return memo.Cost{Penalties: memo.PlanGramMismatchPenalty}, true
+			}
 			return memo.Cost{C: 0}, true
 		}
-		return o.optimizeScalarExpr(t)
+		return o.optimizeScalarExpr(t, required.PlanGram)
 
 	case opt.ScalarExpr:
-		return o.optimizeScalarExpr(t)
+		return o.optimizeScalarExpr(t, required.PlanGram)
 
 	default:
 		panic(errors.AssertionFailedf("unhandled child: %+v", e))
@@ -622,16 +626,56 @@ func (o *Optimizer) optimizeGroupMember(
 	return fullyOptimized
 }
 
+// scalarMatchesPlanGram recursively checks whether the deterministic scalar
+// tree matches the given PlanGram. Used for the no-subquery fast path where no
+// optimizer state is needed.
+func scalarMatchesPlanGram(scalar opt.Expr, pg physical.PlanGram, md *opt.Metadata) bool {
+	if pg.Any() {
+		return true
+	}
+	if pg.None() {
+		return false
+	}
+	if pg.HasAlternates() {
+		matched := false
+		pg.VisitAlternates(func(alt physical.PlanGram) {
+			if !matched && scalarMatchesPlanGram(scalar, alt, md) {
+				matched = true
+			}
+		})
+		return matched
+	}
+	if !pg.Matches(scalar, md) {
+		return false
+	}
+	for i, n := 0, scalar.ChildCount(); i < n; i++ {
+		if !scalarMatchesPlanGram(scalar.Child(i), pg.Child(i), md) {
+			return false
+		}
+	}
+	return true
+}
+
 // optimizeScalarExpr recursively optimizes the children of a scalar expression.
 // This is only necessary when the scalar expression contains a subquery, since
 // scalar expressions otherwise always have zero cost and only one possible
-// plan.
+// plan. The pg parameter carries the PlanGram to match against this scalar node.
 func (o *Optimizer) optimizeScalarExpr(
-	scalar opt.ScalarExpr,
+	scalar opt.ScalarExpr, pg physical.PlanGram,
 ) (cost memo.Cost, fullyOptimized bool) {
+	if pg.HasAlternates() {
+		return o.optimizeScalarExprAlternates(scalar, pg)
+	}
+	if !pg.Any() {
+		if pg.None() || !pg.Matches(scalar, o.mem.Metadata()) {
+			cost.Penalties |= memo.PlanGramMismatchPenalty
+			pg = physical.NonePlanGram
+		}
+	}
 	fullyOptimized = true
 	for i, n := 0, scalar.ChildCount(); i < n; i++ {
-		childProps := BuildChildPhysicalPropsScalar(o.mem, scalar, i)
+		childPG := pg.Child(i)
+		childProps := BuildChildPhysicalPropsScalar(o.mem, scalar, i, childPG)
 		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
 
 		// Accumulate cost of children.
@@ -644,6 +688,25 @@ func (o *Optimizer) optimizeScalarExpr(
 		}
 	}
 	return cost, fullyOptimized
+}
+
+// optimizeScalarExprAlternates tries each PlanGram alternate for a scalar
+// expression and returns the lowest cost.
+func (o *Optimizer) optimizeScalarExprAlternates(
+	scalar opt.ScalarExpr, pg physical.PlanGram,
+) (bestCost memo.Cost, fullyOptimized bool) {
+	bestCost = memo.MaxCost
+	fullyOptimized = true
+	pg.VisitAlternates(func(alt physical.PlanGram) {
+		altCost, altOptimized := o.optimizeScalarExpr(scalar, alt)
+		if altCost.Less(bestCost) {
+			bestCost = altCost
+		}
+		if !altOptimized {
+			fullyOptimized = false
+		}
+	})
+	return bestCost, fullyOptimized
 }
 
 // enforceProps costs an expression where one of the physical properties has
@@ -851,6 +914,19 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		}
 	}
 
+	// For scalar parents with PlanGram alternates, resolve to the matching
+	// concrete alternate before computing child PlanGrams.
+	scalarPG := parentProps.PlanGram
+	if relParent == nil && scalarPG.HasAlternates() {
+		resolved := physical.NonePlanGram
+		scalarPG.VisitAlternates(func(alt physical.PlanGram) {
+			if scalarMatchesPlanGram(parent, alt, o.mem.Metadata()) {
+				resolved = alt
+			}
+		})
+		scalarPG = resolved
+	}
+
 	// Iterate over the expression's children, replacing any that have a lower
 	// cost alternative.
 	var mutable opt.MutableExpr
@@ -860,7 +936,8 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		if relParent != nil {
 			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
 		} else {
-			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
+			childPG := scalarPG.Child(i)
+			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i, childPG)
 		}
 		after := o.setLowestCostTree(before, childProps)
 		if after != before {

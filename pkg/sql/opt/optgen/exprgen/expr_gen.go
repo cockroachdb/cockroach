@@ -400,7 +400,7 @@ func (eg *exprGen) populateBestProps(
 		if rel != nil {
 			childProps = xform.BuildChildPhysicalProps(eg.mem, rel, i, required)
 		} else {
-			childProps = xform.BuildChildPhysicalPropsScalar(eg.mem, expr, i)
+			childProps = xform.BuildChildPhysicalPropsScalar(eg.mem, expr, i, physical.AnyPlanGram)
 		}
 		cost.Add(eg.populateBestProps(ctx, expr.Child(i), childProps))
 	}

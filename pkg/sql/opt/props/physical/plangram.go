@@ -66,11 +66,6 @@ import (
 // requires that all PlanGram values being compared point into the same graph of
 // terms.
 //
-// TODO(michae2): PlanGram matching currently only affects relational expressions
-// (via ComputeCost). Scalar children (e.g. Filters, Projections, ON conditions)
-// are not checked even if explicitly specified in the grammar, because scalar
-// optimization does not consult the PlanGram.
-//
 // TODO(michae2): support NOT within PlanGrams.
 type PlanGram struct {
 	// root is the starting term. "root" can also be considered a "pseudo

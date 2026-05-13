@@ -1058,3 +1058,176 @@ limit
  │         └── filters
  │              └── c:3 > 0 [outer=(3)]
  └── 5
+
+# Scalar Expression Matching
+
+# Scalar match — Filters child matches.
+
+# PlanGram specifies the Filters child and it matches.
+opt format=show-cost plangram=(root: (Select (Scan) (Filters));)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Deep scalar match — full filter tree.
+
+# PlanGram specifies the full scalar structure: Filters → FiltersItem → Eq.
+opt format=show-cost plangram=(root: (Select (Scan) (Filters (FiltersItem (Eq any any))));)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Scalar mismatch — wrong operator in filter.
+
+# PlanGram says Gt but the filter is Eq — should get plangram-mismatch.
+opt format=show-cost plangram=(root: (Select (Scan) (Filters (FiltersItem (Gt any any))));)
+SELECT * FROM abc WHERE a = 1
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── cost: 9.07
+ ├── cost-flags: plangram-mismatch
+ ├── key: ()
+ └── fd: ()-->(1-3)
+
+# Scalar alternates — filter matches one of two alternates.
+
+# One alternate matches (Eq), the other doesn't (Gt). Should match without penalty.
+opt format=show-cost plangram=(root: (Select (Scan) filter); filter: (Filters (FiltersItem (Eq any any))) | (Filters (FiltersItem (Gt any any)));)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Partial scalar spec — FiltersItem without condition (implicit any).
+
+# Only specifies (Filters (FiltersItem)) without the comparison operator.
+# The implicit any child should match any filter condition.
+opt format=show-cost plangram=(root: (Select (Scan) (Filters (FiltersItem)));)
+SELECT * FROM abc WHERE a = 1
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── cardinality: [0 - 1]
+ ├── cost: 1098.64
+ ├── cost-flags: unbounded-cardinality
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:1 = 1 [outer=(1), fd=()-->(1)]
+
+# Projection match — Projections child matches.
+
+opt format=show-cost plangram=(root: (Project (Scan) (Projections));)
+SELECT a + 1, b FROM abc
+----
+project
+ ├── columns: "?column?":6!null b:2
+ ├── immutable
+ ├── cost: 1088.44
+ ├── cost-flags: unbounded-cardinality
+ ├── scan abc@abc_b_idx
+ │    ├── columns: a:1!null b:2
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── a:1 + 1 [as="?column?":6, outer=(1), immutable]
+
+# Projection mismatch — wrong scalar child.
+
+opt format=show-cost plangram=(root: (Project (Scan) (Filters));)
+SELECT a + 1, b FROM abc
+----
+project
+ ├── columns: "?column?":6!null b:2
+ ├── immutable
+ ├── cost: 1088.44
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── scan abc@abc_b_idx
+ │    ├── columns: a:1!null b:2
+ │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── a:1 + 1 [as="?column?":6, outer=(1), immutable]
+
+# Subquery case — EXISTS subquery with PlanGram specifying relational structure
+# through scalar nodes.
+
+opt format=show-cost plangram=(root: (Select (Scan) (Filters (FiltersItem (Exists (Scan)))));)
+SELECT * FROM abc WHERE EXISTS (SELECT 1 FROM xy WHERE x = a)
+----
+semi-join (merge)
+ ├── columns: a:1!null b:2 c:3
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── cost: 2176.96
+ ├── cost-flags: plangram-mismatch unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan abc
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── cost: 1088.62
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ ├── scan xy
+ │    ├── columns: x:6!null
+ │    ├── cost: 1058.32
+ │    ├── cost-flags: plangram-mismatch unbounded-cardinality
+ │    ├── key: (6)
+ │    └── ordering: +6
+ └── filters (true)
