@@ -543,6 +543,14 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
+	var canMutate bool
+	for _, s := range body {
+		if s.Relational().CanMutate {
+			canMutate = true
+			break
+		}
+	}
+
 	multiColDataSource := len(f.ResolvedType().TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
@@ -563,6 +571,7 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				CanMutate:          canMutate,
 			},
 		},
 	)

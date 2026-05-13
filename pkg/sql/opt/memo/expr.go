@@ -777,6 +777,9 @@ type UDFDefinition struct {
 	// results to the same buffer. This is used to implement the PL/pgsql
 	// RETURN NEXT and RETURN QUERY statements.
 	ResultBufferID RoutineResultBufferID
+
+	// CanMutate is true if the UDF contains body statement that contains mutation.
+	CanMutate bool
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
