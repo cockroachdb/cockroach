@@ -9,7 +9,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/errors"
 )
 
 type alterFunctionOptionsNode struct {
@@ -221,11 +219,8 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if len(dependentObjects) > 0 {
 		// TODO(#146475): once functions are rewritten to use ID references, we can
 		// allow renames for views.
-		return errors.UnimplementedErrorf(
-			errors.IssueLink{
-				IssueURL: build.MakeIssueURL(83233),
-				Detail:   "renames are disallowed because references are by name",
-			},
+		return unimplemented.NewWithIssueDetailf(83233,
+			"renames are disallowed because references are by name",
 			"cannot rename function %q because other functions or views ([%v]) still depend on it",
 			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}
@@ -382,12 +377,9 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 	if len(dependentObjects) > 0 {
-		return errors.UnimplementedErrorf(
-			errors.IssueLink{
-				IssueURL: build.MakeIssueURL(83233),
-				Detail: "set schema is disallowed because there are references from " +
-					"other objects by name",
-			},
+		return unimplemented.NewWithIssueDetailf(83233,
+			"set schema is disallowed because there are references from "+
+				"other objects by name",
 			"cannot set schema for function %q because other functions or views ([%v]) still depend on it",
 			fnDesc.Name, strings.Join(dependentObjects, ", "))
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -200,11 +201,11 @@ func validateWithLogicalType(
 
 		// Check for unsupported LogicalTypes that require nested column handling
 		if _, ok := logicalType.(schema.ListLogicalType); ok {
-			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+			return unimplemented.NewWithIssuef(162543,
 				"ListLogicalType not supported (requires nested column chunk handling)")
 		}
 		if _, ok := logicalType.(schema.MapLogicalType); ok {
-			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+			return unimplemented.NewWithIssuef(162543,
 				"MapLogicalType not supported (requires nested column chunk handling)")
 		}
 		if _, ok := logicalType.(schema.BSONLogicalType); ok {

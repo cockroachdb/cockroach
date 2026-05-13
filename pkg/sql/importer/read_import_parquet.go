@@ -12,7 +12,6 @@ import (
 
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/schema"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -628,11 +628,9 @@ func determineColumnsToRead(
 			maxDefLevel := parquetCol.MaxDefinitionLevel()
 			if maxDefLevel > 1 {
 				return nil,
-					errors.UnimplementedErrorf(
-						errors.IssueLink{
-							IssueURL: build.MakeIssueURL(162543),
-							Detail:   "support parquet nested types for import",
-						}, "column %q has nested or repeated structure (definition level %d); "+
+					unimplemented.NewWithIssueDetailf(162543,
+						"support parquet nested types for import",
+						"column %q has nested or repeated structure (definition level %d); "+
 							"only simple required and optional columns are supported",
 						parquetColName, maxDefLevel)
 

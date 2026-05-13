@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1442,8 +1443,7 @@ func getTenantInfo(
 		}
 	}
 	if len(tenants) > 0 && jobDetails.RevisionHistory {
-		return spans, tenants, errors.UnimplementedError(
-			errors.IssueLink{IssueURL: build.MakeIssueURL(47896)},
+		return spans, tenants, unimplemented.NewWithIssue(47896,
 			"can not backup tenants with revision history",
 		)
 	}
