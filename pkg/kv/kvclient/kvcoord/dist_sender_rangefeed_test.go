@@ -340,6 +340,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 	}
 	const numServers int = 3
 	serverArgs := base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
 		RetryOptions: retry.Options{
 			InitialBackoff: 10 * time.Millisecond,
 			MaxBackoff:     10 * time.Millisecond,
