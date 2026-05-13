@@ -1897,8 +1897,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	// transferring its replica for range r1 to remote store s2, then
 	// localss.adjusted.replicas will not have r1. This is fine in that s1
 	// should not be making more decisions about r1. If the change is undone
-	// later, we will again compute the top-k, which will consider r1, before
-	// computing new changes (due to REQUIREMENT(change-computation)).
+	// later, the top-k will be recomputed here on the next leaseholder msg
+	// from localss; rebalance passes that interleave between the undo and
+	// that next msg see a stale topK and tolerate it (see the topKRanges
+	// invariant on storeState).
 	for rangeID, state := range localss.adjusted.replicas {
 		if !state.IsLeaseholder {
 			// We may have transferred the lease away previously but still have a
@@ -1919,9 +1921,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// transferred to another store s11, s10 will not see r1 below. We
 		// make this choice to avoid cluttering the top-k for s10 with
 		// replicas that are going away. If it is undone, r1 will not be in
-		// the top-k for s10, but due to REQUIREMENT(change-computation), a
-		// new authoritative state will be provided and the top-k recomputed,
-		// before computing any new changes.
+		// the top-k for s10 until the next leaseholder msg from msg.StoreID
+		// rebuilds it; rebalance passes that interleave between the undo and
+		// that msg see a stale topK and tolerate it (see the topKRanges
+		// invariant on storeState).
 		for _, replica := range rs.replicas {
 			typ := replica.ReplicaState.ReplicaType.ReplicaType
 			if isVoter(typ) || isNonVoter(typ) {

@@ -607,7 +607,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			// from before a pending change mutated rs.replicas. Both
 			// self-correct on the next leaseholder msg from the relevant local
 			// store, so skip the range and move on.
-			ml.logf(ctx, 3, "skipping r%d: stale topK[s%d] or stale constraints, "+
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] or stale constraints, "+
 				"s%d not in cached replica set", rangeID, store.StoreID, store.StoreID)
 			re.passObs.replicaShed(ctx, rangeTransient)
 			continue
@@ -811,7 +811,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// store has enacted, but topK still lists r. Self-corrects on the
 			// next leaseholder msg from this store. See the topKRanges
 			// invariant in cluster_state.go.
-			ml.logf(ctx, 3, "skipping r%d: stale topK[s%d] entry, s%d no longer a replica",
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] entry, s%d no longer a replica",
 				rangeID, localStoreID, localStoreID)
 			re.passObs.leaseShed(ctx, rangeTransient)
 			continue
@@ -820,7 +820,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// Stale topK[localStoreID]: the local store transferred its lease
 			// away since the msg that built topK and the change has enacted.
 			// Self-corrects on the next msg from this store.
-			ml.logf(ctx, 3, "skipping r%d: stale topK[s%d] entry, s%d no longer leaseholder",
+			ml.logf(ctx, 1, "skipping r%d: stale topK[s%d] entry, s%d no longer leaseholder",
 				rangeID, localStoreID, localStoreID)
 			re.passObs.leaseShed(ctx, rangeTransient)
 			continue
@@ -848,7 +848,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// permanent parity-with-topK guard rather than a transitional
 			// safety net: any future replica-mutating code path that forgets
 			// to invalidate gets a benign skip rather than a node fatal.
-			ml.logf(ctx, 3, "skipping r%d: stale rs.constraints, "+
+			ml.logf(ctx, 1, "skipping r%d: stale rs.constraints, "+
 				"cached leaseholderID=s%d but local store=s%d",
 				rangeID, rstate.constraints.leaseholderID, store.StoreID)
 			re.passObs.leaseShed(ctx, rangeTransient)

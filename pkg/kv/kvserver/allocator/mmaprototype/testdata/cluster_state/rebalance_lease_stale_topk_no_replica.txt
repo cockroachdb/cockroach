@@ -120,30 +120,18 @@ store-load-msg
 #     (which lacks s8). replicaRole(s8) returns (false,false) → "stale
 #     topK[s%d] or stale constraints, s%d not in cached replica set" skip.
 # Pass completes without panic; the per-pass summary attributes both skips.
-rebalance-stores store-id=8 vmodule=3
+rebalance-stores store-id=8 vmodule=1
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 0) (nodes-cpu-capacity 1000)
-[mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: load is >10% above mean [load=99 meanLoad=0 fractionUsed=9.90%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=99 meanLoad=0 fractionUsed=9.90%* meanUtil=0.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=1000.00,1000.00(false))) - within grace period
 [mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: true, pending decrease 1000.00 vs threshold 0.10, pending increase 1000.00 vs epsilon 0.00); pending: (none)
-[mmaid=1] load summary for dim=CPURate (s8): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=0 fractionUsed=100.00%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s8): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s8): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n8): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=0 fractionUsed=100.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] evaluating s8: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s8 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] adding overloaded store s8 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
 [mmaid=1] sorted shedding stores: (s8: overloadUrgent, cannotShed: false) (s1: overloadSlow, cannotShed: true)
-[mmaid=1] start processing shedding store s8: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
-[mmaid=1] top-K[CPURate] ranges for s8 with lease on local s8: r44:[cpu:10ns/s, write-bandwidth:0 B/s, byte-size:0 B]
-[mmaid=1] local store s8 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
 [mmaid=1] skipping r44: stale topK[s8] entry, s8 no longer a replica
-[mmaid=1] attempting to shed replicas next
 [mmaid=1] skipping r44: stale topK[s8] or stale constraints, s8 not in cached replica set
 [mmaid=1] rebalancing pass summary [local=s8]:
 	overloaded:
