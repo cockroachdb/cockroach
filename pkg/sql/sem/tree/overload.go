@@ -301,6 +301,11 @@ type Overload struct {
 	// should be performed against the function owner rather than the invoking
 	// user.
 	SecurityMode RoutineSecurity
+
+	// CanMutate indicates whether the routine body can perform mutations.
+	// This includes direct DML, mutations inside CTEs or subqueries, and
+	// calls to other mutating routines.
+	CanMutate bool
 }
 
 // params implements the overloadImpl interface.

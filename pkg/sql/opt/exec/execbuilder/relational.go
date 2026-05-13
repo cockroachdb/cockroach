@@ -3711,11 +3711,10 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
-		}
+	if udf.Def.CanMutate {
+		b.flags.Set(exec.PlanFlagContainsMutation)
 	}
+
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,

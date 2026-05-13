@@ -545,6 +545,7 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				CanMutate:          o.CanMutate,
 			},
 		},
 	)
@@ -939,6 +940,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 
 	// Build a CALL expression that invokes the routine.
 	outScope := inScope.push()
+	bodyExpr := bodyScope.expr
 	routine := b.factory.ConstructUDFCall(
 		memo.ScalarListExpr{},
 		&memo.UDFCallPrivate{
@@ -948,10 +950,11 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Volatility:  volatility.Volatile,
 				RoutineType: tree.ProcedureRoutine,
 				RoutineLang: tree.RoutineLangPLpgSQL,
-				Body:        []memo.RelExpr{bodyScope.expr},
+				Body:        []memo.RelExpr{bodyExpr},
 				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
 				BodyStmts:   bodyStmts,
 				BodyASTs:    []tree.Statement{nil},
+				CanMutate:   bodyExpr.Relational().CanMutate,
 			},
 		},
 	)

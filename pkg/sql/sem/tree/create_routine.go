@@ -95,6 +95,10 @@ type CreateRoutine struct {
 	// BodyAnnotations is not assigned during initial parsing of user input. It's
 	// assigned by the opt builder when the optimizer parses the body statements.
 	BodyAnnotations []*Annotations
+	// CanMutate is set by the opt builder to indicate whether the routine body
+	// can perform mutations, including direct DML, mutations inside CTEs or
+	// subqueries, and calls to other mutating routines.
+	CanMutate bool
 }
 
 // Format implements the NodeFormatter interface.

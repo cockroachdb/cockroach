@@ -643,6 +643,11 @@ func (desc *Mutable) SetSecurity(v catpb.Function_Security) {
 	desc.Security = v
 }
 
+// SetCanMutate sets the CanMutate field on the function descriptor.
+func (desc *Mutable) SetCanMutate(v bool) {
+	desc.CanMutate = v
+}
+
 // SetName sets the function name.
 func (desc *Mutable) SetName(n string) {
 	desc.Name = n
@@ -1075,6 +1080,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		ret.Class = tree.GeneratorClass
 	}
 	ret.SecurityMode = desc.getCreateExprSecurity()
+	ret.CanMutate = desc.FunctionDescriptor.CanMutate
 
 	return ret, nil
 }

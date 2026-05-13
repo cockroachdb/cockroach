@@ -31,6 +31,7 @@ go_library(
         "v26_2_trigger_backref_repair.go",
         "v26_3_advisory_locks.go",
         "v26_3_alter_statements_pk.go",
+        "v26_3_func_desc_can_mutate.go",
         "v26_3_stmt_diag_max_latency.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",

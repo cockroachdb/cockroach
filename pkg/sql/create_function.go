@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -132,6 +133,10 @@ func (n *createFunctionNode) createNewFunction(
 
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+		udfDesc.SetCanMutate(n.cf.CanMutate)
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -271,6 +276,10 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+		udfDesc.SetCanMutate(n.cf.CanMutate)
 	}
 
 	// Removing all existing references before adding new references.

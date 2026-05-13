@@ -988,10 +988,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return nil, err
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
-		}
+	if udf.Def.CanMutate {
+		b.flags.Set(exec.PlanFlagContainsMutation)
 	}
 
 	blockState := udf.Def.BlockState
