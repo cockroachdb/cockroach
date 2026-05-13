@@ -92,13 +92,13 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			&planGramExpr{
 				op: opt.ScanOp,
 				fields: []planGramExprField{
-					{key: "Index", val: "abc_b_idx"},
+					{Key: "Index", Val: "abc_b_idx"},
 				},
 			},
 			&planGramExpr{
 				op: opt.ScanOp,
 				fields: []planGramExprField{
-					{key: "Index", val: "abc_c_idx"},
+					{Key: "Index", Val: "abc_c_idx"},
 				},
 			},
 		},
@@ -145,7 +145,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
 				fields: []planGramExprField{
-					{key: "Index", val: "abc_a_idx"},
+					{Key: "Index", Val: "abc_a_idx"},
 				},
 			}},
 			expectedOneLine:  "root: (Scan Index=\"abc_a_idx\");",
@@ -209,8 +209,8 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
 				fields: []planGramExprField{
-					{key: "Table", val: "abc"},
-					{key: "Index", val: "abc_b_idx"},
+					{Key: "Table", Val: "abc"},
+					{Key: "Index", Val: "abc_b_idx"},
 				},
 			}},
 			expectedOneLine:  "root: (Scan Table=\"abc\" Index=\"abc_b_idx\");",
@@ -221,7 +221,7 @@ func TestPlanGramFormatPretty(t *testing.T) {
 			plangram: PlanGram{root: &planGramExpr{
 				op: opt.ScanOp,
 				fields: []planGramExprField{
-					{key: "Index", val: `has "quotes" and spaces`},
+					{Key: "Index", Val: `has "quotes" and spaces`},
 				},
 			}},
 			expectedOneLine:  `root: (Scan Index="has \"quotes\" and spaces");`,
@@ -342,7 +342,7 @@ func TestPlanGramMatches(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, tc.pg.Matches(tc.expr))
+			require.Equal(t, tc.expected, tc.pg.Matches(tc.expr, nil /* md */))
 		})
 	}
 }

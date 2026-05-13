@@ -9,3 +9,21 @@ scan abc
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── key: (1)
  └── fd: (1)-->(2,3)
+
+# Table field matching: matching table name.
+opt plangram=(root: (Scan Table="abc");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Table field matching: wrong table name causes PlanGram mismatch penalty.
+opt plangram=(root: (Scan Table="xyz");)
+SELECT * FROM abc
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── key: (1)
+ └── fd: (1)-->(2,3)

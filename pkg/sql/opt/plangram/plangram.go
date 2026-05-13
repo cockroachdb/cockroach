@@ -6,6 +6,7 @@
 package plangram
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
@@ -28,16 +29,16 @@ func VisibleToPlanGram(expr memo.RelExpr) bool {
 // BuildChildRequired returns the PlanGram term for the nth child of
 // the parent expression.
 func BuildChildRequired(
-	parent memo.RelExpr, required physical.PlanGram, childIdx int,
+	parent memo.RelExpr, required physical.PlanGram, childIdx int, mem *memo.Memo,
 ) physical.PlanGram {
 	if !VisibleToPlanGram(parent) {
-		// For expressions not visible to PlanGrams, the current term is simply
-		// passed down.
 		return required
 	}
-	if !required.Matches(parent) {
-		// Once we hit a mismatch, NonePlanGram is passed downward to reduce the
-		// number of optimization calls for lower groups.
+	var md *opt.Metadata
+	if mem != nil {
+		md = mem.Metadata()
+	}
+	if !required.Matches(parent, md) {
 		return physical.NonePlanGram
 	}
 	return required.Child(childIdx)
@@ -56,4 +57,69 @@ func BuildChildRequired(
 // enforceProps.
 func CanProvide(_ memo.RelExpr, required physical.PlanGram) bool {
 	return !required.HasAlternates()
+}
+
+func init() {
+	physical.MatchFieldsFunc = matchFields
+}
+
+// matchFields checks whether the fields of a PlanGram expression match the
+// given optimizer expression. It extracts table names from the expression's
+// private and compares them against the field values.
+func matchFields(fields []physical.PlanGramExprField, e opt.Expr, md *opt.Metadata) bool {
+	if md == nil {
+		return false
+	}
+	for _, f := range fields {
+		switch f.Key {
+		case "Table":
+			tableID, ok := tableIDFromExpr(e)
+			if !ok {
+				return false
+			}
+			if string(md.Table(tableID).Name()) != f.Val {
+				return false
+			}
+		case "LeftTable":
+			zj, ok := e.(*memo.ZigzagJoinExpr)
+			if !ok {
+				return false
+			}
+			if string(md.Table(zj.LeftTable).Name()) != f.Val {
+				return false
+			}
+		case "RightTable":
+			zj, ok := e.(*memo.ZigzagJoinExpr)
+			if !ok {
+				return false
+			}
+			if string(md.Table(zj.RightTable).Name()) != f.Val {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// tableIDFromExpr extracts the TableID from expressions that have a Table
+// field in their private.
+func tableIDFromExpr(e opt.Expr) (opt.TableID, bool) {
+	switch t := e.(type) {
+	case *memo.ScanExpr:
+		return t.Table, true
+	case *memo.IndexJoinExpr:
+		return t.Table, true
+	case *memo.LookupJoinExpr:
+		return t.Table, true
+	case *memo.InvertedJoinExpr:
+		return t.Table, true
+	case *memo.VectorSearchExpr:
+		return t.Table, true
+	case *memo.VectorMutationSearchExpr:
+		return t.Table, true
+	default:
+		return 0, false
+	}
 }

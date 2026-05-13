@@ -132,9 +132,10 @@ type planGramExpr struct {
 
 // planGramExprField represents a single field of an optimizer expression. How
 // this matches the corresponding optgen field depends on the specific
-// expression and field.
+// expression and field. Key and Val are exported so the plangram package can
+// access them for matching.
 type planGramExprField struct {
-	key, val string
+	Key, Val string
 }
 
 var _ planGramTerm = &planGramProduction{}
@@ -232,9 +233,9 @@ func (p PlanGram) FormatPretty(b *bytes.Buffer, newlines bool) {
 			for _, field := range t.fields {
 				b.WriteRune(' ')
 				// Assume field names don't need to be quoted.
-				b.WriteString(field.key)
+				b.WriteString(field.Key)
 				b.WriteRune('=')
-				b.WriteString(strconv.Quote(field.val))
+				b.WriteString(strconv.Quote(field.Val))
 			}
 			for _, child := range t.children {
 				b.WriteRune(' ')
@@ -553,7 +554,7 @@ func (p *planGramParser) parseExpr() (planGramTerm, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field value %s", val)
 		}
-		expr.fields = append(expr.fields, planGramExprField{key: name, val: unquoted})
+		expr.fields = append(expr.fields, planGramExprField{Key: name, Val: unquoted})
 	}
 	// TODO(michae2): check for correct number of children.
 	return expr, nil
@@ -640,13 +641,22 @@ func (p PlanGram) RootHash() uint64 {
 	return uint64(reflect.ValueOf(p.root).Pointer())
 }
 
+// MatchFieldsFunc, if set, checks that the fields of a planGramExpr match the
+// given optimizer expression. It is set by the plangram package to avoid an
+// import cycle (memo -> physical -> memo).
+var MatchFieldsFunc func(fields []PlanGramExprField, e opt.Expr, md *opt.Metadata) bool
+
+// PlanGramExprField is exported so the plangram package can access fields for
+// matching. It is a key-value pair.
+type PlanGramExprField = planGramExprField
+
 // Matches reports whether this PlanGram term matches the given optimizer
 // expression. Any matches everything, None matches nothing. A concrete PlanGram
-// expression matches if the operator matches (or is a wildcard) and the child
-// count matches. This should only be called after alternates have been
-// expanded, so the root is always a planGramExpr or Any or None. It panics if
-// called on a production.
-func (p PlanGram) Matches(e opt.Expr) bool {
+// expression matches if the operator matches (or is a wildcard), the child
+// count matches, and all fields match. This should only be called after
+// alternates have been expanded, so the root is always a planGramExpr or Any or
+// None. It panics if called on a production.
+func (p PlanGram) Matches(e opt.Expr, md *opt.Metadata) bool {
 	if p.Any() {
 		return true
 	}
@@ -655,8 +665,13 @@ func (p PlanGram) Matches(e opt.Expr) bool {
 	}
 	switch t := p.root.(type) {
 	case *planGramExpr:
-		// TODO(michae2): check fields
-		return (t.op == opt.UnknownOp || t.op == e.Op()) && len(t.children) <= e.ChildCount()
+		if (t.op != opt.UnknownOp && t.op != e.Op()) || len(t.children) > e.ChildCount() {
+			return false
+		}
+		if len(t.fields) > 0 && MatchFieldsFunc != nil {
+			return MatchFieldsFunc(t.fields, e, md)
+		}
+		return true
 	default:
 		panic(errors.AssertionFailedf("called Matches(%v) on non-expression PlanGram term %v", e, t))
 	}

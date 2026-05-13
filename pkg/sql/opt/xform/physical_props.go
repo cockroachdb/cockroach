@@ -92,7 +92,7 @@ func BuildChildPhysicalProps(
 	childProps.Ordering = ordering.BuildChildRequired(mem, parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
 	childProps.RemoteBranch = parentProps.RemoteBranch
-	childProps.PlanGram = plangram.BuildChildRequired(parent, parentProps.PlanGram, nth)
+	childProps.PlanGram = plangram.BuildChildRequired(parent, parentProps.PlanGram, nth, mem)
 
 	switch parent.Op() {
 	case opt.LimitOp:

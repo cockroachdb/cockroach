@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/plangram",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
     ],
@@ -16,8 +17,11 @@ go_test(
     srcs = ["plangram_test.go"],
     deps = [
         ":plangram",
+        "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",
