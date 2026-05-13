@@ -817,8 +817,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				// window. A follow-up commit converts this assertion into a
 				// skip+log so a benign cache race no longer fatals the node.
 				panic(errors.AssertionFailedf(
-					"internal state inconsistency: replica considered for lease shedding has no pending"+
-						" changes but is not leaseholder: %+v", rstate))
+					"internal state inconsistency: r%d considered for lease shedding "+
+						"on s%d has no pending changes but s%d is not leaseholder: replicas=%v",
+					rangeID, localStoreID, localStoreID, rstate.replicas))
 			}
 			foundLocalReplica = true
 			break
@@ -829,7 +830,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// store is no longer in rs.replicas because the removal pending
 			// change has enacted. Converted to a skip+log in a follow-up commit.
 			panic(errors.AssertionFailedf(
-				"internal state inconsistency: local store is not a replica: %+v", rstate))
+				"internal state inconsistency: r%d considered for lease shedding "+
+					"on s%d but s%d is not in replicas=%v",
+				rangeID, localStoreID, localStoreID, rstate.replicas))
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
