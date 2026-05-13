@@ -81,14 +81,15 @@ dump-store [stores=(1,2,3)]
   Prints content of the replica states in the store. If no stores are provided,
   uses all populated stores.
 
-apply-plan [stores=(1,2,3)] [restart=<bool>] [fail_commit=(s1,..)]
+apply-plan [stores=(1,2,3)] [restart=<bool>]
+          [fail_commit_state=(s1,..)] [fail_commit_raft=(s1,..)]
 
   Applies recovery plan on specified stores. If no stores are provided, uses all
   populated stores. If restart = false, simulates cli version of command where
   application could fail and roll back with an error. If restart = true,
   simulates half online approach where unattended operation succeeds but writes
   potential error into store.
-  fail_commit injects a Commit failure on the listed stores.
+  fail_commit_state / fail_commit_raft inject a Commit failure on are the same.
 
 dump-events [remove=<bool>] [status=<bool>]
 
@@ -96,6 +97,11 @@ dump-events [remove=<bool>] [status=<bool>]
   If remove=true then corresponding method is told to remove events after
   dumping in a way range log population does when consuming those events.
   If status=true, half-online approach recovery report is dumped for each store.
+
+require-separated
+
+  Skips the rest of the testdata file unless the runner is in the sep-eng
+  pass. Used by tests that assert behavior unique to separated engines.
 */
 
 // Range info used for test data to avoid providing unnecessary fields that are
@@ -255,6 +261,9 @@ type quorumRecoveryEnv struct {
 	// Helper resources to make time and identifiers predictable.
 	uuidGen uuid.Generator
 	clock   timeutil.TimeSource
+
+	// separated indicates if engines should be separated or not.
+	separated bool
 }
 
 func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
@@ -280,6 +289,15 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		out, err = e.handleApplyPlan(t, d)
 	case "dump-events":
 		out, err = e.dumpRecoveryEvents(t, d)
+	case "require-separated":
+		// Skip the rest of the testdata file unless the runner is in the
+		// sep-eng pass. Used by tests that assert behavior unique to
+		// separated engines (e.g., asymmetric per-engine commit failures
+		// where the State and Raft batches don't alias).
+		if !e.separated {
+			t.SkipNow()
+		}
+		out = "ok"
 	default:
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
@@ -606,7 +624,12 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 			storage.CacheSize(1<<20 /* 1 MiB */))
 		require.NoError(t, err)
 
-		engines := kvstorage.MakeEngines(eng)
+		var engines kvstorage.Engines
+		if e.separated {
+			engines = kvstorage.MakeSeparatedEnginesForTesting(eng, eng)
+		} else {
+			engines = kvstorage.MakeEngines(eng)
+		}
 		require.NoError(t, storage.MVCCPutProto(
 			context.Background(), engines.LogEngine(), keys.StoreIdentKey(), hlc.Timestamp{},
 			&roachpb.StoreIdent{
@@ -668,16 +691,16 @@ func (e *quorumRecoveryEnv) groupStoresByNode(
 
 func (e *quorumRecoveryEnv) groupStoresByNodeStore(
 	t *testing.T, storeIDs []roachpb.StoreID,
-) map[roachpb.NodeID]map[roachpb.StoreID]storage.Batch {
-	nodes := make(map[roachpb.NodeID]map[roachpb.StoreID]storage.Batch)
+) map[roachpb.NodeID]map[roachpb.StoreID]StoreBatches {
+	nodes := make(map[roachpb.NodeID]map[roachpb.StoreID]StoreBatches)
 	iterateSelectedStores(t, storeIDs, e.stores,
 		func(store kvstorage.Engines, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
 			nodeStores, ok := nodes[nodeID]
 			if !ok {
-				nodeStores = make(map[roachpb.StoreID]storage.Batch)
+				nodeStores = make(map[roachpb.StoreID]StoreBatches)
 				nodes[nodeID] = nodeStores
 			}
-			nodeStores[storeID] = store.TODOBothEngines().NewBatch()
+			nodeStores[storeID] = NewStoreBatches(store)
 		})
 	return nodes
 }
@@ -771,31 +794,79 @@ func (b *failingBatch) Commit(sync bool) error {
 	return b.Batch.Commit(sync)
 }
 
-func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
-	ctx := context.Background()
-	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	restart := dd.ScanArgOr(t, &d, "restart", false)
-	failCommit, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, &d, "fail_commit")
-	failSet := make(map[roachpb.StoreID]struct{}, len(failCommit))
-	for _, id := range failCommit {
-		failSet[id] = struct{}{}
+// commitFailures collects the per-store, per-engine Commit-failure injections
+// configured for an apply-plan command. A store may appear in either or both
+// sets:
+//
+//   - state: fail the State batch's Commit.
+//   - raft: fail the Raft batch's Commit.
+//
+// Under one-eng stores the State and Raft fields alias the same batch, so any
+// non-empty set for a store fails the (only) commit; aliasing is preserved by
+// wrapping both fields with a single shared failingBatch. Under sep-eng the
+// two fields are distinct and the flavors are independent: failing only state
+// leaves the raft engine's writes (audit record, HardState) committed, while
+// failing only raft short-circuits the whole commit because StoreBatches.commit
+// flushes the raft engine first and returns on the first error.
+type commitFailures struct {
+	state, raft map[roachpb.StoreID]struct{}
+}
+
+func (cf commitFailures) wrap(storeID roachpb.StoreID, sb StoreBatches) StoreBatches {
+	_, failState := cf.state[storeID]
+	_, failRaft := cf.raft[storeID]
+	if !failState && !failRaft {
+		return sb
 	}
-	wrapBatch := func(storeID roachpb.StoreID, b storage.Batch) storage.Batch {
-		if _, fail := failSet[storeID]; !fail {
-			return b
-		}
+	wrap := func(b storage.Batch) *failingBatch {
 		return &failingBatch{
 			Batch:     b,
 			commitErr: errors.Newf("injected commit failure on s%d", storeID),
 		}
 	}
+	// One-eng stores alias the State and Raft batches; preserve the aliasing
+	// so the (only) Commit fails cleanly without partially writing through
+	// the unwrapped half of the pair.
+	if sb.State == sb.Raft {
+		w := wrap(sb.State)
+		return StoreBatches{State: w, Raft: w}
+	}
+	if failState {
+		sb.State = wrap(sb.State)
+	}
+	if failRaft {
+		sb.Raft = wrap(sb.Raft)
+	}
+	return sb
+}
+
+func parseCommitFailures(t *testing.T, d *datadriven.TestData) commitFailures {
+	asSet := func(name string) map[roachpb.StoreID]struct{} {
+		ids, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, d, name)
+		set := make(map[roachpb.StoreID]struct{}, len(ids))
+		for _, id := range ids {
+			set[id] = struct{}{}
+		}
+		return set
+	}
+	return commitFailures{
+		state: asSet("fail_commit_state"),
+		raft:  asSet("fail_commit_raft"),
+	}
+}
+
+func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
+	ctx := context.Background()
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	restart := dd.ScanArgOr(t, &d, "restart", false)
+	failures := parseCommitFailures(t, &d)
 
 	var updated, skipped, missing int
 	if !restart {
 		nodes := e.groupStoresByNodeStore(t, stores)
 		for _, perNode := range nodes {
-			for storeID, b := range perNode {
-				perNode[storeID] = wrapBatch(storeID, b)
+			for storeID, sb := range perNode {
+				perNode[storeID] = failures.wrap(storeID, sb)
 			}
 		}
 		defer func() {
@@ -833,8 +904,8 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 		}
 
 		rep, err := maybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock,
-			func(storeID roachpb.StoreID, eng kvstorage.Engines) storage.Batch {
-				return wrapBatch(storeID, eng.TODOBothEngines().NewBatch())
+			func(storeID roachpb.StoreID, eng kvstorage.Engines) StoreBatches {
+				return failures.wrap(storeID, NewStoreBatches(eng))
 			})
 		if err != nil {
 			return "", err

@@ -203,10 +203,6 @@ func visitStoreReplicas(
 		// at potentially uncommitted entries as we have no way to determine their
 		// outcome, and they will become committed as soon as the replica is
 		// designated as a survivor.
-		// TODO(sep-raft-log): decide which LogID to read from. If the raft and
-		// state machine readers are slightly out of sync, the LogIDs may mismatch.
-		// For the heuristics here, it would probably make sense to read from all
-		// LogIDs with unapplied entries.
 		rangeUpdates, err := GetDescriptorChangesFromRaftLog(
 			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raftRO)
 		if err != nil {

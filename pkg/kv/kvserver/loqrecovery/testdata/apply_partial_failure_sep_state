@@ -1,4 +1,10 @@
-# End-to-end test for the partial-commit failure path of CommitReplicaChanges.
+# End-to-end test for the asymmetric partial-commit failure that exists only
+# under separated engines: the log engine commit succeeds but the state engine
+# commit fails.
+
+require-separated
+----
+ok
 
 replication-data
 - NodeID: 1
@@ -52,14 +58,13 @@ Replica updates:
 Decommissioned nodes:
 [n4, n5]
 
-# First apply: inject a Commit failure on store 2.
-apply-plan stores=(1,2) fail_commit_raft=(2)
+# Inject a State-engine commit failure on s2.
+apply-plan stores=(1,2) fail_commit_state=(2)
 ----
 ERROR: failed to commit update to one or more stores: failed to update store s2: injected commit failure on s2
 
-# Since there was no error for s1 commit, it has the rewritten descriptor
-# (replica 16, single voter) while s2 still has the original three-replica
-# descriptor.
+# On-disk state: s1 has the rewritten descriptor; s2 still has the original
+# three-replica descriptor because its State-engine batch was discarded.
 dump-store stores=(1,2)
 ----
 - NodeID: 1
@@ -85,14 +90,18 @@ dump-store stores=(1,2)
   - RangeID: 2
     RaftReplicaID: 2
 
-# Audit records: only s1's write was committed.
+# Audit records: s1's record from its successful commit, AND s2's record
+# because s2's log-engine batch (which holds the audit-record write) was
+# committed even though the state-engine batch failed.
 dump-events stores=(1,2)
 ----
 Events:
 updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
 
-# Rerunning apply-plan should skip s1, and commit s2.
-apply-plan stores=(1,2)
+# Operator re-runs apply-plan. For s2, the state-engine descriptor is
+# still old, so the full sequence runs again.
+apply-plan stores=(1,2) counts=true
 ----
 updated=1 skipped=1 missing=0
 
@@ -120,14 +129,11 @@ dump-store stores=(1,2)
   - RangeID: 2
     RaftReplicaID: 16
 
+# s2 now has TWO audit records for r2: the witness from the failed first
+# attempt and the fresh one from the successful retry.
 dump-events stores=(1,2)
 ----
 Events:
 updated range r1, Key:/Min, Store:s1 ReplicaID:16
 updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
-
-dump-events stores=(1,2)
-----
-Events:
-updated range r1, Key:/Min, Store:s1 ReplicaID:16
 updated range r2, Key:/Table/1, Store:s2 ReplicaID:16

@@ -53,7 +53,7 @@ Decommissioned nodes:
 [n4, n5]
 
 # First apply: inject a Commit failure on store 2.
-apply-plan stores=(1,2) restart=true fail_commit=(2)
+apply-plan stores=(1,2) restart=true fail_commit_raft=(2)
 ----
 updated=2 skipped=0 missing=0
 
