@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -201,6 +203,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 	}
 	if sendErr != nil {
 		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
+		sendErr = pgerror.Wrap(sendErr, pgcode.InternalConnectionFailure, "outbox communication error")
 		// Make sure the stream is not used any more.
 		m.stream = nil
 		log.Dev.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
@@ -402,6 +405,7 @@ func (m *Outbox) startWatchdogGoroutine(
 				if err != io.EOF {
 					// io.EOF is considered a graceful termination of the gRPC
 					// stream, so it is ignored.
+					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "outbox communication error")
 					m.setErr(err)
 				}
 				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)

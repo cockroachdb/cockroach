@@ -129,6 +129,7 @@ func (req runnerRequest) run() error {
 	if err != nil {
 		// Mark this error as special runnerDialErr so that we could retry this
 		// distributed query as local.
+		err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "dial error")
 		err = &runnerDialErr{err: err}
 		res.err = err
 		return err
@@ -136,7 +137,7 @@ func (req runnerRequest) run() error {
 	// TODO(radu): do we want a timeout here?
 	resp, err := client.SetupFlow(req.ctx, req.flowReq)
 	if err != nil {
-		res.err = err
+		res.err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "SetupFlow RPC error")
 	} else {
 		res.err = resp.Error.ErrorDetail(req.ctx)
 	}
