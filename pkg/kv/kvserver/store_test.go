@@ -267,7 +267,7 @@ func createTestStoreWithoutStart(
 
 	rangeProv := &dummyFirstRangeProvider{}
 	var storeSender struct{ kv.Sender }
-	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+	ds := kvcoord.NewDistSender(ctx, kvcoord.DistSenderConfig{
 		AmbientCtx:         cfg.AmbientCtx,
 		Settings:           cfg.Settings,
 		Clock:              cfg.Clock,
