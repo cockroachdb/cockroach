@@ -291,6 +291,7 @@ func RunDistSQLFlow(
 
 	ch := newCheckpointHandler(
 		job,
+		execCtx.ExecCfg().InternalDB,
 		&execCtx.ExecCfg().Settings.SV,
 		frontierUpdates,
 		applierInstanceIDs,
@@ -338,6 +339,7 @@ func RunDistSQLFlow(
 // the flow down.
 type checkpointHandler struct {
 	job             *jobs.Job
+	db              isql.DB
 	sv              *settings.Values
 	frontierUpdates chan<- hlc.Timestamp
 	endTime         hlc.Timestamp
@@ -354,6 +356,7 @@ type checkpointHandler struct {
 // immediately return the checkpoint while waiting for fresher updates.
 func newCheckpointHandler(
 	job *jobs.Job,
+	db isql.DB,
 	sv *settings.Values,
 	frontierUpdates chan<- hlc.Timestamp,
 	applierInstanceIDs []base.SQLInstanceID,
@@ -369,6 +372,7 @@ func newCheckpointHandler(
 	}
 	return &checkpointHandler{
 		job:              job,
+		db:               db,
 		sv:               sv,
 		frontierUpdates:  frontierUpdates,
 		endTime:          endTime,
@@ -404,21 +408,9 @@ func (ch *checkpointHandler) handleMeta(
 		return nil
 	}
 
-	//lint:ignore SA1019 deprecated updater sets HighWater and ReplicatedTime on progress proto
-	if err := ch.job.DeprecatedNoTxn().Update(ctx,
-		func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
-			if err := md.CheckRunningOrReverting(); err != nil {
-				return err
-			}
-			progress := md.Progress
-			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-			prog.ReplicatedTime = replicatedTime
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &replicatedTime,
-			}
-			ju.UpdateProgress(progress)
-			return nil
-		}); err != nil {
+	if err := ch.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return ch.job.ProgressStorage().SetResolved(ctx, txn, replicatedTime)
+	}); err != nil {
 		return err
 	}
 	ch.replicatedTime = replicatedTime

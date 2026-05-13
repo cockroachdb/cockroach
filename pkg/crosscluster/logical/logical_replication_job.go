@@ -96,7 +96,7 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 	jobExecCtx := execCtx.(sql.JobExecContext)
 
 	if r.jobUsesUDF() && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&jobExecCtx.ExecCfg().Settings.SV) {
-		r.updateStatusMessage(ctx, "job paused because UDF-based logical replication writer is disabled")
+		r.updateStatusMessage(ctx, jobExecCtx.ExecCfg().InternalDB, "job paused because UDF-based logical replication writer is disabled")
 		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
 	}
 
@@ -119,27 +119,29 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 func (r *logicalReplicationResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
+	db := execCtx.ExecCfg().InternalDB
 	if err == nil {
-		r.updateStatusMessage(ctx, "")
+		r.updateStatusMessage(ctx, db, "")
 		return nil
 	}
 	if jobs.IsPermanentJobError(err) {
-		r.updateStatusMessage(ctx, redact.Sprintf("permanent error: %v", err))
+		r.updateStatusMessage(ctx, db, redact.Sprintf("permanent error: %v", err))
 		return err
 	}
-	r.updateStatusMessage(ctx, redact.Sprintf("pausing after error: %v", err))
+	r.updateStatusMessage(ctx, db, redact.Sprintf("pausing after error: %v", err))
 	return jobs.MarkPauseRequestError(err)
 }
 
 func (r *logicalReplicationResumer) updateStatusMessage(
-	ctx context.Context, status redact.RedactableString,
+	ctx context.Context, db isql.DB, status redact.RedactableString,
 ) {
 	log.Dev.Infof(ctx, "%s", status)
-	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
-	err := r.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
-		md.Progress.StatusMessage = string(status.Redact())
-		ju.UpdateProgress(md.Progress)
-		return nil
+	redactedStatus := string(status.Redact())
+	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if redactedStatus == "" {
+			return r.job.StatusStorage().Clear(ctx, txn)
+		}
+		return r.job.StatusStorage().Set(ctx, txn, redactedStatus)
 	})
 	if err != nil {
 		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
