@@ -643,6 +643,11 @@ func (desc *Mutable) SetSecurity(v catpb.Function_Security) {
 	desc.Security = v
 }
 
+// SetCanMutate sets the CanMutate field on the function descriptor.
+func (desc *Mutable) SetCanMutate(v catpb.Function_CanMutate) {
+	desc.CanMutate = v
+}
+
 // SetName sets the function name.
 func (desc *Mutable) SetName(n string) {
 	desc.Name = n
@@ -1075,8 +1080,30 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		ret.Class = tree.GeneratorClass
 	}
 	ret.SecurityMode = desc.getCreateExprSecurity()
+	ret.CanMutate = canMutateToOverload(desc.FunctionDescriptor.CanMutate)
 
 	return ret, nil
+}
+
+// canMutateToOverload converts the proto CanMutate enum to the tree type.
+func canMutateToOverload(cm catpb.Function_CanMutate) tree.RoutineCanMutate {
+	switch cm {
+	case catpb.Function_CAN_MUTATE:
+		return tree.RoutineMutates
+	case catpb.Function_CANNOT_MUTATE:
+		return tree.RoutineDoesNotMutate
+	default:
+		return tree.RoutineCanMutateUnknown
+	}
+}
+
+// CanMutateBoolToProto converts a definitively-known bool to the proto enum.
+// Used at CREATE FUNCTION time when the body has been fully analyzed.
+func CanMutateBoolToProto(canMutate bool) catpb.Function_CanMutate {
+	if canMutate {
+		return catpb.Function_CAN_MUTATE
+	}
+	return catpb.Function_CANNOT_MUTATE
 }
 
 func (desc *immutable) getOverloadVolatility() (volatility.V, error) {
