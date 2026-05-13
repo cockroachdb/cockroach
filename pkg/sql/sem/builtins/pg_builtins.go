@@ -1746,10 +1746,12 @@ FROM defaults_parsed
 		},
 	),
 
-	// pg_function_is_visible returns true if the input oid corresponds to a
-	// function that is visible in the search path. A function is visible if
-	// its schema appears in the search path and no function with the same name
-	// appears in an earlier search-path schema.
+	// pg_function_is_visible returns true iff the function with the given
+	// OID is the first one in the current search_path with its proname AND
+	// proargtypes — i.e., the bare name+signature resolves back to this
+	// OID. Mirrors Postgres's signature-aware FunctionIsVisible: two
+	// same-named functions in different schemas with disjoint argument
+	// lists do not shadow each other.
 	// https://www.postgresql.org/docs/current/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
@@ -1759,6 +1761,7 @@ FROM defaults_parsed
                        FROM pg_catalog.pg_proc p2
                        JOIN pg_catalog.pg_namespace n2 ON p2.pronamespace = n2.oid
                        WHERE p2.proname = p.proname
+                         AND p2.proargtypes = p.proargtypes
                          AND n2.nspname = ANY current_schemas(true)
                        ORDER BY array_position(current_schemas(true), n2.nspname)
                        LIMIT 1) IS NOT DISTINCT FROM
@@ -1767,7 +1770,7 @@ FROM defaults_parsed
              WHERE p.oid = $1
              LIMIT 1`,
 			CalledOnNullInput: true,
-			Info:              "Returns whether the function with the given OID is visible in the search path (its schema is on the search path and no function with the same name shadows it from an earlier schema).",
+			Info:              "Returns whether the function with the given OID is visible in the search path (its schema is on the search path and no function with the same name and signature shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
 			Language:          tree.RoutineLangSQL,
 		},
