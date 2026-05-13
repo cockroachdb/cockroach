@@ -290,6 +290,11 @@ const (
 	// to persist per-tenant resource group configurations.
 	V26_3_AddResourceGroupsTable
 
+	// V26_3_FunctionDescCanMutate adds the can_mutate field to function
+	// descriptors, computed at CREATE FUNCTION time to indicate whether the
+	// routine body contains mutation statements.
+	V26_3_FunctionDescCanMutate
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -380,6 +385,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
 
 	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_FunctionDescCanMutate: {Major: 26, Minor: 2, Internal: 12},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

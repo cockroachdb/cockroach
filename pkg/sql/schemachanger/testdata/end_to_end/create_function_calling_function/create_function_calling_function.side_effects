@@ -49,6 +49,7 @@ write *eventpb.CreateFunction to event log:
 upsert descriptor #112
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  dependsOnFunctions:
   +  - 110
   +  - 111
@@ -141,6 +142,7 @@ upsert descriptor #110
      volatility: VOLATILE
 upsert descriptor #111
    function:
+     canMutate: CANNOT_MUTATE
   +  dependedOnBy:
   +  - id: 112
      dependsOnFunctions:
@@ -160,6 +162,7 @@ persist all catalog changes to storage
 upsert descriptor #112
   -
   +function:
+  +  canMutate: CANNOT_MUTATE
   +  dependsOnFunctions:
   +  - 110
   +  - 111
@@ -252,6 +255,7 @@ upsert descriptor #110
      volatility: VOLATILE
 upsert descriptor #111
    function:
+     canMutate: CANNOT_MUTATE
   +  dependedOnBy:
   +  - id: 112
      dependsOnFunctions:
