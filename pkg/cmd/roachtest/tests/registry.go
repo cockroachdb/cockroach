@@ -144,6 +144,7 @@ func RegisterTests(r registry.Registry) {
 	registerOnlineRestorePerfBreakdown(r)
 	registerFastRestorePerf(r)
 	registerOnlineRestoreCorrectness(r)
+	registerOnlineRestoreChaos(r)
 	registerRoachmart(r)
 	registerRoachtest(r)
 	registerRubyPG(r)
