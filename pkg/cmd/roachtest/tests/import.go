@@ -827,7 +827,8 @@ func importCancellationRunner(
 
 	numAttempts := randutil.RandIntInRange(rng, 2, 5)
 	finalAttempt := numAttempts - 1
-	urlsToImport := ds.getDataURLs()
+	allURLs := ds.getDataURLs()
+	urlsToImport := slices.Clone(allURLs)
 	for attempt := range numAttempts {
 		if len(urlsToImport) == 0 {
 			break
@@ -846,6 +847,14 @@ func importCancellationRunner(
 
 		t.WorkerStatus(fmt.Sprintf("beginning attempt %d for %s using files: %s", attempt+1, ds.getTableName(),
 			strings.Join(urls, ", ")))
+
+		var rowCountBefore int64
+		err = conn.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT count(*) FROM import_test.%s`, ds.getTableName()),
+		).Scan(&rowCountBefore)
+		if err != nil {
+			return err
+		}
 
 		var jobID jobspb.JobID
 		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls, ds.getDataFormat())
@@ -894,10 +903,8 @@ func importCancellationRunner(
 		t.WorkerStatus(fmt.Sprintf("Import job for attempt %d/%d for table %s (%d files) completed with status %s.",
 			attempt+1, numAttempts, ds.getTableName(), len(urls), status))
 
-		// If the IMPORT was successful (eg, our cancellation came in too late),
-		// remove the files that succeeded so we don't try to import them again.
-		// If this was the last attempt, this should remove all the remaining
-		// files and `filesToImport` should be empty.
+		// Remove files whose data is now in the table so we don't re-import
+		// them. On the final attempt all remaining files should be removed.
 		switch status {
 		case "succeeded":
 			t.L().PrintfCtx(ctx, "Removing files [%s] from consideration; completed", strings.Join(urls, ", "))
@@ -905,7 +912,24 @@ func importCancellationRunner(
 				return slices.Contains(urls, url)
 			})
 		case "canceled":
-			// Expected outcome of cancellation.
+			// A canceled import may have published data before the
+			// cancellation completed. Compare row counts to detect this;
+			// a table-wide exists check would be confused by rows from
+			// earlier succeeded attempts.
+			var rowCountAfter int64
+			err = conn.QueryRowContext(ctx,
+				fmt.Sprintf(`SELECT count(*) FROM import_test.%s`, ds.getTableName()),
+			).Scan(&rowCountAfter)
+			if err != nil {
+				return err
+			}
+			if rowCountAfter > rowCountBefore {
+				t.L().PrintfCtx(ctx, "Canceled import job %s published data before cancellation; removing files [%s] from consideration",
+					jobID, strings.Join(urls, ", "))
+				urlsToImport = slices.DeleteFunc(urlsToImport, func(url string) bool {
+					return slices.Contains(urls, url)
+				})
+			}
 		case "failed":
 			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
 		default:
