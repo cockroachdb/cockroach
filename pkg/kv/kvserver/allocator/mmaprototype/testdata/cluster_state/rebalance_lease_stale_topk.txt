@@ -6,17 +6,16 @@
 # consecutive leaseholder msgs from store L, topKRanges[L] entries can list
 # ranges where the local store is no longer leaseholder or replica.
 # Skip-on-pending in the rebalance loops only masks the in-progress window;
-# post-enact, readers fire assertions in rebalanceLeasesFromLocalStoreID
-# (the !IsLeaseholder and missing-replica checks) and in
-# rebalanceReplicasFromShedingStore (the replicaRole check). Those Fatalf /
-# panic sites were converted to panic(AssertionFailedf) in an earlier commit
-# so the datadriven harness can capture them; a follow-up commit converts
-# them to skip+log.
+# post-enact, the lease-shed loop's !IsLeaseholder / missing-replica checks
+# and the replica-shed loop's replicaRole check used to fire as Fatalf /
+# panic. They are now skip+log at V(3) — see the comments at the
+# corresponding sites in cluster_state_rebalance_stores.go.
 #
 # This test walks an enacted lease transfer s8->s1 with no follow-up msg
-# from s8, then runs s8's rebalance pass. Expected: panic at the
-# !IsLeaseholder check since topK[s8] still lists r44 but rs.replicas now
-# marks s1 as leaseholder.
+# from s8, then runs s8's rebalance pass. topK[s8] still lists r44 but
+# rs.replicas now marks s1 as leaseholder; the lease-shed loop logs and
+# skips the range. The pass completes without panic; the per-pass summary
+# shows the range as "range-transient" failure.
 
 set-store
   store-id=1 node-id=1
@@ -97,8 +96,25 @@ store-load-msg
 
 # topK[s8] still lists r44 but rs.replicas[s8].IsLeaseholder is now false.
 # The lease-shed loop iterates topK[s8], finds r44, hits s8 in rs.replicas
-# with IsLeaseholder=false, and panics. The datadriven harness recovers and
-# prints the panic.
+# with IsLeaseholder=false, logs at V(3), and continues. Pre-fix this
+# panicked.
 rebalance-stores store-id=8
 ----
-panic: internal state inconsistency: r44 considered for lease shedding on s8 has no pending changes but s8 is not leaseholder: replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok s8:replica-id=2 type=VOTER_FULL lease disposition:ok]
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 0) (nodes-cpu-capacity 1000)
+[mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
+[mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=1000.00,1000.00(false))) - within grace period
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: true, pending decrease 1000.00 vs threshold 0.10, pending increase 1000.00 vs epsilon 0.00); pending: (none)
+[mmaid=1] evaluating s8: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s8 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] adding overloaded store s8 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
+[mmaid=1] sorted shedding stores: (s8: overloadUrgent, cannotShed: false) (s1: overloadSlow, cannotShed: true)
+[mmaid=1] rebalancing pass summary [local=s8]:
+	overloaded:
+		lease-grace: [s1, s8]
+	failure: [{s8, total: 2, no-cand:1, range-transient:1}]
+	skipped: [s1]
+pending(1)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
