@@ -423,3 +423,105 @@ tier1  -2000     -3000
 burstM
 tier0  -249
 tier1  -124
+
+# ----- Dampening tests -----
+#
+# Reset to default cluster settings and bring refill rates back to round
+# numbers. The prior tests left model.rates at 4999/3999/2999/1999
+# (after increase_rates_by=+1 then -2). Adding +1 restores 5000/4000/
+# 3000/2000.
+setClusterSettings app=0.8 system=0.95 burst=0.05
+----
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.8
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = 0.95
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.05
+cpuTTG can_burst no_burst
+tier0  0         -1000
+tier1  -2000     -3000
+burstM
+tier0  -249
+tier1  -124
+
+resetInterval increase_rates_by=1
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  1         -999
+tier1  -1999     -2999
+burstM
+tier0  -249
+tier1  -124
+
+# Set high CPU load: runnable=320, procs=10. Default threshold=32,
+# so 320 >= 32*10 is true -> overloaded. dampening decreases by 0.01
+# per allocate call.
+set-cpu-load runnable=320 procs=10
+----
+cpu-load: runnable=320 procs=10
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+# After one allocate under overload, dampeningFactor = 0.99.
+# Dampened tier0 can_burst = 5000 * 0.99 = 4950.
+# Dampened tier0 no_burst  = 4000 * 0.99 = 3960.
+# Burst buckets are NOT dampened: tier0 noBurst/4 = 4000/4 = 1000.
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  4950      3960
+tier1  2970      1980
+burstM
+tier0  1000
+tier1  500
+
+# Drop load below threshold. dampening recovers by 0.01 per tick.
+set-cpu-load runnable=0 procs=10
+----
+cpu-load: runnable=0 procs=10
+
+# Start a new interval so allocated counters reset.
+resetInterval
+----
+fit(
+	tier1 no_burst -> 80%
+	tier1 can_burst -> 85%
+	tier0 no_burst -> 95%
+	tier0 can_burst -> 100%
+)
+cpuTTG can_burst no_burst
+tier0  4950      3960
+tier1  2970      1980
+burstM
+tier0  1000
+tier1  500
+
+set-tokens v=0
+----
+cpuTTG can_burst no_burst
+tier0  0         0
+tier1  0         0
+burstM
+tier0  0
+tier1  0
+
+# dampeningFactor recovers: 0.99 + 0.01 = 1.00. Full tokens dispensed.
+allocate remaining=1
+----
+cpuTTG can_burst no_burst
+tier0  5000      4000
+tier1  3000      2000
+burstM
+tier0  1000
+tier1  500

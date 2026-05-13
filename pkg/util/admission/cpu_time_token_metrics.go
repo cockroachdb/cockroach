@@ -14,6 +14,16 @@ import (
 )
 
 var (
+	cpuTimeTokenDampeningFactorMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.dampening_factor",
+		Help: crstrings.UnwrapText(`
+			The current dampening factor applied to CPU time token allocations
+			when scheduler overload is detected; 1.0 means no dampening,
+			0.0 means fully dampened`),
+		Measurement: "Factor",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	cpuTimeTokenMultiplierMeta = metric.Metadata{
 		Name: "admission.cpu_time_tokens.multiplier",
 		Help: crstrings.UnwrapText(`
@@ -91,9 +101,10 @@ var (
 // control. Fields are exported because metric.Registry.AddMetricStruct
 // uses reflection to discover metrics.
 type cpuTimeTokenMetrics struct {
-	Multiplier     *metric.GaugeFloat64
-	TokensConsumed *metric.Counter
-	TokensReturned *metric.Counter
+	DampeningFactor *metric.GaugeFloat64
+	Multiplier      *metric.GaugeFloat64
+	TokensConsumed  *metric.Counter
+	TokensReturned  *metric.Counter
 
 	// ExhaustedDurationNanos tracks cumulative nanoseconds each bucket has
 	// spent exhausted. Each (tier, qual) bucket gets its own counter rather
@@ -151,9 +162,10 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	// keep working.
 	b := aggmetric.MakeBuilder("kind", "tenant_id")
 	m := &cpuTimeTokenMetrics{
-		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
-		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
-		TokensReturned: metric.NewCounter(cpuTimeTokensReturnedMeta),
+		DampeningFactor: metric.NewGaugeFloat64(cpuTimeTokenDampeningFactorMeta),
+		Multiplier:      metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
+		TokensConsumed:  metric.NewCounter(cpuTimeTokensConsumedMeta),
+		TokensReturned:  metric.NewCounter(cpuTimeTokensReturnedMeta),
 	}
 	// Create one AggCounter per tier for each per-tenant metric.
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {

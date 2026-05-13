@@ -253,6 +253,17 @@ type cpuTimeTokenAllocatorI interface {
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 
+// dampeningDelta is the per-tick increment/decrement of the dampening
+// factor. At 1ms ticks, reaching the floor from 1.0 takes ~50 ticks
+// = ~50ms, and recovery is symmetric.
+const dampeningDelta = 0.01
+
+// dampeningFloor is the minimum dampening factor. The system always
+// dispenses at least this fraction of computed tokens, even under
+// sustained scheduler overload. This prevents full starvation and
+// keeps the system functioning enough to self-correct.
+const dampeningFloor = 0.50
+
 // cpuTimeTokenAllocator allocates tokens to a cpuTimeTokenGranter. See the
 // comment above cpuTimeTokenFiller for a high level picture. The
 // responsibility of cpuTimeTokenAllocator is to gradually allocate tokens
@@ -283,6 +294,17 @@ type cpuTimeTokenAllocator struct {
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
 	allocated tokenCounts
+
+	// dampeningFactor scales per-tick token allocations to leave CPU
+	// headroom when the goroutine scheduler is overloaded. 1.0 means no
+	// dampening; 0.0 means fully dampened (no tokens dispensed). Written
+	// only by the filler goroutine via allocateTokens.
+	dampeningFactor float64
+
+	// Written by CPULoad callback (arbitrary goroutine), read by
+	// filler goroutine on the next tick.
+	lastRunnable atomic.Int64
+	lastProcs    atomic.Int64
 }
 
 // modeStrategy encapsulates the mode-specific behavior of the
@@ -481,6 +503,14 @@ func computeMinimums(r rates) minimums {
 	return m
 }
 
+// CPULoad stores the latest runnable goroutine count and GOMAXPROCS
+// for use by allocateTokens on the next tick. Called from an arbitrary
+// goroutine by the goschedstats callback.
+func (a *cpuTimeTokenAllocator) CPULoad(runnable, procs int, _ time.Duration) {
+	a.lastRunnable.Store(int64(runnable))
+	a.lastProcs.Store(int64(procs))
+}
+
 // allocateTokensFn distributes refillRates across remaining ticks in
 // the interval, returning the per-tick allocations. Extracted as a
 // standalone function so it can be reused by future strategy
@@ -523,7 +553,37 @@ func allocateTokensFn(refillRates rates, allocated *tokenCounts, remainingTicks 
 // INVARIANT: remainingTicks >= 1.
 // TODO(josh): Expand to cover group-specific token buckets too.
 func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval int64) {
+	// Adjust the dampening factor based on scheduler load. When the
+	// runnable goroutine count exceeds the overload threshold, decrease
+	// the factor to throttle token dispensing. This gives the scheduler
+	// room to drain its backlog. Recovery is symmetric.
+	runnable := int(a.lastRunnable.Load())
+	procs := int(a.lastProcs.Load())
+	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&a.settings.SV))
+	if procs > 0 && runnable >= threshold*procs {
+		a.dampeningFactor = max(dampeningFloor, a.dampeningFactor-dampeningDelta)
+	} else {
+		a.dampeningFactor = min(1.0, a.dampeningFactor+dampeningDelta)
+	}
+	a.metrics.DampeningFactor.Update(a.dampeningFactor)
+
 	allocations := allocateTokensFn(a.refillRates, &a.allocated, expectedRemainingTicksInInterval)
+
+	// Save undampened allocations for per-group burst bucket refill.
+	// Per-group burst buckets control priority ordering (whether a
+	// group qualifies for canBurst), not total throughput, so they
+	// are not dampened.
+	// TODO(ssd): Should we also dampen the per-group burst bucket
+	// refill? Under sustained overload, groups would continue
+	// accumulating burst budget at the full rate, which could cause
+	// a burst of admitted work when dampening lifts.
+	undampenedAllocations := allocations
+	for tier := range allocations {
+		for qual := range allocations[tier] {
+			allocations[tier][qual] = int64(float64(allocations[tier][qual]) * a.dampeningFactor)
+		}
+	}
+
 	// Each bucket has a max capacity. The max capacity for each bucket is
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
@@ -545,7 +605,7 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// default values, this implies that an application tenant can burst,
 	// if they are using roughly less than 20% of the CPU on a CRDB node
 	// (0.8 * 0.25 = 0.2).
-	a.strategy.refillBurst(allocations, a.refillRates)
+	a.strategy.refillBurst(undampenedAllocations, a.refillRates)
 }
 
 // resetInterval recomputes refill rates and applies the delta to the
