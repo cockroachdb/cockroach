@@ -92,27 +92,43 @@ outer:
 	default:
 		scheme = ""
 	}
-	bucket := fmt.Sprintf("%s://%s/operation-backup-restore/%d/?AUTH=implicit", scheme, testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
+	bucket := fmt.Sprintf(
+		"%s://%s/operation-backup-restore/%d/?AUTH=implicit",
+		scheme, testutils.BackupTestingBucket(), timeutil.Now().UnixNano(),
+	)
 
-	backupTS := hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
+	backupTS := hlc.Timestamp{
+		WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano(),
+	}
 
 	if !online {
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
+			"BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history",
+			dbName, bucket, backupTS.AsOfSystemTime(),
+		))
 		if err != nil {
 			o.Fatal(err)
 		}
 		for i := range 24 {
 			o.Status(fmt.Sprintf("backing up db %s (incremental layer %d)", dbName, i))
 			// Update backupTS to match the latest layer.
-			backupTS = hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
-			_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
+			backupTS = hlc.Timestamp{
+				WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano(),
+			}
+			_, err = conn.ExecContext(ctx, fmt.Sprintf(
+				"BACKUP DATABASE %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH revision_history",
+				dbName, bucket, backupTS.AsOfSystemTime(),
+			))
 			if err != nil {
 				o.Fatal(err)
 			}
 		}
 	} else {
 		// Revision history doesn't work with online restore.
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS.AsOfSystemTime()))
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
+			"BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'",
+			dbName, bucket, backupTS.AsOfSystemTime(),
+		))
 		if err != nil {
 			o.Fatal(err)
 		}
@@ -134,7 +150,10 @@ outer:
 	startTime := timeutil.Now()
 	if !online {
 		o.Status("beginning offline restore")
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s')", dbName, bucket, restoreDBName))
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
+			"RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s')",
+			dbName, bucket, restoreDBName,
+		))
 		if err != nil {
 			o.Fatal(err)
 		}
@@ -151,7 +170,10 @@ outer:
 		resCh := make(chan scanResult, 1)
 		go func() {
 			var r scanResult
-			row := conn.QueryRowContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)", dbName, bucket, restoreDBName))
+			row := conn.QueryRowContext(ctx, fmt.Sprintf(
+				"RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)",
+				dbName, bucket, restoreDBName,
+			))
 			r.err = row.Scan(&r.id, &r.tables, &r.approxRows, &r.approxBytes, &r.downloadJobId)
 			resCh <- r
 		}()

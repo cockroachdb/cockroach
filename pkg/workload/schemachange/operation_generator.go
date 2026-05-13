@@ -328,6 +328,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if def.Nullable.Nullability == tree.NotNull {
 		og.potentialCommitErrors.add(pgcode.NotNullViolation)
 	}
+	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 
 	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsString(def))
 	return op, nil
@@ -416,6 +417,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		// above isn't exhaustive enough.
 		og.potentialCommitErrors.add(pgcode.UniqueViolation)
 	}
+	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 
 	stmt.sql = fmt.Sprintf(
 		`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`,
@@ -1198,6 +1200,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		og.potentialCommitErrors.addAll(codesWithConditions{
 			{code: pgcode.UniqueViolation, condition: def.Unique},
 		})
+		og.potentialCommitErrors.add(pgcode.UndefinedTable)
 	}
 
 	stmt.sql = tree.AsString(def)
@@ -1782,6 +1785,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// flakes, so permit it as a valid outcome instead.
 		{code: pgcode.DependentObjectsStillExist, condition: true},
 	})
+	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
 }
@@ -2726,6 +2730,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 	}
 
+	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
