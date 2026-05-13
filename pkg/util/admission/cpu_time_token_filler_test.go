@@ -184,13 +184,14 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	}
 	st := cluster.MakeClusterSettings()
 	allocator := cpuTimeTokenAllocator{
-		granter:      granter,
-		settings:     st,
-		configHolder: newResourceGroupConfigHolder(&st.SV),
-		model:        model,
-		metrics:      metrics,
-		queues:       queues,
-		lastMode:     serverlessMode,
+		granter:         granter,
+		settings:        st,
+		configHolder:    newResourceGroupConfigHolder(&st.SV),
+		model:           model,
+		metrics:         metrics,
+		queues:          queues,
+		lastMode:        serverlessMode,
+		dampeningFactor: 1.0,
 	}
 	printBurstMgrs = func() string {
 		var b strings.Builder
@@ -229,6 +230,13 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 			burstMgrs[testTier0].tokens = v
 			burstMgrs[testTier1].tokens = v
 			return flushAndReset()
+		case "set-cpu-load":
+			var runnable, procs int
+			d.ScanArgs(t, "runnable", &runnable)
+			d.ScanArgs(t, "procs", &procs)
+			allocator.lastRunnable.Store(int64(runnable))
+			allocator.lastProcs.Store(int64(procs))
+			return fmt.Sprintf("cpu-load: runnable=%d procs=%d\n", runnable, procs)
 		case "setClusterSettings":
 			ctx := context.Background()
 			var override float64
@@ -611,4 +619,136 @@ func TestGroupBurstRates(t *testing.T) {
 	out = allocator.groupBurstRates(allocator.configHolder.Snapshot(), tokens, rr)
 	require.Equal(t, [2]float64{-500, 4000}, out[0])
 	require.Equal(t, [2]float64{-500, 4000}, out[1])
+}
+
+// TestDampeningFactor verifies that allocateTokens reduces token
+// dispensing when the scheduler is overloaded (runnable >=
+// threshold*procs) and recovers when load drops. It also verifies
+// that burst refill is NOT dampened.
+func TestDampeningFactor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metrics := makeCPUTimeTokenMetrics()
+	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
+	tier0Granter := &cpuTimeTokenChildGranter{
+		tier:   testTier0,
+		parent: granter,
+	}
+	tier1Granter := &cpuTimeTokenChildGranter{
+		tier:   testTier1,
+		parent: granter,
+	}
+	granter.requester[testTier0] = &testRequester{
+		additionalID: "tier0",
+		granter:      tier0Granter,
+	}
+	granter.requester[testTier1] = &testRequester{
+		additionalID: "tier1",
+		granter:      tier1Granter,
+	}
+	burstMgrs := [numResourceTiers]*testBurstManager{
+		testTier0: {burstFrac: defaultTenantGroupConfig.BurstFrac},
+		testTier1: {burstFrac: defaultTenantGroupConfig.BurstFrac},
+	}
+	queues := [numResourceTiers]workQueueIForAllocator{
+		testTier0: burstMgrs[testTier0],
+		testTier1: burstMgrs[testTier1],
+	}
+
+	st := cluster.MakeClusterSettings()
+	model := &testModel{buf: &strings.Builder{}, rates: rates{}}
+	model.rates[testTier0][canBurst] = 5000
+	model.rates[testTier0][noBurst] = 4000
+	model.rates[testTier1][canBurst] = 3000
+	model.rates[testTier1][noBurst] = 2000
+	allocator := cpuTimeTokenAllocator{
+		granter:         granter,
+		settings:        st,
+		configHolder:    newResourceGroupConfigHolder(&st.SV),
+		model:           model,
+		metrics:         metrics,
+		queues:          queues,
+		lastMode:        serverlessMode,
+		dampeningFactor: 1.0,
+	}
+
+	ctx := context.Background()
+	allocator.resetInterval(ctx)
+
+	// Default threshold is 32. Set overload: runnable=320, procs=10.
+	// 320 >= 32*10 = true -> overloaded.
+	allocator.lastRunnable.Store(320)
+	allocator.lastProcs.Store(10)
+
+	// Zero out buckets so we can measure the effect of dampening.
+	granter.mu.buckets[testTier0][canBurst].tokens = 0
+	granter.mu.buckets[testTier0][noBurst].tokens = 0
+	granter.mu.buckets[testTier1][canBurst].tokens = 0
+	granter.mu.buckets[testTier1][noBurst].tokens = 0
+	burstMgrs[testTier0].tokens = 0
+	burstMgrs[testTier1].tokens = 0
+
+	// Allocate once at remaining=1 so full refill rates are emitted.
+	allocator.allocateTokens(1)
+
+	// After one tick of overload, dampeningFactor should be 0.99.
+	require.InDelta(t, 0.99, allocator.dampeningFactor, 0.001)
+
+	// Dampened tokens should be less than the full refill rates.
+	// Full canBurst tier0 = 5000, dampened at 0.99 = 4950.
+	require.Equal(t, int64(4950), granter.mu.buckets[testTier0][canBurst].tokens)
+	require.Equal(t, int64(3960), granter.mu.buckets[testTier0][noBurst].tokens)
+
+	// Burst refill should NOT be dampened. It uses the undampened
+	// allocations through groupBurstRates, which derives rate100 from
+	// the system tier's canBurst allocation (5000 with default
+	// canBurstTarget=1.0). Scaled by BurstFrac=0.20 per tier => 1000.
+	require.Equal(t, int64(1000), burstMgrs[testTier0].tokens)
+	require.Equal(t, int64(1000), burstMgrs[testTier1].tokens)
+
+	// Call allocateTokens many more times with overload to drive dampening
+	// to the floor.
+	for i := 0; i < 100; i++ {
+		allocator.resetInterval(ctx)
+		granter.mu.buckets[testTier0][canBurst].tokens = 0
+		granter.mu.buckets[testTier0][noBurst].tokens = 0
+		granter.mu.buckets[testTier1][canBurst].tokens = 0
+		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		allocator.allocateTokens(1)
+	}
+	// Clamped at dampeningFloor (0.50).
+	require.Equal(t, dampeningFloor, allocator.dampeningFactor)
+	// Tokens at 50% of full rate: 5000 * 0.5 = 2500.
+	require.Equal(t, int64(2500), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Now drop load below threshold: recovery.
+	allocator.lastRunnable.Store(0)
+	allocator.lastProcs.Store(10)
+	allocator.resetInterval(ctx)
+	granter.mu.buckets[testTier0][canBurst].tokens = 0
+	granter.mu.buckets[testTier0][noBurst].tokens = 0
+	granter.mu.buckets[testTier1][canBurst].tokens = 0
+	granter.mu.buckets[testTier1][noBurst].tokens = 0
+	allocator.allocateTokens(1)
+
+	require.InDelta(t, 0.51, allocator.dampeningFactor, 0.001)
+	// Tokens at 51% of full rate: 5000 * 0.51 = 2550.
+	require.Equal(t, int64(2550), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Recovery: many ticks at low load -> factor returns to 1.0.
+	for i := 0; i < 100; i++ {
+		allocator.resetInterval(ctx)
+		granter.mu.buckets[testTier0][canBurst].tokens = 0
+		granter.mu.buckets[testTier0][noBurst].tokens = 0
+		granter.mu.buckets[testTier1][canBurst].tokens = 0
+		granter.mu.buckets[testTier1][noBurst].tokens = 0
+		allocator.allocateTokens(1)
+	}
+	// Clamped at 1.0.
+	require.Equal(t, 1.0, allocator.dampeningFactor)
+	require.Equal(t, int64(5000), granter.mu.buckets[testTier0][canBurst].tokens)
+
+	// Verify metric is updated.
+	require.Equal(t, 1.0, metrics.DampeningFactor.Value())
 }
