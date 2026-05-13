@@ -66,6 +66,12 @@ func ClipByRect(g geo.Geometry, b geo.CartesianBoundingBox) (geo.Geometry, error
 	if g.Empty() {
 		return g, nil
 	}
+	if math.IsNaN(b.LoX) || math.IsNaN(b.LoY) || math.IsNaN(b.HiX) || math.IsNaN(b.HiY) ||
+		math.IsInf(b.LoX, 0) || math.IsInf(b.LoY, 0) || math.IsInf(b.HiX, 0) || math.IsInf(b.HiY, 0) {
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue, "value out of range: overflow",
+		)
+	}
 	clipByRectEWKB, err := geos.ClipByRect(g.EWKB(), b.LoX, b.LoY, b.HiX, b.HiY)
 	if err != nil {
 		return geo.Geometry{}, err

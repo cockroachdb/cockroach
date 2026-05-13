@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -127,6 +128,73 @@ func TestMinimumBoundingCircle(t *testing.T) {
 			require.Equal(t, tt.expectedCoords, centerCoords)
 		})
 	}
+}
+
+func TestClipByRect(t *testing.T) {
+	testCases := []struct {
+		name    string
+		bbox    geo.CartesianBoundingBox
+		wantErr bool
+	}{
+		{
+			name: "NaN LoY",
+			bbox: geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{LoX: -10, LoY: math.NaN(), HiX: 10, HiY: 10},
+			},
+			wantErr: true,
+		},
+		{
+			name: "NaN HiX",
+			bbox: geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{LoX: -10, LoY: -10, HiX: math.NaN(), HiY: 10},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Inf LoX",
+			bbox: geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{LoX: math.Inf(1), LoY: -10, HiX: 10, HiY: 10},
+			},
+			wantErr: true,
+		},
+		{
+			name: "NegInf HiY",
+			bbox: geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{LoX: -10, LoY: -10, HiX: 10, HiY: math.Inf(-1)},
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid bbox",
+			bbox: geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{LoX: -10, LoY: -10, HiX: 10, HiY: 10},
+			},
+			wantErr: false,
+		},
+	}
+
+	g := geo.MustParseGeometry("POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ClipByRect(g, tc.bbox)
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "value out of range: overflow")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+
+	t.Run("empty geometry", func(t *testing.T) {
+		g, err := geo.ParseGeometry("POINT EMPTY")
+		require.NoError(t, err)
+		ret, err := ClipByRect(g, geo.CartesianBoundingBox{
+			BoundingBox: geopb.BoundingBox{LoX: math.NaN(), LoY: math.NaN(), HiX: math.NaN(), HiY: math.NaN()},
+		})
+		require.NoError(t, err)
+		require.Equal(t, g, ret)
+	})
 }
 
 func TestConvexHull(t *testing.T) {
