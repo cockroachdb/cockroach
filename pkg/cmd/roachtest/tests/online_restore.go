@@ -582,6 +582,119 @@ func registerOnlineRestoreRecovery(r registry.Registry) {
 	})
 }
 
+// registerOnlineRestoreChaos registers a roachtest that restores SmallFixture
+// (350 GiB TPCC) via online restore and injects a process-kill failure during
+// the download phase, then verifies the restored data against the fixture's
+// stored fingerprint. The link phase is fast (~20s) and the download is
+// ~10min, so most of the 4h timeout is reserved for the fingerprint check.
+func registerOnlineRestoreChaos(r registry.Registry) {
+	sp := onlineRestoreSpecs{
+		restoreSpecs: restoreSpecs{
+			hardware:   makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			backup:     backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
+			timeout:    4 * time.Hour,
+			suites:     registry.Suites(registry.Nightly),
+			namePrefix: "online-restore-chaos",
+		},
+	}
+	if !backuptestutils.IsOnlineRestoreSupported() {
+		sp.skip = "online restore is only tested on development branch"
+	}
+	sp.initTestName()
+	r.Add(registry.TestSpec{
+		Name:                      sp.testName,
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   sp.hardware.makeClusterSpecs(r),
+		Timeout:                   sp.timeout,
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		CompatibleClouds:          sp.backup.CompatibleClouds(),
+		Suites:                    sp.suites,
+		TestSelectionOptOutSuites: sp.suites,
+		SkipPostValidations:       registry.PostValidationReplicaDivergence,
+		Randomized:                true,
+		Monitor:                   true,
+		Skip:                      sp.skip,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runOnlineRestoreChaos(ctx, t, c, sp)
+		},
+	})
+}
+
+func runOnlineRestoreChaos(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp onlineRestoreSpecs,
+) {
+	testRNG, seed := randutil.NewLockedPseudoRand()
+	t.L().Printf("random seed: %d", seed)
+
+	rd := makeRestoreDriver(ctx, t, c, sp.restoreSpecs)
+	rd.prepareCluster(ctx)
+
+	testUtils, err := setupBackupRestoreTestUtils(
+		ctx, t, c, testRNG, withOnlineRestore(true), withCompaction(false),
+	)
+	require.NoError(t, err)
+	defer testUtils.CloseConnections()
+	defer testUtils.takeDebugZip(ctx, t.L())
+
+	// Cap the download retry duration so a stalled job pauses in minutes
+	// rather than after the 72h default.
+	require.NoError(t, testUtils.Exec(ctx, testRNG,
+		"SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '30m'",
+	))
+
+	const numToKill = 1
+	failureNodes := c.CRDBNodes()[:numToKill]
+	liveNodes := c.CRDBNodes()[numToKill:]
+	isGraceful := testRNG.Intn(2) == 0
+	t.L().Printf("process kill failure isGraceful: %t", isGraceful)
+	t.Monitor().ExpectProcessDead(failureNodes)
+	failer, args, err := roachtestutil.MakeProcessKillFailer(
+		t.L(), c, failureNodes, isGraceful, 5*time.Minute, /* gracePeriod */
+	)
+	require.NoError(t, err)
+	require.NoError(t, failer.Setup(ctx, t.L(), args))
+	defer func() {
+		if err := failer.Cleanup(ctx, t.L()); err != nil {
+			t.L().Printf("failed to clean up failure: %v", err)
+		}
+	}()
+
+	// Link phase. The non-detached restore blocks until the link completes,
+	// after which the download job is queryable from the jobs table.
+	if _, _, err := executeTestRestorePhase(
+		ctx, t, c, sp, rd, true, /* runOnline */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	queryNode := testUtils.RandomNode(testRNG, liveNodes)
+	var downloadJobID int
+	require.NoError(t, testUtils.QueryRow(ctx, testRNG,
+		`SELECT job_id FROM [SHOW JOBS]
+		 WHERE description LIKE '%Background Data Download%' AND job_type = 'RESTORE'
+		 ORDER BY created DESC LIMIT 1`,
+	).Scan(&downloadJobID))
+	t.L().Printf("OR download job id: %d", downloadJobID)
+
+	injectAndRecoverFailure(
+		ctx, t, t.L(), testUtils, queryNode, downloadJobID, failer, args,
+		randFloatBetween(testRNG, 0.15, 0.65),
+		// recoverFractionCompleted is allowed to exceed 1.0 so there is a chance
+		// of a node remaining down through the end of the download.
+		min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+	)
+
+	// injectAndRecoverFailure returns once the job has succeeded, but it does
+	// not assert the cluster has actually drained external bytes. Do that
+	// explicitly before the (expensive) fingerprint.
+	conn, err := c.ConnE(ctx, t.L(), queryNode)
+	require.NoError(t, err)
+	defer conn.Close()
+	require.NoError(t, checkNoExternalBytesRemaining(ctx, conn))
+
+	rd.maybeValidateFingerprint(ctx)
+}
+
 func postRestoreValidation(
 	ctx context.Context,
 	c cluster.Cluster,

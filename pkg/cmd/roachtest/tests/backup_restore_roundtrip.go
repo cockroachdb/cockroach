@@ -262,6 +262,10 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 	workloadSeed := testRNG.Int63()
 	t.L().Printf("workload seed: %d", workloadSeed)
 
+	onlineRestore := testRNG.Intn(2) == 0
+	t.L().Printf("online restore: %t", onlineRestore)
+	t.AddParam("onlineRestore", fmt.Sprintf("%t", onlineRestore))
+
 	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
 	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3,cloud_logging_transport=1"}
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
@@ -291,10 +295,8 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// quite a while to backup. Considering the goal of this test, it'd be good
 	// to add some options to provide the caller with more flexibility over the
 	// workload.
-	// TODO (kev-cao): Once OR download phase is resilient to node failures, we
-	// can metamorphically add online restore to this test as well.
 	testUtils, err := setupBackupRestoreTestUtils(
-		ctx, t, c, testRNG, withCompaction(true),
+		ctx, t, c, testRNG, withCompaction(true), withOnlineRestore(onlineRestore),
 	)
 	require.NoError(t, err)
 	defer testUtils.CloseConnections()
@@ -376,6 +378,19 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 		min(randFloatBetween(testRNG, 0.65, 1.1), 1),
 	)
 	require.NoError(t, restoreJob.WaitForJobSuccess(ctx))
+	// If running online restore, inject an additional failure during the download phase.
+	if onlineRestore {
+		downloadJobID, err := d.getORDownloadJobID(ctx, t.L(), testRNG)
+		require.NoError(t, err)
+		injectAndRecoverFailure(
+			ctx, t, t.L(), testUtils, testUtils.RandomNode(testRNG, liveNodes), downloadJobID, failer, args,
+			randFloatBetween(testRNG, 0.15, 0.65),
+			min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+		)
+		require.NoError(t, testUtils.waitForJobSuccess(
+			ctx, t.L(), testRNG, downloadJobID, true, /* internalSystemJobs */
+		))
+	}
 	require.NoError(t, restoreJob.ValidateRestore(ctx))
 }
 
