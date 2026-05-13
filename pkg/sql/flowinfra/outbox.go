@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -200,7 +202,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 		}
 	}
 	if sendErr != nil {
-		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
+		sendErr = HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
 		// Make sure the stream is not used any more.
 		m.stream = nil
 		log.Dev.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
@@ -399,12 +401,10 @@ func (m *Outbox) startWatchdogGoroutine(
 		for {
 			signal, err := stream.Recv()
 			if err != nil {
+				err = HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)
 				if err != io.EOF {
-					// io.EOF is considered a graceful termination of the gRPC
-					// stream, so it is ignored.
 					m.setErr(err)
 				}
-				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)
 				break
 			}
 			switch {
@@ -457,21 +457,23 @@ func (m *Outbox) Err() error {
 	return m.mu.err
 }
 
-// HandleStreamErr is a utility method used to handle an error when calling
-// a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other errors flowCtxCancel is. The given error is logged with
-// the associated opName.
+// HandleStreamErr is a utility method used to handle an error when calling a
+// method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is called
+// and io.EOF is returned as-is. For all other errors, flowCtxCancel is called
+// and the error is wrapped with pgcode.InternalConnectionFailure before being
+// returned. The given error is logged with the associated opName.
 func HandleStreamErr(
 	ctx context.Context,
 	opName redact.SafeString,
 	err error,
 	flowCtxCancel, outboxCtxCancel context.CancelFunc,
-) {
+) error {
 	if err == io.EOF {
 		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
-	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
-		flowCtxCancel()
+		return err
 	}
+	log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+	flowCtxCancel()
+	return pgerror.Wrap(err, pgcode.InternalConnectionFailure, "outbox communication error")
 }
