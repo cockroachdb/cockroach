@@ -21,17 +21,27 @@ import (
 func TestQuorumRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		testTime, _ := time.Parse(time.RFC3339, "2022-02-24T01:40:00Z")
-		env := quorumRecoveryEnv{
-			uuidGen: NewSeqGen(1),
-			clock:   timeutil.NewManualTime(testTime),
+	// Run every testdata file under both engine layouts.
+	for _, separated := range []bool{false, true} {
+		name := "one-eng"
+		if separated {
+			name = "sep-eng"
 		}
-		defer env.cleanupStores()
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return env.Handle(t, *d)
+		t.Run(name, func(t *testing.T) {
+			datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+				testTime, _ := time.Parse(time.RFC3339, "2022-02-24T01:40:00Z")
+				env := quorumRecoveryEnv{
+					uuidGen:   NewSeqGen(1),
+					clock:     timeutil.NewManualTime(testTime),
+					separated: separated,
+				}
+				defer env.cleanupStores()
+				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+					return env.Handle(t, *d)
+				})
+			})
 		})
-	})
+	}
 }
 
 func TestValidatePlanReplicaSet(t *testing.T) {

@@ -33,7 +33,7 @@ func writeReplicaRecoveryStoreRecord(
 	timestamp int64,
 	update loqrecoverypb.ReplicaUpdate,
 	report PrepareReplicaReport,
-	readWriter storage.ReadWriter,
+	raftRW kvstorage.RaftRW,
 ) error {
 	record := loqrecoverypb.ReplicaRecoveryRecord{
 		Timestamp:       timestamp,
@@ -49,7 +49,7 @@ func writeReplicaRecoveryStoreRecord(
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal update record entry")
 	}
-	if err := readWriter.PutUnversioned(
+	if err := raftRW.PutUnversioned(
 		keys.StoreUnsafeReplicaRecoveryKey(uuid), data); err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func UpdateRangeLogWithRecovery(
 
 func writeNodeRecoveryResults(
 	ctx context.Context,
-	writer storage.ReadWriter,
+	writer kvstorage.RaftRW,
 	result loqrecoverypb.PlanApplicationResult,
 	actions loqrecoverypb.DeferredRecoveryActions,
 ) error {
@@ -190,7 +190,7 @@ func writeNodeRecoveryResults(
 }
 
 func readNodeRecoveryStatusInfo(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, reader kvstorage.RaftRO,
 ) (loqrecoverypb.PlanApplicationResult, bool, error) {
 	var result loqrecoverypb.PlanApplicationResult
 	ok, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryStatusKey(),
@@ -205,7 +205,7 @@ func readNodeRecoveryStatusInfo(
 // ReadCleanupActionsInfo reads cleanup actions info if it is present in the
 // reader.
 func ReadCleanupActionsInfo(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, reader kvstorage.RaftRO,
 ) (loqrecoverypb.DeferredRecoveryActions, bool, error) {
 	var result loqrecoverypb.DeferredRecoveryActions
 	exists, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
@@ -219,7 +219,7 @@ func ReadCleanupActionsInfo(
 
 // RemoveCleanupActionsInfo removes cleanup actions info if it is present in the
 // reader.
-func RemoveCleanupActionsInfo(ctx context.Context, writer storage.ReadWriter) error {
+func RemoveCleanupActionsInfo(ctx context.Context, writer kvstorage.RaftRW) error {
 	_, _, err := storage.MVCCDelete(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
 		hlc.Timestamp{}, storage.MVCCWriteOptions{})
 	return err

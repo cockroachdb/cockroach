@@ -812,7 +812,7 @@ func applyRecoveryToLocalStore(
 	defer stopper.Stop(ctx)
 
 	var localNodeID roachpb.NodeID
-	batches := make(map[roachpb.StoreID]storage.Batch)
+	batches := make(map[roachpb.StoreID]loqrecovery.StoreBatches)
 	stores := make([]kvstorage.Engines, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
 		eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
@@ -823,7 +823,7 @@ func applyRecoveryToLocalStore(
 		store := kvstorage.MakeEngines(eng)
 		stores[i] = store
 
-		batch := store.TODOBothEngines().NewBatch()
+		batch := loqrecovery.NewStoreBatches(store)
 		defer store.Close() //nolint:deferloop
 		defer batch.Close() //nolint:deferloop
 
@@ -846,7 +846,6 @@ func applyRecoveryToLocalStore(
 	}
 
 	updateTime := timeutil.Now()
-	// TODO(sep-raft-log): batches need to work with the split log/state engines.
 	prepReport, err := loqrecovery.PrepareUpdateReplicas(
 		ctx, nodeUpdates, uuid.DefaultGenerator, updateTime, localNodeID, batches)
 	if err != nil {

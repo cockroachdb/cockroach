@@ -134,13 +134,24 @@ func (s Server) ServeLocalReplicas(
 	for _, s := range stores {
 		s := s // copy for closure
 		g.Go(func() error {
-			// TODO(sep-raft-log): when raft and state machine engines are separate,
-			// we need two snapshots here. This path is online, so we should make sure
-			// these snapshots are consistent, or visitStoreReplicas handles the
-			// asynchronous snapshots well.
-			reader := s.TODOBothEngines().NewSnapshot()
-			defer reader.Close()
-			return visitStoreReplicas(ctx, reader, reader, s.StoreID(), s.NodeID(),
+			// If engines are separated, we can't snapshot both state and raft engines
+			// atomically. However, we take the state engine snapshot first.
+			// The reason is that the highest risk we worry about is to rollback a
+			// range change. If we take the log engine snapshot first, and then the
+			// state engine, we could apply some entries between these two events, and
+			// that means that RaftAppliedIndex could advance, and causes us to miss a
+			// descriptor change. But by taking the state engine first, the only thing
+			// that could change until we take the log engine snapshot is appending
+			// more raft log entries, which we will visit and report if they change
+			// a descriptor.
+			stateSnap := s.StateEngine().NewSnapshot()
+			defer stateSnap.Close()
+			raftSnap := stateSnap
+			if s.EnginesSeparated() {
+				raftSnap = s.LogEngine().NewSnapshot()
+				defer raftSnap.Close()
+			}
+			return visitStoreReplicas(ctx, stateSnap, raftSnap, s.StoreID(), s.NodeID(),
 				func(info loqrecoverypb.ReplicaInfo) error {
 					return syncStream.Send(&serverpb.RecoveryCollectLocalReplicaInfoResponse{ReplicaInfo: &info})
 				})
