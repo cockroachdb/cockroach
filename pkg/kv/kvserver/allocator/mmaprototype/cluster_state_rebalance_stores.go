@@ -599,8 +599,14 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 		if !isVoter && !isNonVoter {
-			// Due to REQUIREMENT(change-computation), the top-k is up to date, so
-			// this must never happen.
+			// Two staleness sources can land us here despite the
+			// skip-on-pending check above: a stale topK[localStoreID] entry
+			// pointing at a range where store.StoreID is no longer a replica
+			// (topK is rebuilt only on StoreLeaseholderMsg — see the topKRanges
+			// invariant in cluster_state.go), or a stale rs.constraints cache
+			// from before a pending change mutated rs.replicas. A follow-up
+			// commit converts this assertion into a skip+log so a benign cache
+			// race no longer fatals the node.
 			panic(errors.AssertionFailedf("internal state inconsistency: "+
 				"store=%v range_id=%v pending-changes=%v "+
 				"rstate_replicas=%v rstate_constraints=%v",
@@ -801,24 +807,29 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				continue
 			}
 			if !repl.IsLeaseholder {
-				// NB: due to REQUIREMENT(change-computation), the top-k
-				// ranges for ss reflect the latest adjusted state, including
-				// pending changes. Thus, this store must be a replica and the
-				// leaseholder, hence this assertion, and other assertions
-				// below. Additionally, the code above ignored the range if it
-				// has pending changes, which while not necessary for the
-				// is-leaseholder assertion, makes the case where we assert
-				// even narrower.
-				log.KvDistribution.Fatalf(ctx,
+				// We are iterating ss.adjusted.topKRanges[localStoreID], which is
+				// rebuilt only on a StoreLeaseholderMsg from localStoreID (see the
+				// topKRanges invariant in cluster_state.go). If the local store
+				// transferred its lease away after that msg and the change has
+				// since enacted, topK still lists r but rs.replicas no longer
+				// marks the local store as leaseholder. The skip-on-pending check
+				// above only masks the in-progress window, not the post-enact
+				// window. A follow-up commit converts this assertion into a
+				// skip+log so a benign cache race no longer fatals the node.
+				panic(errors.AssertionFailedf(
 					"internal state inconsistency: replica considered for lease shedding has no pending"+
-						" changes but is not leaseholder: %+v", rstate)
+						" changes but is not leaseholder: %+v", rstate))
 			}
 			foundLocalReplica = true
 			break
 		}
 		if !foundLocalReplica {
-			log.KvDistribution.Fatalf(
-				ctx, "internal state inconsistency: local store is not a replica: %+v", rstate)
+			// Same staleness source as above, with a removal pending instead of a
+			// lease transfer: topK still lists r for localStoreID, but the local
+			// store is no longer in rs.replicas because the removal pending
+			// change has enacted. Converted to a skip+log in a follow-up commit.
+			panic(errors.AssertionFailedf(
+				"internal state inconsistency: local store is not a replica: %+v", rstate))
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			ml.logf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
@@ -836,8 +847,17 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {
-			// See the earlier comment about assertions.
-			panic(fmt.Sprintf("internal state inconsistency: "+
+			// rs.constraints is a cached blob (see clearAnalyzedConstraints in
+			// cluster_state.go); leaseholderID reflects rs.replicas at cache
+			// time. If a prior pass cached the blob while the previous
+			// leaseholder held the lease and a subsequent external change moved
+			// the lease here without invalidating, the cached leaseholderID
+			// disagrees with the now-correct local store. This is the #170112
+			// panic. A follow-up commit invalidates rs.constraints in
+			// addPendingRangeChange to close that gap; another follow-up converts
+			// this assertion into a skip+log as defense-in-depth for any future
+			// path that mutates rs.replicas without invalidating.
+			panic(errors.AssertionFailedf("internal state inconsistency: "+
 				"store=%v range_id=%v should be leaseholder but isn't",
 				store.StoreID, rangeID))
 		}

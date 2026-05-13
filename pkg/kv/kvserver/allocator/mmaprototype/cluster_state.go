@@ -719,13 +719,32 @@ type storeState struct {
 		// one resource dimension, that is the dimension chosen when picking the
 		// top-k.
 		//
+		// The key in this map is a local store-id; the value enumerates ranges
+		// for which (a) that local store is the leaseholder and (b) the storeState
+		// owning this entry has a replica.
+		//
+		// Lifecycle and staleness: topKRanges is rebuilt only by
+		// processStoreLeaseholderMsgInternal — a StoreLeaseholderMsg from local
+		// store L recomputes topKRanges[L] across every storeState from scratch.
+		// Pending mutations to rs.replicas and ss.adjusted.replicas (via
+		// applyReplicaChange / undoReplicaChange) and enactment / GC of pending
+		// changes do NOT update topK. So between consecutive msgs from L,
+		// topKRanges[L] entries can become stale in two ways:
+		//   - phantom entry: r is listed for store ss, but ss is no longer in
+		//     rs.replicas (replica removed via a pending change that has since
+		//     enacted); or
+		//   - leaseholder mismatch: r is listed under L, but rs.replicas[L] no
+		//     longer marks L as leaseholder (lease transferred away).
+		// Skip-on-pending in the rebalance loops masks the in-progress window;
+		// the post-enact window relies on readers (rebalanceLeasesFromLocalStoreID,
+		// rebalanceReplicas) tolerating mismatches by skipping affected entries.
+		// Self-corrects on L's next leaseholder msg.
+		//
 		// It includes ranges whose replicas are being removed via pending
 		// changes, or lease transfers. That is, it does not account for
 		// pending or enacted changes made since the last time top-k was
 		// computed. It does account for pending changes that were pending
 		// when the top-k was computed.
-		//
-		// The key in this map is a local store-id.
 		//
 		// NB: this only includes replicas that satisfy the isVoter() or
 		// isNonVoter() methods, i.e., {VOTER_FULL, VOTER_INCOMING, NON_VOTER,
@@ -733,9 +752,6 @@ type storeState struct {
 		// only replica types where the allocator wants to explicitly consider
 		// shedding, since the other states are transient states, that are
 		// either going away, or will soon transition to a full-fledged state.
-		//
-		// We may decide to keep this top-k up-to-date incrementally instead of
-		// recomputing it from scratch on each StoreLeaseholderMsg.
 		//
 		// Example:
 		// Assume the local node has two stores, s1 and s2.
@@ -1256,8 +1272,24 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 	}
 }
 
-// clearAnalyzedConstraints clears the analyzed constraints for the range state.
-// This should be used when rs is deleted or rs.constraints needs to be reset.
+// clearAnalyzedConstraints clears the cached analyzed constraints for the
+// range state.
+//
+// Invalidation contract: rs.constraints is a per-rangeState cache of
+// constraint analysis derived from rs.replicas (specifically the
+// IsLeaseholder flags and the per-replica StoreIDs/types). It is consulted
+// in the rebalance loops both to choose candidate stores and to assert
+// internal invariants (see rebalanceLeasesFromLocalStoreID and
+// rebalanceReplicas). Any code path that mutates rs.replicas
+// must call this method to keep the cache consistent. The call sites are:
+//   - processRangeMsg slow path (after replacing rs.replicas wholesale),
+//   - processStoreLeaseholderMsgInternal range-removal branch (rs being GC'd),
+//   - undoPendingChange.
+//
+// addPendingRangeChange also mutates rs.replicas (via applyReplicaChange) but
+// does NOT yet invalidate; that is the #170112 root cause and is closed by a
+// follow-up commit. pendingChangeEnacted is a no-op for replicas — invalidation
+// by the prior addPendingRangeChange will cover it once that gap is closed.
 func (rs *rangeState) clearAnalyzedConstraints() {
 	if rs.constraints == nil {
 		return
