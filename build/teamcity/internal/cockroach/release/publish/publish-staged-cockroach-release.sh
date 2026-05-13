@@ -6,7 +6,7 @@
 # included in the /LICENSE file.
 
 
-set -euxo pipefail
+set -euo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
@@ -40,29 +40,66 @@ release_branch=$(echo "${version}" | grep -E -o '^v[0-9]+\.[0-9]+')
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-prod"
   gcs_staged_bucket="cockroach-release-artifacts-staged-prod"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_PROD"
   if [[ $prerelease == false ]] ; then
     dockerhub_repository="docker.io/cockroachdb/cockroach"
   else
     dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
   fi
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
-  gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
   git_repo_for_tag="cockroachdb/cockroach"
 else
   gcs_bucket="cockroach-release-artifacts-dryrun"
   gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
-  # export the variable to avoid shell escaping
-  export gcs_credentials="$GCS_CREDENTIALS_DEV"
   dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
-  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
-  gcr_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
-  git_repo_for_tag=""
+  gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-test"
+  # In dry-run, only tag if the operator opts in by pointing DRYRUN_TAG_REPO at a
+  # writable fork (e.g. user/cockroach).
+  git_repo_for_tag="${DRYRUN_TAG_REPO:-}"
+fi
+
+# With WIF (GitHub Actions), credentials are handled via the environment.
+# With TeamCity, use the JSON key env vars.
+if [[ -n "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+  export gcs_credentials=""
+  gcr_staged_credentials=""
+  gcr_credentials=""
+else
+  if [[ -z "${DRY_RUN}" ]] ; then
+    export gcs_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
+    gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
+  else
+    export gcs_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
+    gcr_credentials="${GOOGLE_COCKROACH_RELEASE_CREDENTIALS:-$GCS_CREDENTIALS_DEV}"
+  fi
+fi
+
+# Pick git tag remote + auth. TeamCity sets the SSH deploy key and uses
+# SSH; GitHub Actions sets a PAT (GH_TOKEN) and uses HTTPS with the
+# token embedded in the URL. The PAT must authorize git_repo_for_tag —
+# the prod repo for real publishes, and any fork used for dry-run
+# rehearsal. The GHA branch reads GH_TOKEN, not GITHUB_TOKEN: GHA's
+# runner reserves GITHUB_TOKEN for the auto-issued workflow token and
+# may shadow values set in the step's env block, so we use GH_TOKEN
+# both here and in the workflow.
+tag_remote=""
+tag_git_cmd=""
+if [[ -n "${git_repo_for_tag}" ]]; then
+  if [[ -n "${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY:-}" ]]; then
+    github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
+    configure_git_ssh_key
+    tag_remote="ssh://git@github.com/${git_repo_for_tag}.git"
+    tag_git_cmd="git_wrapped"
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    tag_remote="https://x-access-token:${GH_TOKEN}@github.com/${git_repo_for_tag}.git"
+    tag_git_cmd="git"
+  else
+    echo "ERROR: tag repo ${git_repo_for_tag} configured but neither GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY nor GH_TOKEN is set"
+    exit 1
+  fi
 fi
 
 tc_end_block "Variable Setup"
@@ -70,21 +107,19 @@ tc_end_block "Variable Setup"
 tc_start_block "Verify binaries SHA"
 # Make sure that the linux/amd64 source docker image is built using the same version and SHA. 
 # This is a quick check and it assumes that the docker image was built correctly and based on the tarball binaries.
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
 verify_docker_image "${gcr_staged_repository}:${version}" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" false false
 tc_end_block "Verify binaries SHA"
 
 tc_start_block "Check remote tag and tag"
-if [[ -z "${DRY_RUN}" ]]; then
-  github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
-  configure_git_ssh_key
-  if git_wrapped ls-remote --exit-code --tags "ssh://git@github.com/${git_repo_for_tag}.git" "${version}"; then
+if [[ -n "${git_repo_for_tag}" ]]; then
+  if "${tag_git_cmd}" ls-remote --exit-code --tags "${tag_remote}" "${version}"; then
     echo "Tag ${version} already exists"
     exit 1
   fi
   git tag "${version}"
 else
-  echo "Skipping for dry-run"
+  echo "No tag repo configured; skipping"
 fi
 tc_end_block "Check remote tag and tag"
 
@@ -132,14 +167,14 @@ DOCKERFILE
 # Build and push the multi-arch image to DockerHub. The staged repo (source)
 # is on us-docker.pkg.dev and DockerHub (destination) is on docker.io, so both
 # logins can coexist.
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
 docker buildx build --pull --push --no-cache \
   --platform linux/amd64,linux/arm64,linux/s390x \
   --tag "$dockerhub_tag" "$tmpdir"
 
 # Copy the multi-arch manifest from DockerHub to GCR. These are on different
 # hostnames so both logins can coexist.
-docker_login_gcr "$gcr_repository" "$gcr_credentials"
+docker_login_gcr "$gcr_repository" "${gcr_credentials:-}"
 docker buildx imagetools create -t "$gcr_tag" "$dockerhub_tag"
 
 tc_end_block "Make and push multiarch docker images"
@@ -155,22 +190,21 @@ FROM $gcr_staged_tag_fips
 RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
 DOCKERFILE
 
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker_login_gcr "$gcr_staged_repository" "${gcr_staged_credentials:-}"
 docker buildx build --pull --push --no-cache \
   --platform linux/amd64 \
   --tag "$dockerhub_tag_fips" "$tmpdir"
 
-docker_login_gcr "$gcr_repository" "$gcr_credentials"
+docker_login_gcr "$gcr_repository" "${gcr_credentials:-}"
 docker buildx imagetools create -t "$gcr_tag_fips" "$dockerhub_tag_fips"
 tc_end_block "Make and push FIPS docker image"
 
 
 tc_start_block "Push release tag to GitHub"
-if [[ -z "${DRY_RUN}" ]]; then
-  configure_git_ssh_key
-  git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$version"
+if [[ -n "${git_repo_for_tag}" ]]; then
+  "${tag_git_cmd}" push "${tag_remote}" "$version"
 else
-  echo "skipping for dry-run"
+  echo "No tag repo configured; skipping"
 fi
 tc_end_block "Push release tag to GitHub"
 

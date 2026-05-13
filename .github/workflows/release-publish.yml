@@ -1,0 +1,565 @@
+# Copyright 2026 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+# This workflow publishes a previously staged CockroachDB release:
+# copies binaries to production GCS, pushes Docker images to DockerHub/GCR,
+# tags the release in GitHub, publishes to Red Hat, and creates RAFA PRs.
+#
+# It replaces the TeamCity "Publish Cockroach Release" composite build.
+#
+#   validate-skip-jobs (gates every job below; see skip_jobs input)
+#     └─► validate-build ─► approve-publish ─┬─► update-versions-master
+#                                            └─► publish-staged ─┬─► publish-redhat
+#                                                                └─► create-rafa-prs
+#   notify (always, needs all above)
+#
+# approve-publish is the single human-approval gate (release-ops env);
+# every downstream job inherits the approval transitively. Reviewer
+# clicks once per dispatch, not once per job.
+
+name: Release - Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (use dev buckets and repos)'
+        type: boolean
+        default: true
+      sha:
+        description: 'Git SHA to build (defaults to branch HEAD)'
+        type: string
+        default: ''
+      dryrun_tag:
+        description: 'Dry-run only: push the release tag to the current repo (e.g. on a fork). Ignored when not in dry-run.'
+        type: boolean
+        default: false
+      skip_jobs:
+        description: 'Comma-separated job IDs to skip (no spaces) when resuming after a partial failure. Validated by the validate-skip-jobs job. Valid IDs: validate-build, update-versions-master, publish-staged, publish-redhat, create-rafa-prs.'
+        type: string
+        default: ''
+
+concurrency:
+  group: release-publish-${{ github.ref_name }}-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+# Minimal workflow-level permissions; jobs request what they need.
+permissions: {}
+
+env:
+  # DRY_RUN gates which GCS bucket / GCR repo / git tag the publish
+  # scripts touch. Tied to USE_PROD_GCP (not IS_PRODUCTION_REPO): without
+  # prod credentials we cannot write to prod buckets, so any non-prod-GCP
+  # run forces DRY_RUN=true regardless of the operator's dry_run input.
+  DRY_RUN: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'true' || '' }}
+  # WIF / GCP configuration. See release-build-and-sign.yml for the
+  # rationale behind splitting USE_PROD_GCP from IS_PRODUCTION_REPO:
+  # staging-prod repos can run the prod flow against dev GCP. Real prod
+  # cutover requires both vars set to true. Dry-run forces dev GCP.
+  RELEASE_WIF_PROVIDER: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'projects/65523152860/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' || 'projects/182391335559/locations/global/workloadIdentityPools/gha-releases-oidc/providers/gha-releases-oidc' }}
+  RELEASE_GCP_SERVICE_ACCOUNT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'gha-releases@releases-dev-356314.iam.gserviceaccount.com' || 'release-artifacts@releases-prod.iam.gserviceaccount.com' }}
+  RELEASE_GCP_PROJECT: ${{ (inputs.dry_run || vars.USE_PROD_GCP != 'true') && 'releases-dev-356314' || 'releases-prod' }}
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Stage 0: Validate skip_jobs input
+  # --------------------------------------------------------------------------
+  # Every skippable job depends on this validator and gates itself with
+  #   !contains(format(',{0},', inputs.skip_jobs), ',<job-id>,')
+  # The format/comma-wrap turns the user's input into ",a,b,c," so that
+  # the contains() check matches whole tokens — without the wrap,
+  # contains('publish', 'publish-staged') would false-match. Empty input
+  # produces ",," and matches nothing, so the default is "skip nothing".
+  #
+  # The validator catches typos in seconds; without it, an unknown ID
+  # silently runs every job and the operator only discovers the typo
+  # when the failed job runs again.
+  validate-skip-jobs:
+    name: Validate skip_jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Validate skip_jobs IDs
+        env:
+          SKIP_JOBS: ${{ inputs.skip_jobs }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SKIP_JOBS" ]]; then
+            echo "skip_jobs is empty; nothing to validate."
+            exit 0
+          fi
+          # Keep this list in sync with the skippable jobs below and the
+          # input description in the workflow_dispatch block.
+          valid_ids=(
+            validate-build
+            update-versions-master
+            publish-staged
+            publish-redhat
+            create-rafa-prs
+          )
+          IFS=',' read -ra requested <<< "$SKIP_JOBS"
+          invalid=()
+          for id in "${requested[@]}"; do
+            if [[ ! " ${valid_ids[*]} " == *" $id "* ]]; then
+              invalid+=("$id")
+            fi
+          done
+          if (( ${#invalid[@]} > 0 )); then
+            echo "::error::Unknown skip_jobs IDs: ${invalid[*]}"
+            echo "Valid IDs: ${valid_ids[*]}"
+            exit 1
+          fi
+          echo "skip_jobs validated: ${requested[*]}"
+
+  # --------------------------------------------------------------------------
+  # Pre-check: Verify build-and-sign completed for this SHA
+  # --------------------------------------------------------------------------
+  validate-build:
+    name: Validate build-and-sign
+    needs: validate-skip-jobs
+    if: >-
+      ${{ !contains(format(',{0},', inputs.skip_jobs), ',validate-build,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Check for successful build-and-sign run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.sha || github.sha }}
+        run: |
+          echo "Checking for successful 'Release - Build and Sign' run on SHA $TARGET_SHA..."
+          run=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow "Release - Build and Sign" \
+            --commit "$TARGET_SHA" \
+            --status success \
+            --json databaseId,conclusion,headSha \
+            --jq '.[0]' \
+          )
+          if [[ -z "$run" || "$run" == "null" ]]; then
+            echo "::error::No successful 'Release - Build and Sign' run found for SHA $TARGET_SHA"
+            echo "Re-run with skip_jobs=validate-build to bypass this check."
+            exit 1
+          fi
+          echo "Found successful build run: $run"
+
+  # --------------------------------------------------------------------------
+  # Stage 1 gate: single approval covering every job that touches user-
+  # observable state (update-versions-master + publish-staged and
+  # everything they fan out to). GHA's environment-approval is per-job,
+  # so without this gate the reviewer would have to click approve once
+  # per job that uses `release-ops`. Consolidating onto one no-op
+  # approval job keeps the human-in-the-loop boundary in one place.
+  # --------------------------------------------------------------------------
+  approve-publish:
+    name: Approve publish
+    needs: validate-build
+    if: >-
+      ${{ !cancelled() &&
+        (needs.validate-build.result == 'success' ||
+         (needs.validate-build.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',validate-build,'))) &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    environment: release-ops
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - run: echo "Approved by reviewer; downstream publish jobs unblocked."
+
+  # --------------------------------------------------------------------------
+  # Stage 1a: Bump master to the next dev version and open the
+  # version-update PRs in the satellite repos (homebrew-tap, helm-charts,
+  # baking-branch merges, ...). Runs against master regardless of which
+  # release branch dispatched the workflow.
+  # --------------------------------------------------------------------------
+  update-versions-master:
+    needs: approve-publish
+    if: >-
+      ${{ !cancelled() &&
+        needs.approve-publish.result == 'success' &&
+        !contains(format(',{0},', inputs.skip_jobs), ',update-versions-master,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    name: Update version.txt
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Resolve released version from publish SHA
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_SHA: ${{ inputs.sha || github.sha }}
+        run: |
+          raw=$(gh api "repos/${GITHUB_REPOSITORY}/contents/pkg/build/version.txt?ref=${PUBLISH_SHA}" -q '.content' | base64 -d)
+          version=$(echo "$raw" | grep -v '^#' | head -n1)
+          if [[ -z "$version" ]]; then
+            echo "::error::Could not parse version from pkg/build/version.txt at ${PUBLISH_SHA}"
+            exit 1
+          fi
+          echo "Resolved RELEASED_VERSION=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Check out master, not the publish SHA — the version-update tool
+      # operates on master and creates PRs against satellite repos.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: master
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      # gha-releases-release-smtp-password must be provisioned in both the
+      # dev and prod Secret Manager projects before this workflow can
+      # succeed; the release tool requires SMTP_PASSWORD even though the
+      # only outbound mail in dry-run goes to dev-inf+release-dev@.
+      - name: Fetch update-versions secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
+            smtp_password:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-smtp-password
+
+      - name: Run update-versions
+        env:
+          # GH_TOKEN serves two purposes here:
+          #   1. The Go binary's pushURL() embeds it for satellite-repo PR
+          #      pushes (homebrew-tap, helm-charts).
+          #   2. update_versions_impl.sh uses it to authenticate the
+          #      `git fetch origin` (and the binary's `git ls-remote
+          #      origin`) against the cockroach repo inside the bazel
+          #      container, via a url.<base>.insteadOf rewrite.
+          GH_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          SMTP_PASSWORD: ${{ steps.secrets.outputs.smtp_password }}
+          RELEASED_VERSION: ${{ steps.resolve.outputs.version }}
+          IS_PRODUCTION_REPO: ${{ vars.IS_PRODUCTION_REPO }}
+        run: |
+          build/github/release-update-versions.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 1b: Publish staged release (binaries, Docker, git tag)
+  # --------------------------------------------------------------------------
+  publish-staged:
+    # Depends on approve-publish (the single human-approval gate),
+    # parallel to update-versions-master. update-versions-master and
+    # publish-staged are independent: the former operates on master to
+    # bump the dev version and open satellite-repo PRs; the latter
+    # promotes the staged release artifacts. Sequencing them serially
+    # added run time without buying anything.
+    needs: approve-publish
+    if: >-
+      ${{ !cancelled() &&
+        needs.approve-publish.result == 'success' &&
+        !contains(format(',{0},', inputs.skip_jobs), ',publish-staged,') &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    name: Publish staged cockroach release
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          # Don't leave the workflow's auto-issued GITHUB_TOKEN in
+          # .git/config as `http.https://github.com/.extraheader`. On this
+          # org the auto-token is policy-clamped to Contents: read, and
+          # the extraheader's Authorization wins over the URL-embedded
+          # bot PAT we use for the tag push — yielding "Write access to
+          # repository not granted" 403s. With persist-credentials=false
+          # the URL-embedded PAT is the only Authorization git sends.
+          persist-credentials: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # See release-build-and-sign.yml: avoids the spurious
+          # "Path Validation Error" cache-save warning on every run.
+          cache-image: false
+
+      # Fetch publish secrets via the official Google action so each value is
+      # auto-registered with ::add-mask:: and never has to flow through `echo`
+      # in our scripts.
+      - name: Fetch publish secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            docker_access_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-dockerhub-access-token
+            docker_id:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-dockerhub-username
+            github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
+
+      - name: Publish staged release
+        env:
+          DOCKER_ACCESS_TOKEN: ${{ steps.secrets.outputs.docker_access_token }}
+          DOCKER_ID: ${{ steps.secrets.outputs.docker_id }}
+          # GHA tagging path: HTTPS push using the bot PAT. The PAT must
+          # authorize git_repo_for_tag (the prod repo for real publishes,
+          # and any fork used for dry-run rehearsal). TC tagging path
+          # (SSH deploy key) is unaffected — TC sets
+          # GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY directly and the
+          # script branches on it first.
+          # Use GH_TOKEN (not GITHUB_TOKEN). GHA's runner reserves the
+          # GITHUB_TOKEN name and may shadow our value with the auto-
+          # issued workflow token; GH_TOKEN sidesteps that and matches
+          # the convention used by every other release workflow step.
+          GH_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          DRYRUN_TAG_REPO: ${{ env.DRY_RUN != '' && inputs.dryrun_tag && github.repository || '' }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-publish-staged.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2a: Publish to Red Hat (needs publish-staged)
+  # --------------------------------------------------------------------------
+  publish-redhat:
+    name: Publish to Red Hat
+    needs: publish-staged
+    if: >-
+      ${{ !cancelled() &&
+        (needs.publish-staged.result == 'success' ||
+         (needs.publish-staged.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',publish-staged,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',publish-redhat,') &&
+        !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    # Reviewer-approval gate is on approve-publish upstream; this job
+    # inherits the gate transitively via its needs chain.
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+        with:
+          # See release-build-and-sign.yml: avoids the spurious
+          # "Path Validation Error" cache-save warning on every run.
+          cache-image: false
+
+      # Fetch Red Hat publish secrets via the official Google action so each
+      # value is auto-registered with ::add-mask:: and never has to flow
+      # through `echo` in our scripts.
+      - name: Fetch Red Hat publish secrets
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            quay_registry_key:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-quay-registry-key
+            redhat_api_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-redhat-api-token
+
+      - name: Publish to Red Hat
+        env:
+          QUAY_REGISTRY_KEY: ${{ steps.secrets.outputs.quay_registry_key }}
+          REDHAT_API_TOKEN: ${{ steps.secrets.outputs.redhat_api_token }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-publish-redhat.sh
+
+  # --------------------------------------------------------------------------
+  # Stage 2b: Create RAFA pull requests (needs publish-staged)
+  # --------------------------------------------------------------------------
+  create-rafa-prs:
+    name: Create RAFA pull requests
+    needs: publish-staged
+    if: >-
+      ${{ !cancelled() &&
+        (needs.publish-staged.result == 'success' ||
+         (needs.publish-staged.result == 'skipped' && contains(format(',{0},', inputs.skip_jobs), ',publish-staged,'))) &&
+        !contains(format(',{0},', inputs.skip_jobs), ',create-rafa-prs,') &&
+        !inputs.dry_run && vars.IS_PRODUCTION_REPO == 'true' &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    # Reviewer-approval gate is on approve-publish upstream; this job
+    # inherits the gate transitively via its needs chain.
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch the GitHub PAT via the official Google action so it's
+      # auto-registered with ::add-mask:: and never has to flow through `echo`
+      # in our scripts.
+      - name: Fetch GitHub PAT
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            github_pat:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-github-pat
+
+      - name: Create RAFA pull requests
+        env:
+          GH_TOKEN: ${{ steps.secrets.outputs.github_pat }}
+          # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
+          TC_BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
+        run: |
+          build/github/release-publish-rafa-prs.sh
+
+  # --------------------------------------------------------------------------
+  # Notification (always runs)
+  # --------------------------------------------------------------------------
+  notify:
+    name: Slack notification
+    if: >-
+      ${{ always() &&
+        (github.ref == 'refs/heads/master' ||
+         (startsWith(github.ref, 'refs/heads/release-') && endsWith(github.ref, '-rc')) ||
+         startsWith(github.ref, 'refs/heads/staging-v'))
+      }}
+    needs:
+      - validate-skip-jobs
+      - validate-build
+      - approve-publish
+      - update-versions-master
+      - publish-staged
+      - publish-redhat
+      - create-rafa-prs
+    # No `environment:` here. The release-ops environment requires a human
+    # reviewer for every job that uses it; that's the right gate for
+    # publish-cloud-only / publish-staged / publish-redhat / create-rafa-prs
+    # because each performs a customer-facing mutation. The notify job
+    # only posts a Slack summary — gating it would block delivery of the
+    # final status (especially failure pings) until the same human
+    # approves an extra step, defeating the point of the notification.
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Determine overall status
+        id: status
+        env:
+          HAS_FAILURE: ${{ contains(needs.*.result, 'failure') }}
+          HAS_CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+        run: |
+          if [[ "$HAS_FAILURE" == "true" ]]; then
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+            echo "color=#dc3545" >> "$GITHUB_OUTPUT"
+            echo "emoji=:x:" >> "$GITHUB_OUTPUT"
+          elif [[ "$HAS_CANCELLED" == "true" ]]; then
+            echo "result=cancelled" >> "$GITHUB_OUTPUT"
+            echo "color=#ffc107" >> "$GITHUB_OUTPUT"
+            echo "emoji=:warning:" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=success" >> "$GITHUB_OUTPUT"
+            echo "color=#28a745" >> "$GITHUB_OUTPUT"
+            echo "emoji=:white_check_mark:" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.RELEASE_WIF_PROVIDER }}
+          service_account: ${{ env.RELEASE_GCP_SERVICE_ACCOUNT }}
+
+      # Fetch the Slack token via the official Google action so it's
+      # auto-registered with ::add-mask:: and never has to flow through
+      # `echo` in our scripts.
+      - name: Fetch Slack token
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3
+        with:
+          secrets: |-
+            slack_bot_token:${{ env.RELEASE_GCP_PROJECT }}/gha-releases-release-slack-bot-token
+
+      - name: Post to #release-ops
+        env:
+          SLACK_TOKEN: ${{ steps.secrets.outputs.slack_bot_token }}
+          SLACK_PAYLOAD: >-
+            {
+              "channel": "C08H9FA1W3C",
+              "text": "${{ steps.status.outputs.emoji }} Release publish *${{ steps.status.outputs.result }}* for `${{ github.ref_name }}` (<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>)",
+              "attachments": [
+                {
+                  "color": "${{ steps.status.outputs.color }}",
+                  "fields": [
+                    { "title": "Branch", "value": "`${{ github.ref_name }}`", "short": true },
+                    { "title": "Dry run", "value": "${{ env.DRY_RUN != '' }}", "short": true },
+                    { "title": "Triggered by", "value": "${{ github.actor }}", "short": true }
+                  ]
+                }
+              ]
+            }
+        run: |
+          curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$SLACK_PAYLOAD"
