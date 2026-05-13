@@ -210,7 +210,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
-	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider))
+	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider)
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
+		fnBody.CanMutate = funcdesc.CanMutateBoolToProto(n.CanMutate)
+	}
+	b.Add(fnBody)
 	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_2) {
 		b.Add(&scpb.FunctionParams{
 			FunctionID: fnID,
@@ -410,6 +414,9 @@ func replaceFunction(
 
 	// Build the FunctionBody element with the new body and references.
 	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider)
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_3_FunctionDescCanMutate) {
+		fnBody.CanMutate = funcdesc.CanMutateBoolToProto(n.CanMutate)
+	}
 	b.Replace(fnBody)
 
 	// Replace the FunctionParams element with the updated params.

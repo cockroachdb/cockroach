@@ -1,0 +1,16 @@
+/* setup */
+CREATE TABLE t(a INT PRIMARY KEY, b INT);
+CREATE FUNCTION f_insert(a INT, b INT) RETURNS VOID LANGUAGE SQL AS $$
+  INSERT INTO t VALUES(a, b);
+$$;
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE FUNCTION f_caller(a INT, b INT) RETURNS VOID LANGUAGE SQL AS $$
+  SELECT f_insert(a, b);
+$$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f_caller›(‹a› INT8, ‹b› INT8)
+	RETURNS VOID
+	LANGUAGE SQL
+	AS $$SELECT ‹public›.‹f_insert›(‹a›, ‹b›);$$;
+ └── execute 1 system table mutations transaction

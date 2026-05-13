@@ -156,7 +156,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
                 ├── CreateFunctionDescriptor {"Function":{"FunctionID":107}}
                 ├── SetFunctionName {"FunctionID":107,"Name":"t"}
                 ├── SetFunctionParams {"Params":{"FunctionID":107}}
-                ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":107}}
+                ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","CanMutate":2,"FunctionID":107}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":107}
                 ├── UpdateFunctionRelationReferences {"FunctionID":107}
                 ├── CreateSequenceDescriptor {"SequenceID":108}

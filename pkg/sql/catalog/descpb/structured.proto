@@ -2017,7 +2017,22 @@ message FunctionDescriptor {
   optional uint32 replicated_pcr_version = 24 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Next field id is 25
+  // CanMutate indicates whether the routine body can perform mutations.
+  // This includes direct DML statements (INSERT, UPDATE, DELETE, UPSERT),
+  // mutations inside CTEs or subqueries, and calls to other routines that
+  // themselves can mutate. It is computed at CREATE FUNCTION time by
+  // inspecting the CanMutate logical property of the built body
+  // statements, and persisted so that it is available at execution time
+  // without needing to build the routine body.
+  //
+  // UNKNOWN_CAN_MUTATE (the zero value) indicates that the mutation status
+  // has not been determined. This is the case for function descriptors
+  // created before this field was introduced. When unknown, consumers must
+  // fall back to inspecting the body RelExprs to determine whether the
+  // routine can mutate.
+  optional cockroach.sql.catalog.catpb.Function.CanMutate can_mutate = 25 [(gogoproto.nullable) = false];
+
+  // Next field id is 26
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,
