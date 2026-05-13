@@ -323,6 +323,7 @@ go_test(
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/storage",
+        "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/fingerprintutils",

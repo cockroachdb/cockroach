@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -562,13 +561,13 @@ func checkBackupElidedPrefixForOnlineCompat(
 
 func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
-) (uint64, error) {
+) (uint64, []error, error) {
 	total := r.job.Progress().Details.(*jobspb.Progress_Restore).Restore.TotalDownloadRequired
 
 	// If this is a resumption of a job that has already calculated the total
 	// spans to download, we can skip this step.
 	if total != 0 {
-		return total, nil
+		return total, nil, nil
 	}
 
 	ctx, sp := tracing.ChildSpan(ctx, "backup.maybeCalculateDownloadSpans")
@@ -585,18 +584,18 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return r.job.StatusStorage().Set(ctx, txn, "Phase 2 of 2: Downloading restored data")
 	}); err != nil {
-		return 0, errors.Wrap(err, "updating status message for download phase")
+		return 0, nil, errors.Wrap(err, "updating status message for download phase")
 	}
 
-	total, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
+	total, perNodeErrs, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to get remaining external file bytes")
+		return 0, nil, errors.Wrap(err, "failed to get remaining external file bytes")
 	}
 
 	log.Dev.Infof(ctx, "total download size (across all stores) to complete restore: %s", sz(total))
 
 	if total == 0 {
-		return total, nil
+		return total, perNodeErrs, nil
 	}
 
 	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
@@ -605,56 +604,71 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
-		return 0, errors.Wrapf(err, "failed to update job %d", r.job.ID())
+		return 0, nil, errors.Wrapf(err, "failed to update job %d", r.job.ID())
 	}
 
-	return total, nil
+	return total, perNodeErrs, nil
 }
 
+// sendDownloadWorker drives the worker side of doDownloadFiles: it issues
+// DownloadSpan RPCs in a loop, waiting on completionPoller between iterations
+// until the poller closes the channel. It returns the union of per-node
+// sub-errors observed across all iterations along with any fatal error.
 func (r *restoreResumer) sendDownloadWorker(
-	execCtx sql.JobExecContext, spans roachpb.Spans, completionPoller chan struct{},
-) func(context.Context) error {
-	return func(ctx context.Context) error {
-		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
-		defer tsp.Finish()
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	spans roachpb.Spans,
+	completionPoller chan struct{},
+) (perNodeErrs []error, _ error) {
+	ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
+	defer tsp.Finish()
 
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-		for {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-
-			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
-				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
-					return err
-				}
-			}
-
-			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
-				return err
-			}
-
-			// Wait for the completion poller to signal that it has checked our work.
-			select {
-			case _, ok := <-completionPoller:
-				if !ok {
-					return nil
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			// Sleep a bit before sending download requests again to avoid a hot loop.
-			// This will only be hit if after a successful download request, there are
-			// still spans to download (e.g. because of a rabalancing).
-			time.Sleep(10 * time.Second)
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	for {
+		if err := ctx.Err(); err != nil {
+			return perNodeErrs, err
 		}
+
+		if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+			if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+				return perNodeErrs, err
+			}
+		}
+
+		iterSubErrs, err := sendDownloadSpan(ctx, execCtx, spans)
+		if err != nil {
+			return perNodeErrs, err
+		}
+		perNodeErrs = append(perNodeErrs, iterSubErrs...)
+
+		// Wait for the completion poller to signal that it has checked our work.
+		select {
+		case _, ok := <-completionPoller:
+			if !ok {
+				return perNodeErrs, nil
+			}
+		case <-ctx.Done():
+			return perNodeErrs, ctx.Err()
+		}
+
+		// Sleep a bit before sending download requests again to avoid a hot loop.
+		// This will only be hit if after a successful download request, there are
+		// still spans to download (e.g. because of a rabalancing).
+		time.Sleep(10 * time.Second)
 	}
 }
 
 var useCopy = envutil.EnvOrDefaultBool("COCKROACH_DOWNLOAD_COPY", true)
 
-func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roachpb.Spans) error {
+// sendDownloadSpan sends a DownloadSpan RPC fanout for the given spans. The
+// returned error is a transport-level failure that aborts the call. perNodeErrs
+// holds the decoded per-node errors from resp.Errors; a non-empty perNodeErrs
+// is not itself a failure — the caller decides how to surface it (e.g. trigger
+// a retry of the overall download phase) versus continuing to make progress on
+// the nodes that did respond.
+func sendDownloadSpan(
+	ctx context.Context, execCtx sql.JobExecContext, spans roachpb.Spans,
+) (perNodeErrs []error, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendDownloadSpan")
 	defer sp.Finish()
 
@@ -664,15 +678,17 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 		ViaBackingFileDownload: useCopy,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.Dev.VInfof(ctx, 1, "finished sending download requests for %d spans, %d errors", len(spans), len(resp.Errors))
+	log.Dev.VInfof(ctx, 1,
+		"finished sending download requests for %d spans, %d errors",
+		len(spans), len(resp.Errors))
 	for n, encoded := range resp.Errors {
-		err := errors.DecodeError(ctx, encoded)
-		return errors.Wrapf(err,
-			"failed to download spans on %d nodes; n%d err", len(resp.Errors), n)
+		perNodeErrs = append(perNodeErrs, errors.Wrapf(errors.DecodeError(ctx, encoded),
+			"failed to download spans on %d nodes; n%d err",
+			len(resp.Errors), n))
 	}
-	return nil
+	return perNodeErrs, nil
 }
 
 func getDownloadSpans(
@@ -747,82 +763,86 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 	})
 }
 
-// waitForDownloadToComplete waits until there are no more ExternalFileBytes
-// remaining to be downloaded for the restore. It sends a signal on the passed
-// channel each time it polls the span, and closes it when it stops.
+// waitForDownloadToComplete polls SpanStats until there are no more
+// ExternalFileBytes remaining to be downloaded for the restore. It sends a
+// signal on completionChan each time it polls, and closes the channel when it
+// returns. It returns the union of per-node sub-errors observed across all
+// polling iterations along with any fatal error.
 func (r *restoreResumer) waitForDownloadToComplete(
-	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails, ch chan struct{},
-) error {
-	defer close(ch)
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.RestoreDetails,
+	completionChan chan struct{},
+) (perNodeErrs []error, _ error) {
+	defer close(completionChan)
 
 	ctx, tsp := tracing.ChildSpan(ctx, "backup.waitForDownloadToComplete")
 	defer tsp.Finish()
 
-	total, err := r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details)
+	total, calcSubErrs, err := r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details)
 	if err != nil {
-		return errors.Wrap(err, "failed to calculate total number of spans to download")
+		return nil, errors.Wrap(err, "failed to calculate total number of spans to download")
 	}
+	perNodeErrs = append(perNodeErrs, calcSubErrs...)
 
 	// Download is already complete or there is nothing to be downloaded, in
 	// either case we can mark the job as done.
 	if total == 0 {
 		r.downloadJobProg = 1.0
 		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
-		return r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			return 1.0
-		})
-	}
-
-	var lastProgressUpdate time.Time
-	for rt := retry.StartWithCtx(
-		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
-	); rt.Next(); {
-		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
-		if err != nil {
-			return errors.Wrap(err, "failed to get remaining external file bytes")
-		}
-
-		// Sometimes a new virtual/external file sneaks in after we count total; the
-		// amount this skews the informational percentage isn't enough to recompute
-		// total but we still don't want total-remaining to be negative as that
-		// leads to nonsensical progress.
-		if remaining > total {
-			total = remaining
-		}
-
-		rawFraction := float32(total-remaining) / float32(total)
-		fractionComplete := rawFraction
-		if details.ExperimentalCopy {
-			fractionComplete = experimentalCopyLinkFraction +
-				rawFraction*(1.0-experimentalCopyLinkFraction)
-		}
-		log.Dev.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
-			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
-		)
-		r.downloadJobProg = fractionComplete
-
-		if remaining == 0 {
-			r.notifyStatsRefresherOfNewTables(ctx)
-			return nil
-		}
-
-		if timeutil.Since(lastProgressUpdate) > time.Minute {
-			//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
-			if err := r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				return fractionComplete
+		if err := r.job.DeprecatedNoTxn().FractionProgressed(ctx,
+			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				return 1.0
 			}); err != nil {
-				return err
-			}
-			lastProgressUpdate = timeutil.Now()
+			return perNodeErrs, err
 		}
-		// Signal the download job if it is waiting that we've polled and found work
-		// left for it to do.
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
+		return perNodeErrs, nil
 	}
-	return ctx.Err()
+
+	remaining, iterSubErrs, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
+	if err != nil {
+		return perNodeErrs, errors.Wrap(err, "failed to get remaining external file bytes")
+	}
+	perNodeErrs = append(perNodeErrs, iterSubErrs...)
+
+	// Sometimes a new virtual/external file sneaks in after we count total; the
+	// amount this skews the informational percentage isn't enough to recompute
+	// total but we still don't want total-remaining to be negative as that
+	// leads to nonsensical progress.
+	if remaining > total {
+		total = remaining
+	}
+
+	rawFraction := float32(total-remaining) / float32(total)
+	fractionComplete := rawFraction
+	if details.ExperimentalCopy {
+		fractionComplete = experimentalCopyLinkFraction +
+			rawFraction*(1.0-experimentalCopyLinkFraction)
+	}
+	log.Dev.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
+		sz(total-remaining), sz(remaining), sz(total), fractionComplete,
+	)
+	r.downloadJobProg = fractionComplete
+
+	if remaining == 0 {
+		r.notifyStatsRefresherOfNewTables(ctx)
+		return perNodeErrs, nil
+	}
+
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := r.job.DeprecatedNoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		return fractionComplete
+	}); err != nil {
+		return perNodeErrs, err
+	}
+
+	// Signal the download job if it is waiting that we've polled and found work
+	// left for it to do.
+	select {
+	case completionChan <- struct{}{}:
+	default:
+	}
+	return perNodeErrs, ctx.Err()
 }
 
 func unstickRestoreSpans(
@@ -839,23 +859,33 @@ func unstickRestoreSpans(
 	return nil
 }
 
+// getExternalBytesOverSpans returns the sum of remaining external bytes across
+// spans. See getRemainingExternalFileBytes for the meaning of the returned
+// perNodeErrs: the slice is the concatenation of per-node sub-errors observed
+// across all spans, and remaining undercounts when it is non-empty.
 func getExternalBytesOverSpans(
 	ctx context.Context, execCfg *sql.ExecutorConfig, spans roachpb.Spans,
-) (uint64, error) {
-	var remaining uint64
+) (remaining uint64, perNodeErrs []error, _ error) {
 	for _, span := range spans {
-		remainingForSpan, err := getRemainingExternalFileBytes(ctx, execCfg, span)
+		remainingForSpan, spanSubErrs, err := getRemainingExternalFileBytes(ctx, execCfg, span)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
+		perNodeErrs = append(perNodeErrs, spanSubErrs...)
 		remaining += remainingForSpan
 	}
-	return remaining, nil
+	return remaining, perNodeErrs, nil
 }
 
+// getRemainingExternalFileBytes returns the sum of ExternalFileBytes across
+// all nodes that responded to the SpanStats fanout for span. The returned
+// error is a transport-level failure that aborts the call. perNodeErrs holds
+// the per-node errors from resp.Errors; remaining undercounts when perNodeErrs
+// is non-empty (the failed nodes contribute zero). Callers that need an exact
+// total must treat a non-empty perNodeErrs as fatal.
 func getRemainingExternalFileBytes(
 	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
-) (uint64, error) {
+) (remaining uint64, perNodeErrs []error, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.getRemainingExternalFileBytes")
 	defer sp.Finish()
 
@@ -865,14 +895,18 @@ func getRemainingExternalFileBytes(
 		SkipMvccStats: true,
 	})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
+	}
+	for _, errString := range resp.Errors {
+		perNodeErrs = append(perNodeErrs, errors.Wrapf(errors.Newf("%s", errString),
+			"failed getting span stats on %d nodes",
+			len(resp.Errors)))
 	}
 
-	var remaining uint64
 	for _, stats := range resp.SpanToStats {
 		remaining += stats.ExternalFileBytes
 	}
-	return remaining, nil
+	return remaining, perNodeErrs, nil
 }
 
 func (r *restoreResumer) doDownloadFilesWithRetry(
@@ -944,13 +978,30 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	grp := ctxgroup.WithContext(ctx)
 	completionPoller := make(chan struct{})
 
-	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
+	// The worker and poller goroutines accumulate per-node RPC sub-errors
+	// locally and return them to their wrapping closure. Each variable has a
+	// single writer so no synchronization is needed; both are read only after
+	// grp.Wait returns. A per-node sub-error doesn't cancel the sibling
+	// goroutine: that decision is deferred to this scope, where we either
+	// continue to cleanup or surface a combined error that the retry loop in
+	// doDownloadFilesWithRetry can reset on if progress has advanced.
+	var workerSubErrs, pollerSubErrs []error
 	grp.GoCtx(func(ctx context.Context) error {
-		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
+		var err error
+		workerSubErrs, err = r.sendDownloadWorker(ctx, execCtx, details.DownloadSpans, completionPoller)
+		return err
+	})
+	grp.GoCtx(func(ctx context.Context) error {
+		var err error
+		pollerSubErrs, err = r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
+		return err
 	})
 
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send download spans")
+	}
+	if subErrs := append(workerSubErrs, pollerSubErrs...); len(subErrs) > 0 {
+		return errors.Wrap(errors.Join(subErrs...), "per-node rpc errors during download")
 	}
 
 	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
@@ -1088,7 +1139,12 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 		return nil
 	}
 
-	total, err := getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	total, perNodeErrs, err := getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	if err == nil && len(perNodeErrs) > 0 {
+		// Cleanup isn't in a retry loop and can't excise spans on nodes it
+		// couldn't measure, so treat per-node SpanStats errors as fatal here.
+		err = errors.Wrap(errors.Join(perNodeErrs...), "per-node SpanStats errors during cleanup")
+	}
 	if total == 0 && err == nil {
 		// No external data, so we can exit early.
 		return nil
@@ -1116,7 +1172,10 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 		}
 	}
 
-	total, err = getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	total, perNodeErrs, err = getExternalBytesOverSpans(ctx, p.ExecCfg(), details.DownloadSpans)
+	if err == nil && len(perNodeErrs) > 0 {
+		err = errors.Wrap(errors.Join(perNodeErrs...), "per-node SpanStats errors during cleanup after excise")
+	}
 	if total > 0 {
 		return errors.Newf("online restored keys space still contains external data %d after excise", total)
 	}

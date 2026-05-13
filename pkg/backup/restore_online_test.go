@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -114,6 +116,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	backuptestutils.EnableFastRestoreForTest(t)
+	AllowORDownloadBestEffortFailures(t)
 
 	const numAccounts = 1000
 
@@ -266,6 +269,7 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	backuptestutils.EnableFastRestoreForTest(t)
+	AllowORDownloadBestEffortFailures(t)
 
 	const numAccounts = 1000
 
@@ -761,6 +765,96 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 	require.Equal(t, maxDownloadAttempts*2, attemptCount)
+}
+
+// TestOnlineRestoreDownloadSurvivesNodeFailure stops one node before
+// resuming the download phase of an online restore and waits for the
+// download job's persisted fraction_completed to advance past zero. The
+// stopped node is then restarted so the job can run to completion with
+// no external bytes remaining.
+func TestOnlineRestoreDownloadSurvivesNodeFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// SpanStats and DownloadSpan fanouts against the stopped node will
+	// keep returning per-node errors that surface as best-effort messages
+	// on the download job.
+	AllowORDownloadBestEffortFailures(t)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const (
+		numNodes        = 3
+		numAccounts     = 1000
+		unavailableNode = numNodes - 1
+	)
+
+	// RestartServer needs the stopped node's stores to come back with the
+	// same data, which requires a sticky in-memory VFS.
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: fs.NewStickyRegistry(),
+				},
+			},
+		},
+	}
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, numNodes, numAccounts, InitManualReplication, clusterArgs,
+	)
+	defer cleanupFn()
+
+	// Cap the download retry duration so a stalled job pauses quickly
+	// rather than after the 72h default.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '1m'")
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/backup", "backup", sqlDB,
+	)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	// Pause before any spans are downloaded so the failure can be
+	// injected before the download starts.
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+	defer sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+
+	var linkJobID jobspb.JobID
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		`RESTORE DATABASE data FROM LATEST IN '%s'
+		 WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2, detached`, externalStorage,
+	)).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, linkJobID)
+
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
+
+	unavailableNodeID := tc.Server(unavailableNode).NodeID()
+	t.Logf("stopping n%d", unavailableNodeID)
+	tc.StopServer(unavailableNode)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
+
+	// The download job persists fraction_completed at most once per
+	// minute, so allow up to 90s for an update with a non-zero value to
+	// land while the node is still down.
+	testutils.SucceedsWithin(t, func() error {
+		var fraction float64
+		sqlDB.QueryRow(t,
+			`SELECT fraction_completed FROM [SHOW JOB $1]`, downloadJobID,
+		).Scan(&fraction)
+		if fraction == 0 {
+			return errors.New("fraction_completed is still zero")
+		}
+		return nil
+	}, 90*time.Second)
+
+	t.Logf("restarting n%d", unavailableNodeID)
+	require.NoError(t, tc.RestartServer(unavailableNode))
+
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
 }
 
 func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
