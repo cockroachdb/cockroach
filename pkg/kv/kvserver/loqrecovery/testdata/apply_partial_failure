@@ -1,0 +1,133 @@
+# End-to-end test for the partial-commit failure path of CommitReplicaChanges.
+
+replication-data
+- NodeID: 1
+  StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- NodeID: 1
+  StoreID: 2
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 2, ReplicaID: 2}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 2
+  NewReplica:
+    NodeID: 1
+    StoreID: 2
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
+
+# First apply: inject a Commit failure on store 2.
+apply-plan stores=(1,2) fail_commit=(2)
+----
+ERROR: failed to commit update to one or more stores: failed to update store s2: injected commit failure on s2
+
+# Since there was no error for s1 commit, it has the rewritten descriptor
+# (replica 16, single voter) while s2 still has the original three-replica
+# descriptor.
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 1
+  StoreID: 2
+  Descriptors:
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 2
+    RaftReplicaID: 2
+
+# Audit records: only s1's write was committed.
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+
+# Rerunning apply-plan should skip s1, and commit s2.
+apply-plan stores=(1,2)
+----
+updated=1 skipped=1 missing=0
+
+# Final state: both stores recovered.
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 1
+  StoreID: 2
+  Descriptors:
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 2, ReplicaID: 16}
+  LocalData:
+  - RangeID: 2
+    RaftReplicaID: 16
+
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16
+
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s2 ReplicaID:16

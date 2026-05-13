@@ -81,13 +81,14 @@ dump-store [stores=(1,2,3)]
   Prints content of the replica states in the store. If no stores are provided,
   uses all populated stores.
 
-apply-plan [stores=(1,2,3)] [restart=<bool>]
+apply-plan [stores=(1,2,3)] [restart=<bool>] [fail_commit=(s1,..)]
 
   Applies recovery plan on specified stores. If no stores are provided, uses all
   populated stores. If restart = false, simulates cli version of command where
   application could fail and roll back with an error. If restart = true,
   simulates half online approach where unattended operation succeeds but writes
   potential error into store.
+  fail_commit injects a Commit failure on the listed stores.
 
 dump-events [remove=<bool>] [status=<bool>]
 
@@ -756,14 +757,47 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 	return string(out)
 }
 
+// failingBatch wraps a storage.Batch and forces Commit to return an injected
+// error if commitErr is not nil.
+type failingBatch struct {
+	storage.Batch
+	commitErr error
+}
+
+func (b *failingBatch) Commit(sync bool) error {
+	if b.commitErr != nil {
+		return b.commitErr
+	}
+	return b.Batch.Commit(sync)
+}
+
 func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	restart := dd.ScanArgOr(t, &d, "restart", false)
+	failCommit, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, &d, "fail_commit")
+	failSet := make(map[roachpb.StoreID]struct{}, len(failCommit))
+	for _, id := range failCommit {
+		failSet[id] = struct{}{}
+	}
+	wrapBatch := func(storeID roachpb.StoreID, b storage.Batch) storage.Batch {
+		if _, fail := failSet[storeID]; !fail {
+			return b
+		}
+		return &failingBatch{
+			Batch:     b,
+			commitErr: errors.Newf("injected commit failure on s%d", storeID),
+		}
+	}
 
 	var updated, skipped, missing int
 	if !restart {
 		nodes := e.groupStoresByNodeStore(t, stores)
+		for _, perNode := range nodes {
+			for storeID, b := range perNode {
+				perNode[storeID] = wrapBatch(storeID, b)
+			}
+		}
 		defer func() {
 			for _, storeBatches := range nodes {
 				for _, b := range storeBatches {
@@ -798,7 +832,10 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 			t.Fatal("failed to save plan to plan store", err)
 		}
 
-		rep, err := MaybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock)
+		rep, err := maybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock,
+			func(storeID roachpb.StoreID, eng kvstorage.Engines) storage.Batch {
+				return wrapBatch(storeID, eng.TODOBothEngines().NewBatch())
+			})
 		if err != nil {
 			return "", err
 		}
