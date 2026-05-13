@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -133,6 +134,17 @@ func (n *createFunctionNode) createNewFunction(
 
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	// Only persist CanMutate after the version gate is active. During a
+	// rolling upgrade, old nodes don't know about the can_mutate field and
+	// won't reset it in resetFuncOption during CREATE OR REPLACE. If we
+	// wrote the field before finalization and then rolled back, a subsequent
+	// CREATE OR REPLACE on the old binary could leave a stale value (e.g.
+	// CANNOT_MUTATE on a body that now contains DML), causing new nodes
+	// after re-upgrade to incorrectly skip the body-loop fallback.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+		udfDesc.SetCanMutate(funcdesc.CanMutateBoolToProto(n.cf.CanMutate))
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -272,6 +284,17 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
 		return err
+	}
+
+	// Only persist CanMutate after the version gate is active. During a
+	// rolling upgrade, old nodes don't know about the can_mutate field and
+	// won't reset it in resetFuncOption during CREATE OR REPLACE. If we
+	// wrote the field before finalization and then rolled back, a subsequent
+	// CREATE OR REPLACE on the old binary could leave a stale value (e.g.
+	// CANNOT_MUTATE on a body that now contains DML), causing new nodes
+	// after re-upgrade to incorrectly skip the body-loop fallback.
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3_FunctionDescCanMutate) {
+		udfDesc.SetCanMutate(funcdesc.CanMutateBoolToProto(n.cf.CanMutate))
 	}
 
 	// Removing all existing references before adding new references.
@@ -620,6 +643,10 @@ func resetFuncOption(udfDesc *funcdesc.Mutable) {
 	udfDesc.SetVolatility(catpb.Function_VOLATILE)
 	udfDesc.SetNullInputBehavior(catpb.Function_CALLED_ON_NULL_INPUT)
 	udfDesc.SetLeakProof(false)
+	// Reset CanMutate so that a stale value from a previous version of the
+	// descriptor does not persist after CREATE OR REPLACE. The correct value
+	// is re-set below, gated on V26_3_FunctionDescCanMutate.
+	udfDesc.SetCanMutate(catpb.Function_UNKNOWN_CAN_MUTATE)
 }
 
 func makeFunctionParam(

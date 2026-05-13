@@ -516,6 +516,28 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
+	// Derive canMutate from the descriptor (via the Overload). When the
+	// descriptor's CanMutate is unknown (for descriptors predating the
+	// field), fall back to inspecting the eagerly-built body expressions.
+	//
+	// This resolution always produces a definite value before the UDF
+	// call expression is constructed below, so parent routines that call
+	// this one will never see an unknown mutation status from this child.
+	// The fallback is safe because unknown-status descriptors always have
+	// eagerly-built body expressions available for inspection.
+	canMutate := o.CanMutate
+	if canMutate == tree.RoutineCanMutateUnknown {
+		for _, s := range body {
+			if s.Relational().CanMutate {
+				canMutate = tree.RoutineMutates
+				break
+			}
+		}
+		if canMutate == tree.RoutineCanMutateUnknown {
+			canMutate = tree.RoutineDoesNotMutate
+		}
+	}
+
 	multiColDataSource := len(f.ResolvedType().TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
@@ -536,6 +558,7 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				CanMutate:          canMutate,
 			},
 		},
 	)
@@ -972,6 +995,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 
 	// Build a CALL expression that invokes the routine.
 	outScope := inScope.push()
+	bodyExpr := bodyScope.expr
 	routine := b.factory.ConstructUDFCall(
 		memo.ScalarListExpr{},
 		&memo.UDFCallPrivate{
@@ -981,10 +1005,11 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Volatility:  volatility.Volatile,
 				RoutineType: tree.ProcedureRoutine,
 				RoutineLang: tree.RoutineLangPLpgSQL,
-				Body:        []memo.RelExpr{bodyScope.expr},
+				Body:        []memo.RelExpr{bodyExpr},
 				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
 				BodyStmts:   bodyStmts,
 				BodyASTs:    []tree.Statement{nil},
+				CanMutate:   tree.RoutineCanMutateFromBool(bodyExpr.Relational().CanMutate),
 			},
 		},
 	)
