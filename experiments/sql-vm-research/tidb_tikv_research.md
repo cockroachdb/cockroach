@@ -557,8 +557,6 @@ a TPC audit, but the methodology is at least transparent.
 - You value operational simplicity (one binary to deploy and version).
 - You're adding new SQL features or builtins frequently (one-language
   development is much faster than the three-repo dance).
-- Your query mix is heavy on point reads and small scans where
-  coprocessor-style pushdown adds overhead, not value.
 
 ### Surprising things worth flagging
 
@@ -568,6 +566,12 @@ a TPC audit, but the methodology is at least transparent.
    **don't reach for a VM on day one.** A typed protobuf tree handles
    everything TiKV does, and adding a VM adds an entire language-design
    problem on top of an already-hard one.
+
+   *(This editorial position is contested; see
+   [`discussions/bytecode-vs-volcano.md`](discussions/bytecode-vs-volcano.md)
+   for the counter-case and the broader OLTP-vs-batch workload argument.
+   TiKV's choice was structurally forced by TiDB having no VM to reuse;
+   the analogous decision for CockroachDB is more open.)*
 2. **Coprocessor v2 (the actual plugin/dylib framework) is dead.** Despite a
    stated "long-term goal" to re-implement v1 as a v2 plugin, this never
    happened. PingCAP has not invested in it for 4+ years. **Take it as
@@ -578,8 +582,12 @@ a TPC audit, but the methodology is at least transparent.
    *exclusively* by the SQL planner refusing to push down functions that the
    target version doesn't support. The cost is a per-version function support
    matrix that TiDB carries; the benefit is that the wire format itself never
-   evolves. If CockroachDB has cluster-version gating already, the function
-   matrix becomes trivial.
+   evolves. CockroachDB's cluster-version framework is the right *kind* of
+   machinery for this — substantially easier to leverage than TiKV's
+   hand-maintained per-version matrix — but applying it to per-function
+   pushdown gating would still be real work (defining which gates apply to
+   which functions, plumbing checks into the planner's pushdown decisions,
+   handling mixed-version states).
 4. **Coprocessor cache hit returns ~zero bytes.** A repeated analytical scan
    over unchanged data costs one round trip per Region for the version check
    — no row data on the wire at all. CockroachDB's range cache and
@@ -602,6 +610,13 @@ a TPC audit, but the methodology is at least transparent.
    quota are runtime defenses, not static checks. **In the CockroachDB v2
    architecture, you don't need a verifier if you don't use bytecode** —
    another argument against jumping to a VM.
+
+   *(Same caveat as item 1: the "don't use bytecode" framing is
+   contested in
+   [`discussions/bytecode-vs-volcano.md`](discussions/bytecode-vs-volcano.md).
+   The discussion notes that bytecode's amenability to static analysis
+   and resource bounding is itself an argument **for** bytecode in the
+   eventual KV-pushdown context — the opposite framing.)*
 
 ---
 
