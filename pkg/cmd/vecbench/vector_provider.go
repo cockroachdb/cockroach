@@ -58,9 +58,9 @@ type VectorProvider interface {
 	// table/store creation when the index should be created before data import.
 	CreateIndex(ctx context.Context) error
 
-	// CheckIndexCreationStatus returns the percentage complete (0.0-1.0) of index
-	// creation and any error. For providers that don't support async index creation,
-	// this should return 1.0, nil.
+	// CheckIndexCreationStatus returns the progress of index creation. A value
+	// in [0.0, 1.0] indicates the fraction complete. A negative value indicates
+	// that progress tracking is not available (e.g. synchronous index creation).
 	CheckIndexCreationStatus(ctx context.Context) (float64, error)
 
 	// SetupSearch allows the provider to perform expensive up-front steps in

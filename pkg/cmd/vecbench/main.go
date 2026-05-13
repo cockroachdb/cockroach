@@ -81,6 +81,12 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 	"Database connection string (when not using --memstore)")
 var flagCreateIndexAfterImport = flag.Bool("index-after", false,
 	"Create vector index after data import instead of during table creation (SQL provider only)")
+var flagPgvector = flag.Bool("pgvector", false,
+	"Target PostgreSQL with pgvector extension instead of CockroachDB")
+var flagExportCSV = flag.Bool("export-csv", false,
+	"Export results to results_search.csv and results_build.csv")
+var flagFollowerRead = flag.Bool("follower-read", false,
+	"Use follower reads (AS OF SYSTEM TIME follower_read_timestamp()) for search queries (CockroachDB only)")
 
 // vecbench benchmarks vector index in-memory build and search performance on a
 // variety of datasets. Datasets are downloaded from the
@@ -294,11 +300,39 @@ func (vb *vectorBench) SearchIndex() {
 		p95Latency := latencyEstimator.Estimate(0.95) * 1000
 		p99Latency := latencyEstimator.Estimate(0.99) * 1000
 
+		recall := sumRecall / float64(count) * 100
+		avgLeaf := sumLeafVectors / float64(count)
+		avgAll := sumVectors / float64(count)
+		avgFull := sumFullVectors / float64(count)
+		avgPartitions := sumPartitions / float64(count)
+
 		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\n",
-			beamSize, sumRecall/float64(count)*100,
-			sumLeafVectors/float64(count), sumVectors/float64(count),
-			sumFullVectors/float64(count), sumPartitions/float64(count),
+			beamSize, recall, avgLeaf, avgAll, avgFull, avgPartitions,
 			qps, p50Latency, p95Latency, p99Latency)
+
+		if *flagExportCSV {
+			header := []string{
+				"dataset", "backend", "beam", "recall_pct",
+				"leaf_vectors", "all_vectors", "full_vectors", "partitions",
+				"qps", "p50_ms", "p95_ms", "p99_ms",
+			}
+			row := []string{
+				vb.datasetName, backendName(),
+				fmt.Sprintf("%d", beamSize),
+				fmt.Sprintf("%.2f", recall),
+				fmt.Sprintf("%.0f", avgLeaf),
+				fmt.Sprintf("%.0f", avgAll),
+				fmt.Sprintf("%.2f", avgFull),
+				fmt.Sprintf("%.2f", avgPartitions),
+				fmt.Sprintf("%.2f", qps),
+				fmt.Sprintf("%.2f", p50Latency),
+				fmt.Sprintf("%.2f", p95Latency),
+				fmt.Sprintf("%.2f", p99Latency),
+			}
+			if err := appendCSVRow("results_search.csv", header, row); err != nil {
+				fmt.Printf(Red+"Error writing search CSV: %v\n"+Reset, err)
+			}
+		}
 	}
 
 	fmt.Println()
@@ -501,6 +535,10 @@ func (vb *vectorBench) BuildIndex() {
 				progress, err := vb.provider.CheckIndexCreationStatus(vb.ctx)
 				if err != nil {
 					fmt.Printf(Red+"Error checking index status: %v\n"+Reset, err)
+				} else if progress < 0 {
+					// Progress tracking not available (e.g. pgvector).
+					fmt.Printf(ClearLine+White+"\rCreating index... %v"+Reset,
+						timeutil.Since(startIndexTime).Truncate(time.Second))
 				} else {
 					fmt.Printf(ClearLine+White+"\rIndex creation progress: %.1f%% in %v"+Reset,
 						progress*100, timeutil.Since(startIndexTime).Truncate(time.Second))
@@ -510,7 +548,23 @@ func (vb *vectorBench) BuildIndex() {
 	indexCreated:
 	}
 
-	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(startAt.Elapsed()))
+	buildDuration := startAt.Elapsed()
+	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(buildDuration))
+
+	if *flagExportCSV {
+		header := []string{
+			"dataset", "backend", "total_vectors", "dims", "duration_sec",
+		}
+		row := []string{
+			vb.datasetName, backendName(),
+			fmt.Sprintf("%d", vb.data.TrainCount),
+			fmt.Sprintf("%d", vb.data.Dims),
+			fmt.Sprintf("%.2f", buildDuration.Seconds()),
+		}
+		if err := appendCSVRow("results_build.csv", header, row); err != nil {
+			fmt.Printf(Red+"Error writing build CSV: %v\n"+Reset, err)
+		}
+	}
 
 	// Ensure that index is persisted so it can be reused.
 	if err = vb.provider.Save(vb.ctx); err != nil {
@@ -552,6 +606,15 @@ func newVectorProvider(
 	if *flagCreateIndexAfterImport && *flagMemStore {
 		return nil, errors.New("--create-index-after-import flag cannot be used with --memstore")
 	}
+	if *flagPgvector && *flagMemStore {
+		return nil, errors.New("--pgvector and --memstore cannot be used together")
+	}
+	if *flagFollowerRead && *flagMemStore {
+		return nil, errors.New("--follower-read cannot be used with --memstore")
+	}
+	if *flagFollowerRead && *flagPgvector {
+		return nil, errors.New("--follower-read cannot be used with --pgvector")
+	}
 
 	options := cspann.IndexOptions{
 		MinPartitionSize:      minPartitionSize,
@@ -566,7 +629,7 @@ func newVectorProvider(
 	}
 
 	// Use SQL-based provider with connection string from flags.
-	provider, err := NewSQLProvider(context.Background(), datasetName, dims, distanceMetric, options)
+	provider, err := NewSQLProvider(context.Background(), datasetName, dims, distanceMetric, options, *flagFollowerRead)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating SQL provider")
 	}
@@ -576,4 +639,19 @@ func newVectorProvider(
 
 func roundDuration(duration time.Duration) time.Duration {
 	return duration.Truncate(time.Millisecond)
+}
+
+// backendName returns a short identifier for the active backend, used in CSV
+// output to distinguish runs.
+func backendName() string {
+	if *flagMemStore {
+		return "memstore"
+	}
+	if *flagPgvector {
+		return "pgvector"
+	}
+	if *flagFollowerRead {
+		return "crdb-follower"
+	}
+	return "crdb"
 }
