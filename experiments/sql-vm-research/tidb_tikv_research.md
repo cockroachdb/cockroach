@@ -490,13 +490,23 @@ a TPC audit, but the methodology is at least transparent.
 
 ### What TiDB+TiKV has that CockroachDB doesn't
 
-1. **Pushdown of computation as a first-class wire-level concept.** CockroachDB
-   has DistSender + DistSQL flows that ship work to gateway nodes for the
-   appropriate Range, but the Range-leaseholder doesn't run a pluggable
-   evaluator: it returns rows to the SQL gateway, which evaluates filters.
-   The MVCC scan can apply some predicates (e.g., for the "fetch latest
-   version" case), but there is no "operator DAG over the wire to the
-   storage replica."
+1. **An operator DAG that runs inside the storage process.** TiKV's
+   coprocessor accepts a typed operator DAG (TableScan, Selection,
+   Projection, Limit, TopN, partial Aggregation) over the wire from TiDB
+   and runs it inside the TiKV pod, on bytes that never leave that
+   process. Filtered/projected results return.
+
+   CockroachDB pushes work to remote nodes through DistSQL — flows
+   construct processors (including filters, projections, partial
+   aggregations, joins, sorts) on the nodes holding the data, so
+   distributed computation *does* happen remotely for sufficiently
+   complex queries. But the wire boundary the work crosses is
+   gateway-SQL → remote-node-SQL, not SQL → storage. The KV layer
+   itself (Pebble, MVCC scans) does not run a pluggable SQL evaluator —
+   it applies some MVCC-level predicates on the read path but otherwise
+   returns rows for the in-process SQL layer on the same node to
+   evaluate. There is no analog of "ship an operator DAG into a
+   separately-deployed storage layer."
 2. **A separate stateless SQL pod from a storage pod.** Independent scaling.
    CockroachDB has all-in-one nodes; you can still run "compute" SQL nodes
    that don't hold data, but the binary is the same.
