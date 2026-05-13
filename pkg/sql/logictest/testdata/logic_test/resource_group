@@ -4,7 +4,7 @@
 # the in-development resource manager. The whole feature is hidden behind
 # sql.experimental_resource_groups.enabled.
 
-# Disabled by default: every statement returns FeatureNotSupported.
+subtest disabled_by_default
 
 statement error pq: resource group SQL is disabled
 CREATE RESOURCE GROUP g WITH cpu_weight = 100
@@ -21,13 +21,20 @@ SHOW RESOURCE GROUP g
 statement error pq: resource group SQL is disabled
 SHOW RESOURCE GROUPS
 
+subtest end
+
 # Enable the feature for the rest of the tests.
 statement ok
 SET CLUSTER SETTING sql.experimental_resource_groups.enabled = true
 
+subtest create
+
 # CREATE requires WITH clause (and thus at least one option).
 statement error at or near "EOF": syntax error
 CREATE RESOURCE GROUP missing_weight
+
+statement error pq: cpu_weight is required and must be a positive integer
+CREATE RESOURCE GROUP only_max_cpu WITH max_cpu = true
 
 statement error pq: cpu_weight must be a positive integer
 CREATE RESOURCE GROUP zero_weight WITH cpu_weight = 0
@@ -66,21 +73,6 @@ SHOW RESOURCE GROUP medium
 id  name    cpu_weight  max_cpu
 19  medium  50          false
 
-# SHOW RESOURCE GROUPS lists all.
-query ITIB colnames,rowsort
-SHOW RESOURCE GROUPS
-----
-id  name    cpu_weight  max_cpu
-17  high    100         true
-19  medium  50          false
-
-# SHOW RESOURCE GROUP <name> errors when the named group does not exist.
-statement error pq: resource group "ghost" does not exist
-SHOW RESOURCE GROUP ghost
-
-# SHOW RESOURCE GROUPS (no name) returns zero rows when none match,
-# without erroring; covered above by the empty/initial states.
-
 # Duplicate name is rejected; IF NOT EXISTS swallows the conflict.
 statement error pq: resource group "high" already exists
 CREATE RESOURCE GROUP high WITH cpu_weight = 999
@@ -93,6 +85,26 @@ query I
 SELECT cpu_weight FROM [SHOW RESOURCE GROUP high]
 ----
 100
+
+subtest end
+
+subtest show
+
+# SHOW RESOURCE GROUPS lists all.
+query ITIB colnames,rowsort
+SHOW RESOURCE GROUPS
+----
+id  name    cpu_weight  max_cpu
+17  high    100         true
+19  medium  50          false
+
+# SHOW RESOURCE GROUP <name> errors when the named group does not exist.
+statement error pq: resource group "ghost" does not exist
+SHOW RESOURCE GROUP ghost
+
+subtest end
+
+subtest alter
 
 # ALTER updates only specified options (partial update).
 statement ok
@@ -120,7 +132,10 @@ ALTER RESOURCE GROUP ghost WITH cpu_weight = 1
 statement ok
 ALTER RESOURCE GROUP IF EXISTS ghost WITH cpu_weight = 1
 
-# DROP basic, error path, IF EXISTS path.
+subtest end
+
+subtest drop
+
 statement ok
 DROP RESOURCE GROUP medium
 
@@ -137,7 +152,10 @@ SHOW RESOURCE GROUPS
 id  name  cpu_weight  max_cpu
 17  high  200         false
 
-# Non-admin users cannot use any of the statements.
+subtest end
+
+subtest non_admin
+
 user testuser
 
 statement error pq: only users with the admin role may use resource group statements
@@ -157,6 +175,12 @@ SHOW RESOURCE GROUPS
 
 user root
 
+subtest end
+
+subtest resource_not_reserved
+
 # RESOURCE is not reserved: still usable as an identifier.
 statement ok
 CREATE TABLE resource (id INT PRIMARY KEY); DROP TABLE resource
+
+subtest end

@@ -34,7 +34,7 @@ func checkResourceGroupsEnabled(ctx context.Context, p *planner) error {
 	// clear error rather than "relation does not exist".
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_3_AddResourceGroupsTable) {
 		return pgerror.New(pgcode.FeatureNotSupported,
-			"resource group SQL is not available until the cluster upgrade is finalized")
+			"resource group SQL is not available until the cluster upgrade to v26.3 is finalized")
 	}
 	if !experimentalResourceGroupsEnabled.Get(&p.ExecCfg().Settings.SV) {
 		return errors.WithHint(
@@ -81,8 +81,7 @@ func applyResourceGroupOptions(
 		return eval.Expr(ctx, evalCtx, typedExpr)
 	}
 	for _, opt := range opts {
-		key := string(opt.Key)
-		switch key {
+		switch key := string(opt.Key); key {
 		case resourceGroupOptCPUWeight:
 			datum, err := evalOpt(opt.Value)
 			if err != nil {
