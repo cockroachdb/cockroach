@@ -827,7 +827,8 @@ func importCancellationRunner(
 
 	numAttempts := randutil.RandIntInRange(rng, 2, 5)
 	finalAttempt := numAttempts - 1
-	urlsToImport := ds.getDataURLs()
+	allURLs := ds.getDataURLs()
+	urlsToImport := append([]string(nil), allURLs...)
 	for attempt := range numAttempts {
 		if len(urlsToImport) == 0 {
 			break
@@ -905,7 +906,22 @@ func importCancellationRunner(
 				return slices.Contains(urls, url)
 			})
 		case "canceled":
-			// Expected outcome of cancellation.
+			var hasRows bool
+			err = conn.QueryRowContext(ctx,
+				fmt.Sprintf(`SELECT exists(SELECT 1 FROM import_test.%s LIMIT 1)`, ds.getTableName()),
+			).Scan(&hasRows)
+			if err != nil {
+				return err
+			}
+			if hasRows {
+				t.L().PrintfCtx(ctx, "Canceled import job %s published data before cancellation; truncating table %s and resetting file list",
+					jobID, ds.getTableName())
+				_, err = conn.ExecContext(ctx, fmt.Sprintf(`TRUNCATE TABLE import_test.%s`, ds.getTableName()))
+				if err != nil {
+					return err
+				}
+				urlsToImport = append(urlsToImport[:0], allURLs...)
+			}
 		case "failed":
 			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
 		default:
