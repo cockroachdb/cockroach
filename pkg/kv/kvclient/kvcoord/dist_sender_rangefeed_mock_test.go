@@ -127,7 +127,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					transport.EXPECT().Release().AnyTimes()
 				}
 
-				ds := NewDistSender(DistSenderConfig{
+				ds := NewDistSender(ctx, DistSenderConfig{
 					AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 					Clock:           clock,
 					NodeDescs:       g,

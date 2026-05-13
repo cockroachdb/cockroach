@@ -244,7 +244,7 @@ func sendBatch(
 			})
 	}
 
-	ds := NewDistSender(DistSenderConfig{
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
 		Settings:           cluster.MakeTestingClusterSettings(),
 		NodeDescs:          g,

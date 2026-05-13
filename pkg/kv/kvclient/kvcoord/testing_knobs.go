@@ -71,6 +71,10 @@ type ClientTestingKnobs struct {
 	// picking a transaction's anchor key; instead, the transaction is anchored at
 	// the first key it locks.
 	DisableTxnAnchorKeyRandomization bool
+
+	// DontRandomizeLeaseholderOnCtxError, if set, disables randomization of the
+	// cached leaseholder when a context error is encountered.
+	DontRandomizeLeaseholderOnCtxError bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

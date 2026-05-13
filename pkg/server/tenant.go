@@ -1245,7 +1245,7 @@ func makeTenantSQLServerArgs(
 		KVInterceptor:     costController,
 		TestingKnobs:      dsKnobs,
 	}
-	ds := kvcoord.NewDistSender(dsCfg)
+	ds := kvcoord.NewDistSender(startupCtx, dsCfg)
 	registry.AddMetricStruct(ds.Metrics())
 
 	var clientKnobs kvcoord.ClientTestingKnobs
